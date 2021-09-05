@@ -17,10 +17,14 @@ namespace {
 
 class MockScrollbar : public FakeScrollbar {
  public:
-  MockScrollbar() : FakeScrollbar(true, true, true) {}
+  MockScrollbar() {
+    set_should_paint(true);
+    set_has_thumb(true);
+    set_is_overlay(true);
+  }
 
-  void PaintPart(PaintCanvas* canvas, ScrollbarPart part) override {
-    if (part == TICKMARKS)
+  void PaintPart(PaintCanvas*, ScrollbarPart part, const gfx::Rect&) override {
+    if (part == TRACK_BUTTONS_TICKMARKS)
       paint_tickmarks_called_ = true;
   }
 
@@ -37,6 +41,8 @@ class MockScrollbar : public FakeScrollbar {
   }
 
  private:
+  ~MockScrollbar() override = default;
+
   bool paint_tickmarks_called_ = false;
 };
 
@@ -48,12 +54,11 @@ TEST(PaintedOverlayScrollbarLayerTest, PaintTickmarks) {
   auto layer_tree_host = FakeLayerTreeHost::Create(
       &fake_client_, &task_graph_runner_, animation_host.get());
 
-  MockScrollbar* scrollbar = new MockScrollbar();
+  auto scrollbar = base::MakeRefCounted<MockScrollbar>();
   scrollbar->set_has_tickmarks(false);
 
   scoped_refptr<PaintedOverlayScrollbarLayer> scrollbar_layer =
-      PaintedOverlayScrollbarLayer::Create(
-          std::unique_ptr<Scrollbar>(scrollbar));
+      PaintedOverlayScrollbarLayer::Create(scrollbar);
 
   scrollbar_layer->SetIsDrawable(true);
   scrollbar_layer->SetBounds(gfx::Size(100, 100));

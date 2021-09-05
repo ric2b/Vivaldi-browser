@@ -137,7 +137,7 @@ class ExtensionActionUtilsExecuteExtensionActionFunction
     : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("extensionActionUtils.executeExtensionAction",
-                             EXECUTE_EXTENSIONACTION)
+                             EXTENSIONS_EXECUTEEXTENSIONACTION)
   ExtensionActionUtilsExecuteExtensionActionFunction() = default;
 
  private:
@@ -197,6 +197,36 @@ class ExtensionActionUtilsShowExtensionOptionsFunction
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsShowExtensionOptionsFunction);
+};
+
+class ExtensionActionUtilsGetExtensionMenuFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("extensionActionUtils.getExtensionMenu",
+                             EXTENSIONS_GETEXTENSIONMENU)
+  ExtensionActionUtilsGetExtensionMenuFunction() = default;
+
+ private:
+  ~ExtensionActionUtilsGetExtensionMenuFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsGetExtensionMenuFunction);
+};
+
+class ExtensionActionUtilsExecuteMenuActionFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("extensionActionUtils.executeMenuAction",
+                             EXTENSIONS_EXECUTEMENUACTION)
+  ExtensionActionUtilsExecuteMenuActionFunction() = default;
+
+ private:
+  ~ExtensionActionUtilsExecuteMenuActionFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtilsExecuteMenuActionFunction);
 };
 
 }  // namespace extensions

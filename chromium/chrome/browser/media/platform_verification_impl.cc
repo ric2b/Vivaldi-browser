@@ -44,7 +44,7 @@ std::vector<uint8_t> GetStorageIdSaltFromProfile(
 // static
 void PlatformVerificationImpl::Create(
     content::RenderFrameHost* render_frame_host,
-    media::mojom::PlatformVerificationRequest request) {
+    mojo::PendingReceiver<media::mojom::PlatformVerification> receiver) {
   DVLOG(2) << __func__;
   DCHECK(render_frame_host);
 
@@ -53,13 +53,13 @@ void PlatformVerificationImpl::Create(
 
   // The object is bound to the lifetime of |render_frame_host| and the mojo
   // connection. See FrameServiceBase for details.
-  new PlatformVerificationImpl(render_frame_host, std::move(request));
+  new PlatformVerificationImpl(render_frame_host, std::move(receiver));
 }
 
 PlatformVerificationImpl::PlatformVerificationImpl(
     content::RenderFrameHost* render_frame_host,
-    media::mojom::PlatformVerificationRequest request)
-    : FrameServiceBase(render_frame_host, std::move(request)),
+    mojo::PendingReceiver<media::mojom::PlatformVerification> receiver)
+    : FrameServiceBase(render_frame_host, std::move(receiver)),
       render_frame_host_(render_frame_host) {}
 
 PlatformVerificationImpl::~PlatformVerificationImpl() {
@@ -82,7 +82,8 @@ void PlatformVerificationImpl::ChallengePlatform(
         base::MakeRefCounted<chromeos::attestation::PlatformVerificationFlow>();
 
   platform_verification_flow_->ChallengePlatformKey(
-      web_contents(), service_id, challenge,
+      content::WebContents::FromRenderFrameHost(render_frame_host()),
+      service_id, challenge,
       base::Bind(&PlatformVerificationImpl::OnPlatformChallenged,
                  weak_factory_.GetWeakPtr(), base::Passed(&callback)));
 #else

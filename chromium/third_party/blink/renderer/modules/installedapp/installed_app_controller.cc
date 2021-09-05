@@ -54,15 +54,15 @@ const char InstalledAppController::kSupplementName[] = "InstalledAppController";
 
 InstalledAppController::InstalledAppController(LocalFrame& frame)
     : Supplement<LocalFrame>(frame),
-      ContextLifecycleObserver(frame.GetDocument()) {}
+      ExecutionContextLifecycleObserver(frame.GetDocument()) {}
 
-void InstalledAppController::ContextDestroyed(ExecutionContext*) {
+void InstalledAppController::ContextDestroyed() {
   provider_.reset();
 }
 
 void InstalledAppController::OnGetManifestForRelatedApps(
     std::unique_ptr<AppInstalledCallbacks> callbacks,
-    const KURL& /*url*/,
+    const KURL& url,
     mojom::blink::ManifestPtr manifest) {
   Vector<mojom::blink::RelatedApplicationPtr> mojo_related_apps;
   for (const auto& related_application : manifest->related_applications) {
@@ -86,7 +86,7 @@ void InstalledAppController::OnGetManifestForRelatedApps(
   }
 
   provider_->FilterInstalledApps(
-      std::move(mojo_related_apps),
+      std::move(mojo_related_apps), url,
       WTF::Bind(&InstalledAppController::OnFilterInstalledApps,
                 WrapPersistent(this), WTF::Passed(std::move(callbacks))));
 }
@@ -98,7 +98,7 @@ void InstalledAppController::OnFilterInstalledApps(
   for (const auto& res : result) {
     auto* app = MakeGarbageCollected<RelatedApplication>();
     app->setPlatform(res->platform);
-    app->setURL(res->url);
+    app->setUrl(res->url);
     app->setId(res->id);
     app->setVersion(res->version);
     applications.push_back(app);
@@ -108,7 +108,7 @@ void InstalledAppController::OnFilterInstalledApps(
 
 void InstalledAppController::Trace(Visitor* visitor) {
   Supplement<LocalFrame>::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

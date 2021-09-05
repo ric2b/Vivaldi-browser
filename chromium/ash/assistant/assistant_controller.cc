@@ -15,20 +15,13 @@
 #include "ash/public/mojom/assistant_volume_control.mojom.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
 #include "ash/utility/screenshot_controller.h"
 #include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
+#include "chromeos/services/assistant/public/features.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
 #include "components/prefs/pref_registry_simple.h"
-#include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
-#include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/remote_set.h"
-#include "services/content/public/mojom/constants.mojom.h"
-#include "services/content/public/mojom/navigable_contents_factory.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
 
 namespace ash {
 
@@ -54,9 +47,10 @@ void AssistantController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(prefs::kAssistantNumWarmerWelcomeTriggered, 0);
 }
 
-void AssistantController::BindRequest(
-    chromeos::assistant::mojom::AssistantControllerRequest request) {
-  assistant_controller_bindings_.AddBinding(this, std::move(request));
+void AssistantController::BindReceiver(
+    mojo::PendingReceiver<chromeos::assistant::mojom::AssistantController>
+        receiver) {
+  assistant_controller_receivers_.Add(this, std::move(receiver));
 }
 
 void AssistantController::BindReceiver(
@@ -105,6 +99,14 @@ void AssistantController::SendAssistantFeedback(
   assistant_feedback->description = feedback_description;
   assistant_feedback->screenshot_png = screenshot_png;
   assistant_->SendAssistantFeedback(std::move(assistant_feedback));
+}
+
+void AssistantController::StartTextInteraction(
+    const std::string& query,
+    bool allow_tts,
+    chromeos::assistant::mojom::AssistantQuerySource source) {
+  assistant_interaction_controller_.StartTextInteraction(query, allow_tts,
+                                                         source);
 }
 
 void AssistantController::StartSpeakerIdEnrollmentFlow() {
@@ -158,7 +160,8 @@ void AssistantController::OnDeepLinkReceived(
     case DeepLinkType::kScreenshot:
       // We close the UI before taking the screenshot as it's probably not the
       // user's intention to include the Assistant in the picture.
-      assistant_ui_controller_.CloseUi(AssistantExitPoint::kScreenshot);
+      assistant_ui_controller_.CloseUi(
+          chromeos::assistant::mojom::AssistantExitPoint::kScreenshot);
       Shell::Get()->screenshot_controller()->TakeScreenshotForAllRootWindows();
       break;
     case DeepLinkType::kTaskManager:
@@ -170,6 +173,7 @@ void AssistantController::OnDeepLinkReceived(
     case DeepLinkType::kLists:
     case DeepLinkType::kNotes:
     case DeepLinkType::kOnboarding:
+    case DeepLinkType::kProactiveSuggestions:
     case DeepLinkType::kQuery:
     case DeepLinkType::kReminders:
     case DeepLinkType::kSettings:
@@ -251,29 +255,6 @@ void AssistantController::OpenUrl(const GURL& url,
   NotifyUrlOpened(url, from_server);
 }
 
-void AssistantController::GetNavigableContentsFactory(
-    mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver) {
-  const UserSession* user_session =
-      Shell::Get()->session_controller()->GetUserSession(0);
-
-  if (!user_session) {
-    LOG(WARNING) << "Unable to retrieve active user session.";
-    return;
-  }
-
-  const base::Optional<base::Token>& service_instance_group =
-      user_session->user_info.service_instance_group;
-  if (!service_instance_group) {
-    LOG(ERROR) << "Unable to retrieve service instance group.";
-    return;
-  }
-
-  Shell::Get()->connector()->Connect(
-      service_manager::ServiceFilter::ByNameInGroup(
-          content::mojom::kServiceName, *service_instance_group),
-      std::move(receiver));
-}
-
 bool AssistantController::IsAssistantReady() const {
   return !!assistant_;
 }
@@ -296,11 +277,8 @@ void AssistantController::NotifyDeepLinkReceived(const GURL& deep_link) {
   const std::map<std::string, std::string> params =
       assistant::util::GetDeepLinkParams(deep_link);
 
-  // TODO(wutao): Remove AssistantControllerObserver::OnDeepLinkReceived.
   for (AssistantControllerObserver& observer : observers_)
     observer.OnDeepLinkReceived(type, params);
-
-  view_delegate_.NotifyDeepLinkReceived(type, params);
 }
 
 void AssistantController::NotifyOpeningUrl(const GURL& url,
@@ -318,18 +296,20 @@ void AssistantController::NotifyUrlOpened(const GURL& url, bool from_server) {
 void AssistantController::OnAssistantStatusChanged(
     mojom::AssistantState state) {
   if (state == mojom::AssistantState::NOT_READY)
-    assistant_ui_controller_.CloseUi(AssistantExitPoint::kUnspecified);
+    assistant_ui_controller_.CloseUi(
+        chromeos::assistant::mojom::AssistantExitPoint::kUnspecified);
 }
 
 void AssistantController::OnLockedFullScreenStateChanged(bool enabled) {
   if (enabled)
-    assistant_ui_controller_.CloseUi(AssistantExitPoint::kUnspecified);
+    assistant_ui_controller_.CloseUi(
+        chromeos::assistant::mojom::AssistantExitPoint::kUnspecified);
 }
 
 void AssistantController::BindController(
     mojo::PendingReceiver<chromeos::assistant::mojom::AssistantController>
         receiver) {
-  BindRequest(std::move(receiver));
+  BindReceiver(std::move(receiver));
 }
 
 void AssistantController::BindAlarmTimerController(

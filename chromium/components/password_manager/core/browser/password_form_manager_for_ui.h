@@ -70,12 +70,14 @@ class PasswordFormManagerForUI {
   // Updates the username value. Called when user edits the username and clicks
   // the save button. Updates the username and modifies internal state
   // accordingly.
-  virtual void UpdateUsername(const base::string16& new_username) = 0;
+  virtual void OnUpdateUsernameFromPrompt(
+      const base::string16& new_username) = 0;
 
   // Updates the password value. Called when user selects a password from the
   // password selection dropdown and clicks the save button. Updates the
   // password and modifies internal state accordingly.
-  virtual void UpdatePasswordValue(const base::string16& new_password) = 0;
+  virtual void OnUpdatePasswordFromPrompt(
+      const base::string16& new_password) = 0;
 
   // Called when the user chose not to update password.
   virtual void OnNopeUpdateClicked() = 0;
@@ -93,6 +95,10 @@ class PasswordFormManagerForUI {
 
   // Called when the passwords were shown on on the bubble without obfuscation.
   virtual void OnPasswordsRevealed() = 0;
+
+  // A user opted to move the credentials used for a successful login from the
+  // profile store to the account store.
+  virtual void MoveCredentialsToAccountStore() = 0;
 };
 
 }  // namespace  password_manager

@@ -15,8 +15,8 @@
 #include "net/http/http_util.h"
 #include "net/socket/next_proto.h"
 #include "net/spdy/spdy_http_utils.h"
+#include "net/third_party/quiche/src/common/platform/api/quiche_string_piece.h"
 #include "net/third_party/quiche/src/quic/core/quic_connection.h"
-#include "net/third_party/quiche/src/quic/platform/api/quic_string_piece.h"
 #include "net/third_party/quiche/src/spdy/core/spdy_header_block.h"
 #include "quic_http_stream.h"
 
@@ -98,11 +98,11 @@ void BidirectionalStreamQuicImpl::Start(
 
   if (rv != OK) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(&BidirectionalStreamQuicImpl::NotifyError,
-                                  weak_factory_.GetWeakPtr(),
-                                  session_->IsCryptoHandshakeConfirmed()
-                                      ? rv
-                                      : ERR_QUIC_HANDSHAKE_FAILED));
+        FROM_HERE,
+        base::BindOnce(
+            &BidirectionalStreamQuicImpl::NotifyError,
+            weak_factory_.GetWeakPtr(),
+            session_->OneRttKeysAvailable() ? rv : ERR_QUIC_HANDSHAKE_FAILED));
     return;
   }
 
@@ -216,7 +216,7 @@ int64_t BidirectionalStreamQuicImpl::GetTotalReceivedBytes() const {
   // When QPACK is enabled, headers are sent and received on the stream, so
   // the headers bytes do not need to be accounted for independently.
   int64_t total_received_bytes =
-      quic::VersionUsesHttp3(session_->GetQuicVersion())
+      quic::VersionUsesHttp3(session_->GetQuicVersion().transport_version)
           ? 0
           : headers_bytes_received_;
   if (stream_) {
@@ -232,9 +232,10 @@ int64_t BidirectionalStreamQuicImpl::GetTotalReceivedBytes() const {
 int64_t BidirectionalStreamQuicImpl::GetTotalSentBytes() const {
   // When QPACK is enabled, headers are sent and received on the stream, so
   // the headers bytes do not need to be accounted for independently.
-  int64_t total_sent_bytes = quic::VersionUsesHttp3(session_->GetQuicVersion())
-                                 ? 0
-                                 : headers_bytes_sent_;
+  int64_t total_sent_bytes =
+      quic::VersionUsesHttp3(session_->GetQuicVersion().transport_version)
+          ? 0
+          : headers_bytes_sent_;
   if (stream_) {
     total_sent_bytes += stream_->stream_bytes_written();
   } else {
@@ -263,7 +264,7 @@ void BidirectionalStreamQuicImpl::PopulateNetErrorDetails(
   details->connection_info =
       QuicHttpStream::ConnectionInfoFromQuicVersion(session_->GetQuicVersion());
   session_->PopulateNetErrorDetails(details);
-  if (session_->IsCryptoHandshakeConfirmed() && stream_)
+  if (session_->OneRttKeysAvailable() && stream_)
     details->quic_connection_error = stream_->connection_error();
 }
 

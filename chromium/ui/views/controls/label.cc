@@ -57,8 +57,7 @@ bool IsOpaque(SkColor color) {
 
 namespace views {
 
-Label::Label() : Label(base::string16()) {
-}
+Label::Label() : Label(base::string16()) {}
 
 Label::Label(const base::string16& text)
     : Label(text, style::CONTEXT_LABEL, style::STYLE_PRIMARY) {}
@@ -67,17 +66,17 @@ Label::Label(const base::string16& text,
              int text_context,
              int text_style,
              gfx::DirectionalityMode directionality_mode)
-    : text_context_(text_context), context_menu_contents_(this) {
+    : text_context_(text_context),
+      text_style_(text_style),
+      context_menu_contents_(this) {
   Init(text, style::GetFont(text_context, text_style), directionality_mode);
   SetLineHeight(style::GetLineHeight(text_context, text_style));
-
-  // If an explicit style is given, ignore color changes due to the NativeTheme.
-  if (text_style != style::STYLE_PRIMARY)
-    SetEnabledColor(style::GetColor(*this, text_context, text_style));
 }
 
 Label::Label(const base::string16& text, const CustomFont& font)
-    : text_context_(style::CONTEXT_LABEL), context_menu_contents_(this) {
+    : text_context_(style::CONTEXT_LABEL),
+      text_style_(style::STYLE_PRIMARY),
+      context_menu_contents_(this) {
   Init(text, font.font_list, gfx::DirectionalityMode::DIRECTIONALITY_FROM_TEXT);
 }
 
@@ -239,7 +238,6 @@ void Label::SetMultiLine(bool multi_line) {
     return;
   multi_line_ = multi_line;
   full_text_->SetMultiline(multi_line);
-  full_text_->SetReplaceNewlineCharsWithSymbols(!multi_line);
   OnPropertyChanged(&multi_line_, kPropertyEffectsLayout);
 }
 
@@ -346,7 +344,7 @@ void Label::SetMaximumWidth(int max_width) {
   if (max_width_ == max_width)
     return;
   max_width_ = max_width;
-  OnPropertyChanged(&max_width_, kPropertyEffectsPreferredSizeChanged);
+  OnPropertyChanged(&max_width_, kPropertyEffectsLayout);
 }
 
 bool Label::GetCollapseWhenHidden() const {
@@ -376,7 +374,7 @@ base::i18n::TextDirection Label::GetTextDirectionForTesting() {
 }
 
 bool Label::IsSelectionSupported() const {
-  return !GetObscured() && full_text_->IsSelectionSupported();
+  return !GetObscured();
 }
 
 bool Label::GetSelectable() const {
@@ -429,6 +427,12 @@ void Label::SelectRange(const gfx::Range& range) {
     SchedulePaint();
 }
 
+views::PropertyChangedSubscription Label::AddTextChangedCallback(
+    views::PropertyChangedCallback callback) {
+  return AddPropertyChangedCallback(&full_text_ + kLabelText,
+                                    std::move(callback));
+}
+
 int Label::GetBaseline() const {
   return GetInsets().top() + font_list().GetBaseline();
 }
@@ -461,7 +465,8 @@ gfx::Size Label::GetMinimumSize() const {
   if (!GetVisible() && collapse_when_hidden_)
     return gfx::Size();
 
-  gfx::Size size(0, font_list().GetHeight());
+  // Always reserve vertical space for at least one line.
+  gfx::Size size(0, std::max(font_list().GetHeight(), GetLineHeight()));
   if (elide_behavior_ == gfx::ELIDE_HEAD ||
       elide_behavior_ == gfx::ELIDE_MIDDLE ||
       elide_behavior_ == gfx::ELIDE_TAIL ||
@@ -480,6 +485,7 @@ gfx::Size Label::GetMinimumSize() const {
       size.SetToMin(GetTextSize());
     }
   }
+
   size.Enlarge(GetInsets().width(), GetInsets().height());
   return size;
 }
@@ -565,7 +571,8 @@ std::unique_ptr<gfx::RenderText> Label::CreateRenderText() const {
       GetMultiLine() && (elide_behavior_ != gfx::NO_ELIDE) ? gfx::ELIDE_TAIL
                                                            : elide_behavior_;
 
-  auto render_text = gfx::RenderText::CreateHarfBuzzInstance();
+  std::unique_ptr<gfx::RenderText> render_text =
+      gfx::RenderText::CreateRenderText();
   render_text->SetHorizontalAlignment(GetHorizontalAlignment());
   render_text->SetVerticalAlignment(GetVerticalAlignment());
   render_text->SetDirectionalityMode(full_text_->directionality_mode());
@@ -632,8 +639,6 @@ void Label::PaintText(gfx::Canvas* canvas) {
 }
 
 void Label::OnBoundsChanged(const gfx::Rect& previous_bounds) {
-  if (previous_bounds.size() != size())
-    InvalidateLayout();
   ClearDisplayText();
 }
 
@@ -645,6 +650,7 @@ void Label::OnPaint(gfx::Canvas* canvas) {
 }
 
 void Label::OnThemeChanged() {
+  View::OnThemeChanged();
   UpdateColorsFromTheme();
 }
 
@@ -695,8 +701,9 @@ bool Label::OnMousePressed(const ui::MouseEvent& event) {
 #endif
 
   return selection_controller_->OnMousePressed(
-      event, false, had_focus ? SelectionController::FOCUSED
-                              : SelectionController::UNFOCUSED);
+      event, false,
+      had_focus ? SelectionController::FOCUSED
+                : SelectionController::UNFOCUSED);
 }
 
 bool Label::OnMouseDragged(const ui::MouseEvent& event) {
@@ -939,8 +946,7 @@ const gfx::RenderText* Label::GetRenderTextForSelectionController() const {
 void Label::Init(const base::string16& text,
                  const gfx::FontList& font_list,
                  gfx::DirectionalityMode directionality_mode) {
-  full_text_ = gfx::RenderText::CreateHarfBuzzInstance();
-  DCHECK(full_text_->MultilineSupported());
+  full_text_ = gfx::RenderText::CreateRenderText();
   full_text_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
   full_text_->SetDirectionalityMode(directionality_mode);
   // NOTE: |full_text_| should not be elided at all. This is used to keep
@@ -950,19 +956,7 @@ void Label::Init(const base::string16& text,
   full_text_->SetCursorEnabled(false);
   full_text_->SetWordWrapBehavior(gfx::TRUNCATE_LONG_WORDS);
 
-  elide_behavior_ = gfx::ELIDE_TAIL;
-  stored_selection_range_ = gfx::Range::InvalidRange();
-  enabled_color_set_ = background_color_set_ = false;
-  selection_text_color_set_ = selection_background_color_set_ = false;
-  subpixel_rendering_enabled_ = true;
-  auto_color_readability_enabled_ = true;
-  multi_line_ = false;
-  max_lines_ = 0;
   UpdateColorsFromTheme();
-  handles_tooltips_ = true;
-  collapse_when_hidden_ = false;
-  fixed_width_ = 0;
-  max_width_ = 0;
   SetText(text);
 
   // Only selectable labels will get requests to show the context menu, due to
@@ -1054,7 +1048,7 @@ void Label::UpdateColorsFromTheme() {
   ui::NativeTheme* theme = GetNativeTheme();
   if (!enabled_color_set_) {
     requested_enabled_color_ =
-        style::GetColor(*this, text_context_, style::STYLE_PRIMARY);
+        style::GetColor(*this, text_context_, text_style_);
   }
   if (!background_color_set_) {
     background_color_ =

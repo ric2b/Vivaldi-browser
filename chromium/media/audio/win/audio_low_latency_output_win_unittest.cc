@@ -34,18 +34,11 @@
 #include "media/base/seekable_buffer.h"
 #include "media/base/test_data_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "testing/gmock_mutant.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::base::ThreadTaskRunnerHandle;
 using ::testing::_;
-using ::testing::AnyNumber;
-using ::testing::AtLeast;
-using ::testing::Between;
-using ::testing::CreateFunctor;
 using ::testing::DoAll;
-using ::testing::Gt;
-using ::testing::InvokeWithoutArgs;
 using ::testing::NotNull;
 using ::testing::Return;
 
@@ -140,7 +133,7 @@ class ReadFromFileAudioSource : public AudioOutputStream::AudioSourceCallback {
     return frames;
   }
 
-  void OnError() override {}
+  void OnError(ErrorType type) override {}
 
   int file_size() { return file_->data_size(); }
 
@@ -273,7 +266,7 @@ TEST_F(WASAPIAudioOutputStreamTest, OpenStartAndClose) {
   AudioOutputStream* aos = CreateDefaultAudioOutputStream(audio_manager_.get());
   EXPECT_TRUE(aos->Open());
   MockAudioSourceCallback source;
-  EXPECT_CALL(source, OnError()).Times(0);
+  EXPECT_CALL(source, OnError(_)).Times(0);
   aos->Start(&source);
   aos->Close();
 }
@@ -284,7 +277,7 @@ TEST_F(WASAPIAudioOutputStreamTest, OpenStartStopAndClose) {
   AudioOutputStream* aos = CreateDefaultAudioOutputStream(audio_manager_.get());
   EXPECT_TRUE(aos->Open());
   MockAudioSourceCallback source;
-  EXPECT_CALL(source, OnError()).Times(0);
+  EXPECT_CALL(source, OnError(_)).Times(0);
   aos->Start(&source);
   aos->Stop();
   aos->Close();

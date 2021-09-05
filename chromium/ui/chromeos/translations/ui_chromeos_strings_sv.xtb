@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">Ladda upp</translation>
 <translation id="1249250836236328755">Genre</translation>
 <translation id="1278813325885878377">Ungerskt tangentbord (QWERTY)</translation>
+<translation id="1293556467332435079">Filer</translation>
 <translation id="1297922636971898492">Google Drive är inte tillgängligt för närvarande. Överföringen fortsätter automatiskt när Google Drive är tillgängligt igen.</translation>
 <translation id="1307931752636661898">Det går inte att visa Linux-filer</translation>
 <translation id="1310751437842832374">Translitterering (mausam → ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">Sparat</translation>
 <translation id="1864756863218646478">Filen hittades inte.</translation>
 <translation id="1921986354447415460">Tangentbord för turkiska F</translation>
+<translation id="1924372192547904021"><ph name="DRIVE_NAME" /> har formaterats</translation>
 <translation id="1931134289871235022">Slovakiska</translation>
 <translation id="1933345018156373194">Flytten misslyckades. Oväntat fel: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">finska</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">Tyskt Neo 2-tangentbord</translation>
 <translation id="2943400156390503548">Presentationer</translation>
 <translation id="2943503720238418293">Ange ett kortare namn</translation>
+<translation id="2949781154072577687">Formaterar <ph name="DRIVE_NAME" /> …</translation>
 <translation id="2951236788251446349">Manet</translation>
 <translation id="2963783323012015985">Turkiskt tangentbord</translation>
 <translation id="2966459079597787514">Svenskt tangentbord</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">Kopieringen misslyckades. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Melon</translation>
 <translation id="4372884569765913867">1:1</translation>
+<translation id="4394214039309501350">Extern länk</translation>
 <translation id="4425149324548788773">Min enhet</translation>
 <translation id="4465830120256509958">Brasilianskt tangentbord</translation>
 <translation id="4470564870223067757">Hangul 2 Set</translation>
@@ -346,7 +350,7 @@
 <translation id="5123433949759960244">Basketboll</translation>
 <translation id="5129662217315786329">polska</translation>
 <translation id="5144820558584035333">Hangul 3 Set (390)</translation>
-<translation id="5145331109270917438">Ändrad den</translation>
+<translation id="5145331109270917438">Ändringsdatum</translation>
 <translation id="515594325917491223">Schack</translation>
 <translation id="5158593464696388225">Det gick inte att spara bilden.</translation>
 <translation id="5159383109919732130"><ph name="BEGIN_BOLD" />Ta inte bort enheten ännu!<ph name="END_BOLD" />
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">Tangentbord för devanagari (fonetiskt)</translation>
 <translation id="6885780034956018177">Snigel</translation>
 <translation id="6896758677409633944">Kopiera</translation>
+<translation id="6898028766943174120">Fler undermappar …</translation>
 <translation id="691516599546977041">Det går inte att spara i <ph name="FOLDER_NAME" />. Redigerade bilder sparas i mappen Nedladdningar.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">US Workman</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">Aktivera synkronisering via mobildata</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6970230597523682626">bulgariska</translation>
+<translation id="6973630695168034713">Mappar</translation>
 <translation id="6978611942794658017">Den här filen är avsedd för en dator med Windows-programvara. Den är inte kompatibel med din enhet, som har Chrome OS. Sök efter en lämplig ersättningsapp i Chrome Web Store.</translation>
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">Du har slut på utrymme</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">Ett ögonblick</translation>
 <translation id="7603724359189955920">Rutnät</translation>
 <translation id="7627790789328695202">Det finns redan en fil med namnet <ph name="FILE_NAME" />. Byt namn på filen och försök igen.</translation>
+<translation id="7628656427739290098"><ph name="PERCENT" /> % klart.</translation>
 <translation id="7649070708921625228">Hjälp</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> objekt flyttas ...</translation>
 <translation id="7658239707568436148">Avbryt</translation>
+<translation id="7695430100978772476">Det gick inte att formatera <ph name="DRIVE_NAME" /></translation>
 <translation id="770015031906360009">grekiska</translation>
 <translation id="7706319470528945664">Portugisiskt tangentbord </translation>
 <translation id="7711920809702896782">Bildinformation</translation>

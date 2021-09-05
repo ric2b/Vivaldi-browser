@@ -9,6 +9,9 @@
 
 #include "chrome/browser/net/dns_probe_runner.h"
 #include "net/base/ip_address.h"
+#include "net/base/network_isolation_key.h"
+#include "net/dns/public/resolve_error_info.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace chrome_browser_net {
 
@@ -33,6 +36,16 @@ static base::Optional<net::AddressList> AddressListForResponse(
 
 }  // namespace
 
+FakeHostResolver::SingleResult::SingleResult(
+    int32_t result,
+    net::ResolveErrorInfo resolve_error_info,
+    Response response)
+    : result(result),
+      resolve_error_info(resolve_error_info),
+      response(response) {
+  DCHECK(result == net::OK || result == net::ERR_NAME_NOT_RESOLVED);
+}
+
 FakeHostResolver::FakeHostResolver(
     mojo::PendingReceiver<network::mojom::HostResolver> resolver_receiver,
     std::vector<SingleResult> result_list)
@@ -42,23 +55,27 @@ FakeHostResolver::FakeHostResolver(
 FakeHostResolver::FakeHostResolver(
     mojo::PendingReceiver<network::mojom::HostResolver> resolver_receiver,
     int32_t result,
+    net::ResolveErrorInfo resolve_error_info,
     Response response)
     : FakeHostResolver(std::move(resolver_receiver),
-                       {SingleResult(result, response)}) {}
+                       {SingleResult(result, resolve_error_info, response)}) {}
 
 FakeHostResolver::~FakeHostResolver() = default;
 
 void FakeHostResolver::ResolveHost(
     const net::HostPortPair& host,
+    const net::NetworkIsolationKey& network_isolation_key,
     network::mojom::ResolveHostParametersPtr optional_parameters,
     mojo::PendingRemote<network::mojom::ResolveHostClient>
         pending_response_client) {
+  EXPECT_TRUE(network_isolation_key.IsTransient());
+
   const SingleResult& cur_result = result_list_[next_result_];
   if (next_result_ + 1 < result_list_.size())
     next_result_++;
   mojo::Remote<network::mojom::ResolveHostClient> response_client(
       std::move(pending_response_client));
-  response_client->OnComplete(cur_result.result,
+  response_client->OnComplete(cur_result.result, cur_result.resolve_error_info,
                               AddressListForResponse(cur_result.response));
 }
 
@@ -78,8 +95,11 @@ HangingHostResolver::~HangingHostResolver() = default;
 
 void HangingHostResolver::ResolveHost(
     const net::HostPortPair& host,
+    const net::NetworkIsolationKey& network_isolation_key,
     network::mojom::ResolveHostParametersPtr optional_parameters,
     mojo::PendingRemote<network::mojom::ResolveHostClient> response_client) {
+  EXPECT_TRUE(network_isolation_key.IsTransient());
+
   // Intentionally do not call response_client->OnComplete, but hang onto the
   // |response_client| since destroying that also causes the mojo
   // set_connection_error_handler handler to be called.
@@ -95,10 +115,10 @@ void HangingHostResolver::MdnsListen(
 }
 
 FakeHostResolverNetworkContext::FakeHostResolverNetworkContext(
-    std::vector<FakeHostResolver::SingleResult> system_result_list,
-    std::vector<FakeHostResolver::SingleResult> public_result_list)
-    : system_result_list_(std::move(system_result_list)),
-      public_result_list_(std::move(public_result_list)) {}
+    std::vector<FakeHostResolver::SingleResult> current_config_result_list,
+    std::vector<FakeHostResolver::SingleResult> google_config_result_list)
+    : current_config_result_list_(std::move(current_config_result_list)),
+      google_config_result_list_(std::move(google_config_result_list)) {}
 
 FakeHostResolverNetworkContext::~FakeHostResolverNetworkContext() = default;
 
@@ -107,21 +127,21 @@ void FakeHostResolverNetworkContext::CreateHostResolver(
     mojo::PendingReceiver<network::mojom::HostResolver> receiver) {
   ASSERT_TRUE(config_overrides);
   if (!config_overrides->nameservers) {
-    if (!system_resolver_) {
-      system_resolver_ = std::make_unique<FakeHostResolver>(
-          std::move(receiver), system_result_list_);
+    if (!current_config_resolver_) {
+      current_config_resolver_ = std::make_unique<FakeHostResolver>(
+          std::move(receiver), current_config_result_list_);
     }
   } else {
-    if (!public_resolver_) {
-      public_resolver_ = std::make_unique<FakeHostResolver>(
-          std::move(receiver), public_result_list_);
+    if (!google_config_resolver_) {
+      google_config_resolver_ = std::make_unique<FakeHostResolver>(
+          std::move(receiver), google_config_result_list_);
     }
   }
 }
 
 FakeDnsConfigChangeManager::FakeDnsConfigChangeManager(
-    network::mojom::DnsConfigChangeManagerRequest request)
-    : binding_(this, std::move(request)) {}
+    mojo::PendingReceiver<network::mojom::DnsConfigChangeManager> receiver)
+    : receiver_(this, std::move(receiver)) {}
 
 FakeDnsConfigChangeManager::~FakeDnsConfigChangeManager() = default;
 
@@ -133,7 +153,7 @@ void FakeDnsConfigChangeManager::RequestNotifications(
 
 void FakeDnsConfigChangeManager::SimulateDnsConfigChange() {
   ASSERT_TRUE(client_);
-  client_->OnSystemDnsConfigChanged();
+  client_->OnDnsConfigChanged();
 }
 
 }  // namespace chrome_browser_net

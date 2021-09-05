@@ -1,8 +1,33 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="be">
+<translation id="1089894737218087497">Усталяваць аўтаномна</translation>
+<translation id="1682285232070778125">Зрабіць Vivaldi браўзэрам па-змаўчанню</translation>
+<translation id="1974060860693918893">Дадаткова</translation>
+<translation id="2286454467119466181">Протый</translation>
+<translation id="237789874664518125">Капірайт <ph name="YEAR" /> Vivaldi Technologies AS. Усе правы абаронены. &lt;a&gt;Палітыка канфідэнцыйнасці&lt;/a&gt;</translation>
 <translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Усе правы захаваны.</translation>
+<translation id="2611953850925269349">Усёроўна выйсці з Vivaldi ?</translation>
+<translation id="3004507951429848293">Калі націсніце 'Прыняць і абнавіць' , то Вы пагаджаецесь з &lt;a&gt;Умовамі карыстання&lt;/a&gt; Vivaldi</translation>
+<translation id="335985608243443814">Агляд...</translation>
+<translation id="3642991949832251880">Зачыніць Vivaldi усё роўна?</translation>
+<translation id="3784826321032465839">Усталяваць Vivladi</translation>
 <translation id="3850557856045828465">Увага: Vivaldi не можа забараніць пашырэнням запісь гісторыі старонак. Каб адлучыць гэта пашырэнне у рэжыме інкогніта, скасуйце гэты параметр.</translation>
 <translation id="4044951018940382324">Вівалдзі</translation>
+<translation id="4079588913451946215">Усталяваць для ўсех карысалнікаў</translation>
+<translation id="421958613172216971">Выберыце тэчку</translation>
+<translation id="4234678621326711327">Усталяваць для гэтага карыстальніка</translation>
+<translation id="4322221081772213228">Калі націснеце "Прыняць і Ўсталяваць" , Вы пагаджаецесь з &lt;a&gt;Умовамі выкарыстання&lt;/a&gt; Vivaldi</translation>
+<translation id="4380252528729894811">Тэчка прызначэння</translation>
+<translation id="4619978527973181021">Прыняць і ўсталяваць</translation>
+<translation id="479976146866774527">Адбываецца Усталёўка Vivaldi</translation>
+<translation id="5051728323101947360">Даць магчымась зрабіць Vivvaldi як браўзэр па-змаўчанню</translation>
+<translation id="5247376421371319618">Прыняць і абаніць</translation>
+<translation id="5288672417093782294">Ісці да наладаў нагадванняў Vivaldi</translation>
+<translation id="5302048478445481009">Мова</translation>
 <translation id="5743878272102782872">Мэнаджар задач - Vivaldi</translation>
+<translation id="6213772951145281007">Ачысціць Cookie і дадзеныя сайтаў пад час выхаду з Vivaldi</translation>
+<translation id="6569282126279967574">Аёй! Vivaldi парушыўся. Перазапусціць?</translation>
+<translation id="7658239707568436148">Скасаваць</translation>
+<translation id="933060950687965486">Тып усталёўкі</translation>
 </translationbundle>

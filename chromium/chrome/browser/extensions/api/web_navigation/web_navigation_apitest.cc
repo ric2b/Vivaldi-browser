@@ -30,14 +30,13 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/context_menu_params.h"
-#include "content/public/common/resource_type.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
@@ -50,10 +49,9 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/web/web_context_menu_data.h"
+#include "third_party/blink/public/common/context_menu_data/media_type.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 
-using content::ResourceType;
 using content::WebContents;
 
 namespace extensions {
@@ -215,16 +213,9 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Api) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/api")) << message_;
 }
 
-// Flaky on Windows Linux and  Chrome OS. See http://crbug.com/874782.
-#if defined(OS_WIN) || defined(OS_CHROMEOS) || defined(OS_LINUX)
-#define MAYBE_GetFrame DISABLED_GetFrame
-#else
-#define MAYBE_GetFrame GetFrame
-#endif
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_GetFrame) {
+IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, GetFrame) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/getFrame")) << message_;
 }
-#undef MAYBE_GetFrame
 
 IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, ClientRedirect) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/clientRedirect"))
@@ -324,14 +315,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, SimpleLoad) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/simpleLoad")) << message_;
 }
 
-// Flaky on Windows, Mac and Linux. See http://crbug.com/477480 (Windows) and
-// https://crbug.com/746407 (Mac, Linux).
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-#define MAYBE_Failures DISABLED_Failures
-#else
-#define MAYBE_Failures Failures
-#endif
-IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_Failures) {
+IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, Failures) {
   ASSERT_TRUE(RunExtensionTest("webnavigation/failures")) << message_;
 }
 
@@ -368,7 +352,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, MAYBE_UserAction) {
   // This corresponds to "Open link in new tab".
   content::ContextMenuParams params;
   params.is_editable = false;
-  params.media_type = blink::WebContextMenuData::kMediaTypeNone;
+  params.media_type = blink::ContextMenuDataMediaType::kNone;
   params.page_url = url;
   params.link_url = extension->GetResourceURL("b.html");
 

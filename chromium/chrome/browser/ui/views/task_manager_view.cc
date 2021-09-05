@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/bind_helpers.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -32,7 +33,6 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_client_view.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/shelf_item.h"
@@ -102,6 +102,7 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(Browser* browser) {
   static constexpr char kTaskManagerId[] = "ijaigheoohcacdnplfbdimmcfldnnhdi";
   const ash::ShelfID shelf_id(kTaskManagerId);
   window->SetProperty(ash::kShelfIDKey, shelf_id.Serialize());
+  window->SetProperty(ash::kAppIDKey, shelf_id.app_id);
   window->SetProperty<int>(ash::kShelfItemTypeKey, ash::TYPE_DIALOG);
 #endif
   return g_task_manager_view->table_model_.get();
@@ -205,14 +206,6 @@ bool TaskManagerView::Accept() {
   return false;
 }
 
-bool TaskManagerView::Close() {
-  return true;
-}
-
-int TaskManagerView::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_OK;
-}
-
 bool TaskManagerView::IsDialogButtonEnabled(ui::DialogButton button) const {
   const ui::ListSelectionModel::SelectedIndices& selections(
       tab_table_->selection_model().selected_indices());
@@ -293,8 +286,15 @@ TaskManagerView::TaskManagerView()
       tab_table_parent_(nullptr),
       is_always_on_top_(false) {
   DialogDelegate::set_use_custom_frame(false);
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK);
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK, l10n_util::GetStringUTF16(IDS_TASK_MANAGER_KILL));
+
+  // Avoid calling Accept() when closing the dialog, since Accept() here means
+  // "kill task" (!).
+  // TODO(ellyjones): Remove this once the Accept() override is removed from
+  // this class.
+  DialogDelegate::SetCloseCallback(base::DoNothing());
 
   Init();
   chrome::RecordDialogCreation(chrome::DialogIdentifier::TASK_MANAGER);

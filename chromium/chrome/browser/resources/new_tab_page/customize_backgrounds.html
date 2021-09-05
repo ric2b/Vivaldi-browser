@@ -1,0 +1,60 @@
+<style>
+  #container {
+    padding: 4px;
+  }
+
+  ntp-grid {
+    --ntp-grid-gap: 8px;
+  }
+
+  .tile {
+    cursor: pointer;
+    outline-width: 0;
+  }
+
+  ntp-untrusted-iframe {
+    pointer-events: none;
+  }
+
+  :host-context(.focus-outline-visible) .tile:focus {
+    box-shadow: 0 0 0 2px var(--ntp-focus-shadow-color);
+  }
+
+  .image {
+    border-radius: 4px;
+    display: block;
+    height: 176px;
+    width: 176px;
+  }
+
+  .label {
+    color: var(--ntp-primary-text-color);
+    margin-bottom: 4px;
+    margin-top: 3px;
+    min-height: 30px;
+  }
+</style>
+<ntp-grid id="collections" columns="3" hidden="[[selectedCollection]]">
+  <dom-repeat id="collectionsRepeat" items="[[collections_]]">
+    <template>
+      <div class="tile" tabindex="0" title="[[item.label]]" role="button"
+        on-click="onCollectionClick_">
+        <ntp-untrusted-iframe class="image"
+            path="image?[[item.previewImageUrl.url]]">
+        </ntp-untrusted-iframe>
+        <div class="label">[[item.label]]</div>
+      </div>
+    </template>
+  </dom-repeat>
+</ntp-grid>
+<ntp-grid id="images" columns="3" hidden="[[!selectedCollection]]">
+  <dom-repeat items="[[images_]]">
+    <template>
+      <div class="tile" tabindex="0" title="[[item.label]]" role="button">
+        <ntp-untrusted-iframe class="image"
+            path="image?[[item.previewImageUrl.url]]">
+        </ntp-untrusted-iframe>
+      </div>
+    </template>
+  </dom-repeat>
+</ntp-grid>

@@ -19,7 +19,6 @@
 #include "content/public/test/content_test_suite_base.h"
 #include "content/shell/app/shell_main_delegate.h"
 #include "content/shell/common/shell_switches.h"
-#include "media/base/media_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/buildflags.h"
 #include "ui/base/ui_base_switches.h"
@@ -39,9 +38,10 @@ class ContentBrowserTestSuite : public ContentTestSuiteBase {
 
  protected:
   void Initialize() override {
-    // Browser tests are expected not to tear-down various globals. (Must run
-    // before the base class is initialized.)
+    // Browser tests are expected not to tear-down various globals and may
+    // complete with the thread priority being above NORMAL.
     base::TestSuite::DisableCheckForLeakedGlobals();
+    base::TestSuite::DisableCheckForThreadPriorityAtTestEnd();
 
     ContentTestSuiteBase::Initialize();
 
@@ -62,13 +62,8 @@ class ContentTestLauncherDelegate : public TestLauncherDelegate {
     return ContentBrowserTestSuite(argc, argv).Run();
   }
 
-  bool AdjustChildProcessCommandLine(
-      base::CommandLine* command_line,
-      const base::FilePath& temp_data_dir) override {
-    command_line->AppendSwitchPath(switches::kContentShellDataPath,
-                                   temp_data_dir);
-    command_line->AppendSwitch(switches::kUseFakeDeviceForMediaStream);
-    return true;
+  std::string GetUserDataDirectoryCommandLineSwitch() override {
+    return switches::kContentShellDataPath;
   }
 
  protected:

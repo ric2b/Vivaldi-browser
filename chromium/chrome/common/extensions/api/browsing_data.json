@@ -144,6 +144,11 @@
             "type": "boolean",
             "optional": true,
             "description": "Delete site and media engagement data."
+          },
+          "siteSettings": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Delete site specific settings (permissions etc)."
           }
         }
       }

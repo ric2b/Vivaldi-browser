@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/web/modules/peerconnection/rtc_rtp_receiver_impl.h"
+#include "third_party/blink/renderer/modules/peerconnection/rtc_rtp_receiver_impl.h"
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "third_party/blink/public/platform/modules/peerconnection/webrtc_util.h"
-#include "third_party/blink/public/platform/web_rtc_rtp_source.h"
-#include "third_party/blink/public/platform/web_rtc_stats.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_encoded_audio_stream_transformer.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_encoded_video_stream_transformer.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_rtp_sender_platform.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_rtp_source.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_stats.h"
+#include "third_party/blink/renderer/platform/peerconnection/webrtc_util.h"
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
 #include "third_party/webrtc/api/scoped_refptr.h"
 
@@ -134,7 +137,9 @@ class RTCRtpReceiverImpl::RTCRtpReceiverInternal
  public:
   RTCRtpReceiverInternal(
       scoped_refptr<webrtc::PeerConnectionInterface> native_peer_connection,
-      RtpReceiverState state)
+      RtpReceiverState state,
+      bool force_encoded_audio_insertable_streams,
+      bool force_encoded_video_insertable_streams)
       : native_peer_connection_(std::move(native_peer_connection)),
         main_task_runner_(state.main_task_runner()),
         signaling_task_runner_(state.signaling_task_runner()),
@@ -142,6 +147,21 @@ class RTCRtpReceiverImpl::RTCRtpReceiverInternal
         state_(std::move(state)) {
     DCHECK(native_peer_connection_);
     DCHECK(state_.is_initialized());
+    if (force_encoded_audio_insertable_streams &&
+        webrtc_receiver_->media_type() == cricket::MEDIA_TYPE_AUDIO) {
+      encoded_audio_transformer_ =
+          std::make_unique<RTCEncodedAudioStreamTransformer>(main_task_runner_);
+      webrtc_receiver_->SetDepacketizerToDecoderFrameTransformer(
+          encoded_audio_transformer_->Delegate());
+    }
+    if (force_encoded_video_insertable_streams &&
+        webrtc_receiver_->media_type() == cricket::MEDIA_TYPE_VIDEO) {
+      encoded_video_transformer_ =
+          std::make_unique<RTCEncodedVideoStreamTransformer>(main_task_runner_);
+      webrtc_receiver_->SetDepacketizerToDecoderFrameTransformer(
+          encoded_video_transformer_->Delegate());
+    }
+    DCHECK(!encoded_audio_transformer_ || !encoded_video_transformer_);
   }
 
   const RtpReceiverState& state() const {
@@ -158,21 +178,20 @@ class RTCRtpReceiverImpl::RTCRtpReceiverInternal
     state_ = std::move(state);
   }
 
-  blink::WebVector<std::unique_ptr<blink::WebRTCRtpSource>> GetSources() {
+  Vector<std::unique_ptr<RTCRtpSource>> GetSources() {
     // The webrtc_recever_ is a proxy, so this is a blocking call to the webrtc
     // signalling thread.
     auto webrtc_sources = webrtc_receiver_->GetSources();
-    blink::WebVector<std::unique_ptr<blink::WebRTCRtpSource>> sources(
-        webrtc_sources.size());
-    for (size_t i = 0; i < webrtc_sources.size(); ++i) {
-      sources[i] = blink::CreateRTCRtpSource(webrtc_sources[i]);
+    Vector<std::unique_ptr<RTCRtpSource>> sources(
+        static_cast<WTF::wtf_size_t>(webrtc_sources.size()));
+    for (WTF::wtf_size_t i = 0; i < webrtc_sources.size(); ++i) {
+      sources[i] = std::make_unique<RTCRtpSource>(webrtc_sources[i]);
     }
     return sources;
   }
 
-  void GetStats(
-      blink::WebRTCStatsReportCallback callback,
-      const blink::WebVector<webrtc::NonStandardGroupId>& exposed_group_ids) {
+  void GetStats(RTCStatsReportCallback callback,
+                const Vector<webrtc::NonStandardGroupId>& exposed_group_ids) {
     signaling_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&RTCRtpReceiverInternal::GetStatsOnSignalingThread, this,
@@ -189,6 +208,14 @@ class RTCRtpReceiverImpl::RTCRtpReceiverInternal
         blink::ToAbslOptional(delay_seconds));
   }
 
+  RTCEncodedAudioStreamTransformer* GetEncodedAudioStreamTransformer() const {
+    return encoded_audio_transformer_.get();
+  }
+
+  RTCEncodedVideoStreamTransformer* GetEncodedVideoStreamTransformer() const {
+    return encoded_video_transformer_.get();
+  }
+
  private:
   friend class WTF::ThreadSafeRefCounted<RTCRtpReceiverInternal,
                                          RTCRtpReceiverInternalTraits>;
@@ -199,12 +226,12 @@ class RTCRtpReceiverImpl::RTCRtpReceiverInternal
   }
 
   void GetStatsOnSignalingThread(
-      blink::WebRTCStatsReportCallback callback,
-      const blink::WebVector<webrtc::NonStandardGroupId>& exposed_group_ids) {
+      RTCStatsReportCallback callback,
+      const Vector<webrtc::NonStandardGroupId>& exposed_group_ids) {
     native_peer_connection_->GetStats(
         webrtc_receiver_.get(),
-        blink::CreateRTCStatsCollectorCallback(
-            main_task_runner_, std::move(callback), exposed_group_ids));
+        CreateRTCStatsCollectorCallback(main_task_runner_, std::move(callback),
+                                        exposed_group_ids));
   }
 
   const scoped_refptr<webrtc::PeerConnectionInterface> native_peer_connection_;
@@ -214,6 +241,8 @@ class RTCRtpReceiverImpl::RTCRtpReceiverInternal
   const scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
   const scoped_refptr<base::SingleThreadTaskRunner> signaling_task_runner_;
   const scoped_refptr<webrtc::RtpReceiverInterface> webrtc_receiver_;
+  std::unique_ptr<RTCEncodedAudioStreamTransformer> encoded_audio_transformer_;
+  std::unique_ptr<RTCEncodedVideoStreamTransformer> encoded_video_transformer_;
   RtpReceiverState state_;
 };
 
@@ -240,10 +269,14 @@ uintptr_t RTCRtpReceiverImpl::getId(
 
 RTCRtpReceiverImpl::RTCRtpReceiverImpl(
     scoped_refptr<webrtc::PeerConnectionInterface> native_peer_connection,
-    RtpReceiverState state)
+    RtpReceiverState state,
+    bool force_encoded_audio_insertable_streams,
+    bool force_encoded_video_insertable_streams)
     : internal_(base::MakeRefCounted<RTCRtpReceiverInternal>(
           std::move(native_peer_connection),
-          std::move(state))) {}
+          std::move(state),
+          force_encoded_audio_insertable_streams,
+          force_encoded_video_insertable_streams)) {}
 
 RTCRtpReceiverImpl::RTCRtpReceiverImpl(const RTCRtpReceiverImpl& other)
     : internal_(other.internal_) {}
@@ -264,7 +297,7 @@ void RTCRtpReceiverImpl::set_state(RtpReceiverState state) {
   internal_->set_state(std::move(state));
 }
 
-std::unique_ptr<blink::WebRTCRtpReceiver> RTCRtpReceiverImpl::ShallowCopy()
+std::unique_ptr<RTCRtpReceiverPlatform> RTCRtpReceiverImpl::ShallowCopy()
     const {
   return std::make_unique<RTCRtpReceiverImpl>(*this);
 }
@@ -287,22 +320,22 @@ const blink::WebMediaStreamTrack& RTCRtpReceiverImpl::Track() const {
   return internal_->state().track_ref()->web_track();
 }
 
-blink::WebVector<blink::WebString> RTCRtpReceiverImpl::StreamIds() const {
+Vector<String> RTCRtpReceiverImpl::StreamIds() const {
   const auto& stream_ids = internal_->state().stream_ids();
-  blink::WebVector<blink::WebString> web_stream_ids(stream_ids.size());
-  for (size_t i = 0; i < stream_ids.size(); ++i)
-    web_stream_ids[i] = blink::WebString::FromUTF8(stream_ids[i]);
-  return web_stream_ids;
+  Vector<String> wtf_stream_ids(
+      static_cast<WTF::wtf_size_t>(stream_ids.size()));
+  for (WTF::wtf_size_t i = 0; i < stream_ids.size(); ++i)
+    wtf_stream_ids[i] = String::FromUTF8(stream_ids[i]);
+  return wtf_stream_ids;
 }
 
-blink::WebVector<std::unique_ptr<blink::WebRTCRtpSource>>
-RTCRtpReceiverImpl::GetSources() {
+Vector<std::unique_ptr<RTCRtpSource>> RTCRtpReceiverImpl::GetSources() {
   return internal_->GetSources();
 }
 
 void RTCRtpReceiverImpl::GetStats(
-    blink::WebRTCStatsReportCallback callback,
-    const blink::WebVector<webrtc::NonStandardGroupId>& exposed_group_ids) {
+    RTCStatsReportCallback callback,
+    const Vector<webrtc::NonStandardGroupId>& exposed_group_ids) {
   internal_->GetStats(std::move(callback), exposed_group_ids);
 }
 
@@ -316,17 +349,27 @@ void RTCRtpReceiverImpl::SetJitterBufferMinimumDelay(
   internal_->SetJitterBufferMinimumDelay(delay_seconds);
 }
 
+RTCEncodedAudioStreamTransformer*
+RTCRtpReceiverImpl::GetEncodedAudioStreamTransformer() const {
+  return internal_->GetEncodedAudioStreamTransformer();
+}
+
+RTCEncodedVideoStreamTransformer*
+RTCRtpReceiverImpl::GetEncodedVideoStreamTransformer() const {
+  return internal_->GetEncodedVideoStreamTransformer();
+}
+
 RTCRtpReceiverOnlyTransceiver::RTCRtpReceiverOnlyTransceiver(
-    std::unique_ptr<blink::WebRTCRtpReceiver> receiver)
+    std::unique_ptr<RTCRtpReceiverPlatform> receiver)
     : receiver_(std::move(receiver)) {
   DCHECK(receiver_);
 }
 
 RTCRtpReceiverOnlyTransceiver::~RTCRtpReceiverOnlyTransceiver() {}
 
-blink::WebRTCRtpTransceiverImplementationType
+RTCRtpTransceiverPlatformImplementationType
 RTCRtpReceiverOnlyTransceiver::ImplementationType() const {
-  return blink::WebRTCRtpTransceiverImplementationType::kPlanBReceiverOnly;
+  return RTCRtpTransceiverPlatformImplementationType::kPlanBReceiverOnly;
 }
 
 uintptr_t RTCRtpReceiverOnlyTransceiver::Id() const {
@@ -334,18 +377,18 @@ uintptr_t RTCRtpReceiverOnlyTransceiver::Id() const {
   return 0u;
 }
 
-blink::WebString RTCRtpReceiverOnlyTransceiver::Mid() const {
+String RTCRtpReceiverOnlyTransceiver::Mid() const {
   NOTIMPLEMENTED();
-  return blink::WebString();
+  return String();
 }
 
-std::unique_ptr<blink::WebRTCRtpSender> RTCRtpReceiverOnlyTransceiver::Sender()
-    const {
+std::unique_ptr<blink::RTCRtpSenderPlatform>
+RTCRtpReceiverOnlyTransceiver::Sender() const {
   NOTIMPLEMENTED();
   return nullptr;
 }
 
-std::unique_ptr<blink::WebRTCRtpReceiver>
+std::unique_ptr<RTCRtpReceiverPlatform>
 RTCRtpReceiverOnlyTransceiver::Receiver() const {
   return receiver_->ShallowCopy();
 }
@@ -379,7 +422,7 @@ RTCRtpReceiverOnlyTransceiver::FiredDirection() const {
 }
 
 webrtc::RTCError RTCRtpReceiverOnlyTransceiver::SetCodecPreferences(
-    blink::WebVector<webrtc::RtpCodecCapability>) {
+    Vector<webrtc::RtpCodecCapability>) {
   NOTIMPLEMENTED();
   return {};
 }

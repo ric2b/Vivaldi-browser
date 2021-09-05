@@ -23,9 +23,7 @@ config("inside_headless_component") {
 }
 
 group("headless_lib") {
-  deps = [
-    ":headless_non_renderer",
-  ]
+  deps = [ ":headless_non_renderer" ]
 }
 
 repack("pak") {
@@ -36,6 +34,7 @@ repack("pak") {
     "$root_gen_dir/content/browser/devtools/devtools_resources.pak",
     "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
     "$root_gen_dir/content/content_resources.pak",
+    "$root_gen_dir/content/dev_ui_content_resources.pak",
     "$root_gen_dir/headless/headless_lib_resources.pak",
     "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
     "$root_gen_dir/net/net_resources.pak",
@@ -58,7 +57,8 @@ repack("pak") {
     ":resources",
     "//components/resources:components_resources",
     "//components/strings",
-    "//content:resources",
+    "//content:content_resources",
+    "//content:dev_ui_content_resources",
     "//content/app/resources",
     "//content/browser/devtools:resources",
     "//content/browser/tracing:resources",
@@ -78,9 +78,7 @@ action("embed_resources") {
   # TODO(altimin): Consider zipping file here, it can reduce size up to 80%.
   script = "lib/embed_data.py"
 
-  inputs = [
-    "$root_out_dir/headless_lib.pak",
-  ]
+  inputs = [ "$root_out_dir/headless_lib.pak" ]
 
   outputs = [
     "$root_gen_dir/headless/embedded_resource_pak.cc",
@@ -102,9 +100,7 @@ action("embed_resources") {
     "kHeadlessResourcePak",
   ]
 
-  deps = [
-    ":pak",
-  ]
+  deps = [ ":pak" ]
 }
 
 grit("resources") {
@@ -113,7 +109,6 @@ grit("resources") {
     "grit/headless_lib_resources.h",
     "$root_gen_dir/headless/headless_lib_resources.pak",
   ]
-  source_is_generated = true
 }
 
 devtools_domains = [
@@ -169,11 +164,9 @@ foreach(domain, devtools_domains) {
 
 action("gen_devtools_client_api") {
   script = "lib/browser/devtools_api/client_api_generator.py"
-  deps = [
-    "//third_party/blink/renderer/core/inspector:protocol_version",
-  ]
+  deps = [ "//third_party/blink/public/devtools_protocol:protocol_version" ]
   inputs = [
-    "$root_gen_dir/third_party/blink/renderer/core/inspector/protocol.json",
+    "$root_gen_dir/third_party/blink/public/devtools_protocol/protocol.json",
   ]
 
   outputs = generated_devtools_api
@@ -212,11 +205,9 @@ if (headless_fontconfig_utils && !is_fuchsia) {
 
 inspector_protocol_generate("protocol_sources") {
   visibility = [ "//headless:headless_shared_sources" ]
-  deps = [
-    "//third_party/blink/renderer/core/inspector:protocol_version",
-  ]
+  deps = [ "//third_party/blink/public/devtools_protocol:protocol_version" ]
   _blink_protocol_path = rebase_path(
-          "$root_gen_dir/third_party/blink/renderer/core/inspector/protocol.json",
+          "$root_gen_dir/third_party/blink/public/devtools_protocol/protocol.json",
           root_build_dir)
 
   inspector_protocol_dir = "//third_party/inspector_protocol"
@@ -225,7 +216,7 @@ inspector_protocol_generate("protocol_sources") {
   config_values = [ "protocol.path=$_blink_protocol_path" ]
 
   inputs = [
-    "$root_gen_dir/third_party/blink/renderer/core/inspector/protocol.json",
+    "$root_gen_dir/third_party/blink/public/devtools_protocol/protocol.json",
     config_file,
   ]
 
@@ -259,6 +250,8 @@ jumbo_source_set("headless_shared_sources") {
     "app/headless_shell_switches.h",
     "lib/headless_content_client.cc",
     "lib/headless_content_client.h",
+    "lib/headless_origin_trial_policy.cc",
+    "lib/headless_origin_trial_policy.h",
     "public/headless_browser.cc",
     "public/headless_browser.h",
     "public/headless_export.h",
@@ -288,7 +281,7 @@ jumbo_source_set("headless_shared_sources") {
     "//base:base_static",
     "//content/public/common",
     "//content/public/common:service_names",
-    "//third_party/inspector_protocol:encoding",
+    "//third_party/inspector_protocol:crdtp",
     "//ui/base",
     "//url",
   ]
@@ -297,7 +290,7 @@ jumbo_source_set("headless_shared_sources") {
     deps += [ "//components/crash/content/browser" ]
   }
   if (is_component_build && is_win) {
-    deps += [ "//components/crash/content/app:crash_export_thunks" ]
+    deps += [ "//components/crash/core/app:crash_export_thunks" ]
   }
 
   if (is_linux && !is_chromeos) {
@@ -309,9 +302,7 @@ jumbo_source_set("headless_shared_sources") {
 
 # Code that is needed in a renderer process.
 jumbo_component("headless") {
-  deps = [
-    ":headless_shared_sources",
-  ]
+  deps = [ ":headless_shared_sources" ]
 }
 
 # Code that is not needed in a renderer process.
@@ -347,7 +338,6 @@ jumbo_component("headless_non_renderer") {
     "lib/browser/headless_window_tree_host.h",
     "lib/browser/protocol/browser_handler.cc",
     "lib/browser/protocol/browser_handler.h",
-    "lib/browser/protocol/domain_handler.cc",
     "lib/browser/protocol/domain_handler.h",
     "lib/browser/protocol/headless_devtools_session.cc",
     "lib/browser/protocol/headless_devtools_session.h",
@@ -444,7 +434,7 @@ jumbo_component("headless_non_renderer") {
     deps += [
       "//components/crash/core/common:crash_key",
       "//components/security_state/content",
-      "//components/services/pdf_compositor/public/mojom",
+      "//components/services/print_compositor/public/mojom",
       "//gin",
       "//third_party/blink/public:blink",
       "//third_party/blink/public:blink_headers",
@@ -456,15 +446,15 @@ jumbo_component("headless_non_renderer") {
       deps += [ "//components/crash/content/browser" ]
     }
     if (is_win) {
-      deps += [ "//components/crash/content/app:crash_export_thunks" ]
+      deps += [ "//components/crash/core/app:crash_export_thunks" ]
     }
 
     if (enable_basic_printing) {
       deps += [
         "//components/printing/browser",
         "//components/printing/renderer",
-        "//components/services/pdf_compositor",
-        "//components/services/pdf_compositor/public/mojom",
+        "//components/services/print_compositor",
+        "//components/services/print_compositor/public/mojom",
       ]
     }
   }
@@ -473,7 +463,6 @@ jumbo_component("headless_non_renderer") {
   # use external v8 startup data too.
   if ((is_win && is_component_build) || !is_win) {
     if (v8_use_external_startup_data) {
-      data += [ "$root_out_dir/natives_blob.bin" ]
       public_deps += [ "//v8" ]
       if (use_v8_context_snapshot) {
         data += [ "$root_out_dir/v8_context_snapshot.bin" ]
@@ -558,9 +547,7 @@ if (!is_component_build) {
   # For component builds all dependencies are already included in the headless
   # component.
   group("headless_renderer") {
-    deps = [
-      ":headless_non_renderer",
-    ]
+    deps = [ ":headless_non_renderer" ]
   }
 }
 
@@ -594,7 +581,7 @@ test("headless_unittests") {
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//components/security_state/content",
-    "//components/services/pdf_compositor/public/mojom",
+    "//components/services/print_compositor/public/mojom",
     "//content/public/app:both",
     "//content/public/child:child",
     "//content/public/common",
@@ -607,14 +594,14 @@ test("headless_unittests") {
   }
 
   if (is_win) {
-    deps += [ "//components/crash/content/app:crash_export_thunks" ]
+    deps += [ "//components/crash/core/app:crash_export_thunks" ]
   }
 
   if (enable_basic_printing) {
     sources += [ "lib/browser/headless_printing_unittest.cc" ]
     deps += [
       "//components/printing/browser",
-      "//components/services/pdf_compositor",
+      "//components/services/print_compositor",
       "//third_party/blink/public:blink",
     ]
   }
@@ -622,17 +609,11 @@ test("headless_unittests") {
 
 if (is_mac) {
   copy("mac_helpers") {
-    sources = [
-      "$root_out_dir/chrome_crashpad_handler",
-    ]
+    sources = [ "$root_out_dir/chrome_crashpad_handler" ]
 
-    deps = [
-      "//components/crash/content/app:chrome_crashpad_handler",
-    ]
+    deps = [ "//components/crash/core/app:chrome_crashpad_handler" ]
 
-    outputs = [
-      "$root_out_dir/Helpers/{{source_file_part}}",
-    ]
+    outputs = [ "$root_out_dir/Helpers/{{source_file_part}}" ]
   }
 }
 
@@ -642,6 +623,7 @@ test("headless_browsertests") {
     "lib/headless_browser_browsertest.cc",
     "lib/headless_browser_context_browsertest.cc",
     "lib/headless_devtools_client_browsertest.cc",
+    "lib/headless_origin_trials_browsertest.cc",
     "lib/headless_web_contents_browsertest.cc",
     "test/headless_browser_test.cc",
     "test/headless_browser_test.h",
@@ -658,15 +640,13 @@ test("headless_browsertests") {
     "$root_out_dir/headless_lib.pak",
     "//net/tools/testserver/",
     "//third_party/blink/web_tests/http/tests/inspector-protocol/",
-    "//third_party/pywebsocket/",
+    "//third_party/pywebsocket3/",
     "//third_party/tlslite/",
     "test/data/",
   ]
 
   if (is_mac) {
-    data_deps = [
-      ":mac_helpers",
-    ]
+    data_deps = [ ":mac_helpers" ]
   }
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
@@ -685,7 +665,7 @@ test("headless_browsertests") {
     "//base",
     "//cc:test_support",
     "//components/security_state/content",
-    "//components/services/pdf_compositor/public/mojom",
+    "//components/services/print_compositor/public/mojom",
     "//content/test:test_support",
     "//services/network/public/mojom",
     "//testing/gmock",
@@ -704,7 +684,7 @@ test("headless_browsertests") {
   if (enable_basic_printing) {
     deps += [
       "//components/printing/browser",
-      "//components/services/pdf_compositor",
+      "//components/services/print_compositor",
       "//pdf",
     ]
   }
@@ -725,7 +705,7 @@ if (is_win) {
     deps = [
       ":headless_non_renderer",
       "//build:branding_buildflags",
-      "//components/services/pdf_compositor/public/mojom",
+      "//components/services/print_compositor/public/mojom",
       "//content:sandbox_helper_win",
       "//content/public/browser",
       "//content/public/common",
@@ -749,24 +729,24 @@ if (is_win) {
     }
   }
 
-  # Headless library with child specific dependencies (e.g., renderer). This
-  # is used when no browser depencendies are needed (e.g. chrome:child_dll).
-  static_library("headless_shell_child_lib") {
-    sources = [
-      "app/headless_shell.cc",
-      "app/headless_shell.h",
-      "app/headless_shell_win.cc",
-      "public/headless_shell.h",
-    ]
-    deps = [
-      ":headless_renderer",
-      "//build:branding_buildflags",
-      "//content/public/child:child",
-      "//net",
-      "//ui/base",
-    ]
+  if (is_multi_dll_chrome) {
+    # Headless library with child specific dependencies (e.g., renderer). This
+    # is used when no browser depencendies are needed (e.g. chrome:child_dll).
+    static_library("headless_shell_child_lib") {
+      sources = [
+        "app/headless_shell.cc",
+        "app/headless_shell.h",
+        "app/headless_shell_win.cc",
+        "public/headless_shell.h",
+      ]
+      deps = [
+        ":headless_renderer",
+        "//build:branding_buildflags",
+        "//content/public/child:child",
+        "//net",
+        "//ui/base",
+      ]
 
-    if (is_multi_dll_chrome) {
       defines = [ "CHROME_MULTIPLE_DLL_CHILD" ]
       sources += [
         "lib/browser/headless_web_contents_impl.cc",
@@ -808,16 +788,14 @@ jumbo_static_library("headless_shell_lib") {
     "//build:branding_buildflags",
     "//components/os_crypt",
     "//components/security_state/content",
-    "//components/services/pdf_compositor/public/mojom",
+    "//components/services/print_compositor/public/mojom",
     "//content/public/app:both",
     "//content/public/browser",
     "//content/public/child:child",
     "//content/public/common",
   ]
 
-  public_deps = [
-    "//base",
-  ]
+  public_deps = [ "//base" ]
 
   if (!is_component_build) {
     public_deps += [ ":headless_non_renderer" ]
@@ -831,7 +809,7 @@ jumbo_static_library("headless_shell_lib") {
     deps += [
       "//components/printing/browser",
       "//components/printing/renderer",
-      "//components/services/pdf_compositor",
+      "//components/services/print_compositor",
     ]
   }
 
@@ -839,8 +817,8 @@ jumbo_static_library("headless_shell_lib") {
     defines = [ "HEADLESS_USE_CRASHPAD" ]
 
     deps += [
-      "//components/crash/content/app:crash_export_thunks",
-      "//components/crash/content/app:run_as_crashpad_handler",
+      "//components/crash/core/app:crash_export_thunks",
+      "//components/crash/core/app:run_as_crashpad_handler",
       "//content:sandbox_helper_win",
       "//sandbox",
     ]
@@ -848,7 +826,7 @@ jumbo_static_library("headless_shell_lib") {
 }
 
 if (is_fuchsia) {
-  fuchsia_package("headless_shell_pkg") {
+  cr_fuchsia_package("headless_shell_pkg") {
     binary = ":headless_shell"
     package_name_override = "headless_shell"
     manifest = "//build/config/fuchsia/tests.cmx"
@@ -861,18 +839,12 @@ if (is_fuchsia) {
 }
 
 executable("headless_shell") {
-  sources = [
-    "app/headless_shell_main.cc",
-  ]
+  sources = [ "app/headless_shell_main.cc" ]
 
-  deps = [
-    ":headless_shell_lib",
-  ]
+  deps = [ ":headless_shell_lib" ]
 
   if (!headless_use_embedded_resources) {
-    data = [
-      "$root_out_dir/headless_lib.pak",
-    ]
+    data = [ "$root_out_dir/headless_lib.pak" ]
   }
 
   if (is_win) {
@@ -894,9 +866,7 @@ process_version("version_header") {
 }
 
 executable("headless_example") {
-  sources = [
-    "app/headless_example.cc",
-  ]
+  sources = [ "app/headless_example.cc" ]
 
   deps = [
     ":headless_shell_lib",

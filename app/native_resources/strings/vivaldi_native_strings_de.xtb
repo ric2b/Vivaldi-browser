@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Link in neuem Fenster öffnen</translation>
 <translation id="3588820906588687999">Bild in neuem Tab öffnen</translation>
 <translation id="3601066750251199488">Monster 3</translation>
-<translation id="366643050267431920">Als Ereignis hinzufügen</translation>
 <translation id="3732157130969736834">Link zu Lesezeichen hinzufügen</translation>
 <translation id="3732388226447288666">Tier 2</translation>
 <translation id="3732439195215136813">Tier 5</translation>
@@ -68,7 +67,6 @@
 <translation id="4636708767492582204">Per Mail senden</translation>
 <translation id="4677434526832593569">Tier 8</translation>
 <translation id="4881695831933465202">Öffnen</translation>
-<translation id="4973311370126107785">Die Ausführung von JavaScript über AppleScript ist deaktiviert. Um es einzuschalten, gehen Sie in der Menüleiste zu Extras &gt; JavaScript von Apple Events zulassen.</translation>
 <translation id="5014281392052865061">Importierte Schnellwahl</translation>
 <translation id="5092656712000637858">Seite als Web-Paneel hinzufügen</translation>
 <translation id="5177818338935286353">Monster 7</translation>
@@ -89,6 +87,7 @@
 <translation id="6229528619562190452">Klicken Sie hier, um Vivaldi zu aktualisieren.</translation>
 <translation id="6234173136417926046">Bild als Schnellwahl-Hintergrund verwenden</translation>
 <translation id="630690498669249215">Opera Lesezeichen-Datei</translation>
+<translation id="6339818817272922368">Lokales Konto</translation>
 <translation id="6438786710866753178">Landschaft 4</translation>
 <translation id="6477028720702061455">Opera-Profilordner für den Import auswählen</translation>
 <translation id="6510706699590490869">Vivaldi &amp;aktualisieren</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">Vivaldi wird durch das <ph name="BEGIN_LINK_CHROMIUM" />Chromium Open Source Projekt<ph name="END_LINK_CHROMIUM" /> und andere <ph name="BEGIN_LINK_OSS" />Open Source Software<ph name="END_LINK_OSS" /> ermöglicht.</translation>
 <translation id="7715497554424665066">Update &amp;ignorieren</translation>
 <translation id="7724603315864178912">Ausschneiden</translation>
+<translation id="7793738202466490491">Als Kalender Ereignis hinzufügen</translation>
 <translation id="7865983598101744945">Beenden bestätigen</translation>
 <translation id="7957213167373139414">Mein Kalender</translation>
 <translation id="8027581147000338959">In neuem Fenster öffnen</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">In Hintergrund-Tab öffnen</translation>
 <translation id="8373293945112511707">Landschaft 1</translation>
 <translation id="8427094907586191051">Landschaft 17</translation>
+<translation id="8446668873108041390">Die Ausführung von JavaScript über AppleScript ist deaktiviert. Unter Einstellungen &gt; Privatsphäre &gt; Apple Events gibt es eine Einstellung, um JavaScript von Apple Events aus zuzulassen.</translation>
 <translation id="8539196077526389150">Landschaft 13</translation>
 <translation id="8624587806981488221">Bild &amp;neu laden</translation>
 <translation id="864444594187862076">Opera Version 15+ (Developer)</translation>

@@ -12,7 +12,7 @@
 #include "chrome/browser/ui/webui/feed_internals/feed_internals.mojom.h"
 #include "chrome/browser/ui/webui/feed_internals/feed_internals_page_handler.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/browser_resources.h"
+#include "chrome/grit/dev_ui_browser_resources.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 
@@ -28,15 +28,13 @@ FeedInternalsUI::FeedInternalsUI(content::WebUI* web_ui)
   source->SetDefaultResource(IDR_FEED_INTERNALS_HTML);
 
   content::WebUIDataSource::Add(profile_, source);
-  // This class is the caller of the callback when an observer interface is
-  // triggered. So this base::Unretained is safe.
-  AddHandlerToRegistry(base::BindRepeating(
-      &FeedInternalsUI::BindFeedInternalsPageHandler, base::Unretained(this)));
 }
+
+WEB_UI_CONTROLLER_TYPE_IMPL(FeedInternalsUI)
 
 FeedInternalsUI::~FeedInternalsUI() = default;
 
-void FeedInternalsUI::BindFeedInternalsPageHandler(
+void FeedInternalsUI::BindInterface(
     mojo::PendingReceiver<feed_internals::mojom::PageHandler> receiver) {
   page_handler_ = std::make_unique<FeedInternalsPageHandler>(
       std::move(receiver),

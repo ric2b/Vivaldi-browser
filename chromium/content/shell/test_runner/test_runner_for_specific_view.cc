@@ -16,14 +16,14 @@
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_canvas.h"
+#include "content/common/widget_messages.h"
 #include "content/public/common/isolated_world_ids.h"
-#include "content/renderer/compositor/layer_tree_view.h"
+#include "content/shell/common/web_test/web_test_string_util.h"
 #include "content/shell/test_runner/layout_dump.h"
 #include "content/shell/test_runner/mock_content_settings_client.h"
 #include "content/shell/test_runner/mock_screen_orientation_client.h"
 #include "content/shell/test_runner/pixel_dump.h"
 #include "content/shell/test_runner/spell_check_client.h"
-#include "content/shell/test_runner/test_common.h"
 #include "content/shell/test_runner/test_interfaces.h"
 #include "content/shell/test_runner/test_preferences.h"
 #include "content/shell/test_runner/test_runner.h"
@@ -39,7 +39,6 @@
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_isolated_world_ids.h"
 #include "third_party/blink/public/platform/web_isolated_world_info.h"
-#include "third_party/blink/public/platform/web_point.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/public/web/blink.h"
@@ -101,12 +100,15 @@ void TestRunnerForSpecificView::Reset() {
     // the Page.
     // TODO(danakj): This should set visibility on all RenderWidgets not just
     // the main frame.
-    // TODO(danakj): This should set visible on the RenderWidget not just the
-    // LayerTreeView.
-    main_frame_render_widget()->layer_tree_view()->SetVisible(true);
+    WidgetMsg_WasShown msg(main_frame_render_widget()->routing_id(),
+                           /*show_request_timestamp=*/base::TimeTicks(),
+                           /*was_evicted=*/false,
+                           /*record_tab_switch_time_request=*/base::nullopt);
+    main_frame_render_widget()->OnMessageReceived(msg);
   }
-  web_view_test_proxy_->ApplyPageHidden(/*hidden=*/false,
-                                        /*initial_setting=*/true);
+  web_view_test_proxy_->ApplyPageVisibilityState(
+      content::PageVisibilityState::kVisible,
+      /*initial_setting=*/true);
 }
 
 bool TestRunnerForSpecificView::RequestPointerLock() {
@@ -468,18 +470,14 @@ void TestRunnerForSpecificView::ExecCommand(gin::Arguments* args) {
       blink::WebString::FromUTF8(command), blink::WebString::FromUTF8(value));
 }
 
+void TestRunnerForSpecificView::TriggerTestInspectorIssue() {
+  web_view()->FocusedFrame()->AddInspectorIssue(
+      blink::mojom::InspectorIssueCode::kSameSiteCookieIssue);
+}
+
 bool TestRunnerForSpecificView::IsCommandEnabled(const std::string& command) {
   return web_view()->FocusedFrame()->IsCommandEnabled(
       blink::WebString::FromUTF8(command));
-}
-
-bool TestRunnerForSpecificView::HasCustomPageSizeStyle(int page_index) {
-  // TODO(dcheng): This class has many implicit assumptions that the frames it
-  // operates on are always local.
-  blink::WebFrame* frame = web_view()->MainFrame();
-  if (!frame || frame->IsWebRemoteFrame())
-    return false;
-  return frame->ToWebLocalFrame()->HasCustomPageSizeStyle(page_index);
 }
 
 void TestRunnerForSpecificView::ForceRedSelectionColors() {
@@ -488,35 +486,43 @@ void TestRunnerForSpecificView::ForceRedSelectionColors() {
 
 void TestRunnerForSpecificView::SetPageVisibility(
     const std::string& new_visibility) {
-  bool hidden;
-  if (new_visibility == "visible")
-    hidden = false;
-  else if (new_visibility == "hidden")
-    hidden = true;
-  else
+  content::PageVisibilityState visibility;
+  if (new_visibility == "visible") {
+    visibility = content::PageVisibilityState::kVisible;
+  } else if (new_visibility == "hidden") {
+    visibility = content::PageVisibilityState::kHidden;
+  } else {
     return;
+  }
 
   // As would the browser via IPC, set visibility on the RenderWidget then on
   // the Page.
   // TODO(danakj): This should set visibility on all RenderWidgets not just the
   // main frame.
-  // TODO(danakj): This should set visible on the RenderWidget not just the
-  // LayerTreeView.
-  main_frame_render_widget()->layer_tree_view()->SetVisible(!hidden);
-  web_view_test_proxy_->ApplyPageHidden(/*hidden=*/hidden,
-                                        /*initial_setting=*/false);
+  if (visibility == content::PageVisibilityState::kVisible) {
+    WidgetMsg_WasShown msg(main_frame_render_widget()->routing_id(),
+                           /*show_request_timestamp=*/base::TimeTicks(),
+                           /*was_evicted=*/false,
+                           /*record_tab_switch_time_request=*/base::nullopt);
+    main_frame_render_widget()->OnMessageReceived(msg);
+  } else {
+    WidgetMsg_WasHidden msg(main_frame_render_widget()->routing_id());
+    main_frame_render_widget()->OnMessageReceived(msg);
+  }
+  web_view_test_proxy_->ApplyPageVisibilityState(visibility,
+                                                 /*initial_setting=*/false);
 }
 
 void TestRunnerForSpecificView::SetTextDirection(
     const std::string& direction_name) {
-  // Map a direction name to a WebTextDirection value.
-  blink::WebTextDirection direction;
+  // Map a direction name to a base::i18n::TextDirection value.
+  base::i18n::TextDirection direction;
   if (direction_name == "auto")
-    direction = blink::kWebTextDirectionDefault;
+    direction = base::i18n::UNKNOWN_DIRECTION;
   else if (direction_name == "rtl")
-    direction = blink::kWebTextDirectionRightToLeft;
+    direction = base::i18n::RIGHT_TO_LEFT;
   else if (direction_name == "ltr")
-    direction = blink::kWebTextDirectionLeftToRight;
+    direction = base::i18n::LEFT_TO_RIGHT;
   else
     return;
 
@@ -645,13 +651,13 @@ void TestRunnerForSpecificView::SetIsolatedWorldInfo(
 
   blink::WebIsolatedWorldInfo info;
   if (security_origin->IsString()) {
-    info.security_origin =
-        blink::WebSecurityOrigin::CreateFromString(V8StringToWebString(
+    info.security_origin = blink::WebSecurityOrigin::CreateFromString(
+        web_test_string_util::V8StringToWebString(
             blink::MainThreadIsolate(), security_origin.As<v8::String>()));
   }
 
   if (content_security_policy->IsString()) {
-    info.content_security_policy = V8StringToWebString(
+    info.content_security_policy = web_test_string_util::V8StringToWebString(
         blink::MainThreadIsolate(), content_security_policy.As<v8::String>());
   }
 
@@ -718,11 +724,12 @@ blink::WebLocalFrame* TestRunnerForSpecificView::GetLocalMainFrame() {
 }
 
 WebWidgetTestProxy* TestRunnerForSpecificView::main_frame_render_widget() {
-  return static_cast<WebWidgetTestProxy*>(web_view_test_proxy_->GetWidget());
+  return static_cast<WebWidgetTestProxy*>(
+      web_view_test_proxy_->GetMainRenderFrame()->GetLocalRootRenderWidget());
 }
 
 blink::WebView* TestRunnerForSpecificView::web_view() {
-  return web_view_test_proxy_->webview();
+  return web_view_test_proxy_->GetWebView();
 }
 
 WebTestDelegate* TestRunnerForSpecificView::delegate() {

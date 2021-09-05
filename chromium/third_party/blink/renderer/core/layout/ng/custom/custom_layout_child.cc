@@ -11,8 +11,13 @@
 #include "third_party/blink/renderer/core/layout/ng/custom/custom_layout_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/custom/custom_layout_scope.h"
 #include "third_party/blink/renderer/core/layout/ng/custom/custom_layout_work_task.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 
 namespace blink {
+
+namespace {
+const char kInvalidLayoutChild[] = "The LayoutChild is not valid.";
+}  // namespace
 
 CustomLayoutChild::CustomLayoutChild(const CSSLayoutDefinition& definition,
                                      NGLayoutInputNode node)
@@ -23,6 +28,24 @@ CustomLayoutChild::CustomLayoutChild(const CSSLayoutDefinition& definition,
           definition.ChildNativeInvalidationProperties(),
           definition.ChildCustomInvalidationProperties())) {}
 
+ScriptPromise CustomLayoutChild::intrinsicSizes(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
+  // A layout child may be invalid if it has been removed from the tree (it is
+  // possible for a web developer to hold onto a LayoutChild object after its
+  // underlying LayoutObject has been destroyed).
+  if (!node_ || !token_->IsValid()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kInvalidLayoutChild);
+    return ScriptPromise();
+  }
+
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  CustomLayoutScope::Current()->Queue()->emplace_back(
+      this, token_, resolver, CustomLayoutWorkTask::TaskType::kIntrinsicSizes);
+  return resolver->Promise();
+}
+
 ScriptPromise CustomLayoutChild::layoutNextFragment(
     ScriptState* script_state,
     const CustomLayoutConstraintsOptions* options,
@@ -31,10 +54,9 @@ ScriptPromise CustomLayoutChild::layoutNextFragment(
   // possible for a web developer to hold onto a LayoutChild object after its
   // underlying LayoutObject has been destroyed).
   if (!node_ || !token_->IsValid()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kInvalidStateError,
-                                           "The LayoutChild is not valid."));
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kInvalidLayoutChild);
+    return ScriptPromise();
   }
 
   // Serialize the provided data if needed.
@@ -54,11 +76,12 @@ ScriptPromise CustomLayoutChild::layoutNextFragment(
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   CustomLayoutScope::Current()->Queue()->emplace_back(
-      this, token_, resolver, options, std::move(constraint_data));
+      this, token_, resolver, options, std::move(constraint_data),
+      CustomLayoutWorkTask::TaskType::kLayoutFragment);
   return resolver->Promise();
 }
 
-void CustomLayoutChild::Trace(blink::Visitor* visitor) {
+void CustomLayoutChild::Trace(Visitor* visitor) {
   visitor->Trace(style_map_);
   visitor->Trace(token_);
   ScriptWrappable::Trace(visitor);

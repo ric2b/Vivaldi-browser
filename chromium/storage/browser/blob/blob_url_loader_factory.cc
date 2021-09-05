@@ -83,17 +83,17 @@ void BlobURLLoaderFactory::Create(
 }
 
 void BlobURLLoaderFactory::CreateLoaderAndStart(
-    network::mojom::URLLoaderRequest loader,
+    mojo::PendingReceiver<network::mojom::URLLoader> loader,
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
     const network::ResourceRequest& request,
-    network::mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   if (url_.is_valid() && request.url != url_) {
     receivers_.ReportBadMessage("Invalid URL when attempting to fetch Blob");
-    client->OnComplete(
-        network::URLLoaderCompletionStatus(net::ERR_INVALID_URL));
+    mojo::Remote<network::mojom::URLLoaderClient>(std::move(client))
+        ->OnComplete(network::URLLoaderCompletionStatus(net::ERR_INVALID_URL));
     return;
   }
   BlobURLLoader::CreateAndStart(

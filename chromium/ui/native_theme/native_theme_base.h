@@ -27,6 +27,10 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
   gfx::Size GetPartSize(Part part,
                         State state,
                         const ExtraParams& extra) const override;
+  float GetBorderRadiusForPart(Part part,
+                               float width,
+                               float height,
+                               float zoom) const override;
   void Paint(cc::PaintCanvas* canvas,
              Part part,
              State state,
@@ -39,7 +43,34 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
   gfx::Rect GetNinePatchAperture(Part part) const override;
 
  protected:
+  // Colors for form controls refresh.
+  enum ControlColorId {
+    kBorder,
+    kDisabledBorder,
+    kHoveredBorder,
+    kPressedBorder,
+    kAccent,
+    kDisabledAccent,
+    kHoveredAccent,
+    kPressedAccent,
+    kBackground,
+    kDisabledBackground,
+    kFill,
+    kDisabledFill,
+    kHoveredFill,
+    kPressedFill,
+    kLightenLayer,
+    kProgressValue,
+    kSlider,
+    kDisabledSlider,
+    kHoveredSlider,
+    kPressedSlider,
+    kAutoCompleteBackground
+  };
+
+  using NativeTheme::NativeTheme;
   NativeThemeBase();
+  explicit NativeThemeBase(bool should_only_use_dark_colors);
   ~NativeThemeBase() override;
 
   // Draw the arrow. Used by scrollbar and inner spin button.
@@ -72,35 +103,35 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
                                     const gfx::Rect& rect,
                                     ColorScheme color_scheme) const;
 
-  virtual void PaintCheckbox(cc::PaintCanvas* canvas,
-                             State state,
-                             const gfx::Rect& rect,
-                             const ButtonExtraParams& button,
-                             ColorScheme color_scheme) const;
+  void PaintCheckbox(cc::PaintCanvas* canvas,
+                     State state,
+                     const gfx::Rect& rect,
+                     const ButtonExtraParams& button,
+                     ColorScheme color_scheme) const;
 
-  virtual void PaintRadio(cc::PaintCanvas* canvas,
-                          State state,
-                          const gfx::Rect& rect,
-                          const ButtonExtraParams& button,
-                          ColorScheme color_scheme) const;
+  void PaintRadio(cc::PaintCanvas* canvas,
+                  State state,
+                  const gfx::Rect& rect,
+                  const ButtonExtraParams& button,
+                  ColorScheme color_scheme) const;
 
-  virtual void PaintButton(cc::PaintCanvas* canvas,
-                           State state,
-                           const gfx::Rect& rect,
-                           const ButtonExtraParams& button,
-                           ColorScheme color_scheme) const;
+  void PaintButton(cc::PaintCanvas* canvas,
+                   State state,
+                   const gfx::Rect& rect,
+                   const ButtonExtraParams& button,
+                   ColorScheme color_scheme) const;
 
-  virtual void PaintTextField(cc::PaintCanvas* canvas,
-                              State state,
-                              const gfx::Rect& rect,
-                              const TextFieldExtraParams& text,
-                              ColorScheme color_scheme) const;
+  void PaintTextField(cc::PaintCanvas* canvas,
+                      State state,
+                      const gfx::Rect& rect,
+                      const TextFieldExtraParams& text,
+                      ColorScheme color_scheme) const;
 
-  virtual void PaintMenuList(cc::PaintCanvas* canvas,
-                             State state,
-                             const gfx::Rect& rect,
-                             const MenuListExtraParams& menu_list,
-                             ColorScheme color_scheme) const;
+  void PaintMenuList(cc::PaintCanvas* canvas,
+                     State state,
+                     const gfx::Rect& rect,
+                     const MenuListExtraParams& menu_list,
+                     ColorScheme color_scheme) const;
 
   virtual void PaintMenuPopupBackground(
       cc::PaintCanvas* canvas,
@@ -121,17 +152,17 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
       const MenuSeparatorExtraParams& menu_separator,
       ColorScheme color_scheme) const;
 
-  virtual void PaintSliderTrack(cc::PaintCanvas* canvas,
-                                State state,
-                                const gfx::Rect& rect,
-                                const SliderExtraParams& slider,
-                                ColorScheme color_scheme) const;
+  void PaintSliderTrack(cc::PaintCanvas* canvas,
+                        State state,
+                        const gfx::Rect& rect,
+                        const SliderExtraParams& slider,
+                        ColorScheme color_scheme) const;
 
-  virtual void PaintSliderThumb(cc::PaintCanvas* canvas,
-                                State state,
-                                const gfx::Rect& rect,
-                                const SliderExtraParams& slider,
-                                ColorScheme color_scheme) const;
+  void PaintSliderThumb(cc::PaintCanvas* canvas,
+                        State state,
+                        const gfx::Rect& rect,
+                        const SliderExtraParams& slider,
+                        ColorScheme color_scheme) const;
 
   virtual void PaintInnerSpinButton(
       cc::PaintCanvas* canvas,
@@ -140,16 +171,22 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
       const InnerSpinButtonExtraParams& spin_button,
       ColorScheme color_scheme) const;
 
-  virtual void PaintProgressBar(cc::PaintCanvas* canvas,
-                                State state,
-                                const gfx::Rect& rect,
-                                const ProgressBarExtraParams& progress_bar,
-                                ColorScheme color_scheme) const;
+  void PaintProgressBar(cc::PaintCanvas* canvas,
+                        State state,
+                        const gfx::Rect& rect,
+                        const ProgressBarExtraParams& progress_bar,
+                        ColorScheme color_scheme) const;
 
   virtual void PaintFrameTopArea(cc::PaintCanvas* canvas,
                                  State state,
                                  const gfx::Rect& rect,
                                  const FrameTopAreaExtraParams& frame_top_area,
+                                 ColorScheme color_scheme) const;
+
+  virtual void PaintLightenLayer(cc::PaintCanvas* canvas,
+                                 SkRect skrect,
+                                 State state,
+                                 SkScalar border_radius,
                                  ColorScheme color_scheme) const;
 
   // Shrinks checkbox/radio button rect, if necessary, to make room for padding
@@ -177,7 +214,7 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
   // Returns the color used to draw the arrow.
   SkColor GetArrowColor(State state, ColorScheme color_scheme) const;
 
-  int scrollbar_width_;
+  int scrollbar_width_ = 15;
 
  private:
   friend class NativeThemeAuraTest;
@@ -210,8 +247,28 @@ class NATIVE_THEME_EXPORT NativeThemeBase : public NativeTheme {
                                   const SkScalar border_radius,
                                   ColorScheme color_scheme) const;
 
+  SkColor ControlsAccentColorForState(State state,
+                                      ColorScheme color_scheme) const;
+  SkColor ControlsBorderColorForState(State state,
+                                      ColorScheme color_scheme) const;
+  SkColor ControlsFillColorForState(State state,
+                                    ColorScheme color_scheme) const;
+  SkColor ControlsBackgroundColorForState(State state,
+                                          ColorScheme color_scheme) const;
+  SkColor ControlsSliderColorForState(State state,
+                                      ColorScheme color_scheme) const;
+  SkColor GetHighContrastControlColor(ControlColorId color_id,
+                                      ColorScheme color_scheme) const;
+  SkColor GetDarkModeControlColor(ControlColorId color_id) const;
+  SkColor GetControlColor(ControlColorId color_id,
+                          ColorScheme color_scheme) const;
+  SkRect AlignSliderTrack(const gfx::Rect& slider_rect,
+                          const NativeTheme::SliderExtraParams& slider,
+                          bool is_value,
+                          float track_height) const;
+
   // The length of the arrow buttons, 0 means no buttons are drawn.
-  int scrollbar_button_length_;
+  int scrollbar_button_length_ = 14;
 
   DISALLOW_COPY_AND_ASSIGN(NativeThemeBase);
 };

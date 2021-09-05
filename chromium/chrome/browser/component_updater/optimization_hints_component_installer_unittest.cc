@@ -4,6 +4,8 @@
 
 #include "chrome/browser/component_updater/optimization_hints_component_installer.h"
 
+#include <utility>
+
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -37,7 +39,7 @@ class TestOptimizationGuideService
   explicit TestOptimizationGuideService(
       scoped_refptr<base::SingleThreadTaskRunner> io_thread_task_runner)
       : optimization_guide::OptimizationGuideService(io_thread_task_runner) {}
-  ~TestOptimizationGuideService() override {}
+  ~TestOptimizationGuideService() override = default;
 
   void MaybeUpdateHintsComponent(
       const optimization_guide::HintsComponentInfo& info) override {
@@ -58,8 +60,8 @@ class TestOptimizationGuideService
 class OptimizationHintsMockComponentUpdateService
     : public component_updater::MockComponentUpdateService {
  public:
-  OptimizationHintsMockComponentUpdateService() {}
-  ~OptimizationHintsMockComponentUpdateService() override {}
+  OptimizationHintsMockComponentUpdateService() = default;
+  ~OptimizationHintsMockComponentUpdateService() override = default;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(OptimizationHintsMockComponentUpdateService);
@@ -71,7 +73,7 @@ namespace component_updater {
 
 class OptimizationHintsComponentInstallerTest : public PlatformTest {
  public:
-  OptimizationHintsComponentInstallerTest() {}
+  OptimizationHintsComponentInstallerTest() = default;
 
   void SetUp() override {
     PlatformTest::SetUp();
@@ -91,7 +93,6 @@ class OptimizationHintsComponentInstallerTest : public PlatformTest {
         data_reduction_proxy::DataReductionProxyTestContext::Builder()
             .WithMockConfig()
             .Build();
-    drp_test_context_->DisableWarmupURLFetch();
   }
 
   void TearDown() override {
@@ -173,7 +174,7 @@ TEST_F(OptimizationHintsComponentInstallerTest,
   std::unique_ptr<OptimizationHintsMockComponentUpdateService> cus(
       new OptimizationHintsMockComponentUpdateService());
   EXPECT_CALL(*cus, RegisterComponent(testing::_)).Times(0);
-  RegisterOptimizationHintsComponent(cus.get(), profile_prefs());
+  RegisterOptimizationHintsComponent(cus.get(), false, profile_prefs());
   RunUntilIdle();
 }
 
@@ -186,7 +187,7 @@ TEST_F(OptimizationHintsComponentInstallerTest,
   std::unique_ptr<OptimizationHintsMockComponentUpdateService> cus(
       new OptimizationHintsMockComponentUpdateService());
   EXPECT_CALL(*cus, RegisterComponent(testing::_)).Times(0);
-  RegisterOptimizationHintsComponent(cus.get(), profile_prefs());
+  RegisterOptimizationHintsComponent(cus.get(), false, profile_prefs());
   RunUntilIdle();
 }
 
@@ -198,7 +199,7 @@ TEST_F(OptimizationHintsComponentInstallerTest,
   std::unique_ptr<OptimizationHintsMockComponentUpdateService> cus(
       new OptimizationHintsMockComponentUpdateService());
   EXPECT_CALL(*cus, RegisterComponent(testing::_)).Times(0);
-  RegisterOptimizationHintsComponent(cus.get(), nullptr);
+  RegisterOptimizationHintsComponent(cus.get(), false, nullptr);
   RunUntilIdle();
 }
 
@@ -213,7 +214,7 @@ TEST_F(OptimizationHintsComponentInstallerTest,
   EXPECT_CALL(*cus, RegisterComponent(testing::_))
       .Times(1)
       .WillOnce(testing::Return(true));
-  RegisterOptimizationHintsComponent(cus.get(), profile_prefs());
+  RegisterOptimizationHintsComponent(cus.get(), false, profile_prefs());
   RunUntilIdle();
 }
 

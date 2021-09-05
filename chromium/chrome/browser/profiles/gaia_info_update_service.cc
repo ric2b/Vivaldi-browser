@@ -19,243 +19,198 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/base/avatar_icon_util.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/account_info.h"
+#include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
+#include "components/signin/public/identity_manager/consent_level.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/storage_partition.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/image/image.h"
 
-namespace {
+#if defined(OS_CHROMEOS)
+#include "chromeos/constants/chromeos_features.h"
+#endif
 
-// Update the user's GAIA info every 24 hours.
-const int kUpdateIntervalHours = 24;
+GAIAInfoUpdateService::GAIAInfoUpdateService(
+    signin::IdentityManager* identity_manager,
+    ProfileAttributesStorage* profile_attributes_storage,
+    const base::FilePath& profile_path,
+    PrefService* profile_prefs)
+    : identity_manager_(identity_manager),
+      profile_attributes_storage_(profile_attributes_storage),
+      profile_path_(profile_path),
+      profile_prefs_(profile_prefs) {
+  identity_manager_->AddObserver(this);
 
-// If the users's GAIA info is very out of date then wait at least this long
-// before starting an update. This avoids slowdown during startup.
-const int kMinUpdateIntervalSeconds = 5;
+  if (!ShouldUpdatePrimaryAccount()) {
+    ClearProfileEntry();
+    return;
+  }
+  ProfileAttributesEntry* entry;
+  if (!profile_attributes_storage_->GetProfileAttributesWithPath(profile_path_,
+                                                                 &entry)) {
+    return;
+  }
 
-}  // namespace
-
-GAIAInfoUpdateService::GAIAInfoUpdateService(Profile* profile)
-    : profile_(profile) {
-  signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(profile_);
-  identity_manager->AddObserver(this);
-
-  PrefService* prefs = profile_->GetPrefs();
-  last_updated_ = base::Time::FromInternalValue(
-      prefs->GetInt64(prefs::kProfileGAIAInfoUpdateTime));
-
-  // TODO(msalama): Once Unconsented primary account is available on startup,
-  // remove the wait on refresh tokens.
-  if (identity_manager->AreRefreshTokensLoaded())
-    OnRefreshTokensLoaded();
+  gaia_id_of_profile_attribute_entry_ = entry->GetGAIAId();
 }
 
-GAIAInfoUpdateService::~GAIAInfoUpdateService() {
-  DCHECK(!profile_) << "Shutdown not called before dtor";
+GAIAInfoUpdateService::~GAIAInfoUpdateService() = default;
+
+void GAIAInfoUpdateService::UpdatePrimaryAccount() {
+  if (!ShouldUpdatePrimaryAccount())
+    return;
+
+  auto unconsented_primary_account_info =
+      identity_manager_->GetPrimaryAccountInfo(
+          signin::ConsentLevel::kNotRequired);
+
+  if (!gaia_id_of_profile_attribute_entry_.empty() &&
+      unconsented_primary_account_info.gaia !=
+          gaia_id_of_profile_attribute_entry_) {
+    ClearProfileEntry();
+  }
+
+  auto maybe_account_info =
+      identity_manager_
+          ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
+              unconsented_primary_account_info.account_id);
+  if (maybe_account_info.has_value())
+    UpdatePrimaryAccount(maybe_account_info.value());
 }
 
-void GAIAInfoUpdateService::Update() {
-  // The user must be logged in.
-  signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(profile_);
-  if (!identity_manager->HasUnconsentedPrimaryAccount())
+void GAIAInfoUpdateService::UpdatePrimaryAccount(const AccountInfo& info) {
+  if (!info.IsValid())
     return;
 
-  if (!base::FeatureList::IsEnabled(kPersistUPAInProfileInfoCache) &&
-      !identity_manager->HasPrimaryAccount())
+  ProfileAttributesEntry* entry;
+  if (!profile_attributes_storage_->GetProfileAttributesWithPath(profile_path_,
+                                                                 &entry)) {
     return;
+  }
+  gaia_id_of_profile_attribute_entry_ = info.gaia;
+  entry->SetGAIAGivenName(base::UTF8ToUTF16(info.given_name));
+  entry->SetGAIAName(base::UTF8ToUTF16(info.full_name));
 
-  if (profile_image_downloader_)
-    return;
-  profile_image_downloader_.reset(new ProfileDownloader(this));
-  profile_image_downloader_->Start();
+  entry->SetHostedDomain(info.hosted_domain);
+  const base::string16 hosted_domain = base::UTF8ToUTF16(info.hosted_domain);
+  profile_prefs_->SetString(prefs::kGoogleServicesHostedDomain,
+                            base::UTF16ToUTF8(hosted_domain));
+
+  if (info.picture_url == kNoPictureURLFound) {
+    entry->SetGAIAPicture(std::string(), gfx::Image());
+  } else if (!info.account_image.IsEmpty()) {
+    // Only set the image if it is not empty, to avoid clearing the image if we
+    // fail to download it on one of the 24 hours interval to refresh the data.
+    entry->SetGAIAPicture(info.last_downloaded_image_url_with_size,
+                          info.account_image);
+  }
 }
 
 // static
 bool GAIAInfoUpdateService::ShouldUseGAIAProfileInfo(Profile* profile) {
 #if defined(OS_CHROMEOS)
-  return false;
+  return base::FeatureList::IsEnabled(chromeos::features::kAvatarToolbarButton);
 #endif
   return true;
 }
 
-bool GAIAInfoUpdateService::NeedsProfilePicture() const {
-  return true;
-}
+void GAIAInfoUpdateService::UpdateAnyAccount(const AccountInfo& info) {
+  if (!info.IsValid())
+    return;
 
-int GAIAInfoUpdateService::GetDesiredImageSideLength() const {
-  return 256;
-}
-
-signin::IdentityManager* GAIAInfoUpdateService::GetIdentityManager() {
-  return IdentityManagerFactory::GetForProfile(profile_);
-}
-
-network::mojom::URLLoaderFactory* GAIAInfoUpdateService::GetURLLoaderFactory() {
-  return content::BrowserContext::GetDefaultStoragePartition(profile_)
-      ->GetURLLoaderFactoryForBrowserProcess()
-      .get();
-}
-
-std::string GAIAInfoUpdateService::GetCachedPictureURL() const {
-  return profile_->GetPrefs()->GetString(prefs::kProfileGAIAInfoPictureURL);
-}
-
-bool GAIAInfoUpdateService::IsPreSignin() const {
-  return false;
-}
-
-void GAIAInfoUpdateService::OnProfileDownloadSuccess(
-    ProfileDownloader* downloader) {
-  // Make sure that |ProfileDownloader| gets deleted after return.
-  std::unique_ptr<ProfileDownloader> profile_image_downloader(
-      profile_image_downloader_.release());
-
-  // Save the last updated time.
-  last_updated_ = base::Time::Now();
-  profile_->GetPrefs()->SetInt64(prefs::kProfileGAIAInfoUpdateTime,
-                                 last_updated_.ToInternalValue());
-  ScheduleNextUpdate();
-
-  base::string16 full_name = downloader->GetProfileFullName();
-  base::string16 given_name = downloader->GetProfileGivenName();
-  SkBitmap bitmap = downloader->GetProfilePicture();
-  ProfileDownloader::PictureStatus picture_status =
-      downloader->GetProfilePictureStatus();
-  std::string picture_url = downloader->GetProfilePictureURL();
   ProfileAttributesEntry* entry;
-  if (!g_browser_process->profile_manager()->GetProfileAttributesStorage().
-          GetProfileAttributesWithPath(profile_->GetPath(), &entry)) {
+  if (!profile_attributes_storage_->GetProfileAttributesWithPath(profile_path_,
+                                                                 &entry)) {
     return;
   }
 
-  entry->SetGAIAGivenName(given_name);
-  entry->SetGAIAName(full_name);
-
-  if (picture_status == ProfileDownloader::PICTURE_SUCCESS) {
-    profile_->GetPrefs()->SetString(prefs::kProfileGAIAInfoPictureURL,
-                                    picture_url);
-    gfx::Image gfx_image = gfx::Image::CreateFrom1xBitmap(bitmap);
-    entry->SetGAIAPicture(gfx_image);
-  } else if (picture_status == ProfileDownloader::PICTURE_DEFAULT) {
-    entry->SetGAIAPicture(gfx::Image());
-  }
-
-  const base::string16 hosted_domain = downloader->GetProfileHostedDomain();
-  profile_->GetPrefs()->SetString(
-      prefs::kGoogleServicesHostedDomain,
-      (hosted_domain.empty() ? kNoHostedDomainFound
-                             : base::UTF16ToUTF8(hosted_domain)));
+  // These are idempotent, i.e. the second and any further call for the same
+  // account info has no further impact.
+  entry->AddAccountName(info.full_name);
+  entry->AddAccountCategory(info.hosted_domain == kNoHostedDomainFound
+                                ? AccountCategory::kConsumer
+                                : AccountCategory::kEnterprise);
 }
 
-void GAIAInfoUpdateService::OnProfileDownloadFailure(
-    ProfileDownloader* downloader,
-    ProfileDownloaderDelegate::FailureReason reason) {
-  profile_image_downloader_.reset();
-
-  // Save the last updated time.
-  last_updated_ = base::Time::Now();
-  profile_->GetPrefs()->SetInt64(prefs::kProfileGAIAInfoUpdateTime,
-                                 last_updated_.ToInternalValue());
-  ScheduleNextUpdate();
-}
-
-void GAIAInfoUpdateService::OnUsernameChanged(const std::string& username) {
+void GAIAInfoUpdateService::ClearProfileEntry() {
   ProfileAttributesEntry* entry;
-  if (!g_browser_process->profile_manager()->GetProfileAttributesStorage().
-          GetProfileAttributesWithPath(profile_->GetPath(), &entry)) {
+  if (!profile_attributes_storage_->GetProfileAttributesWithPath(profile_path_,
+                                                                 &entry)) {
     return;
   }
-
-  if (username.empty()) {
-    // Unset the old user's GAIA info.
-    entry->SetGAIAName(base::string16());
-    entry->SetGAIAGivenName(base::string16());
-    entry->SetGAIAPicture(gfx::Image());
-    // Unset the cached URL.
-    profile_->GetPrefs()->ClearPref(prefs::kProfileGAIAInfoPictureURL);
-  } else {
-    // Update the new user's GAIA info.
-    Update();
-  }
+  gaia_id_of_profile_attribute_entry_ = "";
+  entry->SetGAIAName(base::string16());
+  entry->SetGAIAGivenName(base::string16());
+  entry->SetGAIAPicture(std::string(), gfx::Image());
+  entry->SetHostedDomain(std::string());
+  // Unset the cached URL.
+  profile_prefs_->ClearPref(prefs::kGoogleServicesHostedDomain);
 }
 
 void GAIAInfoUpdateService::Shutdown() {
-  timer_.Stop();
-  profile_image_downloader_.reset();
-  signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(profile_);
-  identity_manager->RemoveObserver(this);
-
-  // OK to reset |profile_| pointer here because GAIAInfoUpdateService will not
-  // access it again.  This pointer is also used to implement the delegate for
-  // |profile_image_downloader_|.  However that object was destroyed above.
-  profile_ = nullptr;
-}
-
-void GAIAInfoUpdateService::ScheduleNextUpdate() {
-  if (timer_.IsRunning())
-    return;
-
-  const base::TimeDelta desired_delta =
-      base::TimeDelta::FromHours(kUpdateIntervalHours);
-  const base::TimeDelta update_delta = base::Time::Now() - last_updated_;
-
-  base::TimeDelta delta;
-  if (update_delta < base::TimeDelta() || update_delta > desired_delta)
-    delta = base::TimeDelta::FromSeconds(kMinUpdateIntervalSeconds);
-  else
-    delta = desired_delta - update_delta;
-
-  // UMA Profile Metrics should be logged regularly.  Logging is not performed
-  // in Update() because it is a public method and may be called at any time.
-  // These metrics should logged only on this schedule.
-  //
-  // In mac perf tests, the browser process pointer may be null.
-  if (g_browser_process)
-    ProfileMetrics::LogNumberOfProfiles(g_browser_process->profile_manager());
-
-  timer_.Start(FROM_HERE, delta, this, &GAIAInfoUpdateService::Update);
-}
-
-void GAIAInfoUpdateService::OnPrimaryAccountSet(
-    const CoreAccountInfo& primary_account_info) {
-  OnUsernameChanged(primary_account_info.gaia);
-}
-
-void GAIAInfoUpdateService::OnPrimaryAccountCleared(
-    const CoreAccountInfo& previous_primary_account_info) {
-  OnUsernameChanged(std::string());
+  identity_manager_->RemoveObserver(this);
 }
 
 void GAIAInfoUpdateService::OnUnconsentedPrimaryAccountChanged(
     const CoreAccountInfo& unconsented_primary_account_info) {
-  signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(profile_);
+  if (unconsented_primary_account_info.gaia.empty()) {
+    ClearProfileEntry();
+  } else {
+    UpdatePrimaryAccount();
+  }
+}
 
-  if (identity_manager->HasPrimaryAccount() ||
-      !base::FeatureList::IsEnabled(kPersistUPAInProfileInfoCache)) {
+void GAIAInfoUpdateService::OnExtendedAccountInfoUpdated(
+    const AccountInfo& info) {
+  UpdateAnyAccount(info);
+
+  if (!ShouldUpdatePrimaryAccount())
+    return;
+
+  CoreAccountInfo account_info = identity_manager_->GetPrimaryAccountInfo(
+      signin::ConsentLevel::kNotRequired);
+
+  if (info.account_id != account_info.account_id)
+    return;
+
+  UpdatePrimaryAccount(info);
+}
+
+void GAIAInfoUpdateService::OnAccountsInCookieUpdated(
+    const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
+    const GoogleServiceAuthError& error) {
+  ProfileAttributesEntry* entry;
+  if (!profile_attributes_storage_->GetProfileAttributesWithPath(profile_path_,
+                                                                 &entry)) {
     return;
   }
 
-  OnUsernameChanged(unconsented_primary_account_info.gaia);
+  // We can fully regenerate the info about all accounts only when there are no
+  // signed-out accounts. This means that for instance clearing cookies will
+  // reset the info.
+  if (accounts_in_cookie_jar_info.signed_out_accounts.empty()) {
+    entry->ClearAccountNames();
+    entry->ClearAccountCategories();
+
+    // Regenerate based on the info from signed-in accounts (if not available
+    // now, it will be regenerated soon via OnExtendedAccountInfoUpdated() once
+    // downloaded).
+    for (gaia::ListedAccount account :
+         accounts_in_cookie_jar_info.signed_in_accounts) {
+      auto maybe_account_info =
+          identity_manager_
+              ->FindExtendedAccountInfoForAccountWithRefreshTokenByAccountId(
+                  account.id);
+      if (maybe_account_info.has_value())
+        UpdateAnyAccount(*maybe_account_info);
+    }
+  }
 }
 
-void GAIAInfoUpdateService::OnRefreshTokensLoaded() {
-  signin::IdentityManager* identity_manager =
-      IdentityManagerFactory::GetForProfile(profile_);
-
-  bool clear_profile =
-      !identity_manager->HasUnconsentedPrimaryAccount() ||
-      (!base::FeatureList::IsEnabled(kPersistUPAInProfileInfoCache) &&
-       !identity_manager->HasPrimaryAccount());
-
-  if (clear_profile) {
-    OnUsernameChanged(std::string());
-  }
-
-  ScheduleNextUpdate();
+bool GAIAInfoUpdateService::ShouldUpdatePrimaryAccount() {
+  return identity_manager_->HasPrimaryAccount(
+      signin::ConsentLevel::kNotRequired);
 }

@@ -21,7 +21,6 @@
 #include "base/strings/stringprintf.h"
 #include "cc/mojo_embedder/async_layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_frame_sink.h"
-#include "components/viz/client/hit_test_data_provider_draw_quad.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/host/host_frame_sink_manager.h"
@@ -118,6 +117,7 @@ Window::Window(WindowDelegate* delegate, client::WindowType type)
 }
 
 Window::~Window() {
+  is_destroying_ = true;
   WindowOcclusionTracker::ScopedPause pause_occlusion_tracking;
 
   if (layer()->owner() == this)
@@ -181,10 +181,8 @@ Window::~Window() {
   // If SetEmbedFrameSinkId() was called by client code, then we assume client
   // code is taking care of invalidating.
   if (frame_sink_id_.is_valid() && !embeds_external_client_) {
-    auto* context_factory_private =
-        Env::GetInstance()->context_factory_private();
-    auto* host_frame_sink_manager =
-        context_factory_private->GetHostFrameSinkManager();
+    auto* context_factory = Env::GetInstance()->context_factory();
+    auto* host_frame_sink_manager = context_factory->GetHostFrameSinkManager();
     host_frame_sink_manager->InvalidateFrameSinkId(frame_sink_id_);
   }
 }
@@ -778,29 +776,34 @@ void Window::UpdateVisualState() {
     delegate_->UpdateVisualState();
 }
 
-#if !defined(NDEBUG)
+#if DCHECK_IS_ON()
 std::string Window::GetDebugInfo() const {
+  std::string name = GetName();
+  if (name.empty())
+    name = "Unknown";
+  std::string layer_state = "NoLayer";
+  if (layer()) {
+    layer_state = base::StringPrintf(
+        "%s opacity=%.1f",
+        layer()->GetTargetVisibility() ? "LayerVisible" : "LayerHidden",
+        layer()->opacity());
+  }
   return base::StringPrintf(
-      "%s<%d> bounds(%d, %d, %d, %d) %s %s opacity=%.1f "
-      "occlusion_state=%s",
-      GetName().empty() ? "Unknown" : GetName().c_str(), id(), bounds().x(),
-      bounds().y(), bounds().width(), bounds().height(),
-      visible_ ? "WindowVisible" : "WindowHidden",
-      layer()
-          ? (layer()->GetTargetVisibility() ? "LayerVisible" : "LayerHidden")
-          : "NoLayer",
-      layer() ? layer()->opacity() : 1.0f,
-      OcclusionStateToString(occlusion_state_));
+      "%s<%d> bounds=%s %s %s occlusion_state=%s", name.c_str(), id(),
+      bounds().ToString().c_str(), visible_ ? "WindowVisible" : "WindowHidden",
+      layer_state.c_str(), OcclusionStateToString(occlusion_state_));
+}
+
+std::string Window::GetWindowHierarchy(int depth) const {
+  std::string hierarchy =
+      base::StringPrintf("%*s%s\n", depth * 2, "", GetDebugInfo().c_str());
+  for (Window* child : children_)
+    hierarchy += child->GetWindowHierarchy(depth + 1);
+  return hierarchy;
 }
 
 void Window::PrintWindowHierarchy(int depth) const {
-  VLOG(0) << base::StringPrintf(
-      "%*s%s", depth * 2, "", GetDebugInfo().c_str());
-  for (Windows::const_iterator it = children_.begin();
-       it != children_.end(); ++it) {
-    Window* child = *it;
-    child->PrintWindowHierarchy(depth + 1);
-  }
+  VLOG(0) << GetWindowHierarchy(depth);
 }
 #endif
 
@@ -1147,12 +1150,11 @@ std::unique_ptr<cc::LayerTreeFrameSink> Window::CreateLayerTreeFrameSink() {
   // this function be called.
   DCHECK(!embeds_external_client_);
 
-  auto* context_factory_private = Env::GetInstance()->context_factory_private();
-  auto* host_frame_sink_manager =
-      context_factory_private->GetHostFrameSinkManager();
+  auto* context_factory = Env::GetInstance()->context_factory();
+  auto* host_frame_sink_manager = context_factory->GetHostFrameSinkManager();
 
   if (!frame_sink_id_.is_valid()) {
-    auto frame_sink_id = context_factory_private->AllocateFrameSinkId();
+    auto frame_sink_id = context_factory->AllocateFrameSinkId();
     host_frame_sink_manager->RegisterFrameSinkId(
         frame_sink_id, this, viz::ReportFirstSurfaceActivation::kYes);
     SetEmbedFrameSinkIdImpl(frame_sink_id);
@@ -1175,14 +1177,6 @@ std::unique_ptr<cc::LayerTreeFrameSink> Window::CreateLayerTreeFrameSink() {
   params.pipes.compositor_frame_sink_remote = std::move(sink_remote);
   params.pipes.client_receiver = std::move(client_receiver);
   params.client_name = kExo;
-  bool root_accepts_events =
-      (event_targeting_policy_ == EventTargetingPolicy::kTargetOnly) ||
-      (event_targeting_policy_ == EventTargetingPolicy::kTargetAndDescendants);
-  if (!features::IsVizHitTestingSurfaceLayerEnabled()) {
-    params.hit_test_data_provider =
-        std::make_unique<viz::HitTestDataProviderDrawQuad>(
-            true /* should_ask_for_child_region */, root_accepts_events);
-  }
   auto frame_sink =
       std::make_unique<cc::mojo_embedder::AsyncLayerTreeFrameSink>(
           nullptr /* context_provider */, nullptr /* worker_context_provider */,
@@ -1284,7 +1278,7 @@ const char* Window::OcclusionStateToString(OcclusionState state) {
 void Window::SetOpaqueRegionsForOcclusion(
     const std::vector<gfx::Rect>& opaque_regions_for_occlusion) {
   // Only transparent windows should try to set opaque regions for occlusion.
-  DCHECK(transparent());
+  DCHECK(transparent() || opaque_regions_for_occlusion.empty());
   if (opaque_regions_for_occlusion == opaque_regions_for_occlusion_)
     return;
   opaque_regions_for_occlusion_ = opaque_regions_for_occlusion;
@@ -1341,7 +1335,8 @@ void Window::OnLayerAlphaShapeChanged() {
     observer.OnWindowAlphaShapeSet(this);
 }
 
-void Window::OnLayerFillsBoundsOpaquelyChanged() {
+void Window::OnLayerFillsBoundsOpaquelyChanged(
+    ui::PropertyChangeReason reason) {
   // Let observers know that this window's transparent status has changed.
   // Transparent status can affect the occlusion computed for windows.
   WindowOcclusionTracker::ScopedPause pause_occlusion_tracking;
@@ -1351,7 +1346,7 @@ void Window::OnLayerFillsBoundsOpaquelyChanged() {
     DCHECK(opaque_regions_for_occlusion_.empty());
 
   for (WindowObserver& observer : observers_)
-    observer.OnWindowTransparentChanged(this);
+    observer.OnWindowTransparentChanged(this, reason);
 }
 
 void Window::OnLayerTransformed(const gfx::Transform& old_transform,
@@ -1478,7 +1473,7 @@ void Window::UpdateLayerName() {
   if (id_ != -1)
     layer_name += " " + base::NumberToString(id_);
 
-  layer()->set_name(layer_name);
+  layer()->SetName(layer_name);
 #endif
 }
 

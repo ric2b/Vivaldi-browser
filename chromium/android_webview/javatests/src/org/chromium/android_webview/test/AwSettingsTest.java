@@ -2345,7 +2345,6 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
-    @DisabledTest(message = "crbug.com/957626")
     public void testJavaScriptPopupsOpenTwice() throws Throwable {
         final ViewPair views = createViews();
         runPerViewSettingsTest(new AwSettingsJavaScriptPopupsTestHelper(
@@ -2403,7 +2402,6 @@ public class AwSettingsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
-    @DisabledTest(message = "crbug.com/1010034")
     // As our implementation of network loads blocking uses the same net::URLRequest settings, make
     // sure that setting cache mode doesn't accidentally enable network loads.  The reference
     // behaviour is that when network loads are blocked, setting cache mode has no effect.
@@ -3121,6 +3119,35 @@ public class AwSettingsTest {
         // Loading the html via a data URI requires us to encode '#' symbols as '%23'.
         mActivityTestRule.loadDataSync(
                 awContents, onPageFinishedHelper, page.replace("#", "%23"), "text/html", false);
+        String actualTitle = mActivityTestRule.getTitleOnUiThread(awContents);
+        Assert.assertEquals(expectedTitle, actualTitle);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView", "Preferences"})
+    public void testWebComponentsV0Reenabled() throws Throwable {
+        // TODO(1021631): This test should be removed once Android Webview
+        // disables Web Components v0 by default.
+        final TestAwContentsClient client = new TestAwContentsClient();
+        final AwTestContainerView view =
+                mActivityTestRule.createAwTestContainerViewOnMainSync(client);
+        final AwContents awContents = view.getAwContents();
+        CallbackHelper onPageFinishedHelper = client.getOnPageFinishedHelper();
+        AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
+        final String expectedTitle = "enabled"; // https://crbug.com/1021631
+        final String page = "<!doctype html>"
+                + "<script>"
+                + "const htmlImportsEnabled = 'import' in document.createElement('link');"
+                + "const customElementsV0Enabled = 'registerElement' in document;"
+                + "const shadowDomV0Enabled = 'createShadowRoot' in document.createElement('div');"
+                + "if (htmlImportsEnabled && customElementsV0Enabled && shadowDomV0Enabled) {"
+                + "  document.title = 'enabled';"
+                + "} else {"
+                + "  document.title = 'disabled';"
+                + "}"
+                + "</script>";
+        mActivityTestRule.loadDataSync(awContents, onPageFinishedHelper, page, "text/html", false);
         String actualTitle = mActivityTestRule.getTitleOnUiThread(awContents);
         Assert.assertEquals(expectedTitle, actualTitle);
     }

@@ -74,14 +74,15 @@ void CastSessionDelegateBase::StartUDP(
 
   // Rationale for using unretained: The callback cannot be called after the
   // destruction of CastTransportIPC, and they both share the same thread.
-  cast_transport_.reset(new CastTransportIPC(
+  cast_transport_ = std::make_unique<CastTransportIPC>(
       local_endpoint, remote_endpoint, std::move(options),
-      base::Bind(&CastSessionDelegateBase::ReceivePacket,
-                 base::Unretained(this)),
-      base::Bind(&CastSessionDelegateBase::StatusNotificationCB,
-                 base::Unretained(this), error_callback),
-      base::Bind(&media::cast::LogEventDispatcher::DispatchBatchOfEvents,
-                 base::Unretained(cast_environment_->logger()))));
+      base::BindRepeating(&CastSessionDelegateBase::ReceivePacket,
+                          base::Unretained(this)),
+      base::BindRepeating(&CastSessionDelegateBase::StatusNotificationCB,
+                          base::Unretained(this), error_callback),
+      base::BindRepeating(
+          &media::cast::LogEventDispatcher::DispatchBatchOfEvents,
+          base::Unretained(cast_environment_->logger())));
 }
 
 void CastSessionDelegateBase::StatusNotificationCB(
@@ -125,8 +126,8 @@ void CastSessionDelegate::StartAudio(
   audio_frame_input_available_callback_ = callback;
   cast_sender_->InitializeAudio(
       config,
-      base::Bind(&CastSessionDelegate::OnOperationalStatusChange,
-                 weak_factory_.GetWeakPtr(), true, error_callback));
+      base::BindRepeating(&CastSessionDelegate::OnOperationalStatusChange,
+                          weak_factory_.GetWeakPtr(), true, error_callback));
 }
 
 void CastSessionDelegate::StartVideo(
@@ -147,10 +148,9 @@ void CastSessionDelegate::StartVideo(
 
   cast_sender_->InitializeVideo(
       config,
-      base::Bind(&CastSessionDelegate::OnOperationalStatusChange,
-                 weak_factory_.GetWeakPtr(), false, error_callback),
-      create_vea_cb,
-      create_video_encode_mem_cb);
+      base::BindRepeating(&CastSessionDelegate::OnOperationalStatusChange,
+                          weak_factory_.GetWeakPtr(), false, error_callback),
+      create_vea_cb, create_video_encode_mem_cb);
 }
 
 void CastSessionDelegate::StartRemotingStream(
@@ -182,8 +182,8 @@ void CastSessionDelegate::StartUDP(
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   CastSessionDelegateBase::StartUDP(local_endpoint, remote_endpoint,
                                     std::move(options), error_callback);
-  event_subscribers_.reset(
-      new media::cast::RawEventSubscriberBundle(cast_environment_));
+  event_subscribers_ = std::make_unique<media::cast::RawEventSubscriberBundle>(
+      cast_environment_);
 
   cast_sender_ = CastSender::Create(cast_environment_, cast_transport_.get());
 }

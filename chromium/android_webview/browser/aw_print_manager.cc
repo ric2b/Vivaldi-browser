@@ -13,6 +13,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "components/printing/browser/print_manager_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
@@ -57,14 +58,14 @@ AwPrintManager::AwPrintManager(
       fd_(file_descriptor) {
   DCHECK(settings_);
   pdf_writing_done_callback_ = std::move(callback);
+  DCHECK(pdf_writing_done_callback_);
   cookie_ = 1;  // Set a valid dummy cookie value.
 }
 
 AwPrintManager::~AwPrintManager() = default;
 
 void AwPrintManager::PdfWritingDone(int page_count) {
-  if (pdf_writing_done_callback_)
-    pdf_writing_done_callback_.Run(page_count);
+  pdf_writing_done_callback_.Run(page_count);
   // Invalidate the file descriptor so it doesn't get reused.
   fd_ = -1;
 }
@@ -72,7 +73,8 @@ void AwPrintManager::PdfWritingDone(int page_count) {
 bool AwPrintManager::PrintNow() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   auto* rfh = web_contents()->GetMainFrame();
-  return rfh->Send(new PrintMsg_PrintPages(rfh->GetRoutingID()));
+  GetPrintRenderFrame(rfh)->PrintRequestedPages();
+  return true;
 }
 
 void AwPrintManager::OnGetDefaultPrintSettings(
@@ -126,9 +128,9 @@ void AwPrintManager::OnDidPrintDocument(
 
   DCHECK(pdf_writing_done_callback_);
   base::PostTaskAndReplyWithResult(
-      base::CreateTaskRunner({base::ThreadPool(), base::MayBlock(),
-                              base::TaskPriority::BEST_EFFORT,
-                              base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
+      base::ThreadPool::CreateTaskRunner(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
           .get(),
       FROM_HERE, base::BindOnce(&SaveDataToFd, fd_, number_pages_, data),
       base::BindOnce(&AwPrintManager::OnDidPrintDocumentWritingDone,

@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -35,6 +36,17 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDiscoverySession {
   // The ErrorCallback is used by methods to asynchronously report errors.
   typedef base::Closure ErrorCallback;
 
+  enum SessionStatus {
+    // Just added to the adapter.
+    PENDING_START,
+    // Request sent to OS.
+    STARTING,
+    // Actively scanning.
+    SCANNING,
+    // Finished scanning, should be deleted soon.
+    INACTIVE
+  };
+
   // Destructor automatically terminates the discovery session. If this
   // results in a call to the underlying system to stop device discovery
   // (i.e. this instance represents the last active discovery session),
@@ -59,10 +71,18 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDiscoverySession {
   // to call this method to end a discovery session, instead of relying on the
   // destructor, so that they can be notified of the result via the callback
   // arguments.
-  virtual void Stop(const base::Closure& callback,
-                    const ErrorCallback& error_callback);
+  virtual void Stop(base::Closure callback = base::DoNothing(),
+                    ErrorCallback error_callback = base::DoNothing());
 
   virtual const BluetoothDiscoveryFilter* GetDiscoveryFilter() const;
+
+  SessionStatus status() const { return status_; }
+
+  // Updates the status from PENDING_START to STARTING.
+  void PendingSessionsStarting();
+
+  // Updates the status from STARTING to SCANNING.
+  void StartingSessionsScanning();
 
   base::WeakPtr<BluetoothDiscoverySession> GetWeakPtr();
 
@@ -97,8 +117,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDiscoverySession {
   // discovery state.
   void MarkAsInactive();
 
-  // Whether or not this instance represents an active discovery session.
-  bool active_;
+  // Indicates the state of this session.
+  SessionStatus status_;
 
   // Whether a Stop() operation is in progress for this session.
   bool is_stop_in_progress_;

@@ -8,10 +8,11 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/browser_context.h"
 #include "net/base/filename_util.h"
-#include "storage/browser/fileapi/file_system_url.h"
+#include "storage/browser/file_system/file_system_url.h"
 
 #if defined(OS_CHROMEOS)
 #include "extensions/browser/api/extensions_api_client.h"
@@ -33,19 +34,19 @@ bool GetIsDirectoryFromFileInfo(const base::FilePath& path) {
 // path directories for the IsNonNativeLocalPathDirectory API.
 void EntryIsDirectory(content::BrowserContext* context,
                       const base::FilePath& path,
-                      const base::Callback<void(bool)>& callback) {
+                      base::OnceCallback<void(bool)> callback) {
 #if defined(OS_CHROMEOS)
   NonNativeFileSystemDelegate* delegate =
       ExtensionsAPIClient::Get()->GetNonNativeFileSystemDelegate();
   if (delegate && delegate->IsUnderNonNativeLocalPath(context, path)) {
-    delegate->IsNonNativeLocalPathDirectory(context, path, callback);
+    delegate->IsNonNativeLocalPathDirectory(context, path, std::move(callback));
     return;
   }
 #endif
 
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
-      base::Bind(&GetIsDirectoryFromFileInfo, path), callback);
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&GetIsDirectoryFromFileInfo, path), std::move(callback));
 }
 
 }  // namespace
@@ -57,10 +58,10 @@ IsDirectoryCollector::~IsDirectoryCollector() {}
 
 void IsDirectoryCollector::CollectForEntriesPaths(
     const std::vector<base::FilePath>& paths,
-    const CompletionCallback& callback) {
+    CompletionCallback callback) {
   DCHECK(!callback.is_null());
   paths_ = paths;
-  callback_ = callback;
+  callback_ = std::move(callback);
 
   DCHECK(!result_.get());
   result_.reset(new std::set<base::FilePath>());
@@ -69,15 +70,16 @@ void IsDirectoryCollector::CollectForEntriesPaths(
   if (!left_) {
     // Nothing to process.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(callback_, std::move(result_)));
-    callback_ = CompletionCallback();
+        FROM_HERE, base::BindOnce(std::move(callback_), std::move(result_)));
+    callback_.Reset();
     return;
   }
 
   for (size_t i = 0; i < paths.size(); ++i) {
-    EntryIsDirectory(context_, paths[i],
-                     base::Bind(&IsDirectoryCollector::OnIsDirectoryCollected,
-                                weak_ptr_factory_.GetWeakPtr(), i));
+    EntryIsDirectory(
+        context_, paths[i],
+        base::BindOnce(&IsDirectoryCollector::OnIsDirectoryCollected,
+                       weak_ptr_factory_.GetWeakPtr(), i));
   }
 }
 
@@ -87,11 +89,11 @@ void IsDirectoryCollector::OnIsDirectoryCollected(size_t index,
     result_->insert(paths_[index]);
   if (!--left_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(callback_, std::move(result_)));
+        FROM_HERE, base::BindOnce(std::move(callback_), std::move(result_)));
     // Release the callback to avoid a circullar reference in case an instance
     // of this class is a member of a ref counted class, which instance is bound
     // to this callback.
-    callback_ = CompletionCallback();
+    callback_.Reset();
   }
 }
 

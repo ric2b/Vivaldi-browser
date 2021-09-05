@@ -14,6 +14,7 @@
 #include "build/build_config.h"
 #include "media/gpu/video_frame_mapper.h"
 #include "media/gpu/video_frame_mapper_factory.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/codec/png_codec.h"
 
 namespace media {
@@ -87,6 +88,13 @@ void VideoFrameFileWriter::ProcessVideoFrame(
   if (num_frames_writes_requested_ >= output_limit_)
     return;
 
+  if (video_frame->visible_rect().IsEmpty()) {
+    // This occurs in bitstream buffer in webrtc scenario.
+    DLOG(WARNING) << "Skipping writing, frame_index=" << frame_index
+                  << " because visible_rect is empty";
+    return;
+  }
+
   num_frames_writes_requested_++;
 
   base::AutoLock auto_lock(frame_writer_lock_);
@@ -122,10 +130,12 @@ void VideoFrameFileWriter::ProcessVideoFrameTask(
   // Create VideoFrameMapper if not yet created. The decoder's output pixel
   // format is not known yet when creating the VideoFrameWriter. We can only
   // create the VideoFrameMapper upon receiving the first video frame.
-  if (!video_frame_mapper_) {
-    video_frame_mapper_ =
-        VideoFrameMapperFactory::CreateMapper(video_frame->format());
-    LOG_ASSERT(video_frame_mapper_) << "Failed to create VideoFrameMapper";
+  if ((video_frame->storage_type() == VideoFrame::STORAGE_DMABUFS ||
+       video_frame->storage_type() == VideoFrame::STORAGE_GPU_MEMORY_BUFFER) &&
+      !video_frame_mapper_) {
+    video_frame_mapper_ = VideoFrameMapperFactory::CreateMapper(
+        video_frame->format(), video_frame->storage_type());
+    ASSERT_TRUE(video_frame_mapper_) << "Failed to create VideoFrameMapper";
   }
 #endif
 
@@ -147,12 +157,15 @@ void VideoFrameFileWriter::WriteVideoFramePNG(
     scoped_refptr<const VideoFrame> video_frame,
     const base::FilePath& filename) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(writer_thread_sequence_checker_);
-  DCHECK(video_frame_mapper_);
 
   auto mapped_frame = video_frame;
 #if defined(OS_CHROMEOS)
-  if (video_frame->storage_type() == VideoFrame::STORAGE_DMABUFS)
+  if (video_frame->storage_type() == VideoFrame::STORAGE_DMABUFS ||
+      video_frame->storage_type() == VideoFrame::STORAGE_GPU_MEMORY_BUFFER) {
+    CHECK(video_frame_mapper_);
     mapped_frame = video_frame_mapper_->Map(std::move(video_frame));
+  }
+
 #endif
 
   if (!mapped_frame) {
@@ -174,7 +187,7 @@ void VideoFrameFileWriter::WriteVideoFramePNG(
       argb_out_frame->stride(VideoFrame::kARGBPlane),
       true, /* discard_transparency */
       std::vector<gfx::PNGCodec::Comment>(), &png_output);
-  LOG_ASSERT(png_encode_status);
+  ASSERT_TRUE(png_encode_status);
 
   // Write the PNG data to file.
   base::FilePath file_path(
@@ -182,19 +195,21 @@ void VideoFrameFileWriter::WriteVideoFramePNG(
   const int size = base::checked_cast<int>(png_output.size());
   const int bytes_written = base::WriteFile(
       file_path, reinterpret_cast<char*>(png_output.data()), size);
-  LOG_ASSERT(bytes_written == size);
+  ASSERT_TRUE(bytes_written == size);
 }
 
 void VideoFrameFileWriter::WriteVideoFrameYUV(
     scoped_refptr<const VideoFrame> video_frame,
     const base::FilePath& filename) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(writer_thread_sequence_checker_);
-  DCHECK(video_frame_mapper_);
 
   auto mapped_frame = video_frame;
 #if defined(OS_CHROMEOS)
-  if (video_frame->storage_type() == VideoFrame::STORAGE_DMABUFS)
+  if (video_frame->storage_type() == VideoFrame::STORAGE_DMABUFS ||
+      video_frame->storage_type() == VideoFrame::STORAGE_GPU_MEMORY_BUFFER) {
+    CHECK(video_frame_mapper_);
     mapped_frame = video_frame_mapper_->Map(std::move(video_frame));
+  }
 #endif
 
   if (!mapped_frame) {
@@ -226,7 +241,7 @@ void VideoFrameFileWriter::WriteVideoFrameYUV(
         VideoFrame::Rows(i, pixel_format, visible_size.height());
     const int row_bytes =
         VideoFrame::RowBytes(i, pixel_format, visible_size.width());
-    LOG_ASSERT(stride > 0);
+    ASSERT_TRUE(stride > 0);
     for (size_t row = 0; row < rows; ++row) {
       if (yuv_file.WriteAtCurrentPos(
               reinterpret_cast<const char*>(data + (stride * row)),

@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/profiles/profile.h"
@@ -148,15 +149,14 @@ void SwitchLanguage(const std::string& locale,
       locale, enable_locale_keyboard_layouts, login_layouts_only, callback,
       profile);
   // USER_BLOCKING because it blocks startup on ChromeOS. crbug.com/968554
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::BindOnce(&SwitchLanguageDoReloadLocale, std::move(data)),
       base::BindOnce(&FinishSwitchLanguage));
 }
 
 bool IsAllowedLanguage(const std::string& language, const PrefService* prefs) {
-  base::span<const base::Value> allowed_languages =
+  base::Value::ConstListView allowed_languages =
       prefs->GetList(prefs::kAllowedLanguages)->GetList();
 
   // Empty list means all languages are allowed.
@@ -218,7 +218,7 @@ std::string GetAllowedFallbackUILanguage(const PrefService* prefs) {
   }
 
   // Check the allowed UI locales and return the first valid entry.
-  base::span<const base::Value> allowed_languages =
+  base::Value::ConstListView allowed_languages =
       prefs->GetList(prefs::kAllowedLanguages)->GetList();
   for (const base::Value& value : allowed_languages) {
     const std::string& locale = value.GetString();

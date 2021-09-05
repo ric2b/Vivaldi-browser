@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">您被禁止访问互联网</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> 要求提供用户名和口令。</translation>
 <translation id="2337852623177822836">设置由管理员控制</translation>
+<translation id="2344028582131185878">自动下载</translation>
 <translation id="2355395290879513365">攻击者可能能够看到您正在此网站上浏览的图片，并通过编辑这些图片让您受骗。</translation>
 <translation id="2356070529366658676">询问</translation>
 <translation id="2359808026110333948">继续</translation>
@@ -62,7 +63,9 @@
 <translation id="3109728660330352905">您未获授权，无法查看此网页。</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />尝试运行网络连接诊断<ph name="END_LINK" />。</translation>
 <translation id="3154506275960390542">此页包含一个可能无法安全提交的表单。他人可能会在传输过程中查看您所发送的数据；攻击者也可能会修改这些数据，从而改变服务器收到的内容。</translation>
-<translation id="3176929007561373547">请检查您的代理服务器设置或与网络管理员联系，以确保代理服务器正常运行。如果您认为自己不需要使用代理服务器，请执行以下操作：
+<translation id="3176929007561373547">请检查您的代理服务器设置或与网络管理员联系，以确保代理服务器正常运行。
+如果您认为自己不需要使用代理服务器，
+请执行以下操作：
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">点击刷新按钮以重新提交加载该网页所需的数据。</translation>
 <translation id="3227137524299004712">麦克风</translation>
@@ -76,7 +79,8 @@
 <translation id="3566021033012934673">您的连接不是私密连接</translation>
 <translation id="3574305903863751447"><ph name="COUNTRY" /><ph name="STATE" /><ph name="CITY" /></translation>
 <translation id="3586931643579894722">隐藏详细信息</translation>
-<translation id="3630155396527302611">如果它已在可访问网络的程序列表中，请尝试将它从该列表中移除，然后重新添加到其中。</translation>
+<translation id="3630155396527302611">如果它已在可访问网络的程序列表中，请尝试将它从该列表中移除，
+    然后重新添加到其中。</translation>
 <translation id="3658742229777143148">修订版本</translation>
 <translation id="3681007416295224113">证书信息</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />检查代理服务器、防火墙和 DNS 配置<ph name="END_LINK" /></translation>
@@ -85,7 +89,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> 已被屏蔽</translation>
 <translation id="3987940399970879459">小于 1 MB</translation>
 <translation id="4075732493274867456">客户端和服务器不支持一般的 SSL 协议版本或加密套件。</translation>
-<translation id="410351446219883937">自动播放</translation>
 <translation id="4116663294526079822">在此网站上始终允许</translation>
 <translation id="4130226655945681476">检查网线、调制解调器和路由器</translation>
 <translation id="4151403195736952345">使用全局默认设置（检测）</translation>
@@ -143,7 +146,8 @@
 <translation id="5932224571077948991">网站展示过侵扰性或误导性广告</translation>
 <translation id="5990559369517809815">对服务器的请求已遭到某个扩展程序的阻止。</translation>
 <translation id="6051221802930200923">您目前无法访问 <ph name="SITE" />，因为此网站使用了证书锁定。网络错误和攻击通常是暂时的，因此，此网页稍后可能会恢复正常。</translation>
-<translation id="6146055958333702838">请检查所有网线是否都已连好，然后重新启动您可能正在使用的任何路由器、调制解调器或其他网络设备。</translation>
+<translation id="6146055958333702838">请检查所有网线连接状况，然后重启所有您可能正在使用的任何路由器、调制解调器
+或其他网络设备。</translation>
 <translation id="614940544461990577">请试试以下办法：</translation>
 <translation id="6165508094623778733">了解详情</translation>
 <translation id="6177128806592000436">您与此网站之间建立的连接不安全</translation>

@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">Az internethez való hozzáférést a rendszer letiltotta</translation>
 <translation id="2317259163369394535">A(z) <ph name="DOMAIN" /> felhasználónevet és jelszót kér.</translation>
 <translation id="2337852623177822836">A beállítást a rendszergazda szabályozza</translation>
+<translation id="2344028582131185878">Automatikus letöltések</translation>
 <translation id="2355395290879513365">A felhasználók esetleg láthatják a webhelyen éppen megtekintett képeket, és azokat módosítva félrevezethetnek.</translation>
 <translation id="2356070529366658676">Kérés</translation>
 <translation id="2359808026110333948">Tovább</translation>
@@ -72,6 +73,7 @@
 <translation id="3447661539832366887">Az eszköz tulajdonosa kikapcsolta a dinoszauruszos játékot.</translation>
 <translation id="3447884698081792621">Tanúsítvány megjelenítése (kibocsátó: <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Haladó beállítások elrejtése</translation>
+<translation id="3484560055331845446">Elveszítheted a hozzáférést Google-fiókokhoz. A Chrome azt javasolja, hogy azonnal módosítsd a jelszavad. Be kell majd jelentkezned.</translation>
 <translation id="3566021033012934673">Ez egy nem biztonságos kapcsolat</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Részletek elrejtése</translation>
@@ -85,7 +87,6 @@
 <translation id="3973234410852337861">A(z) <ph name="HOST_NAME" /> le van tiltva</translation>
 <translation id="3987940399970879459">Kevesebb, mint 1 MB</translation>
 <translation id="4075732493274867456">A kliens és a szerver nem támogat ugyanolyan SSL-protokollverziót vagy titkosítási csomagot.</translation>
-<translation id="410351446219883937">Automatikus lejátszás</translation>
 <translation id="4116663294526079822">Mindig engedélyezze ezen az oldalon</translation>
 <translation id="4130226655945681476">A hálózati kábelek, a modem és a router ellenőrzése</translation>
 <translation id="4151403195736952345">Globális alapértelmezés használata (Észlelés)</translation>
@@ -104,6 +105,7 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Próbálkozz a bővítmények letiltásával.</translation>
 <translation id="4592951414987517459">A(z) <ph name="DOMAIN" /> domainnel való kapcsolatod modern kriptográfiával van titkosítva.</translation>
+<translation id="4690462567478992370">Érvénytelen tanúsítványt ne használj</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Kapcsolata megszakadt</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />A Windows hálózati diagnosztika futtatása<ph name="END_LINK" /></translation>
@@ -111,8 +113,10 @@
 <translation id="4750917950439032686">Adataid (például jelszó vagy hitelkártyaszám) nem láthatóak más számára, amikor a rendszer elküldi őket a webhelynek.</translation>
 <translation id="4764776831041365478">A <ph name="URL" /> weboldal lehet, hogy ideiglenesen nem érhető el, vagy véglegesen új címre költözött.</translation>
 <translation id="4943872375798546930">Nincs találat</translation>
+<translation id="4974590756084640048">Figyelmeztetések újbóli engedélyezése</translation>
 <translation id="5023310440958281426">Ellenőrizze rendszergazdai házirendjeit</translation>
 <translation id="5039804452771397117">Engedélyezés</translation>
+<translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 van használatban)} other {(# van használatban)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />A proxy címének ellenőrzése<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bites)</translation>
 <translation id="5287240709317226393">Sütik megjelenítése</translation>
@@ -160,6 +164,7 @@
 <translation id="6657585470893396449">Jelszó</translation>
 <translation id="6685834062052613830">Kijelentkezés és a beállítás befejezése</translation>
 <translation id="6711464428925977395">Valami gond van a proxyszerverrel, vagy a cím nem megfelelő.</translation>
+<translation id="6757797048963528358">Számítógéped alvó üzemmódba váltott.</translation>
 <translation id="6897140037006041989">User agent</translation>
 <translation id="7053983685419859001">Letiltás</translation>
 <translation id="7079718277001814089">A webhely rosszindulatú programokat tartalmaz</translation>
@@ -194,12 +199,14 @@
 <translation id="8041940743680923270">Globális alapértelmezés használata (Megkérdezés)</translation>
 <translation id="808894953321890993">Jelszó módosítása</translation>
 <translation id="8142868475871995937">Látogasson el a &lt;strong&gt;vivaldi://policy&lt;/strong&gt; oldalra a feketelistán lévő URL-ek és egyéb, a rendszergazda által előírt szabályok megtekintéséhez.</translation>
+<translation id="8149426793427495338">Számítógéped alvó üzemmódba váltott.</translation>
 <translation id="8150722005171944719">A fájl (<ph name="URL" />) nem olvasható. Lehet, hogy eltávolították, áthelyezték, vagy a fájlengedélyek megakadályozzák a hozzáférést.</translation>
 <translation id="8184538546369750125">Globális alapértelmezés használata (Engedélyezés)</translation>
 <translation id="8211406090763984747">A kapcsolat biztonságos</translation>
 <translation id="8225771182978767009">A számítógépet beállító személy a webhely letiltása mellett döntött.</translation>
 <translation id="8241707690549784388">A keresett oldal a megadott információt használta. Ha visszatérsz arra az oldalra, akkor lehet, hogy az egyszer már megtett mozdulatok ismétlésre kerülnek. Mégis továbblépsz?</translation>
 <translation id="8241712895048303527">Letiltás ezen a webhelyen</translation>
+<translation id="8286036467436129157">Bejelentkezés</translation>
 <translation id="8288807391153049143">Tanúsítvány megjelenítése</translation>
 <translation id="8289355894181816810">Forduljon a hálózati rendszergazdához, ha nem tudja, hogy ez mit jelent.</translation>
 <translation id="8332188693563227489">A hozzáférés megtagadva a következőhöz: <ph name="HOST_NAME" /></translation>
@@ -217,6 +224,7 @@
 <translation id="9169664750068251925">Mindig tiltsa ezen az oldalon</translation>
 <translation id="9183425211371246419">A(z) <ph name="HOST_NAME" /> egy nem támogatott protokollt használ.</translation>
 <translation id="9219103736887031265">Képek</translation>
+<translation id="936602727769022409">Elveszítheted a hozzáférést Google-fiókodhoz. A Chromium azt javasolja, hogy azonnal módosítsd a jelszavad. Be kell majd jelentkezned.</translation>
 <translation id="969892804517981540">Hivatalos verzió</translation>
 <translation id="988159990683914416">Fejlesztői változat</translation>
 </translationbundle>

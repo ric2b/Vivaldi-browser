@@ -100,7 +100,7 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
 
     // Called when a surrounding text is changed.
     virtual void OnSurroundingTextChanged(const std::string& engine_id,
-                                          const std::string& text,
+                                          const base::string16& text,
                                           int cursor_pos,
                                           int anchor_pos,
                                           int offset_pos) = 0;
@@ -129,9 +129,10 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
 
   ~InputMethodEngineBase() override;
 
-  void Initialize(std::unique_ptr<InputMethodEngineBase::Observer> observer,
-                  const char* extension_id,
-                  Profile* profile);
+  virtual void Initialize(
+      std::unique_ptr<InputMethodEngineBase::Observer> observer,
+      const char* extension_id,
+      Profile* profile);
 
   // IMEEngineHandlerInterface overrides.
   void FocusIn(const ui::IMEEngineHandlerInterface::InputContext& input_context)
@@ -142,7 +143,7 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
   void Reset() override;
   void ProcessKeyEvent(const ui::KeyEvent& key_event,
                        KeyEventDoneCallback callback) override;
-  void SetSurroundingText(const std::string& text,
+  void SetSurroundingText(const base::string16& text,
                           uint32_t cursor_pos,
                           uint32_t anchor_pos,
                           uint32_t offset_pos) override;
@@ -158,6 +159,10 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
   // is not focused.
   bool CommitText(int context_id, const char* text, std::string* error);
 
+  // Notifies InputContextHandler to commit any composition text.
+  // Set |reset_engine| to false if the event was from the extension.
+  void ConfirmCompositionText(bool reset_engine, bool keep_selection);
+
   // Deletes |number_of_chars| unicode characters as the basis of |offset| from
   // the surrounding text. The |offset| is relative position based on current
   // caret.
@@ -170,8 +175,14 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
                              size_t number_of_chars,
                              std::string* error);
 
+  // Commit the text currently being composed to the composition.
+  // Fails if the context is not focused.
+  bool FinishComposingText(int context_id, std::string* error);
+
   // Send the sequence of key events.
-  bool SendKeyEvents(int context_id, const std::vector<KeyboardEvent>& events);
+  bool SendKeyEvents(int context_id,
+                     const std::vector<KeyboardEvent>& events,
+                     std::string* error);
 
   // Set the current composition and associated properties.
   bool SetComposition(int context_id,
@@ -188,6 +199,12 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
                            int selection_after,
                            const std::vector<SegmentInfo>& segments,
                            std::string* error);
+
+  // Set the current selection range.
+  bool SetSelectionRange(int context_id,
+                         int start,
+                         int end,
+                         std::string* error);
 
   // Called when a key event is handled.
   void KeyEventHandled(const std::string& extension_id,
@@ -215,6 +232,7 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
     ~PendingKeyEvent();
 
     std::string component_id;
+    KeyboardEvent key_event;
     ui::IMEEngineHandlerInterface::KeyEventDoneCallback callback;
 
    private:
@@ -228,22 +246,31 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
   virtual void UpdateComposition(const ui::CompositionText& composition_text,
                                  uint32_t cursor_pos,
                                  bool is_visible) = 0;
+
   // Notifies InputContextHandler to change the composition range.
   virtual bool SetCompositionRange(
       uint32_t before,
       uint32_t after,
       const std::vector<ui::ImeTextSpan>& text_spans) = 0;
+
+  // Notifies the InputContextHandler to change the selection range.
+  virtual bool SetSelectionRange(uint32_t start, uint32_t end) = 0;
+
   // Notifies InputContextHanlder to commit |text|.
   virtual void CommitTextToInputContext(int context_id,
                                         const std::string& text) = 0;
+
   // Notifies InputContextHandler to delete surrounding text.
   void DeleteSurroundingTextToInputContext(int offset, size_t number_of_chars);
+
   // Sends the key event to the window tree host.
   virtual bool SendKeyEvent(ui::KeyEvent* ui_event,
-                            const std::string& code) = 0;
-  // Notifies InputContextHandler to commit any composition text.
-  // Set |reset_engine| to false if the event was from the extension.
-  void ConfirmCompositionText(bool reset_engine);
+                            const std::string& code,
+                            std::string* error) = 0;
+
+  // Used to verify that a key event is valid before precessing it in the
+  // current context.
+  virtual bool IsValidKeyEvent(const ui::KeyEvent* ui_event) = 0;
 
   ui::TextInputType current_input_type_;
 
@@ -282,6 +309,9 @@ class InputMethodEngineBase : virtual public ui::IMEEngineHandlerInterface {
   // Indicates whether the IME extension is currently handling a physical key
   // event. This is used in CommitText/UpdateCompositionText/etc.
   bool handling_key_event_;
+
+ private:
+  ui::KeyEvent ConvertKeyboardEventToUIKeyEvent(const KeyboardEvent& event);
 };
 
 }  // namespace input_method

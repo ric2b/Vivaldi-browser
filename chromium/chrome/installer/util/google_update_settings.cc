@@ -12,10 +12,11 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/path_service.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/lazy_task_runner.h"
+#include "base/task/lazy_thread_pool_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "base/win/registry.h"
@@ -59,10 +60,9 @@ const GoogleUpdateSettings::UpdatePolicy
 
 namespace {
 
-base::LazySequencedTaskRunner g_collect_stats_consent_task_runner =
-    LAZY_SEQUENCED_TASK_RUNNER_INITIALIZER(
-        base::TaskTraits(base::ThreadPool(),
-                         base::TaskPriority::USER_VISIBLE,
+base::LazyThreadPoolSequencedTaskRunner g_collect_stats_consent_task_runner =
+    LAZY_THREAD_POOL_SEQUENCED_TASK_RUNNER_INITIALIZER(
+        base::TaskTraits(base::TaskPriority::USER_VISIBLE,
                          base::TaskShutdownBehavior::BLOCK_SHUTDOWN));
 
 // Reads the value |name| from the app's ClientState registry key in |root| into
@@ -225,8 +225,8 @@ bool GoogleUpdateSettings::IsSystemInstall() {
 
 base::SequencedTaskRunner*
 GoogleUpdateSettings::CollectStatsConsentTaskRunner() {
-  // TODO(fdoray): Use LazySequencedTaskRunner::GetRaw() here instead of
-  // .Get().get() when it's added to the API, http://crbug.com/730170.
+  // TODO(fdoray): Use LazyThreadPoolSequencedTaskRunner::GetRaw() here instead
+  // of .Get().get() when it's added to the API, http://crbug.com/730170.
   return g_collect_stats_consent_task_runner.Get().get();
 }
 
@@ -415,12 +415,6 @@ bool GoogleUpdateSettings::ClearReferral() {
   return ClearGoogleUpdateStrKey(google_update::kRegReferralField);
 }
 
-bool GoogleUpdateSettings::UpdateDidRunState(bool did_run) {
-  // Written into HKCU; read by Google Update.
-  return WriteUserGoogleUpdateStrKey(google_update::kRegDidRunField,
-                                     did_run ? L"1" : L"0");
-}
-
 void GoogleUpdateSettings::UpdateInstallStatus(bool system_install,
     installer::ArchiveType archive_type, int install_return_code,
     const base::string16& product_guid) {
@@ -541,8 +535,8 @@ GoogleUpdateSettings::UpdatePolicy GoogleUpdateSettings::GetAppUpdatePolicy(
   if (policy_key.Open(HKEY_LOCAL_MACHINE, kPoliciesKey, KEY_QUERY_VALUE) ==
           ERROR_SUCCESS) {
     DWORD value = 0;
-    base::string16 app_update_override(kUpdateOverrideValuePrefix);
-    app_guid.AppendToString(&app_update_override);
+    base::string16 app_update_override =
+        base::StrCat({kUpdateOverrideValuePrefix, app_guid});
     // First try to read and comprehend the app-specific override.
     found_override = (policy_key.ReadValueDW(app_update_override.c_str(),
                                              &value) == ERROR_SUCCESS &&

@@ -12,6 +12,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_restrictions.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/ip_address.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -69,6 +70,22 @@ CustomPatternWithAlias kCustomPatternsWithContext[] = {
     // GAIA IDs
     {"GAIA", R"xxx((\"?\bgaia_id\"?[=:]['\"])(\d+)(\b['\"]))xxx"},
     {"GAIA", R"xxx((\{id: )(\d+)(, email:))xxx"},
+
+    // UUIDs given by the 'blkid' tool. These don't necessarily look like
+    // standard UUIDs, so treat them specially.
+    {"UUID", R"xxx((UUID=")([0-9a-zA-Z-]+)("))xxx"},
+
+    // Volume labels presented in the 'blkid' tool, and as part of removable
+    // media paths shown in various logs such as cros-disks (in syslog).
+    // There isn't a well-defined format for these. For labels in blkid,
+    // capture everything between the open and closing quote.
+    {"Volume Label", R"xxx((LABEL=")([^"]+)("))xxx"},
+    // For paths, this is harder. The only restricted characters are '/' and
+    // NUL, so use a simple heuristic. cros-disks generally quotes paths using
+    // single-quotes, so capture everything until a quote character. For lsblk,
+    // capture everything until the end of the line, since the mount path is the
+    // last field.
+    {"Volume Label", R"xxx((/media/removable/)(.+?)(['"/\n]|$))xxx"},
 };
 
 bool MaybeUnmapAddress(net::IPAddress* addr) {
@@ -210,17 +227,18 @@ std::string MaybeScrubIPAddress(const std::string& addr) {
 
 #define H16 NCG(HEXDIG) "{1,4}"
 #define LS32 NCG(H16 ":" H16 "|" IPV4ADDRESS)
+#define WB "\\b"
 
 #define IPV6ADDRESS NCG( \
-                                          NCG(H16 ":") "{6}" LS32 "|" \
-                                     "::" NCG(H16 ":") "{5}" LS32 "|" \
-  OPT_NCG(                      H16) "::" NCG(H16 ":") "{4}" LS32 "|" \
-  OPT_NCG( NCG(H16 ":") "{0,1}" H16) "::" NCG(H16 ":") "{3}" LS32 "|" \
-  OPT_NCG( NCG(H16 ":") "{0,2}" H16) "::" NCG(H16 ":") "{2}" LS32 "|" \
-  OPT_NCG( NCG(H16 ":") "{0,3}" H16) "::" NCG(H16 ":")       LS32 "|" \
-  OPT_NCG( NCG(H16 ":") "{0,4}" H16) "::"                    LS32 "|" \
-  OPT_NCG( NCG(H16 ":") "{0,5}" H16) "::"                    H16 "|" \
-  OPT_NCG( NCG(H16 ":") "{0,6}" H16) "::")
+                                          WB NCG(H16 ":") "{6}" LS32 WB "|" \
+                                        "::" NCG(H16 ":") "{5}" LS32 WB "|" \
+  OPT_NCG( WB                      H16) "::" NCG(H16 ":") "{4}" LS32 WB "|" \
+  OPT_NCG( WB NCG(H16 ":") "{0,1}" H16) "::" NCG(H16 ":") "{3}" LS32 WB "|" \
+  OPT_NCG( WB NCG(H16 ":") "{0,2}" H16) "::" NCG(H16 ":") "{2}" LS32 WB "|" \
+  OPT_NCG( WB NCG(H16 ":") "{0,3}" H16) "::" NCG(H16 ":")       LS32 WB "|" \
+  OPT_NCG( WB NCG(H16 ":") "{0,4}" H16) "::"                    LS32 WB "|" \
+  OPT_NCG( WB NCG(H16 ":") "{0,5}" H16) "::"                    H16  WB "|" \
+  OPT_NCG( WB NCG(H16 ":") "{0,6}" H16) "::")
 
 #define IPVFUTURE                     \
   "v" HEXDIG                          \
@@ -383,9 +401,8 @@ AnonymizerTool::~AnonymizerTool() {
 
 std::string AnonymizerTool::Anonymize(const std::string& input) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!::content::BrowserThread::CurrentlyOn(::content::BrowserThread::UI))
-      << "This is an expensive operation. Do not execute this on the UI "
-         "thread.";
+  base::AssertLongCPUWorkAllowed();
+
   std::string anonymized = AnonymizeMACAddresses(input);
   anonymized = AnonymizeAndroidAppStoragePaths(std::move(anonymized));
   anonymized = AnonymizeCustomPatterns(std::move(anonymized));
@@ -593,14 +610,16 @@ std::string AnonymizerTool::AnonymizeCustomPatternWithContext(
   while (FindAndConsumeAndGetSkipped(&text, *re, &skipped, &pre_matched_id,
                                      &matched_id, &post_matched_id)) {
     std::string matched_id_as_string = matched_id.as_string();
-    std::string replacement_id = (*identifier_space)[matched_id_as_string];
-    if (replacement_id.empty()) {
+    std::string replacement_id;
+    if (identifier_space->count(matched_id_as_string) == 0) {
       // The weird NumberToString trick is because Windows does not like
       // to deal with %zu and a size_t in printf, nor does it support %llu.
       replacement_id = base::StringPrintf(
           "<%s: %s>", pattern.alias,
-          base::NumberToString(identifier_space->size()).c_str());
+          base::NumberToString(identifier_space->size() + 1).c_str());
       (*identifier_space)[matched_id_as_string] = replacement_id;
+    } else {
+      replacement_id = (*identifier_space)[matched_id_as_string];
     }
 
     skipped.AppendToString(&result);
@@ -680,8 +699,8 @@ std::string AnonymizerTool::AnonymizeCustomPatternWithoutContext(
       continue;
     }
     std::string matched_id_as_string = matched_id.as_string();
-    std::string replacement_id = (*identifier_space)[matched_id_as_string];
-    if (replacement_id.empty()) {
+    std::string replacement_id;
+    if (identifier_space->count(matched_id_as_string) == 0) {
       replacement_id = MaybeScrubIPAddress(matched_id_as_string);
       if (replacement_id != matched_id_as_string) {
         // The weird NumberToString trick is because Windows does not like
@@ -689,9 +708,11 @@ std::string AnonymizerTool::AnonymizeCustomPatternWithoutContext(
         replacement_id = base::StringPrintf(
             "<%s: %s>",
             replacement_id.empty() ? pattern.alias : replacement_id.c_str(),
-            base::NumberToString(identifier_space->size()).c_str());
+            base::NumberToString(identifier_space->size() + 1).c_str());
         (*identifier_space)[matched_id_as_string] = replacement_id;
       }
+    } else {
+      replacement_id = (*identifier_space)[matched_id_as_string];
     }
 
     skipped.AppendToString(&result);

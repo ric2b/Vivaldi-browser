@@ -28,8 +28,8 @@
 #import "ios/chrome/browser/ui/material_components/utils.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
 #include "ios/chrome/browser/ui/util/rtl_geometry.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -64,7 +64,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 @property(nonatomic, assign) BOOL editingExistingFolder;
 @property(nonatomic, assign) bookmarks::BookmarkModel* bookmarkModel;
-@property(nonatomic, assign) ios::ChromeBrowserState* browserState;
+@property(nonatomic, assign) ChromeBrowserState* browserState;
 @property(nonatomic, assign) const BookmarkNode* folder;
 @property(nonatomic, strong) BookmarkFolderViewController* folderViewController;
 @property(nonatomic, assign) const BookmarkNode* parentFolder;
@@ -122,11 +122,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
   return folderCreator;
 }
 
-+ (instancetype)
-    folderEditorWithBookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel
-                           folder:(const BookmarkNode*)folder
-                     browserState:(ios::ChromeBrowserState*)browserState
-                       dispatcher:(id<BrowserCommands>)dispatcher {
++ (instancetype)folderEditorWithBookmarkModel:
+                    (bookmarks::BookmarkModel*)bookmarkModel
+                                       folder:(const BookmarkNode*)folder
+                                 browserState:(ChromeBrowserState*)browserState
+                                   dispatcher:(id<BrowserCommands>)dispatcher {
   DCHECK(folder);
   DCHECK(!bookmarkModel->is_permanent_node(folder));
   DCHECK(browserState);
@@ -146,8 +146,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (instancetype)initWithBookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel {
   DCHECK(bookmarkModel);
   DCHECK(bookmarkModel->loaded());
-  self = [super initWithTableViewStyle:UITableViewStylePlain
-                           appBarStyle:ChromeTableViewControllerStyleNoAppBar];
+  self = [super initWithStyle:UITableViewStylePlain];
   if (self) {
     _bookmarkModel = bookmarkModel;
 
@@ -172,7 +171,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   self.tableView.rowHeight = UITableViewAutomaticDimension;
   self.tableView.sectionHeaderHeight = 0;
   self.tableView.sectionFooterHeight = 0;
-  self.tableView.tableFooterView = [[UIView alloc] init];
   [self.tableView
       setSeparatorInset:UIEdgeInsetsMake(0, kBookmarkCellHorizontalLeadingInset,
                                          0, 0)];

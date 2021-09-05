@@ -9,7 +9,6 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/common/checked_lock.h"
@@ -50,10 +49,6 @@ class BASE_EXPORT TaskQueue : public RefCountedThreadSafe<TaskQueue> {
   class Observer {
    public:
     virtual ~Observer() = default;
-
-    // Notify observer that a task has been posted on the TaskQueue. Can be
-    // called on any thread.
-    virtual void OnPostTask(Location from_here, TimeDelta delay) = 0;
 
     // Notify observer that the time at which this queue wants to run
     // the next task has changed. |next_wakeup| can be in the past
@@ -329,7 +324,7 @@ class BASE_EXPORT TaskQueue : public RefCountedThreadSafe<TaskQueue> {
   // queue is unblocked when it is enabled and no fence prevents the front task
   // from running. If the EnqueueOrder of a task is greater than this when it
   // starts running, it means that is was never blocked.
-  EnqueueOrder GetLastUnblockEnqueueOrder() const;
+  EnqueueOrder GetEnqueueOrderAtWhichWeBecameUnblocked() const;
 
   void SetObserver(Observer* observer);
 

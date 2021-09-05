@@ -10,6 +10,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents_view_delegate.h"
+#include "third_party/blink/public/mojom/input/focus_type.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -96,8 +97,7 @@ void WebContentsViewChildFrame::CreateView(gfx::NativeView context) {
 }
 
 RenderWidgetHostViewBase* WebContentsViewChildFrame::CreateViewForWidget(
-    RenderWidgetHost* render_widget_host,
-    bool is_guest_view_hack) {
+    RenderWidgetHost* render_widget_host) {
   return RenderWidgetHostViewChildFrame::Create(render_widget_host);
 }
 
@@ -109,8 +109,6 @@ RenderWidgetHostViewBase* WebContentsViewChildFrame::CreateViewForChildWidget(
 void WebContentsViewChildFrame::SetPageTitle(const base::string16& title) {
   // The title is ignored for the WebContentsViewChildFrame.
 }
-
-void WebContentsViewChildFrame::RenderViewCreated(RenderViewHost* host) {}
 
 void WebContentsViewChildFrame::RenderViewReady() {}
 
@@ -181,9 +179,9 @@ void WebContentsViewChildFrame::TakeFocus(bool reverse) {
   RenderFrameHostImpl* rfhi =
       outer_node->parent()->render_manager()->current_frame_host();
 
-  rfhi->AdvanceFocus(
-      reverse ? blink::kWebFocusTypeBackward : blink::kWebFocusTypeForward,
-      rfp);
+  rfhi->AdvanceFocus(reverse ? blink::mojom::FocusType::kBackward
+                             : blink::mojom::FocusType::kForward,
+                     rfp);
 }
 
 void WebContentsViewChildFrame::ShowContextMenu(

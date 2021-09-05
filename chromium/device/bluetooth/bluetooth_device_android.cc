@@ -153,10 +153,9 @@ void BluetoothDeviceAndroid::SetConnectionLatency(
   NOTIMPLEMENTED();
 }
 
-void BluetoothDeviceAndroid::Connect(
-    PairingDelegate* pairing_delegate,
-    const base::Closure& callback,
-    const ConnectErrorCallback& error_callback) {
+void BluetoothDeviceAndroid::Connect(PairingDelegate* pairing_delegate,
+                                     base::OnceClosure callback,
+                                     ConnectErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
@@ -265,7 +264,8 @@ void BluetoothDeviceAndroid::CreateGattRemoteService(
 BluetoothDeviceAndroid::BluetoothDeviceAndroid(BluetoothAdapterAndroid* adapter)
     : BluetoothDevice(adapter) {}
 
-void BluetoothDeviceAndroid::CreateGattConnectionImpl() {
+void BluetoothDeviceAndroid::CreateGattConnectionImpl(
+    base::Optional<device::BluetoothUUID> service_uuid) {
   Java_ChromeBluetoothDevice_createGattConnectionImpl(AttachCurrentThread(),
                                                       j_device_);
 }

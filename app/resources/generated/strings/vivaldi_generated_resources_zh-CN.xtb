@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
 <translation id="1017280919048282932">添加到字典(&amp;A)</translation>
+<translation id="1029317248976101138">缩放</translation>
 <translation id="1031362278801463162">正在加载预览</translation>
 <translation id="1047431265488717055">复制链接文字(&amp;X)</translation>
 <translation id="1049795001945932310">语言设置(&amp;L)</translation>
@@ -54,6 +55,7 @@
 <translation id="1886996562706621347">允许网站请求成为协议的默认处理程序（推荐）</translation>
 <translation id="1901303067676059328">全选(&amp;A)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">请使用一个介于 1-<ph name="MAX_COPIES" /> 之间的数字来表明要打印多少份。</translation>
 <translation id="1963227389609234879">全部移除</translation>
 <translation id="1994173015038366702">网站网址</translation>
 <translation id="2019718679933488176">在新标签页中打开音频(&amp;O)</translation>
@@ -66,7 +68,6 @@
 <translation id="2150139952286079145">搜索目标打印机</translation>
 <translation id="215753907730220065">退出全屏模式</translation>
 <translation id="2177950615300672361">隐身标签页：<ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">用数字打印的份数（1 到 999 份）。</translation>
 <translation id="219008588003277019">Native Client 模块：<ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">隐藏按钮</translation>
 <translation id="2218515861914035131">粘贴为纯文本</translation>
@@ -78,11 +79,9 @@
 <translation id="2282146716419988068">GPU 进程</translation>
 <translation id="2301382460326681002">扩展程序根目录无效。</translation>
 <translation id="2318143611928805047">纸张尺寸</translation>
-<translation id="2318923050469484167">当前的隐身会话（<ph name="EMBEDDING" />）</translation>
 <translation id="2322193970951063277">页眉和页脚</translation>
 <translation id="2326931316514688470">重新加载应用(&amp;R)</translation>
 <translation id="2327492829706409234">启用应用</translation>
-<translation id="2344028582131185878">自动下载</translation>
 <translation id="2348176352564285430">应用：<ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">选择扩展程序目录。</translation>
 <translation id="2379281330731083556">使用系统对话框进行打印...<ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +94,12 @@
 <translation id="2470702053775288986">已停用不支持的扩展程序</translation>
 <translation id="2476578072172137802">网站设置</translation>
 <translation id="2482878487686419369">通知</translation>
+<translation id="2498539833203011245">最小化</translation>
 <translation id="2509495747794740764">缩放比例必须是一个介于 10 到 200 之间的数字。</translation>
 <translation id="253557089021624350">持续活动者数量</translation>
 <translation id="2546283357679194313">Cookie 和网站数据</translation>
 <translation id="2550212893339833758">已交换的内存</translation>
 <translation id="2553440850688409052">隐藏此插件</translation>
-<translation id="2580924999637585241">总计：<ph name="NUMBER_OF_SHEETS" />张， <ph name="SHEETS_LABEL" />页</translation>
 <translation id="26224892172169984">不允许任何网站处理协议</translation>
 <translation id="2662876636500006917">Chrome 線上應用商店</translation>
 <translation id="2678063897982469759">重新启用</translation>
@@ -120,7 +119,6 @@
 <translation id="2932883381142163287">举报滥用行为</translation>
 <translation id="2941112035454246133">低</translation>
 <translation id="2972581237482394796">重做(&amp;R)</translation>
-<translation id="299483336428448530">这是您的家长安装的。</translation>
 <translation id="3003623123441819449">CSS 缓存</translation>
 <translation id="3008272652534848354">重置权限</translation>
 <translation id="3012631534724231212">（内嵌框架）</translation>
@@ -274,7 +272,6 @@
 <translation id="5425042808445046667">继续下载</translation>
 <translation id="5427459444770871191">顺时针旋转(&amp;C)</translation>
 <translation id="5431318178759467895">颜色</translation>
-<translation id="5472133193607270166">当此设置处于开启状态时，网站无法根据您在各个不同网站上的浏览活动为您展示个性化广告。某些网站可能会无法正常运行。</translation>
 <translation id="5483785310822538350">撤消对文件和设备的访问权限</translation>
 <translation id="5485102783864353244">添加应用</translation>
 <translation id="5486561344817861625">模拟浏览器重启</translation>
@@ -302,7 +299,6 @@
 <translation id="5804241973901381774">权限</translation>
 <translation id="5828633471261496623">正在打印...</translation>
 <translation id="583281660410589416">未知</translation>
-<translation id="5838456317242088717">当前的隐身会话</translation>
 <translation id="5860491529813859533">启用</translation>
 <translation id="5867841422488265304">搜索或输入网址</translation>
 <translation id="5908769186679515905">禁止网站运行 Flash</translation>
@@ -322,7 +318,6 @@
 <translation id="6147020289383635445">打印预览失败。</translation>
 <translation id="6156863943908443225">脚本缓存</translation>
 <translation id="6169666352732958425">无法投射桌面。</translation>
-<translation id="6196640612572343990">阻止第三方 Cookie</translation>
 <translation id="6196854373336333322">“<ph name="EXTENSION_NAME" />”扩展程序控制了您的代理设置，也就是说，它可以更改、中断或窃听您在网上执行的任何操作。如果您不确定出现这种变化的原因，那么这种变化可能并不是您所希望的。</translation>
 <translation id="6206311232642889873">复制图片(&amp;Y)</translation>
 <translation id="6239558157302047471">重新加载框架(&amp;F)</translation>
@@ -335,6 +330,7 @@
 <translation id="6295158916970320988">所有网站</translation>
 <translation id="6295855836753816081">正在保存…</translation>
 <translation id="6308937455967653460">链接另存为(&amp;K)...</translation>
+<translation id="6315493146179903667">前置全部窗口</translation>
 <translation id="6326855256003666642">持续活动者数量</translation>
 <translation id="6374469231428023295">重试</translation>
 <translation id="6385543213911723544">网站可以保存和读取 Cookie 数据</translation>
@@ -380,6 +376,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">显示控件(&amp;C)</translation>
 <translation id="7311079019872751559">未经沙盒屏蔽的插件访问</translation>
+<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">尝试打印时出现错误。请检查您的打印机，然后重试。</translation>
 <translation id="7412226954991670867">GPU 内存</translation>
 <translation id="7421925624202799674">显示网页源代码(&amp;V)</translation>
@@ -437,7 +434,8 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> 千字节</translation>
 <translation id="8137559199583651773">管理扩展程序</translation>
 <translation id="8180239481735238521">页面</translation>
-<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{有 1 项下载正在进行中}other{有多项下载正在进行中}}</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
+    =1{有 1 项下载正在进行中}other{有多项下载正在进行中}}</translation>
 <translation id="8230134520748321204">要保存 <ph name="ORIGIN" /> 的密码吗？</translation>
 <translation id="8261378640211443080">该扩展程序未列在 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />中，并可能是在您不知情的情况下添加的。</translation>
 <translation id="8270242299912238708">PDF 文档</translation>

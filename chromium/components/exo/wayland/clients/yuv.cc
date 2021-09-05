@@ -36,7 +36,7 @@ class YuvClient : public ClientBase {
 };
 
 bool YuvClient::WriteSolidColor(gbm_bo* bo, SkColor color) {
-  for (size_t i = 0; i < gbm_bo_get_plane_count(bo); ++i) {
+  for (size_t i = 0; i < static_cast<size_t>(gbm_bo_get_plane_count(bo)); ++i) {
     base::ScopedFD fd(gbm_bo_get_plane_fd(bo, i));
     uint32_t stride = gbm_bo_get_stride_for_plane(bo, i);
     uint32_t offset = gbm_bo_get_offset(bo, i);
@@ -132,6 +132,12 @@ int main(int argc, char* argv[]) {
   if (!params.FromCommandLine(*command_line))
     return 1;
 
+  if (!params.use_drm) {
+    LOG(ERROR) << "Missing --use-drm parameter which is required for buffer "
+                  "allocation";
+    return 1;
+  }
+
   // TODO(dcastagna): Support other YUV formats.
   params.drm_format = DRM_FORMAT_NV12;
   params.bo_usage =
@@ -140,5 +146,5 @@ int main(int argc, char* argv[]) {
   base::SingleThreadTaskExecutor main_task_executor(base::MessagePumpType::UI);
   exo::wayland::clients::YuvClient client;
   client.Run(params);
-  return 1;
+  return 0;
 }

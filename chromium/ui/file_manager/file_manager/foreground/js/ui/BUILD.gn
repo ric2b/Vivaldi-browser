@@ -22,6 +22,7 @@ js_type_check("closure_compile_module") {
     ":action_model_ui",
     ":actions_submenu",
     ":banners",
+    ":breadcrumb",
     ":closure_compile_externs",
     ":combobutton",
     ":commandbutton",
@@ -64,7 +65,6 @@ js_library("closure_compile_externs") {
   sources = []
   externs_list = [
     "$externs_path/metrics_private.js",
-    "$externs_path/web_animations.js",
     "//ui/file_manager/externs/background/crostini.js",
     "//ui/file_manager/externs/background/drive_sync_handler.js",
     "//ui/file_manager/externs/background/file_browser_background.js",
@@ -122,11 +122,18 @@ js_library("banners") {
   externs_list = [ "//ui/file_manager/externs/chrome_echo_private.js" ]
 }
 
+js_library("breadcrumb") {
+  deps = [
+    "//ui/webui/resources/cr_elements/cr_action_menu:cr_action_menu",
+    "//ui/webui/resources/js:assert",
+  ]
+}
+
 js_library("combobutton") {
   deps = [
     ":files_menu",
+    ":multi_menu",
     "//ui/file_manager/file_manager/foreground/elements:files_toggle_ripple",
-    "//ui/webui/resources/js/cr/ui:menu_button",
   ]
   externs_list = [ "//ui/file_manager/externs/paper_elements.js" ]
 }
@@ -193,9 +200,7 @@ js_library("drag_selector") {
 }
 
 js_library("empty_folder") {
-  deps = [
-    "//ui/webui/resources/js:util",
-  ]
+  deps = [ "//ui/webui/resources/js:util" ]
 }
 
 js_library("file_grid") {
@@ -250,6 +255,7 @@ js_library("file_manager_ui") {
     ":action_model_ui",
     ":actions_submenu",
     ":banners",
+    ":breadcrumb",
     ":combobutton",
     ":default_task_dialog",
     ":dialog_footer",
@@ -274,7 +280,6 @@ js_library("file_manager_ui") {
     "//ui/file_manager/file_manager/foreground/elements:files_toast",
     "//ui/file_manager/file_manager/foreground/elements:files_toggle_ripple",
     "//ui/file_manager/file_manager/foreground/elements:files_tooltip",
-    "//ui/file_manager/file_manager/foreground/elements:xf_activity_complete",
     "//ui/file_manager/file_manager/foreground/elements:xf_button",
     "//ui/file_manager/file_manager/foreground/elements:xf_circular_progress",
     "//ui/file_manager/file_manager/foreground/elements:xf_display_panel",
@@ -340,9 +345,7 @@ js_unittest("file_table_list_unittest") {
 }
 
 js_library("file_tap_handler") {
-  deps = [
-    "//ui/file_manager/file_manager/common/js:util",
-  ]
+  deps = [ "//ui/file_manager/file_manager/common/js:util" ]
 }
 
 js_unittest("file_tap_handler_unittest") {
@@ -356,17 +359,13 @@ js_unittest("file_tap_handler_unittest") {
 # TODO(tapted): Move this into //ui/file_manager/base.
 js_library("files_alert_dialog") {
   visibility += [ "//ui/file_manager/gallery/*" ]
-  deps = [
-    "//ui/webui/resources/js/cr/ui:dialogs",
-  ]
+  deps = [ "//ui/webui/resources/js/cr/ui:dialogs" ]
 }
 
 # TODO(tapted): Move this into //ui/file_manager/base.
 js_library("files_confirm_dialog") {
   visibility += [ "//ui/file_manager/gallery/*" ]
-  deps = [
-    "//ui/webui/resources/js/cr/ui:dialogs",
-  ]
+  deps = [ "//ui/webui/resources/js/cr/ui:dialogs" ]
 }
 
 js_library("files_menu") {
@@ -378,9 +377,22 @@ js_library("files_menu") {
   externs_list = [ "//ui/file_manager/externs/paper_elements.js" ]
 }
 
+js_library("gear_menu") {
+  deps = [ "//ui/file_manager/file_manager/common/js:util" ]
+}
+
 js_library("install_linux_package_dialog") {
   deps = [
     ":file_manager_dialog_base",
+    "//ui/file_manager/file_manager/common/js:util",
+  ]
+}
+
+js_unittest("install_linux_package_dialog_unittest") {
+  deps = [
+    ":install_linux_package_dialog",
+    "//ui/file_manager/base/js:test_error_reporting",
+    "//ui/webui/resources/js:webui_resource_test",
   ]
 }
 
@@ -389,12 +401,6 @@ js_library("import_crostini_image_dialog") {
     "//ui/webui/resources/js:cr",
     "//ui/webui/resources/js/cr:ui",
     "//ui/webui/resources/js/cr/ui:dialogs",
-  ]
-}
-
-js_library("gear_menu") {
-  deps = [
-    "//ui/file_manager/file_manager/common/js:util",
   ]
 }
 
@@ -424,6 +430,7 @@ js_library("multi_menu") {
     "//ui/webui/resources/js/cr/ui:menu_item",
     "//ui/webui/resources/js/cr/ui:position_util",
   ]
+  externs_list = [ "$externs_path/pending.js" ]
 }
 
 js_unittest("multi_menu_unittest") {
@@ -505,6 +512,7 @@ js_test_gen_html("js_test_gen_html") {
     ":file_table_list_unittest",
     ":file_table_unittest",
     ":file_tap_handler_unittest",
+    ":install_linux_package_dialog_unittest",
     ":multi_menu_unittest",
   ]
 }

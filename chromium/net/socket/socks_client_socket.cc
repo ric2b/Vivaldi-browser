@@ -62,6 +62,7 @@ static_assert(sizeof(SOCKS4ServerResponse) == kReadHeaderSize,
 SOCKSClientSocket::SOCKSClientSocket(
     std::unique_ptr<StreamSocket> transport_socket,
     const HostPortPair& destination,
+    const NetworkIsolationKey& network_isolation_key,
     RequestPriority priority,
     HostResolver* host_resolver,
     bool disable_secure_dns,
@@ -75,6 +76,7 @@ SOCKSClientSocket::SOCKSClientSocket(
       host_resolver_(host_resolver),
       disable_secure_dns_(disable_secure_dns),
       destination_(destination),
+      network_isolation_key_(network_isolation_key),
       priority_(priority),
       net_log_(transport_socket_->NetLog()),
       traffic_annotation_(traffic_annotation) {}
@@ -309,14 +311,15 @@ int SOCKSClientSocket::DoResolveHost() {
   parameters.initial_priority = priority_;
   if (disable_secure_dns_)
     parameters.secure_dns_mode_override = DnsConfig::SecureDnsMode::OFF;
-  resolve_host_request_ =
-      host_resolver_->CreateRequest(destination_, net_log_, parameters);
+  resolve_host_request_ = host_resolver_->CreateRequest(
+      destination_, network_isolation_key_, net_log_, parameters);
 
   return resolve_host_request_->Start(
       base::BindOnce(&SOCKSClientSocket::OnIOComplete, base::Unretained(this)));
 }
 
 int SOCKSClientSocket::DoResolveHostComplete(int result) {
+  resolve_error_info_ = resolve_host_request_->GetResolveErrorInfo();
   if (result != OK) {
     // Resolving the hostname failed; fail the request rather than automatically
     // falling back to SOCKS4a (since it can be confusing to see invalid IP
@@ -470,6 +473,10 @@ int SOCKSClientSocket::GetPeerAddress(IPEndPoint* address) const {
 
 int SOCKSClientSocket::GetLocalAddress(IPEndPoint* address) const {
   return transport_socket_->GetLocalAddress(address);
+}
+
+ResolveErrorInfo SOCKSClientSocket::GetResolveErrorInfo() const {
+  return resolve_error_info_;
 }
 
 }  // namespace net

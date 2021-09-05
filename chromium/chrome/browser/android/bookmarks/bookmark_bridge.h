@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_ANDROID_BOOKMARKS_BOOKMARK_BRIDGE_H_
 #define CHROME_BROWSER_ANDROID_BOOKMARKS_BOOKMARK_BRIDGE_H_
 
+#include <memory>
+#include <set>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/compiler_specific.h"
@@ -56,11 +59,6 @@ class BookmarkBridge : public bookmarks::BaseBookmarkModelObserver,
       const base::android::JavaParamRef<jobject>& obj,
       jlong id,
       jint type);
-
-  void GetPermanentNodeIDs(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jobject>& j_result_obj);
 
   void GetTopLevelFolderParentIDs(
       JNIEnv* env,
@@ -212,15 +210,12 @@ class BookmarkBridge : public bookmarks::BaseBookmarkModelObserver,
 
   void EndGroupingUndos(JNIEnv* env,
                         const base::android::JavaParamRef<jobject>& obj);
-  // <--- Vivaldi
   base::string16 GetTitle(const bookmarks::BookmarkNode* node) const;
-  base::string16 GetNickName(const bookmarks::BookmarkNode* node) const;
-  base::string16 GetFaviconUrl(const bookmarks::BookmarkNode* node) const;
-  base::string16 GetThumbnail(const bookmarks::BookmarkNode* node) const;
 
+  // <--- Vivaldi
   void GetSpeedDialFolders(JNIEnv* env,
-                          const JavaParamRef<jobject>& obj,
-                          const JavaParamRef<jobject>& j_folders_obj);
+                          const base::android::JavaParamRef<jobject>& obj,
+                          const base::android::JavaParamRef<jobject>& j_folders_obj);
 
   void SetBookmarkDescription(JNIEnv* env,
                               const base::android::JavaParamRef<jobject>& obj,
@@ -242,13 +237,13 @@ class BookmarkBridge : public bookmarks::BaseBookmarkModelObserver,
                             jboolean is_speeddial);
 
   void GetChildIDsVivaldi(JNIEnv* env,
-                   const JavaParamRef<jobject>& obj,
+                   const base::android::JavaParamRef<jobject>& obj,
                    jlong id,
                    jint type,
                    jboolean get_folders,
                    jboolean get_bookmarks,
                    jboolean get_separators,
-                   const JavaParamRef<jobject>& j_result_obj);
+                   const base::android::JavaParamRef<jobject>& j_result_obj);
 
   base::android::ScopedJavaLocalRef<jobject> GetTrashFolderId(
       JNIEnv* env,
@@ -312,9 +307,14 @@ class BookmarkBridge : public bookmarks::BaseBookmarkModelObserver,
       bookmarks::BookmarkModel* model) override;
   void ExtensiveBookmarkChangesEnded(bookmarks::BookmarkModel* model) override;
 
-  /** Vivaldi */
-  void BookmarkSpeedDialNodeChanged(bookmarks::BookmarkModel* model,
-                                    const bookmarks::BookmarkNode* node) override;
+  // 2 Vivaldi-specific overrides and their helper field to detect speed dial
+  // changes.
+  void OnWillChangeBookmarkMetaInfo(
+      bookmarks::BookmarkModel* model,
+      const bookmarks::BookmarkNode* node) override;
+  void BookmarkMetaInfoChanged(bookmarks::BookmarkModel* model,
+                               const bookmarks::BookmarkNode* node) override;
+  bool vivaldi_saved_speed_dial_value_ = false;
 
   // Override PartnerBookmarksShim::Observer
   void PartnerShimChanged(PartnerBookmarksShim* shim) override;

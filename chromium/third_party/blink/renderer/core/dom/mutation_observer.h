@@ -35,8 +35,8 @@
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer_options.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_state_observer.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -56,14 +56,16 @@ class Node;
 class ScriptState;
 class V8MutationCallback;
 
+using MutationObserverSet = HeapHashSet<Member<MutationObserver>>;
 using MutationObserverRegistrationSet =
     HeapHashSet<WeakMember<MutationObserverRegistration>>;
+using MutationObserverVector = HeapVector<Member<MutationObserver>>;
 using MutationRecordVector = HeapVector<Member<MutationRecord>>;
 
 class CORE_EXPORT MutationObserver final
     : public ScriptWrappable,
       public ActiveScriptWrappable<MutationObserver>,
-      public ContextClient {
+      public ExecutionContextLifecycleStateObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(MutationObserver);
   // Using CancelInspectorAsyncTasks as pre-finalizer to cancel async tasks.
@@ -94,6 +96,7 @@ class CORE_EXPORT MutationObserver final
 
   static MutationObserver* Create(Delegate*);
   static MutationObserver* Create(ScriptState*, V8MutationCallback*);
+  static void DeliverMutations();
   static void EnqueueSlotChange(HTMLSlotElement&);
   static void CleanSlotChangeList(Document&);
 
@@ -112,16 +115,16 @@ class CORE_EXPORT MutationObserver final
 
   bool HasPendingActivity() const override { return !records_.IsEmpty(); }
 
+  void ContextLifecycleStateChanged(mojom::FrameLifecycleState) final;
+  void ContextDestroyed() final {}
+
   void Trace(Visitor*) override;
 
-  // Methods to be used by MutationObserverNotifier
-  void Deliver();
-  bool ShouldBeSuspended() const;
-  void CancelInspectorAsyncTasks();
-  unsigned priority() { return priority_; }
-
  private:
-  void Activate();
+  struct ObserverLessThan;
+
+  void Deliver();
+  void CancelInspectorAsyncTasks();
 
   Member<Delegate> delegate_;
   HeapVector<Member<MutationRecord>> records_;

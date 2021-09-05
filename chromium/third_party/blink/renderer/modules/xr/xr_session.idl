@@ -7,7 +7,7 @@
 enum XRSessionMode {
   "inline",
   "immersive-vr",
-  /* [RuntimeEnabled=WebXRARModule] */ "immersive-ar",
+  "immersive-ar",
 };
 
 enum XREnvironmentBlendMode {
@@ -32,6 +32,7 @@ enum XRVisibilityState {
   readonly attribute XRVisibilityState visibilityState;
   [SameObject] readonly attribute XRRenderState renderState;
   [MeasureAs=XRSessionGetInputSources, SameObject] readonly attribute XRInputSourceArray inputSources;
+  [SameObject] readonly attribute XRDOMOverlayState domOverlayState;
 
   attribute EventHandler onend;
   attribute EventHandler onselect;
@@ -39,24 +40,26 @@ enum XRVisibilityState {
   attribute EventHandler onselectstart;
   attribute EventHandler onselectend;
   attribute EventHandler onvisibilitychange;
+  attribute EventHandler onsqueeze;
+  attribute EventHandler onsqueezestart;
+  attribute EventHandler onsqueezeend;
 
-  [RaisesException] void updateRenderState(optional XRRenderStateInit init);
+  [RaisesException] void updateRenderState(optional XRRenderStateInit init = {});
 
   [CallWith=ScriptState, RaisesException] Promise<XRReferenceSpace> requestReferenceSpace(XRReferenceSpaceType type);
 
   long requestAnimationFrame(XRFrameRequestCallback callback);
   void cancelAnimationFrame(long handle);
 
-  [RuntimeEnabled=WebXRHitTest, CallWith=ScriptState, RaisesException] Promise<FrozenArray<XRHitResult>> requestHitTest(XRRay ray, XRSpace space);
-
   // https://github.com/immersive-web/real-world-geometry/blob/master/plane-detection-explainer.md
-  [RuntimeEnabled=WebXRPlaneDetection] readonly attribute XRWorldTrackingState worldTrackingState;
-  [RuntimeEnabled=WebXRPlaneDetection, RaisesException] void updateWorldTrackingState(optional XRWorldTrackingStateInit state);
-
-  [RuntimeEnabled=WebXRAnchors] readonly attribute XRAnchorSet trackedAnchors;
-  [RuntimeEnabled=WebXRAnchors, CallWith=ScriptState, RaisesException] Promise<XRAnchor> createAnchor(XRRigidTransform initial_pose, XRSpace space);
+  [RuntimeEnabled=WebXRIncubations] readonly attribute XRWorldTrackingState worldTrackingState;
+  [RuntimeEnabled=WebXRIncubations, RaisesException] void updateWorldTrackingState(optional XRWorldTrackingStateInit state = {});
 
   [CallWith=ScriptState, Measure, RaisesException] Promise<void> end();
 
-  [RuntimeEnabled=WebXRHitTest, CallWith=ScriptState, RaisesException] Promise<XRHitTestSource> requestHitTestSource(XRHitTestOptionsInit options);
+  // https://github.com/immersive-web/hit-test/blob/master/hit-testing-explainer.md
+  [RuntimeEnabled=WebXRHitTest, CallWith=ScriptState, MeasureAs=XRSessionRequestHitTestSource, RaisesException]
+  Promise<XRHitTestSource> requestHitTestSource(XRHitTestOptionsInit options);
+  [RuntimeEnabled=WebXRHitTest, CallWith=ScriptState, MeasureAs=XRSessionRequestHitTestSourceForTransientInput, RaisesException]
+  Promise<XRTransientInputHitTestSource> requestHitTestSourceForTransientInput(XRTransientInputHitTestOptionsInit options);
 };

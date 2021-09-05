@@ -78,9 +78,13 @@ ServiceWorkerJobCoordinator::~ServiceWorkerJobCoordinator() {
 void ServiceWorkerJobCoordinator::Register(
     const GURL& script_url,
     const blink::mojom::ServiceWorkerRegistrationOptions& options,
+    blink::mojom::FetchClientSettingsObjectPtr
+        outside_fetch_client_settings_object,
     ServiceWorkerRegisterJob::RegistrationCallback callback) {
   std::unique_ptr<ServiceWorkerRegisterJobBase> job(
-      new ServiceWorkerRegisterJob(context_, script_url, options));
+      new ServiceWorkerRegisterJob(
+          context_, script_url, options,
+          std::move(outside_fetch_client_settings_object)));
   ServiceWorkerRegisterJob* queued_job = static_cast<ServiceWorkerRegisterJob*>(
       job_queues_[options.scope].Push(std::move(job)));
   queued_job->AddCallback(std::move(callback));
@@ -88,9 +92,10 @@ void ServiceWorkerJobCoordinator::Register(
 
 void ServiceWorkerJobCoordinator::Unregister(
     const GURL& scope,
+    bool is_immediate,
     ServiceWorkerUnregisterJob::UnregistrationCallback callback) {
   std::unique_ptr<ServiceWorkerRegisterJobBase> job(
-      new ServiceWorkerUnregisterJob(context_, scope));
+      new ServiceWorkerUnregisterJob(context_, scope, is_immediate));
   ServiceWorkerUnregisterJob* queued_job =
       static_cast<ServiceWorkerUnregisterJob*>(
           job_queues_[scope].Push(std::move(job)));
@@ -101,25 +106,31 @@ void ServiceWorkerJobCoordinator::Update(
     ServiceWorkerRegistration* registration,
     bool force_bypass_cache) {
   DCHECK(registration);
+  // Use an empty fetch client settings object because this method is for
+  // browser-initiated update and there is no associated execution context.
   job_queues_[registration->scope()].Push(
       base::WrapUnique<ServiceWorkerRegisterJobBase>(
-          new ServiceWorkerRegisterJob(context_, registration,
-                                       force_bypass_cache,
-                                       false /* skip_script_comparison */)));
+          new ServiceWorkerRegisterJob(
+              context_, registration, force_bypass_cache,
+              false /* skip_script_comparison */,
+              blink::mojom::FetchClientSettingsObject::New())));
 }
 
 void ServiceWorkerJobCoordinator::Update(
     ServiceWorkerRegistration* registration,
     bool force_bypass_cache,
     bool skip_script_comparison,
+    blink::mojom::FetchClientSettingsObjectPtr
+        outside_fetch_client_settings_object,
     ServiceWorkerRegisterJob::RegistrationCallback callback) {
   DCHECK(registration);
   ServiceWorkerRegisterJob* queued_job = static_cast<ServiceWorkerRegisterJob*>(
       job_queues_[registration->scope()].Push(
           base::WrapUnique<ServiceWorkerRegisterJobBase>(
-              new ServiceWorkerRegisterJob(context_, registration,
-                                           force_bypass_cache,
-                                           skip_script_comparison))));
+              new ServiceWorkerRegisterJob(
+                  context_, registration, force_bypass_cache,
+                  skip_script_comparison,
+                  std::move(outside_fetch_client_settings_object)))));
   queued_job->AddCallback(std::move(callback));
 }
 

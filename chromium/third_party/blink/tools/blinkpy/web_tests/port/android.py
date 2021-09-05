@@ -64,6 +64,8 @@ intent = None
 perf_control = None
 # pylint: enable=invalid-name
 
+_friendly_browser_names = {
+    'weblayershell': 'weblayer', 'systemwebviewshell': 'webview', 'chromepublic': 'chromium'}
 
 def _import_android_packages_if_necessary():
     # pylint: disable=invalid-name
@@ -143,8 +145,20 @@ TEST_RESOURCES_TO_PUSH = [
 ]
 
 
+class DriverDetails(object):
+
+    def __init__(self, apk):
+        self._apk = apk
+
+    def apk_name(self):
+        return self._apk
+
+
 # Information required when running web tests using content_shell as the test runner.
-class ContentShellDriverDetails():
+class ContentShellDriverDetails(DriverDetails):
+
+    def __init__(self):
+        super(ContentShellDriverDetails, self).__init__('apks/ContentShell.apk')
 
     def device_cache_directory(self):
         return self.device_directory() + 'cache/'
@@ -154,9 +168,6 @@ class ContentShellDriverDetails():
 
     def device_fifo_directory(self):
         return '/data/data/' + self.package_name() + '/files/'
-
-    def apk_name(self):
-        return 'apks/ContentShell.apk'
 
     def package_name(self):
         return 'org.chromium.content_shell_apk'
@@ -244,44 +255,53 @@ class AndroidPort(base.Port):
 
     BUILD_REQUIREMENTS_URL = 'https://www.chromium.org/developers/how-tos/android-build-instructions'
 
-    def __init__(self, host, port_name, **kwargs):
-        _import_android_packages_if_necessary()
-        super(AndroidPort, self).__init__(host, port_name, **kwargs)
-
+    def __init__(self, host, port_name='', apk='', options=None, **kwargs):
+        super(AndroidPort, self).__init__(host, port_name, options=options, **kwargs)
         self._operating_system = 'android'
         self._version = 'kitkat'
+        fs = host.filesystem
+        self._local_port = factory.PortFactory(host).get(**kwargs)
 
-        self._host_port = factory.PortFactory(host).get(**kwargs)
-        self.server_process_constructor = self._android_server_process_constructor
+        if apk:
+            self._driver_details = DriverDetails(apk)
+            browser_type = fs.splitext(fs.basename(apk))[0].lower()
+            self._browser_type = _friendly_browser_names.get(browser_type, browser_type)
+        else:
+            # The legacy test runner will be used to run web tests on Android.
+            # So we need to initialize several port member variables.
+            _import_android_packages_if_necessary()
+            self._driver_details = ContentShellDriverDetails()
+            self._browser_type = 'content_shell'
+            self._debug_logging = self.get_option('android_logging')
+            self.server_process_constructor = self._android_server_process_constructor
 
-        if not self.get_option('disable_breakpad'):
-            self._dump_reader = DumpReaderAndroid(host, self._build_path())
+            if not self.get_option('disable_breakpad'):
+                self._dump_reader = DumpReaderAndroid(host, self._build_path())
 
-        if self.driver_name() != self.CONTENT_SHELL_NAME:
-            raise AssertionError('Web tests on Android only support content_shell as the driver.')
+            # Initialize the AndroidDevices class which tracks available devices.
+            default_devices = None
+            if hasattr(self._options, 'adb_devices') and len(self._options.adb_devices):
+                default_devices = self._options.adb_devices
 
-        self._driver_details = ContentShellDriverDetails()
+            self._devices = AndroidDevices(default_devices, self._debug_logging)
 
-        # Initialize the AndroidDevices class which tracks available devices.
-        default_devices = None
-        if hasattr(self._options, 'adb_devices') and len(self._options.adb_devices):
-            default_devices = self._options.adb_devices
+            devil_chromium.Initialize(
+                output_directory=self._build_path(),
+                adb_path=self._path_from_chromium_base(
+                    'third_party', 'android_sdk', 'public', 'platform-tools', 'adb'))
 
-        self._debug_logging = self.get_option('android_logging')
-        self._devices = AndroidDevices(default_devices, self._debug_logging)
+            devil_env.config.InitializeLogging(
+                logging.DEBUG
+                if self._debug_logging and self.get_option('debug_rwt_logging')
+                else logging.WARNING)
 
-        devil_chromium.Initialize(
-            output_directory=self._build_path(),
-            adb_path=self._path_from_chromium_base(
-                'third_party', 'android_sdk', 'public', 'platform-tools', 'adb'))
-        devil_env.config.InitializeLogging(
-            logging.DEBUG
-            if self._debug_logging and self.get_option('debug_rwt_logging')
-            else logging.WARNING)
+            prepared_devices = self.get_option('prepared_devices', [])
+            for serial in prepared_devices:
+                self._devices.set_device_prepared(serial)
 
-        prepared_devices = self.get_option('prepared_devices', [])
-        for serial in prepared_devices:
-            self._devices.set_device_prepared(serial)
+    def get_platform_tags(self):
+        _sanitize_tag = lambda t: t.replace('_', '-').replace(' ', '-')
+        return frozenset(['android', 'android-' + _sanitize_tag(self._browser_type)])
 
     def default_smoke_test_only(self):
         return True
@@ -306,11 +326,6 @@ class AndroidPort(base.Port):
             raise test_run_results.TestRunException(exit_codes.NO_DEVICES_EXIT_STATUS,
                                                     'Unable to find any attached Android devices.')
         return len(usable_devices)
-
-    def max_drivers_per_process(self):
-        # Android falls over when we try to run multiple content_shells per worker.
-        # See https://codereview.chromium.org/1158323009/
-        return 1
 
     def check_build(self, needs_http, printer):
         exit_status = super(AndroidPort, self).check_build(needs_http, printer)
@@ -494,25 +509,25 @@ class AndroidPort(base.Port):
     # Overridden protected methods.
 
     def _build_path(self, *comps):
-        return self._host_port._build_path(*comps)
+        return self._local_port._build_path(*comps)
 
     def _build_path_with_target(self, target, *comps):
-        return self._host_port._build_path_with_target(target, *comps)
+        return self._local_port._build_path_with_target(target, *comps)
 
     def path_to_apache(self):
-        return self._host_port.path_to_apache()
+        return self._local_port.path_to_apache()
 
     def path_to_apache_config_file(self):
-        return self._host_port.path_to_apache_config_file()
+        return self._local_port.path_to_apache_config_file()
 
     def _path_to_driver(self, target=None):
         return self._build_path_with_target(target, self._driver_details.apk_name())
 
     def _path_to_image_diff(self):
-        return self._host_port._path_to_image_diff()
+        return self._local_port._path_to_image_diff()
 
     def _shut_down_http_server(self, pid):
-        return self._host_port._shut_down_http_server(pid)
+        return self._local_port._shut_down_http_server(pid)
 
     def _driver_class(self):
         return ChromiumAndroidDriver
@@ -668,7 +683,7 @@ class ChromiumAndroidDriver(driver.Driver):
             symfs_path = self._find_or_create_symfs()
             kallsyms_path = self._update_kallsyms_cache(symfs_path)
             # FIXME: We should pass this some sort of "Bridge" object abstraction around ADB instead of a path/device pair.
-            self._profiler = AndroidPerf(self._port.host, self._port._path_to_driver(), self._port.results_directory(),
+            self._profiler = AndroidPerf(self._port.host, self._port._path_to_driver(), self._port.artifacts_directory(),
                                          self._device, symfs_path, kallsyms_path)
             # FIXME: This is a layering violation and should be moved to Port.check_sys_deps
             # once we have an abstraction around an adb_path/device_serial pair to make it
@@ -706,7 +721,7 @@ class ChromiumAndroidDriver(driver.Driver):
         if 'ANDROID_SYMFS' in env:
             symfs_path = env['ANDROID_SYMFS']
         else:
-            symfs_path = fs.join(self._port.results_directory(), 'symfs')
+            symfs_path = fs.join(self._port.artifacts_directory(), 'symfs')
             _log.debug('ANDROID_SYMFS not set, using %s', symfs_path)
 
         # find the installed path, and the path of the symboled built library

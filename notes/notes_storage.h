@@ -22,35 +22,35 @@ class BrowserContext;
 }
 
 namespace vivaldi {
-class Notes_Model;
-class Notes_Node;
+class NotesModel;
+class NoteNode;
 
 // NotesLoadDetails is used by NotesStorage when loading notes.
-// Notes_Model creates a NotesLoadDetails and passes it (including
+// NotesModel creates a NotesLoadDetails and passes it (including
 // ownership) to NotesStorage. NotesStorage loads the notes (and
-// index) in the background thread, then calls back to the Notes_Model (on
+// index) in the background thread, then calls back to the NotesModel (on
 // the main thread) when loading is done, passing ownership back to the
-// Notes_Model. While loading Notes_Model does not maintain references to
+// NotesModel. While loading NotesModel does not maintain references to
 // the contents of the NotesLoadDetails, this ensures we don't have any
 // threading problems.
 class NotesLoadDetails {
  public:
-  NotesLoadDetails(Notes_Node* notes_node,
-                   Notes_Node* other_notes_node,
-                   Notes_Node* trash_notes_node,
+  NotesLoadDetails(NoteNode* notes_node,
+                   NoteNode* other_notes_node,
+                   NoteNode* trash_notes_node,
                    int64_t max_id);
   ~NotesLoadDetails();
 
-  Notes_Node* notes_node() { return notes_node_.get(); }
-  std::unique_ptr<Notes_Node> release_notes_node() {
+  NoteNode* notes_node() { return notes_node_.get(); }
+  std::unique_ptr<NoteNode> release_notes_node() {
     return std::move(notes_node_);
   }
-  Notes_Node* other_notes_node() { return other_notes_node_.get(); }
-  std::unique_ptr<Notes_Node> release_other_notes_node() {
+  NoteNode* other_notes_node() { return other_notes_node_.get(); }
+  std::unique_ptr<NoteNode> release_other_notes_node() {
     return std::move(other_notes_node_);
   }
-  Notes_Node* trash_notes_node() { return trash_notes_node_.get(); }
-  std::unique_ptr<Notes_Node> release_trash_notes_node() {
+  NoteNode* trash_notes_node() { return trash_notes_node_.get(); }
+  std::unique_ptr<NoteNode> release_trash_notes_node() {
     return std::move(trash_notes_node_);
   }
 
@@ -80,20 +80,35 @@ class NotesLoadDetails {
   void set_ids_reassigned(bool value) { ids_reassigned_ = value; }
   bool ids_reassigned() const { return ids_reassigned_; }
 
+  // Whether new GUIDs were assigned to Notes that lacked them.
+  void set_guids_reassigned(bool value) { guids_reassigned_ = value; }
+  bool guids_reassigned() const { return guids_reassigned_; }
+
+  // Returns the string blob representing the sync metadata in the json file.
+  // The string blob is set during decode time upon the call to
+  // NotesModel::Load.
+  void set_sync_metadata_str(std::string sync_metadata_str) {
+    sync_metadata_str_ = std::move(sync_metadata_str);
+  }
+  const std::string& sync_metadata_str() const { return sync_metadata_str_; }
+
  private:
-  std::unique_ptr<Notes_Node> notes_node_;
-  std::unique_ptr<Notes_Node> other_notes_node_;
-  std::unique_ptr<Notes_Node> trash_notes_node_;
+  std::unique_ptr<NoteNode> notes_node_;
+  std::unique_ptr<NoteNode> other_notes_node_;
+  std::unique_ptr<NoteNode> trash_notes_node_;
   std::string computed_checksum_;
   std::string stored_checksum_;
   int64_t highest_id_found_;
   bool ids_reassigned_;
+  bool guids_reassigned_;
+  // A string blob represetning the sync metadata stored in the json file.
+  std::string sync_metadata_str_;
 
   DISALLOW_COPY_AND_ASSIGN(NotesLoadDetails);
 };
 
 // NotesStorage handles reading/write the notes model. The
-// Notes_Model uses the NotesStorage to load notes from disk, as well
+// NotesModel uses the NotesStorage to load notes from disk, as well
 // as notifying the NotesStorage every time the model changes.
 //
 // Internally NotesStorage uses NotesCodec to do the actual read/write.
@@ -101,7 +116,7 @@ class NotesStorage : public base::ImportantFileWriter::DataSerializer {
  public:
   // Creates a NotesStorage for the specified model
   NotesStorage(content::BrowserContext* context,
-               Notes_Model* model,
+               NotesModel* model,
                base::SequencedTaskRunner* sequenced_task_runner);
 
   ~NotesStorage() override;
@@ -131,7 +146,7 @@ class NotesStorage : public base::ImportantFileWriter::DataSerializer {
   bool SaveNow();
 
   // The model. The model is NULL once NotesModelDeleted has been invoked.
-  Notes_Model* model_;
+  NotesModel* model_;
 
   // Helper to write notes data safely.
   base::ImportantFileWriter writer_;

@@ -6,8 +6,11 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <algorithm>
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -19,6 +22,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_runner.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -30,9 +34,9 @@
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/blob/blob_reader.h"
 #include "storage/browser/blob/blob_storage_context.h"
-#include "storage/browser/fileapi/file_stream_reader.h"
-#include "storage/browser/fileapi/file_system_context.h"
-#include "storage/browser/fileapi/file_system_file_util.h"
+#include "storage/browser/file_system/file_stream_reader.h"
+#include "storage/browser/file_system/file_system_context.h"
+#include "storage/browser/file_system/file_system_file_util.h"
 #include "storage/browser/test/async_file_test_helper.h"
 #include "storage/browser/test/fake_blob_data_handle.h"
 #include "storage/browser/test/test_file_system_context.h"
@@ -41,13 +45,13 @@
 #include "url/gurl.h"
 
 using base::FilePath;
-using content::AsyncFileTestHelper;
 using net::DrainableIOBuffer;
 using net::IOBuffer;
-using FileCreationInfo = storage::BlobMemoryController::FileCreationInfo;
 
 namespace storage {
 namespace {
+
+using FileCreationInfo = BlobMemoryController::FileCreationInfo;
 
 void SaveBlobStatusAndFiles(BlobStatus* status_ptr,
                             std::vector<FileCreationInfo>* files_ptr,
@@ -377,8 +381,7 @@ TEST_F(BlobReaderTest, BasicFileSystem) {
 TEST_F(BlobReaderTest, BasicReadableDataHandle) {
   auto b = std::make_unique<BlobDataBuilder>("uuid");
   const std::string kData = "Test Blob Data";
-  auto data_handle =
-      base::MakeRefCounted<storage::FakeBlobDataHandle>(kData, "");
+  auto data_handle = base::MakeRefCounted<FakeBlobDataHandle>(kData, "");
   b->AppendReadableDataHandle(std::move(data_handle));
   this->InitializeReader(std::move(b));
 
@@ -408,8 +411,7 @@ TEST_F(BlobReaderTest, ReadableDataHandleWithSideData) {
   auto b = std::make_unique<BlobDataBuilder>("uuid");
   const std::string kData = "Test Blob Data";
   const std::string kSideData = "Test side data";
-  auto data_handle =
-      base::MakeRefCounted<storage::FakeBlobDataHandle>(kData, kSideData);
+  auto data_handle = base::MakeRefCounted<FakeBlobDataHandle>(kData, kSideData);
   b->AppendReadableDataHandle(std::move(data_handle));
   this->InitializeReader(std::move(b));
 
@@ -420,14 +422,15 @@ TEST_F(BlobReaderTest, ReadableDataHandleWithSideData) {
   CheckSizeCalculatedSynchronously(kData.size(), size_result);
 
   EXPECT_TRUE(reader_->has_side_data());
-  BlobReader::Status status = BlobReader::Status::DONE;
-  EXPECT_EQ(BlobReader::Status::DONE,
-            reader_->ReadSideData(
-                base::BindOnce(&SetValue<BlobReader::Status>, &status)));
+  BlobReader::Status status = BlobReader::Status::NET_ERROR;
+  // As this is using a FakeBlobDataHandle, expect this to be synchronous.
+  reader_->ReadSideData(base::BindOnce(&SetValue<BlobReader::Status>, &status));
   EXPECT_EQ(net::OK, reader_->net_error());
-  EXPECT_TRUE(reader_->side_data());
-  std::string result(reader_->side_data()->data(),
-                     reader_->side_data()->size());
+  EXPECT_EQ(BlobReader::Status::DONE, status);
+  auto side_data = reader_->TakeSideData();
+  EXPECT_TRUE(side_data.has_value());
+  std::string result(reinterpret_cast<const char*>(side_data->data()),
+                     side_data->size());
   EXPECT_EQ(kSideData, result);
 }
 
@@ -536,7 +539,7 @@ TEST_F(BlobReaderTest, SegmentedBufferAndMemory) {
     for (size_t j = 0; j < kItemSize; j++) {
       buf[j] = current_value++;
     }
-    b->AppendData(buf, kItemSize);
+    b->AppendData(std::string(buf, kItemSize));
   }
   this->InitializeReader(std::move(b));
 
@@ -642,14 +645,13 @@ TEST_F(BlobReaderTest, FileSystemAsync) {
   EXPECT_EQ(0, memcmp(buffer->data(), "FileData!!!", kData.size()));
 }
 
-TEST_F(BlobReaderTest, ReadableDataHandleAsync) {
+TEST_F(BlobReaderTest, ReadableDataHandleSingle) {
   auto b = std::make_unique<BlobDataBuilder>("uuid");
-  const std::string kData = "Test Blob Data";
-  auto data_handle =
-      base::MakeRefCounted<storage::FakeBlobDataHandle>(kData, "");
-  data_handle->EnableDelayedReading();
-  b->AppendReadableDataHandle(data_handle);
+  const std::string kOrigData = "12345 Test Blob Data 12345";
+  auto data_handle = base::MakeRefCounted<FakeBlobDataHandle>(kOrigData, "");
+  b->AppendReadableDataHandle(data_handle, 6, 14);
   this->InitializeReader(std::move(b));
+  const std::string kData = kOrigData.substr(6, 14);
 
   int size_result = -1;
   EXPECT_FALSE(IsReaderTotalSizeCalculated());
@@ -657,20 +659,121 @@ TEST_F(BlobReaderTest, ReadableDataHandleAsync) {
                                           &SetValue<int>, &size_result)));
   CheckSizeCalculatedSynchronously(kData.size(), size_result);
 
+  // This test checks the optimized single mojo data item path, where the
+  // data pipe passed in gets passed directly to the MojoDataItem.
+  EXPECT_TRUE(reader_->IsSingleMojoDataItem());
+
+  mojo::ScopedDataPipeProducerHandle producer;
+  mojo::ScopedDataPipeConsumerHandle consumer;
+  MojoResult pipe_result = mojo::CreateDataPipe(nullptr, &producer, &consumer);
+  ASSERT_EQ(MOJO_RESULT_OK, pipe_result);
+
+  int bytes_read = net::ERR_UNEXPECTED;
+  reader_->ReadSingleMojoDataItem(
+      std::move(producer),
+      base::BindLambdaForTesting([&](int result) { bytes_read = result; }));
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_EQ(kData.size(), static_cast<size_t>(bytes_read));
+
+  std::vector<uint8_t> buffer(bytes_read);
+  uint32_t num_bytes = bytes_read;
+  MojoReadDataFlags flags = MOJO_READ_DATA_FLAG_ALL_OR_NONE;
+  MojoResult read_result = consumer->ReadData(buffer.data(), &num_bytes, flags);
+  ASSERT_EQ(MOJO_RESULT_OK, read_result);
+  ASSERT_EQ(kData.size(), num_bytes);
+
+  EXPECT_EQ(0, memcmp(buffer.data(), kData.c_str(), kData.size()));
+}
+
+// This test is the same as ReadableDataHandleSingle, but adds the
+// additional wrinkle of a SetReadRange call.
+TEST_F(BlobReaderTest, ReadableDataHandleSingleRange) {
+  auto b = std::make_unique<BlobDataBuilder>("uuid");
+  const std::string kOrigData = "12345 Test Blob Data 12345";
+  auto data_handle = base::MakeRefCounted<FakeBlobDataHandle>(kOrigData, "");
+  b->AppendReadableDataHandle(data_handle, 6, 14);
+  this->InitializeReader(std::move(b));
+  const std::string kData = kOrigData.substr(6, 14);
+
+  int size_result = -1;
+  EXPECT_FALSE(IsReaderTotalSizeCalculated());
+  EXPECT_EQ(BlobReader::Status::DONE, reader_->CalculateSize(base::BindOnce(
+                                          &SetValue<int>, &size_result)));
+  CheckSizeCalculatedSynchronously(kData.size(), size_result);
+
+  // This test checks the optimized single mojo data item path, where the
+  // data pipe passed in gets passed directly to the MojoDataItem.
+  EXPECT_TRUE(reader_->IsSingleMojoDataItem());
+
+  uint64_t range_start = 3;
+  uint64_t range_length = 6;
+  reader_->SetReadRange(range_start, range_length);
+
+  mojo::ScopedDataPipeProducerHandle producer;
+  mojo::ScopedDataPipeConsumerHandle consumer;
+  MojoResult pipe_result = mojo::CreateDataPipe(nullptr, &producer, &consumer);
+  ASSERT_EQ(MOJO_RESULT_OK, pipe_result);
+
+  int bytes_read = net::ERR_UNEXPECTED;
+  reader_->ReadSingleMojoDataItem(
+      std::move(producer),
+      base::BindLambdaForTesting([&](int result) { bytes_read = result; }));
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_EQ(range_length, static_cast<uint64_t>(bytes_read));
+
+  std::vector<uint8_t> buffer(bytes_read);
+  uint32_t num_bytes = bytes_read;
+  MojoReadDataFlags flags = MOJO_READ_DATA_FLAG_ALL_OR_NONE;
+  MojoResult read_result = consumer->ReadData(buffer.data(), &num_bytes, flags);
+  ASSERT_EQ(MOJO_RESULT_OK, read_result);
+  ASSERT_EQ(range_length, num_bytes);
+
+  EXPECT_EQ(0,
+            memcmp(buffer.data(), kData.c_str() + range_start, range_length));
+}
+
+TEST_F(BlobReaderTest, ReadableDataHandleMultipleSlices) {
+  auto b = std::make_unique<BlobDataBuilder>("uuid");
+  const std::string kData1 = "Test Blob Data";
+  const std::string kData2 = "Extra test blob data";
+
+  // Create readable data handles with various slices of data.
+  // It's important to test that both the first element we read and a
+  // non-first element that we read handle slices, as these touch different
+  // pieces of code.
+  b->AppendReadableDataHandle(
+      base::MakeRefCounted<FakeBlobDataHandle>(kData1, ""), 5, 4);
+  b->AppendReadableDataHandle(
+      base::MakeRefCounted<FakeBlobDataHandle>(kData2, ""), 6, 9);
+  this->InitializeReader(std::move(b));
+
+  std::string kData = kData1.substr(5, 4) + kData2.substr(6, 9);
+
+  int size_result = -1;
+  EXPECT_FALSE(IsReaderTotalSizeCalculated());
+  EXPECT_EQ(BlobReader::Status::DONE, reader_->CalculateSize(base::BindOnce(
+                                          &SetValue<int>, &size_result)));
+  CheckSizeCalculatedSynchronously(kData.size(), size_result);
+
+  // Verify this condition while we are here.
+  EXPECT_FALSE(reader_->IsSingleMojoDataItem());
+
   scoped_refptr<net::IOBuffer> buffer =
       base::MakeRefCounted<net::IOBuffer>(kData.size());
 
   int bytes_read = 0;
   int async_bytes_read = 0;
-  EXPECT_EQ(BlobReader::Status::IO_PENDING,
-            reader_->Read(buffer.get(), kData.size(), &bytes_read,
-                          base::BindOnce(&SetValue<int>, &async_bytes_read)));
-  EXPECT_TRUE(data_handle->HasPendingReadCallbacks());
-  data_handle->RunPendingReadCallbacks();
+  BlobReader::Status result =
+      reader_->Read(buffer.get(), kData.size(), &bytes_read,
+                    base::BindOnce(&SetValue<int>, &async_bytes_read));
   EXPECT_EQ(net::OK, reader_->net_error());
-  EXPECT_EQ(0, bytes_read);
-  EXPECT_EQ(kData.size(), static_cast<size_t>(async_bytes_read));
-  EXPECT_EQ(0, memcmp(buffer->data(), "Test Blob Data", kData.size()));
+  EXPECT_EQ(result, BlobReader::Status::DONE);
+  EXPECT_EQ(0, async_bytes_read);
+  EXPECT_EQ(kData.size(), static_cast<size_t>(bytes_read));
+
+  EXPECT_EQ(0, memcmp(buffer->data(), kData.data(), kData.size()));
 }
 
 TEST_F(BlobReaderTest, FileRange) {
@@ -721,8 +824,7 @@ TEST_F(BlobReaderTest, ReadableDataHandleRange) {
   const std::string kData = "Test Blob Data";
   const uint64_t kOffset = 2;
   const uint64_t kReadLength = 3;
-  auto data_handle =
-      base::MakeRefCounted<storage::FakeBlobDataHandle>(kData, "");
+  auto data_handle = base::MakeRefCounted<FakeBlobDataHandle>(kData, "");
   b->AppendReadableDataHandle(std::move(data_handle));
   this->InitializeReader(std::move(b));
 
@@ -833,8 +935,7 @@ TEST_F(BlobReaderTest, MixedContent) {
   const base::Time kTime = base::Time::Now();
   const FilePath kData1Path = FilePath::FromUTF8Unsafe("/fake/file.txt");
 
-  auto data_handle =
-      base::MakeRefCounted<storage::FakeBlobDataHandle>(kData3, "");
+  auto data_handle = base::MakeRefCounted<FakeBlobDataHandle>(kData3, "");
 
   b->AppendFile(kData1Path, 0, kData1.size(), kTime);
   b->AppendData(kData2);
@@ -1079,7 +1180,8 @@ TEST_F(BlobReaderTest, ReadFromIncompleteBlob) {
       BlobReader::Status::IO_PENDING,
       reader_->CalculateSize(base::BindOnce(&SetValue<int>, &size_result)));
   EXPECT_FALSE(reader_->IsInMemory());
-  future_data.Populate(base::make_span(kData.data(), kDataSize), 0);
+  future_data.Populate(base::as_bytes(base::make_span(kData.data(), kDataSize)),
+                       0);
   context_.NotifyTransportComplete(kUuid);
   base::RunLoop().RunUntilIdle();
   CheckSizeCalculatedAsynchronously(kDataSize, size_result);

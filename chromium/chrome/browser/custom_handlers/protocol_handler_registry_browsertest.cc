@@ -11,19 +11,23 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
-#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/permissions/permission_request_manager.h"
+#include "components/permissions/test/mock_permission_prompt_factory.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/blink/public/web/web_context_menu_data.h"
+#include "third_party/blink/public/common/context_menu_data/media_type.h"
+
+#if defined(OS_MACOSX)
+#include "chrome/test/base/launchservices_utils_mac.h"
+#endif
 
 using content::WebContents;
 
@@ -31,9 +35,15 @@ class RegisterProtocolHandlerBrowserTest : public InProcessBrowserTest {
  public:
   RegisterProtocolHandlerBrowserTest() { }
 
+  void SetUpOnMainThread() override {
+#if defined(OS_MACOSX)
+    ASSERT_TRUE(test::RegisterAppWithLaunchServices());
+#endif
+  }
+
   TestRenderViewContextMenu* CreateContextMenu(GURL url) {
     content::ContextMenuParams params;
-    params.media_type = blink::WebContextMenuData::kMediaTypeNone;
+    params.media_type = blink::ContextMenuDataMediaType::kNone;
     params.link_url = url;
     params.unfiltered_link_url = url;
     WebContents* web_contents =
@@ -140,10 +150,13 @@ using RegisterProtocolHandlerExtensionBrowserTest =
     extensions::ExtensionBrowserTest;
 
 IN_PROC_BROWSER_TEST_F(RegisterProtocolHandlerExtensionBrowserTest, Basic) {
-  PermissionRequestManager* manager = PermissionRequestManager::FromWebContents(
-      browser()->tab_strip_model()->GetActiveWebContents());
-  auto prompt_factory = std::make_unique<MockPermissionPromptFactory>(manager);
-  prompt_factory->set_response_type(PermissionRequestManager::ACCEPT_ALL);
+  permissions::PermissionRequestManager* manager =
+      permissions::PermissionRequestManager::FromWebContents(
+          browser()->tab_strip_model()->GetActiveWebContents());
+  auto prompt_factory =
+      std::make_unique<permissions::MockPermissionPromptFactory>(manager);
+  prompt_factory->set_response_type(
+      permissions::PermissionRequestManager::ACCEPT_ALL);
 
   const extensions::Extension* extension =
       LoadExtension(test_data_dir_.AppendASCII("protocol_handler"));
@@ -157,6 +170,9 @@ IN_PROC_BROWSER_TEST_F(RegisterProtocolHandlerExtensionBrowserTest, Basic) {
   ASSERT_TRUE(content::ExecuteScript(
       browser()->tab_strip_model()->GetActiveWebContents(),
       "navigator.registerProtocolHandler('geo', 'test.html?%s', 'test');"));
+
+  // Wait until the prompt is "displayed" and "accepted".
+  base::RunLoop().RunUntilIdle();
 
   // Test the handler.
   ui_test_utils::NavigateToURL(browser(), GURL("geo:test"));

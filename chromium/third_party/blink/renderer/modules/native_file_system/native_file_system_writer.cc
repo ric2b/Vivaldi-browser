@@ -30,7 +30,7 @@ NativeFileSystemWriter::NativeFileSystemWriter(
     ExecutionContext* context,
     mojo::PendingRemote<mojom::blink::NativeFileSystemFileWriter>
         writer_pending_remote)
-    : ContextLifecycleObserver(context),
+    : ExecutionContextLifecycleObserver(context),
       writer_remote_(std::move(writer_pending_remote)) {
   DCHECK(writer_remote_);
 }
@@ -46,11 +46,12 @@ ScriptPromise NativeFileSystemWriter::write(
   Blob* blob = nullptr;
   if (data.IsArrayBuffer()) {
     DOMArrayBuffer* array_buffer = data.GetAsArrayBuffer();
-    blob_data->AppendBytes(array_buffer->Data(), array_buffer->ByteLength());
+    blob_data->AppendBytes(array_buffer->Data(),
+                           array_buffer->ByteLengthAsSizeT());
   } else if (data.IsArrayBufferView()) {
     DOMArrayBufferView* array_buffer_view = data.GetAsArrayBufferView().View();
     blob_data->AppendBytes(array_buffer_view->BaseAddress(),
-                           array_buffer_view->byteLength());
+                           array_buffer_view->byteLengthAsSizeT());
   } else if (data.IsBlob()) {
     blob = data.GetAsBlob();
   } else if (data.IsUSVString()) {
@@ -61,19 +62,21 @@ ScriptPromise NativeFileSystemWriter::write(
 
   if (!blob) {
     uint64_t size = blob_data->length();
-    blob = Blob::Create(BlobDataHandle::Create(std::move(blob_data), size));
+    blob = MakeGarbageCollected<Blob>(
+        BlobDataHandle::Create(std::move(blob_data), size));
   }
 
-  return WriteBlob(script_state, position, blob);
+  return WriteBlob(script_state, position, blob, exception_state);
 }
 
-ScriptPromise NativeFileSystemWriter::WriteBlob(ScriptState* script_state,
-                                                uint64_t position,
-                                                Blob* blob) {
+ScriptPromise NativeFileSystemWriter::WriteBlob(
+    ScriptState* script_state,
+    uint64_t position,
+    Blob* blob,
+    ExceptionState& exception_state) {
   if (!writer_remote_ || pending_operation_) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state, MakeGarbageCollected<DOMException>(
-                          DOMExceptionCode::kInvalidStateError));
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError, "");
+    return ScriptPromise();
   }
   pending_operation_ =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -176,9 +179,8 @@ ScriptPromise NativeFileSystemWriter::WriteStream(
     ReadableStream* stream,
     ExceptionState& exception_state) {
   if (!writer_remote_ || pending_operation_) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state, MakeGarbageCollected<DOMException>(
-                          DOMExceptionCode::kInvalidStateError));
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError, "");
+    return ScriptPromise();
   }
   DCHECK(!stream_loader_);
 
@@ -201,12 +203,13 @@ ScriptPromise NativeFileSystemWriter::WriteStream(
   return result;
 }
 
-ScriptPromise NativeFileSystemWriter::truncate(ScriptState* script_state,
-                                               uint64_t size) {
+ScriptPromise NativeFileSystemWriter::truncate(
+    ScriptState* script_state,
+    uint64_t size,
+    ExceptionState& exception_state) {
   if (!writer_remote_ || pending_operation_) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state, MakeGarbageCollected<DOMException>(
-                          DOMExceptionCode::kInvalidStateError));
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError, "");
+    return ScriptPromise();
   }
   pending_operation_ =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -217,11 +220,11 @@ ScriptPromise NativeFileSystemWriter::truncate(ScriptState* script_state,
   return result;
 }
 
-ScriptPromise NativeFileSystemWriter::close(ScriptState* script_state) {
+ScriptPromise NativeFileSystemWriter::close(ScriptState* script_state,
+                                            ExceptionState& exception_state) {
   if (!writer_remote_ || pending_operation_) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state, MakeGarbageCollected<DOMException>(
-                          DOMExceptionCode::kInvalidStateError));
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError, "");
+    return ScriptPromise();
   }
   pending_operation_ =
       MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -234,7 +237,7 @@ ScriptPromise NativeFileSystemWriter::close(ScriptState* script_state) {
 
 void NativeFileSystemWriter::Trace(Visitor* visitor) {
   ScriptWrappable::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
   visitor->Trace(file_);
   visitor->Trace(pending_operation_);
   visitor->Trace(stream_loader_);
@@ -266,7 +269,7 @@ void NativeFileSystemWriter::CloseComplete(
   writer_remote_.reset();
 }
 
-void NativeFileSystemWriter::ContextDestroyed(ExecutionContext*) {
+void NativeFileSystemWriter::ContextDestroyed() {
   writer_remote_.reset();
 }
 

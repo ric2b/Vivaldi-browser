@@ -26,7 +26,6 @@ class WindowTreeHost;
 }  // namespace aura
 
 namespace ui {
-class Reflector;
 class Layer;
 }  // namespace ui
 
@@ -62,7 +61,7 @@ class ASH_EXPORT DockedMagnifierControllerImpl
   // the magnifier viewport.
   static constexpr int kScreenHeightDivisor = 3;
 
-  static void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test);
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   // Get the Docked Magnifier settings for the current active user prefs.
   bool GetEnabled() const;
@@ -79,6 +78,7 @@ class ASH_EXPORT DockedMagnifierControllerImpl
 
   // DockedMagnifierController:
   void CenterOnPoint(const gfx::Point& point_in_screen) override;
+  int GetMagnifierHeightForTesting() const override;
 
   // ash::SessionObserver:
   void OnActiveUserPrefServiceChanged(PrefService* pref_service) override;
@@ -148,7 +148,6 @@ class ASH_EXPORT DockedMagnifierControllerImpl
   void OnEnabledPrefChanged();
   void OnScalePrefChanged();
   void OnFullscreenMagnifierEnabledPrefChanged();
-  void OnHighContrastEnabledPrefChanged();
 
   void Refresh();
 
@@ -195,10 +194,6 @@ class ASH_EXPORT DockedMagnifierControllerImpl
   // A solid color layer that shows a black line separating the magnifier
   // viewport from the rest of the display contents.
   std::unique_ptr<ui::Layer> separator_layer_;
-
-  // Reflects the contents of the current display's compositor into the
-  // viewport's magnifier layer.
-  std::unique_ptr<ui::Reflector> reflector_;
 
   // The pref service of the currently active user. Can be null in
   // ash_unittests.

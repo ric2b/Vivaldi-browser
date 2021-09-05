@@ -211,8 +211,6 @@ class ExceptionToAbortStreamingScope {
 
 RawResource* GetRawResource(ScriptState* script_state,
                             const String& url_string) {
-  if (!RuntimeEnabledFeatures::WasmCodeCacheEnabled())
-    return nullptr;
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   if (!execution_context)
     return nullptr;
@@ -234,31 +232,24 @@ RawResource* GetRawResource(ScriptState* script_state,
 class WasmStreamingClient : public v8::WasmStreaming::Client {
  public:
   WasmStreamingClient(const String& response_url,
-                      const base::Time& response_time,
-                      v8::Isolate* isolate,
-                      v8::Local<v8::Context> context)
+                      const base::Time& response_time)
       : response_url_(response_url.IsolatedCopy()),
-        response_time_(response_time),
-        context_(isolate, context) {
-    context_.SetWeak();
-  }
+        response_time_(response_time) {}
 
   void OnModuleCompiled(v8::CompiledWasmModule compiled_module) override {
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"),
                          "v8.wasm.compiledModule", TRACE_EVENT_SCOPE_THREAD,
                          "url", response_url_.Utf8());
 
-    // Don't cache if Context has been destroyed.
-    if (context_.IsEmpty())
-      return;
-
-    // Our heuristic for whether it's worthwhile to cache is that the module
-    // was fully compiled and it is "large". Wire bytes size is likely to be
-    // highly correlated with compiled module size so we use it to avoid the
-    // cost of serializing when not caching.
     v8::MemorySpan<const uint8_t> wire_bytes =
         compiled_module.GetWireBytesRef();
-    const size_t kWireBytesSizeThresholdBytes = 1UL << 17;  // 128 KB.
+    // Our heuristic for whether it's worthwhile to cache is that the module
+    // was fully compiled and the size is such that loading from the cache will
+    // improve startup time. Use wire bytes size since it should be correlated
+    // with module size.
+    // TODO(bbudge) This is set very low to compare performance of caching with
+    // baseline compilation. Adjust this test once we know which sizes benefit.
+    const size_t kWireBytesSizeThresholdBytes = 1UL << 10;  // 1 KB.
     if (wire_bytes.size() < kWireBytesSizeThresholdBytes)
       return;
 
@@ -292,7 +283,6 @@ class WasmStreamingClient : public v8::WasmStreaming::Client {
  private:
   String response_url_;
   base::Time response_time_;
-  v8::Global<v8::Context> context_;
   scoped_refptr<CachedMetadata> cached_module_;
 
   DISALLOW_COPY_AND_ASSIGN(WasmStreamingClient);
@@ -332,7 +322,10 @@ void StreamFromResponseCallback(
     return;
   }
 
-  if (response->MimeType() != "application/wasm") {
+  // The spec explicitly disallows any extras on the Content-Type header,
+  // so we check against ContentType() rather than MimeType(), which
+  // implicitly strips extras.
+  if (response->ContentType().LowerASCII() != "application/wasm") {
     exception_state.ThrowTypeError(
         "Incorrect response MIME type. Expected 'application/wasm'.");
     return;
@@ -359,14 +352,15 @@ void StreamFromResponseCallback(
   }
 
   String url = response->url();
+  const std::string& url_utf8 = url.Utf8();
+  streaming->SetUrl(url_utf8.c_str(), url_utf8.size());
   RawResource* raw_resource = GetRawResource(script_state, url);
   if (raw_resource) {
     SingleCachedMetadataHandler* cache_handler =
         raw_resource->ScriptCacheHandler();
     if (cache_handler) {
       auto client = std::make_shared<WasmStreamingClient>(
-          url, raw_resource->GetResponse().ResponseTime(), args.GetIsolate(),
-          script_state->GetContext());
+          url, raw_resource->GetResponse().ResponseTime());
       streaming->SetClient(client);
       scoped_refptr<CachedMetadata> cached_module =
           cache_handler->GetCachedMetadata(kWasmModuleTag);
@@ -388,7 +382,7 @@ void StreamFromResponseCallback(
                                "v8.wasm.moduleCacheInvalid",
                                TRACE_EVENT_SCOPE_THREAD);
           cache_handler->ClearCachedMetadata(
-              CachedMetadataHandler::kSendToPlatform);
+              CachedMetadataHandler::kClearPersistentStorage);
         }
       }
     }

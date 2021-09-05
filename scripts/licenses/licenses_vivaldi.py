@@ -129,6 +129,7 @@ ADDITIONAL_PATHS = (
     os.path.join('..', 'scripts', 'licenses'),
     os.path.join('..', 'vivapp', 'src', 'browserjs'),
     os.path.join('..', 'vivapp', 'src', 'components', 'image-inspector'),
+    os.path.join('..', 'vivapp', 'src', 'util'),
 )
 
 SPECIAL_CASES = {
@@ -167,6 +168,12 @@ SPECIAL_CASES = {
         "URL": "https://www.flaticon.com/",
         "License": "attribution required",
         "License File": "/../scripts/licenses/avatar_profiles_license.txt",
+    },
+    os.path.join('..', 'vivapp', 'src', 'util'): {
+        "Name": "Boyer-Moore-Horspool Search",
+        "URL": "https://github.com/Chocobo1/bmhs",
+        "License": "BSD-3-Clause",
+        "License File": "/../vivapp/src/util/bmhs_license.txt",
     },
 }
 

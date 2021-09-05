@@ -44,10 +44,9 @@ GURL GetThemeUrl(const std::string& path) {
 }
 
 bool IsNewTabCssPath(const std::string& path) {
-  static const char kNewTabCSSPath[] = "css/new_tab_theme.css";
-  static const char kIncognitoNewTabCSSPath[] =
-      "css/incognito_new_tab_theme.css";
-  return (path == kNewTabCSSPath) || (path == kIncognitoNewTabCSSPath);
+  static const char kNewTabThemeCssPath[] = "css/new_tab_theme.css";
+  static const char kIncognitoTabThemeCssPath[] = "css/incognito_tab_theme.css";
+  return path == kNewTabThemeCssPath || path == kIncognitoTabThemeCssPath;
 }
 
 void ProcessImageOnUiThread(const gfx::ImageSkia& image,
@@ -82,9 +81,11 @@ std::string ThemeSource::GetSource() {
 }
 
 void ThemeSource::StartDataRequest(
-    const std::string& path,
+    const GURL& url,
     const content::WebContents::Getter& wc_getter,
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
+  // TODO(crbug/1009127): Simplify usages of |path| since |url| is available.
+  const std::string path = content::URLDataSource::URLToRequestPath(url);
   // Default scale factor if not specified.
   float scale = 1.0f;
   // All frames by default if not specified.
@@ -97,7 +98,7 @@ void ThemeSource::StartDataRequest(
     NTPResourceCache::WindowType type =
         NTPResourceCache::GetWindowType(profile_, /*render_host=*/nullptr);
     NTPResourceCache* cache = NTPResourceCacheFactory::GetForProfile(profile_);
-    callback.Run(cache->GetNewTabCSS(type));
+    std::move(callback).Run(cache->GetNewTabCSS(type));
     return;
   }
 
@@ -152,16 +153,16 @@ void ThemeSource::StartDataRequest(
     // URLs are only used by WebUI pages and component extensions.  However, the
     // user can also enter these into the omnibox, so we need to fail
     // gracefully.
-    callback.Run(nullptr);
+    std::move(callback).Run(nullptr);
   } else if ((GetMimeType(path) == "image/png") &&
              ((scale > max_scale) || (frame != -1))) {
     // This will extract and scale frame 0 of animated images.
     // TODO(reveman): Support scaling of animated images and avoid scaling and
     // re-encode when specific frame is specified (crbug.com/750064).
     DCHECK_LE(frame, 0);
-    SendThemeImage(callback, resource_id, scale);
+    SendThemeImage(std::move(callback), resource_id, scale);
   } else {
-    SendThemeBitmap(callback, resource_id, scale);
+    SendThemeBitmap(std::move(callback), resource_id, scale);
   }
 }
 
@@ -208,7 +209,7 @@ bool ThemeSource::ShouldServiceRequest(
 // ThemeSource, private:
 
 void ThemeSource::SendThemeBitmap(
-    const content::URLDataSource::GotDataCallback& callback,
+    content::URLDataSource::GotDataCallback callback,
     int resource_id,
     float scale) {
   ui::ScaleFactor scale_factor = ui::GetSupportedScaleFactor(scale);
@@ -217,16 +218,17 @@ void ThemeSource::SendThemeBitmap(
     scoped_refptr<base::RefCountedMemory> image_data(
         ThemeService::GetThemeProviderForProfile(profile_->GetOriginalProfile())
             .GetRawData(resource_id, scale_factor));
-    callback.Run(image_data.get());
+    std::move(callback).Run(image_data.get());
   } else {
     DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
     const ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-    callback.Run(rb.LoadDataResourceBytesForScale(resource_id, scale_factor));
+    std::move(callback).Run(
+        rb.LoadDataResourceBytesForScale(resource_id, scale_factor));
   }
 }
 
 void ThemeSource::SendThemeImage(
-    const content::URLDataSource::GotDataCallback& callback,
+    content::URLDataSource::GotDataCallback callback,
     int resource_id,
     float scale) {
   scoped_refptr<base::RefCountedBytes> data(new base::RefCountedBytes());
@@ -235,7 +237,7 @@ void ThemeSource::SendThemeImage(
     const ui::ThemeProvider& tp = ThemeService::GetThemeProviderForProfile(
         profile_->GetOriginalProfile());
     ProcessImageOnUiThread(*tp.GetImageSkiaNamed(resource_id), scale, data);
-    callback.Run(data.get());
+    std::move(callback).Run(data.get());
   } else {
     DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
     // Fetching image data in ResourceBundle should happen on the UI thread. See
@@ -243,7 +245,7 @@ void ThemeSource::SendThemeImage(
     base::PostTaskAndReply(
         FROM_HERE, {content::BrowserThread::UI},
         base::BindOnce(&ProcessResourceOnUiThread, resource_id, scale, data),
-        base::BindOnce(callback, data));
+        base::BindOnce(std::move(callback), data));
   }
 }
 

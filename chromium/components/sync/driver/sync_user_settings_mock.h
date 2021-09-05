@@ -31,7 +31,16 @@ class SyncUserSettingsMock : public SyncUserSettings {
   MOCK_CONST_METHOD0(GetSelectedTypes, UserSelectableTypeSet());
   MOCK_METHOD2(SetSelectedTypes, void(bool, UserSelectableTypeSet));
   MOCK_CONST_METHOD0(GetRegisteredSelectableTypes, UserSelectableTypeSet());
-  MOCK_CONST_METHOD0(GetForcedTypes, UserSelectableTypeSet());
+
+#if defined(OS_CHROMEOS)
+  MOCK_CONST_METHOD0(IsSyncAllOsTypesEnabled, bool());
+  MOCK_CONST_METHOD0(GetSelectedOsTypes, UserSelectableOsTypeSet());
+  MOCK_METHOD2(SetSelectedOsTypes, void(bool, UserSelectableOsTypeSet));
+  MOCK_CONST_METHOD0(GetRegisteredSelectableOsTypes, UserSelectableOsTypeSet());
+
+  MOCK_CONST_METHOD0(IsOsSyncFeatureEnabled, bool());
+  MOCK_METHOD1(SetOsSyncFeatureEnabled, void(bool));
+#endif
 
   MOCK_CONST_METHOD0(IsEncryptEverythingAllowed, bool());
   MOCK_CONST_METHOD0(IsEncryptEverythingEnabled, bool());
@@ -40,6 +49,7 @@ class SyncUserSettingsMock : public SyncUserSettings {
   MOCK_CONST_METHOD0(GetEncryptedDataTypes, ModelTypeSet());
   MOCK_CONST_METHOD0(IsPassphraseRequired, bool());
   MOCK_CONST_METHOD0(IsPassphraseRequiredForPreferredDataTypes, bool());
+  MOCK_CONST_METHOD0(IsTrustedVaultKeyRequired, bool());
   MOCK_CONST_METHOD0(IsTrustedVaultKeyRequiredForPreferredDataTypes, bool());
   MOCK_CONST_METHOD0(IsUsingSecondaryPassphrase, bool());
   MOCK_CONST_METHOD0(GetExplicitPassphraseTime, base::Time());
@@ -47,8 +57,6 @@ class SyncUserSettingsMock : public SyncUserSettings {
 
   MOCK_METHOD1(SetEncryptionPassphrase, void(const std::string&));
   MOCK_METHOD1(SetDecryptionPassphrase, bool(const std::string&));
-  MOCK_METHOD2(AddTrustedVaultDecryptionKeys,
-               void(const std::string&, const std::vector<std::string>&));
 };
 
 }  // namespace syncer

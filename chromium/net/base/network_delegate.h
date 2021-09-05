@@ -11,12 +11,14 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_checker.h"
 #include "net/base/auth.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/site_for_cookies.h"
 #include "net/proxy_resolution/proxy_retry_info.h"
 
 class GURL;
@@ -41,7 +43,6 @@ class CookieOptions;
 class HttpRequestHeaders;
 class HttpResponseHeaders;
 class IPEndPoint;
-class ProxyInfo;
 class URLRequest;
 
 class NET_EXPORT NetworkDelegate {
@@ -58,17 +59,13 @@ class NET_EXPORT NetworkDelegate {
   int NotifyBeforeStartTransaction(URLRequest* request,
                                    CompletionOnceCallback callback,
                                    HttpRequestHeaders* headers);
-  void NotifyBeforeSendHeaders(URLRequest* request,
-                               const ProxyInfo& proxy_info,
-                               const ProxyRetryInfoMap& proxy_retry_info,
-                               HttpRequestHeaders* headers);
   int NotifyHeadersReceived(
       URLRequest* request,
       CompletionOnceCallback callback,
       const HttpResponseHeaders* original_response_headers,
       scoped_refptr<HttpResponseHeaders>* override_response_headers,
       const IPEndPoint& remote_endpoint,
-      GURL* allowed_unsafe_redirect_url);
+      base::Optional<GURL>* preserve_fragment_on_redirect_url);
   void NotifyBeforeRedirect(URLRequest* request,
                             const GURL& new_location);
   void NotifyResponseStarted(URLRequest* request, int net_error);
@@ -84,7 +81,7 @@ class NET_EXPORT NetworkDelegate {
                     bool allowed_from_caller);
   bool ForcePrivacyMode(
       const GURL& url,
-      const GURL& site_for_cookies,
+      const SiteForCookies& site_for_cookies,
       const base::Optional<url::Origin>& top_frame_origin) const;
 
   bool CancelURLRequestWithPolicyViolatingReferrerHeader(
@@ -152,26 +149,15 @@ class NET_EXPORT NetworkDelegate {
                                        CompletionOnceCallback callback,
                                        HttpRequestHeaders* headers) = 0;
 
-  // Called after a connection is established , and just before headers are sent
-  // to the destination server (i.e., not called for HTTP CONNECT requests). For
-  // non-tunneled requests using HTTP proxies, |headers| will include any
-  // proxy-specific headers as well. Allows the delegate to read/write |headers|
-  // before they get sent out. |headers| is valid only for the duration of the
-  // call.
-  virtual void OnBeforeSendHeaders(URLRequest* request,
-                                   const ProxyInfo& proxy_info,
-                                   const ProxyRetryInfoMap& proxy_retry_info,
-                                   HttpRequestHeaders* headers) = 0;
-
   // Called for HTTP requests when the headers have been received.
   // |original_response_headers| contains the headers as received over the
   // network, these must not be modified. |override_response_headers| can be set
   // to new values, that should be considered as overriding
   // |original_response_headers|.
   // If the response is a redirect, and the Location response header value is
-  // identical to |allowed_unsafe_redirect_url|, then the redirect is never
-  // blocked and the reference fragment is not copied from the original URL
-  // to the redirection target.
+  // identical to |preserve_fragment_on_redirect_url|, then the redirect is
+  // never blocked and the reference fragment is not copied from the original
+  // URL to the redirection target.
   //
   // Returns OK to continue with the request, ERR_IO_PENDING if the result is
   // not ready yet, and any other status code to cancel the request. If
@@ -179,15 +165,15 @@ class NET_EXPORT NetworkDelegate {
   // however, that a pending operation may be cancelled by
   // OnURLRequestDestroyed. Once cancelled, |request|,
   // |original_response_headers|, |override_response_headers|, and
-  // |allowed_unsafe_redirect_url| become invalid and |callback| may not be
-  // called.
+  // |preserve_fragment_on_redirect_url| become invalid and |callback| may not
+  // be called.
   virtual int OnHeadersReceived(
       URLRequest* request,
       CompletionOnceCallback callback,
       const HttpResponseHeaders* original_response_headers,
       scoped_refptr<HttpResponseHeaders>* override_response_headers,
       const IPEndPoint& remote_endpoint,
-      GURL* allowed_unsafe_redirect_url) = 0;
+      base::Optional<GURL>* preserve_fragment_on_redirect_url) = 0;
 
   // Called right after a redirect response code was received. |new_location| is
   // only valid for the duration of the call.
@@ -239,7 +225,7 @@ class NET_EXPORT NetworkDelegate {
   // settings block cookies from being get or set.
   virtual bool OnForcePrivacyMode(
       const GURL& url,
-      const GURL& site_for_cookies,
+      const SiteForCookies& site_for_cookies,
       const base::Optional<url::Origin>& top_frame_origin) const = 0;
 
   // Called when the |referrer_url| for requesting |target_url| during handling

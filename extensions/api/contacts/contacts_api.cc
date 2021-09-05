@@ -533,6 +533,7 @@ ExtensionFunction::ResponseAction ContactsAddPropertyItemFunction::Run() {
   add_property.value = property_value;
   add_property.property_name =
       APIAddpropertyTypeToInternal(params->property_to_add.property_name);
+  add_property.type = params->property_to_add.type;
 
   ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
 
@@ -572,6 +573,7 @@ ExtensionFunction::ResponseAction ContactsUpdatePropertyItemFunction::Run() {
 
   update_property.value =
       base::UTF8ToUTF16(params->property_to_update.property_value);
+  update_property.type = params->property_to_update.type;
 
   contact::PropertyID property_id;
 
@@ -685,6 +687,11 @@ ExtensionFunction::ResponseAction ContactsAddEmailAddressFunction::Run() {
     add_email.set_obsolete(isObsolete);
   }
 
+  if (params->email_to_add.type.get()) {
+    std::string type = *params->email_to_add.type;
+    add_email.set_type(type);
+  }
+
   ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
 
   model->AddEmailAddress(
@@ -782,6 +789,11 @@ ExtensionFunction::ResponseAction ContactsUpdateEmailAddressFunction::Run() {
     bool isObsolete = false;
     isObsolete = (*params->email_to_update.obsolete);
     updated_email.set_obsolete(isObsolete);
+  }
+
+  if (params->email_to_update.type.get()) {
+    std::string type = *params->email_to_update.type;
+    updated_email.set_type(type);
   }
 
   ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());

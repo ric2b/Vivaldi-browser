@@ -29,10 +29,10 @@ extern const base::Feature kAutofillCreateDataForTest;
 extern const base::Feature kAutofillCreditCardAssist;
 extern const base::Feature kAutofillEnableAccountWalletStorage;
 extern const base::Feature kAutofillEnableCompanyName;
+extern const base::Feature kAutofillEnableHideSuggestionsUI;
 extern const base::Feature kAutofillEnforceMinRequiredFieldsForHeuristics;
 extern const base::Feature kAutofillEnforceMinRequiredFieldsForQuery;
 extern const base::Feature kAutofillEnforceMinRequiredFieldsForUpload;
-extern const base::Feature kAutofillGetPaymentsIdentityFromSync;
 extern const base::Feature kAutofillKeyboardAccessory;
 extern const base::Feature kAutofillPruneSuggestions;
 extern const base::Feature kAutofillMetadataUploads;
@@ -57,7 +57,8 @@ extern const base::Feature kAutofillTouchToFill;
 extern const base::Feature kAutofillUploadThrottling;
 extern const base::Feature kAutofillUseApi;
 extern const base::Feature kAutofillUseImprovedLabelDisambiguation;
-extern const base::Feature kAutofillUseServerCVCPrediction;
+extern const base::Feature kAutofillUseVariationCountryCode;
+
 #if defined(OS_ANDROID)
 extern const base::Feature kAutofillManualFallbackAndroid;
 extern const base::Feature kAutofillRefreshStyleAndroid;

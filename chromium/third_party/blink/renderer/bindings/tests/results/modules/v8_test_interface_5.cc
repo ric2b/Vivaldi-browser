@@ -337,7 +337,7 @@ static void VoidMethodTestInterfaceEmptyArgMethod(const v8::FunctionCallbackInfo
   TestInterfaceEmpty* test_interface_empty_arg;
   test_interface_empty_arg = V8TestInterfaceEmpty::ToImplWithTypeCheck(info.GetIsolate(), info[0]);
   if (!test_interface_empty_arg) {
-    V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("voidMethodTestInterfaceEmptyArg", "TestInterface5", "parameter 1 is not of type 'TestInterfaceEmpty'."));
+    V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("voidMethodTestInterfaceEmptyArg", "TestInterface5", ExceptionMessages::ArgumentNotOfType(0, "TestInterfaceEmpty")));
     return;
   }
 
@@ -485,7 +485,7 @@ static void VoidMethodVoidExperimentalCallbackFunctionMethod(const v8::FunctionC
   VoidExperimentalCallbackFunction* arg;
   arg = V8VoidExperimentalCallbackFunction::ToImplWithTypeCheck(info.GetIsolate(), info[0]);
   if (!arg) {
-    V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("voidMethodVoidExperimentalCallbackFunction", "TestInterface5", "parameter 1 is not of type 'VoidExperimentalCallbackFunction'."));
+    V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("voidMethodVoidExperimentalCallbackFunction", "TestInterface5", ExceptionMessages::ArgumentNotOfType(0, "VoidExperimentalCallbackFunction")));
     return;
   }
 
@@ -613,8 +613,8 @@ static void IndexedPropertySetter(
   if (!property_value.Prepare())
     return;
 
-  bool result = impl->AnonymousIndexedSetter(index, property_value);
-  if (!result)
+  IndexedPropertySetterResult result = impl->AnonymousIndexedSetter(index, property_value);
+  if (result == IndexedPropertySetterResult::kDidNotIntercept)
     return;
   V8SetReturnValue(info, v8_value);
 }
@@ -623,10 +623,10 @@ static void IndexedPropertyDeleter(
     uint32_t index, const v8::PropertyCallbackInfo<v8::Boolean>& info) {
   TestInterface5Implementation* impl = V8TestInterface5::ToImpl(info.Holder());
 
-  DeleteResult result = impl->AnonymousIndexedDeleter(index);
-  if (result == kDeleteUnknownProperty)
+  NamedPropertyDeleterResult result = impl->AnonymousIndexedDeleter(index);
+  if (result == NamedPropertyDeleterResult::kDidNotIntercept)
     return;
-  V8SetReturnValue(info, result == kDeleteSuccess);
+  V8SetReturnValue(info, result == NamedPropertyDeleterResult::kDeleted);
 }
 
 }  // namespace test_interface_5_implementation_v8_internal
@@ -780,102 +780,119 @@ void V8TestInterface5::WindowExposedAttributeAttributeSetterCallback(
 }
 
 void V8TestInterface5::VoidMethodTestInterfaceEmptyArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.voidMethodTestInterfaceEmptyArg");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_voidMethodTestInterfaceEmptyArg");
 
   test_interface_5_implementation_v8_internal::VoidMethodTestInterfaceEmptyArgMethod(info);
 }
 
 void V8TestInterface5::VoidMethodDoubleArgFloatArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.voidMethodDoubleArgFloatArg");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_voidMethodDoubleArgFloatArg");
 
   test_interface_5_implementation_v8_internal::VoidMethodDoubleArgFloatArgMethod(info);
 }
 
 void V8TestInterface5::VoidMethodUnrestrictedDoubleArgUnrestrictedFloatArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.voidMethodUnrestrictedDoubleArgUnrestrictedFloatArg");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_voidMethodUnrestrictedDoubleArgUnrestrictedFloatArg");
 
   test_interface_5_implementation_v8_internal::VoidMethodUnrestrictedDoubleArgUnrestrictedFloatArgMethod(info);
 }
 
 void V8TestInterface5::VoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.voidMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_voidMethod");
 
   test_interface_5_implementation_v8_internal::VoidMethodMethod(info);
 }
 
 void V8TestInterface5::VoidMethodMethodCallbackForMainWorld(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.voidMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_voidMethod");
 
   test_interface_5_implementation_v8_internal::VoidMethodMethodForMainWorld(info);
 }
 
 void V8TestInterface5::AlwaysExposedMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.alwaysExposedMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_alwaysExposedMethod");
 
   test_interface_5_implementation_v8_internal::AlwaysExposedMethodMethod(info);
 }
 
 void V8TestInterface5::WorkerExposedMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.workerExposedMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_workerExposedMethod");
 
   test_interface_5_implementation_v8_internal::WorkerExposedMethodMethod(info);
 }
 
 void V8TestInterface5::WindowExposedMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.windowExposedMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_windowExposedMethod");
 
   test_interface_5_implementation_v8_internal::WindowExposedMethodMethod(info);
 }
 
 void V8TestInterface5::AlwaysExposedStaticMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.alwaysExposedStaticMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_alwaysExposedStaticMethod");
 
   test_interface_5_implementation_v8_internal::AlwaysExposedStaticMethodMethod(info);
 }
 
 void V8TestInterface5::WorkerExposedStaticMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.workerExposedStaticMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_workerExposedStaticMethod");
 
   test_interface_5_implementation_v8_internal::WorkerExposedStaticMethodMethod(info);
 }
 
 void V8TestInterface5::WindowExposedStaticMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.windowExposedStaticMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_windowExposedStaticMethod");
 
   test_interface_5_implementation_v8_internal::WindowExposedStaticMethodMethod(info);
 }
 
 void V8TestInterface5::WindowAndServiceWorkerExposedMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.windowAndServiceWorkerExposedMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_windowAndServiceWorkerExposedMethod");
 
   test_interface_5_implementation_v8_internal::WindowAndServiceWorkerExposedMethodMethod(info);
 }
 
 void V8TestInterface5::VoidMethodBooleanOrDOMStringArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.voidMethodBooleanOrDOMStringArg");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_voidMethodBooleanOrDOMStringArg");
 
   test_interface_5_implementation_v8_internal::VoidMethodBooleanOrDOMStringArgMethod(info);
 }
 
 void V8TestInterface5::VoidMethodDoubleOrDOMStringArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.voidMethodDoubleOrDOMStringArg");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_voidMethodDoubleOrDOMStringArg");
 
   test_interface_5_implementation_v8_internal::VoidMethodDoubleOrDOMStringArgMethod(info);
 }
 
 void V8TestInterface5::VoidMethodVoidExperimentalCallbackFunctionMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.voidMethodVoidExperimentalCallbackFunction");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_voidMethodVoidExperimentalCallbackFunction");
 
   test_interface_5_implementation_v8_internal::VoidMethodVoidExperimentalCallbackFunctionMethod(info);
 }
 
 void V8TestInterface5::VoidMethodVoidCallbackFunctionModulesArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.voidMethodVoidCallbackFunctionModulesArg");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_voidMethodVoidCallbackFunctionModulesArg");
 
   test_interface_5_implementation_v8_internal::VoidMethodVoidCallbackFunctionModulesArgMethod(info);
 }
 
 void V8TestInterface5::ToStringMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface5.toString");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterface5Implementation_toString");
 
   test_interface_5_implementation_v8_internal::ToStringMethod(info);
@@ -1095,16 +1112,6 @@ v8::Local<v8::Object> V8TestInterface5::FindInstanceInPrototypeChain(
 TestInterface5Implementation* V8TestInterface5::ToImplWithTypeCheck(
     v8::Isolate* isolate, v8::Local<v8::Value> value) {
   return HasInstance(value, isolate) ? ToImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
-}
-
-TestInterface5Implementation* NativeValueTraits<TestInterface5Implementation>::NativeValue(
-    v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exception_state) {
-  TestInterface5Implementation* native_value = V8TestInterface5::ToImplWithTypeCheck(isolate, value);
-  if (!native_value) {
-    exception_state.ThrowTypeError(ExceptionMessages::FailedToConvertJSValue(
-        "TestInterface5"));
-  }
-  return native_value;
 }
 
 void V8TestInterface5::InstallConditionalFeatures(

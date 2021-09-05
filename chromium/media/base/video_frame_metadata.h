@@ -158,13 +158,36 @@ class MEDIA_EXPORT VideoFrameMetadata {
     PAGE_SCALE_FACTOR,
     ROOT_SCROLL_OFFSET_X,
     ROOT_SCROLL_OFFSET_Y,
-    TOP_CONTROLS_HEIGHT,
-    TOP_CONTROLS_SHOWN_RATIO,
+    TOP_CONTROLS_VISIBLE_HEIGHT,
 
     // If present, this field represents the local time at which the VideoFrame
-    // was decoded from whichever format it was encoded in.
-    // Use Get/SetTimeTicks() for this key.
-    DECODE_TIME,
+    // was decoded from whichever format it was encoded in. Sometimes only
+    // DECODE_END_TIME will be present. Use Get/SetTimeTicks() for this key.
+    DECODE_BEGIN_TIME,
+    DECODE_END_TIME,
+
+    // If present, this field represents the elapsed time from the submission of
+    // the encoded packet with the same PTS as this frame to the decoder until
+    // the decoded frame was ready for presentation. Stored as base::TimeDelta.
+    PROCESSING_TIME,
+
+    // The RTP timestamp associated with this video frame. Stored as a double
+    // since base::DictionaryValue doesn't have a uint32_t type.
+    //
+    // https://w3c.github.io/webrtc-pc/#dom-rtcrtpcontributingsource
+    RTP_TIMESTAMP,
+
+    // For video frames coming from a remote source, this is the time the
+    // encoded frame was received by the platform, i.e., the time at
+    // which the last packet belonging to this frame was received over the
+    // network.
+    RECEIVE_TIME,
+
+    // If present, this field represents the duration this frame is ideally
+    // expected to spend on the screen during playback. Unlike FRAME_DURATION
+    // this field takes into account current playback rate.
+    // Use Get/SetTimeDelta() for this key.
+    WALLCLOCK_FRAME_DURATION,
 
     NUM_KEYS
   };
@@ -186,7 +209,6 @@ class MEDIA_EXPORT VideoFrameMetadata {
   void SetTimeTicks(Key key, const base::TimeTicks& value);
   void SetUnguessableToken(Key key, const base::UnguessableToken& value);
   void SetRect(Key key, const gfx::Rect& value);
-  void SetValue(Key key, std::unique_ptr<base::Value> value);
 
   // Getters.  Returns true if |key| is present, and its value has been set.
   bool GetBoolean(Key key, bool* value) const WARN_UNUSED_RESULT;
@@ -199,16 +221,11 @@ class MEDIA_EXPORT VideoFrameMetadata {
   bool GetUnguessableToken(Key key, base::UnguessableToken* value) const
       WARN_UNUSED_RESULT;
   bool GetRect(Key key, gfx::Rect* value) const WARN_UNUSED_RESULT;
-  // Returns null if |key| was not present or value was not a ListValue.
-  const base::ListValue* GetList(Key key) const WARN_UNUSED_RESULT;
-  // Returns null if |key| was not present.
-  const base::Value* GetValue(Key key) const WARN_UNUSED_RESULT;
 
   // Convenience method that returns true if |key| exists and is set to true.
   bool IsTrue(Key key) const WARN_UNUSED_RESULT;
 
   // For serialization.
-  std::unique_ptr<base::DictionaryValue> CopyInternalValues() const;
   void MergeInternalValuesFrom(const base::Value& in);
   const base::Value& GetInternalValues() const { return dictionary_; }
 
@@ -216,8 +233,6 @@ class MEDIA_EXPORT VideoFrameMetadata {
   void MergeMetadataFrom(const VideoFrameMetadata* metadata_source);
 
  private:
-  const base::Value* GetBinaryValue(Key key) const;
-
   base::DictionaryValue dictionary_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoFrameMetadata);

@@ -4,9 +4,13 @@
 
 #include "chrome/browser/ui/views/global_media_controls/media_notification_container_impl_view.h"
 
+#include "base/containers/flat_set.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_observer.h"
+#include "chrome/test/views/chrome_views_test_base.h"
+#include "media/base/media_switches.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/display/test/scoped_screen_override.h"
@@ -14,7 +18,6 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/test/button_test_api.h"
-#include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget_utils.h"
 
 using media_session::mojom::MediaPlaybackState;
@@ -38,31 +41,16 @@ class MockMediaNotificationContainerObserver
   MOCK_METHOD1(OnContainerClicked, void(const std::string& id));
   MOCK_METHOD1(OnContainerDismissed, void(const std::string& id));
   MOCK_METHOD1(OnContainerDestroyed, void(const std::string& id));
+  MOCK_METHOD2(OnContainerDraggedOut,
+               void(const std::string& id, gfx::Rect bounds));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockMediaNotificationContainerObserver);
 };
 
-// Fake display::Screen implementation that allows us to set a cursor location.
-class FakeCursorLocationScreen : public display::test::TestScreen {
- public:
-  FakeCursorLocationScreen() = default;
-  ~FakeCursorLocationScreen() override = default;
-
-  void SetCursorScreenPoint(gfx::Point point) { cursor_position_ = point; }
-
-  // display::test::TestScreen implementation.
-  gfx::Point GetCursorScreenPoint() override { return cursor_position_; }
-
- private:
-  gfx::Point cursor_position_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeCursorLocationScreen);
-};
-
 }  // anonymous namespace
 
-class MediaNotificationContainerImplViewTest : public views::ViewsTestBase {
+class MediaNotificationContainerImplViewTest : public ChromeViewsTestBase {
  public:
   MediaNotificationContainerImplViewTest() : screen_override_(&fake_screen_) {}
   ~MediaNotificationContainerImplViewTest() override = default;
@@ -71,29 +59,25 @@ class MediaNotificationContainerImplViewTest : public views::ViewsTestBase {
   void SetUp() override {
     ViewsTestBase::SetUp();
 
-    views::Widget::InitParams params =
-        CreateParams(views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
-    params.bounds = gfx::Rect(400, 300);
-    params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-    widget_.Init(std::move(params));
+    widget_ = CreateTestWidget();
 
     auto notification_container =
         std::make_unique<MediaNotificationContainerImplView>(
             kTestNotificationId, nullptr);
     notification_container_ = notification_container.get();
-    widget_.SetContentsView(notification_container.release());
+    widget_->SetContentsView(notification_container.release());
 
     observer_ = std::make_unique<MockMediaNotificationContainerObserver>();
     notification_container_->AddObserver(observer_.get());
 
     SimulateMediaSessionData();
 
-    widget_.Show();
+    widget_->Show();
   }
 
   void TearDown() override {
     notification_container_->RemoveObserver(observer_.get());
-    widget_.Close();
+    widget_.reset();
     ViewsTestBase::TearDown();
   }
 
@@ -106,7 +90,7 @@ class MediaNotificationContainerImplViewTest : public views::ViewsTestBase {
   bool IsDismissButtonVisible() { return GetDismissButton()->IsDrawn(); }
 
   void SimulateHoverOverContainer() {
-    fake_screen_.SetCursorScreenPoint(
+    fake_screen_.set_cursor_screen_point(
         notification_container_->GetBoundsInScreen().CenterPoint());
 
     ui::MouseEvent event(ui::ET_MOUSE_ENTERED, gfx::Point(), gfx::Point(),
@@ -118,7 +102,7 @@ class MediaNotificationContainerImplViewTest : public views::ViewsTestBase {
     gfx::Rect container_bounds = notification_container_->GetBoundsInScreen();
     gfx::Point point_outside_container =
         container_bounds.bottom_right() + gfx::Vector2d(1, 1);
-    fake_screen_.SetCursorScreenPoint(point_outside_container);
+    fake_screen_.set_cursor_screen_point(point_outside_container);
 
     ui::MouseEvent event(ui::ET_MOUSE_EXITED, gfx::Point(), gfx::Point(),
                          ui::EventTimeForNow(), 0, 0);
@@ -155,7 +139,7 @@ class MediaNotificationContainerImplViewTest : public views::ViewsTestBase {
     ui::KeyboardCode button_press_keycode = ui::VKEY_RETURN;
 #endif  // defined(OS_MACOSX)
 
-    ui::test::EventGenerator generator(GetRootWindow(&widget_));
+    ui::test::EventGenerator generator(GetRootWindow(widget_.get()));
     generator.PressKey(button_press_keycode, 0);
   }
 
@@ -237,7 +221,7 @@ class MediaNotificationContainerImplViewTest : public views::ViewsTestBase {
 
   void NotifyUpdatedActions() { GetView()->UpdateWithMediaActions(actions_); }
 
-  media_message_center::MediaNotificationView* GetView() {
+  media_message_center::MediaNotificationViewImpl* GetView() {
     return notification_container()->view_for_testing();
   }
 
@@ -245,17 +229,48 @@ class MediaNotificationContainerImplViewTest : public views::ViewsTestBase {
     return notification_container()->GetDismissButtonForTesting();
   }
 
-  views::Widget widget_;
+  std::unique_ptr<views::Widget> widget_;
   MediaNotificationContainerImplView* notification_container_ = nullptr;
   std::unique_ptr<MockMediaNotificationContainerObserver> observer_;
 
   // Set of actions currently enabled.
-  std::set<MediaSessionAction> actions_;
+  base::flat_set<MediaSessionAction> actions_;
 
-  FakeCursorLocationScreen fake_screen_;
+  display::test::TestScreen fake_screen_;
   display::test::ScopedScreenOverride screen_override_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaNotificationContainerImplViewTest);
+};
+
+// TODO(https://crbug.com/1022452): Remove this class once
+// |kGlobalMediaControlsOverlayControls| is enabled by default.
+class MediaNotificationContainerImplViewOverlayControlsTest
+    : public MediaNotificationContainerImplViewTest {
+ public:
+  void SetUp() override {
+    feature_list_.InitAndEnableFeature(
+        media::kGlobalMediaControlsOverlayControls);
+    MediaNotificationContainerImplViewTest::SetUp();
+  }
+
+  void SimulateMouseDrag(gfx::Vector2d drag_distance) {
+    gfx::Rect start_bounds = notification_container()->bounds();
+    gfx::Point drag_start = start_bounds.CenterPoint();
+    gfx::Point drag_end = drag_start + drag_distance;
+
+    notification_container()->OnMousePressed(
+        ui::MouseEvent(ui::ET_MOUSE_PRESSED, drag_start, drag_start,
+                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+    notification_container()->OnMouseDragged(
+        ui::MouseEvent(ui::ET_MOUSE_DRAGGED, drag_end, drag_end,
+                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+    notification_container()->OnMouseReleased(
+        ui::MouseEvent(ui::ET_MOUSE_RELEASED, drag_end, drag_end,
+                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 TEST_F(MediaNotificationContainerImplViewTest, SwipeToDismiss) {
@@ -370,4 +385,39 @@ TEST_F(MediaNotificationContainerImplViewTest, SendsClicks) {
   // It should also notify its observers when the header is clicked.
   EXPECT_CALL(observer(), OnContainerClicked(kTestNotificationId));
   SimulateHeaderClicked();
+}
+
+TEST_F(MediaNotificationContainerImplViewOverlayControlsTest,
+       Dragging_VeryShortSendsClick) {
+  // If the user presses and releases the mouse with only a very short drag,
+  // then it should be considered a click.
+  EXPECT_CALL(observer(), OnContainerClicked(kTestNotificationId));
+  EXPECT_CALL(observer(), OnContainerDraggedOut(kTestNotificationId, _))
+      .Times(0);
+  SimulateMouseDrag(gfx::Vector2d(1, 1));
+  testing::Mock::VerifyAndClearExpectations(&observer());
+}
+
+TEST_F(MediaNotificationContainerImplViewOverlayControlsTest,
+       Dragging_ShortDoesNothing) {
+  // If the user presses and releases the mouse with a drag that doesn't go
+  // outside of the container, then it should just return to its initial
+  // position and do nothing.
+  EXPECT_CALL(observer(), OnContainerClicked(kTestNotificationId)).Times(0);
+  EXPECT_CALL(observer(), OnContainerDraggedOut(kTestNotificationId, _))
+      .Times(0);
+  SimulateMouseDrag(gfx::Vector2d(20, 20));
+  testing::Mock::VerifyAndClearExpectations(&observer());
+}
+
+TEST_F(MediaNotificationContainerImplViewOverlayControlsTest,
+       Dragging_LongFiresDraggedOut) {
+  // If the user presses and releases the mouse with a long enough drag to pull
+  // the container out of the dialog, then it should fire an
+  // |OnContainerDraggedOut()| notification.
+  EXPECT_CALL(observer(), OnContainerClicked(kTestNotificationId)).Times(0);
+  EXPECT_CALL(observer(), OnContainerDraggedOut(kTestNotificationId, _));
+  SimulateMouseDrag(
+      notification_container()->bounds().bottom_right().OffsetFromOrigin());
+  testing::Mock::VerifyAndClearExpectations(&observer());
 }

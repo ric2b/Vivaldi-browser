@@ -9,21 +9,10 @@
 
 @protocol ActivityServicePositioner;
 @protocol ActivityServicePresentation;
-@class CommandDispatcher;
-@class TabModel;
-
-namespace ios {
-class ChromeBrowserState;
-}  // namespace
 
 // ActivityServiceLegacyCoordinator provides a public interface for the share
 // menu feature.
 @interface ActivityServiceLegacyCoordinator : ChromeCoordinator
-
-// Models.
-@property(nonatomic, readwrite, assign) ios::ChromeBrowserState* browserState;
-@property(nonatomic, readwrite, weak) CommandDispatcher* dispatcher;
-@property(nonatomic, readwrite, weak) TabModel* tabModel;
 
 // Providers.
 @property(nonatomic, readwrite, weak) id<ActivityServicePositioner>
@@ -31,9 +20,14 @@ class ChromeBrowserState;
 @property(nonatomic, readwrite, weak) id<ActivityServicePresentation>
     presentationProvider;
 
-// Removes references to any weak objects that this coordinator holds pointers
-// to.
-- (void)disconnect;
+// Unavailable, use -initWithBaseViewController:browser:.
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+    NS_UNAVAILABLE;
+
+// Unavailable, use -initWithBaseViewController:browser:.
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                              browserState:(ChromeBrowserState*)browserState
+    NS_UNAVAILABLE;
 
 // Cancels any in-progress share activities and dismisses the corresponding UI.
 - (void)cancelShare;

@@ -99,7 +99,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
 
   // GLES2Interface implementation
   void FreeSharedMemory(void*) override;
-  GLboolean DidGpuSwitch() final;
+  GLboolean DidGpuSwitch(gl::GpuPreference* active_gpu) final;
 
   // Include the auto-generated part of this class. We split this because
   // it means we can easily edit the non-auto generated parts right here in
@@ -400,7 +400,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
   void OnGpuControlErrorMessage(const char* message, int32_t id) final;
   void OnGpuControlSwapBuffersCompleted(
       const SwapBuffersCompleteParams& params) final;
-  void OnGpuSwitched() final;
+  void OnGpuSwitched(gl::GpuPreference active_gpu_heuristic) final;
   void OnSwapBufferPresented(uint64_t swap_id,
                              const gfx::PresentationFeedback& feedback) final;
   void OnGpuControlReturnData(base::span<const uint8_t> data) final;
@@ -489,7 +489,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
   void DeleteBuffersStub(GLsizei n, const GLuint* buffers);
   void DeleteRenderbuffersStub(GLsizei n, const GLuint* renderbuffers);
   void DeleteTexturesStub(GLsizei n, const GLuint* textures);
-  void DeletePathsCHROMIUMStub(GLuint first_client_id, GLsizei range);
   void DeleteProgramStub(GLsizei n, const GLuint* programs);
   void DeleteShaderStub(GLsizei n, const GLuint* shaders);
   void DeleteSamplersStub(GLsizei n, const GLuint* samplers);
@@ -515,6 +514,14 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
                                            const GLsizei* instanceCounts,
                                            GLsizei drawcount);
 
+  void MultiDrawArraysInstancedBaseInstanceWEBGLHelper(
+      GLenum mode,
+      const GLint* firsts,
+      const GLsizei* counts,
+      const GLsizei* instanceCounts,
+      const GLuint* baseInstances,
+      GLsizei drawcount);
+
   void MultiDrawElementsWEBGLHelper(GLenum mode,
                                     const GLsizei* counts,
                                     GLenum type,
@@ -527,6 +534,16 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
                                              const GLsizei* offsets,
                                              const GLsizei* instanceCounts,
                                              GLsizei drawcount);
+
+  void MultiDrawElementsInstancedBaseVertexBaseInstanceWEBGLHelper(
+      GLenum mode,
+      const GLsizei* counts,
+      GLenum type,
+      const GLsizei* offsets,
+      const GLsizei* instanceCounts,
+      const GLint* baseVertices,
+      const GLuint* baseInstances,
+      GLsizei drawcount);
 
   GLuint CreateImageCHROMIUMHelper(ClientBuffer buffer,
                                    GLsizei width,
@@ -652,18 +669,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
                            const char* func_name);
 
   const std::string& GetLogPrefix() const;
-
-  bool PrepareInstancedPathCommand(const char* function_name,
-                                   GLsizei num_paths,
-                                   GLenum path_name_type,
-                                   const void* paths,
-                                   GLenum transform_type,
-                                   const GLfloat* transform_values,
-                                   ScopedTransferBufferPtr* buffer,
-                                   uint32_t* out_paths_shm_id,
-                                   uint32_t* out_paths_offset,
-                                   uint32_t* out_transforms_shm_id,
-                                   uint32_t* out_transforms_offset);
 
 // Set to 1 to have the client fail when a GL error is generated.
 // This helps find bugs in the renderer since the debugger stops on the error.
@@ -859,6 +864,9 @@ class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
       pending_presentation_callbacks_;
 
   std::string last_active_url_;
+
+  bool gpu_switched_ = false;
+  gl::GpuPreference active_gpu_heuristic_ = gl::GpuPreference::kDefault;
 
   base::WeakPtrFactory<GLES2Implementation> weak_ptr_factory_{this};
 

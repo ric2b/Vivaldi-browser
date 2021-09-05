@@ -8,8 +8,6 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/task_environment.h"
 #include "mojo/core/embedder/embedder.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/public/cpp/simple_url_loader.h"
@@ -218,17 +216,6 @@ TEST_F(BlobURLStoreImplTest, RevokeCantCommit) {
   EXPECT_EQ(1u, bad_messages_.size());
 }
 
-TEST_F(BlobURLStoreImplTest, RevokeCantCommit_ProcessNotValid) {
-  delegate_.can_commit_url_result = false;
-  delegate_.is_process_valid_result = false;
-
-  mojo::Remote<BlobURLStore> url_store(CreateURLStore());
-  url_store->Revoke(kValidUrl);
-  url_store.FlushForTesting();
-  EXPECT_TRUE(bad_messages_.empty());
-  EXPECT_FALSE(context_->GetBlobFromPublicURL(kValidUrl));
-}
-
 TEST_F(BlobURLStoreImplTest, RevokeURLWithFragment) {
   mojo::Remote<BlobURLStore> url_store(CreateURLStore());
   url_store->Revoke(kFragmentUrl);
@@ -279,8 +266,9 @@ TEST_F(BlobURLStoreImplTest, ResolveAsURLLoaderFactory) {
   BlobURLStoreImpl url_store(context_->AsWeakPtr(), &delegate_);
   RegisterURL(&url_store, std::move(blob), kValidUrl);
 
-  network::mojom::URLLoaderFactoryPtr factory;
-  url_store.ResolveAsURLLoaderFactory(kValidUrl, MakeRequest(&factory));
+  mojo::Remote<network::mojom::URLLoaderFactory> factory;
+  url_store.ResolveAsURLLoaderFactory(kValidUrl,
+                                      factory.BindNewPipeAndPassReceiver());
 
   auto request = std::make_unique<network::ResourceRequest>();
   request->url = kValidUrl;

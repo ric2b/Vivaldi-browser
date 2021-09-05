@@ -29,7 +29,7 @@
 #include "base/gtest_prod_util.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/loader/frame_loader_types.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -53,18 +53,20 @@ class CORE_EXPORT History final : public ScriptWrappable,
   explicit History(LocalFrame*);
 
   unsigned length(ExceptionState&) const;
-  SerializedScriptValue* state(ExceptionState&);
+  ScriptValue state(v8::Isolate*, ExceptionState&);
 
   void back(ScriptState*, ExceptionState&);
   void forward(ScriptState*, ExceptionState&);
   void go(ScriptState*, int delta, ExceptionState&);
 
-  void pushState(scoped_refptr<SerializedScriptValue>,
+  void pushState(v8::Isolate* isolate,
+                 const ScriptValue& data,
                  const String& title,
                  const String& url,
                  ExceptionState&);
 
-  void replaceState(scoped_refptr<SerializedScriptValue> data,
+  void replaceState(v8::Isolate* isolate,
+                    const ScriptValue& data,
                     const String& title,
                     const String& url,
                     ExceptionState& exception_state);
@@ -75,7 +77,7 @@ class CORE_EXPORT History final : public ScriptWrappable,
   bool stateChanged() const;
   bool IsSameAsCurrentState(SerializedScriptValue*) const;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(HistoryTest, CanChangeToURL);

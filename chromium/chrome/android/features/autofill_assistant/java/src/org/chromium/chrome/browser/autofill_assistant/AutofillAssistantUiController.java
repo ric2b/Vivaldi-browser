@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.autofill_assistant;
 
+import android.content.Context;
+
 import androidx.annotation.Nullable;
 
 import org.chromium.base.annotations.CalledByNative;
@@ -19,8 +21,9 @@ import org.chromium.chrome.browser.autofill_assistant.carousel.AssistantChip.Typ
 import org.chromium.chrome.browser.autofill_assistant.header.AssistantHeaderModel;
 import org.chromium.chrome.browser.autofill_assistant.metrics.DropOutReason;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
-import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.ui.TabObscuringHandler;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
@@ -93,17 +96,22 @@ class AutofillAssistantUiController {
         }
         sActiveChromeActivities.add(activity);
 
+        // TODO(crbug.com/1048983): Have the params be passed in to the constructor directly rather
+        //         than obtaining them from ChromeActivity getters.
         return new AutofillAssistantUiController(activity, activity.getBottomSheetController(),
-                allowTabSwitching, nativeUiController, onboardingCoordinator);
+                activity.getTabObscuringHandler(), allowTabSwitching, nativeUiController,
+                onboardingCoordinator);
     }
 
     private AutofillAssistantUiController(ChromeActivity activity, BottomSheetController controller,
-            boolean allowTabSwitching, long nativeUiController,
+            TabObscuringHandler tabObscuringHandler, boolean allowTabSwitching,
+            long nativeUiController,
             @Nullable AssistantOnboardingCoordinator onboardingCoordinator) {
         mNativeUiController = nativeUiController;
         mActivity = activity;
-        mCoordinator = new AssistantCoordinator(activity, controller,
-                onboardingCoordinator == null ? null : onboardingCoordinator.transferControls());
+        mCoordinator = new AssistantCoordinator(activity, controller, tabObscuringHandler,
+                onboardingCoordinator == null ? null : onboardingCoordinator.transferControls(),
+                this::safeNativeOnKeyboardVisibilityChanged);
         mActivityTabObserver =
                 new ActivityTabProvider.ActivityTabTabObserver(activity.getActivityTabProvider()) {
                     @Override
@@ -129,8 +137,10 @@ class AutofillAssistantUiController {
                             // later.
                             safeNativeSetVisible(false);
                         } else if (tab.getWebContents() == mWebContents) {
-                            // The original tab was re-selected. Show it again
+                            // The original tab was re-selected. Show it again and force an
+                            // expansion on the bottom sheet.
                             safeNativeSetVisible(true);
+                            showContentAndExpandBottomSheet();
                         } else {
                             // A new tab was selected. If Autofill Assistant is running on it,
                             // attach the UI to that other instance, otherwise destroy the UI.
@@ -192,8 +202,18 @@ class AutofillAssistantUiController {
     }
 
     @CalledByNative
+    private void showContentAndExpandBottomSheet() {
+        mCoordinator.getBottomBarCoordinator().showContentAndExpand();
+    }
+
+    @CalledByNative
     private void expandBottomSheet() {
-        mCoordinator.getBottomBarCoordinator().showAndExpand();
+        mCoordinator.getBottomBarCoordinator().expand();
+    }
+
+    @CalledByNative
+    private void collapseBottomSheet() {
+        mCoordinator.getBottomBarCoordinator().collapse();
     }
 
     @CalledByNative
@@ -212,9 +232,14 @@ class AutofillAssistantUiController {
     }
 
     @CalledByNative
+    private void hideKeyboardIfFocusNotOnText() {
+        mCoordinator.getKeyboardCoordinator().hideKeyboardIfFocusNotOnText();
+    }
+
+    @CalledByNative
     private void showSnackbar(int delayMs, String message) {
-        mSnackbarController =
-                AssistantSnackbar.show(mActivity, delayMs, message, this::safeSnackbarResult);
+        mSnackbarController = AssistantSnackbar.show(mActivity, mActivity.getSnackbarManager(),
+                delayMs, message, this::safeSnackbarResult);
     }
 
     private void dismissSnackbar() {
@@ -230,22 +255,14 @@ class AutofillAssistantUiController {
         return new ArrayList<>();
     }
 
-    /** Adds a suggestion to the chip list, which executes the action {@code actionIndex}. */
-    @CalledByNative
-    private void addSuggestion(
-            List<AssistantChip> chips, String text, int actionIndex, int icon, boolean disabled) {
-        chips.add(new AssistantChip(AssistantChip.Type.CHIP_ASSISTIVE, icon, text, disabled,
-                /* sticky= */ false, () -> safeNativeOnUserActionSelected(actionIndex)));
-    }
-
     /**
      * Adds an action button to the chip list, which executes the action {@code actionIndex}.
      */
     @CalledByNative
     private void addActionButton(List<AssistantChip> chips, int icon, String text, int actionIndex,
-            boolean disabled, boolean sticky) {
+            boolean disabled, boolean sticky, String identifier) {
         chips.add(new AssistantChip(AssistantChip.Type.BUTTON_HAIRLINE, icon, text, disabled,
-                sticky, () -> safeNativeOnUserActionSelected(actionIndex)));
+                sticky, identifier, () -> safeNativeOnUserActionSelected(actionIndex)));
     }
 
     /**
@@ -254,9 +271,9 @@ class AutofillAssistantUiController {
      */
     @CalledByNative
     private void addHighlightedActionButton(List<AssistantChip> chips, int icon, String text,
-            int actionIndex, boolean disabled, boolean sticky) {
+            int actionIndex, boolean disabled, boolean sticky, String identifier) {
         chips.add(new AssistantChip(Type.BUTTON_FILLED_BLUE, icon, text, disabled, sticky,
-                () -> safeNativeOnUserActionSelected(actionIndex)));
+                identifier, () -> safeNativeOnUserActionSelected(actionIndex)));
     }
 
     /**
@@ -266,31 +283,52 @@ class AutofillAssistantUiController {
      */
     @CalledByNative
     private void addCancelButton(List<AssistantChip> chips, int icon, String text, int actionIndex,
-            boolean disabled, boolean sticky) {
+            boolean disabled, boolean sticky, String identifier) {
         chips.add(new AssistantChip(AssistantChip.Type.BUTTON_HAIRLINE, icon, text, disabled,
-                sticky, () -> safeNativeOnCancelButtonClicked(actionIndex)));
+                sticky, identifier, () -> safeNativeOnCancelButtonClicked(actionIndex)));
     }
 
     /**
      * Adds a close action button to the chip list, which shuts down Autofill Assistant.
      */
     @CalledByNative
-    private void addCloseButton(
-            List<AssistantChip> chips, int icon, String text, boolean disabled, boolean sticky) {
+    private void addCloseButton(List<AssistantChip> chips, int icon, String text, boolean disabled,
+            boolean sticky, String identifier) {
         chips.add(new AssistantChip(AssistantChip.Type.BUTTON_HAIRLINE, icon, text, disabled,
-                sticky, this::safeNativeOnCloseButtonClicked));
+                sticky, identifier, this::safeNativeOnCloseButtonClicked));
     }
 
     @CalledByNative
     private void setActions(List<AssistantChip> chips) {
+        // TODO(b/144075373): Move this to AssistantCarouselModel and AssistantHeaderModel. Move
+        // header chip logic to native.
         AssistantCarouselModel model = getModel().getActionsModel();
-        setChips(model, chips);
+        model.setChips(chips);
         setHeaderChip(chips);
     }
 
     @CalledByNative
-    private void setSuggestions(List<AssistantChip> chips) {
-        setChips(getModel().getSuggestionsModel(), chips);
+    private void setDisableChipChangeAnimations(boolean disable) {
+        // TODO(b/144075373): Move this to AssistantCarouselModel.
+        getModel().getActionsModel().setDisableChangeAnimations(disable);
+    }
+
+    @CalledByNative
+    private void setAllChipsVisibleExcept(String identifier, boolean visible) {
+        AssistantCarouselModel model = getModel().getActionsModel();
+        List<AssistantChip> chips = model.get(AssistantCarouselModel.CHIPS);
+        // Copy the list and modify the copy. Modifying the actual list in-place will not fire the
+        // relevant change notifications. TODO(b/144075373): Refactor to avoid this deep copy,
+        // preferably by moving this to native.
+        List<AssistantChip> newChips = new ArrayList<>();
+        for (int i = 0; i < chips.size(); ++i) {
+            AssistantChip newChip = new AssistantChip(chips.get(i));
+            newChips.add(newChip);
+            if (!chips.get(i).getIdentifier().equals(identifier)) {
+                newChip.setVisible(visible);
+            }
+        }
+        model.setChips(newChips);
     }
 
     private void setHeaderChip(List<AssistantChip> chips) {
@@ -306,15 +344,6 @@ class AutofillAssistantUiController {
         getModel().getHeaderModel().set(AssistantHeaderModel.CHIP, headerChip);
     }
 
-    private void setChips(AssistantCarouselModel model, List<AssistantChip> chips) {
-        // We apply the minimum set of operations on the current chips to transform it in the target
-        // list of chips. When testing for chip equivalence, we only compare their type and text but
-        // all substitutions will still be applied so we are sure we display the given {@code chips}
-        // with their associated callbacks.
-        EditDistance.transform(model.getChipsModel(), chips,
-                (a, b) -> a.getType() == b.getType() && a.getText().equals(b.getText()));
-    }
-
     @CalledByNative
     private void setViewportMode(@AssistantViewportMode int mode) {
         mCoordinator.getBottomBarCoordinator().setViewportMode(mode);
@@ -323,6 +352,11 @@ class AutofillAssistantUiController {
     @CalledByNative
     private void setPeekMode(@AssistantPeekHeightCoordinator.PeekMode int peekMode) {
         mCoordinator.getBottomBarCoordinator().setPeekMode(peekMode);
+    }
+
+    @CalledByNative
+    private Context getContext() {
+        return mActivity;
     }
 
     // Native methods.
@@ -368,6 +402,13 @@ class AutofillAssistantUiController {
         }
     }
 
+    private void safeNativeOnKeyboardVisibilityChanged(boolean visible) {
+        if (mNativeUiController != 0) {
+            AutofillAssistantUiControllerJni.get().onKeyboardVisibilityChanged(
+                    mNativeUiController, AutofillAssistantUiController.this, visible);
+        }
+    }
+
     private void safeNativeSetVisible(boolean visible) {
         if (mNativeUiController != 0) {
             AutofillAssistantUiControllerJni.get().setVisible(
@@ -389,6 +430,8 @@ class AutofillAssistantUiController {
                 long nativeUiControllerAndroid, AutofillAssistantUiController caller, int index);
         void onCloseButtonClicked(
                 long nativeUiControllerAndroid, AutofillAssistantUiController caller);
+        void onKeyboardVisibilityChanged(long nativeUiControllerAndroid,
+                AutofillAssistantUiController caller, boolean visible);
         void setVisible(long nativeUiControllerAndroid, AutofillAssistantUiController caller,
                 boolean visible);
     }

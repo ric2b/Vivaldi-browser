@@ -30,6 +30,8 @@ const char kSendFeatureReportFailed[] = "Failed to write the feature report.";
 const char kReceiveFeatureReportFailed[] =
     "Failed to receive the feature report.";
 const char kUnexpectedClose[] = "The device was closed unexpectedly.";
+const char kArrayBufferTooBig[] =
+    "The provided ArrayBuffer exceeds the maximum allowed size.";
 
 Vector<uint8_t> ConvertBufferSource(
     const ArrayBufferOrArrayBufferView& buffer) {
@@ -37,11 +39,14 @@ Vector<uint8_t> ConvertBufferSource(
   Vector<uint8_t> vector;
   if (buffer.IsArrayBuffer()) {
     vector.Append(static_cast<uint8_t*>(buffer.GetAsArrayBuffer()->Data()),
-                  buffer.GetAsArrayBuffer()->ByteLength());
+                  base::checked_cast<wtf_size_t>(
+                      buffer.GetAsArrayBuffer()->ByteLengthAsSizeT()));
   } else {
-    vector.Append(static_cast<uint8_t*>(
-                      buffer.GetAsArrayBufferView().View()->BaseAddress()),
-                  buffer.GetAsArrayBufferView().View()->byteLength());
+    vector.Append(
+        static_cast<uint8_t*>(
+            buffer.GetAsArrayBufferView().View()->BaseAddress()),
+        base::checked_cast<wtf_size_t>(
+            buffer.GetAsArrayBufferView().View()->byteLengthAsSizeT()));
   }
   return vector;
 }
@@ -85,7 +90,7 @@ bool IsProtected(
 HIDDevice::HIDDevice(HID* parent,
                      device::mojom::blink::HidDeviceInfoPtr info,
                      ExecutionContext* context)
-    : ContextLifecycleObserver(context),
+    : ExecutionContextLifecycleObserver(context),
       parent_(parent),
       device_info_(std::move(info)) {
   DCHECK(device_info_);
@@ -103,7 +108,7 @@ HIDDevice::~HIDDevice() {
 }
 
 ExecutionContext* HIDDevice::GetExecutionContext() const {
-  return ContextLifecycleObserver::GetExecutionContext();
+  return ExecutionContextLifecycleObserver::GetExecutionContext();
 }
 
 const AtomicString& HIDDevice::InterfaceName() const {
@@ -187,6 +192,17 @@ ScriptPromise HIDDevice::sendReport(ScriptState* script_state,
     return promise;
   }
 
+  size_t data_size =
+      data.IsArrayBuffer()
+          ? data.GetAsArrayBuffer()->ByteLengthAsSizeT()
+          : data.GetAsArrayBufferView().View()->byteLengthAsSizeT();
+
+  if (!base::CheckedNumeric<wtf_size_t>(data_size).IsValid()) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kNotSupportedError, kArrayBufferTooBig));
+    return promise;
+  }
+
   device_requests_.insert(resolver);
   connection_->Write(report_id, ConvertBufferSource(data),
                      WTF::Bind(&HIDDevice::FinishSendReport,
@@ -207,6 +223,17 @@ ScriptPromise HIDDevice::sendFeatureReport(
   if (!opened()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError, kOpenRequired));
+    return promise;
+  }
+
+  size_t data_size =
+      data.IsArrayBuffer()
+          ? data.GetAsArrayBuffer()->ByteLengthAsSizeT()
+          : data.GetAsArrayBufferView().View()->byteLengthAsSizeT();
+
+  if (!base::CheckedNumeric<wtf_size_t>(data_size).IsValid()) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kNotSupportedError, kArrayBufferTooBig));
     return promise;
   }
 
@@ -239,19 +266,19 @@ ScriptPromise HIDDevice::receiveFeatureReport(ScriptState* script_state,
   return promise;
 }
 
-void HIDDevice::ContextDestroyed(ExecutionContext*) {
+void HIDDevice::ContextDestroyed() {
   connection_.reset();
   device_requests_.clear();
   receiver_.reset();
 }
 
-void HIDDevice::Trace(blink::Visitor* visitor) {
+void HIDDevice::Trace(Visitor* visitor) {
   visitor->Trace(parent_);
   visitor->Trace(device_requests_);
   visitor->Trace(collections_);
   EventTargetWithInlineData::Trace(visitor);
   ScriptWrappable::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 void HIDDevice::Dispose() {

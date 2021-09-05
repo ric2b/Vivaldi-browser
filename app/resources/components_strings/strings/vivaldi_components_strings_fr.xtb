@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">Votre accès à Internet est bloqué</translation>
 <translation id="2317259163369394535">Le <ph name="DOMAIN" /> nécessite un nom d’utilisateur et un mot de passe.</translation>
 <translation id="2337852623177822836">Paramètre contrôlé par votre administrateur</translation>
+<translation id="2344028582131185878">Téléchargements automatiques</translation>
 <translation id="2355395290879513365">Il se peut que des pirates informatiques puissent voir les images que vous regardez sur ce site et vous piègent en les modifiant.</translation>
 <translation id="2356070529366658676">Demander</translation>
 <translation id="2359808026110333948">Continuer</translation>
@@ -88,7 +89,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> est bloqué</translation>
 <translation id="3987940399970879459">Moins de 1 Mo</translation>
 <translation id="4075732493274867456">Le client et le serveur ne sont pas compatibles avec une version de protocole ou une méthode de chiffrement SSL commune.</translation>
-<translation id="410351446219883937">Lecture automatique</translation>
 <translation id="4116663294526079822">Toujours autoriser sur ce site</translation>
 <translation id="4130226655945681476">Vérifier les câbles réseau, le modem et le routeur</translation>
 <translation id="4151403195736952345">Utiliser la valeur globale par défaut (Détection)</translation>

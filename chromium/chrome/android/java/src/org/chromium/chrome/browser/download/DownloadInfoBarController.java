@@ -12,27 +12,25 @@ import android.text.TextUtils;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.PluralsRes;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.DeviceConditions;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.infobar.DownloadProgressInfoBar;
 import org.chromium.chrome.browser.infobar.IPHInfoBarSupport;
 import org.chromium.chrome.browser.infobar.InfoBar;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.infobar.InfoBarIdentifier;
-import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.toolbar.ToolbarButtonInProductHelpController;
-import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
+import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.components.download.DownloadState;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.offline_items_collection.ContentId;
@@ -281,7 +279,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
     public void onDownloadItemUpdated(DownloadItem downloadItem) {
         if (mUseNewDownloadPath) return;
 
-        OfflineItem offlineItem = DownloadInfo.createOfflineItem(downloadItem.getDownloadInfo());
+        OfflineItem offlineItem = DownloadItem.createOfflineItem(downloadItem);
         if (!isVisibleToUser(offlineItem)) return;
 
         if (downloadItem.getDownloadInfo().state() == DownloadState.COMPLETE) {
@@ -320,8 +318,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
                     if (result) {
                         onItemRemoved(downloadItem.getContentId());
                     } else {
-                        computeNextStepForUpdate(
-                                DownloadInfo.createOfflineItem(downloadItem.getDownloadInfo()));
+                        computeNextStepForUpdate(DownloadItem.createOfflineItem(downloadItem));
                     }
                 });
     }
@@ -366,6 +363,11 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
         return mCurrentInfoBar != null;
     }
 
+    private ChromeActivity getActivity() {
+        Tab tab = getCurrentTab();
+        return tab == null ? null : ((TabImpl) tab).getActivity();
+    }
+
     /**
      * Helper method to get the parameters for showing accelerated download infobar IPH.
      * @return The UI parameters to show IPH, if an IPH should be shown, null otherwise.
@@ -373,9 +375,9 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
     public IPHInfoBarSupport.TrackerParameters getTrackerParameters() {
         if (getDownloadCount().inProgress == 0) return null;
 
-        BottomSheet bottomSheet =
-                getCurrentTab() == null ? null : getCurrentTab().getActivity().getBottomSheet();
-        if (bottomSheet != null && bottomSheet.isSheetOpen()) return null;
+        if (getActivity() == null || getActivity().getBottomSheetController().isSheetOpen()) {
+            return null;
+        }
 
         return new IPHInfoBarSupport.TrackerParameters(
                 FeatureConstants.DOWNLOAD_INFOBAR_DOWNLOADS_ARE_FASTER_FEATURE,
@@ -393,7 +395,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
             return false;
         }
 
-        if (DownloadUtils.shouldAutoOpenDownload(offlineItem.mimeType, true)) {
+        if (MimeUtils.canAutoOpenMimeType(offlineItem.mimeType)) {
             return false;
         }
 
@@ -415,7 +417,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
      */
     private void computeNextStepForUpdate(OfflineItem updatedItem, boolean forceShowDownloadStarted,
             boolean userCancel, boolean itemWasRemoved) {
-        if (!FeatureUtilities.isDownloadProgressInfoBarEnabled()) return;
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOAD_PROGRESS_INFOBAR)) return;
 
         if (updatedItem != null && mIgnoredItems.contains(updatedItem.id)) return;
 
@@ -750,7 +752,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
      */
     @VisibleForTesting
     protected void showInfoBar(@DownloadInfoBarState int state, DownloadProgressInfoBarData info) {
-        if (!FeatureUtilities.isDownloadProgressInfoBarEnabled()) return;
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOAD_PROGRESS_INFOBAR)) return;
 
         mCurrentInfo = info;
 
@@ -842,15 +844,12 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
 
     private void maybeShowDownloadsStillInProgressIPH() {
         if (getDownloadCount().inProgress == 0) return;
-        if (getCurrentTab() == null
-                || !(getCurrentTab().getActivity() instanceof ChromeTabbedActivity)) {
+        if (getCurrentTab() == null || !(getActivity() instanceof ChromeTabbedActivity)) {
             return;
         }
 
-        ChromeTabbedActivity activity = (ChromeTabbedActivity) getCurrentTab().getActivity();
-        Profile profile = mIsIncognito ? Profile.getLastUsedProfile().getOffTheRecordProfile()
-                                       : Profile.getLastUsedProfile().getOriginalProfile();
-        ToolbarButtonInProductHelpController.maybeShowDownloadContinuingIPH(activity, profile);
+        ChromeTabbedActivity activity = (ChromeTabbedActivity) getActivity();
+        activity.getToolbarButtonInProductHelpController().showDownloadContinuingIPH();
     }
 
     @Nullable
@@ -937,7 +936,7 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
                 DownloadUtils.openItem(
                         itemId, mIsIncognito, DownloadOpenSource.DOWNLOAD_PROGRESS_INFO_BAR);
             } else {
-                DownloadManagerService.getDownloadManagerService().openDownloadsPage(
+                DownloadManagerService.openDownloadsPage(
                         getContext(), DownloadOpenSource.DOWNLOAD_PROGRESS_INFO_BAR);
             }
             recordLinkClicked(itemId != null);

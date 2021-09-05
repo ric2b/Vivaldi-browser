@@ -18,6 +18,7 @@
 #include "components/signin/public/identity_manager/access_token_fetcher.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/signin/public/identity_manager/scope_set.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/base/ip_endpoint.h"
 
@@ -72,12 +73,12 @@ void GCMAccountTracker::Start() {
   account_tracker_->AddObserver(this);
   driver_->AddConnectionObserver(this);
 
-  std::vector<AccountIds> accounts = account_tracker_->GetAccounts();
-  for (std::vector<AccountIds>::const_iterator iter = accounts.begin();
+  std::vector<CoreAccountInfo> accounts = account_tracker_->GetAccounts();
+  for (std::vector<CoreAccountInfo>::const_iterator iter = accounts.begin();
        iter != accounts.end(); ++iter) {
     if (!iter->email.empty()) {
       account_infos_.insert(std::make_pair(
-          iter->account_key, AccountInfo(iter->email, TOKEN_NEEDED)));
+          iter->account_id, AccountInfo(iter->email, TOKEN_NEEDED)));
     }
   }
 
@@ -104,12 +105,12 @@ void GCMAccountTracker::ScheduleReportTokens() {
       GetTimeToNextTokenReporting());
 }
 
-void GCMAccountTracker::OnAccountSignInChanged(const AccountIds& ids,
+void GCMAccountTracker::OnAccountSignInChanged(const CoreAccountInfo& account,
                                                bool is_signed_in) {
   if (is_signed_in)
-    OnAccountSignedIn(ids);
+    OnAccountSignedIn(account);
   else
-    OnAccountSignedOut(ids);
+    OnAccountSignedOut(account);
 }
 
 void GCMAccountTracker::OnAccessTokenFetchCompleteForAccount(
@@ -163,11 +164,9 @@ void GCMAccountTracker::ReportTokens() {
     return;
   }
 
-  // Wait for AccountTracker to be done with fetching the user info, as
-  // well as all of the pending token requests from GCMAccountTracker to be done
-  // before you report the results.
-  if (!account_tracker_->IsAllUserInfoFetched() ||
-      !pending_token_requests_.empty()) {
+  // Wait for all of the pending token requests from GCMAccountTracker to be
+  // done before you report the results.
+  if (!pending_token_requests_.empty()) {
     return;
   }
 
@@ -290,7 +289,7 @@ void GCMAccountTracker::GetAllNeededTokens() {
 void GCMAccountTracker::GetToken(AccountInfos::iterator& account_iter) {
   DCHECK_EQ(account_iter->second.state, TOKEN_NEEDED);
 
-  identity::ScopeSet scopes;
+  signin::ScopeSet scopes;
   scopes.insert(kGCMGroupServerScope);
   scopes.insert(kGCMCheckinServerScope);
 
@@ -311,13 +310,13 @@ void GCMAccountTracker::GetToken(AccountInfos::iterator& account_iter) {
   account_iter->second.state = GETTING_TOKEN;
 }
 
-void GCMAccountTracker::OnAccountSignedIn(const AccountIds& ids) {
-  DVLOG(1) << "Account signed in: " << ids.email;
-  auto iter = account_infos_.find(ids.account_key);
+void GCMAccountTracker::OnAccountSignedIn(const CoreAccountInfo& account) {
+  DVLOG(1) << "Account signed in: " << account.email;
+  auto iter = account_infos_.find(account.account_id);
   if (iter == account_infos_.end()) {
-    DCHECK(!ids.email.empty());
-    account_infos_.insert(
-        std::make_pair(ids.account_key, AccountInfo(ids.email, TOKEN_NEEDED)));
+    DCHECK(!account.email.empty());
+    account_infos_.insert(std::make_pair(
+        account.account_id, AccountInfo(account.email, TOKEN_NEEDED)));
   } else if (iter->second.state == ACCOUNT_REMOVED) {
     iter->second.state = TOKEN_NEEDED;
   }
@@ -325,9 +324,9 @@ void GCMAccountTracker::OnAccountSignedIn(const AccountIds& ids) {
   GetAllNeededTokens();
 }
 
-void GCMAccountTracker::OnAccountSignedOut(const AccountIds& ids) {
-  DVLOG(1) << "Account signed out: " << ids.email;
-  auto iter = account_infos_.find(ids.account_key);
+void GCMAccountTracker::OnAccountSignedOut(const CoreAccountInfo& account) {
+  DVLOG(1) << "Account signed out: " << account.email;
+  auto iter = account_infos_.find(account.account_id);
   if (iter == account_infos_.end())
     return;
 
@@ -338,7 +337,7 @@ void GCMAccountTracker::OnAccountSignedOut(const AccountIds& ids) {
   // re-added and a new access token request made, we do not break this class'
   // invariant that there is at most one ongoing access token request per
   // account.
-  pending_token_requests_.erase(ids.account_key);
+  pending_token_requests_.erase(account.account_id);
   ReportTokens();
 }
 

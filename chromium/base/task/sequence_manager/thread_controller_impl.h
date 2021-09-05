@@ -40,10 +40,6 @@ class BASE_EXPORT ThreadControllerImpl : public ThreadController,
       SequenceManagerImpl* funneled_sequence_manager,
       const TickClock* time_source);
 
-  static std::unique_ptr<ThreadControllerImpl> CreateSequenceFunneled(
-      scoped_refptr<SingleThreadTaskRunner> task_runner,
-      const TickClock* time_source);
-
   // ThreadController:
   void SetWorkBatchSize(int work_batch_size) override;
   void WillQueueTask(PendingTask* pending_task,
@@ -66,6 +62,9 @@ class BASE_EXPORT ThreadControllerImpl : public ThreadController,
   MessagePump* GetBoundMessagePump() const override;
 #if defined(OS_IOS) || defined(OS_ANDROID)
   void AttachToMessagePump() override;
+#endif
+#if defined(OS_IOS)
+  void DetachFromMessagePump() override;
 #endif
   bool ShouldQuitRunLoopWhenIdle() override;
 

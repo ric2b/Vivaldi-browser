@@ -10,7 +10,12 @@
 #import "base/ios/block_types.h"
 #import "ios/testing/earl_grey/base_earl_grey_test_case.h"
 #import "ios/testing/earl_grey/disabled_test_macros.h"
-#include "net/test/embedded_test_server/embedded_test_server.h"
+
+namespace net {
+namespace test_server {
+class EmbeddedTestServer;
+}
+}
 
 // Base class for all Chrome Earl Grey tests.
 @interface ChromeTestCase : BaseEarlGreyTestCase
@@ -31,6 +36,9 @@
 // Turns off mock authentication. It will automatically be re-enabled at the
 // end of the test. This shall only be called once per test.
 - (void)disableMockAuthentication;
+
+// Turns mock authentication back on.
+- (void)enableMockAuthentication;
 
 // Stops the HTTP server. It will be re-started at the end of the test. This
 // should only be called when the HTTP server is running. This shall only be

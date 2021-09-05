@@ -60,23 +60,23 @@ void SVGColorProperty::Add(SVGPropertyBase* other,
 
   Color fallback_color = FallbackColorForCurrentColor(context_element);
   Color from_color =
-      ToSVGColorProperty(other)->style_color_.Resolve(fallback_color);
+      To<SVGColorProperty>(other)->style_color_.Resolve(fallback_color);
   Color to_color = style_color_.Resolve(fallback_color);
   style_color_ = StyleColor(ColorDistance::AddColors(from_color, to_color));
 }
 
 void SVGColorProperty::CalculateAnimatedValue(
-    SVGAnimationElement* animation_element,
+    const SVGAnimateElement& animation_element,
     float percentage,
     unsigned repeat_count,
     SVGPropertyBase* from_value,
     SVGPropertyBase* to_value,
     SVGPropertyBase* to_at_end_of_duration_value,
     SVGElement* context_element) {
-  StyleColor from_style_color = ToSVGColorProperty(from_value)->style_color_;
-  StyleColor to_style_color = ToSVGColorProperty(to_value)->style_color_;
+  StyleColor from_style_color = To<SVGColorProperty>(from_value)->style_color_;
+  StyleColor to_style_color = To<SVGColorProperty>(to_value)->style_color_;
   StyleColor to_at_end_of_duration_style_color =
-      ToSVGColorProperty(to_at_end_of_duration_value)->style_color_;
+      To<SVGColorProperty>(to_at_end_of_duration_value)->style_color_;
 
   // Apply currentColor rules.
   DCHECK(context_element);
@@ -87,24 +87,23 @@ void SVGColorProperty::CalculateAnimatedValue(
       to_at_end_of_duration_style_color.Resolve(fallback_color);
   Color animated_color = style_color_.Resolve(fallback_color);
 
-  DCHECK(animation_element);
   float animated_red = animated_color.Red();
-  animation_element->AnimateAdditiveNumber(
+  animation_element.AnimateAdditiveNumber(
       percentage, repeat_count, from_color.Red(), to_color.Red(),
       to_at_end_of_duration_color.Red(), animated_red);
 
   float animated_green = animated_color.Green();
-  animation_element->AnimateAdditiveNumber(
+  animation_element.AnimateAdditiveNumber(
       percentage, repeat_count, from_color.Green(), to_color.Green(),
       to_at_end_of_duration_color.Green(), animated_green);
 
   float animated_blue = animated_color.Blue();
-  animation_element->AnimateAdditiveNumber(
+  animation_element.AnimateAdditiveNumber(
       percentage, repeat_count, from_color.Blue(), to_color.Blue(),
       to_at_end_of_duration_color.Blue(), animated_blue);
 
   float animated_alpha = animated_color.Alpha();
-  animation_element->AnimateAdditiveNumber(
+  animation_element.AnimateAdditiveNumber(
       percentage, repeat_count, from_color.Alpha(), to_color.Alpha(),
       to_at_end_of_duration_color.Alpha(), animated_alpha);
 
@@ -120,7 +119,7 @@ float SVGColorProperty::CalculateDistance(SVGPropertyBase* to_value,
 
   Color from_color = style_color_.Resolve(fallback_color);
   Color to_color =
-      ToSVGColorProperty(to_value)->style_color_.Resolve(fallback_color);
+      To<SVGColorProperty>(to_value)->style_color_.Resolve(fallback_color);
   return ColorDistance::Distance(from_color, to_color);
 }
 

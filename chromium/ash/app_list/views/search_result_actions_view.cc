@@ -20,11 +20,11 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
-#include "ui/views/animation/ink_drop_impl.h"
-#include "ui/views/animation/ink_drop_mask.h"
+#include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 
@@ -47,20 +47,18 @@ class SearchResultImageButton : public views::ImageButton {
                           const SearchResult::Action& action);
   ~SearchResultImageButton() override {}
 
-  // views::View overrides:
+  // views::View:
   void OnFocus() override;
   void OnBlur() override;
 
-  // ui::EventHandler overrides:
+  // ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override;
 
-  // views::Button overrides:
+  // views::Button:
   void StateChanged(ButtonState old_state) override;
 
-  // views::InkDropHost overrides:
-  std::unique_ptr<views::InkDrop> CreateInkDrop() override;
+  // views::InkDropHostView:
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
-  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override;
 
@@ -80,7 +78,6 @@ class SearchResultImageButton : public views::ImageButton {
   SearchResultActionsView* parent_;
   const bool visible_on_hover_;
   bool to_be_activate_by_long_press_ = false;
-  bool selected_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultImageButton);
 };
@@ -109,6 +106,7 @@ SearchResultImageButton::SearchResultImageButton(
   SetTooltipText(action.tooltip_text);
 
   SetVisible(!visible_on_hover_);
+  views::InstallCircleHighlightPathGenerator(this);
 }
 
 void SearchResultImageButton::OnFocus() {
@@ -149,10 +147,6 @@ void SearchResultImageButton::StateChanged(
   parent_->ActionButtonStateChanged();
 }
 
-std::unique_ptr<views::InkDrop> SearchResultImageButton::CreateInkDrop() {
-  return CreateDefaultFloodFillInkDropImpl();
-}
-
 std::unique_ptr<views::InkDropRipple>
 SearchResultImageButton::CreateInkDropRipple() const {
   const gfx::Point center = GetLocalBounds().CenterPoint();
@@ -166,19 +160,15 @@ SearchResultImageButton::CreateInkDropRipple() const {
       GetInkDropCenterBasedOnLastEvent(), ripple_color, 1.0f);
 }
 
-std::unique_ptr<views::InkDropMask> SearchResultImageButton::CreateInkDropMask()
-    const {
-  return std::make_unique<views::CircleInkDropMask>(
-      size(), GetLocalBounds().CenterPoint(), GetInkDropRadius());
-}
-
 std::unique_ptr<views::InkDropHighlight>
 SearchResultImageButton::CreateInkDropHighlight() const {
+  // TODO(crbug.com/1051167): Grab ink drop related colors and opacities from a
+  // theme.
   constexpr SkColor ripple_color = SkColorSetA(gfx::kGoogleGrey900, 0x12);
-  return std::make_unique<views::InkDropHighlight>(
-      gfx::PointF(GetLocalBounds().CenterPoint()),
-      std::make_unique<views::CircleLayerDelegate>(ripple_color,
-                                                   GetInkDropRadius()));
+  auto highlight = std::make_unique<views::InkDropHighlight>(gfx::SizeF(size()),
+                                                             ripple_color);
+  highlight->set_visible_opacity(1.f);
+  return highlight;
 }
 
 void SearchResultImageButton::UpdateOnStateChanged() {
@@ -187,13 +177,6 @@ void SearchResultImageButton::UpdateOnStateChanged() {
   if (visible_on_hover_) {
     SetVisible(parent_->IsSearchResultHoveredOrSelected() ||
                parent()->Contains(GetFocusManager()->GetFocusedView()));
-  }
-
-  const bool selected = parent_->GetSelectedAction() == tag();
-  if (selected_ != selected) {
-    selected_ = selected;
-    if (selected)
-      NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
   }
 }
 
@@ -235,10 +218,8 @@ SearchResultActionsView::SearchResultActionsView(
 SearchResultActionsView::~SearchResultActionsView() {}
 
 void SearchResultActionsView::SetActions(const SearchResult::Actions& actions) {
-  if (selected_action_.has_value()) {
+  if (selected_action_.has_value())
     selected_action_.reset();
-    delegate_->OnSearchResultActionsUnSelected();
-  }
   buttons_.clear();
   RemoveAllChildViews(true);
 
@@ -306,9 +287,20 @@ bool SearchResultActionsView::SelectNextAction(bool reverse_tab_order) {
   return true;
 }
 
+void SearchResultActionsView::NotifyA11yResultSelected() {
+  DCHECK(HasSelectedAction());
+
+  int selected_action = GetSelectedAction();
+  for (views::Button* button : buttons_) {
+    if (button->tag() == selected_action) {
+      button->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+      return;
+    }
+  }
+}
+
 void SearchResultActionsView::ClearSelectedAction() {
   selected_action_.reset();
-  delegate_->OnSearchResultActionsUnSelected();
   UpdateButtonsOnStateChanged();
 }
 

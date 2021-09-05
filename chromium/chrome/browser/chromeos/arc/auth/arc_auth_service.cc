@@ -39,6 +39,7 @@
 #include "components/arc/session/arc_bridge_service.h"
 #include "components/arc/session/arc_supervision_transition.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -111,6 +112,9 @@ ProvisioningResult ConvertArcSignInStatusToProvisioningResult(
 mojom::ChromeAccountType GetAccountType(const Profile* profile) {
   if (profile->IsChild())
     return mojom::ChromeAccountType::CHILD_ACCOUNT;
+
+  if (IsActiveDirectoryUserForProfile(profile))
+    return mojom::ChromeAccountType::ACTIVE_DIRECTORY_ACCOUNT;
 
   chromeos::DemoSession* demo_session = chromeos::DemoSession::Get();
   if (demo_session && demo_session->started()) {
@@ -221,6 +225,28 @@ void TriggerAccountManagerMigrationsIfRequired(Profile* profile) {
   migrator->Start();
 }
 
+// See //components/arc/mojom/auth.mojom RequestPrimaryAccount() for the spec.
+// See also go/arc-primary-account.
+std::string GetAccountName(Profile* profile) {
+  switch (GetAccountType(profile)) {
+    case mojom::ChromeAccountType::USER_ACCOUNT:
+    case mojom::ChromeAccountType::CHILD_ACCOUNT:
+      // IdentityManager::GetPrimaryAccountInfo(
+      //    signin::ConsentLevel::kNotRequired).email might be more appropriate
+      // here, but this is what we have done historically.
+      return chromeos::ProfileHelper::Get()
+          ->GetUserByProfile(profile)
+          ->GetDisplayEmail();
+    case mojom::ChromeAccountType::ROBOT_ACCOUNT:
+    case mojom::ChromeAccountType::ACTIVE_DIRECTORY_ACCOUNT:
+    case mojom::ChromeAccountType::OFFLINE_DEMO_ACCOUNT:
+      return std::string();
+    case mojom::ChromeAccountType::UNKNOWN:
+      NOTREACHED();
+      return std::string();
+  }
+}
+
 }  // namespace
 
 // static
@@ -271,6 +297,11 @@ void ArcAuthService::GetGoogleAccountsInArc(
   }
 
   DispatchAccountsInArc(std::move(callback));
+}
+
+void ArcAuthService::RequestPrimaryAccount(
+    RequestPrimaryAccountCallback callback) {
+  std::move(callback).Run(GetAccountName(profile_), GetAccountType(profile_));
 }
 
 void ArcAuthService::OnConnectionReady() {
@@ -504,9 +535,15 @@ void ArcAuthService::FetchPrimaryAccountInfo(
           ->SetURLLoaderFactoryForTesting(url_loader_factory_);
     }
   } else {
-    // Optionally retrieve auth code in silent mode.
+    // Optionally retrieve auth code in silent mode. Use the "unconsented"
+    // primary account because this class doesn't care about browser sync
+    // consent.
+    DCHECK(identity_manager_->HasPrimaryAccount(
+        signin::ConsentLevel::kNotRequired));
     auth_code_fetcher = CreateArcBackgroundAuthCodeFetcher(
-        identity_manager_->GetPrimaryAccountId(), initial_signin);
+        identity_manager_->GetPrimaryAccountId(
+            signin::ConsentLevel::kNotRequired),
+        initial_signin);
   }
 
   // Add the request to |pending_token_requests_| first, before starting a token
@@ -528,7 +565,9 @@ void ArcAuthService::IsAccountManagerAvailable(
 void ArcAuthService::HandleAddAccountRequest() {
   DCHECK(chromeos::IsAccountManagerAvailable(profile_));
 
-  chromeos::InlineLoginHandlerDialogChromeOS::Show();
+  chromeos::InlineLoginHandlerDialogChromeOS::Show(
+      std::string() /*email*/,
+      chromeos::InlineLoginHandlerDialogChromeOS::Source::kArc);
 }
 
 void ArcAuthService::HandleRemoveAccountRequest(const std::string& email) {
@@ -541,7 +580,8 @@ void ArcAuthService::HandleRemoveAccountRequest(const std::string& email) {
 void ArcAuthService::HandleUpdateCredentialsRequest(const std::string& email) {
   DCHECK(chromeos::IsAccountManagerAvailable(profile_));
 
-  chromeos::InlineLoginHandlerDialogChromeOS::Show(email);
+  chromeos::InlineLoginHandlerDialogChromeOS::Show(
+      email, chromeos::InlineLoginHandlerDialogChromeOS::Source::kArc);
 }
 
 void ArcAuthService::OnRefreshTokenUpdatedForAccount(
@@ -555,6 +595,11 @@ void ArcAuthService::OnRefreshTokenUpdatedForAccount(
 
   // Ignore the update if ARC has not been provisioned yet.
   if (!arc::IsArcProvisioned(profile_))
+    return;
+
+  // For child device accounts do not allow the propagation of secondary
+  // accounts from Chrome OS Account Manager to ARC.
+  if (profile_->IsChild() && !IsPrimaryGaiaAccount(account_info.gaia))
     return;
 
   if (identity_manager_->HasAccountWithRefreshTokenInPersistentErrorState(
@@ -654,8 +699,7 @@ void ArcAuthService::OnPrimaryAccountAuthCodeFetched(
   DeletePendingTokenRequest(fetcher);
 
   if (success) {
-    const std::string& full_account_id =
-        base::UTF16ToUTF8(signin_ui_util::GetAuthenticatedUsername(profile_));
+    const std::string& full_account_id = GetAccountName(profile_);
     std::move(callback).Run(
         mojom::ArcSignInStatus::SUCCESS,
         CreateAccountInfo(!IsArcOptInVerificationDisabled(), auth_code,
@@ -693,7 +737,7 @@ void ArcAuthService::FetchSecondaryAccountInfo(
     return;
   }
 
-  const std::string& account_id = account_info->account_id;
+  const CoreAccountId& account_id = account_info->account_id;
   DCHECK(!account_id.empty());
 
   std::unique_ptr<ArcBackgroundAuthCodeFetcher> fetcher =
@@ -767,7 +811,7 @@ void ArcAuthService::OnDataRemovalAccepted(bool accepted) {
 
 std::unique_ptr<ArcBackgroundAuthCodeFetcher>
 ArcAuthService::CreateArcBackgroundAuthCodeFetcher(
-    const std::string& account_id,
+    const CoreAccountId& account_id,
     bool initial_signin) {
   base::Optional<AccountInfo> account_info =
       identity_manager_
@@ -777,14 +821,8 @@ ArcAuthService::CreateArcBackgroundAuthCodeFetcher(
   auto fetcher = std::make_unique<ArcBackgroundAuthCodeFetcher>(
       url_loader_factory_, profile_, account_id, initial_signin,
       IsPrimaryGaiaAccount(account_info.value().gaia));
-  if (skip_merge_session_for_testing_)
-    fetcher->SkipMergeSessionForTesting();
 
   return fetcher;
-}
-
-void ArcAuthService::SkipMergeSessionForTesting() {
-  skip_merge_session_for_testing_ = true;
 }
 
 void ArcAuthService::TriggerAccountsPushToArc(bool filter_primary_account) {

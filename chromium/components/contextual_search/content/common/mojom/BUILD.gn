@@ -5,10 +5,7 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
-  sources = [
-    "contextual_search_js_api_service.mojom",
-  ]
-  public_deps = [
-    "//url/mojom:url_mojom_gurl",
-  ]
+  generate_java = true
+  sources = [ "contextual_search_js_api_service.mojom" ]
+  public_deps = [ "//url/mojom:url_mojom_gurl" ]
 }

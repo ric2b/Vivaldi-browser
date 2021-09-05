@@ -18,13 +18,13 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/shell/test_runner/test_runner_export.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "third_party/blink/public/common/input/web_touch_point.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
-#include "third_party/blink/public/platform/web_input_event.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
-#include "third_party/blink/public/platform/web_point.h"
-#include "third_party/blink/public/platform/web_touch_point.h"
+#include "ui/gfx/geometry/point.h"
 
 namespace blink {
 class WebFrameWidget;
@@ -102,7 +102,7 @@ class TEST_RUNNER_EXPORT EventSender {
 
     SavedEventType type;
     blink::WebMouseEvent::Button button_type;  // For MouseUp.
-    blink::WebPoint pos;                       // For MouseMove.
+    gfx::Point pos;                            // For MouseMove.
     int milliseconds;                          // For LeapForward.
     int modifiers;
   };
@@ -278,7 +278,7 @@ class TEST_RUNNER_EXPORT EventSender {
   blink::WebDragData current_drag_data_;
 
   // Location of the touch point that initiated a gesture.
-  blink::WebFloatPoint current_gesture_location_;
+  gfx::PointF current_gesture_location_;
 
   // Mouse-like pointer properties.
   struct PointerState {
@@ -290,14 +290,13 @@ class TEST_RUNNER_EXPORT EventSender {
     int current_buttons_;
 
     // Location of last mouseMoveTo event of this pointer.
-    blink::WebPoint last_pos_;
+    gfx::Point last_pos_;
 
     int modifiers_;
 
     PointerState()
         : pressed_button_(blink::WebMouseEvent::Button::kNoButton),
           current_buttons_(0),
-          last_pos_(blink::WebPoint(0, 0)),
           modifiers_(0) {}
   };
   typedef std::unordered_map<int, PointerState> PointerStateMap;
@@ -311,7 +310,7 @@ class TEST_RUNNER_EXPORT EventSender {
 
   // Time and place of the last mouse up event.
   base::TimeTicks last_click_time_;
-  blink::WebPoint last_click_pos_;
+  gfx::Point last_click_pos_;
 
   // The last button number passed to mouseDown and mouseUp.
   // Used to determine whether the click count continues to increment or not.

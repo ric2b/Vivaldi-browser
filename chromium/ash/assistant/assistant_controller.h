@@ -22,6 +22,7 @@
 #include "ash/assistant/assistant_suggestions_controller.h"
 #include "ash/assistant/assistant_ui_controller.h"
 #include "ash/assistant/assistant_view_delegate_impl.h"
+#include "ash/assistant/assistant_web_ui_controller.h"
 #include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/public/cpp/assistant/assistant_image_downloader.h"
 #include "ash/public/cpp/assistant/assistant_interface_binder.h"
@@ -32,12 +33,12 @@
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom-forward.h"
 #include "components/prefs/pref_service.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
-#include "services/content/public/mojom/navigable_contents_factory.mojom-forward.h"
 
 class PrefRegistrySimple;
 
@@ -51,6 +52,7 @@ class AssistantSetupController;
 class AssistantStateController;
 class AssistantSuggestionsController;
 class AssistantUiController;
+class AssistantWebUiController;
 
 class ASH_EXPORT AssistantController
     : public chromeos::assistant::mojom::AssistantController,
@@ -66,8 +68,9 @@ class ASH_EXPORT AssistantController
 
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
-  void BindRequest(
-      chromeos::assistant::mojom::AssistantControllerRequest request);
+  void BindReceiver(
+      mojo::PendingReceiver<chromeos::assistant::mojom::AssistantController>
+          receiver);
   void BindReceiver(
       mojo::PendingReceiver<mojom::AssistantVolumeControl> receiver);
 
@@ -89,6 +92,10 @@ class ASH_EXPORT AssistantController
   void SendAssistantFeedback(bool assistant_debug_info_allowed,
                              const std::string& feedback_description,
                              const std::string& screenshot_png) override;
+  void StartTextInteraction(
+      const std::string& query,
+      bool allow_tts,
+      chromeos::assistant::mojom::AssistantQuerySource source) override;
 
   // AssistantControllerObserver:
   void OnDeepLinkReceived(
@@ -114,11 +121,6 @@ class ASH_EXPORT AssistantController
                bool in_background = false,
                bool from_server = false);
 
-  // Acquires a NavigableContentsFactory from the Content Service to allow
-  // Assistant to display embedded web contents.
-  void GetNavigableContentsFactory(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver);
-
   AssistantAlarmTimerController* alarm_timer_controller() {
     return &assistant_alarm_timer_controller_;
   }
@@ -139,11 +141,19 @@ class ASH_EXPORT AssistantController
     return &assistant_setup_controller_;
   }
 
+  AssistantStateController* state_controller() {
+    return &assistant_state_controller_;
+  }
+
   AssistantSuggestionsController* suggestions_controller() {
     return &assistant_suggestions_controller_;
   }
 
   AssistantUiController* ui_controller() { return &assistant_ui_controller_; }
+
+  AssistantWebUiController* web_ui_controller() {
+    return &assistant_web_ui_controller_;
+  }
 
   AssistantViewDelegate* view_delegate() { return &view_delegate_; }
 
@@ -184,14 +194,14 @@ class ASH_EXPORT AssistantController
   // register as observers during their construction.
   base::ObserverList<AssistantControllerObserver> observers_;
 
-  mojo::BindingSet<chromeos::assistant::mojom::AssistantController>
-      assistant_controller_bindings_;
+  mojo::ReceiverSet<chromeos::assistant::mojom::AssistantController>
+      assistant_controller_receivers_;
 
   mojo::Receiver<mojom::AssistantVolumeControl>
       assistant_volume_control_receiver_{this};
   mojo::RemoteSet<mojom::VolumeObserver> volume_observers_;
 
-  chromeos::assistant::mojom::AssistantPtr assistant_;
+  mojo::Remote<chromeos::assistant::mojom::Assistant> assistant_;
 
   // Assistant sub-controllers.
   AssistantAlarmTimerController assistant_alarm_timer_controller_{this};
@@ -202,6 +212,7 @@ class ASH_EXPORT AssistantController
   AssistantSetupController assistant_setup_controller_{this};
   AssistantSuggestionsController assistant_suggestions_controller_{this};
   AssistantUiController assistant_ui_controller_{this};
+  AssistantWebUiController assistant_web_ui_controller_{this};
 
   AssistantViewDelegateImpl view_delegate_{this};
 

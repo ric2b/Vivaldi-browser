@@ -6,13 +6,18 @@ package org.chromium.chrome.browser;
 
 import android.app.backup.BackupManager;
 import android.content.Context;
-import android.content.SharedPreferences;
+
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
-import org.chromium.base.VisibleForTesting;
+import org.chromium.base.StrictModeContext;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
-import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.signin.IdentityServicesProvider;
+import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.identitymanager.IdentityManager;
 
 /**
  * Class for watching for changes to the Android preferences that are backed up using Android
@@ -21,8 +26,6 @@ import org.chromium.components.signin.ChromeSigninController;
 @JNINamespace("android")
 public class ChromeBackupWatcher {
     private BackupManager mBackupManager;
-
-    private static final String FIRST_BACKUP_DONE = "first_backup_done";
 
     @VisibleForTesting
     @CalledByNative
@@ -36,31 +39,42 @@ public class ChromeBackupWatcher {
 
         mBackupManager = new BackupManager(context);
         // Watch the Java preferences that are backed up.
-        SharedPreferences sharedPrefs = ContextUtils.getAppSharedPreferences();
+        SharedPreferencesManager sharedPrefs = SharedPreferencesManager.getInstance();
         // If we have never done a backup do one immediately.
-        if (!sharedPrefs.getBoolean(FIRST_BACKUP_DONE, false)) {
-            mBackupManager.dataChanged();
-            sharedPrefs.edit().putBoolean(FIRST_BACKUP_DONE, true).apply();
+        if (!sharedPrefs.readBoolean(ChromePreferenceKeys.BACKUP_FIRST_BACKUP_DONE, false)) {
+            try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
+                mBackupManager.dataChanged();
+            }
+            sharedPrefs.writeBoolean(ChromePreferenceKeys.BACKUP_FIRST_BACKUP_DONE, true);
         }
-        sharedPrefs.registerOnSharedPreferenceChangeListener(
-                (sharedPreferences, key) -> {
-                    // Update the backup if the user id or any of the backed up Android
-                    // preferences change.
-                    if (key.equals(ChromeSigninController.SIGNED_IN_ACCOUNT_KEY)) {
+        sharedPrefs.addObserver((key) -> {
+            // Update the backup if any of the backed up Android preferences change.
+            for (String pref : ChromeBackupAgent.BACKUP_ANDROID_BOOL_PREFS) {
+                if (key.equals(pref)) {
+                    onBackupPrefsChanged();
+                    return;
+                }
+            }
+        });
+        // Update the backup if the sign-in status changes.
+        IdentityServicesProvider.get().getIdentityManager().addObserver(
+                new IdentityManager.Observer() {
+                    @Override
+                    public void onPrimaryAccountSet(CoreAccountInfo account) {
                         onBackupPrefsChanged();
-                        return;
                     }
-                    for (String pref : ChromeBackupAgent.BACKUP_ANDROID_BOOL_PREFS) {
-                        if (key.equals(pref)) {
-                            onBackupPrefsChanged();
-                            return;
-                        }
+
+                    @Override
+                    public void onPrimaryAccountCleared(CoreAccountInfo account) {
+                        onBackupPrefsChanged();
                     }
                 });
     }
 
     @CalledByNative
     private void onBackupPrefsChanged() {
-        mBackupManager.dataChanged();
+        try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
+            mBackupManager.dataChanged();
+        }
     }
 }

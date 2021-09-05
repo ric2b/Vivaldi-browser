@@ -6,8 +6,8 @@
 #include <atlcom.h>
 #include <atlcomcli.h>
 #include <lmerr.h>
-#include <objbase.h>
 #include <unknwn.h>
+#include <wrl/client.h>
 
 #include <memory>
 
@@ -27,17 +27,22 @@
 #include "base/test/scoped_path_override.h"
 #include "base/test/test_reg_util_win.h"
 #include "base/win/registry.h"
+#include "base/win/scoped_com_initializer.h"
 #include "base/win/win_util.h"
 #include "build/build_config.h"
 #include "chrome/credential_provider/common/gcp_strings.h"
 #include "chrome/credential_provider/gaiacp/gaia_credential_provider.h"
 #include "chrome/credential_provider/gaiacp/gaia_credential_provider_i.h"
 #include "chrome/credential_provider/gaiacp/gcp_utils.h"
+#include "chrome/credential_provider/gaiacp/reg_utils.h"
 #include "chrome/credential_provider/setup/setup_lib.h"
 #include "chrome/credential_provider/test/gcp_fakes.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace credential_provider {
+
+constexpr base::FilePath::CharType kCredentialProviderSetupExe[] =
+    FILE_PATH_LITERAL("gcp_setup.exe");
 
 class GcpSetupTest : public ::testing::Test {
  protected:
@@ -46,10 +51,14 @@ class GcpSetupTest : public ::testing::Test {
   const base::FilePath& module_path() const { return module_path_; }
   const base::string16& product_version() const { return product_version_; }
 
+  void CreateSentinelFileToSimulateCrash(const base::string16& product_version);
+
   void ExpectAllFilesToExist(bool exist, const base::string16& product_version);
+  void ExpectSentinelFileToNotExist(const base::string16& product_version);
   void ExpectCredentialProviderToBeRegistered(
       bool registered,
       const base::string16& product_version);
+  void ExpectRequiredRegistryEntriesToBePresent();
 
   base::FilePath installed_path_for_version(
       const base::string16& product_version) {
@@ -57,6 +66,15 @@ class GcpSetupTest : public ::testing::Test {
         .Append(GetInstallParentDirectoryName())
         .Append(FILE_PATH_LITERAL("Credential Provider"))
         .Append(product_version);
+  }
+
+  base::FilePath sentinel_path_for_version(
+      const base::string16& product_version) {
+    return scoped_temp_progdata_dir_.GetPath()
+        .Append(GetInstallParentDirectoryName())
+        .Append(FILE_PATH_LITERAL("Credential Provider"))
+        .Append(product_version)
+        .Append(FILE_PATH_LITERAL("gcpw_startup.sentinel"));
   }
 
   base::FilePath installed_path() {
@@ -77,11 +95,15 @@ class GcpSetupTest : public ::testing::Test {
   void GetModulePathAndProductVersion(base::FilePath* module_path,
                                       base::string16* product_version);
 
+  base::win::ScopedCOMInitializer com_initializer_{
+      base::win::ScopedCOMInitializer::kMTA};
   registry_util::RegistryOverrideManager registry_override_;
   base::ScopedTempDir scoped_temp_prog_dir_;
   base::ScopedTempDir scoped_temp_start_menu_dir_;
+  base::ScopedTempDir scoped_temp_progdata_dir_;
   std::unique_ptr<base::ScopedPathOverride> program_files_override_;
   std::unique_ptr<base::ScopedPathOverride> start_menu_override_;
+  std::unique_ptr<base::ScopedPathOverride> programdata_override_;
   std::unique_ptr<base::ScopedPathOverride> dll_path_override_;
   base::FilePath module_path_;
   base::string16 product_version_;
@@ -110,6 +132,24 @@ void GcpSetupTest::GetModulePathAndProductVersion(
   *product_version =
       FileVersionInfo::CreateFileVersionInfo(*module_path)->product_version();
   ASSERT_FALSE(product_version->empty());
+}
+
+void GcpSetupTest::CreateSentinelFileToSimulateCrash(
+    const base::string16& product_version) {
+  base::FilePath sentinel_file = sentinel_path_for_version(product_version);
+
+  // Create the destination folder
+  ASSERT_TRUE(base::CreateDirectory(sentinel_file.DirName()));
+  base::win::ScopedHandle file(
+      CreateFile(sentinel_file.value().c_str(), GENERIC_WRITE, 0, nullptr,
+                 CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr));
+  ASSERT_TRUE(file.IsValid());
+}
+
+void GcpSetupTest::ExpectSentinelFileToNotExist(
+    const base::string16& product_version) {
+  base::FilePath sentinel_file = sentinel_path_for_version(product_version);
+  EXPECT_EQ(false, base::PathExists(sentinel_file));
 }
 
 void GcpSetupTest::ExpectAllFilesToExist(
@@ -172,10 +212,12 @@ void GcpSetupTest::ExpectCredentialProviderToBeRegistered(
   }
 }
 
-void GcpSetupTest::SetUp() {
-  ASSERT_TRUE(SUCCEEDED(
-      CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE)));
+void GcpSetupTest::ExpectRequiredRegistryEntriesToBePresent() {
+  base::win::RegKey key(HKEY_LOCAL_MACHINE, kGcpRootKeyName, KEY_READ);
+  EXPECT_TRUE(key.Valid());
+}
 
+void GcpSetupTest::SetUp() {
   // Get the path to the setup exe (this exe during unit tests) and the
   // chrome version.
   GetModulePathAndProductVersion(&module_path_, &product_version_);
@@ -199,6 +241,10 @@ void GcpSetupTest::SetUp() {
   ASSERT_TRUE(scoped_temp_start_menu_dir_.CreateUniqueTempDir());
   start_menu_override_.reset(new base::ScopedPathOverride(
       base::DIR_COMMON_START_MENU, scoped_temp_start_menu_dir_.GetPath()));
+
+  ASSERT_TRUE(scoped_temp_progdata_dir_.CreateUniqueTempDir());
+  programdata_override_.reset(new base::ScopedPathOverride(
+      base::DIR_COMMON_APP_DATA, scoped_temp_progdata_dir_.GetPath()));
 
   // In non-component builds, base::FILE_MODULE will always return the path
   // to base.dll because of the way CURRENT_MODULE works.  Therefore overriding
@@ -226,6 +272,7 @@ TEST_F(GcpSetupTest, DoInstall) {
             DoInstall(module_path(), product_version(), fakes_for_testing()));
   ExpectAllFilesToExist(true, product_version());
   ExpectCredentialProviderToBeRegistered(true, product_version());
+  ExpectRequiredRegistryEntriesToBePresent();
 
   EXPECT_FALSE(
       fake_os_user_manager()->GetUserInfo(kDefaultGaiaAccountName).sid.empty());
@@ -244,6 +291,7 @@ TEST_F(GcpSetupTest, DoInstallOverOldInstall) {
   const base::string16 old_version(L"1.0.0.0");
   ASSERT_EQ(S_OK, DoInstall(module_path(), old_version, fakes_for_testing()));
   ExpectAllFilesToExist(true, old_version);
+  CreateSentinelFileToSimulateCrash(old_version);
 
   FakeOSUserManager::UserInfo old_user_info =
       fake_os_user_manager()->GetUserInfo(kDefaultGaiaAccountName);
@@ -264,6 +312,7 @@ TEST_F(GcpSetupTest, DoInstallOverOldInstall) {
   // Make sure newer version exists and old version is gone.
   ExpectAllFilesToExist(true, product_version());
   ExpectAllFilesToExist(false, old_version);
+  ExpectSentinelFileToNotExist(old_version);
 
   // Make sure kGaiaAccountName info and private data are unchanged.
   EXPECT_EQ(old_user_info,
@@ -348,10 +397,10 @@ TEST_F(GcpSetupTest, LaunchGcpAfterInstall) {
 
   locked_file.Close();
 
-  CComPtr<IGaiaCredentialProvider> provider;
+  Microsoft::WRL::ComPtr<IGaiaCredentialProvider> provider;
   ASSERT_EQ(S_OK,
             CComCreator<CComObject<CGaiaCredentialProvider>>::CreateInstance(
-                nullptr, IID_IGaiaCredentialProvider, (void**)&provider));
+                nullptr, IID_PPV_ARGS(&provider)));
 
   // Make sure newer version exists and old version is gone.
   ExpectAllFilesToExist(true, product_version());
@@ -363,12 +412,13 @@ TEST_F(GcpSetupTest, DoUninstall) {
 
   ASSERT_EQ(S_OK,
             DoInstall(module_path(), product_version(), fakes_for_testing()));
-
+  CreateSentinelFileToSimulateCrash(product_version());
   logging::ResetEventSourceForTesting();
 
   ASSERT_EQ(S_OK,
             DoUninstall(module_path(), installed_path(), fakes_for_testing()));
   ExpectAllFilesToExist(false, product_version());
+  ExpectSentinelFileToNotExist(product_version());
   ExpectCredentialProviderToBeRegistered(false, product_version());
   EXPECT_TRUE(
       fake_os_user_manager()->GetUserInfo(kDefaultGaiaAccountName).sid.empty());
@@ -417,21 +467,18 @@ TEST_F(GcpSetupTest, EnableStats) {
   // Make sure usagestats does not exist.
   base::win::RegKey key;
   EXPECT_EQ(ERROR_SUCCESS,
-            key.Create(HKEY_LOCAL_MACHINE,
-                       credential_provider::kRegUpdaterClientStateAppPath,
+            key.Create(HKEY_LOCAL_MACHINE, kRegUpdaterClientStateAppPath,
                        KEY_ALL_ACCESS | KEY_WOW64_32KEY));
   DWORD value;
-  EXPECT_NE(ERROR_SUCCESS,
-            key.ReadValueDW(credential_provider::kRegUsageStatsName, &value));
+  EXPECT_NE(ERROR_SUCCESS, key.ReadValueDW(kRegUsageStatsName, &value));
 
   // Enable stats.
   base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
-  cmdline.AppendSwitch(credential_provider::switches::kEnableStats);
+  cmdline.AppendSwitch(switches::kEnableStats);
   EXPECT_EQ(0, EnableStatsCollection(cmdline));
 
   // Stats should be enabled.
-  EXPECT_EQ(ERROR_SUCCESS,
-            key.ReadValueDW(credential_provider::kRegUsageStatsName, &value));
+  EXPECT_EQ(ERROR_SUCCESS, key.ReadValueDW(kRegUsageStatsName, &value));
   EXPECT_EQ(1u, value);
 }
 
@@ -439,21 +486,18 @@ TEST_F(GcpSetupTest, DisableStats) {
   // Make sure usagestats does not exist.
   base::win::RegKey key;
   EXPECT_EQ(ERROR_SUCCESS,
-            key.Create(HKEY_LOCAL_MACHINE,
-                       credential_provider::kRegUpdaterClientStateAppPath,
+            key.Create(HKEY_LOCAL_MACHINE, kRegUpdaterClientStateAppPath,
                        KEY_ALL_ACCESS | KEY_WOW64_32KEY));
   DWORD value;
-  EXPECT_NE(ERROR_SUCCESS,
-            key.ReadValueDW(credential_provider::kRegUsageStatsName, &value));
+  EXPECT_NE(ERROR_SUCCESS, key.ReadValueDW(kRegUsageStatsName, &value));
 
   // Disable stats.
   base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
-  cmdline.AppendSwitch(credential_provider::switches::kDisableStats);
+  cmdline.AppendSwitch(switches::kDisableStats);
   EXPECT_EQ(0, EnableStatsCollection(cmdline));
 
   // Stats should be disabled.
-  EXPECT_EQ(ERROR_SUCCESS,
-            key.ReadValueDW(credential_provider::kRegUsageStatsName, &value));
+  EXPECT_EQ(ERROR_SUCCESS, key.ReadValueDW(kRegUsageStatsName, &value));
   EXPECT_EQ(0u, value);
 }
 
@@ -461,23 +505,93 @@ TEST_F(GcpSetupTest, EnableDisableStats) {
   // Make sure usagestats does not exist.
   base::win::RegKey key;
   EXPECT_EQ(ERROR_SUCCESS,
-            key.Create(HKEY_LOCAL_MACHINE,
-                       credential_provider::kRegUpdaterClientStateAppPath,
+            key.Create(HKEY_LOCAL_MACHINE, kRegUpdaterClientStateAppPath,
                        KEY_ALL_ACCESS | KEY_WOW64_32KEY));
   DWORD value;
-  EXPECT_NE(ERROR_SUCCESS,
-            key.ReadValueDW(credential_provider::kRegUsageStatsName, &value));
+  EXPECT_NE(ERROR_SUCCESS, key.ReadValueDW(kRegUsageStatsName, &value));
 
   // Enable and disable stats.
   base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
-  cmdline.AppendSwitch(credential_provider::switches::kEnableStats);
-  cmdline.AppendSwitch(credential_provider::switches::kDisableStats);
+  cmdline.AppendSwitch(switches::kEnableStats);
+  cmdline.AppendSwitch(switches::kDisableStats);
   EXPECT_EQ(0, EnableStatsCollection(cmdline));
 
   // Stats should be disabled.
-  EXPECT_EQ(ERROR_SUCCESS,
-            key.ReadValueDW(credential_provider::kRegUsageStatsName, &value));
+  EXPECT_EQ(ERROR_SUCCESS, key.ReadValueDW(kRegUsageStatsName, &value));
   EXPECT_EQ(0u, value);
+}
+
+TEST_F(GcpSetupTest, WriteUninstallStrings) {
+  base::win::RegKey key;
+
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.Create(HKEY_LOCAL_MACHINE, kRegUpdaterClientStateAppPath,
+                       KEY_ALL_ACCESS | KEY_WOW64_32KEY));
+
+  // Write uninstall strings.
+  base::FilePath file_path =
+      installed_path().Append(FILE_PATH_LITERAL("foo.exe"));
+  ASSERT_EQ(S_OK, WriteUninstallRegistryValues(file_path));
+
+  // Verify uninstall strings.
+  base::string16 uninstall_string;
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.ReadValue(kRegUninstallStringField, &uninstall_string));
+  EXPECT_EQ(uninstall_string, file_path.value());
+
+  base::string16 uninstall_arguments;
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.ReadValue(kRegUninstallArgumentsField, &uninstall_arguments));
+
+  base::CommandLine expected_uninstall_arguments(base::CommandLine::NO_PROGRAM);
+  expected_uninstall_arguments.AppendSwitch(switches::kUninstall);
+
+  EXPECT_EQ(uninstall_arguments,
+            expected_uninstall_arguments.GetCommandLineString());
+}
+
+TEST_F(GcpSetupTest, WriteCredentialProviderRegistryValues) {
+  // Verify keys don't exist.
+  base::win::RegKey key;
+  ASSERT_NE(ERROR_SUCCESS,
+            key.Open(HKEY_LOCAL_MACHINE, kGcpRootKeyName, KEY_ALL_ACCESS));
+
+  // Write GCPW registry keys.
+  ASSERT_EQ(S_OK, WriteCredentialProviderRegistryValues());
+
+  // Verify keys were created.
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.Open(HKEY_LOCAL_MACHINE, kGcpRootKeyName, KEY_ALL_ACCESS));
+}
+
+TEST_F(GcpSetupTest, DoInstallWritesUninstallStrings) {
+  logging::ResetEventSourceForTesting();
+
+  ASSERT_EQ(S_OK,
+            DoInstall(module_path(), product_version(), fakes_for_testing()));
+  ExpectAllFilesToExist(true, product_version());
+
+  base::win::RegKey key;
+
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.Create(HKEY_LOCAL_MACHINE, kRegUpdaterClientStateAppPath,
+                       KEY_ALL_ACCESS | KEY_WOW64_32KEY));
+
+  // Verify uninstall strings.
+  base::string16 uninstall_string;
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.ReadValue(kRegUninstallStringField, &uninstall_string));
+  EXPECT_EQ(uninstall_string,
+            installed_path().Append(kCredentialProviderSetupExe).value());
+
+  base::string16 uninstall_arguments;
+  ASSERT_EQ(ERROR_SUCCESS,
+            key.ReadValue(kRegUninstallArgumentsField, &uninstall_arguments));
+
+  base::CommandLine expected_uninstall_arguments(base::CommandLine::NO_PROGRAM);
+  expected_uninstall_arguments.AppendSwitch(switches::kUninstall);
+  EXPECT_EQ(uninstall_arguments,
+            expected_uninstall_arguments.GetCommandLineString());
 }
 
 // This test checks the expect success / failure of DLL registration when

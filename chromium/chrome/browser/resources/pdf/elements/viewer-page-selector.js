@@ -2,8 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 Polymer({
   is: 'viewer-page-selector',
+
+  _template: html`{__html_template__}`,
 
   properties: {
     /**
@@ -26,10 +32,10 @@ Polymer({
 
   /** @return {!CrInputElement} */
   get pageSelector() {
-    return this.$.pageselector;
+    return /** @type {!CrInputElement} */ (this.$.pageselector);
   },
 
-  pageNoCommitted: function() {
+  pageNoCommitted() {
     const page = parseInt(this.pageSelector.value, 10);
 
     if (!isNaN(page) && page <= this.docLength && page > 0) {
@@ -41,27 +47,27 @@ Polymer({
   },
 
   /** @private */
-  docLengthChanged_: function() {
+  docLengthChanged_() {
     const numDigits = this.docLength.toString().length;
     this.style.setProperty('--page-length-digits', `${numDigits}`);
   },
 
-  select: function() {
+  select() {
     this.pageSelector.select();
   },
 
   /**
    * @return {boolean} True if the selector input field is currently focused.
    */
-  isActive: function() {
-    return this.shadowRoot.activeElement == this.pageSelector;
+  isActive() {
+    return this.shadowRoot.activeElement === this.pageSelector;
   },
 
   /**
    * Immediately remove any non-digit characters.
    * @private
    */
-  onInputValueChange_: function() {
+  onInputValueChange_() {
     this.pageSelector.value = this.pageSelector.value.replace(/[^\d]/, '');
   },
 });

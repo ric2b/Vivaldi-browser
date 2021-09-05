@@ -9,11 +9,14 @@
 
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
+#include "base/util/type_safety/strong_alias.h"
 #include "ui/gfx/image/image.h"
 
 namespace autofill {
 
 struct Suggestion {
+  using IsLoading = util::StrongAlias<class IsLoadingTag, bool>;
+
   enum MatchMode {
     PREFIX_MATCH,    // for prefix matched suggestions;
     SUBSTRING_MATCH  // for substring matched suggestions;
@@ -53,11 +56,17 @@ struct Suggestion {
   base::string16 additional_label;
   // Contains an image to display for the suggestion.
   gfx::Image custom_icon;
+  // TODO(crbug.com/1019660): Identify icons with enum instead of strings.
   // If |custom_icon| is empty, the name of the fallback built-in icon.
   std::string icon;
+  // This icon string shows whether the suggestion originates from local or
+  // account store. If it's empty, no store indication should be shown.
+  std::string store_indicator_icon;
   MatchMode match = PREFIX_MATCH;
   // |value| should be displayed as secondary text.
   bool is_value_secondary = false;
+  // Whether suggestion was interacted with and is now in a loading state.
+  IsLoading is_loading = IsLoading(false);
 };
 
 }  // namespace autofill

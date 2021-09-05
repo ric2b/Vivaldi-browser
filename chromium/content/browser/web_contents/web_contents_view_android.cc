@@ -233,7 +233,7 @@ gfx::Rect WebContentsViewAndroid::GetViewBounds() const {
 void WebContentsViewAndroid::CreateView(gfx::NativeView context) {}
 
 RenderWidgetHostViewBase* WebContentsViewAndroid::CreateViewForWidget(
-    RenderWidgetHost* render_widget_host, bool is_guest_view_hack) {
+    RenderWidgetHost* render_widget_host) {
   if (render_widget_host->GetView()) {
     // During testing, the view will already be set up in most cases to the
     // test view, so we don't want to clobber it with a real one. To verify that
@@ -259,9 +259,6 @@ RenderWidgetHostViewBase* WebContentsViewAndroid::CreateViewForChildWidget(
     RenderWidgetHost* render_widget_host) {
   RenderWidgetHostImpl* rwhi = RenderWidgetHostImpl::From(render_widget_host);
   return new RenderWidgetHostViewAndroid(rwhi, nullptr);
-}
-
-void WebContentsViewAndroid::RenderViewCreated(RenderViewHost* host) {
 }
 
 void WebContentsViewAndroid::RenderViewReady() {
@@ -480,6 +477,7 @@ void WebContentsViewAndroid::OnDragExited() {
 void WebContentsViewAndroid::OnPerformDrop(DropData* drop_data,
                                            const gfx::PointF& location,
                                            const gfx::PointF& screen_location) {
+  web_contents_->Focus();
   web_contents_->GetRenderViewHost()->GetWidget()->FilterDropData(drop_data);
   web_contents_->GetRenderViewHost()->GetWidget()->DragTargetDrop(
       *drop_data, location, screen_location, 0);
@@ -530,9 +528,24 @@ int WebContentsViewAndroid::GetTopControlsHeight() const {
   return delegate ? delegate->GetTopControlsHeight() : 0;
 }
 
+int WebContentsViewAndroid::GetTopControlsMinHeight() const {
+  auto* delegate = web_contents_->GetDelegate();
+  return delegate ? delegate->GetTopControlsMinHeight() : 0;
+}
+
 int WebContentsViewAndroid::GetBottomControlsHeight() const {
   auto* delegate = web_contents_->GetDelegate();
   return delegate ? delegate->GetBottomControlsHeight() : 0;
+}
+
+int WebContentsViewAndroid::GetBottomControlsMinHeight() const {
+  auto* delegate = web_contents_->GetDelegate();
+  return delegate ? delegate->GetBottomControlsMinHeight() : 0;
+}
+
+bool WebContentsViewAndroid::ShouldAnimateBrowserControlsHeightChanges() const {
+  auto* delegate = web_contents_->GetDelegate();
+  return delegate && delegate->ShouldAnimateBrowserControlsHeightChanges();
 }
 
 bool WebContentsViewAndroid::DoBrowserControlsShrinkRendererSize() const {
@@ -606,6 +619,13 @@ void WebContentsViewAndroid::OnSizeChanged() {
 void WebContentsViewAndroid::OnPhysicalBackingSizeChanged() {
   if (web_contents_->GetRenderWidgetHostView())
     web_contents_->SendScreenRects();
+}
+
+void WebContentsViewAndroid::OnBrowserControlsHeightChanged() {
+  auto* rwhv = GetRenderWidgetHostViewAndroid();
+  if (rwhv)
+    rwhv->SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
+                                      base::nullopt);
 }
 
 } // namespace content

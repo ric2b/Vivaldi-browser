@@ -25,18 +25,16 @@ namespace base {
 class TaskRunner;
 }
 
-namespace network {
-class ResourceRequestBody;
-}
-
 namespace storage {
 class BlobStorageContext;
+namespace mojom {
+class BlobStorageContext;
+}
 }
 
 namespace content {
 class BlobHandle;
 class BrowserContext;
-class ResourceContext;
 
 // A context class that keeps track of BlobStorageController used by the chrome.
 // There is an instance associated with each BrowserContext. There could be
@@ -55,15 +53,24 @@ class CONTENT_EXPORT ChromeBlobStorageContext
   static ChromeBlobStorageContext* GetFor(
       BrowserContext* browser_context);
 
-  void InitializeOnIOThread(base::FilePath blob_storage_dir,
+  // Must be called on the UI thread.
+  static mojo::PendingRemote<storage::mojom::BlobStorageContext> GetRemoteFor(
+      BrowserContext* browser_context);
+
+  void InitializeOnIOThread(const base::FilePath& profile_dir,
+                            const base::FilePath& blob_storage_dir,
                             scoped_refptr<base::TaskRunner> file_task_runner);
 
   storage::BlobStorageContext* context() const;
 
+  // Bind a BlobStorageContext mojo interface to be used by storage apis.
+  // This interface should not be exposed to renderers.
+  void BindMojoContext(
+      mojo::PendingReceiver<storage::mojom::BlobStorageContext> receiver);
+
   // Returns a NULL scoped_ptr on failure.
   std::unique_ptr<BlobHandle> CreateMemoryBackedBlob(
-      const char* data,
-      size_t length,
+      base::span<const uint8_t> data,
       const std::string& content_type);
 
   // Returns a SharedURLLoaderFactory capable of creating URLLoaders for exactly
@@ -108,15 +115,6 @@ class CONTENT_EXPORT ChromeBlobStorageContext
 // ChromeBlobStorageContext instance passed in.
 storage::BlobStorageContext* GetBlobStorageContext(
     ChromeBlobStorageContext* blob_storage_context);
-
-using BlobHandles = std::vector<std::unique_ptr<storage::BlobDataHandle>>;
-
-// Attempts to create a vector of BlobDataHandles that ensure any blob data
-// associated with |body| isn't cleaned up until the handles are destroyed.
-// Returns false on failure. This is used for POST and PUT requests.
-bool GetBodyBlobDataHandles(network::ResourceRequestBody* body,
-                            ResourceContext* resource_context,
-                            BlobHandles* blob_handles);
 
 extern const char kBlobStorageContextKeyName[];
 

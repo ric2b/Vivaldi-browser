@@ -4,8 +4,9 @@
 
 package org.chromium.chrome.browser.browserservices;
 
-import android.net.Uri;
 import android.support.test.filters.SmallTest;
+
+import androidx.browser.customtabs.CustomTabsService;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -18,14 +19,14 @@ import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.browserservices.OriginVerifier.OriginVerificationListener;
+import org.chromium.chrome.browser.browsing_data.BrowsingDataBridge;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
 import org.chromium.chrome.browser.browsing_data.TimePeriod;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
-import org.chromium.chrome.browser.preferences.privacy.BrowsingDataBridge;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.mock.MockWebContents;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -35,8 +36,6 @@ import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
-import androidx.browser.customtabs.CustomTabsService;
 
 /** Tests for OriginVerifier. */
 @RunWith(ChromeJUnit4ClassRunner.class)
@@ -85,8 +84,8 @@ public class OriginVerifierTest {
     public void setUp() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
 
-        mHttpsOrigin = new Origin("https://www.example.com");
-        mHttpOrigin = new Origin("http://www.android.com");
+        mHttpsOrigin = Origin.create("https://www.example.com");
+        mHttpOrigin = Origin.create("http://www.android.com");
 
         mHandleAllUrlsVerifier = new OriginVerifier(
                 PACKAGE_NAME, CustomTabsService.RELATION_HANDLE_ALL_URLS, new MockWebContents());
@@ -114,12 +113,6 @@ public class OriginVerifierTest {
     @Test
     @SmallTest
     public void testOnlyHttpsAllowed() throws InterruptedException {
-        Origin origin = new Origin(Uri.parse("LOL"));
-        PostTask.postTask(UiThreadTaskTraits.DEFAULT,
-                () -> mHandleAllUrlsVerifier.start(new TestOriginVerificationListener(), origin));
-        Assert.assertTrue(
-                mVerificationResultSemaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
-        Assert.assertFalse(mLastVerified);
         PostTask.postTask(UiThreadTaskTraits.DEFAULT,
                 () -> mHandleAllUrlsVerifier.start(
                                 new TestOriginVerificationListener(), mHttpOrigin));
@@ -159,10 +152,9 @@ public class OriginVerifierTest {
         Set<String> savedLinks = new HashSet<>();
         savedLinks.add(relationship);
 
-        ChromePreferenceManager preferences = ChromePreferenceManager.getInstance();
+        VerificationResultStore.setRelationships(savedLinks);
 
-        preferences.setVerifiedDigitalAssetLinks(savedLinks);
-        Assert.assertTrue(preferences.getVerifiedDigitalAssetLinks().contains(relationship));
+        Assert.assertTrue(VerificationResultStore.getRelationships().contains(relationship));
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             BrowsingDataBridge.getInstance().clearBrowsingData(callbackHelper::notifyCalled,
@@ -170,6 +162,6 @@ public class OriginVerifierTest {
         });
 
         callbackHelper.waitForCallback(0);
-        Assert.assertTrue(preferences.getVerifiedDigitalAssetLinks().isEmpty());
+        Assert.assertTrue(VerificationResultStore.getRelationships().isEmpty());
     }
 }

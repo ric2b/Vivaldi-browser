@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
@@ -13,6 +14,19 @@
 #include "chrome/browser/ui/browser_finder.h"
 
 namespace extensions {
+
+namespace {
+
+content::GlobalFrameRoutingId GetFrameRoutingId(
+    content::RenderFrameHost* host) {
+  if (!host)
+    return content::GlobalFrameRoutingId();
+
+  return content::GlobalFrameRoutingId(host->GetProcess()->GetID(),
+                                       host->GetRoutingID());
+}
+
+}  // namespace
 
 ExtensionNavigationUIData::ExtensionNavigationUIData() {}
 
@@ -25,7 +39,8 @@ ExtensionNavigationUIData::ExtensionNavigationUIData(
           tab_id,
           window_id,
           ExtensionApiFrameIdMap::GetFrameId(navigation_handle),
-          ExtensionApiFrameIdMap::GetParentFrameId(navigation_handle)) {
+          ExtensionApiFrameIdMap::GetParentFrameId(navigation_handle),
+          GetFrameRoutingId(navigation_handle->GetParentFrame())) {
   // TODO(clamy): See if it would be possible to have just one source for the
   // FrameData that works both for navigations and subresources loads.
 }
@@ -39,7 +54,8 @@ ExtensionNavigationUIData::ExtensionNavigationUIData(
           tab_id,
           window_id,
           ExtensionApiFrameIdMap::GetFrameId(frame_host),
-          ExtensionApiFrameIdMap::GetParentFrameId(frame_host)) {}
+          ExtensionApiFrameIdMap::GetParentFrameId(frame_host),
+          GetFrameRoutingId(frame_host->GetParent())) {}
 
 // static
 std::unique_ptr<ExtensionNavigationUIData>
@@ -49,7 +65,8 @@ ExtensionNavigationUIData::CreateForMainFrameNavigation(
     int window_id) {
   return base::WrapUnique(new ExtensionNavigationUIData(
       web_contents, tab_id, window_id, ExtensionApiFrameIdMap::kTopFrameId,
-      ExtensionApiFrameIdMap::kInvalidFrameId));
+      ExtensionApiFrameIdMap::kInvalidFrameId,
+      content::GlobalFrameRoutingId()));
 }
 
 std::unique_ptr<ExtensionNavigationUIData> ExtensionNavigationUIData::DeepCopy()
@@ -59,6 +76,7 @@ std::unique_ptr<ExtensionNavigationUIData> ExtensionNavigationUIData::DeepCopy()
   copy->is_web_view_ = is_web_view_;
   copy->web_view_instance_id_ = web_view_instance_id_;
   copy->web_view_rules_registry_id_ = web_view_rules_registry_id_;
+  copy->parent_routing_id_ = parent_routing_id_;
   return copy;
 }
 
@@ -67,15 +85,10 @@ ExtensionNavigationUIData::ExtensionNavigationUIData(
     int tab_id,
     int window_id,
     int frame_id,
-    int parent_frame_id)
-    : frame_data_(frame_id,
-                  parent_frame_id,
-                  tab_id,
-                  window_id,
-                  // The RenderFrameHost may not have an associated WebContents
-                  // in cases such as interstitial pages.
-                  web_contents ? web_contents->GetLastCommittedURL() : GURL(),
-                  base::nullopt /* pending_main_frame_url */) {
+    int parent_frame_id,
+    content::GlobalFrameRoutingId parent_routing_id)
+    : frame_data_(frame_id, parent_frame_id, tab_id, window_id),
+      parent_routing_id_(parent_routing_id) {
   WebViewGuest* web_view = WebViewGuest::FromWebContents(web_contents);
   // NOTE(andre@vivaldi.com) : Vivaldi uses WebContents from the tabstrip in
   // WebViewGuests and chrome.webRequest will look for webview specific filters

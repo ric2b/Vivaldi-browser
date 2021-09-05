@@ -32,6 +32,9 @@
 #include "content/public/common/content_features.h"
 #include "net/base/url_util.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/window_animations.h"
 
@@ -41,9 +44,16 @@ namespace {
 
 AssistantOptInDialog* g_dialog = nullptr;
 
-constexpr int kAssistantOptInDialogWidth = 768;
-constexpr int kAssistantOptInDialogHeight = 640;
 constexpr int kCaptionBarHeight = 32;
+constexpr int kDialogMargin = 48;
+constexpr gfx::Size kDialogMaxSize = gfx::Size(768, 768);
+constexpr gfx::Size kDialogMinSize = gfx::Size(544, 464);
+constexpr gfx::Insets kDialogInsets =
+    gfx::Insets(kDialogMargin + kCaptionBarHeight,
+                kDialogMargin,
+                kDialogMargin,
+                kDialogMargin);
+
 constexpr char kFlowTypeParamKey[] = "flow-type";
 constexpr char kCaptionBarHeightParamKey[] = "caption-bar-height";
 
@@ -86,6 +96,8 @@ AssistantOptInUI::AssistantOptInUI(content::WebUI* web_ui)
   source->SetDefaultResource(IDR_ASSISTANT_OPTIN_HTML);
   source->AddResourcePath("voice_match_animation.json",
                           IDR_ASSISTANT_VOICE_MATCH_ANIMATION);
+  source->AddResourcePath("voice_match_already_setup_animation.json",
+                          IDR_ASSISTANT_VOICE_MATCH_ALREADY_SETUP_ANIMATION);
   source->OverrideContentSecurityPolicyWorkerSrc("worker-src blob: 'self';");
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
 
@@ -127,9 +139,7 @@ void AssistantOptInDialog::Show(
     ash::AssistantSetup::StartAssistantOptInFlowCallback callback) {
 #if !BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
   std::move(callback).Run(false);
-  return;
-#endif
-
+#else
   // Check Assistant allowed state.
   if (::assistant::IsAssistantAllowedForProfile(
           ProfileManager::GetActiveUserProfile()) !=
@@ -153,6 +163,7 @@ void AssistantOptInDialog::Show(
   g_dialog = new AssistantOptInDialog(type, std::move(callback));
 
   g_dialog->ShowSystemDialog();
+#endif
 }
 
 // static
@@ -183,17 +194,19 @@ void AssistantOptInDialog::AdjustWidgetInitParams(
 }
 
 void AssistantOptInDialog::GetDialogSize(gfx::Size* size) const {
-  size->SetSize(kAssistantOptInDialogWidth,
-                kAssistantOptInDialogHeight - kCaptionBarHeight);
+  auto bounds = display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+  bounds.Inset(kDialogInsets);
+  auto dialog_size = bounds.size();
+  dialog_size.SetToMin(kDialogMaxSize);
+  dialog_size.SetToMax(kDialogMinSize);
+  size->SetSize(dialog_size.width(), dialog_size.height());
 }
 
 std::string AssistantOptInDialog::GetDialogArgs() const {
   return std::string();
 }
 
-void AssistantOptInDialog::OnDialogShown(
-    content::WebUI* webui,
-    content::RenderViewHost* render_view_host) {
+void AssistantOptInDialog::OnDialogShown(content::WebUI* webui) {
   assistant_ui_ = static_cast<AssistantOptInUI*>(webui->GetController());
 }
 

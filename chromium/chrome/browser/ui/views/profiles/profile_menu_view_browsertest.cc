@@ -12,7 +12,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
@@ -25,7 +24,6 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/scoped_account_consistency.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/secondary_account_helper.h"
@@ -36,7 +34,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/profiles/profile_menu_view.h"
@@ -50,6 +47,7 @@
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
@@ -79,11 +77,10 @@ class UnconsentedPrimaryAccountChecker
   }
 
   // StatusChangeChecker overrides:
-  bool IsExitConditionSatisfied() override {
-    return identity_manager_->HasUnconsentedPrimaryAccount();
-  }
-  std::string GetDebugMessage() const override {
-    return "Unconsented primary account checker";
+  bool IsExitConditionSatisfied(std::ostream* os) override {
+    *os << "Waiting for unconsented primary account";
+    return identity_manager_->HasPrimaryAccount(
+        signin::ConsentLevel::kNotRequired);
   }
 
   // signin::IdentityManager::Observer overrides:
@@ -113,211 +110,78 @@ Profile* CreateTestingProfile(const base::FilePath& path) {
   return profile_ptr;
 }
 
-Profile* CreateTestingProfile(const std::string& profile_name) {
-  base::FilePath path;
-  base::PathService::Get(chrome::DIR_USER_DATA, &path);
-  path = path.AppendASCII(profile_name);
-  return CreateTestingProfile(path);
-}
-
-// Turns a normal profile into one that's signed in.
-void AddAccountToProfile(Profile* profile, const char* signed_in_email) {
-  ProfileAttributesStorage& storage =
-      g_browser_process->profile_manager()->GetProfileAttributesStorage();
-  ProfileAttributesEntry* entry_signed_in;
-  ASSERT_TRUE(storage.GetProfileAttributesWithPath(profile->GetPath(),
-                                                   &entry_signed_in));
-  entry_signed_in->SetAuthInfo("12345", base::UTF8ToUTF16(signed_in_email),
-                               true);
-  profile->GetPrefs()->SetString(prefs::kGoogleServicesHostedDomain,
-                                 "google.com");
-}
-
-// Set up the profiles to enable Lock. Takes as parameter a profile that will be
-// signed in, and also creates a supervised user (necessary for lock), then
-// returns the supervised user profile.
-Profile* SetupProfilesForLock(Profile* signed_in) {
-  base::ScopedAllowBlockingForTesting allow_blocking;
-  constexpr char kEmail[] = "me@google.com";
-  AddAccountToProfile(signed_in, kEmail);
-
-  // Create the |supervised| profile, which is supervised by |signed_in|.
-  ProfileAttributesEntry* entry_supervised;
-  Profile* supervised = CreateTestingProfile("supervised");
-  ProfileAttributesStorage& storage =
-      g_browser_process->profile_manager()->GetProfileAttributesStorage();
-  EXPECT_TRUE(storage.GetProfileAttributesWithPath(supervised->GetPath(),
-                                                   &entry_supervised));
-  entry_supervised->SetSupervisedUserId(kEmail);
-  supervised->GetPrefs()->SetString(prefs::kSupervisedUserId, kEmail);
-
-  // |signed_in| should now be lockable.
-  EXPECT_TRUE(profiles::IsLockAvailable(signed_in));
-  return supervised;
-}
-
 }  // namespace
 
-class ProfileMenuViewExtensionsTest
-    : public SupportsTestDialog<extensions::ExtensionBrowserTest> {
+class ProfileMenuViewTestBase {
  public:
-  ProfileMenuViewExtensionsTest() {}
-  ~ProfileMenuViewExtensionsTest() override {}
-
-  // SupportsTestUi:
-  void ShowUi(const std::string& name) override {
-    // Bubble dialogs' bounds may exceed the display's work area.
-    // https://crbug.com/893292.
-    set_should_verify_dialog_bounds(false);
-
-    constexpr char kSignedIn[] = "SignedIn";
-    constexpr char kMultiProfile[] = "MultiProfile";
-    constexpr char kGuest[] = "Guest";
-    constexpr char kDiceGuest[] = "DiceGuest";
-    constexpr char kManageAccountLink[] = "ManageAccountLink";
-    constexpr char kSupervisedOwner[] = "SupervisedOwner";
-    constexpr char kSupervisedUser[] = "SupervisedUser";
-
-    Browser* target_browser = browser();
-    if (name == kSignedIn || name == kManageAccountLink) {
-      constexpr char kEmail[] = "verylongemailfortesting@gmail.com";
-      AddAccountToProfile(target_browser->profile(), kEmail);
-    }
-    if (name == kMultiProfile) {
-      ProfileManager* profile_manager = g_browser_process->profile_manager();
-      CreateTestingProfile(profile_manager->GenerateNextProfileDirectoryPath());
-      CreateTestingProfile(profile_manager->GenerateNextProfileDirectoryPath());
-    }
-    if (name == kGuest || name == kDiceGuest) {
-      profiles::SwitchToGuestProfile(ProfileManager::CreateCallback());
-
-      Profile* guest = g_browser_process->profile_manager()->GetProfileByPath(
-          ProfileManager::GetGuestProfilePath());
-      EXPECT_TRUE(guest);
-      target_browser = chrome::FindAnyBrowser(guest, true);
-    }
-
-    Profile* supervised = nullptr;
-    if (name == kSupervisedOwner || name == kSupervisedUser) {
-      supervised = SetupProfilesForLock(target_browser->profile());
-    }
-    if (name == kSupervisedUser) {
-      profiles::SwitchToProfile(supervised->GetPath(), false,
-                                ProfileManager::CreateCallback(),
-                                ProfileMetrics::ICON_AVATAR_BUBBLE);
-      EXPECT_TRUE(supervised);
-      target_browser = chrome::FindAnyBrowser(supervised, true);
-    }
-    OpenProfileMenuView(target_browser);
-  }
-
  protected:
-  void OpenProfileMenuView(Browser* browser) {
-    ProfileMenuView::close_on_deactivate_for_testing_ = false;
-    OpenProfileMenuViews(browser);
+  void OpenProfileMenu(Browser* browser, bool use_mouse = true) {
+    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(
+        target_browser_ ? target_browser_ : browser);
 
-    base::RunLoop().RunUntilIdle();
-    ASSERT_TRUE(ProfileMenuView::IsShowing());
-  }
-
-  void OpenProfileMenuViews(Browser* browser) {
-    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-    views::View* button =
+    // Click the avatar button to open the menu.
+    views::View* avatar_button =
         browser_view->toolbar_button_provider()->GetAvatarToolbarButton();
-    DCHECK(button);
-
-    ui::MouseEvent e(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                     ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0);
-    button->OnMousePressed(e);
-  }
-
-  AvatarMenu* GetProfileMenuViewAvatarMenu() {
-    return current_profile_bubble()->avatar_menu_.get();
-  }
-
-  void ClickProfileMenuViewLockButton() {
-    ui::MouseEvent e(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                     ui::EventTimeForNow(), 0, 0);
-    current_profile_bubble()->ButtonPressed(
-        current_profile_bubble()->lock_button_, e);
-  }
-
-  // Access the registry that has been prepared with at least one extension.
-  extensions::ExtensionRegistry* GetPreparedRegistry(Profile* signed_in) {
-    extensions::ExtensionRegistry* registry =
-        extensions::ExtensionRegistry::Get(signed_in);
-    const size_t initial_num_extensions = registry->enabled_extensions().size();
-    const extensions::Extension* ext = LoadExtension(
-        test_data_dir_.AppendASCII("app"));
-    EXPECT_TRUE(ext);
-    EXPECT_EQ(initial_num_extensions + 1,
-              registry->enabled_extensions().size());
-    EXPECT_EQ(0U, registry->blocked_extensions().size());
-    return registry;
-  }
-
-  ProfileMenuView* current_profile_bubble() {
-    return static_cast<ProfileMenuView*>(
-        ProfileMenuView::GetBubbleForTesting());
-  }
-
-  int GetDiceSigninPromoShowCount() {
-    return current_profile_bubble()->GetDiceSigninPromoShowCount();
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ProfileMenuViewExtensionsTest);
-};
-
-// TODO(crbug.com/932818): Remove this class after
-// |kAutofillEnableToolbarStatusChip| is cleaned up. Otherwise we need it
-// because the toolbar is init-ed before each test is set up. Thus need to
-// enable the feature in the general browsertest SetUp().
-class ProfileMenuViewExtensionsParamTest
-    : public ProfileMenuViewExtensionsTest,
-      public ::testing::WithParamInterface<bool> {
- protected:
-  ProfileMenuViewExtensionsParamTest()
-      : ProfileMenuViewExtensionsTest() {}
-  ~ProfileMenuViewExtensionsParamTest() override {}
-
-  void SetUp() override {
-    if (GetParam()) {
-      scoped_feature_list_.InitAndEnableFeature(
-          autofill::features::kAutofillEnableToolbarStatusChip);
+    ASSERT_TRUE(avatar_button);
+    if (use_mouse) {
+      Click(avatar_button);
+    } else {
+      avatar_button->RequestFocus();
+      avatar_button->OnKeyPressed(
+          ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_SPACE, ui::EF_NONE));
+      avatar_button->OnKeyReleased(
+          ui::KeyEvent(ui::ET_KEY_RELEASED, ui::VKEY_SPACE, ui::EF_NONE));
     }
 
-    ProfileMenuViewExtensionsTest::SetUp();
+    ASSERT_TRUE(profile_menu_view());
+    profile_menu_view()->set_close_on_deactivate(false);
+
+#if defined(OS_MACOSX)
+    base::RunLoop().RunUntilIdle();
+#else
+    // If possible wait until the menu is active.
+    views::Widget* menu_widget = profile_menu_view()->GetWidget();
+    ASSERT_TRUE(menu_widget);
+    if (menu_widget->CanActivate()) {
+      views::test::WidgetActivationWaiter(menu_widget, /*active=*/true).Wait();
+    } else {
+      LOG(ERROR) << "menu_widget can not be activated";
+    }
+#endif
+
+    LOG(INFO) << "Opening profile menu was successful";
+  }
+
+  ProfileMenuViewBase* profile_menu_view() {
+    return static_cast<ProfileMenuViewBase*>(
+        ProfileMenuViewBase::GetBubbleForTesting());
+  }
+
+  void SetTargetBrowser(Browser* browser) { target_browser_ = browser; }
+
+  void Click(views::View* clickable_view) {
+    // Simulate a mouse click. Note: Buttons are either fired when pressed or
+    // when released, so the corresponding methods need to be called.
+    clickable_view->OnMousePressed(
+        ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
+                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
+    clickable_view->OnMouseReleased(
+        ui::MouseEvent(ui::ET_MOUSE_RELEASED, gfx::Point(), gfx::Point(),
+                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
+  Browser* target_browser_ = nullptr;
 };
 
-IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, ClickSigninButton) {
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser()));
-
-  views::ButtonListener* bubble = current_profile_bubble();
-  const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                             ui::EventTimeForNow(), 0, 0);
-  base::UserActionTester tester;
-  views::FocusManager* focus_manager =
-      current_profile_bubble()->GetFocusManager();
-
-  // Advance the focus to the first button in the menu, i.e. the signin button.
-  focus_manager->AdvanceFocus(/*reverse=*/false);
-  views::Button* signin_button =
-      static_cast<views::Button*>(focus_manager->GetFocusedView());
-  // Click the button.
-  bubble->ButtonPressed(signin_button, event);
-  EXPECT_EQ(1, tester.GetActionCount("Signin_Signin_FromAvatarBubbleSignin"));
-}
+class ProfileMenuViewExtensionsTest : public ProfileMenuViewTestBase,
+                                      public extensions::ExtensionBrowserTest {
+};
 
 // Make sure nothing bad happens when the browser theme changes while the
 // ProfileMenuView is visible. Regression test for crbug.com/737470
 IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, ThemeChanged) {
-  ASSERT_TRUE(profiles::IsMultipleProfilesEnabled());
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser()));
+  ASSERT_NO_FATAL_FAILURE(OpenProfileMenu(browser()));
 
   // The theme change destroys the avatar button. Make sure the profile chooser
   // widget doesn't try to reference a stale observer during its shutdown.
@@ -329,118 +193,9 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, ThemeChanged) {
   theme_change_observer.Wait();
 
   EXPECT_TRUE(ProfileMenuView::IsShowing());
-  current_profile_bubble()->GetWidget()->Close();
+  profile_menu_view()->GetWidget()->Close();
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(ProfileMenuView::IsShowing());
-}
-
-IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, ViewProfileUMA) {
-  ASSERT_TRUE(profiles::IsMultipleProfilesEnabled());
-
-  base::HistogramTester histograms;
-  Profile* profile = browser()->profile();
-  profile->GetPrefs()->SetInteger(prefs::kProfileAvatarTutorialShown, 0);
-
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser()));
-}
-
-IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, LockProfile) {
-  ASSERT_TRUE(profiles::IsMultipleProfilesEnabled());
-
-  // Set up the message loop for the user manager.
-  scoped_refptr<content::MessageLoopRunner> runner(
-      new content::MessageLoopRunner);
-  UserManager::AddOnUserManagerShownCallbackForTesting(runner->QuitClosure());
-
-  SetupProfilesForLock(browser()->profile());
-  EXPECT_EQ(1U, BrowserList::GetInstance()->size());
-
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser()));
-  AvatarMenu* menu = GetProfileMenuViewAvatarMenu();
-  EXPECT_FALSE(menu->GetItemAt(menu->GetActiveProfileIndex()).signin_required);
-
-  ClickProfileMenuViewLockButton();
-  EXPECT_TRUE(menu->GetItemAt(menu->GetActiveProfileIndex()).signin_required);
-
-  if (!BrowserList::GetInstance()->empty())
-    ui_test_utils::WaitForBrowserToClose(browser());
-  EXPECT_TRUE(BrowserList::GetInstance()->empty());
-
-  // Wait until the user manager is shown.
-  runner->Run();
-
-  // We need to hide the User Manager or else the process can't die.
-  UserManager::Hide();
-}
-
-IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest,
-                       LockProfileBlockExtensions) {
-  ASSERT_TRUE(profiles::IsMultipleProfilesEnabled());
-  // Make sure we have at least one enabled extension.
-  extensions::ExtensionRegistry* registry =
-      GetPreparedRegistry(browser()->profile());
-
-  // Set up the message loop for the user manager.
-  scoped_refptr<content::MessageLoopRunner> runner(
-      new content::MessageLoopRunner);
-  UserManager::AddOnUserManagerShownCallbackForTesting(runner->QuitClosure());
-
-  SetupProfilesForLock(browser()->profile());
-
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser()));
-  ClickProfileMenuViewLockButton();
-
-  if (!BrowserList::GetInstance()->empty())
-    ui_test_utils::WaitForBrowserToClose(browser());
-  EXPECT_TRUE(BrowserList::GetInstance()->empty());
-
-  // Wait until the user manager is shown.
-  runner->Run();
-
-  // Assert that the ExtensionService is blocked.
-  ASSERT_EQ(1U, registry->blocked_extensions().size());
-
-  // We need to hide the User Manager or else the process can't die.
-  UserManager::Hide();
-}
-
-IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest,
-                       LockProfileNoBlockOtherProfileExtensions) {
-  ASSERT_TRUE(profiles::IsMultipleProfilesEnabled());
-  // Make sure we have at least one enabled extension.
-  extensions::ExtensionRegistry* registry =
-      GetPreparedRegistry(browser()->profile());
-  const size_t total_enabled_extensions = registry->enabled_extensions().size();
-
-  // Set up the message loop for the user manager.
-  scoped_refptr<content::MessageLoopRunner> runner(
-      new content::MessageLoopRunner);
-  UserManager::AddOnUserManagerShownCallbackForTesting(runner->QuitClosure());
-
-  // Create a different profile and then lock it.
-  Profile* signed_in = CreateTestingProfile("signed_in");
-  SetupProfilesForLock(signed_in);
-  extensions::ExtensionSystem::Get(signed_in)->InitForRegularProfile(
-      true /* extensions_enabled */);
-  Browser* browser_to_lock = CreateBrowser(signed_in);
-  EXPECT_EQ(2U, BrowserList::GetInstance()->size());
-
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser_to_lock));
-  ClickProfileMenuViewLockButton();
-
-  if (1U != BrowserList::GetInstance()->size())
-    ui_test_utils::WaitForBrowserToClose(browser_to_lock);
-  EXPECT_EQ(1U, BrowserList::GetInstance()->size());
-
-  // Wait until the user manager is shown.
-  runner->Run();
-
-  // Assert that the first profile's extensions are not blocked.
-  ASSERT_EQ(total_enabled_extensions, registry->enabled_extensions().size());
-  ASSERT_EQ(0U, registry->blocked_extensions().size());
-
-  // We need to hide the User Manager or else the process can't die.
-  UserManager::Hide();
 }
 
 // Profile chooser view should close when a tab is added.
@@ -451,7 +206,7 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest,
   ASSERT_EQ(1, tab_strip->count());
   ASSERT_EQ(0, tab_strip->active_index());
 
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser()));
+  ASSERT_NO_FATAL_FAILURE(OpenProfileMenu(browser()));
   AddTabAtIndex(1, GURL("https://test_url.com"),
                 ui::PageTransition::PAGE_TRANSITION_LINK);
   EXPECT_EQ(1, tab_strip->active_index());
@@ -469,7 +224,7 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest,
   ASSERT_EQ(2, tab_strip->count());
   ASSERT_EQ(1, tab_strip->active_index());
 
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser()));
+  ASSERT_NO_FATAL_FAILURE(OpenProfileMenu(browser()));
   tab_strip->ActivateTabAt(0);
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(ProfileMenuView::IsShowing());
@@ -485,7 +240,7 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest,
   ASSERT_EQ(2, tab_strip->count());
   ASSERT_EQ(1, tab_strip->active_index());
 
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser()));
+  ASSERT_NO_FATAL_FAILURE(OpenProfileMenu(browser()));
   tab_strip->CloseWebContentsAt(1, TabStripModel::CLOSE_NONE);
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(ProfileMenuView::IsShowing());
@@ -499,134 +254,11 @@ IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest,
   ASSERT_EQ(1, tab_strip->count());
   ASSERT_EQ(0, tab_strip->active_index());
 
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser()));
+  ASSERT_NO_FATAL_FAILURE(OpenProfileMenu(browser()));
   tab_strip->CloseWebContentsAt(0, TabStripModel::CLOSE_NONE);
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(ProfileMenuView::IsShowing());
 }
-
-// Shows a non-signed in profile with no others.
-IN_PROC_BROWSER_TEST_P(ProfileMenuViewExtensionsParamTest,
-                       InvokeUi_default) {
-  ShowAndVerifyUi();
-}
-
-// Shows a signed in profile with no others.
-IN_PROC_BROWSER_TEST_P(ProfileMenuViewExtensionsParamTest,
-                       InvokeUi_SignedIn) {
-  ShowAndVerifyUi();
-}
-
-// Shows the |ProfileMenuView| with three different profiles.
-IN_PROC_BROWSER_TEST_P(ProfileMenuViewExtensionsParamTest,
-                       InvokeUi_MultiProfile) {
-  ShowAndVerifyUi();
-}
-
-// Shows the |ProfileMenuView| during a Guest browsing session.
-IN_PROC_BROWSER_TEST_P(ProfileMenuViewExtensionsParamTest, InvokeUi_Guest) {
-  ShowAndVerifyUi();
-}
-
-class ProfileMenuViewExtensionsParamTestWithScopedAccountConsistency
-    : public ProfileMenuViewExtensionsParamTest {
- public:
-  ProfileMenuViewExtensionsParamTestWithScopedAccountConsistency() = default;
-
- private:
-  ScopedAccountConsistencyDice scoped_dice_;
-};
-
-// Shows the |ProfileMenuView| during a Guest browsing session when the DICE
-// flag is enabled.
-IN_PROC_BROWSER_TEST_P(
-    ProfileMenuViewExtensionsParamTestWithScopedAccountConsistency,
-    InvokeUi_DiceGuest) {
-  ShowAndVerifyUi();
-}
-
-// Shows the manage account link, which appears when account consistency is
-// enabled for signed-in accounts.
-IN_PROC_BROWSER_TEST_P(ProfileMenuViewExtensionsParamTest,
-                       InvokeUi_ManageAccountLink) {
-  ShowAndVerifyUi();
-}
-
-// Shows the |ProfileMenuView| from a signed-in account that has a supervised
-// user profile attached.
-IN_PROC_BROWSER_TEST_P(ProfileMenuViewExtensionsParamTest,
-                       InvokeUi_SupervisedOwner) {
-  ShowAndVerifyUi();
-}
-
-// Crashes because account consistency changes:  http://crbug.com/820390
-// Shows the |ProfileMenuView| when a supervised user is the active profile.
-IN_PROC_BROWSER_TEST_P(ProfileMenuViewExtensionsParamTest,
-                       DISABLED_InvokeUi_SupervisedUser) {
-  ShowAndVerifyUi();
-}
-
-class ProfileMenuViewExtensionsTestWithScopedAccountConsistency
-    : public ProfileMenuViewExtensionsTest {
- public:
-  ProfileMenuViewExtensionsTestWithScopedAccountConsistency() = default;
-
- private:
-  ScopedAccountConsistencyDice scoped_dice_;
-};
-
-// Open the profile chooser to increment the Dice sign-in promo show counter
-// below the threshold.
-// TODO(https://crbug.com/862573): Re-enable when no longer failing when
-// is_chrome_branded is true.
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#define MAYBE_IncrementDiceSigninPromoShowCounter \
-  DISABLED_IncrementDiceSigninPromoShowCounter
-#else
-#define MAYBE_IncrementDiceSigninPromoShowCounter \
-  IncrementDiceSigninPromoShowCounter
-#endif
-IN_PROC_BROWSER_TEST_F(
-    ProfileMenuViewExtensionsTestWithScopedAccountConsistency,
-    MAYBE_IncrementDiceSigninPromoShowCounter) {
-  browser()->profile()->GetPrefs()->SetInteger(
-      prefs::kDiceSigninUserMenuPromoCount, 7);
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser()));
-  EXPECT_EQ(GetDiceSigninPromoShowCount(), 8);
-}
-
-// The DICE sync illustration is shown only the first 10 times. This test
-// ensures that the profile chooser is shown correctly above this threshold.
-// TODO(https://crbug.com/862573): Re-enable when no longer failing when
-// is_chrome_branded is true.
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#define MAYBE_DiceSigninPromoWithoutIllustration \
-  DISABLED_DiceSigninPromoWithoutIllustration
-#else
-#define MAYBE_DiceSigninPromoWithoutIllustration \
-  DiceSigninPromoWithoutIllustration
-#endif
-IN_PROC_BROWSER_TEST_F(
-    ProfileMenuViewExtensionsTestWithScopedAccountConsistency,
-    MAYBE_DiceSigninPromoWithoutIllustration) {
-  browser()->profile()->GetPrefs()->SetInteger(
-      prefs::kDiceSigninUserMenuPromoCount, 10);
-  ASSERT_NO_FATAL_FAILURE(OpenProfileMenuView(browser()));
-  EXPECT_EQ(GetDiceSigninPromoShowCount(), 11);
-}
-
-// Verify there is no crash when the chooser is used to display a signed-in
-// profile with an empty username.
-IN_PROC_BROWSER_TEST_F(ProfileMenuViewExtensionsTest, SignedInNoUsername) {
-  AddAccountToProfile(browser()->profile(), "");
-  OpenProfileMenuView(browser());
-}
-
-INSTANTIATE_TEST_SUITE_P(,
-                         ProfileMenuViewExtensionsParamTest,
-                         ::testing::Bool());
-
-/*- - - - - - - - - - Profile menu revamp browser tests - - - - - - - - - - -*/
 
 // This class is used to test the existence, the correct order and the call to
 // the correct action of the buttons in the profile menu. This is done by
@@ -657,42 +289,27 @@ INSTANTIATE_TEST_SUITE_P(,
 //   ProfileMenuClickTest_WithPrimaryAccount,
 //   ::testing::Range(0, num_of_actionable_items));
 //
-class ProfileMenuClickTest : public SyncTest,
-                             public testing::WithParamInterface<size_t> {
+class ProfileMenuClickTestBase : public SyncTest,
+                                 public ProfileMenuViewTestBase {
  public:
-  ProfileMenuClickTest() : SyncTest(SINGLE_CLIENT) {
-    scoped_feature_list_.InitAndEnableFeature(features::kProfileMenuRevamp);
+  ProfileMenuClickTestBase() : SyncTest(SINGLE_CLIENT) {}
+  ~ProfileMenuClickTestBase() override = default;
+
+  void SetUpInProcessBrowserTestFixture() override {
+    test_signin_client_factory_ =
+        secondary_account_helper::SetUpSigninClient(&test_url_loader_factory_);
   }
 
   void SetUpOnMainThread() override {
     SyncTest::SetUpOnMainThread();
 
-    sync_service()->OverrideNetworkResourcesForTest(
-        std::make_unique<fake_server::FakeServerNetworkResources>(
+    sync_service()->OverrideNetworkForTest(
+        fake_server::CreateFakeServerHttpPostProviderFactory(
             GetFakeServer()->AsWeakPtr()));
     sync_harness_ = ProfileSyncServiceHarness::Create(
         browser()->profile(), "user@example.com", "password",
         ProfileSyncServiceHarness::SigninType::FAKE_SIGNIN);
   }
-
-  virtual ProfileMenuViewBase::ActionableItem GetExpectedActionableItemAtIndex(
-      size_t index) = 0;
-
-  // This should be called in the test body.
-  void RunTest() {
-    ASSERT_NO_FATAL_FAILURE(OpenProfileMenu());
-    AdvanceFocus(/*count=*/GetParam() + 1);
-    ASSERT_TRUE(GetFocusedItem());
-    Click(GetFocusedItem());
-    LOG(INFO) << "Clicked item at index " << GetParam();
-    base::RunLoop().RunUntilIdle();
-
-    histogram_tester_.ExpectUniqueSample(
-        "Profile.Menu.ClickedActionableItem",
-        GetExpectedActionableItemAtIndex(GetParam()), /*count=*/1);
-  }
-
-  void SetTargetBrowser(Browser* browser) { target_browser_ = browser; }
 
   signin::IdentityManager* identity_manager() {
     return IdentityManagerFactory::GetForProfile(browser()->profile());
@@ -705,36 +322,7 @@ class ProfileMenuClickTest : public SyncTest,
 
   ProfileSyncServiceHarness* sync_harness() { return sync_harness_.get(); }
 
- private:
-  void OpenProfileMenu() {
-    BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(
-        target_browser_ ? target_browser_ : browser());
-
-    // Click the avatar button to open the menu.
-    views::View* avatar_button =
-        browser_view->toolbar_button_provider()->GetAvatarToolbarButton();
-    ASSERT_TRUE(avatar_button);
-    Click(avatar_button);
-
-    ASSERT_TRUE(profile_menu_view());
-    profile_menu_view()->set_close_on_deactivate(false);
-
-#if defined(OS_MACOSX)
-    base::RunLoop().RunUntilIdle();
-#else
-    // If possible wait until the menu is active.
-    views::Widget* menu_widget = profile_menu_view()->GetWidget();
-    ASSERT_TRUE(menu_widget);
-    if (menu_widget->CanActivate()) {
-      views::test::WidgetActivationWaiter(menu_widget, /*active=*/true).Wait();
-    } else {
-      LOG(ERROR) << "menu_widget can not be activated";
-    }
-#endif
-
-    LOG(INFO) << "Opening profile menu was successful";
-  }
-
+ protected:
   void AdvanceFocus(int count) {
     for (int i = 0; i < count; i++)
       profile_menu_view()->GetFocusManager()->AdvanceFocus(/*reverse=*/false);
@@ -744,28 +332,40 @@ class ProfileMenuClickTest : public SyncTest,
     return profile_menu_view()->GetFocusManager()->GetFocusedView();
   }
 
-  void Click(views::View* clickable_view) {
-    // Simulate a mouse click. Note: Buttons are either fired when pressed or
-    // when released, so the corresponding methods need to be called.
-    clickable_view->OnMousePressed(
-        ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
-                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
-    clickable_view->OnMouseReleased(
-        ui::MouseEvent(ui::ET_MOUSE_RELEASED, gfx::Point(), gfx::Point(),
-                       ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0));
-  }
+  secondary_account_helper::ScopedSigninClientFactory
+      test_signin_client_factory_;
 
-  ProfileMenuViewBase* profile_menu_view() {
-    return static_cast<ProfileMenuViewBase*>(
-        ProfileMenuViewBase::GetBubbleForTesting());
-  }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
   base::HistogramTester histogram_tester_;
 
-  Browser* target_browser_ = nullptr;
   std::unique_ptr<ProfileSyncServiceHarness> sync_harness_;
 
+  DISALLOW_COPY_AND_ASSIGN(ProfileMenuClickTestBase);
+};
+
+class ProfileMenuClickTest : public ProfileMenuClickTestBase,
+                             public testing::WithParamInterface<size_t> {
+ public:
+  ProfileMenuClickTest() = default;
+  ~ProfileMenuClickTest() override = default;
+
+  virtual ProfileMenuViewBase::ActionableItem GetExpectedActionableItemAtIndex(
+      size_t index) = 0;
+
+  // This should be called in the test body.
+  void RunTest() {
+    ASSERT_NO_FATAL_FAILURE(OpenProfileMenu(browser()));
+    AdvanceFocus(/*count=*/GetParam() + 1);
+    ASSERT_TRUE(GetFocusedItem());
+    Click(GetFocusedItem());
+    LOG(INFO) << "Clicked item at index " << GetParam();
+    base::RunLoop().RunUntilIdle();
+
+    histogram_tester_.ExpectUniqueSample(
+        "Profile.Menu.ClickedActionableItem",
+        GetExpectedActionableItemAtIndex(GetParam()), /*count=*/1);
+  }
+
+ private:
   DISALLOW_COPY_AND_ASSIGN(ProfileMenuClickTest);
 };
 
@@ -804,8 +404,10 @@ constexpr ProfileMenuViewBase::ActionableItem
         // there are no other buttons at the end.
         ProfileMenuViewBase::ActionableItem::kEditProfileButton};
 
-PROFILE_MENU_CLICK_TEST(kActionableItems_SingleProfileWithCustomName,
-                        ProfileMenuClickTest_SingleProfileWithCustomName) {
+// This test is disabled due to being flaky. See https://crbug.com/1025493.
+PROFILE_MENU_CLICK_TEST(
+    kActionableItems_SingleProfileWithCustomName,
+    DISABLED_ProfileMenuClickTest_SingleProfileWithCustomName) {
   profiles::UpdateProfileName(browser()->profile(),
                               base::UTF8ToUTF16("Custom name"));
   RunTest();
@@ -932,8 +534,9 @@ constexpr ProfileMenuViewBase::ActionableItem
         // there are no other buttons at the end.
         ProfileMenuViewBase::ActionableItem::kPasswordsButton};
 
+// This test is disabled due to being flaky. See https://crbug.com/1049014.
 PROFILE_MENU_CLICK_TEST(kActionableItems_SigninDisallowed,
-                        ProfileMenuClickTest_SigninDisallowed) {
+                        DISABLED_ProfileMenuClickTest_SigninDisallowed) {
   // Check that the setup was successful.
   ASSERT_FALSE(
       browser()->profile()->GetPrefs()->GetBoolean(prefs::kSigninAllowed));
@@ -942,8 +545,8 @@ PROFILE_MENU_CLICK_TEST(kActionableItems_SigninDisallowed,
 }
 
 // Setup for the above test.
-IN_PROC_BROWSER_TEST_P(ProfileMenuClickTest_SigninDisallowed,
-                       PRE_ProfileMenuClickTest_SigninDisallowed) {
+IN_PROC_BROWSER_TEST_P(DISABLED_ProfileMenuClickTest_SigninDisallowed,
+                       DISABLED_PRE_ProfileMenuClickTest_SigninDisallowed) {
   browser()->profile()->GetPrefs()->SetBoolean(
       prefs::kSigninAllowedOnNextStartup, false);
 }
@@ -965,17 +568,24 @@ constexpr ProfileMenuViewBase::ActionableItem
         // there are no other buttons at the end.
         ProfileMenuViewBase::ActionableItem::kPasswordsButton};
 
-// TODO(crbug.com/1015429): Failing on Mac 10.12.
+// TODO(https://crbug.com/1021930) flakey on Linux and Windows.
+#if defined(OS_LINUX) || defined(OS_WIN)
+#define MAYBE_ProfileMenuClickTest_WithUnconsentedPrimaryAccount \
+  DISABLED_ProfileMenuClickTest_WithUnconsentedPrimaryAccount
+#else
+#define MAYBE_ProfileMenuClickTest_WithUnconsentedPrimaryAccount \
+  ProfileMenuClickTest_WithUnconsentedPrimaryAccount
+#endif
 PROFILE_MENU_CLICK_TEST(
     kActionableItems_WithUnconsentedPrimaryAccount,
-    DISABLED_ProfileMenuClickTest_WithUnconsentedPrimaryAccount) {
-  signin::MakeAccountAvailableWithCookies(identity_manager(),
-                                          &test_url_loader_factory_,
-                                          "user@example.com", "gaia_id");
+    MAYBE_ProfileMenuClickTest_WithUnconsentedPrimaryAccount) {
+  secondary_account_helper::SignInSecondaryAccount(
+      browser()->profile(), &test_url_loader_factory_, "user@example.com");
   UnconsentedPrimaryAccountChecker(identity_manager()).Wait();
   // Check that the setup was successful.
   ASSERT_FALSE(identity_manager()->HasPrimaryAccount());
-  ASSERT_TRUE(identity_manager()->HasUnconsentedPrimaryAccount());
+  ASSERT_TRUE(identity_manager()->HasPrimaryAccount(
+      signin::ConsentLevel::kNotRequired));
 
   RunTest();
 
@@ -984,7 +594,7 @@ PROFILE_MENU_CLICK_TEST(
     // The sync confirmation dialog was opened after clicking the signin button
     // in the profile menu. It needs to be manually dismissed to not cause any
     // crashes during shutdown.
-    EXPECT_TRUE(login_ui_test_utils::DismissSyncConfirmationDialog(
+    EXPECT_TRUE(login_ui_test_utils::ConfirmSyncConfirmationDialog(
         browser(), base::TimeDelta::FromSeconds(30)));
   }
 }
@@ -1027,4 +637,37 @@ PROFILE_MENU_CLICK_TEST(kActionableItems_IncognitoProfile,
   SetTargetBrowser(CreateIncognitoBrowser(browser()->profile()));
 
   RunTest();
+}
+
+class ProfileMenuClickKeyAcceleratorTest : public ProfileMenuClickTestBase {
+ public:
+  ProfileMenuClickKeyAcceleratorTest() = default;
+  ~ProfileMenuClickKeyAcceleratorTest() override = default;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ProfileMenuClickKeyAcceleratorTest);
+};
+
+IN_PROC_BROWSER_TEST_F(ProfileMenuClickKeyAcceleratorTest, FocusOtherProfile) {
+  // Add an additional profiles.
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  CreateTestingProfile(profile_manager->GenerateNextProfileDirectoryPath());
+
+  // Open the menu using the keyboard.
+  ASSERT_NO_FATAL_FAILURE(OpenProfileMenu(browser(), /*use_mouse=*/false));
+
+  // The first other profile menu should be focused when the menu is opened
+  // via a key event.
+  views::View* focused_view = GetFocusedItem();
+  ASSERT_TRUE(focused_view);
+  focused_view->OnKeyPressed(
+      ui::KeyEvent(ui::ET_KEY_PRESSED, ui::VKEY_RETURN, ui::EF_NONE));
+  focused_view->OnKeyReleased(
+      ui::KeyEvent(ui::ET_KEY_RELEASED, ui::VKEY_RETURN, ui::EF_NONE));
+  base::RunLoop().RunUntilIdle();
+
+  histogram_tester_.ExpectUniqueSample(
+      "Profile.Menu.ClickedActionableItem",
+      ProfileMenuViewBase::ActionableItem::kOtherProfileButton,
+      /*count=*/1);
 }

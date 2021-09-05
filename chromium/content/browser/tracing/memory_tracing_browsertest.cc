@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback_forward.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
@@ -50,7 +51,7 @@ class MemoryTracingTest : public ContentBrowserTest {
   // Used as callback argument for MemoryDumpManager::RequestGlobalDump():
   void OnGlobalMemoryDumpDone(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      base::Closure closure,
+      base::OnceClosure closure,
       uint32_t request_index,
       bool success,
       uint64_t dump_guid) {
@@ -67,7 +68,7 @@ class MemoryTracingTest : public ContentBrowserTest {
     if (success)
       EXPECT_NE(0u, dump_guid);
     OnMemoryDumpDone(request_index, success);
-    if (!closure.is_null())
+    if (closure)
       std::move(closure).Run();
   }
 
@@ -75,11 +76,11 @@ class MemoryTracingTest : public ContentBrowserTest {
       bool from_renderer_thread,
       const MemoryDumpType& dump_type,
       const MemoryDumpLevelOfDetail& level_of_detail,
-      const base::Closure& closure) {
+      base::OnceClosure closure) {
     uint32_t request_index = next_request_index_++;
-    auto callback = base::Bind(
+    auto callback = base::BindOnce(
         &MemoryTracingTest::OnGlobalMemoryDumpDone, base::Unretained(this),
-        base::ThreadTaskRunnerHandle::Get(), closure, request_index);
+        base::ThreadTaskRunnerHandle::Get(), std::move(closure), request_index);
     if (from_renderer_thread) {
       PostTaskToInProcessRendererAndWait(base::BindOnce(
           &memory_instrumentation::MemoryInstrumentation::
@@ -161,7 +162,7 @@ class MemoryTracingTest : public ContentBrowserTest {
                          const MemoryDumpType& dump_type,
                          const MemoryDumpLevelOfDetail& level_of_detail) {
     RequestGlobalDumpWithClosure(from_renderer_thread, dump_type,
-                                 level_of_detail, base::Closure());
+                                 level_of_detail, base::NullCallback());
   }
 
   void Navigate(Shell* shell) {
@@ -170,7 +171,6 @@ class MemoryTracingTest : public ContentBrowserTest {
 
   MOCK_METHOD2(OnMemoryDumpDone, void(uint32_t request_index, bool successful));
 
-  base::Closure on_memory_dump_complete_closure_;
   std::unique_ptr<MockDumpProvider> mock_dump_provider_;
   uint32_t next_request_index_;
   bool last_callback_success_;
@@ -337,7 +337,8 @@ IN_PROC_BROWSER_TEST_F(SingleProcessMemoryTracingTest, DISABLED_QueuedDumps) {
 #endif  // defined(OS_ANDROID)
 
 // Flaky on Mac. crbug.com/809809
-#if defined(OS_MACOSX)
+// Failing on Android ASAN. crbug.com/1041392
+#if defined(OS_MACOSX) || (defined(OS_ANDROID) && defined(ADDRESS_SANITIZER))
 #define MAYBE_BrowserInitiatedDump DISABLED_BrowserInitiatedDump
 #else
 #define MAYBE_BrowserInitiatedDump BrowserInitiatedDump

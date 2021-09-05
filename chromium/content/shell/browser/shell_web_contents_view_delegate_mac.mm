@@ -7,12 +7,12 @@
 #import  <Cocoa/Cocoa.h>
 
 #include "base/command_line.h"
+#include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/context_menu_params.h"
 #include "content/shell/browser/renderer_host/shell_render_widget_host_view_mac_delegate.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_browser_context.h"
@@ -21,9 +21,9 @@
 #include "content/shell/browser/shell_devtools_frontend.h"
 #include "content/shell/browser/shell_web_contents_view_delegate_creator.h"
 #include "content/shell/common/shell_switches.h"
-#include "third_party/blink/public/web/web_context_menu_data.h"
+#include "third_party/blink/public/common/context_menu_data/edit_flags.h"
 
-using blink::WebContextMenuData;
+using blink::ContextMenuDataEditFlags;
 
 enum {
   ShellContextMenuItemCutTag = 0,
@@ -39,21 +39,21 @@ enum {
 
 @interface ShellContextMenuDelegate : NSObject<NSMenuDelegate> {
  @private
-  content::ShellWebContentsViewDelegate* delegate_;
+  content::ShellWebContentsViewDelegate* _delegate;
 }
 @end
 
 @implementation ShellContextMenuDelegate
 - (id)initWithDelegate:(content::ShellWebContentsViewDelegate*) delegate {
   if ((self = [super init])) {
-    delegate_ = delegate;
+    _delegate = delegate;
   }
   return self;
 }
 
 - (void)itemSelected:(id)sender {
   NSInteger tag = [sender tag];
-  delegate_->ActionPerformed(tag);
+  _delegate->ActionPerformed(tag);
 }
 @end
 
@@ -109,8 +109,8 @@ void ShellWebContentsViewDelegate::ShowContextMenu(
   [menu setDelegate:delegate];
   [menu setAutoenablesItems:NO];
 
-  if (params.media_type == WebContextMenuData::kMediaTypeNone && !has_link &&
-      !has_selection && !params_.is_editable) {
+  if (params.media_type == blink::ContextMenuDataMediaType::kNone &&
+      !has_link && !has_selection && !params_.is_editable) {
     BOOL back_menu_enabled =
         web_contents_->GetController().CanGoBack() ? YES : NO;
     MakeContextMenuItem(@"Back",
@@ -150,7 +150,7 @@ void ShellWebContentsViewDelegate::ShowContextMenu(
 
   if (params_.is_editable) {
     BOOL cut_menu_enabled =
-        (params_.edit_flags & WebContextMenuData::kCanCut) ? YES : NO;
+        (params_.edit_flags & ContextMenuDataEditFlags::kCanCut) ? YES : NO;
     MakeContextMenuItem(@"Cut",
                         ShellContextMenuItemCutTag,
                         menu,
@@ -158,7 +158,7 @@ void ShellWebContentsViewDelegate::ShowContextMenu(
                         delegate);
 
     BOOL copy_menu_enabled =
-        (params_.edit_flags & WebContextMenuData::kCanCopy) ? YES : NO;
+        (params_.edit_flags & ContextMenuDataEditFlags::kCanCopy) ? YES : NO;
     MakeContextMenuItem(@"Copy",
                         ShellContextMenuItemCopyTag,
                         menu,
@@ -166,7 +166,7 @@ void ShellWebContentsViewDelegate::ShowContextMenu(
                         delegate);
 
     BOOL paste_menu_enabled =
-        (params_.edit_flags & WebContextMenuData::kCanPaste) ? YES : NO;
+        (params_.edit_flags & ContextMenuDataEditFlags::kCanPaste) ? YES : NO;
     MakeContextMenuItem(@"Paste",
                         ShellContextMenuItemPasteTag,
                         menu,
@@ -174,7 +174,7 @@ void ShellWebContentsViewDelegate::ShowContextMenu(
                         delegate);
 
     BOOL delete_menu_enabled =
-        (params_.edit_flags & WebContextMenuData::kCanDelete) ? YES : NO;
+        (params_.edit_flags & ContextMenuDataEditFlags::kCanDelete) ? YES : NO;
     MakeContextMenuItem(@"Delete",
                         ShellContextMenuItemDeleteTag,
                         menu,
@@ -237,9 +237,7 @@ void ShellWebContentsViewDelegate::ActionPerformed(int tag) {
     case ShellContextMenuItemOpenLinkTag: {
       ShellBrowserContext* browser_context =
           ShellContentBrowserClient::Get()->browser_context();
-      Shell::CreateNewWindow(browser_context,
-                             params_.link_url,
-                             NULL,
+      Shell::CreateNewWindow(browser_context, params_.link_url, nullptr,
                              gfx::Size());
       break;
     }

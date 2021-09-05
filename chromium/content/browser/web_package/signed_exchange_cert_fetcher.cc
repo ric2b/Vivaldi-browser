@@ -18,16 +18,16 @@
 #include "content/browser/web_package/signed_exchange_devtools_proxy.h"
 #include "content/browser/web_package/signed_exchange_reporter.h"
 #include "content/browser/web_package/signed_exchange_utils.h"
-#include "content/common/throttling_url_loader.h"
-#include "content/public/common/resource_type.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/load_flags.h"
+#include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
-#include "services/network/loader_util.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "third_party/blink/public/common/loader/throttling_url_loader.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 
 namespace content {
 
@@ -81,14 +81,15 @@ SignedExchangeCertFetcher::CreateAndStart(
     CertificateCallback callback,
     SignedExchangeDevToolsProxy* devtools_proxy,
     SignedExchangeReporter* reporter,
-    const base::Optional<base::UnguessableToken>& throttling_profile_id) {
+    const base::Optional<base::UnguessableToken>& throttling_profile_id,
+    base::Optional<net::NetworkIsolationKey> network_isolation_key) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("loading"),
                "SignedExchangeCertFetcher::CreateAndStart");
   std::unique_ptr<SignedExchangeCertFetcher> cert_fetcher(
-      new SignedExchangeCertFetcher(std::move(shared_url_loader_factory),
-                                    std::move(throttles), cert_url, force_fetch,
-                                    std::move(callback), devtools_proxy,
-                                    reporter, throttling_profile_id));
+      new SignedExchangeCertFetcher(
+          std::move(shared_url_loader_factory), std::move(throttles), cert_url,
+          force_fetch, std::move(callback), devtools_proxy, reporter,
+          throttling_profile_id, std::move(network_isolation_key)));
   cert_fetcher->Start();
   return cert_fetcher;
 }
@@ -102,7 +103,8 @@ SignedExchangeCertFetcher::SignedExchangeCertFetcher(
     CertificateCallback callback,
     SignedExchangeDevToolsProxy* devtools_proxy,
     SignedExchangeReporter* reporter,
-    const base::Optional<base::UnguessableToken>& throttling_profile_id)
+    const base::Optional<base::UnguessableToken>& throttling_profile_id,
+    base::Optional<net::NetworkIsolationKey> network_isolation_key)
     : shared_url_loader_factory_(std::move(shared_url_loader_factory)),
       throttles_(std::move(throttles)),
       resource_request_(std::make_unique<network::ResourceRequest>()),
@@ -115,11 +117,11 @@ SignedExchangeCertFetcher::SignedExchangeCertFetcher(
   // cookies. So just set an opaque Origin.
   resource_request_->request_initiator = url::Origin();
   resource_request_->resource_type =
-      static_cast<int>(ResourceType::kSubResource);
+      static_cast<int>(blink::mojom::ResourceType::kSubResource);
   // Cert requests should not send credential informartion, because the default
   // credentials mode of Fetch is "omit".
   resource_request_->credentials_mode = network::mojom::CredentialsMode::kOmit;
-  resource_request_->headers.SetHeader(network::kAcceptHeader,
+  resource_request_->headers.SetHeader(net::HttpRequestHeaders::kAccept,
                                        kCertChainMimeType);
   if (force_fetch) {
     resource_request_->load_flags |=
@@ -131,6 +133,12 @@ SignedExchangeCertFetcher::SignedExchangeCertFetcher(
     resource_request_->enable_load_timing = true;
   }
   resource_request_->throttling_profile_id = throttling_profile_id;
+  if (network_isolation_key) {
+    resource_request_->trusted_params =
+        network::ResourceRequest::TrustedParams();
+    resource_request_->trusted_params->network_isolation_key =
+        *network_isolation_key;
+  }
 }
 
 SignedExchangeCertFetcher::~SignedExchangeCertFetcher() = default;
@@ -149,7 +157,7 @@ void SignedExchangeCertFetcher::Start() {
             base::BindOnce(&SignedExchangeCertFetcher::OnDataURLRequest,
                            base::Unretained(this)));
   }
-  url_loader_ = ThrottlingURLLoader::CreateLoaderAndStart(
+  url_loader_ = blink::ThrottlingURLLoader::CreateLoaderAndStart(
       std::move(shared_url_loader_factory_), std::move(throttles_),
       0 /* routing_id */,
       signed_exchange_utils::MakeRequestID() /* request_id */,
@@ -231,7 +239,7 @@ void SignedExchangeCertFetcher::OnReceiveResponse(
   if (devtools_proxy_) {
     DCHECK(cert_request_id_);
     devtools_proxy_->CertificateResponseReceived(*cert_request_id_,
-                                                 resource_request_->url, head);
+                                                 resource_request_->url, *head);
   }
 
   if (reporter_)
@@ -330,12 +338,13 @@ void SignedExchangeCertFetcher::OnComplete(
 
 void SignedExchangeCertFetcher::OnDataURLRequest(
     const network::ResourceRequest& resource_request,
-    network::mojom::URLLoaderRequest url_loader_request,
-    network::mojom::URLLoaderClientPtr url_loader_client_ptr) {
+    mojo::PendingReceiver<network::mojom::URLLoader> url_loader_receiver,
+    mojo::PendingRemote<network::mojom::URLLoaderClient>
+        url_loader_client_remote) {
   data_url_loader_factory_ = std::make_unique<DataURLLoaderFactory>();
   data_url_loader_factory_->CreateLoaderAndStart(
-      std::move(url_loader_request), 0, 0, 0, resource_request,
-      std::move(url_loader_client_ptr),
+      std::move(url_loader_receiver), 0, 0, 0, resource_request,
+      std::move(url_loader_client_remote),
       net::MutableNetworkTrafficAnnotationTag(kCertFetcherTrafficAnnotation));
 }
 

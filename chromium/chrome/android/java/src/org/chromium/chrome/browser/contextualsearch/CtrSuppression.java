@@ -6,7 +6,8 @@ package org.chromium.chrome.browser.contextualsearch;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 /**
  * Provides a ContextualSearchHeuristic for CTR Recording, logging, and eventually suppression.
@@ -23,14 +24,14 @@ public class CtrSuppression extends ContextualSearchHeuristic {
 
     private static Integer sCurrentWeekNumberCache;
 
-    private final ChromePreferenceManager mPreferenceManager;
+    private final SharedPreferencesManager mPreferenceManager;
 
     /**
      * Constructs an object that tracks impressions and clicks per user to produce CTR and
      * impression metrics.
      */
     CtrSuppression() {
-        mPreferenceManager = ChromePreferenceManager.getInstance();
+        mPreferenceManager = SharedPreferencesManager.getInstance();
 
         // This needs to be done last in this constructor because the native code may call
         // into this object.
@@ -128,13 +129,52 @@ public class CtrSuppression extends ContextualSearchHeuristic {
     // ============================================================================================
 
     @CalledByNative
-    void writeInt(String key, int value) {
-        mPreferenceManager.writeInt(key, value);
+    void writeClicks(int weekRemainder, int value) {
+        mPreferenceManager.writeInt(getKeyForClicksWeek(weekRemainder), value);
     }
 
     @CalledByNative
-    int readInt(String key) {
-        return mPreferenceManager.readInt(key);
+    void writeImpressions(int weekRemainder, int value) {
+        mPreferenceManager.writeInt(getKeyForImpressionsWeek(weekRemainder), value);
+    }
+
+    @CalledByNative
+    void writeOldestWeek(int value) {
+        mPreferenceManager.writeInt(ChromePreferenceKeys.CONTEXTUAL_SEARCH_OLDEST_WEEK, value);
+    }
+
+    @CalledByNative
+    void writeNewestWeek(int value) {
+        mPreferenceManager.writeInt(ChromePreferenceKeys.CONTEXTUAL_SEARCH_NEWEST_WEEK, value);
+    }
+
+    @CalledByNative
+    int readClicks(int weekRemainder) {
+        return mPreferenceManager.readInt(getKeyForClicksWeek(weekRemainder));
+    }
+
+    @CalledByNative
+    int readImpressions(int weekRemainder) {
+        return mPreferenceManager.readInt(getKeyForImpressionsWeek(weekRemainder));
+    }
+
+    @CalledByNative
+    int readOldestWeek() {
+        return mPreferenceManager.readInt(ChromePreferenceKeys.CONTEXTUAL_SEARCH_OLDEST_WEEK);
+    }
+
+    @CalledByNative
+    int readNewestWeek() {
+        return mPreferenceManager.readInt(ChromePreferenceKeys.CONTEXTUAL_SEARCH_NEWEST_WEEK);
+    }
+
+    private String getKeyForClicksWeek(int weekRemainder) {
+        return ChromePreferenceKeys.CONTEXTUAL_SEARCH_CLICKS_WEEK_PREFIX.createKey(weekRemainder);
+    }
+
+    private String getKeyForImpressionsWeek(int weekRemainder) {
+        return ChromePreferenceKeys.CONTEXTUAL_SEARCH_IMPRESSIONS_WEEK_PREFIX.createKey(
+                weekRemainder);
     }
 
     // ============================================================================================
@@ -148,10 +188,12 @@ public class CtrSuppression extends ContextualSearchHeuristic {
      *         or we have never checked.
      */
     private boolean didWeekChange(int currentWeekNumber) {
-        if (mPreferenceManager.getContextualSearchCurrentWeekNumber() == currentWeekNumber) {
+        if (mPreferenceManager.readInt(ChromePreferenceKeys.CONTEXTUAL_SEARCH_CURRENT_WEEK_NUMBER)
+                == currentWeekNumber) {
             return false;
         } else {
-            mPreferenceManager.setContextualSearchCurrentWeekNumber(currentWeekNumber);
+            mPreferenceManager.writeInt(
+                    ChromePreferenceKeys.CONTEXTUAL_SEARCH_CURRENT_WEEK_NUMBER, currentWeekNumber);
             return true;
         }
     }

@@ -11,7 +11,12 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "chromecast/net/small_message_socket.h"
+
+namespace base {
+class SequencedTaskRunner;
+}  // namespace base
 
 namespace google {
 namespace protobuf {
@@ -25,13 +30,15 @@ class StreamSocket;
 }  // namespace net
 
 namespace chromecast {
+class IOBufferPool;
+
 namespace media {
 namespace mixer_service {
 class Generic;
 
 // Base class for sending and receiving messages to/from the mixer service.
 // Not thread-safe; all usage of a given instance must be on the same sequence.
-class MixerSocket : public SmallMessageSocket {
+class MixerSocket : public SmallMessageSocket::Delegate {
  public:
   class Delegate {
    public:
@@ -41,7 +48,7 @@ class MixerSocket : public SmallMessageSocket {
 
     // Called when audio data is received from the other side of the connection.
     // Return |true| if the socket should continue to receive messages.
-    virtual bool HandleAudioData(char* data, int size, int64_t timestamp);
+    virtual bool HandleAudioData(char* data, size_t size, int64_t timestamp);
 
     // Called when audio data is received from the other side of the connection
     // using an IOBufferPool. The |buffer| reference may be held as long as
@@ -52,7 +59,7 @@ class MixerSocket : public SmallMessageSocket {
     // Return |true| if the socket should continue to receive messages.
     virtual bool HandleAudioBuffer(scoped_refptr<net::IOBuffer> buffer,
                                    char* data,
-                                   int size,
+                                   size_t size,
                                    int64_t timestamp);
 
     // Called when the connection is lost; no further data will be sent or
@@ -64,14 +71,28 @@ class MixerSocket : public SmallMessageSocket {
     virtual ~Delegate() = default;
   };
 
-  MixerSocket(std::unique_ptr<net::StreamSocket> socket, Delegate* delegate);
+  explicit MixerSocket(std::unique_ptr<net::StreamSocket> socket);
   ~MixerSocket() override;
 
-  // Changes the delegate.
+  // Used to create local (in-process) connections.
+  MixerSocket();
+  void SetLocalCounterpart(
+      base::WeakPtr<MixerSocket> local_counterpart,
+      scoped_refptr<base::SequencedTaskRunner> counterpart_task_runner);
+  base::WeakPtr<MixerSocket> GetWeakPtr();
+
+  // Sets/changes the delegate. Must be called immediately after creation
+  // (ie, synchronously on the same sequence).
   void SetDelegate(Delegate* delegate);
 
-  // 16-bit type and 64-bit timestamp.
-  static constexpr size_t kAudioHeaderSize = sizeof(int16_t) + sizeof(int64_t);
+  // Adds a |buffer_pool| used to allocate buffers to receive messages into,
+  // and for sending protos. If the pool-allocated buffers are too small for a
+  // given message, a normal IOBuffer will be dynamically allocated instead.
+  void UseBufferPool(scoped_refptr<IOBufferPool> buffer_pool);
+
+  // 16-bit type and 64-bit timestamp, plus 32-bit padding to align to 16 bytes.
+  static constexpr size_t kAudioHeaderSize =
+      sizeof(int16_t) + sizeof(int64_t) + sizeof(int32_t);
   // Includes additional 16-bit size field for SmallMessageSocket.
   static constexpr size_t kAudioMessageHeaderSize =
       sizeof(uint16_t) + kAudioHeaderSize;
@@ -96,23 +117,37 @@ class MixerSocket : public SmallMessageSocket {
   // Sends an arbitrary protobuf across the connection.
   void SendProto(const google::protobuf::MessageLite& message);
 
+  // Resumes receiving messages. Delegate calls may be called synchronously
+  // from within this method.
+  void ReceiveMoreMessages();
+
  private:
-  // SmallMessageSocket implementation:
+  void SendBuffer(scoped_refptr<net::IOBuffer> buffer, size_t buffer_size);
+
+  // SmallMessageSocket::Delegate implementation:
   void OnSendUnblocked() override;
   void OnError(int error) override;
   void OnEndOfStream() override;
-  bool OnMessage(char* data, int size) override;
-  bool OnMessageBuffer(scoped_refptr<net::IOBuffer> buffer, int size) override;
+  bool OnMessage(char* data, size_t size) override;
+  bool OnMessageBuffer(scoped_refptr<net::IOBuffer> buffer,
+                       size_t size) override;
 
-  bool ParseMetadata(char* data, int size);
-  bool ParseAudio(char* data, int size);
+  bool ParseMetadata(char* data, size_t size);
+  bool ParseAudio(char* data, size_t size);
   bool ParseAudioBuffer(scoped_refptr<net::IOBuffer> buffer,
                         char* data,
-                        int size);
+                        size_t size);
 
-  Delegate* delegate_;
+  Delegate* delegate_ = nullptr;
+  const std::unique_ptr<SmallMessageSocket> socket_;
 
+  scoped_refptr<IOBufferPool> buffer_pool_;
   std::queue<scoped_refptr<net::IOBuffer>> write_queue_;
+
+  base::WeakPtr<MixerSocket> local_counterpart_;
+  scoped_refptr<base::SequencedTaskRunner> counterpart_task_runner_;
+
+  base::WeakPtrFactory<MixerSocket> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(MixerSocket);
 };

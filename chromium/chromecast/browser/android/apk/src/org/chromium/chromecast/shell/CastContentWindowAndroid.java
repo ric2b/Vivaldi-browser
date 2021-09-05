@@ -19,11 +19,10 @@ import org.chromium.content_public.browser.WebContents;
  * <p>
  * See chromecast/browser/cast_content_window_android.* for the native half.
  */
-@JNINamespace("chromecast::shell")
+@JNINamespace("chromecast")
 public class CastContentWindowAndroid implements CastWebContentsComponent.OnComponentClosedHandler,
-                                                 CastWebContentsComponent.OnKeyDownHandler,
                                                  CastWebContentsComponent.SurfaceEventHandler {
-    private static final String TAG = "cr_CastContentWindow";
+    private static final String TAG = "CastContentWindow";
     private static final boolean DEBUG = true;
 
     // Note: CastContentWindowAndroid may outlive the native object. The native
@@ -54,7 +53,7 @@ public class CastContentWindowAndroid implements CastWebContentsComponent.OnComp
                         + ") Seesion ID: " + sessionId);
         // TODO call CastContentWindowAndroidJni.get().getId() to set ID to
         // CastWebContentsComponent.
-        mComponent = new CastWebContentsComponent(sessionId, this, this, this, isHeadless,
+        mComponent = new CastWebContentsComponent(sessionId, this, this, isHeadless,
                 enableTouchInput, isRemoteControlMode, turnOnScreen);
     }
 
@@ -105,13 +104,14 @@ public class CastContentWindowAndroid implements CastWebContentsComponent.OnComp
         mComponent.requestMoveOut();
     }
 
-    @Override
-    public void onKeyDown(int keyCode) {
-        if (DEBUG) Log.d(TAG, "onKeyDown");
-        if (mNativeCastContentWindowAndroid != 0) {
-            CastContentWindowAndroidJni.get().onKeyDown(
-                    mNativeCastContentWindowAndroid, CastContentWindowAndroid.this, keyCode);
+    @SuppressWarnings("unused")
+    @CalledByNative
+    private void setHostContext(int interactionId, String conversationId) {
+        if (DEBUG) {
+            Log.d(TAG, "setInteractionid interactionId=%s; conversationID=%s", interactionId,
+                    conversationId);
         }
+        mComponent.setHostContext(interactionId, conversationId);
     }
 
     @Override
@@ -146,8 +146,6 @@ public class CastContentWindowAndroid implements CastWebContentsComponent.OnComp
     interface Natives {
         void onActivityStopped(
                 long nativeCastContentWindowAndroid, CastContentWindowAndroid caller);
-        void onKeyDown(
-                long nativeCastContentWindowAndroid, CastContentWindowAndroid caller, int keyCode);
         boolean consumeGesture(long nativeCastContentWindowAndroid, CastContentWindowAndroid caller,
                 int gestureType);
         void onVisibilityChange(long nativeCastContentWindowAndroid,

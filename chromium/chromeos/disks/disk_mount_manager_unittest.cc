@@ -249,23 +249,29 @@ struct FormatEvent : public ObserverEvent {
   DiskMountManager::FormatEvent event;
   chromeos::FormatError error_code;
   std::string device_path;
+  std::string device_label;
 
   FormatEvent() = default;
   FormatEvent(DiskMountManager::FormatEvent event,
               chromeos::FormatError error_code,
-              const std::string& device_path)
-      : event(event), error_code(error_code), device_path(device_path) {}
+              const std::string& device_path,
+              const std::string& device_label)
+      : event(event),
+        error_code(error_code),
+        device_path(device_path),
+        device_label(device_label) {}
 
   ObserverEventType type() const override { return FORMAT_EVENT; }
 
   bool operator==(const FormatEvent& other) const {
     return event == other.event && error_code == other.error_code &&
-           device_path == other.device_path;
+           device_path == other.device_path &&
+           device_label == other.device_label;
   }
 
   std::string DebugString() const {
-    return StringPrintf("OnFormatEvent(%d, %d, %s)", event, error_code,
-                        device_path.c_str());
+    return StringPrintf("OnFormatEvent(%d, %d, %s, %s)", event, error_code,
+                        device_path.c_str(), device_label.c_str());
   }
 };
 
@@ -274,22 +280,28 @@ struct RenameEvent : public ObserverEvent {
   DiskMountManager::RenameEvent event;
   chromeos::RenameError error_code;
   std::string device_path;
+  std::string device_label;
 
   RenameEvent(DiskMountManager::RenameEvent event,
               chromeos::RenameError error_code,
-              const std::string& device_path)
-      : event(event), error_code(error_code), device_path(device_path) {}
+              const std::string& device_path,
+              const std::string& device_label)
+      : event(event),
+        error_code(error_code),
+        device_path(device_path),
+        device_label(device_label) {}
 
   ObserverEventType type() const override { return RENAME_EVENT; }
 
   bool operator==(const RenameEvent& other) const {
     return event == other.event && error_code == other.error_code &&
-           device_path == other.device_path;
+           device_path == other.device_path &&
+           device_label == other.device_label;
   }
 
   std::string DebugString() const {
-    return StringPrintf("OnRenameEvent(%d, %d, %s)", event, error_code,
-                        device_path.c_str());
+    return StringPrintf("OnRenameEvent(%d, %d, %s, %s)", event, error_code,
+                        device_path.c_str(), device_label.c_str());
   }
 };
 
@@ -359,16 +371,18 @@ class MockDiskMountManagerObserver : public DiskMountManager::Observer {
 
   void OnFormatEvent(DiskMountManager::FormatEvent event,
                      chromeos::FormatError error_code,
-                     const std::string& device_path) override {
-    events_.push_back(
-        std::make_unique<FormatEvent>(event, error_code, device_path));
+                     const std::string& device_path,
+                     const std::string& device_label) override {
+    events_.push_back(std::make_unique<FormatEvent>(event, error_code,
+                                                    device_path, device_label));
   }
 
   void OnRenameEvent(DiskMountManager::RenameEvent event,
                      chromeos::RenameError error_code,
-                     const std::string& device_path) override {
-    events_.push_back(
-        std::make_unique<RenameEvent>(event, error_code, device_path));
+                     const std::string& device_path,
+                     const std::string& device_label) override {
+    events_.push_back(std::make_unique<RenameEvent>(event, error_code,
+                                                    device_path, device_label));
   }
 
   void OnMountEvent(
@@ -492,6 +506,11 @@ std::ostream& operator<<(std::ostream& stream,
   return stream << format_event.DebugString();
 }
 
+std::ostream& operator<<(std::ostream& stream,
+                         const RenameEvent& rename_event) {
+  return stream << rename_event.DebugString();
+}
+
 class DiskMountManagerTest : public testing::Test {
  public:
   DiskMountManagerTest()
@@ -598,7 +617,8 @@ TEST_F(DiskMountManagerTest, Format_NotMounted) {
       "/mount/non_existent", kFormatFileSystemType1, kFormatLabel1);
   ASSERT_EQ(1U, observer_->GetEventCount());
   EXPECT_EQ(FormatEvent(DiskMountManager::FORMAT_COMPLETED,
-                        chromeos::FORMAT_ERROR_UNKNOWN, "/mount/non_existent"),
+                        chromeos::FORMAT_ERROR_UNKNOWN, "/mount/non_existent",
+                        kFormatLabel1),
             observer_->GetFormatEvent(0));
 }
 
@@ -610,7 +630,7 @@ TEST_F(DiskMountManagerTest, Format_ReadOnly) {
   ASSERT_EQ(1U, observer_->GetEventCount());
   EXPECT_EQ(FormatEvent(DiskMountManager::FORMAT_COMPLETED,
                         chromeos::FORMAT_ERROR_DEVICE_NOT_ALLOWED,
-                        kReadOnlyDeviceMountPath),
+                        kReadOnlyDeviceSourcePath, kFormatLabel1),
             observer_->GetFormatEvent(0));
 }
 
@@ -620,7 +640,8 @@ TEST_F(DiskMountManagerTest, Format_Archive) {
       "/archive/mount_path", kFormatFileSystemType1, kFormatLabel1);
   ASSERT_EQ(1U, observer_->GetEventCount());
   EXPECT_EQ(FormatEvent(DiskMountManager::FORMAT_COMPLETED,
-                        chromeos::FORMAT_ERROR_UNKNOWN, "/archive/source_path"),
+                        chromeos::FORMAT_ERROR_UNKNOWN, "/archive/source_path",
+                        kFormatLabel1),
             observer_->GetFormatEvent(0));
 }
 
@@ -649,13 +670,12 @@ TEST_F(DiskMountManagerTest, Format_FailToUnmount) {
   EXPECT_EQ(kDevice1MountPath, mount_event.mount_point.mount_path);
 
   EXPECT_EQ(FormatEvent(DiskMountManager::FORMAT_COMPLETED,
-                        chromeos::FORMAT_ERROR_UNKNOWN, kDevice1SourcePath),
+                        chromeos::FORMAT_ERROR_UNKNOWN, kDevice1SourcePath,
+                        kFormatLabel1),
             observer_->GetFormatEvent(1));
   EXPECT_EQ(1, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(0, fake_cros_disks_client_->format_call_count());
 
   // The device mount should still be here.
@@ -686,14 +706,13 @@ TEST_F(DiskMountManagerTest, Format_FormatFailsToStart) {
   EXPECT_EQ(kDevice1MountPath, mount_event.mount_point.mount_path);
 
   EXPECT_EQ(FormatEvent(DiskMountManager::FORMAT_COMPLETED,
-                        chromeos::FORMAT_ERROR_UNKNOWN, kDevice1SourcePath),
+                        chromeos::FORMAT_ERROR_UNKNOWN, kDevice1SourcePath,
+                        kFormatLabel1),
             observer_->GetFormatEvent(1));
 
   EXPECT_EQ(1, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(1, fake_cros_disks_client_->format_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_format_device_path());
@@ -741,17 +760,17 @@ TEST_F(DiskMountManagerTest, Format_ConcurrentFormatCalls) {
   EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, mount_event.error_code);
   EXPECT_EQ(kDevice1MountPath, mount_event.mount_point.mount_path);
   EXPECT_EQ(FormatEvent(DiskMountManager::FORMAT_COMPLETED,
-                        chromeos::FORMAT_ERROR_UNKNOWN, kDevice1SourcePath),
+                        chromeos::FORMAT_ERROR_UNKNOWN, kDevice1SourcePath,
+                        kFormatLabel2),
             observer_->GetFormatEvent(1));
-  EXPECT_EQ(FormatEvent(DiskMountManager::FORMAT_STARTED,
-                        chromeos::FORMAT_ERROR_NONE, kDevice1SourcePath),
-            observer_->GetFormatEvent(2));
+  EXPECT_EQ(
+      FormatEvent(DiskMountManager::FORMAT_STARTED, chromeos::FORMAT_ERROR_NONE,
+                  kDevice1SourcePath, kFormatLabel1),
+      observer_->GetFormatEvent(2));
 
   EXPECT_EQ(2, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(1, fake_cros_disks_client_->format_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_format_device_path());
@@ -789,8 +808,6 @@ TEST_F(DiskMountManagerTest, Format_FormatFails) {
   EXPECT_EQ(1, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(1, fake_cros_disks_client_->format_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_format_device_path());
@@ -815,11 +832,13 @@ TEST_F(DiskMountManagerTest, Format_FormatFails) {
   ASSERT_EQ(3U, observer_->GetEventCount());
   VerifyMountEvent(observer_->GetMountEvent(0), DiskMountManager::UNMOUNTING,
                    chromeos::MOUNT_ERROR_NONE, kDevice1MountPath);
-  EXPECT_EQ(FormatEvent(DiskMountManager::FORMAT_STARTED,
-                        chromeos::FORMAT_ERROR_NONE, kDevice1SourcePath),
-            observer_->GetFormatEvent(1));
+  EXPECT_EQ(
+      FormatEvent(DiskMountManager::FORMAT_STARTED, chromeos::FORMAT_ERROR_NONE,
+                  kDevice1SourcePath, kFormatLabel1),
+      observer_->GetFormatEvent(1));
   EXPECT_EQ(FormatEvent(DiskMountManager::FORMAT_COMPLETED,
-                        chromeos::FORMAT_ERROR_UNKNOWN, kDevice1SourcePath),
+                        chromeos::FORMAT_ERROR_UNKNOWN, kDevice1SourcePath,
+                        kFormatLabel1),
             observer_->GetFormatEvent(2));
 }
 
@@ -841,8 +860,6 @@ TEST_F(DiskMountManagerTest, Format_FormatSuccess) {
   EXPECT_EQ(1, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(1, fake_cros_disks_client_->format_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_format_device_path());
@@ -862,11 +879,13 @@ TEST_F(DiskMountManagerTest, Format_FormatSuccess) {
   ASSERT_EQ(3U, observer_->GetEventCount());
   VerifyMountEvent(observer_->GetMountEvent(0), DiskMountManager::UNMOUNTING,
                    chromeos::MOUNT_ERROR_NONE, kDevice1MountPath);
-  EXPECT_EQ(FormatEvent(DiskMountManager::FORMAT_STARTED,
-                        chromeos::FORMAT_ERROR_NONE, kDevice1SourcePath),
-            observer_->GetFormatEvent(1));
+  EXPECT_EQ(
+      FormatEvent(DiskMountManager::FORMAT_STARTED, chromeos::FORMAT_ERROR_NONE,
+                  kDevice1SourcePath, kFormatLabel1),
+      observer_->GetFormatEvent(1));
   EXPECT_EQ(FormatEvent(DiskMountManager::FORMAT_COMPLETED,
-                        chromeos::FORMAT_ERROR_NONE, kDevice1SourcePath),
+                        chromeos::FORMAT_ERROR_NONE, kDevice1SourcePath,
+                        kFormatLabel1),
             observer_->GetFormatEvent(2));
 
   // Disk should have new values for file system type and device label name
@@ -892,8 +911,6 @@ TEST_F(DiskMountManagerTest, Format_ConsecutiveFormatCalls) {
   EXPECT_EQ(1, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(1, fake_cros_disks_client_->format_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_format_device_path());
@@ -925,8 +942,6 @@ TEST_F(DiskMountManagerTest, Format_ConsecutiveFormatCalls) {
   EXPECT_EQ(2, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(2, fake_cros_disks_client_->format_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_format_device_path());
@@ -945,13 +960,25 @@ TEST_F(DiskMountManagerTest, Format_ConsecutiveFormatCalls) {
   // simulated.
   EXPECT_EQ(7U, observer_->GetEventCount());
 
-  EXPECT_EQ(2U, observer_->CountFormatEvents(FormatEvent(
-                    DiskMountManager::FORMAT_COMPLETED,
-                    chromeos::FORMAT_ERROR_NONE, kDevice1SourcePath)));
+  EXPECT_EQ(1U,
+            observer_->CountFormatEvents(FormatEvent(
+                DiskMountManager::FORMAT_COMPLETED, chromeos::FORMAT_ERROR_NONE,
+                kDevice1SourcePath, kFormatLabel1)));
 
-  EXPECT_EQ(2U, observer_->CountFormatEvents(FormatEvent(
-                    DiskMountManager::FORMAT_STARTED,
-                    chromeos::FORMAT_ERROR_NONE, kDevice1SourcePath)));
+  EXPECT_EQ(1U,
+            observer_->CountFormatEvents(FormatEvent(
+                DiskMountManager::FORMAT_COMPLETED, chromeos::FORMAT_ERROR_NONE,
+                kDevice1SourcePath, kFormatLabel2)));
+
+  EXPECT_EQ(1U,
+            observer_->CountFormatEvents(FormatEvent(
+                DiskMountManager::FORMAT_STARTED, chromeos::FORMAT_ERROR_NONE,
+                kDevice1SourcePath, kFormatLabel1)));
+
+  EXPECT_EQ(1U,
+            observer_->CountFormatEvents(FormatEvent(
+                DiskMountManager::FORMAT_STARTED, chromeos::FORMAT_ERROR_NONE,
+                kDevice1SourcePath, kFormatLabel2)));
 
   EXPECT_EQ(2U, observer_->CountMountEvents(DiskMountManager::UNMOUNTING,
                                             chromeos::MOUNT_ERROR_NONE,
@@ -1083,7 +1110,8 @@ TEST_F(DiskMountManagerTest, Rename_NotMounted) {
                                                        "MYUSB");
   ASSERT_EQ(1U, observer_->GetEventCount());
   EXPECT_EQ(RenameEvent(DiskMountManager::RENAME_COMPLETED,
-                        chromeos::RENAME_ERROR_UNKNOWN, "/mount/non_existent"),
+                        chromeos::RENAME_ERROR_UNKNOWN, "/mount/non_existent",
+                        "MYUSB"),
             observer_->GetRenameEvent(0));
 }
 
@@ -1095,7 +1123,7 @@ TEST_F(DiskMountManagerTest, Rename_ReadOnly) {
   ASSERT_EQ(1U, observer_->GetEventCount());
   EXPECT_EQ(RenameEvent(DiskMountManager::RENAME_COMPLETED,
                         chromeos::RENAME_ERROR_DEVICE_NOT_ALLOWED,
-                        kReadOnlyDeviceMountPath),
+                        kReadOnlyDeviceSourcePath, "MYUSB"),
             observer_->GetRenameEvent(0));
 }
 
@@ -1105,7 +1133,8 @@ TEST_F(DiskMountManagerTest, Rename_Archive) {
                                                        "MYUSB");
   ASSERT_EQ(1U, observer_->GetEventCount());
   EXPECT_EQ(RenameEvent(DiskMountManager::RENAME_COMPLETED,
-                        chromeos::RENAME_ERROR_UNKNOWN, "/archive/source_path"),
+                        chromeos::RENAME_ERROR_UNKNOWN, "/archive/source_path",
+                        "MYUSB"),
             observer_->GetRenameEvent(0));
 }
 
@@ -1131,14 +1160,13 @@ TEST_F(DiskMountManagerTest, Rename_FailToUnmount) {
   EXPECT_EQ(chromeos::MOUNT_ERROR_UNKNOWN, mount_event.error_code);
   EXPECT_EQ(kDevice1MountPath, mount_event.mount_point.mount_path);
 
-  EXPECT_EQ(RenameEvent(DiskMountManager::RENAME_COMPLETED,
-                        chromeos::RENAME_ERROR_UNKNOWN, kDevice1SourcePath),
-            observer_->GetRenameEvent(1));
+  EXPECT_EQ(
+      RenameEvent(DiskMountManager::RENAME_COMPLETED,
+                  chromeos::RENAME_ERROR_UNKNOWN, kDevice1SourcePath, "MYUSB"),
+      observer_->GetRenameEvent(1));
   EXPECT_EQ(1, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(0, fake_cros_disks_client_->rename_call_count());
 
   // The device mount should still be here.
@@ -1168,15 +1196,14 @@ TEST_F(DiskMountManagerTest, Rename_RenameFailsToStart) {
   EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, mount_event.error_code);
   EXPECT_EQ(kDevice1MountPath, mount_event.mount_point.mount_path);
 
-  EXPECT_EQ(RenameEvent(DiskMountManager::RENAME_COMPLETED,
-                        chromeos::RENAME_ERROR_UNKNOWN, kDevice1SourcePath),
-            observer_->GetRenameEvent(1));
+  EXPECT_EQ(
+      RenameEvent(DiskMountManager::RENAME_COMPLETED,
+                  chromeos::RENAME_ERROR_UNKNOWN, kDevice1SourcePath, "MYUSB"),
+      observer_->GetRenameEvent(1));
 
   EXPECT_EQ(1, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(1, fake_cros_disks_client_->rename_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_rename_device_path());
@@ -1221,18 +1248,18 @@ TEST_F(DiskMountManagerTest, Rename_ConcurrentRenameCalls) {
   EXPECT_EQ(DiskMountManager::UNMOUNTING, mount_event.event);
   EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, mount_event.error_code);
   EXPECT_EQ(kDevice1MountPath, mount_event.mount_point.mount_path);
-  EXPECT_EQ(RenameEvent(DiskMountManager::RENAME_COMPLETED,
-                        chromeos::RENAME_ERROR_UNKNOWN, kDevice1SourcePath),
-            observer_->GetRenameEvent(1));
-  EXPECT_EQ(RenameEvent(DiskMountManager::RENAME_STARTED,
-                        chromeos::RENAME_ERROR_NONE, kDevice1SourcePath),
-            observer_->GetRenameEvent(2));
+  EXPECT_EQ(
+      RenameEvent(DiskMountManager::RENAME_COMPLETED,
+                  chromeos::RENAME_ERROR_UNKNOWN, kDevice1SourcePath, "MYUSB2"),
+      observer_->GetRenameEvent(1));
+  EXPECT_EQ(
+      RenameEvent(DiskMountManager::RENAME_STARTED, chromeos::RENAME_ERROR_NONE,
+                  kDevice1SourcePath, "MYUSB1"),
+      observer_->GetRenameEvent(2));
 
   EXPECT_EQ(2, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(1, fake_cros_disks_client_->rename_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_rename_device_path());
@@ -1256,8 +1283,6 @@ TEST_F(DiskMountManagerTest, Rename_RenameFails) {
   EXPECT_EQ(1, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(1, fake_cros_disks_client_->rename_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_rename_device_path());
@@ -1280,12 +1305,14 @@ TEST_F(DiskMountManagerTest, Rename_RenameFails) {
   ASSERT_EQ(3U, observer_->GetEventCount());
   VerifyMountEvent(observer_->GetMountEvent(0), DiskMountManager::UNMOUNTING,
                    chromeos::MOUNT_ERROR_NONE, kDevice1MountPath);
-  EXPECT_EQ(RenameEvent(DiskMountManager::RENAME_STARTED,
-                        chromeos::RENAME_ERROR_NONE, kDevice1SourcePath),
-            observer_->GetRenameEvent(1));
-  EXPECT_EQ(RenameEvent(DiskMountManager::RENAME_COMPLETED,
-                        chromeos::RENAME_ERROR_UNKNOWN, kDevice1SourcePath),
-            observer_->GetRenameEvent(2));
+  EXPECT_EQ(
+      RenameEvent(DiskMountManager::RENAME_STARTED, chromeos::RENAME_ERROR_NONE,
+                  kDevice1SourcePath, "MYUSB"),
+      observer_->GetRenameEvent(1));
+  EXPECT_EQ(
+      RenameEvent(DiskMountManager::RENAME_COMPLETED,
+                  chromeos::RENAME_ERROR_UNKNOWN, kDevice1SourcePath, "MYUSB"),
+      observer_->GetRenameEvent(2));
 }
 
 // Tests the case when renaming completes successfully.
@@ -1305,8 +1332,6 @@ TEST_F(DiskMountManagerTest, Rename_RenameSuccess) {
   EXPECT_EQ(1, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(1, fake_cros_disks_client_->rename_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_rename_device_path());
@@ -1324,12 +1349,14 @@ TEST_F(DiskMountManagerTest, Rename_RenameSuccess) {
   ASSERT_EQ(3U, observer_->GetEventCount());
   VerifyMountEvent(observer_->GetMountEvent(0), DiskMountManager::UNMOUNTING,
                    chromeos::MOUNT_ERROR_NONE, kDevice1MountPath);
-  EXPECT_EQ(RenameEvent(DiskMountManager::RENAME_STARTED,
-                        chromeos::RENAME_ERROR_NONE, kDevice1SourcePath),
-            observer_->GetRenameEvent(1));
-  EXPECT_EQ(RenameEvent(DiskMountManager::RENAME_COMPLETED,
-                        chromeos::RENAME_ERROR_NONE, kDevice1SourcePath),
-            observer_->GetRenameEvent(2));
+  EXPECT_EQ(
+      RenameEvent(DiskMountManager::RENAME_STARTED, chromeos::RENAME_ERROR_NONE,
+                  kDevice1SourcePath, "MYUSB1"),
+      observer_->GetRenameEvent(1));
+  EXPECT_EQ(
+      RenameEvent(DiskMountManager::RENAME_COMPLETED,
+                  chromeos::RENAME_ERROR_NONE, kDevice1SourcePath, "MYUSB1"),
+      observer_->GetRenameEvent(2));
 
   // Disk should have new value for device label name
   EXPECT_EQ("MYUSB1", disks.find(kDevice1SourcePath)->second->device_label());
@@ -1353,8 +1380,6 @@ TEST_F(DiskMountManagerTest, Rename_ConsecutiveRenameCalls) {
   EXPECT_EQ(1, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(1, fake_cros_disks_client_->rename_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_rename_device_path());
@@ -1386,8 +1411,6 @@ TEST_F(DiskMountManagerTest, Rename_ConsecutiveRenameCalls) {
   EXPECT_EQ(2, fake_cros_disks_client_->unmount_call_count());
   EXPECT_EQ(kDevice1MountPath,
             fake_cros_disks_client_->last_unmount_device_path());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(2, fake_cros_disks_client_->rename_call_count());
   EXPECT_EQ(kDevice1SourcePath,
             fake_cros_disks_client_->last_rename_device_path());
@@ -1407,13 +1430,23 @@ TEST_F(DiskMountManagerTest, Rename_ConsecutiveRenameCalls) {
   // simulated.
   EXPECT_EQ(7U, observer_->GetEventCount());
 
-  EXPECT_EQ(2U, observer_->CountRenameEvents(RenameEvent(
-                    DiskMountManager::RENAME_COMPLETED,
-                    chromeos::RENAME_ERROR_NONE, kDevice1SourcePath)));
+  EXPECT_EQ(1U,
+            observer_->CountRenameEvents(RenameEvent(
+                DiskMountManager::RENAME_COMPLETED, chromeos::RENAME_ERROR_NONE,
+                kDevice1SourcePath, "MYUSB2")));
 
-  EXPECT_EQ(2U, observer_->CountRenameEvents(RenameEvent(
+  EXPECT_EQ(1U, observer_->CountRenameEvents(RenameEvent(
+                    DiskMountManager::RENAME_COMPLETED,
+                    chromeos::RENAME_ERROR_NONE, kDevice1SourcePath, "MYUSB")));
+
+  EXPECT_EQ(1U, observer_->CountRenameEvents(RenameEvent(
                     DiskMountManager::RENAME_STARTED,
-                    chromeos::RENAME_ERROR_NONE, kDevice1SourcePath)));
+                    chromeos::RENAME_ERROR_NONE, kDevice1SourcePath, "MYUSB")));
+
+  EXPECT_EQ(1U,
+            observer_->CountRenameEvents(RenameEvent(
+                DiskMountManager::RENAME_STARTED, chromeos::RENAME_ERROR_NONE,
+                kDevice1SourcePath, "MYUSB2")));
 
   EXPECT_EQ(2U, observer_->CountMountEvents(DiskMountManager::UNMOUNTING,
                                             chromeos::MOUNT_ERROR_NONE,
@@ -1461,8 +1494,6 @@ TEST_F(DiskMountManagerTest, UnmountDeviceRecursively) {
   run_loop.Run();
 
   EXPECT_EQ(2, fake_cros_disks_client_->unmount_call_count());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(chromeos::MOUNT_ERROR_NONE, error_code);
 }
 
@@ -1554,8 +1585,6 @@ TEST_F(DiskMountManagerTest, UnmountDeviceRecursively_FailFirst) {
   run_loop.Run();
 
   EXPECT_EQ(2, fake_cros_disks_client_->unmount_call_count());
-  EXPECT_EQ(chromeos::UNMOUNT_OPTIONS_NONE,
-            fake_cros_disks_client_->last_unmount_options());
   EXPECT_EQ(chromeos::MOUNT_ERROR_INVALID_UNMOUNT_OPTIONS, error_code);
 }
 

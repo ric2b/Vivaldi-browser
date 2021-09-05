@@ -35,7 +35,7 @@ class FileSystemChooserTest : public testing::Test {
         base::BindLambdaForTesting(
             [&](blink::mojom::NativeFileSystemErrorPtr,
                 std::vector<base::FilePath>) { loop.Quit(); }),
-        base::SequencedTaskRunnerHandle::Get());
+        base::ScopedClosureRunner());
     loop.Run();
   }
 

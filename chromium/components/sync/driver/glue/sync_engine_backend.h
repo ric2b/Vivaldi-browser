@@ -27,6 +27,7 @@
 #include "components/sync/engine/model_type_configurer.h"
 #include "components/sync/engine/shutdown_reason.h"
 #include "components/sync/engine/sync_encryption_handler.h"
+#include "components/sync/engine/sync_status_observer.h"
 #include "components/sync/syncable/user_share.h"
 #include "url/gurl.h"
 
@@ -44,7 +45,8 @@ class NigoriHandlerProxy;
 class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
                           public base::trace_event::MemoryDumpProvider,
                           public SyncManager::Observer,
-                          public TypeDebugInfoObserver {
+                          public TypeDebugInfoObserver,
+                          public SyncStatusObserver {
  public:
   using AllNodesCallback =
       base::OnceCallback<void(const ModelType,
@@ -79,12 +81,14 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   void OnStatusCountersUpdated(ModelType type,
                                const StatusCounters& counters) override;
 
+  // SyncStatusObserver implementation.
+  void OnSyncStatusChanged(const SyncStatus& status) override;
+
   // Forwards an invalidation state change to the sync manager.
   void DoOnInvalidatorStateChange(InvalidatorState state);
 
   // Forwards an invalidation to the sync manager.
-  void DoOnIncomingInvalidation(
-      const ObjectIdInvalidationMap& invalidation_map);
+  void DoOnIncomingInvalidation(const TopicInvalidationMap& invalidation_map);
 
   // Note:
   //
@@ -120,7 +124,8 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   void DoSetDecryptionPassphrase(const std::string& passphrase);
 
   // Called to decrypt the pending keys using trusted vault keys.
-  void DoAddTrustedVaultDecryptionKeys(const std::vector<std::string>& keys);
+  void DoAddTrustedVaultDecryptionKeys(
+      const std::vector<std::vector<uint8_t>>& keys);
 
   // Called to turn on encryption of all sync data as well as
   // reencrypt everything.
@@ -149,7 +154,7 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   void DoConfigureSyncer(ModelTypeConfigurer::ConfigureParams params);
   void DoFinishConfigureDataTypes(
       ModelTypeSet types_to_config,
-      const base::Callback<void(ModelTypeSet, ModelTypeSet)>& ready_task);
+      base::OnceCallback<void(ModelTypeSet, ModelTypeSet)> ready_task);
 
   // Set the base request context to use when making HTTP calls.
   // This method will add a reference to the context to persist it
@@ -176,7 +181,7 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   // Notify the syncer that the cookie jar has changed.
   void DoOnCookieJarChanged(bool account_mismatch,
                             bool empty_jar,
-                            const base::Closure& callback);
+                            base::OnceClosure callback);
 
   // Notify about change in client id.
   void DoOnInvalidatorClientIdChange(const std::string& client_id);
@@ -249,12 +254,11 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   WeakHandle<JsBackend> js_backend_;
   WeakHandle<DataTypeDebugInfoListener> debug_info_listener_;
 
-  // These signals allow us to send requests to shut down the HttpBridgeFactory
-  // and ServerConnectionManager without having to wait for those classes to
-  // finish initializing first.
+  // This signal allows us to send requests to shut down the
+  // ServerConnectionManager without having to wait for it to finish
+  // initializing first.
   //
-  // See comments in SyncEngineBackend::ShutdownOnUIThread() for more details.
-  CancelationSignal release_request_context_signal_;
+  // See comment in ShutdownOnUIThread() for more details.
   CancelationSignal stop_syncing_signal_;
 
   // Set when we've been asked to forward sync protocol events to the frontend.

@@ -5,7 +5,9 @@
 
 #include <vector>
 
-#include "browser/menus/bookmark_sorter.h"
+#include "base/strings/string16.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/views/controls/menu/menu_item_view.h"
 
 namespace bookmarks {
 class BookmarkModel;
@@ -18,10 +20,8 @@ class SimpleMenuModel;
 
 namespace gfx {
 class ImageSkia;
-}
-
-namespace views {
-class MenuItemView;
+class Point;
+class Rect;
 }
 
 namespace vivaldi {
@@ -52,11 +52,21 @@ const bookmarks::BookmarkNode* GetNextNode(bookmarks::BookmarkModel* model,
                                            gfx::Rect* rect);
 void SortBookmarkNodes(const bookmarks::BookmarkNode* parent,
                        std::vector<bookmarks::BookmarkNode*>& nodes);
-void AddVivaldiBookmarkMenuItems(Profile* profile_, views::MenuItemView* menu,
-                                 const bookmarks::BookmarkNode* parent);
-void AddSeparator(views::MenuItemView* menu);
+void AddExtraBookmarkMenuItems(Profile* profile_, views::MenuItemView* menu,
+                               unsigned int* menu_index,
+                               const bookmarks::BookmarkNode* parent,
+                               bool on_top);
+void AddSeparator(views::MenuItemView* menu, unsigned int* menu_index);
 bool AddIfSeparator(const bookmarks::BookmarkNode* node,
-                    views::MenuItemView* menu);
+                    views::MenuItemView* menu, unsigned int* menu_index);
+views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
+                                 unsigned int* menu_index,
+                                 int id,
+                                 const base::string16& label,
+                                 const gfx::ImageSkia& icon,
+                                 views::MenuItemView::Type type);
+
+unsigned int GetStartIndexForBookmarks(views::MenuItemView* menu, int64_t id);
 bool IsVivaldiMenuItem(int id);
 const gfx::ImageSkia* GetBookmarkDefaultIcon();
 gfx::ImageSkia GetBookmarkFolderIcon(SkColor text_color);

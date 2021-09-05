@@ -54,7 +54,7 @@ def executor_kwargs(test_type, server_config, cache_manager, run_info_data,
     capabilities["goog:chromeOptions"]["androidPackage"] = \
         "org.chromium.webview_shell"
     capabilities["goog:chromeOptions"]["androidActivity"] = ".WebPlatformTestsActivity"
-    if 'device_serial' in kwargs:
+    if kwargs.get('device_serial'):
         capabilities["goog:chromeOptions"]["androidDeviceSerial"] = kwargs['device_serial']
 
     # Workaround: driver.quit() cannot quit SystemWebViewShell.
@@ -123,7 +123,7 @@ class SystemWebViewShell(Browser):
         # TODO(ato): This only indicates the driver is alive,
         # and doesn't say anything about whether a browser session
         # is active.
-        return self.server.is_alive
+        return self.server.is_alive()
 
     def cleanup(self):
         self.stop()

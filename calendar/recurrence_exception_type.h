@@ -9,6 +9,10 @@
 #ifndef CALENDAR_RECURRENCE_EXCEPTION_TYPE_H_
 #define CALENDAR_RECURRENCE_EXCEPTION_TYPE_H_
 
+#include <string>
+#include <vector>
+
+#include "base/time/time.h"
 #include "calendar/calendar_typedefs.h"
 
 namespace calendar {

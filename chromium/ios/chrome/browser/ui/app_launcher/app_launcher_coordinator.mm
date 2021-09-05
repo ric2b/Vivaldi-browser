@@ -10,8 +10,8 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/app_launcher/app_launcher_flags.h"
 #import "ios/chrome/browser/app_launcher/app_launcher_tab_helper.h"
+#include "ios/chrome/browser/overlays/public/overlay_callback_manager.h"
 #import "ios/chrome/browser/overlays/public/overlay_request.h"
 #import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
 #import "ios/chrome/browser/overlays/public/overlay_response.h"
@@ -57,21 +57,8 @@ void AppLauncherOverlayCallback(ProceduralBlockWithBool app_launch_completion,
 
 }  // namespace
 
-@interface AppLauncherCoordinator ()
-// The base view controller from which to present UI.
-@property(nonatomic, weak) UIViewController* baseViewController;
-@end
-
 @implementation AppLauncherCoordinator
 @synthesize baseViewController = _baseViewController;
-
-- (instancetype)initWithBaseViewController:
-    (UIViewController*)baseViewController {
-  if (self = [super init]) {
-    _baseViewController = baseViewController;
-  }
-  return self;
-}
 
 #pragma mark - Private methods
 
@@ -129,7 +116,7 @@ void AppLauncherOverlayCallback(ProceduralBlockWithBool app_launch_completion,
     std::unique_ptr<OverlayRequest> request =
         OverlayRequest::CreateWithConfig<AppLauncherAlertOverlayRequestConfig>(
             /* is_repeated_request= */ false);
-    request->set_callback(
+    request->GetCallbackManager()->AddCompletionCallback(
         base::BindOnce(&AppLauncherOverlayCallback, completion));
     OverlayRequestQueue::FromWebState(webState,
                                       OverlayModality::kWebContentArea)
@@ -166,28 +153,16 @@ void AppLauncherOverlayCallback(ProceduralBlockWithBool app_launch_completion,
     return YES;
   }
 
-  if (base::FeatureList::IsEnabled(kAppLauncherRefresh)) {
-    // For all other apps other than AppStore, show a prompt if there was no
-    // link transition.
-    if (linkTransition) {
-      [[UIApplication sharedApplication] openURL:net::NSURLWithGURL(URL)
-                                         options:@{}
-                               completionHandler:nil];
-    } else {
-      [self showAlertAndLaunchAppURL:URL webState:webState];
-    }
-    return YES;
+  // For all other apps other than AppStore, show a prompt if there was no
+  // link transition.
+  if (linkTransition) {
+    [[UIApplication sharedApplication] openURL:net::NSURLWithGURL(URL)
+                                       options:@{}
+                             completionHandler:nil];
+  } else {
+    [self showAlertAndLaunchAppURL:URL webState:webState];
   }
-
-// If the following call returns YES, an application is about to be
-// launched and Chrome will go into the background now.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  // TODO(crbug.com/774736): This method needs to be converted to an
-  // asynchronous call so that the call below can be replaced with
-  // |openURL:options:completionHandler:|.
-  return [[UIApplication sharedApplication] openURL:net::NSURLWithGURL(URL)];
-#pragma clang diagnostic pop
+  return YES;
 }
 
 - (void)appLauncherTabHelper:(AppLauncherTabHelper*)tabHelper
@@ -208,7 +183,7 @@ void AppLauncherOverlayCallback(ProceduralBlockWithBool app_launch_completion,
     std::unique_ptr<OverlayRequest> request =
         OverlayRequest::CreateWithConfig<AppLauncherAlertOverlayRequestConfig>(
             /* is_repeated_request= */ true);
-    request->set_callback(
+    request->GetCallbackManager()->AddCompletionCallback(
         base::BindOnce(&AppLauncherOverlayCallback, completion));
     OverlayRequestQueue::FromWebState(tabHelper->web_state(),
                                       OverlayModality::kWebContentArea)

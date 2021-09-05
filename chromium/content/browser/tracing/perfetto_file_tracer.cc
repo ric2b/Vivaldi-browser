@@ -11,15 +11,14 @@
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "build/build_config.h"
 #include "components/tracing/common/trace_startup_config.h"
 #include "components/tracing/common/tracing_switches.h"
-#include "content/public/browser/system_connector.h"
+#include "content/public/browser/tracing_service.h"
 #include "mojo/public/cpp/system/data_pipe_drainer.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_config.h"
-#include "services/tracing/public/mojom/constants.mojom.h"
 #include "third_party/perfetto/include/perfetto/tracing/core/trace_config.h"
 #include "third_party/perfetto/protos/perfetto/config/trace_config.pb.h"
 
@@ -94,14 +93,14 @@ bool PerfettoFileTracer::ShouldEnable() {
       switches::kPerfettoOutputFile);
 }
 
+// Use USER_VISIBLE priority for the drainer because BEST_EFFORT tasks are not
+// run at startup and we want the trace file to be written soon.
 PerfettoFileTracer::PerfettoFileTracer()
-    : background_task_runner_(base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskPriority::BEST_EFFORT,
-           base::TaskShutdownBehavior::BLOCK_SHUTDOWN})),
-      background_drainer_(background_task_runner_) {
-  GetSystemConnector()->BindInterface(tracing::mojom::kServiceName,
-                                      &consumer_host_);
+    : background_drainer_(base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+           base::TaskShutdownBehavior::BLOCK_SHUTDOWN})) {
+  GetTracingService().BindConsumerHost(
+      consumer_host_.BindNewPipeAndPassReceiver());
 
   const auto& chrome_config =
       tracing::TraceStartupConfig::GetInstance()->GetTraceConfig();
@@ -118,16 +117,12 @@ PerfettoFileTracer::PerfettoFileTracer()
   // We just need a single global trace buffer, for our data.
   trace_config.mutable_buffers()->front().set_size_kb(32 * 1024);
 
-  mojo::PendingRemote<tracing::mojom::TracingSessionClient>
-      tracing_session_client;
-  binding_.Bind(tracing_session_client.InitWithNewPipeAndPassReceiver());
-  binding_.set_connection_error_handler(base::BindOnce(
-      &PerfettoFileTracer::OnTracingSessionEnded, base::Unretained(this)));
-
   consumer_host_->EnableTracing(
-      mojo::MakeRequest(&tracing_session_host_),
-      std::move(tracing_session_client), std::move(trace_config),
+      tracing_session_host_.BindNewPipeAndPassReceiver(),
+      receiver_.BindNewPipeAndPassRemote(), std::move(trace_config),
       tracing::mojom::TracingClientPriority::kBackground);
+  receiver_.set_disconnect_handler(base::BindOnce(
+      &PerfettoFileTracer::OnTracingSessionEnded, base::Unretained(this)));
   ReadBuffers();
 }
 
@@ -175,7 +170,7 @@ void PerfettoFileTracer::ReadBuffers() {
 }
 
 void PerfettoFileTracer::OnTracingSessionEnded() {
-  binding_.Close();
+  receiver_.reset();
   tracing_session_host_.reset();
 }
 

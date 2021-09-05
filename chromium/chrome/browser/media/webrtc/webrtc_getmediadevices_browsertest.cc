@@ -28,7 +28,6 @@
 #include "media/audio/audio_manager.h"
 #include "media/base/media_switches.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "testing/gtest/include/gtest/gtest-param-test.h"
 
 namespace {
 
@@ -50,18 +49,7 @@ class WebRtcGetMediaDevicesBrowserTest
  public:
   WebRtcGetMediaDevicesBrowserTest()
       : has_audio_output_devices_initialized_(false),
-        has_audio_output_devices_(false) {
-    std::vector<base::Feature> audio_service_oop_features = {
-        features::kAudioServiceAudioStreams,
-        features::kAudioServiceOutOfProcess};
-    if (GetParam()) {
-      // Force audio service out of process to enabled.
-      audio_service_features_.InitWithFeatures(audio_service_oop_features, {});
-    } else {
-      // Force audio service out of process to disabled.
-      audio_service_features_.InitWithFeatures({}, audio_service_oop_features);
-    }
-  }
+        has_audio_output_devices_(false) {}
 
   void SetUpInProcessBrowserTestFixture() override {
     DetectErrorsInJavaScript();  // Look for errors in our rather complex js.
@@ -70,9 +58,6 @@ class WebRtcGetMediaDevicesBrowserTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Ensure the infobar is enabled, since we expect that in this test.
     EXPECT_FALSE(command_line->HasSwitch(switches::kUseFakeUIForMediaStream));
-
-    // Always use fake devices.
-    command_line->AppendSwitch(switches::kUseFakeDeviceForMediaStream);
   }
 
  protected:
@@ -171,7 +156,7 @@ class WebRtcGetMediaDevicesBrowserTest
   base::test::ScopedFeatureList audio_service_features_;
 };
 
-IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
+IN_PROC_BROWSER_TEST_F(WebRtcGetMediaDevicesBrowserTest,
                        EnumerateDevicesWithoutAccess) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL(kMainWebrtcTestHtmlPage));
@@ -188,7 +173,7 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
+IN_PROC_BROWSER_TEST_F(WebRtcGetMediaDevicesBrowserTest,
                        EnumerateDevicesWithAccess) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL(kMainWebrtcTestHtmlPage));
@@ -207,7 +192,7 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
+IN_PROC_BROWSER_TEST_F(WebRtcGetMediaDevicesBrowserTest,
                        DeviceIdSameGroupIdDiffersAfterReload) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL(kMainWebrtcTestHtmlPage));
@@ -237,7 +222,7 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
+IN_PROC_BROWSER_TEST_F(WebRtcGetMediaDevicesBrowserTest,
                        DeviceIdSameGroupIdDiffersAcrossTabs) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL(kMainWebrtcTestHtmlPage));
@@ -247,7 +232,7 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
   std::vector<MediaDeviceInfo> devices;
   EnumerateDevices(tab1, &devices);
 
-  chrome::AddTabAt(browser(), GURL(), -1, true);
+  chrome::AddTabAt(browser(), GURL(url::kAboutBlankURL), -1, true);
   ui_test_utils::NavigateToURL(browser(), url);
   content::WebContents* tab2 =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -271,13 +256,16 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
+IN_PROC_BROWSER_TEST_F(WebRtcGetMediaDevicesBrowserTest,
                        DeviceIdDiffersAfterClearingCookies) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL(kMainWebrtcTestHtmlPage));
   ui_test_utils::NavigateToURL(browser(), url);
   content::WebContents* tab =
       browser()->tab_strip_model()->GetActiveWebContents();
+
+  EXPECT_TRUE(GetUserMediaAndAccept(tab));
+
   std::vector<MediaDeviceInfo> devices;
   EnumerateDevices(tab, &devices);
 
@@ -298,7 +286,7 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
   CheckEnumerationsAreDifferent(devices, devices2);
 }
 
-IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
+IN_PROC_BROWSER_TEST_F(WebRtcGetMediaDevicesBrowserTest,
                        DeviceIdDiffersAcrossTabsWithCookiesDisabled) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL(kMainWebrtcTestHtmlPage));
@@ -307,10 +295,13 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
       ->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
   content::WebContents* tab1 =
       browser()->tab_strip_model()->GetActiveWebContents();
+
+  EXPECT_TRUE(GetUserMediaAndAccept(tab1));
+
   std::vector<MediaDeviceInfo> devices;
   EnumerateDevices(tab1, &devices);
 
-  chrome::AddTabAt(browser(), GURL(), -1, true);
+  chrome::AddTabAt(browser(), GURL(url::kAboutBlankURL), -1, true);
   ui_test_utils::NavigateToURL(browser(), url);
   content::WebContents* tab2 =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -322,7 +313,7 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
   CheckEnumerationsAreDifferent(devices, devices2);
 }
 
-IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
+IN_PROC_BROWSER_TEST_F(WebRtcGetMediaDevicesBrowserTest,
                        DeviceIdDiffersSameTabAfterReloadWithCookiesDisabled) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL(kMainWebrtcTestHtmlPage));
@@ -331,6 +322,9 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
       ->SetDefaultCookieSetting(CONTENT_SETTING_BLOCK);
   content::WebContents* tab =
       browser()->tab_strip_model()->GetActiveWebContents();
+
+  EXPECT_TRUE(GetUserMediaAndAccept(tab));
+
   std::vector<MediaDeviceInfo> devices;
   EnumerateDevices(tab, &devices);
 
@@ -342,19 +336,3 @@ IN_PROC_BROWSER_TEST_P(WebRtcGetMediaDevicesBrowserTest,
   EXPECT_EQ(devices.size(), devices2.size());
   CheckEnumerationsAreDifferent(devices, devices2);
 }
-
-// We run these tests with the audio service both in and out of the the browser
-// process to have waterfall coverage while the feature rolls out. It should be
-// removed after launch.
-#if defined(OS_WIN) || defined(OS_MACOSX) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
-// Platforms where the out of process audio service is supported.
-INSTANTIATE_TEST_SUITE_P(,
-                         WebRtcGetMediaDevicesBrowserTest,
-                         ::testing::Values(true));
-#else
-// Platforms where the out of process audio service is not supported.
-INSTANTIATE_TEST_SUITE_P(,
-                         WebRtcGetMediaDevicesBrowserTest,
-                         ::testing::Values(false));
-#endif

@@ -10,18 +10,21 @@
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
 #include "chrome/browser/extensions/window_controller.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_frame_host.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/api/zoom/zoom_api.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -155,9 +158,6 @@ void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
       vivaldi::window_private::OnWindowClosed::Create(id),
       browser_context_);
 
-#if !defined(OS_MACOSX)
-  // On mac there is no reason to close the settings window just because the
-  // last window was closed, since the application is still running.
   if (chrome::GetTotalBrowserCount() == 1) {
     BrowserList* browsers = BrowserList::GetInstance();
     for (BrowserList::const_iterator iter = browsers->begin();
@@ -173,7 +173,6 @@ void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
       }
     }
   }
-#endif
 }
 
 ui::WindowShowState ConvertToWindowShowState(WindowState state) {
@@ -201,6 +200,8 @@ VivaldiBrowserWindow::WindowType ConvertToVivaldiWindowType(
     case vivaldi::window_private::WindowType::WINDOW_TYPE_SETTINGS:
       return VivaldiBrowserWindow::WindowType::SETTINGS;
     case vivaldi::window_private::WindowType::WINDOW_TYPE_NONE:
+      return VivaldiBrowserWindow::WindowType::NORMAL;
+    case vivaldi::window_private::WindowType::WINDOW_TYPE_POPUP:
       return VivaldiBrowserWindow::WindowType::NORMAL;
   }
   NOTREACHED();
@@ -294,24 +295,40 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   create_params.is_vivaldi = true;
   create_params.window = window;
   create_params.ext_data = ext_data;
-
   window->SetBrowser(std::make_unique<Browser>(create_params));
+
+  int window_id = window->browser()->session_id().id();
+
   window->CreateWebContents(app_params, render_frame_host());
+
+  // This sets up the parameters used in the "create" binding that fills in the
+  // contentWindow parameter used in the create-callback.
+  content::RenderFrameHost* created_frame =
+      window->web_contents()->GetMainFrame();
+  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue);
+  result->SetInteger("frameId", created_frame->GetRoutingID());
+  result->SetInteger("windowId", window_id);
+  ResponseValue result_arg = OneArgument(std::move(result));
+  // Delay sending the response until the newly created window has finished its
+  // navigation or was closed during that process.
+  window->AddOnDidFinishFirstNavigationCallback(
+      base::BindOnce(&WindowPrivateCreateFunction::OnAppUILoaded, this,
+                     std::move(result_arg)));
+
   window->LoadContents(params->url);
 
-  if (tab_url.empty()) {
-    tab_url = "about:blank";
+  if (!tab_url.empty()) {
+    content::OpenURLParams urlparams(GURL(tab_url), content::Referrer(),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
+    window->browser()->OpenURL(urlparams);
   }
-  content::OpenURLParams urlparams(GURL(tab_url), content::Referrer(),
-                                   WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                                   ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
-  window->browser()->OpenURL(urlparams);
 
   // TODO(pettern): If we ever need to open unfocused windows, we need to
   // add a new method for open delayed and unfocused.
   //  window->Show(focused ? AppWindow::SHOW_ACTIVE : AppWindow::SHOW_INACTIVE);
-  int window_id = window->browser()->session_id().id();
-  return RespondNow(ArgumentList(Results::Create(window_id)));
+
+  return RespondLater();
 }
 
 ExtensionFunction::ResponseAction WindowPrivateGetCurrentIdFunction::Run() {
@@ -370,4 +387,17 @@ ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
   }
   return RespondNow(NoArguments());
 }
+
+void WindowPrivateCreateFunction::OnAppUILoaded(ResponseValue result_arg,
+                                                bool did_finish) {
+  DCHECK(!did_respond());
+
+  if (!did_finish) {
+    Respond(Error("window closed before app-doc loaded"));
+    return;
+  }
+
+  Respond(std::move(result_arg));
+}
+
 }  // namespace extensions

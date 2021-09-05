@@ -24,7 +24,7 @@
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
-#include "chrome/browser/web_applications/components/web_app_tab_helper.h"
+#include "chrome/browser/web_applications/components/web_app_tab_helper_base.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -104,31 +104,11 @@ Browser* LaunchAppBrowser(Profile* profile, const Extension* extension_app) {
   return is_correct_app_browser ? browser : nullptr;
 }
 
-Browser* LaunchBrowserForAppInTab(Profile* profile,
-                                  const Extension* extension_app) {
-  content::WebContents* web_contents =
-      apps::LaunchService::Get(profile)->OpenApplication(apps::AppLaunchParams(
-          extension_app->id(), LaunchContainer::kLaunchContainerTab,
-          WindowOpenDisposition::NEW_FOREGROUND_TAB,
-          AppLaunchSource::kSourceTest));
-  DCHECK(web_contents);
-
-  web_app::WebAppTabHelper* tab_helper =
-      web_app::WebAppTabHelper::FromWebContents(web_contents);
-  DCHECK(tab_helper);
-  DCHECK_EQ(extension_app->id(), tab_helper->app_id());
-
-  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
-  DCHECK_EQ(browser, chrome::FindLastActive());
-  DCHECK_EQ(web_contents, browser->tab_strip_model()->GetActiveWebContents());
-  return browser;
-}
-
 content::WebContents* AddTab(Browser* browser, const GURL& url) {
   int starting_tab_count = browser->tab_strip_model()->count();
   ui_test_utils::NavigateToURLWithDisposition(
       browser, url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   int tab_count = browser->tab_strip_model()->count();
   EXPECT_EQ(starting_tab_count + 1, tab_count);
   return browser->tab_strip_model()->GetActiveWebContents();

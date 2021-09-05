@@ -6,13 +6,15 @@
 
 #include <stddef.h>
 
+#include <string>
+#include <vector>
+
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/platform/aura_window_properties.h"
 #include "ui/aura/client/focus_client.h"
-#include "ui/aura/window.h"
 #include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/widget/widget.h"
 
@@ -37,6 +39,33 @@ Widget* GetWidgetForWindow(aura::Window* window) {
   return widget;
 }
 
+// Fires |event| on the |window|, and the Widget and RootView associated with
+// |window|.
+void FireEventOnWindowChildWidgetAndRootView(aura::Window* window,
+                                             ax::mojom::Event event,
+                                             AXAuraObjCache* cache) {
+  cache->FireEvent(cache->GetOrCreate(window), event);
+  Widget* widget = GetWidgetForWindow(window);
+  if (widget) {
+    cache->FireEvent(cache->GetOrCreate(widget), event);
+
+    views::View* root_view = widget->GetRootView();
+    if (root_view)
+      root_view->NotifyAccessibilityEvent(event, true);
+  }
+}
+
+// Fires location change events on a window, taking into account its
+// associated widget, that widget's root view, and descendant windows.
+void FireLocationChangesRecursively(aura::Window* window,
+                                    AXAuraObjCache* cache) {
+  FireEventOnWindowChildWidgetAndRootView(
+      window, ax::mojom::Event::kLocationChanged, cache);
+
+  for (auto* child : window->children())
+    FireLocationChangesRecursively(child, cache);
+}
+
 }  // namespace
 
 AXWindowObjWrapper::AXWindowObjWrapper(AXAuraObjCache* aura_obj_cache,
@@ -44,15 +73,13 @@ AXWindowObjWrapper::AXWindowObjWrapper(AXAuraObjCache* aura_obj_cache,
     : AXAuraObjWrapper(aura_obj_cache),
       window_(window),
       is_root_window_(window->IsRootWindow()) {
-  window->AddObserver(this);
+  observer_.Add(window);
 
   if (is_root_window_)
     aura_obj_cache_->OnRootWindowObjCreated(window);
 }
 
-AXWindowObjWrapper::~AXWindowObjWrapper() {
-  window_->RemoveObserver(this);
-}
+AXWindowObjWrapper::~AXWindowObjWrapper() = default;
 
 bool AXWindowObjWrapper::IsIgnored() {
   return false;
@@ -144,53 +171,35 @@ void AXWindowObjWrapper::OnWindowBoundsChanged(
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
     ui::PropertyChangeReason reason) {
-  if (window != window_)
-    return;
-
-  FireEvent(window_, ax::mojom::Event::kLocationChanged);
+  if (window == window_)
+    FireLocationChangesRecursively(window_, aura_obj_cache_);
 }
 
 void AXWindowObjWrapper::OnWindowPropertyChanged(aura::Window* window,
                                                  const void* key,
                                                  intptr_t old) {
-  if (window == window_ && key == ui::kChildAXTreeID) {
-    aura_obj_cache_->FireEvent(this, ax::mojom::Event::kChildrenChanged);
-  }
+  if (window == window_ && key == ui::kChildAXTreeID)
+    FireEvent(ax::mojom::Event::kChildrenChanged);
 }
 
 void AXWindowObjWrapper::OnWindowVisibilityChanged(aura::Window* window,
                                                    bool visible) {
-  aura_obj_cache_->FireEvent(this, ax::mojom::Event::kStateChanged);
+  FireEvent(ax::mojom::Event::kStateChanged);
 }
 
 void AXWindowObjWrapper::OnWindowTransformed(aura::Window* window,
                                              ui::PropertyChangeReason reason) {
-  if (window != window_)
-    return;
-
-  FireEvent(window_, ax::mojom::Event::kLocationChanged);
+  if (window == window_)
+    FireLocationChangesRecursively(window_, aura_obj_cache_);
 }
 
 void AXWindowObjWrapper::OnWindowTitleChanged(aura::Window* window) {
-  FireEvent(window, ax::mojom::Event::kTextChanged);
+  FireEventOnWindowChildWidgetAndRootView(
+      window_, ax::mojom::Event::kTreeChanged, aura_obj_cache_);
 }
 
-void AXWindowObjWrapper::FireEvent(aura::Window* window,
-                                   ax::mojom::Event event_type) {
-  aura_obj_cache_->FireEvent(aura_obj_cache_->GetOrCreate(window), event_type);
-
-  Widget* widget = GetWidgetForWindow(window);
-  if (widget) {
-    aura_obj_cache_->FireEvent(aura_obj_cache_->GetOrCreate(widget),
-                               event_type);
-
-    views::View* root_view = widget->GetRootView();
-    if (root_view)
-      root_view->NotifyAccessibilityEvent(event_type, true);
-  }
-
-  for (auto* child : window->children())
-    FireEvent(child, ax::mojom::Event::kLocationChanged);
+void AXWindowObjWrapper::FireEvent(ax::mojom::Event event_type) {
+  aura_obj_cache_->FireEvent(aura_obj_cache_->GetOrCreate(window_), event_type);
 }
 
 }  // namespace views

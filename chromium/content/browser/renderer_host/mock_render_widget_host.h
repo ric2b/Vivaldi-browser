@@ -15,11 +15,7 @@
 #include "content/test/mock_widget_impl.h"
 #include "content/test/mock_widget_input_handler.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-
-namespace viz {
-class MockCompositorFrameSinkClient;
-}  // namespace viz
+#include "third_party/blink/public/common/input/web_input_event.h"
 
 namespace content {
 
@@ -27,12 +23,12 @@ class MockRenderWidgetHost : public RenderWidgetHostImpl {
  public:
   // Allow poking at a few private members.
   using RenderWidgetHostImpl::frame_token_message_queue_;
+  using RenderWidgetHostImpl::GetInitialVisualProperties;
   using RenderWidgetHostImpl::GetVisualProperties;
   using RenderWidgetHostImpl::input_router_;
   using RenderWidgetHostImpl::is_hidden_;
   using RenderWidgetHostImpl::old_visual_properties_;
   using RenderWidgetHostImpl::RendererExited;
-  using RenderWidgetHostImpl::SetInitialVisualProperties;
   using RenderWidgetHostImpl::visual_properties_ack_pending_;
 
   ~MockRenderWidgetHost() override;
@@ -55,12 +51,6 @@ class MockRenderWidgetHost : public RenderWidgetHostImpl {
   blink::WebInputEvent::Type acked_touch_event_type() const {
     return acked_touch_event_type_;
   }
-
-  // Mocks out |renderer_compositor_frame_sink_| with a
-  // CompositorFrameSinkClientPtr bound to
-  // |mock_renderer_compositor_frame_sink|.
-  void SetMockRendererCompositorFrameSink(
-      viz::MockCompositorFrameSinkClient* mock_renderer_compositor_frame_sink);
 
   void SetupForInputRouterTest();
 

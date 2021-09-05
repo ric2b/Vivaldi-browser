@@ -1085,6 +1085,19 @@ void GLES2TraceImplementation::MultiDrawArraysInstancedWEBGL(
                                      drawcount);
 }
 
+void GLES2TraceImplementation::MultiDrawArraysInstancedBaseInstanceWEBGL(
+    GLenum mode,
+    const GLint* firsts,
+    const GLsizei* counts,
+    const GLsizei* instance_counts,
+    const GLuint* baseinstances,
+    GLsizei drawcount) {
+  TRACE_EVENT_BINARY_EFFICIENT0(
+      "gpu", "GLES2Trace::MultiDrawArraysInstancedBaseInstanceWEBGL");
+  gl_->MultiDrawArraysInstancedBaseInstanceWEBGL(
+      mode, firsts, counts, instance_counts, baseinstances, drawcount);
+}
+
 void GLES2TraceImplementation::MultiDrawElementsWEBGL(GLenum mode,
                                                       const GLsizei* counts,
                                                       GLenum type,
@@ -1105,6 +1118,24 @@ void GLES2TraceImplementation::MultiDrawElementsInstancedWEBGL(
                                 "GLES2Trace::MultiDrawElementsInstancedWEBGL");
   gl_->MultiDrawElementsInstancedWEBGL(mode, counts, type, offsets,
                                        instance_counts, drawcount);
+}
+
+void GLES2TraceImplementation::
+    MultiDrawElementsInstancedBaseVertexBaseInstanceWEBGL(
+        GLenum mode,
+        const GLsizei* counts,
+        GLenum type,
+        const GLsizei* offsets,
+        const GLsizei* instance_counts,
+        const GLint* basevertices,
+        const GLuint* baseinstances,
+        GLsizei drawcount) {
+  TRACE_EVENT_BINARY_EFFICIENT0(
+      "gpu",
+      "GLES2Trace::MultiDrawElementsInstancedBaseVertexBaseInstanceWEBGL");
+  gl_->MultiDrawElementsInstancedBaseVertexBaseInstanceWEBGL(
+      mode, counts, type, offsets, instance_counts, basevertices, baseinstances,
+      drawcount);
 }
 
 void GLES2TraceImplementation::StencilFunc(GLenum func,
@@ -2007,7 +2038,7 @@ void GLES2TraceImplementation::UnmapTexSubImage2DCHROMIUM(const void* mem) {
 void GLES2TraceImplementation::ResizeCHROMIUM(GLuint width,
                                               GLuint height,
                                               GLfloat scale_factor,
-                                              GLenum color_space,
+                                              GLcolorSpace color_space,
                                               GLboolean alpha) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::ResizeCHROMIUM");
   gl_->ResizeCHROMIUM(width, height, scale_factor, color_space, alpha);
@@ -2143,6 +2174,18 @@ void GLES2TraceImplementation::DrawArraysInstancedANGLE(GLenum mode,
   gl_->DrawArraysInstancedANGLE(mode, first, count, primcount);
 }
 
+void GLES2TraceImplementation::DrawArraysInstancedBaseInstanceANGLE(
+    GLenum mode,
+    GLint first,
+    GLsizei count,
+    GLsizei primcount,
+    GLuint baseinstance) {
+  TRACE_EVENT_BINARY_EFFICIENT0(
+      "gpu", "GLES2Trace::DrawArraysInstancedBaseInstanceANGLE");
+  gl_->DrawArraysInstancedBaseInstanceANGLE(mode, first, count, primcount,
+                                            baseinstance);
+}
+
 void GLES2TraceImplementation::DrawElementsInstancedANGLE(GLenum mode,
                                                           GLsizei count,
                                                           GLenum type,
@@ -2151,6 +2194,20 @@ void GLES2TraceImplementation::DrawElementsInstancedANGLE(GLenum mode,
   TRACE_EVENT_BINARY_EFFICIENT0("gpu",
                                 "GLES2Trace::DrawElementsInstancedANGLE");
   gl_->DrawElementsInstancedANGLE(mode, count, type, indices, primcount);
+}
+
+void GLES2TraceImplementation::DrawElementsInstancedBaseVertexBaseInstanceANGLE(
+    GLenum mode,
+    GLsizei count,
+    GLenum type,
+    const void* indices,
+    GLsizei primcount,
+    GLint basevertex,
+    GLuint baseinstance) {
+  TRACE_EVENT_BINARY_EFFICIENT0(
+      "gpu", "GLES2Trace::DrawElementsInstancedBaseVertexBaseInstanceANGLE");
+  gl_->DrawElementsInstancedBaseVertexBaseInstanceANGLE(
+      mode, count, type, indices, primcount, basevertex, baseinstance);
 }
 
 void GLES2TraceImplementation::VertexAttribDivisorANGLE(GLuint index,
@@ -2364,228 +2421,6 @@ void GLES2TraceImplementation::SetActiveURLCHROMIUM(const char* url) {
   gl_->SetActiveURLCHROMIUM(url);
 }
 
-void GLES2TraceImplementation::MatrixLoadfCHROMIUM(GLenum matrixMode,
-                                                   const GLfloat* m) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::MatrixLoadfCHROMIUM");
-  gl_->MatrixLoadfCHROMIUM(matrixMode, m);
-}
-
-void GLES2TraceImplementation::MatrixLoadIdentityCHROMIUM(GLenum matrixMode) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
-                                "GLES2Trace::MatrixLoadIdentityCHROMIUM");
-  gl_->MatrixLoadIdentityCHROMIUM(matrixMode);
-}
-
-GLuint GLES2TraceImplementation::GenPathsCHROMIUM(GLsizei range) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::GenPathsCHROMIUM");
-  return gl_->GenPathsCHROMIUM(range);
-}
-
-void GLES2TraceImplementation::DeletePathsCHROMIUM(GLuint path, GLsizei range) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::DeletePathsCHROMIUM");
-  gl_->DeletePathsCHROMIUM(path, range);
-}
-
-GLboolean GLES2TraceImplementation::IsPathCHROMIUM(GLuint path) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::IsPathCHROMIUM");
-  return gl_->IsPathCHROMIUM(path);
-}
-
-void GLES2TraceImplementation::PathCommandsCHROMIUM(GLuint path,
-                                                    GLsizei numCommands,
-                                                    const GLubyte* commands,
-                                                    GLsizei numCoords,
-                                                    GLenum coordType,
-                                                    const GLvoid* coords) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::PathCommandsCHROMIUM");
-  gl_->PathCommandsCHROMIUM(path, numCommands, commands, numCoords, coordType,
-                            coords);
-}
-
-void GLES2TraceImplementation::PathParameterfCHROMIUM(GLuint path,
-                                                      GLenum pname,
-                                                      GLfloat value) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::PathParameterfCHROMIUM");
-  gl_->PathParameterfCHROMIUM(path, pname, value);
-}
-
-void GLES2TraceImplementation::PathParameteriCHROMIUM(GLuint path,
-                                                      GLenum pname,
-                                                      GLint value) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::PathParameteriCHROMIUM");
-  gl_->PathParameteriCHROMIUM(path, pname, value);
-}
-
-void GLES2TraceImplementation::PathStencilFuncCHROMIUM(GLenum func,
-                                                       GLint ref,
-                                                       GLuint mask) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::PathStencilFuncCHROMIUM");
-  gl_->PathStencilFuncCHROMIUM(func, ref, mask);
-}
-
-void GLES2TraceImplementation::StencilFillPathCHROMIUM(GLuint path,
-                                                       GLenum fillMode,
-                                                       GLuint mask) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::StencilFillPathCHROMIUM");
-  gl_->StencilFillPathCHROMIUM(path, fillMode, mask);
-}
-
-void GLES2TraceImplementation::StencilStrokePathCHROMIUM(GLuint path,
-                                                         GLint reference,
-                                                         GLuint mask) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::StencilStrokePathCHROMIUM");
-  gl_->StencilStrokePathCHROMIUM(path, reference, mask);
-}
-
-void GLES2TraceImplementation::CoverFillPathCHROMIUM(GLuint path,
-                                                     GLenum coverMode) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::CoverFillPathCHROMIUM");
-  gl_->CoverFillPathCHROMIUM(path, coverMode);
-}
-
-void GLES2TraceImplementation::CoverStrokePathCHROMIUM(GLuint path,
-                                                       GLenum coverMode) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::CoverStrokePathCHROMIUM");
-  gl_->CoverStrokePathCHROMIUM(path, coverMode);
-}
-
-void GLES2TraceImplementation::StencilThenCoverFillPathCHROMIUM(
-    GLuint path,
-    GLenum fillMode,
-    GLuint mask,
-    GLenum coverMode) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
-                                "GLES2Trace::StencilThenCoverFillPathCHROMIUM");
-  gl_->StencilThenCoverFillPathCHROMIUM(path, fillMode, mask, coverMode);
-}
-
-void GLES2TraceImplementation::StencilThenCoverStrokePathCHROMIUM(
-    GLuint path,
-    GLint reference,
-    GLuint mask,
-    GLenum coverMode) {
-  TRACE_EVENT_BINARY_EFFICIENT0(
-      "gpu", "GLES2Trace::StencilThenCoverStrokePathCHROMIUM");
-  gl_->StencilThenCoverStrokePathCHROMIUM(path, reference, mask, coverMode);
-}
-
-void GLES2TraceImplementation::StencilFillPathInstancedCHROMIUM(
-    GLsizei numPaths,
-    GLenum pathNameType,
-    const GLvoid* paths,
-    GLuint pathBase,
-    GLenum fillMode,
-    GLuint mask,
-    GLenum transformType,
-    const GLfloat* transformValues) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
-                                "GLES2Trace::StencilFillPathInstancedCHROMIUM");
-  gl_->StencilFillPathInstancedCHROMIUM(numPaths, pathNameType, paths, pathBase,
-                                        fillMode, mask, transformType,
-                                        transformValues);
-}
-
-void GLES2TraceImplementation::StencilStrokePathInstancedCHROMIUM(
-    GLsizei numPaths,
-    GLenum pathNameType,
-    const GLvoid* paths,
-    GLuint pathBase,
-    GLint reference,
-    GLuint mask,
-    GLenum transformType,
-    const GLfloat* transformValues) {
-  TRACE_EVENT_BINARY_EFFICIENT0(
-      "gpu", "GLES2Trace::StencilStrokePathInstancedCHROMIUM");
-  gl_->StencilStrokePathInstancedCHROMIUM(numPaths, pathNameType, paths,
-                                          pathBase, reference, mask,
-                                          transformType, transformValues);
-}
-
-void GLES2TraceImplementation::CoverFillPathInstancedCHROMIUM(
-    GLsizei numPaths,
-    GLenum pathNameType,
-    const GLvoid* paths,
-    GLuint pathBase,
-    GLenum coverMode,
-    GLenum transformType,
-    const GLfloat* transformValues) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
-                                "GLES2Trace::CoverFillPathInstancedCHROMIUM");
-  gl_->CoverFillPathInstancedCHROMIUM(numPaths, pathNameType, paths, pathBase,
-                                      coverMode, transformType,
-                                      transformValues);
-}
-
-void GLES2TraceImplementation::CoverStrokePathInstancedCHROMIUM(
-    GLsizei numPaths,
-    GLenum pathNameType,
-    const GLvoid* paths,
-    GLuint pathBase,
-    GLenum coverMode,
-    GLenum transformType,
-    const GLfloat* transformValues) {
-  TRACE_EVENT_BINARY_EFFICIENT0("gpu",
-                                "GLES2Trace::CoverStrokePathInstancedCHROMIUM");
-  gl_->CoverStrokePathInstancedCHROMIUM(numPaths, pathNameType, paths, pathBase,
-                                        coverMode, transformType,
-                                        transformValues);
-}
-
-void GLES2TraceImplementation::StencilThenCoverFillPathInstancedCHROMIUM(
-    GLsizei numPaths,
-    GLenum pathNameType,
-    const GLvoid* paths,
-    GLuint pathBase,
-    GLenum fillMode,
-    GLuint mask,
-    GLenum coverMode,
-    GLenum transformType,
-    const GLfloat* transformValues) {
-  TRACE_EVENT_BINARY_EFFICIENT0(
-      "gpu", "GLES2Trace::StencilThenCoverFillPathInstancedCHROMIUM");
-  gl_->StencilThenCoverFillPathInstancedCHROMIUM(
-      numPaths, pathNameType, paths, pathBase, fillMode, mask, coverMode,
-      transformType, transformValues);
-}
-
-void GLES2TraceImplementation::StencilThenCoverStrokePathInstancedCHROMIUM(
-    GLsizei numPaths,
-    GLenum pathNameType,
-    const GLvoid* paths,
-    GLuint pathBase,
-    GLint reference,
-    GLuint mask,
-    GLenum coverMode,
-    GLenum transformType,
-    const GLfloat* transformValues) {
-  TRACE_EVENT_BINARY_EFFICIENT0(
-      "gpu", "GLES2Trace::StencilThenCoverStrokePathInstancedCHROMIUM");
-  gl_->StencilThenCoverStrokePathInstancedCHROMIUM(
-      numPaths, pathNameType, paths, pathBase, reference, mask, coverMode,
-      transformType, transformValues);
-}
-
-void GLES2TraceImplementation::BindFragmentInputLocationCHROMIUM(
-    GLuint program,
-    GLint location,
-    const char* name) {
-  TRACE_EVENT_BINARY_EFFICIENT0(
-      "gpu", "GLES2Trace::BindFragmentInputLocationCHROMIUM");
-  gl_->BindFragmentInputLocationCHROMIUM(program, location, name);
-}
-
-void GLES2TraceImplementation::ProgramPathFragmentInputGenCHROMIUM(
-    GLuint program,
-    GLint location,
-    GLenum genMode,
-    GLint components,
-    const GLfloat* coeffs) {
-  TRACE_EVENT_BINARY_EFFICIENT0(
-      "gpu", "GLES2Trace::ProgramPathFragmentInputGenCHROMIUM");
-  gl_->ProgramPathFragmentInputGenCHROMIUM(program, location, genMode,
-                                           components, coeffs);
-}
-
 void GLES2TraceImplementation::ContextVisibilityHintCHROMIUM(
     GLboolean visibility) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu",
@@ -2607,12 +2442,6 @@ GLenum GLES2TraceImplementation::GetGraphicsResetStatusKHR() {
 void GLES2TraceImplementation::BlendBarrierKHR() {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::BlendBarrierKHR");
   gl_->BlendBarrierKHR();
-}
-
-void GLES2TraceImplementation::ApplyScreenSpaceAntialiasingCHROMIUM() {
-  TRACE_EVENT_BINARY_EFFICIENT0(
-      "gpu", "GLES2Trace::ApplyScreenSpaceAntialiasingCHROMIUM");
-  gl_->ApplyScreenSpaceAntialiasingCHROMIUM();
 }
 
 void GLES2TraceImplementation::BindFragDataLocationIndexedEXT(
@@ -2716,7 +2545,7 @@ void GLES2TraceImplementation::TexStorage2DImageCHROMIUM(GLenum target,
 
 void GLES2TraceImplementation::SetColorSpaceMetadataCHROMIUM(
     GLuint texture_id,
-    GLColorSpace color_space) {
+    GLcolorSpace color_space) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu",
                                 "GLES2Trace::SetColorSpaceMetadataCHROMIUM");
   gl_->SetColorSpaceMetadataCHROMIUM(texture_id, color_space);
@@ -2808,6 +2637,18 @@ void GLES2TraceImplementation::EndSharedImageAccessDirectCHROMIUM(
   TRACE_EVENT_BINARY_EFFICIENT0(
       "gpu", "GLES2Trace::EndSharedImageAccessDirectCHROMIUM");
   gl_->EndSharedImageAccessDirectCHROMIUM(texture);
+}
+
+void GLES2TraceImplementation::BeginBatchReadAccessSharedImageCHROMIUM() {
+  TRACE_EVENT_BINARY_EFFICIENT0(
+      "gpu", "GLES2Trace::BeginBatchReadAccessSharedImageCHROMIUM");
+  gl_->BeginBatchReadAccessSharedImageCHROMIUM();
+}
+
+void GLES2TraceImplementation::EndBatchReadAccessSharedImageCHROMIUM() {
+  TRACE_EVENT_BINARY_EFFICIENT0(
+      "gpu", "GLES2Trace::EndBatchReadAccessSharedImageCHROMIUM");
+  gl_->EndBatchReadAccessSharedImageCHROMIUM();
 }
 
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_TRACE_IMPLEMENTATION_IMPL_AUTOGEN_H_

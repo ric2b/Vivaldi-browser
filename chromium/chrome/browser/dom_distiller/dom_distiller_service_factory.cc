@@ -8,6 +8,8 @@
 
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/dom_distiller/content/browser/distiller_page_web_contents.h"
@@ -18,15 +20,21 @@
 #include "content/public/browser/storage_partition.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/dom_distiller/distiller_ui_handle_android.h"
+#endif  // defined(OS_ANDROID)
+
 namespace dom_distiller {
 
 DomDistillerContextKeyedService::DomDistillerContextKeyedService(
     std::unique_ptr<DistillerFactory> distiller_factory,
     std::unique_ptr<DistillerPageFactory> distiller_page_factory,
-    std::unique_ptr<DistilledPagePrefs> distilled_page_prefs)
+    std::unique_ptr<DistilledPagePrefs> distilled_page_prefs,
+    std::unique_ptr<DistillerUIHandle> distiller_ui_handle)
     : DomDistillerService(std::move(distiller_factory),
                           std::move(distiller_page_factory),
-                          std::move(distilled_page_prefs)) {}
+                          std::move(distilled_page_prefs),
+                          std::move(distiller_ui_handle)) {}
 
 // static
 DomDistillerServiceFactory* DomDistillerServiceFactory::GetInstance() {
@@ -53,8 +61,8 @@ KeyedService* DomDistillerServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   Profile* profile = Profile::FromBrowserContext(context);
   scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-      base::CreateSequencedTaskRunner({base::ThreadPool(), base::MayBlock(),
-                                       base::TaskPriority::BEST_EFFORT});
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
 
   base::FilePath database_dir(
       context->GetPath().Append(FILE_PATH_LITERAL("Articles")));
@@ -80,11 +88,17 @@ KeyedService* DomDistillerServiceFactory::BuildServiceInstanceFor(
       std::move(distiller_url_fetcher_factory), options));
   std::unique_ptr<DistilledPagePrefs> distilled_page_prefs(
       new DistilledPagePrefs(profile->GetPrefs()));
+  std::unique_ptr<DistillerUIHandle> distiller_ui_handle;
+
+#if defined(OS_ANDROID)
+  distiller_ui_handle =
+      std::make_unique<dom_distiller::android::DistillerUIHandleAndroid>();
+#endif  // defined(OS_ANDROID)
 
   DomDistillerContextKeyedService* service =
-      new DomDistillerContextKeyedService(std::move(distiller_factory),
-                                          std::move(distiller_page_factory),
-                                          std::move(distilled_page_prefs));
+      new DomDistillerContextKeyedService(
+          std::move(distiller_factory), std::move(distiller_page_factory),
+          std::move(distilled_page_prefs), std::move(distiller_ui_handle));
 
   return service;
 }

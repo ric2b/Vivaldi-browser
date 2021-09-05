@@ -10,8 +10,8 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/menu_button.h"
-#include "ui/views/controls/button/menu_button_listener.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view.h"
@@ -57,16 +57,14 @@ class ExampleMenuModel : public ui::SimpleMenuModel,
   DISALLOW_COPY_AND_ASSIGN(ExampleMenuModel);
 };
 
-class ExampleMenuButton : public MenuButton, public MenuButtonListener {
+class ExampleMenuButton : public MenuButton, public ButtonListener {
  public:
   explicit ExampleMenuButton(const base::string16& test);
   ~ExampleMenuButton() override;
 
  private:
-  // MenuButtonListener:
-  void OnMenuButtonClicked(Button* source,
-                           const gfx::Point& point,
-                           const ui::Event* event) override;
+  // ButtonListener:
+  void ButtonPressed(Button* source, const ui::Event& event) override;
 
   ui::SimpleMenuModel* GetMenuModel();
 
@@ -83,8 +81,7 @@ ExampleMenuModel::ExampleMenuModel() : ui::SimpleMenuModel(this) {
   AddSeparator(ui::NORMAL_SEPARATOR);
   AddRadioItem(COMMAND_SELECT_ASCII, ASCIIToUTF16("ASCII"),
                GROUP_MAKE_DECISION);
-  AddRadioItem(COMMAND_SELECT_UTF8, ASCIIToUTF16("UTF-8"),
-               GROUP_MAKE_DECISION);
+  AddRadioItem(COMMAND_SELECT_UTF8, ASCIIToUTF16("UTF-8"), GROUP_MAKE_DECISION);
   AddRadioItem(COMMAND_SELECT_UTF16, ASCIIToUTF16("UTF-16"),
                GROUP_MAKE_DECISION);
   AddSeparator(ui::NORMAL_SEPARATOR);
@@ -174,14 +171,13 @@ ExampleMenuButton::ExampleMenuButton(const base::string16& test)
 
 ExampleMenuButton::~ExampleMenuButton() = default;
 
-void ExampleMenuButton::OnMenuButtonClicked(Button* source,
-                                            const gfx::Point& point,
-                                            const ui::Event* event) {
+void ExampleMenuButton::ButtonPressed(Button* source, const ui::Event& event) {
   menu_runner_ =
       std::make_unique<MenuRunner>(GetMenuModel(), MenuRunner::HAS_MNEMONICS);
 
   menu_runner_->RunMenuAt(source->GetWidget()->GetTopLevelWidget(),
-                          button_controller(), gfx::Rect(point, gfx::Size()),
+                          button_controller(),
+                          gfx::Rect(source->GetMenuPosition(), gfx::Size()),
                           MenuAnchorPosition::kTopRight, ui::MENU_SOURCE_NONE);
 }
 
@@ -193,15 +189,14 @@ ui::SimpleMenuModel* ExampleMenuButton::GetMenuModel() {
 
 }  // namespace
 
-MenuExample::MenuExample() : ExampleBase("Menu") {
-}
+MenuExample::MenuExample() : ExampleBase("Menu") {}
 
 MenuExample::~MenuExample() = default;
 
 void MenuExample::CreateExampleView(View* container) {
   // We add a button to open a menu.
-  ExampleMenuButton* menu_button = new ExampleMenuButton(
-      ASCIIToUTF16("Open a menu"));
+  ExampleMenuButton* menu_button =
+      new ExampleMenuButton(ASCIIToUTF16("Open a menu"));
   container->SetLayoutManager(std::make_unique<FillLayout>());
   container->AddChildView(menu_button);
 }

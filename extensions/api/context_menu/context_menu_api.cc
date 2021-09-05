@@ -8,6 +8,11 @@
 
 #include "extensions/api/context_menu/context_menu_api.h"
 
+#include "content/public/browser/web_contents.h"
+#include "extensions/api/menubar_menu/menubar_menu_api.h"
+#include "ui/vivaldi_browser_window.h"
+#include "browser/vivaldi_browser_finder.h"
+
 namespace extensions {
 
 namespace context_menu = vivaldi::context_menu;
@@ -23,6 +28,17 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
   if (!web_contents)
     return RespondNow(Error("Missing WebContents"));
 
+  // We need a web contents that can be used to determine menu position.
+  // The sender web contents will with reusable react code be the same
+  // for all windows. We have to locate the proper web contents to use.
+  Browser* browser = ::vivaldi::FindBrowserByWindowId(
+      params->properties.window_id);
+  content::WebContents* window_web_contents = browser ?
+      static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents() :
+      nullptr;
+  if (!window_web_contents)
+    return RespondNow(Error("Missing WebContents"));
+
   if (web_contents->IsShowingContextMenu()) {
     return RespondNow(
         Error("Attempt to show a Vivaldi context menu while Chromium "
@@ -32,6 +48,7 @@ ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
 
   controller_.reset(new ::vivaldi::ContextMenuController(this,
                                                          web_contents,
+                                                         window_web_contents,
                                                          std::move(params)));
   controller_->Show();
 

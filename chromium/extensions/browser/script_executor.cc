@@ -36,14 +36,14 @@ const char kFrameRemoved[] = "The frame was removed.";
 // Generates an injection key based on the host ID and either the file URL, if
 // available, or the code string. The format of the key is
 // "<type><host_id><digest>", where <type> is one of "F" (file) and "C" (code),
-// <host_id> is the host ID, and <digest> is the hash digest (base::Hash) of
-// the file URL or the code string, respectively.
+// <host_id> is the host ID, and <digest> is an unspecified hash digest of the
+// file URL or the code string, respectively.
 const std::string GenerateInjectionKey(const HostID& host_id,
-                                       const GURL& file_url,
+                                       const GURL& script_url,
                                        const std::string& code) {
-  const std::string& source = file_url.is_valid() ? file_url.spec() : code;
-  return base::StringPrintf("%c%s%u", file_url.is_valid() ? 'F' : 'C',
-                            host_id.id().c_str(), base::Hash(source));
+  const std::string& source = script_url.is_valid() ? script_url.spec() : code;
+  return base::StringPrintf("%c%s%zu", script_url.is_valid() ? 'F' : 'C',
+                            host_id.id().c_str(), base::FastHash(source));
 }
 
 // A handler for a single injection request. On creation this will send the
@@ -244,7 +244,7 @@ void ScriptExecutor::ExecuteScript(const HostID& host_id,
                                    UserScript::RunLocation run_at,
                                    ScriptExecutor::ProcessType process_type,
                                    const GURL& webview_src,
-                                   const GURL& file_url,
+                                   const GURL& script_url,
                                    bool user_gesture,
                                    base::Optional<CSSOrigin> css_origin,
                                    ScriptExecutor::ResultType result_type,
@@ -269,7 +269,7 @@ void ScriptExecutor::ExecuteScript(const HostID& host_id,
   params.run_at = run_at;
   params.is_web_view = (process_type == WEB_VIEW_PROCESS);
   params.webview_src = webview_src;
-  params.file_url = file_url;
+  params.script_url = script_url;
   params.wants_result = (result_type == JSON_SERIALIZED_RESULT);
   params.user_gesture = user_gesture;
   params.css_origin = css_origin;
@@ -277,7 +277,7 @@ void ScriptExecutor::ExecuteScript(const HostID& host_id,
   // Generate an injection key if this is a CSS injection from an extension
   // (i.e. tabs.insertCSS).
   if (host_id.type() == HostID::EXTENSIONS && script_type == CSS)
-    params.injection_key = GenerateInjectionKey(host_id, file_url, code);
+    params.injection_key = GenerateInjectionKey(host_id, script_url, code);
 
   // Handler handles IPCs and deletes itself on completion.
   new Handler(observer_, web_contents_, params, frame_scope, frame_id,

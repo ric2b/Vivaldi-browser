@@ -11,18 +11,22 @@
 #include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/default_tick_clock.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/dns_probe_service_factory.h"
 #include "chrome/browser/net/dns_probe_test_util.h"
+#include "chrome/browser/net/dns_util.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/navigation_correction_tab_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/embedder_support/pref_names.h"
 #include "components/error_page/common/net_error_info.h"
 #include "components/google/core/common/google_util.h"
 #include "components/prefs/pref_service.h"
@@ -32,12 +36,19 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/url_loader_interceptor.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/net_errors.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/url_request/url_request_failed_job.h"
 #include "services/network/public/cpp/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if defined(OS_WIN)
+#include "base/win/win_util.h"
+#endif
 
 using base::Bind;
 using base::BindOnce;
@@ -95,6 +106,10 @@ class DelayingDnsProbeService : public DnsProbeService {
     delayed_probes_.push_back(std::move(callback));
   }
 
+  net::DnsConfigOverrides GetCurrentConfigOverridesForTesting() override {
+    return dns_probe_service_impl_->GetCurrentConfigOverridesForTesting();
+  }
+
   void StartDelayedProbes() {
     CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
 
@@ -142,18 +157,18 @@ class DelayableRequest {
 class DelayedURLLoader : public network::mojom::URLLoader,
                          public DelayableRequest {
  public:
-  DelayedURLLoader(network::mojom::URLLoaderRequest request,
-                   network::mojom::URLLoaderClientPtr client,
+  DelayedURLLoader(mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+                   mojo::Remote<network::mojom::URLLoaderClient> client,
                    int net_error,
                    bool should_delay,
                    DestructionCallback destruction_callback)
-      : binding_(this, std::move(request)),
+      : receiver_(this, std::move(receiver)),
         client_(std::move(client)),
         net_error_(net_error),
         should_delay_(should_delay),
         destruction_callback_(std::move(destruction_callback)) {
-    binding_.set_connection_error_handler(base::BindOnce(
-        &DelayedURLLoader::OnConnectionError, base::Unretained(this)));
+    receiver_.set_disconnect_handler(base::BindOnce(
+        &DelayedURLLoader::OnMojoDisconnect, base::Unretained(this)));
     if (!should_delay)
       SendResponse();
   }
@@ -180,7 +195,7 @@ class DelayedURLLoader : public network::mojom::URLLoader,
       std::move(destruction_callback_).Run(this);
   }
 
-  void OnConnectionError() { delete this; }
+  void OnMojoDisconnect() { delete this; }
 
   // mojom::URLLoader implementation:
   void FollowRedirect(const std::vector<std::string>& removed_headers,
@@ -191,8 +206,8 @@ class DelayedURLLoader : public network::mojom::URLLoader,
   void PauseReadingBodyFromNet() override {}
   void ResumeReadingBodyFromNet() override {}
 
-  mojo::Binding<network::mojom::URLLoader> binding_;
-  network::mojom::URLLoaderClientPtr client_;
+  mojo::Receiver<network::mojom::URLLoader> receiver_;
+  mojo::Remote<network::mojom::URLLoaderClient> client_;
   int net_error_;
   bool should_delay_;
   DestructionCallback destruction_callback_;
@@ -214,7 +229,7 @@ class BreakableCorrectionInterceptor {
   void InterceptURLLoaderRequest(
       content::URLLoaderInterceptor::RequestParams* params) {
     DelayedURLLoader* job = new DelayedURLLoader(
-        std::move(params->request), std::move(params->client), net_error_,
+        std::move(params->receiver), std::move(params->client), net_error_,
         delay_requests_,
         base::BindOnce(&BreakableCorrectionInterceptor::OnRequestDestroyed,
                        base::Unretained(this)));
@@ -339,15 +354,15 @@ class DnsProbeBrowserTest : public InProcessBrowserTest {
   // DnsProbeStatus messages of its currently active tab monitored.
   void SetActiveBrowser(Browser* browser);
 
-  // Sets the results the FakeHostResolver will return for the system and
-  // public DnsProbeRunners.  Since this mocks out the
-  // NetworkContext & HostResolver used by the DnsProbeService it doesn't really
-  // give an end-to-end test, but content::TestHostResolver mocks don't affect
-  // the probes since they use HostResolverSource::DNS, so this is the best
-  // that can be done currently.
+  // Sets the results the FakeHostResolver will return for the current config
+  // and Google config DnsProbeRunners. Since this mocks out the NetworkContext
+  // and HostResolver used by the DnsProbeService it doesn't really give an
+  // end-to-end test, but content::TestHostResolver mocks don't affect the
+  // probes since they use HostResolverSource::DNS, so this is the best that
+  // can be done currently.
   void SetFakeHostResolverResults(
-      std::vector<FakeHostResolver::SingleResult> system_results,
-      std::vector<FakeHostResolver::SingleResult> public_results);
+      std::vector<FakeHostResolver::SingleResult> current_config_results,
+      std::vector<FakeHostResolver::SingleResult> google_config_results);
 
   void SetCorrectionServiceBroken(bool broken);
   void SetCorrectionServiceDelayRequests(bool delay_requests);
@@ -384,7 +399,8 @@ class DnsProbeBrowserTest : public InProcessBrowserTest {
     return network_context_.get();
   }
 
-  network::mojom::DnsConfigChangeManagerPtr GetDnsConfigChangeManager();
+  mojo::Remote<network::mojom::DnsConfigChangeManager>
+  GetDnsConfigChangeManager();
 
   std::unique_ptr<FakeHostResolverNetworkContext> network_context_;
   std::unique_ptr<FakeDnsConfigChangeManager> dns_config_change_manager_;
@@ -406,18 +422,21 @@ class DnsProbeBrowserTest : public InProcessBrowserTest {
 DnsProbeBrowserTest::DnsProbeBrowserTest()
     : helper_(new DnsProbeBrowserTestIOThreadHelper()),
       active_browser_(NULL),
-      monitored_tab_helper_(NULL) {}
+      monitored_tab_helper_(NULL) {
+  NavigationCorrectionTabObserver::SetAllowEnableCorrectionsForTesting(true);
+}
 
 DnsProbeBrowserTest::~DnsProbeBrowserTest() {
   // No tests should have any unconsumed probe statuses.
   EXPECT_EQ(0, pending_status_count());
+  NavigationCorrectionTabObserver::SetAllowEnableCorrectionsForTesting(false);
 }
 
 void DnsProbeBrowserTest::SetUpOnMainThread() {
   NetErrorTabHelper::set_state_for_testing(NetErrorTabHelper::TESTING_DEFAULT);
 
   browser()->profile()->GetPrefs()->SetBoolean(
-      prefs::kAlternateErrorPagesEnabled, true);
+      embedder_support::kAlternateErrorPagesEnabled, true);
 
   base::PostTask(FROM_HERE, {BrowserThread::IO},
                  BindOnce(&DnsProbeBrowserTestIOThreadHelper::SetUpOnIOThread,
@@ -488,12 +507,12 @@ void DnsProbeBrowserTest::SetActiveBrowser(Browser* browser) {
 }
 
 void DnsProbeBrowserTest::SetFakeHostResolverResults(
-    std::vector<FakeHostResolver::SingleResult> system_results,
-    std::vector<FakeHostResolver::SingleResult> public_results) {
+    std::vector<FakeHostResolver::SingleResult> current_config_results,
+    std::vector<FakeHostResolver::SingleResult> google_config_results) {
   ASSERT_FALSE(network_context_);
 
   network_context_ = std::make_unique<FakeHostResolverNetworkContext>(
-      std::move(system_results), std::move(public_results));
+      std::move(current_config_results), std::move(google_config_results));
 }
 
 void DnsProbeBrowserTest::SetCorrectionServiceBroken(bool broken) {
@@ -614,20 +633,22 @@ void DnsProbeBrowserTest::OnDnsProbeStatusSent(
     awaiting_dns_probe_status_run_loop_->Quit();
 }
 
-network::mojom::DnsConfigChangeManagerPtr
+mojo::Remote<network::mojom::DnsConfigChangeManager>
 DnsProbeBrowserTest::GetDnsConfigChangeManager() {
-  network::mojom::DnsConfigChangeManagerPtr dns_config_change_manager_ptr;
+  mojo::Remote<network::mojom::DnsConfigChangeManager>
+      dns_config_change_manager_remote;
   dns_config_change_manager_ = std::make_unique<FakeDnsConfigChangeManager>(
-      mojo::MakeRequest(&dns_config_change_manager_ptr));
-  return dns_config_change_manager_ptr;
+      dns_config_change_manager_remote.BindNewPipeAndPassReceiver());
+  return dns_config_change_manager_remote;
 }
 
 // Test Fixture for tests where the DNS probes should succeed.
 class DnsProbeSuccessfulProbesTest : public DnsProbeBrowserTest {
   void SetUpOnMainThread() override {
-    SetFakeHostResolverResults(
-        {{net::OK, FakeHostResolver::kOneAddressResponse}},
-        {{net::OK, FakeHostResolver::kOneAddressResponse}});
+    SetFakeHostResolverResults({{net::OK, net::ResolveErrorInfo(net::OK),
+                                 FakeHostResolver::kOneAddressResponse}},
+                               {{net::OK, net::ResolveErrorInfo(net::OK),
+                                 FakeHostResolver::kOneAddressResponse}});
     DnsProbeBrowserTest::SetUpOnMainThread();
   }
 };
@@ -636,8 +657,51 @@ class DnsProbeSuccessfulProbesTest : public DnsProbeBrowserTest {
 class DnsProbeFailingProbesTest : public DnsProbeBrowserTest {
   void SetUpOnMainThread() override {
     SetFakeHostResolverResults(
-        {{net::ERR_NAME_NOT_RESOLVED, FakeHostResolver::kNoResponse}},
-        {{net::ERR_NAME_NOT_RESOLVED, FakeHostResolver::kNoResponse}});
+        {{net::ERR_NAME_NOT_RESOLVED,
+          net::ResolveErrorInfo(net::ERR_NAME_NOT_RESOLVED),
+          FakeHostResolver::kNoResponse}},
+        {{net::ERR_NAME_NOT_RESOLVED,
+          net::ResolveErrorInfo(net::ERR_NAME_NOT_RESOLVED),
+          FakeHostResolver::kNoResponse}});
+    DnsProbeBrowserTest::SetUpOnMainThread();
+  }
+};
+
+class DnsProbeCurrentConfigFailingProbesTest : public DnsProbeBrowserTest {
+ protected:
+  void SetUpOnMainThread() override {
+    SetFakeHostResolverResults(
+        {{net::ERR_NAME_NOT_RESOLVED,
+          net::ResolveErrorInfo(net::ERR_NAME_NOT_RESOLVED),
+          FakeHostResolver::kNoResponse}},
+        {{net::OK, net::ResolveErrorInfo(net::OK),
+          FakeHostResolver::kOneAddressResponse}});
+    DnsProbeBrowserTest::SetUpOnMainThread();
+  }
+};
+
+class DnsProbeCurrentSecureConfigFailingProbesTest
+    : public DnsProbeBrowserTest {
+ protected:
+  void SetUpOnMainThread() override {
+#if defined(OS_WIN)
+    // Mark as not enterprise managed to prevent the secure DNS mode from
+    // being downgraded to off.
+    base::win::ScopedDomainStateForTesting scoped_domain(false);
+#endif
+
+    PrefService* local_state = g_browser_process->local_state();
+    local_state->SetString(prefs::kDnsOverHttpsMode,
+                           chrome_browser_net::kDnsOverHttpsModeSecure);
+    local_state->SetString(prefs::kDnsOverHttpsTemplates,
+                           "https://bar.test/dns-query{?dns}");
+
+    SetFakeHostResolverResults(
+        {{net::ERR_NAME_NOT_RESOLVED,
+          net::ResolveErrorInfo(net::ERR_NAME_NOT_RESOLVED),
+          FakeHostResolver::kNoResponse}},
+        {{net::OK, net::ResolveErrorInfo(net::OK),
+          FakeHostResolver::kOneAddressResponse}});
     DnsProbeBrowserTest::SetUpOnMainThread();
   }
 };
@@ -646,9 +710,12 @@ class DnsProbeFailingProbesTest : public DnsProbeBrowserTest {
 // server (timeout or unreachable host).
 class DnsProbeUnreachableProbesTest : public DnsProbeBrowserTest {
   void SetUpOnMainThread() override {
-    SetFakeHostResolverResults(
-        {{net::ERR_DNS_TIMED_OUT, FakeHostResolver::kNoResponse}},
-        {{net::ERR_DNS_TIMED_OUT, FakeHostResolver::kNoResponse}});
+    SetFakeHostResolverResults({{net::ERR_NAME_NOT_RESOLVED,
+                                 net::ResolveErrorInfo(net::ERR_DNS_TIMED_OUT),
+                                 FakeHostResolver::kNoResponse}},
+                               {{net::ERR_NAME_NOT_RESOLVED,
+                                 net::ResolveErrorInfo(net::ERR_DNS_TIMED_OUT),
+                                 FakeHostResolver::kNoResponse}});
     DnsProbeBrowserTest::SetUpOnMainThread();
   }
 };
@@ -728,6 +795,52 @@ IN_PROC_BROWSER_TEST_F(DnsProbeSuccessfulProbesTest,
   // again.
   EXPECT_EQ(error_page::DNS_PROBE_FINISHED_NXDOMAIN, WaitForSentStatus());
   ExpectDisplayingCorrections("ERR_NAME_NOT_RESOLVED");
+}
+
+IN_PROC_BROWSER_TEST_F(DnsProbeCurrentConfigFailingProbesTest, BadConfig) {
+  SetCorrectionServiceBroken(true);
+
+  NavigateToDnsError(2);
+
+  EXPECT_EQ(error_page::DNS_PROBE_STARTED, WaitForSentStatus());
+  EXPECT_EQ(error_page::DNS_PROBE_STARTED, WaitForSentStatus());
+
+  // Checking the page runs the RunLoop, so make sure nothing hairy happens.
+  EXPECT_EQ(0, pending_status_count());
+  ExpectDisplayingLocalErrorPage("DNS_PROBE_STARTED");
+  EXPECT_EQ(0, pending_status_count());
+
+  StartDelayedProbes(1);
+
+  EXPECT_EQ(error_page::DNS_PROBE_FINISHED_BAD_CONFIG, WaitForSentStatus());
+
+  // Checking the page runs the RunLoop, so make sure nothing hairy happens.
+  EXPECT_EQ(0, pending_status_count());
+  ExpectDisplayingLocalErrorPage("DNS_PROBE_FINISHED_BAD_CONFIG");
+}
+
+IN_PROC_BROWSER_TEST_F(DnsProbeCurrentSecureConfigFailingProbesTest,
+                       BadSecureConfig) {
+  SetCorrectionServiceBroken(true);
+
+  NavigateToDnsError(2);
+
+  EXPECT_EQ(error_page::DNS_PROBE_STARTED, WaitForSentStatus());
+  EXPECT_EQ(error_page::DNS_PROBE_STARTED, WaitForSentStatus());
+
+  // Checking the page runs the RunLoop, so make sure nothing hairy happens.
+  EXPECT_EQ(0, pending_status_count());
+  ExpectDisplayingLocalErrorPage("DNS_PROBE_STARTED");
+  EXPECT_EQ(0, pending_status_count());
+
+  StartDelayedProbes(1);
+
+  EXPECT_EQ(error_page::DNS_PROBE_FINISHED_BAD_SECURE_CONFIG,
+            WaitForSentStatus());
+
+  // Checking the page runs the RunLoop, so make sure nothing hairy happens.
+  EXPECT_EQ(0, pending_status_count());
+  ExpectDisplayingLocalErrorPage("DNS_PROBE_FINISHED_BAD_SECURE_CONFIG");
 }
 
 // Make sure probes update DNS error page properly when they're supposed to.
@@ -882,7 +995,7 @@ IN_PROC_BROWSER_TEST_F(DnsProbeSuccessfulProbesTest, NoProbeInSubframe) {
 IN_PROC_BROWSER_TEST_F(DnsProbeUnreachableProbesTest, ProbesDisabled) {
   // Disable probes (And corrections).
   browser()->profile()->GetPrefs()->SetBoolean(
-      prefs::kAlternateErrorPagesEnabled, false);
+      embedder_support::kAlternateErrorPagesEnabled, false);
 
   SetCorrectionServiceBroken(true);
 
@@ -900,7 +1013,7 @@ IN_PROC_BROWSER_TEST_F(DnsProbeUnreachableProbesTest, ProbesDisabled) {
 IN_PROC_BROWSER_TEST_F(DnsProbeFailingProbesTest, CorrectionsDisabled) {
   // Disable corrections.
   browser()->profile()->GetPrefs()->SetBoolean(
-      prefs::kAlternateErrorPagesEnabled, false);
+      embedder_support::kAlternateErrorPagesEnabled, false);
   // Requests to the correction service should work if any are made, so the test
   // fails if that happens unexpectedly.
   SetCorrectionServiceBroken(false);

@@ -16,8 +16,6 @@ internals.settings.setAutoplayPolicy('user-gesture-required');
 internals.settings.setWebAppScope(
     document.URL.substring(0, document.URL.lastIndexOf('/') + 1) + "foo/");
 
-testRunner.setAutoplayAllowed(true);
-
 function createMediaElement(type) {
   var e = document.createElement(type);
   e.src = type == 'audio' ? 'content/test.oga' : 'content/test.ogv';
@@ -46,11 +44,9 @@ async_test(function(t) {
 }, "Test that a video with an autoplay attribute doesn't autoplay when not whitelisted.");
 
 promise_test(function(t) {
-  return promise_rejects(
+  return promise_rejects_dom(
       t,
-      new DOMException(
-          'play() can only be initiated by a user gesture.',
-          'NotAllowedError'),
+      'NotAllowedError',
       createVideoElement().play());
 }, "Test that play() on a video fails without gesture when not whitelisted.");
 
@@ -68,11 +64,9 @@ async_test(function(t) {
 }, "Test that an audio with an autoplay attribute doesn't autoplay when not whitelisted.");
 
 promise_test(function(t) {
-  return promise_rejects(
+  return promise_rejects_dom(
       t,
-      new DOMException(
-          'play() can only be initiated by a user gesture.',
-          'NotAllowedError'),
+      'NotAllowedError',
       createAudioElement().play());
 }, "Test that play() on an audio fails without gesture when not whitelisted.");
 

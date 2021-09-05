@@ -38,15 +38,18 @@ const AtomicString& RemotePlaybackStateToString(
   DEFINE_STATIC_LOCAL(const AtomicString, connected_value, ("connected"));
   DEFINE_STATIC_LOCAL(const AtomicString, disconnected_value, ("disconnected"));
 
-  if (state == mojom::blink::PresentationConnectionState::CONNECTING)
-    return connecting_value;
-  if (state == mojom::blink::PresentationConnectionState::CONNECTED)
-    return connected_value;
-  if (state == mojom::blink::PresentationConnectionState::CLOSED)
-    return disconnected_value;
-
-  NOTREACHED();
-  return disconnected_value;
+  switch (state) {
+    case mojom::blink::PresentationConnectionState::CONNECTING:
+      return connecting_value;
+    case mojom::blink::PresentationConnectionState::CONNECTED:
+      return connected_value;
+    case mojom::blink::PresentationConnectionState::CLOSED:
+    case mojom::blink::PresentationConnectionState::TERMINATED:
+      return disconnected_value;
+    default:
+      NOTREACHED();
+      return disconnected_value;
+  }
 }
 
 void RunRemotePlaybackTask(ExecutionContext* context,
@@ -88,7 +91,7 @@ RemotePlayback& RemotePlayback::From(HTMLMediaElement& element) {
 }
 
 RemotePlayback::RemotePlayback(HTMLMediaElement& element)
-    : ContextLifecycleObserver(element.GetExecutionContext()),
+    : ExecutionContextLifecycleObserver(element.GetExecutionContext()),
       RemotePlaybackController(element),
       state_(mojom::blink::PresentationConnectionState::CLOSED),
       availability_(mojom::ScreenAvailability::UNKNOWN),
@@ -100,7 +103,7 @@ const AtomicString& RemotePlayback::InterfaceName() const {
 }
 
 ExecutionContext* RemotePlayback::GetExecutionContext() const {
-  return &media_element_->GetDocument();
+  return ExecutionContextLifecycleObserver::GetExecutionContext();
 }
 
 ScriptPromise RemotePlayback::watchAvailability(
@@ -241,7 +244,7 @@ bool RemotePlayback::HasPendingActivity() const {
          prompt_promise_resolver_;
 }
 
-void RemotePlayback::ContextDestroyed(ExecutionContext*) {
+void RemotePlayback::ContextDestroyed() {
   CleanupConnections();
 }
 
@@ -280,6 +283,9 @@ int RemotePlayback::WatchAvailabilityInternal(
       IsBackgroundAvailabilityMonitoringDisabled()) {
     return kWatchAvailabilityNotSupported;
   }
+
+  if (!GetExecutionContext())
+    return kWatchAvailabilityNotSupported;
 
   int id;
   do {
@@ -357,20 +363,22 @@ void RemotePlayback::StateChanged(
   state_ = state;
   if (state_ == mojom::blink::PresentationConnectionState::CONNECTING) {
     DispatchEvent(*Event::Create(event_type_names::kConnecting));
-    if (media_element_->IsHTMLVideoElement()) {
+    if (auto* video_element =
+            DynamicTo<HTMLVideoElement>(media_element_.Get())) {
       // TODO(xjz): Pass the remote device name.
-      ToHTMLVideoElement(media_element_.Get())
-          ->MediaRemotingStarted(WebString());
+
+      video_element->MediaRemotingStarted(WebString());
     }
     media_element_->FlingingStarted();
   } else if (state_ == mojom::blink::PresentationConnectionState::CONNECTED) {
     DispatchEvent(*Event::Create(event_type_names::kConnect));
-  } else if (state_ == mojom::blink::PresentationConnectionState::CLOSED) {
+  } else if (state_ == mojom::blink::PresentationConnectionState::CLOSED ||
+             state_ == mojom::blink::PresentationConnectionState::TERMINATED) {
     DispatchEvent(*Event::Create(event_type_names::kDisconnect));
-    if (media_element_->IsHTMLVideoElement()) {
-      ToHTMLVideoElement(media_element_.Get())
-          ->MediaRemotingStopped(
-              WebMediaPlayerClient::kMediaRemotingStopNoText);
+    if (auto* video_element =
+            DynamicTo<HTMLVideoElement>(media_element_.Get())) {
+      video_element->MediaRemotingStopped(
+          WebMediaPlayerClient::kMediaRemotingStopNoText);
     }
     CleanupConnections();
     presentation_id_ = "";
@@ -461,8 +469,10 @@ void RemotePlayback::RemotePlaybackDisabled() {
   availability_callbacks_.clear();
   StopListeningForAvailability();
 
-  if (state_ == mojom::blink::PresentationConnectionState::CLOSED)
+  if (state_ == mojom::blink::PresentationConnectionState::CLOSED ||
+      state_ == mojom::blink::PresentationConnectionState::TERMINATED) {
     return;
+  }
 
   auto* controller = PresentationController::FromContext(GetExecutionContext());
   if (controller) {
@@ -591,13 +601,13 @@ void RemotePlayback::MaybeStartListeningForAvailability() {
   is_listening_ = true;
 }
 
-void RemotePlayback::Trace(blink::Visitor* visitor) {
+void RemotePlayback::Trace(Visitor* visitor) {
   visitor->Trace(availability_callbacks_);
   visitor->Trace(prompt_promise_resolver_);
   visitor->Trace(media_element_);
   visitor->Trace(observers_);
   EventTargetWithInlineData::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
   RemotePlaybackController::Trace(visitor);
 }
 

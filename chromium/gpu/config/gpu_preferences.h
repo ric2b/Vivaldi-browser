@@ -37,6 +37,14 @@ enum class VulkanImplementationName : uint32_t {
   kLast = kSwiftshader,
 };
 
+enum class GrContextType : uint32_t {
+  kGL = 0,
+  kVulkan = 1,
+  kMetal = 2,
+  kDawn = 3,
+  kLast = kDawn,
+};
+
 // NOTE: if you modify this structure then you must also modify the
 // following two files to keep them in sync:
 //   src/gpu/ipc/common/gpu_preferences.mojom
@@ -127,8 +135,14 @@ struct GPU_EXPORT GpuPreferences {
   // Enforce GL minimums.
   bool enforce_gl_minimums = false;
 
-  // Sets the total amount of memory that may be allocated for GPU resources
-  uint32_t force_gpu_mem_available = 0;
+  // Sets the total amount of memory that may be allocated for GPU resources.
+  uint32_t force_gpu_mem_available_bytes = 0u;
+
+  // Sets the maximum discardable cache size limit for GPU resources.
+  uint32_t force_gpu_mem_discardable_limit_bytes = 0u;
+
+  // Sets maximum texture size.
+  uint32_t force_max_texture_size = 0u;
 
   // Sets the maximum size of the in-memory gpu program cache, in kb
   uint32_t gpu_program_cache_size = kDefaultMaxProgramCacheMemoryBytes;
@@ -178,9 +192,6 @@ struct GPU_EXPORT GpuPreferences {
   // ===================================
   // Settings from //gpu/config/gpu_switches.h
 
-  // Disables workarounds for various GPU driver bugs.
-  bool disable_gpu_driver_bug_workarounds = false;
-
   // Ignores GPU blacklist.
   bool ignore_gpu_blacklist = false;
 
@@ -197,6 +208,9 @@ struct GPU_EXPORT GpuPreferences {
 
   // ===================================
   // Settings from //gpu/command_buffer/service/gpu_switches.h
+  // The type of the GrContext.
+  GrContextType gr_context_type = GrContextType::kGL;
+
   // Use Vulkan for rasterization and display compositing.
   VulkanImplementationName use_vulkan = VulkanImplementationName::kNone;
 
@@ -222,10 +236,29 @@ struct GPU_EXPORT GpuPreferences {
   // Enable the WebGPU command buffer.
   bool enable_webgpu = false;
 
+  // Enable measuring blocked time on GPU Main thread
+  bool enable_gpu_blocked_time_metric = false;
+
+  // Enable collecting perf data for device categorization purpose. Currently
+  // only enabled on Windows platform for the info collection GPU process.
+  bool enable_perf_data_collection = false;
+
 #if defined(USE_OZONE)
   // Determines message pump type for the GPU thread.
   base::MessagePumpType message_pump_type = base::MessagePumpType::DEFAULT;
 #endif
+
+  // ===================================
+  // Settings from //ui/gfx/switches.h
+
+  // Enable native CPU-mappable GPU memory buffer support on Linux.
+  bool enable_native_gpu_memory_buffers = false;
+
+  // ===================================
+  // Settings from //media/base/media_switches.h
+
+  // Force to disable new VideoDecoder.
+  bool force_disable_new_accelerated_video_decoder = false;
 
   // Please update gpu_preferences_unittest.cc when making additions or
   // changes to this struct.

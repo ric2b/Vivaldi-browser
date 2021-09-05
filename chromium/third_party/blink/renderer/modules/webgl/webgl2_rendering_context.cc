@@ -17,7 +17,10 @@
 #include "third_party/blink/renderer/modules/webgl/ext_color_buffer_float.h"
 #include "third_party/blink/renderer/modules/webgl/ext_disjoint_timer_query_webgl2.h"
 #include "third_party/blink/renderer/modules/webgl/ext_float_blend.h"
+#include "third_party/blink/renderer/modules/webgl/ext_texture_compression_bptc.h"
+#include "third_party/blink/renderer/modules/webgl/ext_texture_compression_rgtc.h"
 #include "third_party/blink/renderer/modules/webgl/ext_texture_filter_anisotropic.h"
+#include "third_party/blink/renderer/modules/webgl/ext_texture_norm_16.h"
 #include "third_party/blink/renderer/modules/webgl/khr_parallel_shader_compile.h"
 #include "third_party/blink/renderer/modules/webgl/oes_texture_float_linear.h"
 #include "third_party/blink/renderer/modules/webgl/ovr_multiview_2.h"
@@ -31,9 +34,10 @@
 #include "third_party/blink/renderer/modules/webgl/webgl_context_event.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_debug_renderer_info.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_debug_shaders.h"
+#include "third_party/blink/renderer/modules/webgl/webgl_draw_instanced_base_vertex_base_instance.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_lose_context.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_multi_draw.h"
-#include "third_party/blink/renderer/modules/webgl/webgl_multi_draw_instanced.h"
+#include "third_party/blink/renderer/modules/webgl/webgl_multi_draw_instanced_base_vertex_base_instance.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_video_texture.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 
@@ -123,37 +127,41 @@ ImageBitmap* WebGL2RenderingContext::TransferToImageBitmap(
 
 void WebGL2RenderingContext::RegisterContextExtensions() {
   // Register extensions.
-  RegisterExtension<EXTColorBufferFloat>(ext_color_buffer_float_);
-  RegisterExtension<EXTDisjointTimerQueryWebGL2>(
-      ext_disjoint_timer_query_web_gl2_);
-  RegisterExtension<EXTFloatBlend>(ext_float_blend_);
-  RegisterExtension<EXTTextureFilterAnisotropic>(
-      ext_texture_filter_anisotropic_);
-  RegisterExtension<KHRParallelShaderCompile>(khr_parallel_shader_compile_);
-  RegisterExtension<OESTextureFloatLinear>(oes_texture_float_linear_);
-  RegisterExtension<WebGLCompressedTextureASTC>(webgl_compressed_texture_astc_);
-  RegisterExtension<WebGLCompressedTextureETC>(webgl_compressed_texture_etc_);
-  RegisterExtension<WebGLCompressedTextureETC1>(webgl_compressed_texture_etc1_);
-  RegisterExtension<WebGLCompressedTexturePVRTC>(
-      webgl_compressed_texture_pvrtc_);
-  RegisterExtension<WebGLCompressedTextureS3TC>(webgl_compressed_texture_s3tc_);
-  RegisterExtension<WebGLCompressedTextureS3TCsRGB>(
-      webgl_compressed_texture_s3tc_srgb_);
-  RegisterExtension<WebGLDebugRendererInfo>(webgl_debug_renderer_info_);
-  RegisterExtension<WebGLDebugShaders>(webgl_debug_shaders_);
-  RegisterExtension<WebGLLoseContext>(webgl_lose_context_);
-  RegisterExtension<WebGLMultiDraw>(webgl_multi_draw_, kDraftExtension);
-  RegisterExtension<WebGLMultiDrawInstanced>(webgl_multi_draw_instanced_,
-                                             kDraftExtension);
-  RegisterExtension<WebGLVideoTexture>(webgl_video_texture_, kDraftExtension);
-  RegisterExtension<OVRMultiview2>(ovr_multiview2_);
+  RegisterExtension(ext_color_buffer_float_);
+  RegisterExtension(ext_disjoint_timer_query_web_gl2_);
+  RegisterExtension(ext_float_blend_);
+  RegisterExtension(ext_texture_compression_bptc_);
+  RegisterExtension(ext_texture_compression_rgtc_);
+  RegisterExtension(ext_texture_filter_anisotropic_);
+  RegisterExtension(ext_texture_norm16_, kDraftExtension);
+  RegisterExtension(khr_parallel_shader_compile_);
+  RegisterExtension(oes_texture_float_linear_);
+  RegisterExtension(webgl_compressed_texture_astc_);
+  RegisterExtension(webgl_compressed_texture_etc_);
+  RegisterExtension(webgl_compressed_texture_etc1_);
+  RegisterExtension(webgl_compressed_texture_pvrtc_);
+  RegisterExtension(webgl_compressed_texture_s3tc_);
+  RegisterExtension(webgl_compressed_texture_s3tc_srgb_);
+  RegisterExtension(webgl_debug_renderer_info_);
+  RegisterExtension(webgl_debug_shaders_);
+  RegisterExtension(webgl_draw_instanced_base_vertex_base_instance_,
+                    kDraftExtension);
+  RegisterExtension(webgl_lose_context_);
+  RegisterExtension(webgl_multi_draw_, kDraftExtension);
+  RegisterExtension(webgl_multi_draw_instanced_base_vertex_base_instance_,
+                    kDraftExtension);
+  RegisterExtension(webgl_video_texture_, kDraftExtension);
+  RegisterExtension(ovr_multiview2_);
 }
 
-void WebGL2RenderingContext::Trace(blink::Visitor* visitor) {
+void WebGL2RenderingContext::Trace(Visitor* visitor) {
   visitor->Trace(ext_color_buffer_float_);
   visitor->Trace(ext_disjoint_timer_query_web_gl2_);
   visitor->Trace(ext_float_blend_);
+  visitor->Trace(ext_texture_compression_bptc_);
+  visitor->Trace(ext_texture_compression_rgtc_);
   visitor->Trace(ext_texture_filter_anisotropic_);
+  visitor->Trace(ext_texture_norm16_);
   visitor->Trace(khr_parallel_shader_compile_);
   visitor->Trace(oes_texture_float_linear_);
   visitor->Trace(ovr_multiview2_);
@@ -165,9 +173,10 @@ void WebGL2RenderingContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(webgl_compressed_texture_s3tc_srgb_);
   visitor->Trace(webgl_debug_renderer_info_);
   visitor->Trace(webgl_debug_shaders_);
+  visitor->Trace(webgl_draw_instanced_base_vertex_base_instance_);
   visitor->Trace(webgl_lose_context_);
   visitor->Trace(webgl_multi_draw_);
-  visitor->Trace(webgl_multi_draw_instanced_);
+  visitor->Trace(webgl_multi_draw_instanced_base_vertex_base_instance_);
   visitor->Trace(webgl_video_texture_);
   WebGL2RenderingContextBase::Trace(visitor);
 }

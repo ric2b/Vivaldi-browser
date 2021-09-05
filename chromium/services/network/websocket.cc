@@ -24,7 +24,7 @@
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
-#include "net/base/static_cookie_policy.h"
+#include "net/cookies/static_cookie_policy.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
@@ -72,6 +72,35 @@ mojom::WebSocketMessageType OpCodeToMessageType(
   return static_cast<mojom::WebSocketMessageType>(opCode);
 }
 
+mojom::WebSocketHandshakeResponsePtr ToMojo(
+    std::unique_ptr<net::WebSocketHandshakeResponseInfo> response,
+    bool has_raw_headers_access) {
+  mojom::WebSocketHandshakeResponsePtr response_to_pass(
+      mojom::WebSocketHandshakeResponse::New());
+  response_to_pass->url.Swap(&response->url);
+  response_to_pass->status_code = response->headers->response_code();
+  response_to_pass->status_text = response->headers->GetStatusText();
+  response_to_pass->http_version = response->headers->GetHttpVersion();
+  response_to_pass->remote_endpoint = response->remote_endpoint;
+  size_t iter = 0;
+  std::string name, value;
+  std::string headers_text =
+      base::StrCat({response->headers->GetStatusLine(), "\r\n"});
+  while (response->headers->EnumerateHeaderLines(&iter, &name, &value)) {
+    if (has_raw_headers_access ||
+        !net::HttpResponseHeaders::IsCookieResponseHeader(name)) {
+      // We drop cookie-related headers such as "set-cookie" when the
+      // renderer doesn't have access.
+      response_to_pass->headers.push_back(mojom::HttpHeader::New(name, value));
+      base::StrAppend(&headers_text, {name, ": ", value, "\r\n"});
+    }
+  }
+  headers_text.append("\r\n");
+  response_to_pass->headers_text = headers_text;
+
+  return response_to_pass;
+}
+
 }  // namespace
 
 // Implementation of net::WebSocketEventInterface. Receives events from our
@@ -85,8 +114,11 @@ class WebSocket::WebSocketEventHandler final
   // net::WebSocketEventInterface implementation
 
   void OnCreateURLRequest(net::URLRequest* url_request) override;
-  void OnAddChannelResponse(const std::string& selected_subprotocol,
-                            const std::string& extensions) override;
+  void OnAddChannelResponse(
+      std::unique_ptr<net::WebSocketHandshakeResponseInfo> response,
+      const std::string& selected_subprotocol,
+      const std::string& extensions,
+      int64_t send_flow_control_quota) override;
   void OnDataFrame(bool fin,
                    WebSocketMessageType type,
                    base::span<const char> payload) override;
@@ -99,8 +131,6 @@ class WebSocket::WebSocketEventHandler final
   void OnFailChannel(const std::string& message) override;
   void OnStartOpeningHandshake(
       std::unique_ptr<net::WebSocketHandshakeRequestInfo> request) override;
-  void OnFinishOpeningHandshake(
-      std::unique_ptr<net::WebSocketHandshakeResponseInfo> response) override;
   void OnSSLCertificateError(
       std::unique_ptr<net::WebSocketEventInterface::SSLErrorCallbacks>
           callbacks,
@@ -117,8 +147,6 @@ class WebSocket::WebSocketEventHandler final
 
  private:
   WebSocket* const impl_;
-
-  mojom::WebSocketHandshakeResponsePtr response_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(WebSocketEventHandler);
 };
@@ -141,8 +169,10 @@ void WebSocket::WebSocketEventHandler::OnCreateURLRequest(
 }
 
 void WebSocket::WebSocketEventHandler::OnAddChannelResponse(
+    std::unique_ptr<net::WebSocketHandshakeResponseInfo> response,
     const std::string& selected_protocol,
-    const std::string& extensions) {
+    const std::string& extensions,
+    int64_t send_flow_control_quota) {
   DVLOG(3) << "WebSocketEventHandler::OnAddChannelResponse @"
            << reinterpret_cast<void*>(this) << " selected_protocol=\""
            << selected_protocol << "\""
@@ -181,10 +211,28 @@ void WebSocket::WebSocketEventHandler::OnAddChannelResponse(
       base::BindRepeating(&WebSocket::OnWritable, base::Unretained(impl_)));
   DCHECK_EQ(mojo_result, MOJO_RESULT_OK);
 
+  mojo::ScopedDataPipeProducerHandle writable;
+  const MojoResult write_pipe_result =
+      mojo::CreateDataPipe(&data_pipe_options, &writable, &impl_->readable_);
+  if (write_pipe_result != MOJO_RESULT_OK) {
+    DVLOG(1) << "mojo::CreateDataPipe error:" << result;
+    impl_->Reset();
+    return;
+  }
+  const MojoResult mojo_readable_result = impl_->readable_watcher_.Watch(
+      impl_->readable_.get(), MOJO_HANDLE_SIGNAL_READABLE,
+      MOJO_WATCH_CONDITION_SATISFIED,
+      base::BindRepeating(&WebSocket::OnReadable, base::Unretained(impl_)));
+  DCHECK_EQ(mojo_readable_result, MOJO_RESULT_OK);
+
+  mojom::WebSocketHandshakeResponsePtr mojo_response =
+      ToMojo(std::move(response), !!impl_->has_raw_headers_access_);
+  mojo_response->selected_protocol = selected_protocol;
+  mojo_response->extensions = extensions;
   impl_->handshake_client_->OnConnectionEstablished(
       impl_->receiver_.BindNewPipeAndPassRemote(),
-      impl_->client_.BindNewPipeAndPassReceiver(), selected_protocol,
-      extensions, std::move(response_), std::move(readable));
+      impl_->client_.BindNewPipeAndPassReceiver(), std::move(mojo_response),
+      std::move(readable), std::move(writable));
   impl_->receiver_.set_disconnect_handler(base::BindOnce(
       &WebSocket::OnConnectionError, base::Unretained(impl_), FROM_HERE));
   impl_->handshake_client_.reset();
@@ -192,6 +240,8 @@ void WebSocket::WebSocketEventHandler::OnAddChannelResponse(
   impl_->header_client_.reset();
   impl_->client_.set_disconnect_handler(base::BindOnce(
       &WebSocket::OnConnectionError, base::Unretained(impl_), FROM_HERE));
+
+  impl_->client_->AddSendFlowControlQuota(send_flow_control_quota);
 }
 
 void WebSocket::WebSocketEventHandler::OnDataFrame(
@@ -201,7 +251,6 @@ void WebSocket::WebSocketEventHandler::OnDataFrame(
   DVLOG(3) << "WebSocketEventHandler::OnDataFrame @"
            << reinterpret_cast<void*>(this) << " fin=" << fin
            << " type=" << type << " data is " << payload.size() << " bytes";
-  // TODO(yoichio): Merge OnDataFrame mojo channel into data pipe.
   impl_->client_->OnDataFrame(fin, OpCodeToMessageType(type), payload.size());
   if (payload.size() > 0) {
     impl_->pending_data_frames_.push(payload);
@@ -283,38 +332,6 @@ void WebSocket::WebSocketEventHandler::OnStartOpeningHandshake(
       std::move(request_to_pass));
 }
 
-void WebSocket::WebSocketEventHandler::OnFinishOpeningHandshake(
-    std::unique_ptr<net::WebSocketHandshakeResponseInfo> response) {
-  DVLOG(3) << "WebSocketEventHandler::OnFinishOpeningHandshake "
-           << reinterpret_cast<void*>(this)
-           << " CanReadRawCookies=" << impl_->has_raw_headers_access_;
-
-  mojom::WebSocketHandshakeResponsePtr response_to_pass(
-      mojom::WebSocketHandshakeResponse::New());
-  response_to_pass->url.Swap(&response->url);
-  response_to_pass->status_code = response->headers->response_code();
-  response_to_pass->status_text = response->headers->GetStatusText();
-  response_to_pass->http_version = response->headers->GetHttpVersion();
-  response_to_pass->remote_endpoint = response->remote_endpoint;
-  size_t iter = 0;
-  std::string name, value;
-  std::string headers_text =
-      base::StrCat({response->headers->GetStatusLine(), "\r\n"});
-  while (response->headers->EnumerateHeaderLines(&iter, &name, &value)) {
-    if (impl_->has_raw_headers_access_ ||
-        !net::HttpResponseHeaders::IsCookieResponseHeader(name)) {
-      // We drop cookie-related headers such as "set-cookie" when the
-      // renderer doesn't have access.
-      response_to_pass->headers.push_back(mojom::HttpHeader::New(name, value));
-      base::StrAppend(&headers_text, {name, ": ", value, "\r\n"});
-    }
-  }
-  headers_text.append("\r\n");
-  response_to_pass->headers_text = headers_text;
-
-  response_ = std::move(response_to_pass);
-}
-
 void WebSocket::WebSocketEventHandler::OnSSLCertificateError(
     std::unique_ptr<net::WebSocketEventInterface::SSLErrorCallbacks> callbacks,
     const GURL& url,
@@ -356,7 +373,8 @@ WebSocket::WebSocket(
     WebSocketFactory* factory,
     const GURL& url,
     const std::vector<std::string>& requested_protocols,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
+    const net::NetworkIsolationKey& network_isolation_key,
     std::vector<mojom::HttpHeaderPtr> additional_headers,
     int32_t child_id,
     int32_t frame_id,
@@ -378,8 +396,12 @@ WebSocket::WebSocket(
       child_id_(child_id),
       frame_id_(frame_id),
       origin_(std::move(origin)),
+      site_for_cookies_(site_for_cookies),
       has_raw_headers_access_(has_raw_headers_access),
       writable_watcher_(FROM_HERE,
+                        mojo::SimpleWatcher::ArmingPolicy::MANUAL,
+                        base::ThreadTaskRunnerHandle::Get()),
+      readable_watcher_(FROM_HERE,
                         mojo::SimpleWatcher::ArmingPolicy::MANUAL,
                         base::ThreadTaskRunnerHandle::Get()) {
   DCHECK(handshake_client_);
@@ -402,11 +424,11 @@ WebSocket::WebSocket(
         FROM_HERE,
         base::BindOnce(&WebSocket::AddChannel, weak_ptr_factory_.GetWeakPtr(),
                        url, requested_protocols, site_for_cookies,
-                       std::move(additional_headers)),
+                       network_isolation_key, std::move(additional_headers)),
         delay_);
     return;
   }
-  AddChannel(url, requested_protocols, site_for_cookies,
+  AddChannel(url, requested_protocols, site_for_cookies, network_isolation_key,
              std::move(additional_headers));
 }
 
@@ -440,8 +462,33 @@ void WebSocket::SendFrame(bool fin,
   auto data_to_pass = base::MakeRefCounted<net::IOBuffer>(data.size());
   memcpy(data_to_pass->data(), data.data(), data.size());
 
-  channel_->SendFrame(fin, MessageTypeToOpCode(type), std::move(data_to_pass),
-                      data.size());
+  // It's okay to ignore the result here because we don't access |this| after
+  // this point.
+  ignore_result(channel_->SendFrame(fin, MessageTypeToOpCode(type),
+                                    std::move(data_to_pass), data.size()));
+}
+
+void WebSocket::SendMessage(mojom::WebSocketMessageType type,
+                            uint64_t data_length) {
+  DVLOG(3) << "WebSocket::SendMessage @" << reinterpret_cast<void*>(this)
+           << " type=" << type << " data is " << data_length << " bytes";
+
+  DCHECK(channel_) << "WebSocket::SendMessage is called but there is "
+                      "no active channel.";
+  DCHECK(handshake_succeeded_);
+
+  // This is guaranteed by mojo.
+  if (type == mojom::WebSocketMessageType::CONTINUATION) {
+    Reset();
+    return;
+  }
+  DCHECK(IsKnownEnumValue(type));
+
+  pending_send_data_frames_.push(DataFrame(type, data_length));
+
+  // Safe if ReadAndSendFromDataPipe() deletes |this| because this method is
+  // only called from mojo.
+  ReadAndSendFromDataPipe();
 }
 
 void WebSocket::StartReceiving() {
@@ -462,7 +509,6 @@ void WebSocket::StartClosingHandshake(uint16_t code,
 }
 
 bool WebSocket::AllowCookies(const GURL& url) const {
-  const GURL site_for_cookies = origin_.GetURL();
   net::StaticCookiePolicy::Type policy =
       net::StaticCookiePolicy::ALLOW_ALL_COOKIES;
   if (options_ & mojom::kWebSocketOptionBlockAllCookies) {
@@ -473,7 +519,7 @@ bool WebSocket::AllowCookies(const GURL& url) const {
     return true;
   }
   return net::StaticCookiePolicy(policy).CanAccessCookies(
-             url, site_for_cookies) == net::OK;
+             url, site_for_cookies_) == net::OK;
 }
 
 int WebSocket::OnBeforeStartTransaction(net::CompletionOnceCallback callback,
@@ -492,13 +538,14 @@ int WebSocket::OnHeadersReceived(
     net::CompletionOnceCallback callback,
     const net::HttpResponseHeaders* original_response_headers,
     scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
-    GURL* allowed_unsafe_redirect_url) {
+    base::Optional<GURL>* preserve_fragment_on_redirect_url) {
   if (header_client_) {
     header_client_->OnHeadersReceived(
         original_response_headers->raw_headers(), net::IPEndPoint(),
         base::BindOnce(&WebSocket::OnHeadersReceivedComplete,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback),
-                       override_response_headers, allowed_unsafe_redirect_url));
+                       override_response_headers,
+                       preserve_fragment_on_redirect_url));
     return net::ERR_IO_PENDING;
   }
   return net::OK;
@@ -523,12 +570,14 @@ void WebSocket::OnConnectionError(const base::Location& set_from) {
 void WebSocket::AddChannel(
     const GURL& socket_url,
     const std::vector<std::string>& requested_protocols,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
+    const net::NetworkIsolationKey& network_isolation_key,
     std::vector<mojom::HttpHeaderPtr> additional_headers) {
   DVLOG(3) << "WebSocket::AddChannel @" << reinterpret_cast<void*>(this)
            << " socket_url=\"" << socket_url << "\" requested_protocols=\""
            << base::JoinString(requested_protocols, ", ") << "\" origin=\""
-           << origin_ << "\" site_for_cookies=\"" << site_for_cookies << "\"";
+           << origin_ << "\" site_for_cookies=\""
+           << site_for_cookies.ToDebugString() << "\"";
 
   DCHECK(!channel_);
 
@@ -551,7 +600,8 @@ void WebSocket::AddChannel(
     }
   }
   channel_->SendAddChannelRequest(socket_url, requested_protocols, origin_,
-                                  site_for_cookies, headers_to_pass);
+                                  site_for_cookies, network_isolation_key,
+                                  headers_to_pass);
 }
 
 void WebSocket::OnWritable(MojoResult result,
@@ -619,6 +669,81 @@ void WebSocket::SendDataFrame(base::span<const char>* payload) {
   return;
 }
 
+void WebSocket::OnReadable(MojoResult result,
+                           const mojo::HandleSignalsState& state) {
+  if (result != MOJO_RESULT_OK) {
+    DVLOG(1) << "WebSocket::OnWritable mojo error=" << result;
+    Reset();
+    return;
+  }
+  wait_for_readable_ = false;
+
+  // Safe if ReadAndSendFromDataPipe() deletes |this| because this method is
+  // only called from mojo.
+  ReadAndSendFromDataPipe();
+}
+
+void WebSocket::ReadAndSendFromDataPipe() {
+  if (wait_for_readable_) {
+    return;
+  }
+  while (!pending_send_data_frames_.empty()) {
+    DataFrame& data_frame = pending_send_data_frames_.front();
+    DVLOG(2) << " ConsumePendingDataFrame frame=(" << data_frame.type
+             << ", (data_length = " << data_frame.data_length << "))";
+    if (data_frame.data_length == 0) {
+      auto data_to_pass = base::MakeRefCounted<net::IOBuffer>(0);
+      if (channel_->SendFrame(true, MessageTypeToOpCode(data_frame.type),
+                              std::move(data_to_pass),
+                              0) == net::WebSocketChannel::CHANNEL_DELETED) {
+        // |this| has been deleted.
+        return;
+      }
+      pending_send_data_frames_.pop();
+      continue;
+    }
+
+    const void* buffer;
+    uint32_t readable_size;
+    const MojoResult begin_result = readable_->BeginReadData(
+        &buffer, &readable_size, MOJO_READ_DATA_FLAG_NONE);
+    if (begin_result == MOJO_RESULT_SHOULD_WAIT) {
+      wait_for_readable_ = true;
+      readable_watcher_.ArmOrNotify();
+      return;
+    }
+    if (begin_result == MOJO_RESULT_FAILED_PRECONDITION) {
+      return;
+    }
+    DCHECK_EQ(begin_result, MOJO_RESULT_OK);
+
+    const size_t size_to_send =
+        std::min(static_cast<uint64_t>(readable_size), data_frame.data_length);
+    auto data_to_pass = base::MakeRefCounted<net::IOBuffer>(size_to_send);
+    const bool is_final = (size_to_send == data_frame.data_length);
+    memcpy(data_to_pass->data(), buffer, size_to_send);
+    if (channel_->SendFrame(is_final, MessageTypeToOpCode(data_frame.type),
+                            std::move(data_to_pass), size_to_send) ==
+        net::WebSocketChannel::CHANNEL_DELETED) {
+      // |this| has been deleted.
+      return;
+    }
+
+    const MojoResult end_result = readable_->EndReadData(size_to_send);
+    DCHECK_EQ(end_result, MOJO_RESULT_OK);
+
+    if (size_to_send == data_frame.data_length) {
+      pending_send_data_frames_.pop();
+      continue;
+    }
+
+    DCHECK_GT(data_frame.data_length, size_to_send);
+    data_frame.type = mojom::WebSocketMessageType::CONTINUATION;
+    data_frame.data_length -= size_to_send;
+  }
+  return;
+}
+
 void WebSocket::OnSSLCertificateErrorResponse(
     std::unique_ptr<net::WebSocketEventInterface::SSLErrorCallbacks> callbacks,
     const net::SSLInfo& ssl_info,
@@ -660,10 +785,10 @@ void WebSocket::OnBeforeSendHeadersComplete(
 void WebSocket::OnHeadersReceivedComplete(
     net::CompletionOnceCallback callback,
     scoped_refptr<net::HttpResponseHeaders>* out_headers,
-    GURL* out_allowed_unsafe_redirect_url,
+    base::Optional<GURL>* out_preserve_fragment_on_redirect_url,
     int result,
     const base::Optional<std::string>& headers,
-    const GURL& allowed_unsafe_redirect_url) {
+    const base::Optional<GURL>& preserve_fragment_on_redirect_url) {
   if (!channel_) {
     // Something happened before the OnHeadersReceived response arrives.
     return;

@@ -57,6 +57,11 @@ extern const base::FeatureParam<int>
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
 extern const base::Feature kAssistantRoutines;
 
+// When enabled, we support the second version of timers UX which includes new
+// UI treatments for timers in Assistant and System UI.
+COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
+extern const base::Feature kAssistantTimersV2;
+
 // Enables in-Assistant notifications.
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
 extern const base::Feature kInAssistantNotifications;
@@ -81,12 +86,14 @@ extern const base::Feature kEnableStereoAudioInput;
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
 extern const base::Feature kEnablePowerManager;
 
-// Enables sending the client discourse context with text queries.
-COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
-extern const base::Feature kEnableTextQueriesWithClientDiscourseContext;
-
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
 int GetProactiveSuggestionsMaxWidth();
+
+COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
+int GetProactiveSuggestionsRichEntryPointBackgroundBlurRadius();
+
+COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
+int GetProactiveSuggestionsRichEntryPointCornerRadius();
 
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
 std::string GetProactiveSuggestionsServerExperimentIds();
@@ -100,14 +107,15 @@ COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsAudioEraserEnabled();
 
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsClearCutLogEnabled();
 
+COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
+bool IsConversationStartersV2Enabled();
+
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsDspHotwordEnabled();
 
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsFeedbackUiEnabled();
 
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
 bool IsInAssistantNotificationsEnabled();
-
-COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsKeyRemappingEnabled();
 
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
 bool IsMediaSessionIntegrationEnabled();
@@ -117,18 +125,26 @@ COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsPowerManagerEnabled();
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsProactiveSuggestionsEnabled();
 
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
+bool IsProactiveSuggestionsShowOnScrollEnabled();
+
+COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
+bool IsProactiveSuggestionsShowRichEntryPointEnabled();
+
+COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
 bool IsProactiveSuggestionsSuppressDuplicatesEnabled();
+
+COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
+bool IsResponseProcessingV2Enabled();
 
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsRoutinesEnabled();
 
-COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsScreenContextQueryEnabled();
-
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsStereoAudioInputEnabled();
+
+COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsTimersV2Enabled();
 
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsWarmerWelcomeEnabled();
 
-COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
-bool IsVoiceMatchDisabled();
+COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsVoiceMatchDisabled();
 
 }  // namespace features
 }  // namespace assistant

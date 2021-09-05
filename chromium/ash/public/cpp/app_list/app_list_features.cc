@@ -30,11 +30,18 @@ const base::Feature kEnableZeroStateAppsRanker{
 const base::Feature kEnableQueryBasedMixedTypesRanker{
     "EnableQueryBasedMixedTypesRanker", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kEnableZeroStateMixedTypesRanker{
-    "EnableZeroStateMixedTypesRanker", base::FEATURE_DISABLED_BY_DEFAULT};
+    "EnableZeroStateMixedTypesRanker", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kEnableAppReinstallZeroState{
     "EnableAppReinstallZeroState", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kEnableEmbeddedAssistantUI{
-    "EnableEmbeddedAssistantUI", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kEnableSuggestedFiles{"EnableSuggestedFiles",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+// "EnableEmbeddedAssistantUI" is used in finch experiment therefore we cannot
+// change it until fully launched. It is used to redirect Launcher search to
+// Assistant search.
+const base::Feature kEnableAssistantSearch{"EnableEmbeddedAssistantUI",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kEnableAppGridGhost{"EnableAppGridGhost",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kEnableAppListLaunchRecording{
@@ -46,15 +53,17 @@ const base::Feature kEnableAggregatedMlAppRanking{
 const base::Feature kScalableAppList{"ScalableAppList",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kEnableFuzzyAppSearch{"EnableFuzzyAppSearch",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kEnableExactMatchForNonLatinLocale{
+    "EnableExactMatchForNonLatinLocale", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kEnableAggregatedMlSearchRanking{
     "EnableAggregatedMlSearchRanking", base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsAnswerCardEnabled() {
   // Not using local static variable to allow tests to change this value.
-  // Do not show answer card if the embedded Assistant UI is enabled.
+  // Do not show answer card if Assistant search is enabled.
   return base::FeatureList::IsEnabled(kEnableAnswerCard) &&
-         !IsEmbeddedAssistantUIEnabled();
+         !IsAssistantSearchEnabled();
 }
 
 bool IsPlayStoreAppSearchEnabled() {
@@ -98,8 +107,12 @@ bool IsAppReinstallZeroStateEnabled() {
   return base::FeatureList::IsEnabled(kEnableAppReinstallZeroState);
 }
 
-bool IsEmbeddedAssistantUIEnabled() {
-  return base::FeatureList::IsEnabled(kEnableEmbeddedAssistantUI);
+bool IsSuggestedFilesEnabled() {
+  return base::FeatureList::IsEnabled(kEnableSuggestedFiles);
+}
+
+bool IsAssistantSearchEnabled() {
+  return base::FeatureList::IsEnabled(kEnableAssistantSearch);
 }
 
 bool IsAppGridGhostEnabled() {
@@ -120,6 +133,10 @@ bool IsScalableAppListEnabled() {
 
 bool IsFuzzyAppSearchEnabled() {
   return base::FeatureList::IsEnabled(kEnableFuzzyAppSearch);
+}
+
+bool IsExactMatchForNonLatinLocaleEnabled() {
+  return base::FeatureList::IsEnabled(kEnableExactMatchForNonLatinLocale);
 }
 
 bool IsAggregatedMlSearchRankingEnabled() {

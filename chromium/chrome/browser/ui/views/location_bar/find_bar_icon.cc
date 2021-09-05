@@ -12,9 +12,15 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/animation/ink_drop.h"
 
-FindBarIcon::FindBarIcon(Browser* browser,
-                         PageActionIconView::Delegate* delegate)
-    : PageActionIconView(nullptr, 0, delegate), browser_(browser) {
+FindBarIcon::FindBarIcon(
+    Browser* browser,
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate)
+    : PageActionIconView(nullptr,
+                         0,
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate),
+      browser_(browser) {
   DCHECK(browser_);
 }
 
@@ -39,6 +45,10 @@ base::string16 FindBarIcon::GetTextForTooltipAndAccessibleName() const {
   return l10n_util::GetStringUTF16(IDS_TOOLTIP_FIND);
 }
 
+const char* FindBarIcon::GetClassName() const {
+  return "FindBarIcon";
+}
+
 void FindBarIcon::OnExecuting(ExecuteSource execute_source) {}
 
 views::BubbleDialogDelegateView* FindBarIcon::GetBubble() const {
@@ -49,15 +59,13 @@ const gfx::VectorIcon& FindBarIcon::GetVectorIcon() const {
   return omnibox::kFindInPageIcon;
 }
 
-bool FindBarIcon::Update() {
+void FindBarIcon::UpdateImpl() {
   // |browser_->window()| may return nullptr because Update() is called while
   // BrowserWindow is being constructed.
   if (!browser_->window() || !browser_->HasFindBarController())
-    return false;
+    return;
 
   const bool was_visible = GetVisible();
   SetVisible(browser_->GetFindBarController()->find_bar()->IsFindBarVisible());
-  const bool visibility_changed = was_visible != GetVisible();
-  SetActive(GetVisible(), visibility_changed);
-  return visibility_changed;
+  SetActive(GetVisible(), was_visible != GetVisible());
 }

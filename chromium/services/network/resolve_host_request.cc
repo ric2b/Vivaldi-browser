@@ -19,6 +19,7 @@ namespace network {
 ResolveHostRequest::ResolveHostRequest(
     net::HostResolver* resolver,
     const net::HostPortPair& host,
+    const net::NetworkIsolationKey& network_isolation_key,
     const base::Optional<net::HostResolver::ResolveHostParameters>&
         optional_parameters,
     net::NetLog* net_log) {
@@ -26,7 +27,8 @@ ResolveHostRequest::ResolveHostRequest(
   DCHECK(net_log);
 
   internal_request_ = resolver->CreateRequest(
-      host, net::NetLogWithSource::Make(net_log, net::NetLogSourceType::NONE),
+      host, network_isolation_key,
+      net::NetLogWithSource::Make(net_log, net::NetLogSourceType::NONE),
       optional_parameters);
 }
 
@@ -34,7 +36,9 @@ ResolveHostRequest::~ResolveHostRequest() {
   control_handle_receiver_.reset();
 
   if (response_client_.is_bound()) {
-    response_client_->OnComplete(net::ERR_FAILED, base::nullopt);
+    response_client_->OnComplete(net::ERR_NAME_NOT_RESOLVED,
+                                 net::ResolveErrorInfo(net::ERR_FAILED),
+                                 base::nullopt);
     response_client_.reset();
   }
 }
@@ -55,7 +59,7 @@ int ResolveHostRequest::Start(
   mojo::Remote<mojom::ResolveHostClient> response_client(
       std::move(pending_response_client));
   if (rv != net::ERR_IO_PENDING) {
-    response_client->OnComplete(rv, GetAddressResults());
+    response_client->OnComplete(rv, GetResolveErrorInfo(), GetAddressResults());
     return rv;
   }
 
@@ -81,6 +85,7 @@ void ResolveHostRequest::Cancel(int error) {
 
   internal_request_ = nullptr;
   cancelled_ = true;
+  resolve_error_info_ = net::ResolveErrorInfo(error);
   OnComplete(error);
 }
 
@@ -90,11 +95,21 @@ void ResolveHostRequest::OnComplete(int error) {
 
   control_handle_receiver_.reset();
   SignalNonAddressResults();
-  response_client_->OnComplete(error, GetAddressResults());
+  response_client_->OnComplete(error, GetResolveErrorInfo(),
+                               GetAddressResults());
   response_client_.reset();
 
   // Invoke completion callback last as it may delete |this|.
-  std::move(callback_).Run(error);
+  std::move(callback_).Run(GetResolveErrorInfo().error);
+}
+
+net::ResolveErrorInfo ResolveHostRequest::GetResolveErrorInfo() const {
+  if (cancelled_) {
+    return resolve_error_info_;
+  }
+
+  DCHECK(internal_request_);
+  return internal_request_->GetResolveErrorInfo();
 }
 
 const base::Optional<net::AddressList>& ResolveHostRequest::GetAddressResults()

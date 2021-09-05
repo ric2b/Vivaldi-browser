@@ -23,7 +23,7 @@
 // access.
 @interface WeakCocoaWindowMoveLoop : NSObject {
  @private
-  base::WeakPtr<remote_cocoa::CocoaWindowMoveLoop> weak_;
+  base::WeakPtr<remote_cocoa::CocoaWindowMoveLoop> _weak;
 }
 @end
 
@@ -31,13 +31,13 @@
 - (instancetype)initWithWeakPtr:
     (const base::WeakPtr<remote_cocoa::CocoaWindowMoveLoop>&)weak {
   if ((self = [super init])) {
-    weak_ = weak;
+    _weak = weak;
   }
   return self;
 }
 
 - (base::WeakPtr<remote_cocoa::CocoaWindowMoveLoop>&)weak {
-  return weak_;
+  return _weak;
 }
 @end
 
@@ -60,7 +60,7 @@ CocoaWindowMoveLoop::~CocoaWindowMoveLoop() {
   // Handle the pathological case, where |this| is destroyed while running.
   if (exit_reason_ref_) {
     *exit_reason_ref_ = WINDOW_DESTROYED;
-    quit_closure_.Run();
+    std::move(quit_closure_).Run();
   }
 
   owner_ = nullptr;
@@ -110,7 +110,7 @@ bool CocoaWindowMoveLoop::Run() {
 
     DCHECK_EQ([event type], NSLeftMouseUp);
     *strong->exit_reason_ref_ = MOUSE_UP;
-    strong->quit_closure_.Run();
+    std::move(strong->quit_closure_).Run();
     return event;  // Process the MouseUp.
   };
   id monitor = [NSEvent addLocalMonitorForEventsMatchingMask:mask
@@ -132,7 +132,7 @@ void CocoaWindowMoveLoop::End() {
     DCHECK_EQ(*exit_reason_ref_, ENDED_EXTERNALLY);
     // Ensure the destructor doesn't replace the reason.
     exit_reason_ref_ = nullptr;
-    quit_closure_.Run();
+    std::move(quit_closure_).Run();
   }
 }
 

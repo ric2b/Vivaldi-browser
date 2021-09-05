@@ -16,6 +16,7 @@ enum CSSSampleId {
     // These internal properties exist but are mapped to 0 to ensure they don't get
     // reported in use counter.
     kInternalEffectiveZoom = 0,
+    kInternalEmptyLineHeight = 0,
     kInternalVisitedBackgroundColor = 0,
     kInternalVisitedBorderBlockEndColor = 0,
     kInternalVisitedBorderBlockStartColor = 0,
@@ -688,10 +689,20 @@ enum CSSSampleId {
     kSyntax = 643,
     kOverscrollBehaviorInline = 644,
     kOverscrollBehaviorBlock = 645,
-    kContentSize = 646,
-    kFontOpticalSizing = 647
+    // kContentSize = 646,
+    kFontOpticalSizing = 647,
+    kContainIntrinsicBlockSize = 648,
+    kContainIntrinsicHeight = 649,
+    kContainIntrinsicInlineSize = 650,
+    kContainIntrinsicSize = 651,
+    kContainIntrinsicWidth = 652,
+    // kRenderSubtree = 653,
+    kOriginTrialTestProperty = 654,
+    kSubtreeVisibility = 655,
+    kMathStyle = 656,
+    kAspectRatio = 657,
     // 1. Add new features above this line (don't change the assigned numbers of
-    // the existing items).
-    // 2. Run the update_use_counter_css.py script in
-    // chromium/src/tools/metrics/histograms to update the UMA histogram names.
+    //    the existing items).
+    // 2. Run the src/tools/metrics/histograms/update_use_counter_css.py script
+    //    to update the UMA histogram names.
 };

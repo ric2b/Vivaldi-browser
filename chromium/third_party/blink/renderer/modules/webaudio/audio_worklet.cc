@@ -17,7 +17,7 @@
 namespace blink {
 
 AudioWorklet::AudioWorklet(BaseAudioContext* context)
-    : Worklet(To<Document>(context->GetExecutionContext())),
+    : Worklet(Document::From(context->GetExecutionContext())),
       context_(context) {}
 
 void AudioWorklet::CreateProcessor(
@@ -90,7 +90,7 @@ AudioWorkletMessagingProxy* AudioWorklet::GetMessagingProxy() {
                    FindAvailableGlobalScope());
 }
 
-void AudioWorklet::Trace(blink::Visitor* visitor) {
+void AudioWorklet::Trace(Visitor* visitor) {
   visitor->Trace(context_);
   Worklet::Trace(visitor);
 }

@@ -15,19 +15,20 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "content/browser/loader/single_request_url_loader_factory.h"
 #include "content/browser/service_worker/service_worker_navigation_loader.h"
 #include "content/common/content_export.h"
-#include "content/public/common/resource_type.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "url/gurl.h"
 
 namespace content {
 
 class ResourceContext;
+class ServiceWorkerContainerHost;
 class ServiceWorkerContextCore;
-class ServiceWorkerProviderHost;
 class ServiceWorkerRegistration;
 class ServiceWorkerVersion;
 
@@ -42,27 +43,30 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler final {
   // request interception.
   ServiceWorkerControlleeRequestHandler(
       base::WeakPtr<ServiceWorkerContextCore> context,
-      base::WeakPtr<ServiceWorkerProviderHost> provider_host,
-      ResourceType resource_type,
+      base::WeakPtr<ServiceWorkerContainerHost> container_host,
+      blink::mojom::ResourceType resource_type,
       bool skip_service_worker);
   ~ServiceWorkerControlleeRequestHandler();
 
   // This could get called multiple times during the lifetime in redirect
   // cases. (In fallback-to-network cases we basically forward the request
   // to the request to the next request handler)
+  using ServiceWorkerLoaderCallback =
+      base::OnceCallback<void(SingleRequestURLLoaderFactory::RequestHandler)>;
   void MaybeCreateLoader(
       const network::ResourceRequest& tentative_request,
       BrowserContext* browser_context,
       ResourceContext* resource_context,
-      NavigationLoaderInterceptor::LoaderCallback callback,
+      ServiceWorkerLoaderCallback callback,
       NavigationLoaderInterceptor::FallbackCallback fallback_callback);
   // Returns params with the ControllerServiceWorkerInfoPtr if we have found
   // a matching controller service worker for the |request| that is given
   // to MaybeCreateLoader(). Otherwise this returns base::nullopt.
   base::Optional<SubresourceLoaderParams> MaybeCreateSubresourceLoaderParams();
 
-  // Does all initialization of |provider_host_| for a request.
-  bool InitializeProvider(const network::ResourceRequest& tentative_request);
+  // Does all initialization of |container_host_| for a request.
+  bool InitializeContainerHost(
+      const network::ResourceRequest& tentative_request);
 
   // Exposed for testing.
   ServiceWorkerNavigationLoader* loader() {
@@ -101,8 +105,8 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler final {
   void MaybeScheduleUpdate();
 
   const base::WeakPtr<ServiceWorkerContextCore> context_;
-  const base::WeakPtr<ServiceWorkerProviderHost> provider_host_;
-  const ResourceType resource_type_;
+  const base::WeakPtr<ServiceWorkerContainerHost> container_host_;
+  const blink::mojom::ResourceType resource_type_;
 
   // If true, service workers are bypassed for request interception.
   const bool skip_service_worker_;
@@ -114,7 +118,7 @@ class CONTENT_EXPORT ServiceWorkerControlleeRequestHandler final {
   bool force_update_started_;
   base::TimeTicks registration_lookup_start_time_;
 
-  NavigationLoaderInterceptor::LoaderCallback loader_callback_;
+  ServiceWorkerLoaderCallback loader_callback_;
   NavigationLoaderInterceptor::FallbackCallback fallback_callback_;
 
   base::WeakPtrFactory<ServiceWorkerControlleeRequestHandler> weak_factory_{

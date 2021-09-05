@@ -1636,6 +1636,25 @@ TEST_F(NetworkStateHandlerTest, NetworkActiveNetworksStateChanged) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1u, test_observer_->active_network_change_count());
 
+  // Activate cellular network so that it's part of active network list.
+  service_test_->SetServiceProperty(
+      kShillManagerClientStubCellular, shill::kActivationStateProperty,
+      base::Value(shill::kActivationStateActivating));
+  base::RunLoop().RunUntilIdle();
+  expected_active_network_paths = {kShillManagerClientStubCellular};
+  EXPECT_EQ(expected_active_network_paths,
+            test_observer_->active_network_paths());
+  // Test that network technology change signals the observer.
+  test_observer_->reset_change_counts();
+  service_test_->SetServiceProperty(kShillManagerClientStubCellular,
+                                    shill::kNetworkTechnologyProperty,
+                                    base::Value(shill::kNetworkTechnologyUmts));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, test_observer_->active_network_change_count());
+  // Remove cellular service.
+  service_test_->RemoveService(kShillManagerClientStubCellular);
+  base::RunLoop().RunUntilIdle();
+
   // Add two Tether networks.
   test_observer_->reset_change_counts();
   network_state_handler_->SetTetherTechnologyState(
@@ -1804,11 +1823,24 @@ TEST_F(NetworkStateHandlerTest, RequestScan) {
   EXPECT_EQ(0u, test_observer_->scan_requested_count());
   network_state_handler_->RequestScan(NetworkTypePattern::WiFi());
   network_state_handler_->RequestScan(NetworkTypePattern::Tether());
-  EXPECT_EQ(2u, test_observer_->scan_requested_count());
+  network_state_handler_->RequestScan(NetworkTypePattern::Mobile());
+  EXPECT_EQ(3u, test_observer_->scan_requested_count());
   EXPECT_TRUE(
       NetworkTypePattern::WiFi().Equals(test_observer_->scan_requests()[0]));
   EXPECT_TRUE(
       NetworkTypePattern::Tether().Equals(test_observer_->scan_requests()[1]));
+  EXPECT_TRUE(
+      NetworkTypePattern::Mobile().Equals(test_observer_->scan_requests()[2]));
+
+  // Disable cellular, scan request for cellular only should not send a
+  // notification
+  test_observer_->reset_change_counts();
+  network_state_handler_->SetTechnologyEnabled(
+      NetworkTypePattern::Cellular(), false, network_handler::ErrorCallback());
+  network_state_handler_->RequestScan(NetworkTypePattern::Cellular());
+  EXPECT_EQ(0u, test_observer_->scan_requested_count());
+  network_state_handler_->RequestScan(NetworkTypePattern::Mobile());
+  EXPECT_EQ(1u, test_observer_->scan_requested_count());
 
   // Disable wifi, scan request for wifi only should not send a notification.
   test_observer_->reset_change_counts();

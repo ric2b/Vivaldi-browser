@@ -15,6 +15,7 @@
     *   [help: Does what you think.](#cmd_help)
     *   [ls: List matching targets.](#cmd_ls)
     *   [meta: List target metadata collection results.](#cmd_meta)
+    *   [outputs: Which files a source/target make.](#cmd_outputs)
     *   [path: Find paths between two targets.](#cmd_path)
     *   [refs: Find stuff referencing a target or file.](#cmd_refs)
 *   [Target declarations](#targets)
@@ -27,6 +28,8 @@
     *   [generated_file: Declare a generated_file target.](#func_generated_file)
     *   [group: Declare a named group of targets.](#func_group)
     *   [loadable_module: Declare a loadable module target.](#func_loadable_module)
+    *   [rust_library: Declare a Rust library target.](#func_rust_library)
+    *   [rust_proc_macro: Declare a Rust procedural macro target.](#func_rust_proc_macro)
     *   [shared_library: Declare a shared library target.](#func_shared_library)
     *   [source_set: Declare a source set target.](#func_source_set)
     *   [static_library: Declare a static library target.](#func_static_library)
@@ -38,6 +41,8 @@
     *   [declare_overrides: Declare override build arguments.](#declare_overrides)
     *   [defined: Returns whether an identifier is defined.](#func_defined)
     *   [exec_script: Synchronously run a script and return the output.](#func_exec_script)
+    *   [filter_exclude: Remove values that match a set of patterns.](#func_filter_exclude)
+    *   [filter_include: Remove values that do not match a set of patterns.](#func_filter_include)
     *   [foreach: Iterate over a list.](#func_foreach)
     *   [forward_variables_from: Copies variables from a different scope.](#func_forward_variables_from)
     *   [get_label_info: Get an attribute from a target's label.](#func_get_label_info)
@@ -56,7 +61,9 @@
     *   [set_path_map: Set a path override map.](#set_path_map)
     *   [set_sources_assignment_filter: Set a pattern to filter source files.](#func_set_sources_assignment_filter)
     *   [split_list: Splits a list into N different sub-lists.](#func_split_list)
+    *   [string_join: Concatenates a list of strings with a separator.](#func_string_join)
     *   [string_replace: Replaces substring in the given string.](#func_string_replace)
+    *   [string_split: Split string into a list of strings.](#func_string_split)
     *   [template: Define a template rule.](#func_template)
     *   [tool: Specify arguments to a toolchain tool.](#func_tool)
     *   [toolchain: Defines a toolchain.](#func_toolchain)
@@ -68,6 +75,7 @@
     *   [current_os: [string] The operating system of the current toolchain.](#var_current_os)
     *   [current_toolchain: [string] Label of the current toolchain.](#var_current_toolchain)
     *   [default_toolchain: [string] Label of the default toolchain.](#var_default_toolchain)
+    *   [gn_version: [number] The version of gn.](#var_gn_version)
     *   [host_cpu: [string] The processor architecture that GN is running on.](#var_host_cpu)
     *   [host_os: [string] The operating system that GN is running on.](#var_host_os)
     *   [invoker: [string] The invoking scope inside a template.](#var_invoker)
@@ -81,6 +89,7 @@
     *   [target_os: [string] The desired operating system for the build.](#var_target_os)
     *   [target_out_dir: [string] Directory for target output files.](#var_target_out_dir)
 *   [Variables you set in targets](#target_variables)
+    *   [aliased_deps: [scope] Set of crate-dependency pairs.](#var_aliased_deps)
     *   [all_dependent_configs: [label list] Configs to be forced on dependents.](#var_all_dependent_configs)
     *   [allow_circular_includes_from: [label list] Permit includes from deps.](#var_allow_circular_includes_from)
     *   [arflags: [string list] Arguments passed to static_library archiver.](#var_arflags)
@@ -105,12 +114,18 @@
     *   [complete_static_lib: [boolean] Links all deps into a static library.](#var_complete_static_lib)
     *   [configs: [label list] Configs applying to this target or config.](#var_configs)
     *   [contents: Contents to write to file.](#var_contents)
+    *   [crate_name: [string] The name for the compiled crate.](#var_crate_name)
+    *   [crate_root: [string] The root source file for a binary or library.](#var_crate_root)
+    *   [crate_type: [string] The type of linkage to use on a shared_library.](#var_crate_type)
     *   [data: [file list] Runtime data file dependencies.](#var_data)
     *   [data_deps: [label list] Non-linked dependencies.](#var_data_deps)
     *   [data_keys: [string list] Keys from which to collect metadata.](#var_data_keys)
     *   [defines: [string list] C preprocessor defines.](#var_defines)
     *   [depfile: [string] File name for input dependencies for actions.](#var_depfile)
     *   [deps: [label list] Private linked dependencies.](#var_deps)
+    *   [externs: [scope] Set of Rust crate-dependency pairs.](#var_externs)
+    *   [framework_dirs: [directory list] Additional framework search directories.](#var_framework_dirs)
+    *   [frameworks: [name list] Name of frameworks that must be linked.](#var_frameworks)
     *   [friend: [label pattern list] Allow targets to include private headers.](#var_friend)
     *   [include_dirs: [directory list] Additional include directories.](#var_include_dirs)
     *   [inputs: [file list] Additional compile-time dependencies.](#var_inputs)
@@ -149,12 +164,14 @@
     *   [dotfile: Info about the toplevel .gn file.](#dotfile)
     *   [execution: Build graph and execution overview.](#execution)
     *   [grammar: Language and grammar for GN build files.](#grammar)
-    *   [input_conversion: Processing input from exec_script and read_file.](#input_conversion)
+    *   [input_conversion: Processing input from exec_script and read_file.](#io_conversion)
+    *   [file_pattern: Matching more than one file.](#file_pattern)
     *   [label_pattern: Matching more than one label.](#label_pattern)
     *   [labels: About labels.](#labels)
+    *   [metadata_collection: About metadata and its collection.](#metadata_collection)
     *   [ninja_rules: How Ninja build rules are named.](#ninja_rules)
     *   [nogncheck: Annotating includes for checking.](#nogncheck)
-    *   [output_conversion: Specifies how to transform a value to output.](#output_conversion)
+    *   [output_conversion: Specifies how to transform a value to output.](#io_conversion)
     *   [runtime_deps: How runtime dependency computation works.](#runtime_deps)
     *   [source_expansion: Map sources to outputs for scripts.](#source_expansion)
     *   [switches: Show available command-line switches.](#switch_list)
@@ -191,6 +208,8 @@
      This filtering behavior is also known as "pruning" the list of compile
      targets.
 
+  If input_path is -, input is read from stdin.
+
   output_path is a path indicating where the results of the command are to be
   written. The results will be a file containing a JSON object with one or more
   of following fields:
@@ -223,6 +242,8 @@
    - "error": This will only be present if an error occurred, and will contain
      a string describing the error. This includes cases where the input file is
      not in the right format, or contains invalid targets.
+
+  If output_path is -, output is written to stdout.
 
   The command returns 1 if it is unable to read the input file or write the
   output file, or if there is something wrong with the build such that gen
@@ -346,6 +367,10 @@
       Generated files are normally not checked since they do not exist
       until after a build. With this flag, those generated files that
       can be found on disk are also checked.
+
+  --check-system
+     Check system style includes (using <angle brackets>) in addition to
+     "double quote" includes.
 ```
 
 #### **What gets checked**
@@ -369,8 +394,9 @@
     - Includes with a "nogncheck" annotation are skipped (see
       "gn help nogncheck").
 
-    - Only includes using "quotes" are checked. <brackets> are assumed to be
-      system includes.
+    - Includes using "quotes" are always checked.
+        If system style checking is enabled, includes using <angle brackets>
+        are also checked.
 
     - Include paths are assumed to be relative to any of the "include_dirs" for
       the target (including the implicit current dir).
@@ -481,6 +507,8 @@
   defines [--blame]
   depfile
   deps [--all] [--tree] (see below)
+  framework_dirs
+  frameworks
   include_dirs [--blame]
   inputs
   ldflags [--blame]
@@ -528,9 +556,9 @@
 ```
   --blame
       Used with any value specified on a config, this will name the config that
-      causes that target to get the flag. This doesn't currently work for libs
-      and lib_dirs because those are inherited and are more complicated to
-      figure out the blame (patches welcome).
+      causes that target to get the flag. This doesn't currently work for libs,
+      lib_dirs, frameworks and framework_dirs because those are inherited and
+      are more complicated to figure out the blame (patches welcome).
 ```
 
 #### **Configs**
@@ -669,8 +697,9 @@
   Or it can be a directory relative to the current directory such as:
       out/foo
 
-  "gn gen --check" is the same as running "gn check". See "gn help check"
-  for documentation on that mode.
+  "gn gen --check" is the same as running "gn check". "gn gen --check=system" is
+  the same as running "gn check --check-system".  See "gn help check" for
+  documentation on that mode.
 
   See "gn help switches" for the common command-line switches.
 ```
@@ -684,7 +713,7 @@
       Generate files for an IDE. Currently supported values:
       "eclipse" - Eclipse CDT settings file.
       "vs" - Visual Studio project/solution files.
-             (default Visual Studio version: 2017)
+             (default Visual Studio version: 2019)
       "vs2013" - Visual Studio 2013 project/solution files.
       "vs2015" - Visual Studio 2015 project/solution files.
       "vs2017" - Visual Studio 2017 project/solution files.
@@ -727,6 +756,9 @@
   --workspace=<file_name>
       Override defaut workspace file name ("all"). The workspace file is
       written to the root build directory.
+
+  --ninja-executable=<string>
+      Can be used to specify the ninja executable to use when building.
 
   --ninja-extra-args=<string>
       This string is passed without any quoting to the ninja invocation
@@ -782,7 +814,7 @@
 #### **Compilation Database**
 
 ```
-  --export-compile-commands
+  --export-compile-commands[=<target_name1,target_name2...>]
       Produces a compile_commands.json file in the root of the build directory
       containing an array of â€œcommand objectsâ€?, where each command object
       specifies one way a translation unit is compiled in the project. This is
@@ -941,6 +973,60 @@
       target and all of its dependency tree, rebasing the strings in the `files`
       key onto the source directory of the target's declaration relative to "/".
 ```
+### <a name="cmd_outputs"></a>**gn outputs &lt;out_dir&gt; &lt;list of target or file names...&gt; ***
+
+```
+  Lists the output files corresponding to the given target(s) or file name(s).
+  There can be multiple outputs because there can be more than one output
+  generated by a build step, and there can be more than one toolchain matched.
+  You can also list multiple inputs which will generate a union of all the
+  outputs from those inputs.
+
+   - The input target/file names are relative to the current directory.
+
+   - The output file names are relative to the root build directory.
+
+   This command is useful for finding a ninja command that will build only a
+   portion of the build.
+```
+
+#### **Target outputs**
+
+```
+  If the parameter is a target name that includes a toolchain, it will match
+  only that target in that toolchain. If no toolchain is specified, it will
+  match all targets with that name in any toolchain.
+
+  The result will be the outputs specified by that target which could be a
+  library, executable, output of an action, a stamp file, etc.
+```
+
+#### **File outputs**
+
+```
+  If the parameter is a file name it will compute the output for that compile
+  step for all targets in all toolchains that contain that file as a source
+  file.
+
+  If the source is not compiled (e.g. a header or text file), the command will
+  produce no output.
+
+  If the source is listed as an "input" to a binary target or action will
+  resolve to that target's outputs.
+```
+
+#### **Example**
+
+```
+  gn outputs out/debug some/directory:some_target
+      Find the outputs of a given target.
+
+  gn outputs out/debug src/project/my_file.cc | xargs ninja -C out/debug
+      Compiles just the given source file in all toolchains it's referenced in.
+
+  git diff --name-only | xargs gn outputs out/x64 | xargs ninja -C out/x64
+      Compiles all files changed in git.
+```
 ### <a name="cmd_path"></a>**gn path &lt;out_dir&gt; &lt;target_one&gt; &lt;target_two&gt;**
 
 ```
@@ -984,7 +1070,7 @@
 #### **Example**
 
 ```
-  gn path out/Default //base //tools/gn
+  gn path out/Default //base //gn
 ```
 ### <a name="cmd_refs"></a>**gn refs**
 
@@ -1071,7 +1157,7 @@
 #### **Examples (target input)**
 
 ```
-  gn refs out/Debug //tools/gn:gn
+  gn refs out/Debug //gn:gn
       Find all targets depending on the given exact target name.
 
   gn refs out/Debug //base:i18n --as=buildfiles | xargs gvim
@@ -1163,6 +1249,14 @@
   file names to be relative to the build directory (file names in the
   sources, outputs, and inputs will be all treated as relative to the
   current build file and converted as needed automatically).
+
+  GN sets Ninja's flag 'restat = 1` for all action commands. This means
+  that Ninja will check the timestamp of the output after the action
+  completes. If output timestamp is unchanged, the step will be treated
+  as if it never needed to be rebuilt, potentially eliminating some
+  downstream steps for incremental builds. Scripts can improve build
+  performance by taking care not to change the timstamp of the output
+  file(s) if the contents have not changed.
 ```
 
 #### **File name handling**
@@ -1244,6 +1338,14 @@
   file names to be relative to the build directory (file names in the
   sources, outputs, and inputs will be all treated as relative to the
   current build file and converted as needed automatically).
+
+  GN sets Ninja's flag 'restat = 1` for all action commands. This means
+  that Ninja will check the timestamp of the output after the action
+  completes. If output timestamp is unchanged, the step will be treated
+  as if it never needed to be rebuilt, potentially eliminating some
+  downstream steps for incremental builds. Scripts can improve build
+  performance by taking care not to change the timstamp of the output
+  file(s) if the contents have not changed.
 ```
 
 #### **File name handling**
@@ -1272,7 +1374,7 @@
     script = "idl_processor.py"
     sources = [ "foo.idl", "bar.idl" ]
 
-    # Our script reads this file each time, so we need to list is as a
+    # Our script reads this file each time, so we need to list it as a
     # dependency so we can rebuild if it changes.
     inputs = [ "my_configuration.txt" ]
 
@@ -1533,17 +1635,29 @@
 ```
 ### <a name="func_executable"></a>**executable**: Declare an executable target.
 
+#### **Language and compilation**
+
+```
+  The tools and commands used to create this target type will be
+  determined by the source files in its sources. Targets containing
+  multiple compiler-incompatible languages are not allowed (e.g. a
+  target containing both C and C++ sources is acceptable, but a
+  target containing C and Rust sources is not).
+```
+
 #### **Variables**
 
 ```
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
-         libs, precompiled_header, precompiled_source
+         libs, precompiled_header, precompiled_source, rustflags,
+         rustenv
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
            output_name, output_extension, public, sources, testonly,
            visibility
+  Rust variables: aliased_deps, crate_root, crate_name
 ```
 ### <a name="func_generated_file"></a>**generated_file**: Declare a generated_file target.
 
@@ -1551,7 +1665,7 @@
   Writes data value(s) to disk on resolution. This target type mirrors some
   functionality of the write_file() function, but also provides the ability to
   collect metadata from its dependencies on resolution rather than writing out
-  parse time.
+  at parse time.
 
   The `outputs` variable is required to be a list with a single element,
   specifying the intended location of the output file.
@@ -1580,8 +1694,8 @@
         doom_melon = [ "enable" ]
         my_files = [ "foo.cpp" ]
 
-        // Note: this is functionally equivalent to not defining `my_barrier`
-        // at all in this target's metadata.
+        # Note: this is functionally equivalent to not defining `my_barrier`
+        # at all in this target's metadata.
         my_barrier = [ "" ]
       }
 
@@ -1715,17 +1829,96 @@
   "shared_library" target type instead.
 ```
 
+#### **Language and compilation**
+
+```
+  The tools and commands used to create this target type will be
+  determined by the source files in its sources. Targets containing
+  multiple compiler-incompatible languages are not allowed (e.g. a
+  target containing both C and C++ sources is acceptable, but a
+  target containing C and Rust sources is not).
+```
+
 #### **Variables**
 
 ```
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
-         libs, precompiled_header, precompiled_source
+         libs, precompiled_header, precompiled_source, rustflags,
+         rustenv
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
            output_name, output_extension, public, sources, testonly,
            visibility
+  Rust variables: aliased_deps, crate_root, crate_name, crate_type
+```
+### <a name="func_rust_library"></a>**rust_library**: Declare a Rust library target.
+
+```
+  A Rust library is an archive containing additional rust-c provided metadata.
+  These are the files produced by the rustc compiler with the `.rlib`
+  extension, and are the intermediate step for most Rust-based binaries.
+```
+
+#### **Language and compilation**
+
+```
+  The tools and commands used to create this target type will be
+  determined by the source files in its sources. Targets containing
+  multiple compiler-incompatible languages are not allowed (e.g. a
+  target containing both C and C++ sources is acceptable, but a
+  target containing C and Rust sources is not).
+```
+
+#### **Variables**
+
+```
+  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
+         libs, precompiled_header, precompiled_source, rustflags,
+         rustenv
+  Deps: data_deps, deps, public_deps
+  Dependent configs: all_dependent_configs, public_configs
+  General: check_includes, configs, data, friend, inputs, metadata,
+           output_name, output_extension, public, sources, testonly,
+           visibility
+  Rust variables: aliased_deps, crate_root, crate_name
+```
+### <a name="func_rust_proc_macro"></a>**rust_proc_macro**: Declare a Rust procedural macro target.
+
+```
+  A Rust procedural macro allows creating syntax extensions as execution of a
+  function. They are compiled as dynamic libraries and used by the compiler at
+  runtime.
+
+  Their use is the same as of other Rust libraries, but their build has some
+  additional restrictions in terms of supported flags.
+```
+
+#### **Language and compilation**
+
+```
+  The tools and commands used to create this target type will be
+  determined by the source files in its sources. Targets containing
+  multiple compiler-incompatible languages are not allowed (e.g. a
+  target containing both C and C++ sources is acceptable, but a
+  target containing C and Rust sources is not).
+```
+
+#### **Variables**
+
+```
+  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
+         asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
+         libs, precompiled_header, precompiled_source, rustflags,
+         rustenv
+  Deps: data_deps, deps, public_deps
+  Dependent configs: all_dependent_configs, public_configs
+  General: check_includes, configs, data, friend, inputs, metadata,
+           output_name, output_extension, public, sources, testonly,
+           visibility
+  Rust variables: aliased_deps, crate_root, crate_name
 ```
 ### <a name="func_shared_library"></a>**shared_library**: Declare a shared library target.
 
@@ -1737,19 +1930,38 @@
   instead.
 ```
 
+#### **Language and compilation**
+
+```
+  The tools and commands used to create this target type will be
+  determined by the source files in its sources. Targets containing
+  multiple compiler-incompatible languages are not allowed (e.g. a
+  target containing both C and C++ sources is acceptable, but a
+  target containing C and Rust sources is not).
+```
+
 #### **Variables**
 
 ```
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
-         libs, precompiled_header, precompiled_source
+         libs, precompiled_header, precompiled_source, rustflags,
+         rustenv
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
            output_name, output_extension, public, sources, testonly,
            visibility
+  Rust variables: aliased_deps, crate_root, crate_name, crate_type
 ```
 ### <a name="func_source_set"></a>**source_set**: Declare a source set target.
+
+```
+  The language of a source_set target is determined by the extensions present
+  in its sources.
+```
+
+#### **C-language source_sets**
 
 ```
   A source set is a collection of sources that get compiled, but are not linked
@@ -1774,12 +1986,22 @@
   when linking multiple static libraries into a shared library.
 ```
 
+#### **Rust-language source_sets**
+
+```
+  A Rust source set is a collection of sources that get passed along to the
+  final target that depends on it. No compilation is performed, and the source
+  files are simply added as dependencies on the eventual rustc invocation that
+  would produce a binary.
+```
+
 #### **Variables**
 
 ```
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
-         libs, precompiled_header, precompiled_source
+         libs, precompiled_header, precompiled_source, rustflags,
+         rustenv
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
@@ -1802,12 +2024,20 @@
   complete_static_lib
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
-         libs, precompiled_header, precompiled_source
+         libs, precompiled_header, precompiled_source, rustflags,
+         rustenv
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, friend, inputs, metadata,
            output_name, output_extension, public, sources, testonly,
            visibility
+  Rust variables: aliased_deps, crate_root, crate_name
+
+  The tools and commands used to create this target type will be
+  determined by the source files in its sources. Targets containing
+  multiple compiler-incompatible languages are not allowed (e.g. a
+  target containing both C and C++ sources is acceptable, but a
+  target containing C and Rust sources is not).
 ```
 ### <a name="func_target"></a>**target**: Declare an target with the given programmatic type.
 
@@ -1903,7 +2133,8 @@
 ```
   Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,
          asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,
-         libs, precompiled_header, precompiled_source
+         libs, precompiled_header, precompiled_source, rustflags,
+         rustenv
   Nested configs: configs
 ```
 
@@ -1917,7 +2148,7 @@
 
 ```
   config("myconfig") {
-    includes = [ "include/common" ]
+    include_dirs = [ "include/common" ]
     defines = [ "ENABLE_DOOM_MELON" ]
   }
 
@@ -1942,8 +2173,9 @@
       the current scope is not (since the overrides haven't been applied yet).
 
    2. At the end of executing the block, any variables set within that scope
-      are saved globally as build arguments, with their current values being
-      saved as the "default value" for that argument.
+      are saved, with the values specified in the block used as the "default value"
+      for that argument. Once saved, these variables are available for override
+      via args.gn.
 
    3. User-defined overrides are applied. Anything set in "gn args" now
       overrides any default values. The resulting set of variables is promoted
@@ -2120,7 +2352,7 @@
       unspecified or the empty list which means no arguments.
 
   input_conversion:
-      Controls how the file is read and parsed. See "gn help input_conversion".
+      Controls how the file is read and parsed. See "gn help io_conversion".
 
       If unspecified, defaults to the empty string which causes the script
       result to be discarded. exec script will return None.
@@ -2145,6 +2377,42 @@
   # This example just calls the script with no arguments and discards the
   # result.
   exec_script("//foo/bar/myscript.py")
+```
+### <a name="func_filter_exclude"></a>**filter_exclude**: Remove values that match a set of patterns.
+
+```
+  filter_exclude(values, exclude_patterns)
+
+  The argument values must be a list of strings.
+
+  The argument exclude_patterns must be a list of file patterns (see
+  "gn help file_pattern"). Any elements in values matching at least one
+  of those patterns will be excluded.
+```
+
+#### **Examples**
+```
+  values = [ "foo.cc", "foo.h", "foo.proto" ]
+  result = filter_exclude(values, [ "*.proto" ])
+  # result will be [ "foo.cc", "foo.h" ]
+```
+### <a name="func_filter_include"></a>**filter_include**: Remove values that do not match a set of patterns.
+
+```
+  filter_include(values, include_patterns)
+
+  The argument values must be a list of strings.
+
+  The argument include_patterns must be a list of file patterns (see
+  "gn help file_pattern"). Only elements from values matching at least
+  one of the pattern will be included.
+```
+
+#### **Examples**
+```
+  values = [ "foo.cc", "foo.h", "foo.proto" ]
+  result = filter_include(values, [ "*.proto" ])
+  # result will be [ "foo.proto" ]
 ```
 ### <a name="func_foreach"></a>**foreach**: Iterate over a list.
 
@@ -2417,10 +2685,10 @@
   defined execution order, and it obviously can't reference targets that are
   defined after the function call).
 
-  Only copy and action targets are supported. The outputs from binary targets
-  will depend on the toolchain definition which won't necessarily have been
-  loaded by the time a given line of code has run, and source sets and groups
-  have no useful output file.
+  Only copy, generated_file, and action targets are supported. The outputs from
+  binary targets will depend on the toolchain definition which won't
+  necessarily have been loaded by the time a given line of code has run, and
+  source sets and groups have no useful output file.
 ```
 
 #### **Return value**
@@ -2429,20 +2697,14 @@
   The names in the resulting list will be absolute file paths (normally like
   "//out/Debug/bar.exe", depending on the build directory).
 
-  action targets: this will just return the files specified in the "outputs"
-  variable of the target.
+  action, copy, and generated_file targets: this will just return the files
+  specified in the "outputs" variable of the target.
 
   action_foreach targets: this will return the result of applying the output
   template to the sources (see "gn help source_expansion"). This will be the
   same result (though with guaranteed absolute file paths), as
   process_file_template will return for those inputs (see "gn help
   process_file_template").
-
-  binary targets (executables, libraries): this will return a list of the
-  resulting binary file(s). The "main output" (the actual binary or library)
-  will always be the 0th element in the result. Depending on the platform and
-  output type, there may be other output files as well (like import libraries)
-  which will follow.
 
   source sets and groups: this will return a list containing the path of the
   "stamp" file that Ninja will produce once all outputs are generated. This
@@ -2579,7 +2841,7 @@
   toolchain("toolchain") {
     tool("link") {
       command = "..."
-      pool = ":link_pool($default_toolchain)")
+      pool = ":link_pool($default_toolchain)"
     }
   }
 ```
@@ -2664,7 +2926,7 @@
       Filename to read, relative to the build file.
 
   input_conversion
-      Controls how the file is read and parsed. See "gn help input_conversion".
+      Controls how the file is read and parsed. See "gn help io_conversion".
 ```
 
 #### **Example**
@@ -2898,42 +3160,9 @@
 
   If you want to bypass the filter and add a file even if it might be filtered
   out, call set_sources_assignment_filter([]) to clear the list of filters.
-  This will apply until the current scope exits
-```
+  This will apply until the current scope exits.
 
-#### **How to use patterns**
-
-```
-  File patterns are VERY limited regular expressions. They must match the
-  entire input string to be counted as a match. In regular expression parlance,
-  there is an implicit "^...$" surrounding your input. If you want to match a
-  substring, you need to use wildcards at the beginning and end.
-
-  There are only two special tokens understood by the pattern matcher.
-  Everything else is a literal.
-
-   - "*" Matches zero or more of any character. It does not depend on the
-     preceding character (in regular expression parlance it is equivalent to
-     ".*").
-
-   - "\b" Matches a path boundary. This will match the beginning or end of a
-     string, or a slash.
-```
-
-#### **Pattern examples**
-
-```
-  "*asdf*"
-      Matches a string containing "asdf" anywhere.
-
-  "asdf"
-      Matches only the exact string "asdf".
-
-  "*.cc"
-      Matches strings ending in the literal ".cc".
-
-  "\bwin/*"
-      Matches "win/foo" and "foo/win/bar.cc" but not "iwin/foo".
+  See "gn help file_pattern" for more information on file pattern.
 ```
 
 #### **Sources assignment example**
@@ -2968,6 +3197,22 @@
   Will print:
     [[1, 2], [3, 4], [5, 6]
 ```
+### <a name="func_string_join"></a>**string_join**: Concatenates a list of strings with a separator.
+
+```
+  result = string_join(separator, strings)
+
+  Concatenate a list of strings with intervening occurrences of separator.
+```
+
+#### **Examples**
+
+```
+    string_join("", ["a", "b", "c"])    --> "abc"
+    string_join("|", ["a", "b", "c"])   --> "a|b|c"
+    string_join(", ", ["a", "b", "c"])  --> "a, b, c"
+    string_join("s", ["", ""])          --> "s"
+```
 ### <a name="func_string_replace"></a>**string_replace**: Replaces substring in the given string.
 
 ```
@@ -2988,6 +3233,33 @@
 
   Will print:
     Hello, GN!
+```
+### <a name="func_string_split"></a>**string_split**: Split string into a list of strings.
+
+```
+  result = string_split(str[, sep])
+
+  Split string into all substrings separated by separator and returns a list
+  of the substrings between those separators.
+
+  If the separator argument is omitted, the split is by any whitespace, and
+  any leading/trailing whitespace is ignored; similar to Python's str.split().
+```
+
+#### **Examples without a separator (split on whitespace)**:
+
+```
+  string_split("")          --> []
+  string_split("a")         --> ["a"]
+  string_split(" aa  bb")   --> ["aa", "bb"]
+```
+
+#### **Examples with a separator (split on separators)**:
+
+```
+  string_split("", "|")           --> [""]
+  string_split("  a b  ", " ")    --> ["", "", "a", "b", "", ""]
+  string_split("aa+-bb+-c", "+-") --> ["aa", "bb", "c"]
 ```
 ### <a name="func_template"></a>**template**: Define a template rule.
 
@@ -3186,6 +3458,14 @@
     Platform specific tools:
       "copy_bundle_data": [iOS, macOS] Tool to copy files in a bundle.
       "compile_xcassets": [iOS, macOS] Tool to compile asset catalogs.
+
+    Rust tools:
+      "rust_bin": Tool for compiling Rust binaries
+      "rust_cdylib": Tool for compiling C-compatible dynamic libraries.
+      "rust_dylib": Tool for compiling Rust dynamic libraries.
+      "rust_macro": Tool for compiling Rust procedural macros.
+      "rust_rlib": Tool for compiling Rust libraries.
+      "rust_staticlib": Tool for compiling Rust static libraries.
 ```
 
 #### **Tool variables**
@@ -3195,6 +3475,15 @@
         Valid for: all tools except "action" (required)
 
         The command to run.
+
+    command_launcher  [string]
+        Valid for: all tools except "action" (optional)
+
+        The prefix with which to launch the command (e.g. the path to a Goma or
+        CCache compiler launcher).
+
+        Note that this prefix will not be included in the compilation database or
+        IDE files generated from the build.
 
     default_output_dir  [string with substitutions]
         Valid for: linker tools
@@ -3249,17 +3538,51 @@
 
         Example: description = "Compiling {{source}}"
 
+    exe_output_extension [string, optional, rust tools only]
+    rlib_output_extension [string, optional, rust tools only]
+    dylib_output_extension [string, optional, rust tools only]
+    cdylib_output_extension [string, optional, rust tools only]
+    rust_proc_macro_output_extension [string, optional, rust tools only]
+        Valid for: Rust tools
+
+        These specify the default tool output for each of the crate types.
+        The default is empty for executables, shared, and static libraries and
+        ".rlib" for rlibs. Note that the Rust compiler complains with an error
+        if external crates do not take the form `lib<name>.rlib` or
+        `lib<name>.<shared_extension>`, where `<shared_extension>` is `.so`,
+        `.dylib`, or `.dll` as appropriate for the platform.
+
     lib_switch  [string, optional, link tools only]
     lib_dir_switch  [string, optional, link tools only]
         Valid for: Linker tools except "alink"
 
         These strings will be prepended to the libraries and library search
-        directories, respectively, because linkers differ on how specify them.
+        directories, respectively, because linkers differ on how to specify
+        them.
+
         If you specified:
           lib_switch = "-l"
           lib_dir_switch = "-L"
-        then the "{{libs}}" expansion for [ "freetype", "expat"] would be
-        "-lfreetype -lexpat".
+        then the "{{libs}}" expansion for
+          [ "freetype", "expat" ]
+        would be
+          "-lfreetype -lexpat".
+
+    framework_switch [string, optional, link tools only]
+    framework_dir_switch [string, optional, link tools only]
+        Valid for: Linker tools
+
+        These strings will be prepended to the frameworks and framework search
+        path directories, respectively, because linkers differ on how to specify
+        them.
+
+        If you specified:
+          framework_switch = "-framework "
+          framework_dir_switch = "-F"
+        then the "{{libs}}" expansion for
+          [ "UIKit.framework", "$root_out_dir/Foo.framework" ]
+        would be
+          "-framework UIKit -F. -framework Foo"
 
     outputs  [list of strings with substitutions]
         Valid for: Linker and compiler tools (required)
@@ -3530,6 +3853,12 @@
 
         Example: "libfoo.so libbar.so"
 
+    {{frameworks}}
+        Shared libraries packaged as framework bundle. This is principally
+        used on Apple's platforms (macOS and iOS). All name must be ending
+        with ".framework" suffix; the suffix will be stripped when expanding
+        {{frameworks}} and each item will be preceded by "-framework".
+
   The static library ("alink") tool allows {{arflags}} plus the common tool
   substitutions.
 
@@ -3562,6 +3891,32 @@
         Expands to the path to the partial Info.plist generated by the
         assets catalog compiler. Usually based on the target_name of
         the create_bundle target.
+
+  Rust tools have the notion of a single input and a single output, along
+  with a set of compiler-specific flags. The following expansions are
+  available:
+
+    {{crate_name}}
+        Expands to the string representing the crate name of target under
+        compilation.
+
+    {{crate_type}}
+        Expands to the string representing the type of crate for the target
+        under compilation.
+
+    {{externs}}
+        Expands to the list of --extern flags needed to include addition Rust
+        libraries in this target. Includes any specified renamed dependencies.
+
+    {{rustdeps}}
+        Expands to the list of -Ldependency=<path> strings needed to compile
+        this target.
+
+    {{rustenv}}
+        Expands to the list of environment variables.
+
+    {{rustflags}}
+        Expands to the list of strings representing Rust compiler flags.
 ```
 
 #### **Separate linking and dependencies for shared libraries**
@@ -3921,7 +4276,7 @@
       The list or string to write.
 
   output_conversion
-    Controls how the output is written. See "gn help output_conversion".
+    Controls how the output is written. See "gn help io_conversion".
 ```
 ## <a name="predefined_variables"></a>Built-in predefined variables
 
@@ -3973,6 +4328,17 @@
 ```
   A fully-qualified label representing the default toolchain, which may not
   necessarily be the current one (see "current_toolchain").
+```
+### <a name="var_gn_version"></a>**gn_version**: [number] The version of gn.
+
+```
+  Corresponds to the number printed by `gn --version`.
+```
+
+#### **Example**
+
+```
+  assert(gn_version >= 1700, "need GN version 1700 for the frobulate feature")
 ```
 ### <a name="var_host_cpu"></a>**host_cpu**: The processor architecture that GN is running on.
 
@@ -4255,6 +4621,36 @@
 ```
 ## <a name="target_variables"></a>Variables you set in targets
 
+### <a name="var_aliased_deps"></a>**aliased_deps**: [scope] Set of crate-dependency pairs.
+
+```
+  Valid for `rust_library` targets and `executable`, `static_library`, and
+  `shared_library` targets that contain Rust sources.
+
+  A scope, each key indicating the renamed crate and the corresponding value
+  specifying the label of the dependency producing the relevant binary.
+
+  All dependencies listed in this field *must* be listed as deps of the target.
+
+    executable("foo") {
+      sources = [ "main.rs" ]
+      deps = [ "//bar" ]
+    }
+
+  This target would compile the `foo` crate with the following `extern` flag:
+  `rustc ...command... --extern bar=<build_out_dir>/obj/bar`
+
+    executable("foo") {
+      sources = [ "main.rs" ]
+      deps = [ ":bar" ]
+      aliased_deps = {
+        bar_renamed = ":bar"
+      }
+    }
+
+  With the addition of `aliased_deps`, above target would instead compile with:
+  `rustc ...command... --extern bar_renamed=<build_out_dir>/obj/bar`
+```
 ### <a name="var_all_dependent_configs"></a>**all_dependent_configs**: Configs to be forced on dependents.
 
 ```
@@ -4930,6 +5326,47 @@
   The contents of the file for a generated_file target.
   See "gn help generated_file".
 ```
+### <a name="var_crate_name"></a>**crate_name**: [string] The name for the compiled crate.
+
+```
+  Valid for `rust_library` targets and `executable`, `static_library`,
+  `shared_library`, and `source_set` targets that contain Rust sources.
+
+  If crate_name is not set, then this rule will use the target name.
+```
+### <a name="var_crate_root"></a>**crate_root**: [string] The root source file for a binary or library.
+
+```
+  Valid for `rust_library` targets and `executable`, `static_library`,
+  `shared_library`, and `source_set` targets that contain Rust sources.
+
+  This file is usually the `main.rs` or `lib.rs` for binaries and libraries,
+  respectively.
+
+  If crate_root is not set, then this rule will look for a lib.rs file (or
+  main.rs for executable) or a single file in sources, if sources contains
+  only one file.
+```
+### <a name="var_crate_type"></a>**crate_type**: [string] The type of linkage to use on a shared_library.
+
+```
+  Valid for `rust_library` targets and `executable`, `static_library`,
+  `shared_library`, and `source_set` targets that contain Rust sources.
+
+  Options for this field are "cdylib", "staticlib", "proc-macro", and "dylib".
+  This field sets the `crate-type` attribute for the `rustc` tool on static
+  libraries, as well as the appropiate output extension in the
+  `rust_output_extension` attribute. Since outputs must be explicit, the `lib`
+  crate type (where the Rust compiler produces what it thinks is the
+  appropriate library type) is not supported.
+
+  It should be noted that the "dylib" crate type in Rust is unstable in the set
+  of symbols it exposes, and most usages today are potentially wrong and will
+  be broken in the future.
+
+  Static libraries, rust libraries, and executables have this field set
+  automatically.
+```
 ### <a name="var_data"></a>**data**: Runtime data file dependencies.
 
 ```
@@ -5097,6 +5534,94 @@
   "gn help runtime_deps".
 
   See also "public_deps".
+```
+### <a name="var_externs"></a>**externs**: [scope] Set of Rust crate-dependency pairs.
+
+```
+  A list, each value being a scope indicating a pair of crate name and the path
+  to the Rust library.
+
+  These libraries will be passed as `--extern crate_name=path` to compiler
+  invocation containing the current target.
+```
+
+#### **Examples**
+
+```
+    executable("foo") {
+      sources = [ "main.rs" ]
+      externs = [{
+        crate_name = "bar",
+        path = "path/to/bar.rlib"
+      }]
+    }
+
+  This target would compile the `foo` crate with the following `extern` flag:
+  `--extern bar=path/to/bar.rlib`.
+```
+### <a name="var_framework_dirs"></a>**framework_dirs**: [directory list] Additional framework search directories.
+
+```
+  A list of source directories.
+
+  The directories in this list will be added to the framework search path for
+  the files in the affected target.
+```
+
+#### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurence will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+```
+
+#### **Example**
+
+```
+  framework_dirs = [ "src/include", "//third_party/foo" ]
+```
+### <a name="var_frameworks"></a>**frameworks**: [name list] Name of frameworks that must be linked.
+
+```
+  A list of framework names.
+
+  The frameworks named in that list will be linked with any dynamic link
+  type target.
+```
+
+#### **Ordering of flags and values**
+
+```
+  1. Those set on the current target (not in a config).
+  2. Those set on the "configs" on the target in order that the
+     configs appear in the list.
+  3. Those set on the "all_dependent_configs" on the target in order
+     that the configs appear in the list.
+  4. Those set on the "public_configs" on the target in order that
+     those configs appear in the list.
+  5. all_dependent_configs pulled from dependencies, in the order of
+     the "deps" list. This is done recursively. If a config appears
+     more than once, only the first occurence will be used.
+  6. public_configs pulled from dependencies, in the order of the
+     "deps" list. If a dependency is public, they will be applied
+     recursively.
+```
+
+#### **Example**
+
+```
+  frameworks = [ "Foundation.framework", "Foo.framework" ]
 ```
 ### <a name="var_friend"></a>**friend**: Allow targets to include private headers.
 
@@ -5303,7 +5828,7 @@
   being relative to the current build file.
 
   libs and lib_dirs work differently than other flags in two respects.
-  First, then are inherited across static library boundaries until a
+  First, they are inherited across static library boundaries until a
   shared library or executable target is reached. Second, they are
   uniquified so each one is only passed once (the first instance of it
   will be the one used).
@@ -5345,7 +5870,7 @@
   library) containing the current target.
 
   libs and lib_dirs work differently than other flags in two respects.
-  First, then are inherited across static library boundaries until a
+  First, they are inherited across static library boundaries until a
   shared library or executable target is reached. Second, they are
   uniquified so each one is only passed once (the first instance of it
   will be the one used).
@@ -5434,11 +5959,11 @@
     }
   }
 ```
-### <a name="var_output_conversion"></a>**"output_conversion**: Data format for generated_file targets.
+### <a name="var_output_conversion"></a>**output_conversion**: Data format for generated_file targets.
 
 ```
   Controls how the "contents" of a generated_file target is formatted.
-  See "gn help output_conversion".
+  See "gn help io_conversion".
 ```
 ### <a name="var_output_dir"></a>**output_dir**: [directory] Directory to put output file in.
 
@@ -5968,6 +6493,10 @@
   and they do not cross dependency boundaries (so specifying a .def file in a
   static library or source set will have no effect on the executable or shared
   library they're linked into).
+
+  For Rust targets that do not specify a crate_root, then the crate_root will
+  look for a lib.rs file (or main.rs for executable) or a single file in
+  sources, if sources contains only one file.
 ```
 
 #### **Sources for non-binary targets**
@@ -6063,13 +6592,13 @@
 ### <a name="var_walk_keys"></a>**walk_keys**: Key(s) for managing the metadata collection walk.
 
 ```
-  Defaults to [].
+  Defaults to [""].
 
   These keys are used to control the next step in a collection walk, acting as
   barriers. If a specified key is defined in a target's metadata, the walk will
   use the targets listed in that value to determine which targets are walked.
 
-  If no walk_keys are specified for a generated_file target (i.e. "[]"), the
+  If no walk_keys are specified for a generated_file target (i.e. "[""]"), the
   walk will touch all deps and data_deps of the specified target recursively.
 
   See "gn help generated_file".
@@ -6224,6 +6753,14 @@
       The format of this list is identical to that of "visibility" so see "gn
       help visibility" for examples.
 
+  check_system_includes [optional]
+      Boolean to control whether system style includes are checked by default
+      when running "gn check" or "gn gen --check".  System style includes are
+      includes that use angle brackets <> instead of double quotes "". If this
+      setting is omitted or set to false, these includes will be ignored by
+      default. They can be checked explicitly by running
+      "gn check --check-system" or "gn gen --check=system"
+
   exec_script_whitelist [optional]
       A list of .gn/.gni files (not labels) that have permission to call the
       exec_script function. If this list is defined, calls to exec_script will
@@ -6249,9 +6786,12 @@
       cause the file //BUILD.gn to be loaded.
 
   script_executable [optional]
-      Path to specific Python executable or potentially a different language
-      interpreter that is used to execute scripts in action targets and
-      exec_script calls.
+      Path to specific Python executable or other interpreter to use in
+      action targets and exec_script calls. By default GN searches the
+      PATH for Python to execute these scripts.
+
+      If set to the empty string, the path specified in action targets
+      and exec_script calls will be executed directly.
 
   secondary_source [optional]
       Label of an alternate directory tree to find input files. When searching
@@ -6715,6 +7255,40 @@
       Note that "trim value" is useless because the value parser skips
       whitespace anyway.
 ```
+### <a name="file_pattern"></a>**File patterns**
+
+```
+  File patterns are VERY limited regular expressions. They must match the
+  entire input string to be counted as a match. In regular expression parlance,
+  there is an implicit "^...$" surrounding your input. If you want to match a
+  substring, you need to use wildcards at the beginning and end.
+
+  There are only two special tokens understood by the pattern matcher.
+  Everything else is a literal.
+
+   - "*" Matches zero or more of any character. It does not depend on the
+     preceding character (in regular expression parlance it is equivalent to
+     ".*").
+
+   - "\b" Matches a path boundary. This will match the beginning or end of a
+     string, or a slash.
+```
+
+#### **Pattern examples**
+
+```
+  "*asdf*"
+      Matches a string containing "asdf" anywhere.
+
+  "asdf"
+      Matches only the exact string "asdf".
+
+  "*.cc"
+      Matches strings ending in the literal ".cc".
+
+  "\bwin/*"
+      Matches "win/foo" and "foo/win/bar.cc" but not "iwin/foo".
+```
 ### <a name="label_pattern"></a>**Label patterns**
 
 ```
@@ -6810,6 +7384,148 @@
 
     //net  ->  //net:net
     //tools/gn  ->  //tools/gn:gn
+```
+### <a name="metadata_collection"></a>**Metadata Collection**
+
+```
+  Metadata is information attached to targets throughout the dependency tree. GN
+  allows for the collection of this data into files written during the generation
+  step, enabling users to expose and aggregate this data based on the dependency
+  tree.
+```
+
+#### **generated_file targets**
+
+```
+  Similar to the write_file() function, the generated_file target type
+  creates a file in the specified location with the specified content. The
+  primary difference between write_file() and this target type is that the
+  write_file function does the file write at parse time, while the
+  generated_file target type writes at target resolution time. See
+  "gn help generated_file" for more detail.
+
+  When written at target resolution time, generated_file enables GN to
+  collect and write aggregated metadata from dependents.
+
+  A generated_file target can declare either 'contents' to write statically
+  known contents to a file or 'data_keys' to aggregate metadata and write the
+  result to a file. It can also specify 'walk_keys' (to restrict the metadata
+  collection), 'output_conversion', and 'rebase'.
+```
+
+#### **Collection and Aggregation**
+
+```
+  Targets can declare a 'metadata' variable containing a scope, and this
+  metadata may be collected and written out to a file specified by
+  generated_file aggregation targets. The 'metadata' scope must contain
+  only list values since the aggregation step collects a list of these values.
+
+  During the target resolution, generated_file targets will walk their
+  dependencies recursively, collecting metadata based on the specified
+  'data_keys'. 'data_keys' is specified as a list of strings, used by the walk
+  to identify which variables in dependencies' 'metadata' scopes to collect.
+
+  The walk begins with the listed dependencies of the 'generated_file' target.
+  The 'metadata' scope for each dependency is inspected for matching elements
+  of the 'generated_file' target's 'data_keys' list.  If a match is found, the
+  data from the dependent's matching key list is appended to the aggregate walk
+  list. Note that this means that if more than one walk key is specified, the
+  data in all of them will be aggregated into one list. From there, the walk
+  will then recurse into the dependencies of each target it encounters,
+  collecting the specified metadata for each.
+
+  For example:
+
+    group("a") {
+      metadata = {
+        doom_melon = [ "enable" ]
+        my_files = [ "foo.cpp" ]
+        my_extra_files = [ "bar.cpp" ]
+      }
+
+      deps = [ ":b" ]
+    }
+
+    group("b") {
+      metadata = {
+        my_files = [ "baz.cpp" ]
+      }
+    }
+
+    generated_file("metadata") {
+      outputs = [ "$root_build_dir/my_files.json" ]
+      data_keys = [ "my_files", "my_extra_files" ]
+
+      deps = [ ":a" ]
+    }
+
+  The above will produce the following file data:
+
+    foo.cpp
+    bar.cpp
+    baz.cpp
+
+  The dependency walk can be limited by using the 'walk_keys'. This is a list of
+  labels that should be included in the walk. All labels specified here should
+  also be in one of the deps lists. These keys act as barriers, where the walk
+  will only recurse into the targets listed. An empty list in all specified
+  barriers will end that portion of the walk.
+
+    group("a") {
+      metadata = {
+        my_files = [ "foo.cpp" ]
+        my_files_barrier [ ":b" ]
+      }
+
+      deps = [ ":b", ":c" ]
+    }
+
+    group("b") {
+      metadata = {
+        my_files = [ "bar.cpp" ]
+      }
+    }
+
+    group("c") {
+      metadata = {
+        my_files = [ "doom_melon.cpp" ]
+      }
+    }
+
+    generated_file("metadata") {
+      outputs = [ "$root_build_dir/my_files.json" ]
+      data_keys = [ "my_files", "my_extra_files" ]
+
+      deps = [ ":a" ]
+    }
+
+  The above will produce the following file data (note that `doom_melon.cpp` is
+  not included):
+
+    foo.cpp
+    bar.cpp
+
+  A common example of this sort of barrier is in builds that have host tools
+  built as part of the tree, but do not want the metadata from those host tools
+  to be collected with the target-side code.
+```
+
+#### **Common Uses**
+
+```
+  Metadata can be used to collect information about the different targets in the
+  build, and so a common use is to provide post-build tooling with a set of data
+  necessary to do aggregation tasks. For example, if each test target specifies
+  the output location of its binary to run in a metadata field, that can be
+  collected into a single file listing the locations of all tests in the
+  dependency tree. A local build tool (or continuous integration infrastructure)
+  can then use that file to know which tests exist, and where, and run them
+  accordingly.
+
+  Another use is in image creation, where a post-build image tool needs to know
+  various pieces of information about the components it should include in order
+  to put together the correct image.
 ```
 ### <a name="ninja_rules"></a>**Ninja build rules**
 
@@ -7043,8 +7759,9 @@
   {{source_target_relative}}
       The path to the source file relative to the target's directory. This will
       generally be used for replicating the source directory layout in the
-      output directory. This can only be used in actions and it is an error to
-      use in process_file_template where there is no "target".
+      output directory. This can only be used in actions and bundle_data
+      targets. It is an error to use in process_file_template where there is no
+      "target".
         "//foo/bar/baz.txt" => "baz.txt"
 ```
 

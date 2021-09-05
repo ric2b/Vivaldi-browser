@@ -5,12 +5,9 @@
 package org.chromium.chrome.browser.touch_to_fill;
 
 import android.content.Context;
-import android.graphics.Bitmap;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.Px;
 
-import org.chromium.base.Callback;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 
@@ -27,7 +24,9 @@ public interface TouchToFillComponent {
      * The different reasons that the sheet's state can change.
      *
      * These values are persisted to logs. Entries should not be renumbered and numeric values
-     * should never be reused. Needs to stay in sync with TouchToFill.UserAction in enums.xml.
+     * should never be reused. Needs to stay in sync with TouchToFill.UserAction in enums.xml and
+     * UserAction in touch_to_fill_controller.h.
+     * TODO(crbug.com/1013134): Deduplicate the Java and C++ enum.
      */
     @IntDef({UserAction.SELECT_CREDENTIAL, UserAction.DISMISS, UserAction.SELECT_MANAGE_PASSWORDS,
             UserAction.MAX_VALUE})
@@ -59,20 +58,6 @@ public interface TouchToFillComponent {
          * Called when the user selects the "Manage Passwords" option.
          */
         void onManagePasswordsSelected();
-
-        /**
-         * Called to fetch a favicon for one origin to display it in the UI.
-         *
-         * @param credentialOrigin The origin of the credential for which the favicon should be
-         *         fetched. May be opaque, in this case the frame origin will be used.
-         * @param frameOrigin The origin of the frame for which {@link TouchToFillComponent} is
-         *         displayed. Used as the fallback source for the favicon in credential origin is
-         *         opaque.
-         * @param desiredSize The desired size for the favicon. The actual size may be different.
-         * @param callback The callback to receive the favicon or null if no favicon was found.
-         */
-        void fetchFavicon(String credentialOrigin, String frameOrigin, @Px int desiredSize,
-                Callback<Bitmap> callback);
     }
 
     /**

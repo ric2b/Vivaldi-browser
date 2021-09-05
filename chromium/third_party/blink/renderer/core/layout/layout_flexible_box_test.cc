@@ -496,11 +496,12 @@ TEST_P(LayoutFlexibleBoxTest, ResizedFlexChildRequiresVisualOverflowRecalc) {
   auto* child1_element = GetElementById("child1");
   auto* child2_element = GetElementById("child2");
   child2_element->setAttribute(html_names::kStyleAttr, "height: 100px;");
-  GetDocument().View()->UpdateLifecycleToLayoutClean();
+  GetDocument().View()->UpdateLifecycleToLayoutClean(
+      DocumentUpdateReason::kTest);
 
   auto* child1_box = ToLayoutBox(child1_element->GetLayoutObject());
   ASSERT_TRUE(child1_box->HasSelfPaintingLayer());
-  EXPECT_TRUE(child1_box->Layer()->NeedsVisualOverflowRecalcForTesting());
+  EXPECT_TRUE(child1_box->Layer()->NeedsVisualOverflowRecalc());
 
   UpdateAllLifecyclePhasesForTest();
 

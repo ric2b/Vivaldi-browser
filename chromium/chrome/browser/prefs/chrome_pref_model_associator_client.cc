@@ -11,6 +11,8 @@
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 
+#include "prefs/vivaldi_browser_prefs.h"
+
 // static
 ChromePrefModelAssociatorClient*
 ChromePrefModelAssociatorClient::GetInstance() {
@@ -23,6 +25,11 @@ ChromePrefModelAssociatorClient::~ChromePrefModelAssociatorClient() {}
 
 bool ChromePrefModelAssociatorClient::IsMergeableListPreference(
     const std::string& pref_name) const {
+  // NOTE(igor@vivaldi.com): Do not check if Vivaldi runs to ensure that
+  // a syncable list preference remains such even with --disable-vivaldi.
+  if (::vivaldi::IsMergeableListPreference(pref_name))
+    return true;
+
   return pref_name == prefs::kURLsToRestoreOnStartup;
 }
 

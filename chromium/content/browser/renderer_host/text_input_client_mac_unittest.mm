@@ -11,6 +11,7 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
+#include "content/browser/renderer_host/frame_token_message_queue.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -62,8 +63,9 @@ class TextInputClientMacTest : public testing::Test {
     mock_widget_impl_ = std::make_unique<MockWidgetImpl>(
         widget.InitWithNewPipeAndPassReceiver());
 
-    widget_.reset(new RenderWidgetHostImpl(&delegate_, rph, routing_id,
-                                           std::move(widget), false));
+    widget_.reset(new RenderWidgetHostImpl(
+        &delegate_, rph, routing_id, std::move(widget), /*hidden=*/false,
+        std::make_unique<FrameTokenMessageQueue>()));
   }
 
   void TearDown() override {
@@ -82,14 +84,16 @@ class TextInputClientMacTest : public testing::Test {
 
   // Helper method to post a task on the testing thread's MessageLoop after
   // a short delay.
-  void PostTask(const base::Location& from_here, const base::Closure& task) {
-    PostTask(from_here, task, base::TimeDelta::FromMilliseconds(kTaskDelayMs));
+  void PostTask(base::Location from_here, base::OnceClosure task) {
+    PostTask(std::move(from_here), std::move(task),
+             base::TimeDelta::FromMilliseconds(kTaskDelayMs));
   }
 
-  void PostTask(const base::Location& from_here,
-                const base::Closure& task,
+  void PostTask(base::Location from_here,
+                base::OnceClosure task,
                 const base::TimeDelta delay) {
-    thread_.task_runner()->PostDelayedTask(from_here, task, delay);
+    thread_.task_runner()->PostDelayedTask(std::move(from_here),
+                                           std::move(task), delay);
   }
 
   RenderWidgetHostImpl* widget() { return widget_.get(); }
@@ -148,8 +152,8 @@ TEST_F(TextInputClientMacTest, GetCharacterIndex) {
   const NSUInteger kSuccessValue = 42;
 
   PostTask(FROM_HERE,
-           base::Bind(&TextInputClientMac::SetCharacterIndexAndSignal,
-                      base::Unretained(service()), kSuccessValue));
+           base::BindOnce(&TextInputClientMac::SetCharacterIndexAndSignal,
+                          base::Unretained(service()), kSuccessValue));
   NSUInteger index = service()->GetCharacterIndexAtPoint(
       widget(), gfx::Point(2, 2));
 
@@ -174,8 +178,8 @@ TEST_F(TextInputClientMacTest, NotFoundCharacterIndex) {
 
   // Set an arbitrary value to ensure the index is not |NSNotFound|.
   PostTask(FROM_HERE,
-           base::Bind(&TextInputClientMac::SetCharacterIndexAndSignal,
-                      base::Unretained(service()), kPreviousValue));
+           base::BindOnce(&TextInputClientMac::SetCharacterIndexAndSignal,
+                          base::Unretained(service()), kPreviousValue));
 
   scoped_refptr<TextInputClientMessageFilter> filter(
       new TextInputClientMessageFilter());
@@ -184,8 +188,7 @@ TEST_F(TextInputClientMacTest, NotFoundCharacterIndex) {
           widget()->GetRoutingID(), UINT32_MAX));
   // Set |WTF::notFound| to the index |kTaskDelayMs| after the previous
   // setting.
-  PostTask(FROM_HERE,
-           base::Bind(&CallOnMessageReceived, filter, *message),
+  PostTask(FROM_HERE, base::BindOnce(&CallOnMessageReceived, filter, *message),
            base::TimeDelta::FromMilliseconds(kTaskDelayMs) * 2);
 
   uint32_t index =
@@ -207,8 +210,8 @@ TEST_F(TextInputClientMacTest, GetRectForRange) {
   const gfx::Rect kSuccessValue(42, 43, 44, 45);
 
   PostTask(FROM_HERE,
-           base::Bind(&TextInputClientMac::SetFirstRectAndSignal,
-                      base::Unretained(service()), kSuccessValue));
+           base::BindOnce(&TextInputClientMac::SetFirstRectAndSignal,
+                          base::Unretained(service()), kSuccessValue));
   gfx::Rect rect =
       service()->GetFirstRectForRange(widget(), gfx::Range(NSMakeRange(0, 32)));
 

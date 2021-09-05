@@ -10,7 +10,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/task_manager/task_manager_browsertest_util.h"
 #include "chrome/browser/task_manager/task_manager_tester.h"
 #include "chrome/browser/ui/browser.h"
@@ -28,6 +27,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/test/browser_test_utils.h"
@@ -35,12 +35,10 @@
 #include "content/public/test/test_utils.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "ui/views/controls/table/table_view.h"
-
-#if defined(OS_CHROMEOS)
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
-#endif
+#include "ui/views/controls/table/table_view.h"
+#include "ui/views/test/widget_test.h"
 
 namespace task_manager {
 
@@ -96,7 +94,7 @@ class TaskManagerViewTest : public InProcessBrowserTest {
   content::WebContents* FindWebContentsByTabId(SessionID tab_id) {
     auto& all_tabs = AllTabContentses();
     auto tab_id_matches = [tab_id](content::WebContents* web_contents) {
-      return SessionTabHelper::IdForTab(web_contents) == tab_id;
+      return sessions::SessionTabHelper::IdForTab(web_contents) == tab_id;
     };
     auto it = std::find_if(all_tabs.begin(), all_tabs.end(), tab_id_matches);
 
@@ -106,7 +104,7 @@ class TaskManagerViewTest : public InProcessBrowserTest {
   // Returns the current TaskManagerTableModel index for a particular tab. Don't
   // cache this value, since it can change whenever the message loop runs.
   int FindRowForTab(content::WebContents* tab) {
-    SessionID tab_id = SessionTabHelper::IdForTab(tab);
+    SessionID tab_id = sessions::SessionTabHelper::IdForTab(tab);
     std::unique_ptr<TaskManagerTester> tester =
         TaskManagerTester::Create(base::Closure());
     for (int i = 0; i < tester->GetRowCount(); ++i) {
@@ -114,6 +112,12 @@ class TaskManagerViewTest : public InProcessBrowserTest {
         return i;
     }
     return -1;
+  }
+
+  void HideTaskManagerSync() {
+    views::test::WidgetDestroyedWaiter waiter(GetView()->GetWidget());
+    chrome::HideTaskManager();
+    waiter.Wait();
   }
 
  private:
@@ -216,7 +220,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerViewTest, InitialSelection) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), embedded_test_server()->GetURL("b.com", "/title3.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   // When the task manager is initially shown, the row for the active tab should
   // be selected.
@@ -254,11 +258,11 @@ IN_PROC_BROWSER_TEST_F(TaskManagerViewTest, DISABLED_SelectionConsistency) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), embedded_test_server()->GetURL("b.com", "/title2.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), embedded_test_server()->GetURL("c.com", "/title2.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   // Wait for their titles to appear in the TaskManager. There should be three
   // rows.
@@ -347,7 +351,6 @@ IN_PROC_BROWSER_TEST_F(TaskManagerViewTest, DISABLED_SelectionConsistency) {
 }
 
 // Make sure the task manager's bounds are saved across instances on Chrome OS.
-#if defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(TaskManagerViewTest, RestoreBounds) {
   chrome::ShowTaskManager(browser());
 
@@ -356,7 +359,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerViewTest, RestoreBounds) {
   const gfx::Rect non_default_bounds = default_bounds + gfx::Vector2d(0, 17);
 
   GetView()->GetWidget()->SetBounds(non_default_bounds);
-  GetView()->GetWidget()->CloseNow();
+  HideTaskManagerSync();
 
   chrome::ShowTaskManager(browser());
   EXPECT_EQ(non_default_bounds,
@@ -369,13 +372,12 @@ IN_PROC_BROWSER_TEST_F(TaskManagerViewTest, RestoreBounds) {
   const gfx::Rect offscreen_bounds =
       default_bounds + gfx::Vector2d(0, display.bounds().bottom());
   GetView()->GetWidget()->SetBounds(offscreen_bounds);
-  GetView()->GetWidget()->CloseNow();
+  HideTaskManagerSync();
 
   chrome::ShowTaskManager(browser());
   gfx::Rect restored_bounds = GetView()->GetWidget()->GetWindowBoundsInScreen();
   EXPECT_NE(offscreen_bounds, restored_bounds);
   EXPECT_TRUE(display.bounds().Contains(restored_bounds));
 }
-#endif
 
 }  // namespace task_manager

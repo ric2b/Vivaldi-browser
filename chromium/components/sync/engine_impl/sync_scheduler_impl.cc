@@ -10,11 +10,13 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/base/logging.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/engine/sync_engine_switches.h"
 #include "components/sync/engine_impl/backoff_delay_provider.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -25,6 +27,17 @@ using base::TimeTicks;
 namespace syncer {
 
 namespace {
+
+// Indicates whether |configuration_params| corresponds to Nigori only
+// configuration (which happens if initial sync for Nigori isn't completed).
+// If |configuration_params| is null, returns false.
+bool IsNigoriOnlyConfiguration(
+    const ConfigurationParams* configuration_params) {
+  if (!configuration_params) {
+    return false;
+  }
+  return configuration_params->types_to_download == ModelTypeSet(NIGORI);
+}
 
 bool IsConfigRelatedUpdateOriginValue(
     sync_pb::SyncEnums::GetUpdatesOrigin origin) {
@@ -85,18 +98,23 @@ bool IsActionableError(const SyncProtocolError& error) {
 
 ConfigurationParams::ConfigurationParams()
     : origin(sync_pb::SyncEnums::UNKNOWN_ORIGIN) {}
+
 ConfigurationParams::ConfigurationParams(
     sync_pb::SyncEnums::GetUpdatesOrigin origin,
     ModelTypeSet types_to_download,
-    const base::Closure& ready_task)
+    base::OnceClosure ready)
     : origin(origin),
       types_to_download(types_to_download),
-      ready_task(ready_task) {
+      ready_task(std::move(ready)) {
   DCHECK(!ready_task.is_null());
 }
-ConfigurationParams::ConfigurationParams(const ConfigurationParams& other) =
+
+ConfigurationParams::ConfigurationParams(ConfigurationParams&&) = default;
+
+ConfigurationParams& ConfigurationParams::operator=(ConfigurationParams&&) =
     default;
-ConfigurationParams::~ConfigurationParams() {}
+
+ConfigurationParams::~ConfigurationParams() = default;
 
 // Helper macros to log with the syncer thread name; useful when there
 // are multiple syncer threads involved.
@@ -137,6 +155,16 @@ void SyncSchedulerImpl::OnCredentialsUpdated() {
   if (server_status == HttpResponse::NONE ||
       server_status == HttpResponse::SYNC_AUTH_ERROR) {
     OnServerConnectionErrorFixed();
+  }
+}
+
+void SyncSchedulerImpl::OnCredentialsInvalidated() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!nigori_configuration_with_invalidated_credentials_recorded &&
+      IsNigoriOnlyConfiguration(pending_configure_params_.get())) {
+    UMA_HISTOGRAM_BOOLEAN("Sync.NigoriConfigurationWithInvalidatedCredentials",
+                          true);
+    nigori_configuration_with_invalidated_credentials_recorded = true;
   }
 }
 
@@ -254,8 +282,7 @@ void SyncSchedulerImpl::SendInitialSnapshot() {
     observer.OnSyncCycleEvent(event);
 }
 
-void SyncSchedulerImpl::ScheduleConfiguration(
-    const ConfigurationParams& params) {
+void SyncSchedulerImpl::ScheduleConfiguration(ConfigurationParams params) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(IsConfigRelatedUpdateOriginValue(params.origin));
   DCHECK_EQ(CONFIGURATION_MODE, mode_);
@@ -269,11 +296,12 @@ void SyncSchedulerImpl::ScheduleConfiguration(
 
   // Only reconfigure if we have types to download.
   if (!params.types_to_download.Empty()) {
-    pending_configure_params_ = std::make_unique<ConfigurationParams>(params);
+    pending_configure_params_ =
+        std::make_unique<ConfigurationParams>(std::move(params));
     TrySyncCycleJob();
   } else {
     SDVLOG(2) << "No change in routing info, calling ready task directly.";
-    params.ready_task.Run();
+    std::move(params.ready_task).Run();
   }
 }
 
@@ -491,7 +519,7 @@ void SyncSchedulerImpl::DoConfigurationSyncCycleJob(JobPriority priority) {
     // requests; see also crbug.com/926184.
     nudge_tracker_.RecordInitialSyncDone(
         pending_configure_params_->types_to_download);
-    pending_configure_params_->ready_task.Run();
+    std::move(pending_configure_params_->ready_task).Run();
     pending_configure_params_.reset();
     HandleSuccess();
   } else {

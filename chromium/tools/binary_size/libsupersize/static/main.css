@@ -134,7 +134,18 @@ ul {
   flex: none;
 }
 
+.diff-status-icon {
+  display: block;
+  flex: none;
+  transform: scale(0.8);
+  position: absolute;
+  left: -26px;
+}
+
 /** Tree nodes */
+[role="treeitem"] {
+  position: relative;
+}
 .node {
   display: flex;
   padding-right: 8px;
@@ -175,7 +186,10 @@ ul {
 
 .count,
 .size,
-.percent {
+.percent,
+.added,
+.removed,
+.changed {
   margin-left: auto;
   padding-left: 16px;
   text-align: right;
@@ -187,9 +201,6 @@ ul {
 }
 .grew {
   color: #ea4335;
-}
-.highlight {
-  background: #feefc3;
 }
 
 .diff .size-header::after {

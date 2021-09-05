@@ -27,22 +27,12 @@ enum class PresentQLPreviewController {
   kMaxValue = kAnotherViewControllerIsPresented,
 };
 
-class WebStateList;
-
 // Presents QLPreviewController in order to display USDZ format 3D models.
 @interface ARQuickLookCoordinator : ChromeCoordinator
 
-// Creates a coordinator that uses a |viewController| a |browserState| and
-// a |webStateList|.
+// Unavailable, use -initWithBaseViewController:browser:
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
-                              browserState:
-                                  (ios::ChromeBrowserState*)browserState
-                              webStateList:(WebStateList*)webStateList;
-
-// Unavailable, use -initWithBaseViewController:browserState:webStateList:.
-- (instancetype)initWithBaseViewController:(UIViewController*)viewController
-                              browserState:
-                                  (ios::ChromeBrowserState*)browserState
+                              browserState:(ChromeBrowserState*)browserState
     NS_UNAVAILABLE;
 
 @end

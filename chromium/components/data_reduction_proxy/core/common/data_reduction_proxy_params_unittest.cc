@@ -177,140 +177,6 @@ TEST_F(DataReductionProxyParamsTest, AreServerExperimentsEnabled) {
   }
 }
 
-// Tests if the QUIC field trial is set correctly.
-TEST_F(DataReductionProxyParamsTest, QuicFieldTrial) {
-  const struct {
-    std::string trial_group_name;
-    bool expected_enabled;
-    bool enable_warmup_url;
-    bool expect_warmup_url_enabled;
-    std::string warmup_url;
-  } tests[] = {
-      {"Enabled", true, true, true, std::string()},
-      {"Enabled", true, false, false, std::string()},
-      {"Enabled_Control", true, true, true, std::string()},
-      {"Control", false, true, false, std::string()},
-      {"Disabled", false, true, false, std::string()},
-      {"enabled", true, true, true, std::string()},
-      {"Enabled", true, true, true, "example.com/test.html"},
-      {std::string(), true, false, true, std::string()},
-      {"Enabled", true, false, false, std::string()},
-  };
-
-  for (const auto& test : tests) {
-    ASSERT_FALSE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kDisableDataReductionProxyWarmupURLFetch));
-
-    variations::testing::ClearAllVariationParams();
-    std::map<std::string, std::string> variation_params;
-    if (!test.enable_warmup_url)
-      variation_params["enable_warmup"] = "false";
-
-    if (!test.warmup_url.empty()) {
-      variation_params["warmup_url"] = test.warmup_url;
-      variation_params["whitelisted_probe_http_response_code"] = "204";
-    }
-    ASSERT_TRUE(variations::AssociateVariationParams(
-        params::GetQuicFieldTrialName(), test.trial_group_name,
-        variation_params));
-
-    base::FieldTrialList field_trial_list(nullptr);
-    base::FieldTrialList::CreateFieldTrial(params::GetQuicFieldTrialName(),
-                                           test.trial_group_name);
-
-    EXPECT_EQ(test.expected_enabled, params::IsIncludedInQuicFieldTrial());
-    if (!test.warmup_url.empty()) {
-      EXPECT_EQ(GURL(test.warmup_url), params::GetWarmupURL());
-      EXPECT_TRUE(params::IsWhitelistedHttpResponseCodeForProbes(200));
-      EXPECT_TRUE(params::IsWhitelistedHttpResponseCodeForProbes(net::HTTP_OK));
-      EXPECT_TRUE(params::IsWhitelistedHttpResponseCodeForProbes(204));
-      EXPECT_FALSE(params::IsWhitelistedHttpResponseCodeForProbes(302));
-      EXPECT_FALSE(params::IsWhitelistedHttpResponseCodeForProbes(307));
-      EXPECT_TRUE(params::IsWhitelistedHttpResponseCodeForProbes(404));
-    } else {
-      EXPECT_EQ(GURL("http://check.googlezip.net/e2e_probe"),
-                params::GetWarmupURL());
-    }
-    EXPECT_TRUE(params::FetchWarmupProbeURLEnabled());
-    EXPECT_TRUE(params::IsWarmupURLFetchCallbackEnabled());
-  }
-}
-
-TEST_F(DataReductionProxyParamsTest, QuicFieldTrialDefaultResponseCodeWarmup) {
-  ASSERT_FALSE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kDisableDataReductionProxyWarmupURLFetch));
-
-  EXPECT_TRUE(params::IsIncludedInQuicFieldTrial());
-  EXPECT_EQ(GURL("http://check.googlezip.net/e2e_probe"),
-            params::GetWarmupURL());
-  EXPECT_TRUE(params::FetchWarmupProbeURLEnabled());
-
-  const struct {
-    int http_response_code;
-    bool expected_whitelisted;
-  } tests[] = {{200, true},
-               {net::HTTP_OK, true},
-               {204, false},
-               {301, false},
-               {net::HTTP_TEMPORARY_REDIRECT, false},
-               {404, true},
-               {net::HTTP_NOT_FOUND, true}};
-
-  for (const auto& test : tests) {
-    EXPECT_EQ(test.expected_whitelisted,
-              params::IsWhitelistedHttpResponseCodeForProbes(
-                  test.http_response_code));
-  }
-}
-
-// Tests if the QUIC field trial |enable_quic_non_core_proxies| is set
-// correctly.
-TEST_F(DataReductionProxyParamsTest, QuicEnableNonCoreProxies) {
-  const struct {
-    std::string trial_group_name;
-    bool expected_enabled;
-  } tests[] = {
-      {"Enabled", true},  {"Enabled", true},   {"Enabled", true},
-      {"Control", false}, {"Disabled", false},
-  };
-
-  for (const auto& test : tests) {
-    variations::testing::ClearAllVariationParams();
-    std::map<std::string, std::string> variation_params;
-
-    ASSERT_TRUE(variations::AssociateVariationParams(
-        params::GetQuicFieldTrialName(), test.trial_group_name,
-        variation_params));
-
-    base::FieldTrialList field_trial_list(nullptr);
-    base::FieldTrialList::CreateFieldTrial(params::GetQuicFieldTrialName(),
-                                           test.trial_group_name);
-
-    EXPECT_EQ(test.expected_enabled, params::IsIncludedInQuicFieldTrial());
-  }
-}
-
-TEST_F(DataReductionProxyParamsTest, HoldbackEnabledFieldTrial) {
-  const struct {
-    std::string trial_group_name;
-    bool expected_enabled;
-  } tests[] = {
-      {"Enabled", true},
-      {"Enabled_Control", true},
-      {"Disabled", false},
-      {"enabled", false},
-  };
-
-  for (const auto& test : tests) {
-    base::FieldTrialList field_trial_list(nullptr);
-
-    ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-        "DataCompressionProxyHoldback", test.trial_group_name));
-    EXPECT_EQ(test.trial_group_name, params::HoldbackFieldTrialGroup());
-    EXPECT_EQ(test.expected_enabled, params::IsIncludedInHoldbackFieldTrial())
-        << test.trial_group_name;
-  }
-}
 
 TEST_F(DataReductionProxyParamsTest, PromoFieldTrial) {
   const struct {
@@ -324,7 +190,8 @@ TEST_F(DataReductionProxyParamsTest, PromoFieldTrial) {
   };
 
   for (const auto& test : tests) {
-    base::FieldTrialList field_trial_list(nullptr);
+    base::test::ScopedFeatureList scoped_feature_list;
+    scoped_feature_list.Init();
 
     ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
         "DataCompressionProxyPromoVisibility", test.trial_group_name));
@@ -345,7 +212,8 @@ TEST_F(DataReductionProxyParamsTest, FREPromoFieldTrial) {
   };
 
   for (const auto& test : tests) {
-    base::FieldTrialList field_trial_list(nullptr);
+    base::test::ScopedFeatureList scoped_feature_list;
+    scoped_feature_list.Init();
 
     ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
         "DataReductionProxyFREPromo", test.trial_group_name));
@@ -410,32 +278,6 @@ TEST_F(DataReductionProxyParamsTest, GetConfigServiceURL) {
   }
 }
 
-TEST_F(DataReductionProxyParamsTest, SecureProxyURL) {
-  const struct {
-    std::string test_case;
-    std::string flag_value;
-    GURL expected;
-  } tests[] = {
-      {
-          "Nothing set", "", GURL("http://check.googlezip.net/connect"),
-      },
-      {
-          "Only command line set", "http://example.com/flag",
-          GURL("http://example.com/flag"),
-      },
-  };
-
-  for (const auto& test : tests) {
-    // Reset all flags.
-    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, nullptr);
-    if (!test.flag_value.empty()) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-          switches::kDataReductionProxySecureProxyCheckURL, test.flag_value);
-    }
-    EXPECT_EQ(test.expected, params::GetSecureProxyCheckURL())
-        << test.test_case;
-  }
-}
 
 TEST(DataReductionProxyParamsStandaloneTest, OverrideProxiesForHttp) {
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(

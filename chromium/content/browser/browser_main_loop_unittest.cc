@@ -5,7 +5,6 @@
 #include "content/browser/browser_main_loop.h"
 
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -72,7 +71,7 @@ TEST_F(BrowserMainLoopTest, CreateThreadsInSingleProcess) {
   browser_main_loop.CreateThreads();
   EXPECT_GE(base::ThreadPoolInstance::Get()
                 ->GetMaxConcurrentNonBlockedTasksWithTraitsDeprecated(
-                    {base::ThreadPool(), base::TaskPriority::USER_VISIBLE}),
+                    {base::TaskPriority::USER_VISIBLE}),
             base::SysInfo::NumberOfProcessors() - 1);
   browser_main_loop.ShutdownThreadsAndCleanUp();
   BrowserTaskExecutor::ResetForTesting();

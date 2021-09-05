@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <numeric>
+#include <set>
 
 #include "base/compiler_specific.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -27,9 +28,6 @@ namespace {
 
 // Height of the drop indicator. This should be an even number.
 constexpr int kDropIndicatorHeight = 2;
-
-// Color of the drop indicator.
-constexpr SkColor kDropIndicatorColor = SK_ColorBLACK;
 
 }  // namespace
 
@@ -158,16 +156,16 @@ gfx::Size SubmenuView::CalculatePreferredSize() const {
       const MenuItemView* menu = static_cast<const MenuItemView*>(child);
       const MenuItemView::MenuItemDimensions& dimensions =
           menu->GetDimensions();
-      max_simple_width = std::max(
-          max_simple_width, dimensions.standard_width);
+      max_simple_width = std::max(max_simple_width, dimensions.standard_width);
       max_minor_text_width_ =
           std::max(max_minor_text_width_, dimensions.minor_text_width);
-      max_complex_width = std::max(max_complex_width,
-          dimensions.standard_width + dimensions.children_width);
+      max_complex_width =
+          std::max(max_complex_width,
+                   dimensions.standard_width + dimensions.children_width);
       touchable_minimum_width = dimensions.standard_width;
     } else {
-      max_complex_width = std::max(max_complex_width,
-                                   child->GetPreferredSize().width());
+      max_complex_width =
+          std::max(max_complex_width, child->GetPreferredSize().width());
     }
   }
   if (max_minor_text_width_ > 0)
@@ -175,10 +173,10 @@ gfx::Size SubmenuView::CalculatePreferredSize() const {
 
   // Finish calculating our optimum width.
   gfx::Insets insets = GetInsets();
-  int width = std::max(max_complex_width,
-                       std::max(max_simple_width + max_minor_text_width_ +
-                                    insets.width(),
-                                minimum_preferred_width_ - 2 * insets.width()));
+  int width = std::max(
+      max_complex_width,
+      std::max(max_simple_width + max_minor_text_width_ + insets.width(),
+               minimum_preferred_width_ - 2 * insets.width()));
 
   if (parent_menu_item_->GetMenuController() &&
       parent_menu_item_->GetMenuController()->use_touchable_layout()) {
@@ -228,7 +226,9 @@ void SubmenuView::PaintChildren(const PaintInfo& paint_info) {
   if (paint_drop_indicator) {
     gfx::Rect bounds = CalculateDropIndicatorBounds(drop_item_, drop_position_);
     ui::PaintRecorder recorder(paint_info.context(), size());
-    recorder.canvas()->FillRect(bounds, kDropIndicatorColor);
+    const SkColor drop_indicator_color = GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_MenuDropIndicator);
+    recorder.canvas()->FillRect(bounds, drop_indicator_color);
   }
 }
 
@@ -316,8 +316,8 @@ bool SubmenuView::OnMouseWheel(const ui::MouseWheelEvent& e) {
       if (scrolled_to_top(*i))
         i = next_iter;
     }
-    ScrollRectToVisible(gfx::Rect(gfx::Point(0, scroll_target),
-                                  vis_bounds.size()));
+    ScrollRectToVisible(
+        gfx::Rect(gfx::Point(0, scroll_target), vis_bounds.size()));
     vis_bounds = GetVisibleBounds();
   }
 
@@ -408,9 +408,13 @@ void SubmenuView::Reposition(const gfx::Rect& bounds) {
 
 void SubmenuView::Close() {
   if (host_) {
-    NotifyAccessibilityEvent(ax::mojom::Event::kMenuPopupEnd, true);
+    // We send the event to the ScrollViewContainer first because the View
+    // accessibility delegate sets up a focus override when receiving the
+    // kMenuStart event that we want to be disabled when we send the
+    // kMenuPopupEnd event in order to access the previously focused node.
     GetScrollViewContainer()->NotifyAccessibilityEvent(
         ax::mojom::Event::kMenuEnd, true);
+    NotifyAccessibilityEvent(ax::mojom::Event::kMenuPopupEnd, true);
 
     host_->DestroyMenuHost();
     host_ = nullptr;

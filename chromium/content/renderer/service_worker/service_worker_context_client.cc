@@ -37,6 +37,7 @@
 #include "content/renderer/service_worker/navigation_preload_request.h"
 #include "content/renderer/service_worker/service_worker_fetch_context_impl.h"
 #include "content/renderer/service_worker/service_worker_type_converters.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/net_errors.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -106,7 +107,7 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
     blink::mojom::EmbeddedWorkerStartTimingPtr start_timing,
     mojo::PendingReceiver<blink::mojom::RendererPreferenceWatcher>
         preference_watcher_receiver,
-    std::unique_ptr<blink::URLLoaderFactoryBundleInfo> subresource_loaders,
+    std::unique_ptr<blink::PendingURLLoaderFactoryBundle> subresource_loaders,
     mojo::PendingReceiver<blink::mojom::SubresourceLoaderUpdater>
         subresource_loader_updater,
     const GURL& script_url_to_skip_throttling,
@@ -141,19 +142,18 @@ ServiceWorkerContextClient::ServiceWorkerContextClient(
     // service.
     // Note that the default factory is the network service factory. It's set
     // on the start worker sequence.
-    network_service_connection_error_handler_holder_.Bind(
+    network_service_disconnect_handler_holder_.Bind(
         std::move(subresource_loaders->pending_default_factory()));
-    network_service_connection_error_handler_holder_->Clone(
+    network_service_disconnect_handler_holder_->Clone(
         subresource_loaders->pending_default_factory()
             .InitWithNewPipeAndPassReceiver());
-    network_service_connection_error_handler_holder_
-        .set_connection_error_handler(base::BindOnce(
-            &ServiceWorkerContextClient::StopWorkerOnInitiatorThread,
-            base::Unretained(this)));
+    network_service_disconnect_handler_holder_.set_disconnect_handler(
+        base::BindOnce(&ServiceWorkerContextClient::StopWorkerOnInitiatorThread,
+                       base::Unretained(this)));
   }
 
   loader_factories_ = base::MakeRefCounted<ChildURLLoaderFactoryBundle>(
-      std::make_unique<ChildURLLoaderFactoryBundleInfo>(
+      std::make_unique<ChildPendingURLLoaderFactoryBundle>(
           std::move(subresource_loaders)));
 
   service_worker_provider_info_ = std::move(provider_info);
@@ -178,15 +178,13 @@ void ServiceWorkerContextClient::StartWorkerContextOnInitiatorThread(
         installed_scripts_manager_params,
     mojo::ScopedMessagePipeHandle content_settings_handle,
     mojo::ScopedMessagePipeHandle cache_storage,
-    mojo::ScopedMessagePipeHandle interface_provider,
     mojo::ScopedMessagePipeHandle browser_interface_broker) {
   DCHECK(initiator_thread_task_runner_->RunsTasksInCurrentSequence());
   worker_ = std::move(worker);
   worker_->StartWorkerContext(
       std::move(start_data), std::move(installed_scripts_manager_params),
       std::move(content_settings_handle), std::move(cache_storage),
-      std::move(interface_provider), std::move(browser_interface_broker),
-      initiator_thread_task_runner_);
+      std::move(browser_interface_broker), initiator_thread_task_runner_);
 }
 
 blink::WebEmbeddedWorker& ServiceWorkerContextClient::worker() {
@@ -368,20 +366,20 @@ void ServiceWorkerContextClient::ReportConsoleMessage(
                                          blink::WebStringToGURL(source_url));
 }
 
-scoped_refptr<blink::WebWorkerFetchContext>
+scoped_refptr<blink::WebServiceWorkerFetchContext>
 ServiceWorkerContextClient::CreateWorkerFetchContextOnInitiatorThread() {
   DCHECK(initiator_thread_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(preference_watcher_receiver_.is_valid());
 
   // TODO(bashi): Consider changing ServiceWorkerFetchContextImpl to take
   // URLLoaderFactoryInfo.
-  auto script_loader_factory_info =
-      std::make_unique<network::WrapperSharedURLLoaderFactoryInfo>(std::move(
-          service_worker_provider_info_->script_loader_factory_ptr_info));
+  auto pending_script_loader_factory =
+      std::make_unique<network::WrapperPendingSharedURLLoaderFactory>(std::move(
+          service_worker_provider_info_->script_loader_factory_remote));
 
   return base::MakeRefCounted<ServiceWorkerFetchContextImpl>(
       *renderer_preferences_, script_url_, loader_factories_->PassInterface(),
-      std::move(script_loader_factory_info), script_url_to_skip_throttling_,
+      std::move(pending_script_loader_factory), script_url_to_skip_throttling_,
       GetContentClient()->renderer()->CreateURLLoaderThrottleProvider(
           URLLoaderThrottleProviderType::kWorker),
       GetContentClient()
@@ -468,7 +466,8 @@ void ServiceWorkerContextClient::SendWorkerStarted(
   CHECK_LE(start_timing_->script_evaluation_start_time,
            start_timing_->script_evaluation_end_time);
 
-  instance_host_->OnStarted(status, WorkerThread::GetCurrentId(),
+  instance_host_->OnStarted(status, proxy_->HasFetchHandler(),
+                            WorkerThread::GetCurrentId(),
                             std::move(start_timing_));
 
   TRACE_EVENT_NESTABLE_ASYNC_END0("ServiceWorker", "ServiceWorkerContextClient",
@@ -484,11 +483,8 @@ void ServiceWorkerContextClient::SetupNavigationPreload(
   auto preload_request = std::make_unique<NavigationPreloadRequest>(
       this, fetch_event_id, GURL(url),
       blink::mojom::FetchEventPreloadHandle::New(
-          network::mojom::URLLoaderPtrInfo(
-              std::move(preload_handle->url_loader),
-              network::mojom::URLLoader::Version_),
-          network::mojom::URLLoaderClientRequest(
-              std::move(preload_handle->url_loader_client_request))));
+          std::move(preload_handle->url_loader),
+          std::move(preload_handle->url_loader_client_receiver)));
   context_->preload_requests.AddWithID(std::move(preload_request),
                                        fetch_event_id);
 }

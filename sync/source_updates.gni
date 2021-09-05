@@ -13,6 +13,8 @@ if(!is_android) {
 
 update_target("//components/sync:rest_of_sync") {
   sources += [
+    "//vivaldi/sync/notes/note_update_preprocessing.cc",
+    "//vivaldi/sync/notes/note_update_preprocessing.h",
     "//vivaldi/sync/vivaldi_directory_backing_store.cc",
   ]
 }

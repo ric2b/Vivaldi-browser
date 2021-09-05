@@ -12,14 +12,12 @@
 #include "media/media_buildflags.h"
 #include "media/mojo/mojom/cdm_service.mojom.h"
 #include "media/mojo/mojom/content_decryption_module.mojom.h"
-#include "media/mojo/services/deferred_destroy_strong_binding_set.h"
+#include "media/mojo/services/deferred_destroy_unique_receiver_set.h"
 #include "media/mojo/services/media_mojo_export.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
-#include "services/service_manager/public/cpp/service.h"
-#include "services/service_manager/public/cpp/service_binding.h"
-#include "services/service_manager/public/cpp/service_keepalive.h"
-#include "services/service_manager/public/mojom/service.mojom.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "services/service_manager/public/mojom/interface_provider.mojom.h"
 
 #if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 #include "media/cdm/cdm_host_file.h"
@@ -29,8 +27,7 @@ namespace media {
 
 class CdmFactory;
 
-class MEDIA_MOJO_EXPORT CdmService : public service_manager::Service,
-                                     public mojom::CdmService {
+class MEDIA_MOJO_EXPORT CdmService : public mojom::CdmService {
  public:
   class Client {
    public:
@@ -54,49 +51,35 @@ class MEDIA_MOJO_EXPORT CdmService : public service_manager::Service,
   };
 
   CdmService(std::unique_ptr<Client> client,
-             service_manager::mojom::ServiceRequest request);
+             mojo::PendingReceiver<mojom::CdmService> receiver);
   ~CdmService() final;
 
-  // By default CdmService release is delayed. Overrides the delay with |delay|.
-  // If |delay| is 0, delayed service release will be disabled.
-  void SetServiceReleaseDelayForTesting(base::TimeDelta delay);
-
   size_t BoundCdmFactorySizeForTesting() const {
-    return cdm_factory_bindings_.size();
+    return cdm_factory_receivers_.size();
   }
 
   size_t UnboundCdmFactorySizeForTesting() const {
-    return cdm_factory_bindings_.unbound_size();
+    return cdm_factory_receivers_.unbound_size();
   }
 
  private:
-  // service_manager::Service implementation.
-  void OnStart() final;
-  void OnBindInterface(const service_manager::BindSourceInfo& source_info,
-                       const std::string& interface_name,
-                       mojo::ScopedMessagePipeHandle interface_pipe) override;
-  void OnDisconnected() final;
-
-  void Create(mojom::CdmServiceRequest request);
-
 // mojom::CdmService implementation.
 #if defined(OS_MACOSX)
   void LoadCdm(const base::FilePath& cdm_path,
-               mojom::SeatbeltExtensionTokenProviderPtr token_provider) final;
+               mojo::PendingRemote<mojom::SeatbeltExtensionTokenProvider>
+                   token_provider) final;
 #else
   void LoadCdm(const base::FilePath& cdm_path) final;
 #endif  // defined(OS_MACOSX)
   void CreateCdmFactory(
-      mojom::CdmFactoryRequest request,
-      service_manager::mojom::InterfaceProviderPtr host_interfaces) final;
+      mojo::PendingReceiver<mojom::CdmFactory> receiver,
+      mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+          host_interfaces) final;
 
-  service_manager::ServiceBinding service_binding_;
-  std::unique_ptr<service_manager::ServiceKeepalive> keepalive_;
+  mojo::Receiver<mojom::CdmService> receiver_;
   std::unique_ptr<Client> client_;
   std::unique_ptr<CdmFactory> cdm_factory_;
-  DeferredDestroyStrongBindingSet<mojom::CdmFactory> cdm_factory_bindings_;
-  service_manager::BinderRegistry registry_;
-  mojo::BindingSet<mojom::CdmService> bindings_;
+  DeferredDestroyUniqueReceiverSet<mojom::CdmFactory> cdm_factory_receivers_;
 
   DISALLOW_COPY_AND_ASSIGN(CdmService);
 };

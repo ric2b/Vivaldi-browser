@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "storage/browser/fileapi/file_system_url.h"
+#include "storage/browser/file_system/file_system_url.h"
 
 class GURL;
 class Profile;
@@ -24,11 +24,18 @@ extern const base::FilePath::CharType kRemovableMediaPath[];
 // Absolute path for the folder containing Android files.
 extern const base::FilePath::CharType kAndroidFilesPath[];
 
+// Absolute path for the folder containing font files.
+extern const base::FilePath::CharType kSystemFontsPath[];
+
 // Gets the absolute path for the 'Downloads' folder for the |profile|.
 base::FilePath GetDownloadsFolderForProfile(Profile* profile);
 
 // Gets the absolute path for the 'MyFiles' folder for the |profile|.
 base::FilePath GetMyFilesFolderForProfile(Profile* profile);
+
+// Gets the absolute path for the user's Android Play files (Movies, Pictures,
+// etc..., Android apps excluded). The default path may be overridden by tests.
+base::FilePath GetAndroidFilesPath();
 
 // Converts |old_path| to |new_path| and returns true, if the old path points
 // to an old location of user folders (in "Downloads" or "Google Drive").
@@ -114,9 +121,9 @@ void ConvertToContentUrls(
 // Replacements:
 // * /home/chronos/user/Downloads                => Downloads
 // * /home/chronos/u-<hash>/Downloads            => Downloads
-// * /special/drive-<hash>/root                  => Google Drive
-// * /special/drive-<hash>/team_drives           => Team Drives
-// * /special/drive-<hash>/Computers             => Computers
+// * /media/fuse/drivefs-<hash>/root             => Google Drive
+// * /media/fuse/drivefs-<hash>/team_drives      => Team Drives
+// * /media/fuse/drivefs-<hash>/Computers        => Computers
 // * /run/arc/sdcard/write/emulated/0            => Play files
 // * /media/fuse/crostini_<hash>_termina_penguin => Linux files
 // * '/' with ' \u203a ' (angled quote sign) for display purposes.

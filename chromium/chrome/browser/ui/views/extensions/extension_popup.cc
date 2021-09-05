@@ -8,6 +8,7 @@
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_view_host.h"
 #include "chrome/browser/ui/browser.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
@@ -73,10 +74,6 @@ void ExtensionPopup::AddedToWidget() {
       gfx::Insets(contents_has_rounded_corners ? 0 : radius, 0)));
 }
 
-int ExtensionPopup::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_NONE;
-}
-
 void ExtensionPopup::OnWidgetActivationChanged(views::Widget* widget,
                                                bool active) {
   BubbleDialogDelegateView::OnWidgetActivationChanged(widget, active);
@@ -118,13 +115,23 @@ void ExtensionPopup::OnWindowActivated(
   // DesktopNativeWidgetAura does not trigger the expected browser widget
   // [de]activation events when activating widgets in its own root window.
   // This additional check handles those cases. See https://crbug.com/320889 .
-  if (gained_active == anchor_widget()->GetNativeWindow())
+  if (anchor_widget() && gained_active == anchor_widget()->GetNativeWindow())
     CloseUnlessUnderInspection();
 }
 #endif  // defined(USE_AURA)
 
 void ExtensionPopup::OnExtensionSizeChanged(ExtensionViewViews* view) {
   SizeToContents();
+}
+
+void ExtensionPopup::OnExtensionUnloaded(
+    content::BrowserContext* browser_context,
+    const extensions::Extension* extension,
+    extensions::UnloadedExtensionReason reason) {
+  if (extension->id() == host()->extension_id()) {
+    host_.reset();
+    GetWidget()->Close();
+  }
 }
 
 void ExtensionPopup::Observe(int type,
@@ -160,6 +167,12 @@ void ExtensionPopup::DevToolsAgentHostAttached(
 
 void ExtensionPopup::DevToolsAgentHostDetached(
     content::DevToolsAgentHost* agent_host) {
+  // If the extension's page is open it will be closed when the extension
+  // is uninstalled, and if DevTools are attached, we will be notified here.
+  // But because OnExtensionUnloaded was already called, |host_| is
+  // no longer valid.
+  if (!host())
+    return;
   if (host()->host_contents() == agent_host->GetWebContents())
     show_action_ = SHOW;
 }
@@ -173,7 +186,9 @@ ExtensionPopup::ExtensionPopup(
                                arrow,
                                views::BubbleBorder::SMALL_SHADOW),
       host_(std::move(host)),
+      extension_registry_observer_(this),
       show_action_(show_action) {
+  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
   DialogDelegate::set_use_round_corners(false);
 
   set_margins(gfx::Insets());
@@ -189,7 +204,10 @@ ExtensionPopup::ExtensionPopup(
       this, extensions::NOTIFICATION_EXTENSION_HOST_VIEW_SHOULD_CLOSE,
       content::Source<content::BrowserContext>(host_->browser_context()));
   content::DevToolsAgentHost::AddObserver(this);
-  GetExtensionView()->GetBrowser()->tab_strip_model()->AddObserver(this);
+  host_->browser()->tab_strip_model()->AddObserver(this);
+
+  extension_registry_observer_.Add(
+      extensions::ExtensionRegistry::Get(host_->browser_context()));
 
   // If the host had somehow finished loading, then we'd miss the notification
   // and not show.  This seems to happen in single-process mode.

@@ -894,7 +894,7 @@ TEST_F(BrowserAccessibilityManagerTest, BoundsForRangeBiDi) {
                 .ToString());
 }
 
-TEST_F(BrowserAccessibilityManagerTest, BoundsForRangeScrolledWindow) {
+TEST_F(BrowserAccessibilityManagerTest, DISABLED_BoundsForRangeScrolledWindow) {
   ui::AXNodeData root;
   root.id = 1;
   root.role = ax::mojom::Role::kRootWebArea;
@@ -1159,6 +1159,56 @@ TEST_F(BrowserAccessibilityManagerTest, TestNextPreviousInTreeOrder) {
   EXPECT_EQ(ax::mojom::TreeOrder::kAfter,
             BrowserAccessibilityManager::CompareNodes(*node2_accessible,
                                                       *root_accessible));
+}
+
+TEST_F(BrowserAccessibilityManagerTest, TestNextNonDescendantInTreeOrder) {
+  ui::AXNodeData root;
+  root.id = 1;
+  root.role = ax::mojom::Role::kRootWebArea;
+
+  ui::AXNodeData node2;
+  node2.id = 2;
+  root.child_ids.push_back(2);
+
+  ui::AXNodeData node3;
+  node3.id = 3;
+  root.child_ids.push_back(3);
+
+  ui::AXNodeData node4;
+  node4.id = 4;
+  node3.child_ids.push_back(4);
+
+  ui::AXNodeData node5;
+  node5.id = 5;
+  root.child_ids.push_back(5);
+
+  std::unique_ptr<BrowserAccessibilityManager> manager(
+      BrowserAccessibilityManager::Create(
+          MakeAXTreeUpdate(root, node2, node3, node4, node5),
+          test_browser_accessibility_delegate_.get(),
+          new CountedBrowserAccessibilityFactory()));
+
+  BrowserAccessibility* root_accessible = manager->GetRoot();
+  ASSERT_NE(nullptr, root_accessible);
+  ASSERT_EQ(3U, root_accessible->PlatformChildCount());
+  BrowserAccessibility* node2_accessible = root_accessible->PlatformGetChild(0);
+  ASSERT_NE(nullptr, node2_accessible);
+  BrowserAccessibility* node3_accessible = root_accessible->PlatformGetChild(1);
+  ASSERT_NE(nullptr, node3_accessible);
+  ASSERT_EQ(1U, node3_accessible->PlatformChildCount());
+  BrowserAccessibility* node4_accessible =
+      node3_accessible->PlatformGetChild(0);
+  ASSERT_NE(nullptr, node4_accessible);
+  BrowserAccessibility* node5_accessible = root_accessible->PlatformGetChild(2);
+  ASSERT_NE(nullptr, node5_accessible);
+
+  EXPECT_EQ(nullptr, manager->NextNonDescendantInTreeOrder(nullptr));
+  EXPECT_EQ(node2_accessible, manager->NextInTreeOrder(root_accessible));
+  EXPECT_EQ(node3_accessible,
+            manager->NextNonDescendantInTreeOrder(node2_accessible));
+  EXPECT_EQ(node5_accessible,
+            manager->NextNonDescendantInTreeOrder(node3_accessible));
+  EXPECT_EQ(nullptr, manager->NextNonDescendantInTreeOrder(node5_accessible));
 }
 
 TEST_F(BrowserAccessibilityManagerTest, TestNextPreviousTextOnlyObject) {
@@ -1428,40 +1478,51 @@ TEST_F(BrowserAccessibilityManagerTest, TestGetTextForRange) {
   button_text.SetName("Button");
   button.child_ids.push_back(button_text.id);
 
+  ui::AXNodeData container;
+  container.id = 5;
+  container.role = ax::mojom::Role::kGenericContainer;
+  div.child_ids.push_back(container.id);
+
+  ui::AXNodeData container_text;
+  container_text.id = 6;
+  container_text.role = ax::mojom::Role::kStaticText;
+  container_text.SetName("Text");
+  container.child_ids.push_back(container_text.id);
+
   ui::AXNodeData line_break;
-  line_break.id = 5;
+  line_break.id = 7;
   line_break.role = ax::mojom::Role::kLineBreak;
   line_break.SetName("\n");
   div.child_ids.push_back(line_break.id);
 
   ui::AXNodeData paragraph;
-  paragraph.id = 6;
+  paragraph.id = 8;
   paragraph.role = ax::mojom::Role::kParagraph;
   root.child_ids.push_back(paragraph.id);
 
   ui::AXNodeData paragraph_text;
-  paragraph_text.id = 7;
+  paragraph_text.id = 9;
   paragraph_text.role = ax::mojom::Role::kStaticText;
   paragraph_text.SetName("Hello world.");
   paragraph.child_ids.push_back(paragraph_text.id);
 
   ui::AXNodeData paragraph_line1;
-  paragraph_line1.id = 8;
+  paragraph_line1.id = 10;
   paragraph_line1.role = ax::mojom::Role::kInlineTextBox;
   paragraph_line1.SetName("Hello ");
   paragraph_text.child_ids.push_back(paragraph_line1.id);
 
   ui::AXNodeData paragraph_line2;
-  paragraph_line2.id = 9;
+  paragraph_line2.id = 11;
   paragraph_line2.role = ax::mojom::Role::kInlineTextBox;
   paragraph_line2.SetName("world.");
   paragraph_text.child_ids.push_back(paragraph_line2.id);
 
   std::unique_ptr<BrowserAccessibilityManager> manager(
       BrowserAccessibilityManager::Create(
-          MakeAXTreeUpdate(root, div, button, button_text, line_break,
-                           paragraph, paragraph_text, paragraph_line1,
-                           paragraph_line2),
+          MakeAXTreeUpdate(root, div, button, button_text, container,
+                           container_text, line_break, paragraph,
+                           paragraph_text, paragraph_line1, paragraph_line2),
           test_browser_accessibility_delegate_.get(),
           new CountedBrowserAccessibilityFactory()));
 
@@ -1470,14 +1531,20 @@ TEST_F(BrowserAccessibilityManagerTest, TestGetTextForRange) {
   ASSERT_EQ(2U, root_accessible->PlatformChildCount());
   BrowserAccessibility* div_accessible = root_accessible->PlatformGetChild(0);
   ASSERT_NE(nullptr, div_accessible);
-  ASSERT_EQ(2U, div_accessible->PlatformChildCount());
+  ASSERT_EQ(3U, div_accessible->PlatformChildCount());
   BrowserAccessibility* button_accessible = div_accessible->PlatformGetChild(0);
   ASSERT_NE(nullptr, button_accessible);
   BrowserAccessibility* button_text_accessible =
       button_accessible->PlatformGetChild(0);
   ASSERT_NE(nullptr, button_text_accessible);
-  BrowserAccessibility* line_break_accessible =
+  BrowserAccessibility* container_accessible =
       div_accessible->PlatformGetChild(1);
+  ASSERT_NE(nullptr, container_accessible);
+  BrowserAccessibility* container_text_accessible =
+      container_accessible->PlatformGetChild(0);
+  ASSERT_NE(nullptr, container_text_accessible);
+  BrowserAccessibility* line_break_accessible =
+      div_accessible->PlatformGetChild(2);
   ASSERT_NE(nullptr, line_break_accessible);
   BrowserAccessibility* paragraph_accessible =
       root_accessible->PlatformGetChild(1);
@@ -1496,37 +1563,37 @@ TEST_F(BrowserAccessibilityManagerTest, TestGetTextForRange) {
   std::vector<const BrowserAccessibility*> text_only_objects =
       BrowserAccessibilityManager::FindTextOnlyObjectsInRange(*root_accessible,
                                                               *root_accessible);
+
   EXPECT_EQ(3U, text_only_objects.size());
-  EXPECT_EQ(button_text_accessible, text_only_objects[0]);
+  EXPECT_EQ(container_text_accessible, text_only_objects[0]);
   EXPECT_EQ(line_break_accessible, text_only_objects[1]);
   EXPECT_EQ(paragraph_text_accessible, text_only_objects[2]);
 
   text_only_objects = BrowserAccessibilityManager::FindTextOnlyObjectsInRange(
       *div_accessible, *paragraph_accessible);
   EXPECT_EQ(3U, text_only_objects.size());
-  EXPECT_EQ(button_text_accessible, text_only_objects[0]);
+  EXPECT_EQ(container_text_accessible, text_only_objects[0]);
   EXPECT_EQ(line_break_accessible, text_only_objects[1]);
   EXPECT_EQ(paragraph_text_accessible, text_only_objects[2]);
 
-  EXPECT_EQ(base::ASCIIToUTF16("Button\nHello world."),
+  EXPECT_EQ(base::ASCIIToUTF16("Text\nHello world."),
             BrowserAccessibilityManager::GetTextForRange(*root_accessible, 0,
-                                                         *root_accessible, 19));
-  EXPECT_EQ(base::ASCIIToUTF16("ton\nHello world."),
-            BrowserAccessibilityManager::GetTextForRange(*root_accessible, 3,
-                                                         *root_accessible, 19));
-  EXPECT_EQ(base::ASCIIToUTF16("Button\nHello world."),
+                                                         *root_accessible, 16));
+  EXPECT_EQ(base::ASCIIToUTF16("xt\nHello world."),
+            BrowserAccessibilityManager::GetTextForRange(*root_accessible, 2,
+                                                         *root_accessible, 12));
+  EXPECT_EQ(base::ASCIIToUTF16("Text\nHello world."),
             BrowserAccessibilityManager::GetTextForRange(
                 *div_accessible, 0, *paragraph_accessible, 12));
-  EXPECT_EQ(base::ASCIIToUTF16("ton\nHello world."),
+  EXPECT_EQ(base::ASCIIToUTF16("xt\nHello world."),
             BrowserAccessibilityManager::GetTextForRange(
-                *div_accessible, 3, *paragraph_accessible, 12));
-
-  EXPECT_EQ(base::ASCIIToUTF16("Button\n"),
+                *div_accessible, 2, *paragraph_accessible, 12));
+  EXPECT_EQ(base::ASCIIToUTF16("Text\n"),
             BrowserAccessibilityManager::GetTextForRange(*div_accessible, 0,
-                                                         *div_accessible, 1));
-  EXPECT_EQ(base::ASCIIToUTF16("Button\n"),
+                                                         *div_accessible, 4));
+  EXPECT_EQ(base::ASCIIToUTF16("Text\n"),
             BrowserAccessibilityManager::GetTextForRange(
-                *button_accessible, 0, *line_break_accessible, 1));
+                *button_accessible, 0, *line_break_accessible, 4));
 
   EXPECT_EQ(base::ASCIIToUTF16("Hello world."),
             BrowserAccessibilityManager::GetTextForRange(
@@ -1710,4 +1777,81 @@ TEST_F(BrowserAccessibilityManagerTest, TreeUpdatesAreMergedWhenPossible) {
   // Remove the observer before the manager is destroyed.
   manager->ax_tree()->RemoveObserver(&observer);
 }
+
+TEST_F(BrowserAccessibilityManagerTest, TestHitTestScaled) {
+  // We're creating two linked trees, each of which has two nodes; first create
+  // the child tree's nodes & tree-update.
+  ui::AXNodeData child_root;
+  child_root.id = 1;
+  child_root.role = ax::mojom::Role::kRootWebArea;
+  child_root.SetName("child_root");
+  child_root.relative_bounds.bounds = gfx::RectF(0, 0, 100, 100);
+  child_root.child_ids = {2};
+
+  ui::AXNodeData child_child;
+  child_child.id = 2;
+  child_child.SetName("child_child");
+  child_child.relative_bounds.bounds = gfx::RectF(0, 0, 100, 100);
+
+  ui::AXTreeUpdate child_update = MakeAXTreeUpdate(child_root, child_child);
+
+  // Next, create the parent tree's nodes and tree-update, with kChildTreeId
+  // pointing to the child tree.
+  ui::AXNodeData parent_root;
+  parent_root.id = 1;
+  parent_root.role = ax::mojom::Role::kRootWebArea;
+  parent_root.SetName("parent_root");
+  parent_root.relative_bounds.bounds = gfx::RectF(0, 0, 200, 200);
+  parent_root.child_ids = {2, 3};
+
+  ui::AXNodeData parent_child;
+  parent_child.id = 2;
+  parent_child.SetName("parent_child");
+  parent_child.relative_bounds.bounds = gfx::RectF(0, 0, 100, 100);
+
+  ui::AXNodeData parent_childtree;
+  parent_childtree.id = 3;
+  parent_childtree.AddStringAttribute(
+      ax::mojom::StringAttribute::kChildTreeId,
+      child_update.tree_data.tree_id.ToString());
+  parent_childtree.SetName("parent_childtree");
+  parent_childtree.relative_bounds.bounds = gfx::RectF(100, 100, 100, 100);
+
+  ui::AXTreeUpdate parent_update =
+      MakeAXTreeUpdate(parent_root, parent_child, parent_childtree);
+
+  // Link the child tree to its parent.
+  child_update.tree_data.parent_tree_id = parent_update.tree_data.tree_id;
+
+  // Create the two managers.
+  std::unique_ptr<BrowserAccessibilityManager> parent_manager(
+      BrowserAccessibilityManager::Create(
+          parent_update, test_browser_accessibility_delegate_.get(),
+          new BrowserAccessibilityFactory()));
+
+  std::unique_ptr<BrowserAccessibilityManager> child_manager(
+      BrowserAccessibilityManager::Create(
+          child_update, test_browser_accessibility_delegate_.get(),
+          new BrowserAccessibilityFactory()));
+
+  // Verify that they're properly connected.
+  ASSERT_EQ(parent_manager.get(), child_manager->GetRootManager());
+
+  // Set scaling factor for testing to be 200%
+  parent_manager->UseCustomDeviceScaleFactorForTesting(2.0f);
+  child_manager->UseCustomDeviceScaleFactorForTesting(2.0f);
+
+  // Run the hit-test; we should get the same result regardless of whether we
+  // start from the parent_manager or the child_manager.
+  auto* hittest1 = parent_manager->CachingAsyncHitTest(gfx::Point(75, 75));
+  ASSERT_NE(nullptr, hittest1);
+  ASSERT_EQ("parent_child", hittest1->GetData().GetStringAttribute(
+                                ax::mojom::StringAttribute::kName));
+
+  auto* hittest2 = child_manager->CachingAsyncHitTest(gfx::Point(75, 75));
+  ASSERT_NE(nullptr, hittest2);
+  ASSERT_EQ("parent_child", hittest2->GetData().GetStringAttribute(
+                                ax::mojom::StringAttribute::kName));
+}
+
 }  // namespace content

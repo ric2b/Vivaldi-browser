@@ -11,9 +11,7 @@ assert(is_win)
 #       to the //chrome/browser target (chrome/browser/BUILD.gn).
 
 proto_library("module_list_proto") {
-  sources = [
-    "proto/module_list.proto",
-  ]
+  sources = [ "proto/module_list.proto" ]
 }
 
 source_set("module_info") {
@@ -33,13 +31,13 @@ source_set("module_info") {
     "//base:i18n",
     "//chrome/common/safe_browsing:pe_image_reader",
   ]
+
+  libs = [ "crypt32.lib" ]
 }
 
 loadable_module("conflicts_dll") {
   testonly = true
-  sources = [
-    "test/conflicts_dll.cc",
-  ]
+  sources = [ "test/conflicts_dll.cc" ]
 }
 
 source_set("unit_tests") {
@@ -101,6 +99,7 @@ if (is_chrome_branded) {
       "//chrome/browser",
       "//chrome/chrome_elf:third_party_shared_defines",
       "//chrome/test:test_support_ui",
+      "//components/services/quarantine/public/cpp:features",
       "//testing/gtest",
     ]
   }

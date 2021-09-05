@@ -2,299 +2,290 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-'use strict';
-
-/**
- * Namespace for the Camera app.
- */
-var cca = cca || {};
-
-/**
- * Namespace for views.
- */
-cca.views = cca.views || {};
-
-/**
- * Namespace for Camera view.
- */
-cca.views.camera = cca.views.camera || {};
+import {browserProxy} from '../../browser_proxy/browser_proxy.js';
+import {assertInstanceof} from '../../chrome_util.js';
+// eslint-disable-next-line no-unused-vars
+import {Camera3DeviceInfo} from '../../device/camera3_device_info.js';
+// eslint-disable-next-line no-unused-vars
+import {DeviceInfoUpdater} from '../../device/device_info_updater.js';
+import {ChromeHelper} from '../../mojo/chrome_helper.js';
+import * as nav from '../../nav.js';
+import {PerfEvent} from '../../perf.js';
+import * as state from '../../state.js';
+import {Facing} from '../../type.js';
+import * as util from '../../util.js';
+import {ViewName} from '../view.js';
 
 /**
  * Creates a controller for the options of Camera view.
- * @param {cca.device.DeviceInfoUpdater} infoUpdater
- * @param {function()} doSwitchDevice Callback to trigger device switching.
- * @constructor
  */
-cca.views.camera.Options = function(infoUpdater, doSwitchDevice) {
+export class Options {
   /**
-   * @type {cca.device.DeviceInfoUpdater}
-   * @private
+   * @param {!DeviceInfoUpdater} infoUpdater
+   * @param {!function()} doSwitchDevice Callback to trigger device switching.
    */
-  this.infoUpdater_ = infoUpdater;
+  constructor(infoUpdater, doSwitchDevice) {
+    /**
+     * @type {!DeviceInfoUpdater}
+     * @private
+     * @const
+     */
+    this.infoUpdater_ = infoUpdater;
 
-  /**
-   * @type {function()}
-   * @private
-   */
-  this.doSwitchDevice_ = doSwitchDevice;
+    /**
+     * @type {!function()}
+     * @private
+     * @const
+     */
+    this.doSwitchDevice_ = doSwitchDevice;
 
-  /**
-   * @type {HTMLInputElement}
-   * @private
-   */
-  this.toggleMic_ = document.querySelector('#toggle-mic');
+    /**
+     * @type {!HTMLInputElement}
+     * @private
+     * @const
+     */
+    this.toggleMic_ = assertInstanceof(
+        document.querySelector('#toggle-mic'), HTMLInputElement);
 
-  /**
-   * @type {HTMLInputElement}
-   * @private
-   */
-  this.toggleMirror_ = document.querySelector('#toggle-mirror');
+    /**
+     * @type {!HTMLInputElement}
+     * @private
+     * @const
+     */
+    this.toggleMirror_ = assertInstanceof(
+        document.querySelector('#toggle-mirror'), HTMLInputElement);
+
+    /**
+     * Device id of the camera device currently used or selected.
+     * @type {?string}
+     * @private
+     */
+    this.videoDeviceId_ = null;
+
+    /**
+     * Whether list of video devices is being refreshed now.
+     * @type {boolean}
+     * @private
+     */
+    this.refreshingVideoDeviceIds_ = false;
+
+    /**
+     * Whether the current device is HALv1 and lacks facing configuration.
+     * get facing information.
+     * @type {?boolean}
+     * private
+     */
+    this.isV1NoFacingConfig_ = null;
+
+    /**
+     * Mirroring set per device.
+     * @type {!Object}
+     * @private
+     */
+    this.mirroringToggles_ = {};
+
+    /**
+     * Current audio track in use.
+     * @type {?MediaStreamTrack}
+     * @private
+     */
+    this.audioTrack_ = null;
+
+    [['#switch-device', () => this.switchDevice_()],
+     ['#toggle-grid', () => this.animatePreviewGrid_()],
+     ['#open-settings', () => nav.open(ViewName.SETTINGS)],
+    ]
+        .forEach(
+            ([selector, fn]) =>
+                document.querySelector(selector).addEventListener('click', fn));
+
+    this.toggleMic_.addEventListener('click', () => this.updateAudioByMic_());
+    this.toggleMirror_.addEventListener('click', () => this.saveMirroring_());
+
+    // Restore saved mirroring states per video device.
+    browserProxy.localStorageGet({mirroringToggles: {}})
+        .then((values) => this.mirroringToggles_ = values.mirroringToggles);
+    // Remove the deprecated values.
+    browserProxy.localStorageRemove(
+        ['effectIndex', 'toggleMulti', 'toggleMirror']);
+
+    this.infoUpdater_.addDeviceChangeListener(async (updater) => {
+      state.set(
+          state.State.MULTI_CAMERA,
+          (await updater.getDevicesInfo()).length >= 2);
+    });
+  }
 
   /**
    * Device id of the camera device currently used or selected.
-   * @type {?string}
-   * @private
+   * @return {?string}
    */
-  this.videoDeviceId_ = null;
-
-  /**
-   * Whether list of video devices is being refreshed now.
-   * @type {boolean}
-   * @private
-   */
-  this.refreshingVideoDeviceIds_ = false;
-
-  /**
-   * List of available video devices.
-   * @type {Promise<!Array<MediaDeviceInfo>>}
-   * @private
-   */
-  this.videoDevices_ = null;
-
-  /**
-   * Promise for querying Camera3DeviceInfo of all available video devices from
-   * mojo private API.
-   * @type {Promise<!Array<cca.device.Camera3DeviceInfo>>}
-   * @private
-   */
-  this.devicesPrivateInfo_ = null;
-
-  /**
-   * Whether the current device is HALv1 and lacks facing configuration.
-   * get facing information.
-   * @type {?boolean}
-   * private
-   */
-  this.isV1NoFacingConfig_ = null;
-
-  /**
-   * Mirroring set per device.
-   * @type {Object}
-   * @private
-   */
-  this.mirroringToggles_ = {};
-
-  /**
-   * Current audio track in use.
-   * @type {MediaStreamTrack}
-   * @private
-   */
-  this.audioTrack_ = null;
-
-  // End of properties, seal the object.
-  Object.seal(this);
-
-  [['#switch-device', () => this.switchDevice_()],
-   ['#toggle-grid', () => this.animatePreviewGrid_()],
-   ['#open-settings', () => cca.nav.open('settings')],
-  ]
-      .forEach(
-          ([selector, fn]) =>
-              document.querySelector(selector).addEventListener('click', fn));
-
-  this.toggleMic_.addEventListener('click', () => this.updateAudioByMic_());
-  this.toggleMirror_.addEventListener('click', () => this.saveMirroring_());
-
-  // Restore saved mirroring states per video device.
-  cca.proxy.browserProxy.localStorageGet(
-      {mirroringToggles: {}},
-      (values) => this.mirroringToggles_ = values.mirroringToggles);
-  // Remove the deprecated values.
-  cca.proxy.browserProxy.localStorageRemove(
-      ['effectIndex', 'toggleMulti', 'toggleMirror']);
-
-  this.infoUpdater_.addDeviceChangeListener(async (updater) => {
-    cca.state.set('multi-camera', (await updater.getDevicesInfo()).length >= 2);
-  });
-};
-
-/**
- * Switches to the next available camera device.
- * @private
- */
-cca.views.camera.Options.prototype.switchDevice_ = async function() {
-  if (!cca.state.get('streaming') || cca.state.get('taking')) {
-    return;
+  get currentDeviceId() {
+    return this.videoDeviceId_;
   }
-  const devices = await this.infoUpdater_.getDevicesInfo();
-  cca.util.animateOnce(document.querySelector('#switch-device'));
-  var index =
-      devices.findIndex((entry) => entry.deviceId == this.videoDeviceId_);
-  if (index == -1) {
-    index = 0;
-  }
-  if (devices.length > 0) {
-    index = (index + 1) % devices.length;
-    this.videoDeviceId_ = devices[index].deviceId;
-  }
-  await this.doSwitchDevice_();
-  // Make the active camera announced by screen reader.
-  var found = devices.find((entry) => entry.deviceId == this.videoDeviceId_);
-  if (found) {
-    cca.toast.speak(
-        chrome.i18n.getMessage('status_msg_camera_switched', found.label));
-  }
-};
 
-/**
- * Animates the preview grid.
- * @private
- */
-cca.views.camera.Options.prototype.animatePreviewGrid_ = function() {
-  Array.from(document.querySelector('#preview-grid').children).forEach(
-      (grid) => cca.util.animateOnce(grid));
-};
-
-/**
- * Updates the options' values for the current constraints and stream.
- * @param {Object} constraints Current stream constraints in use.
- * @param {MediaStream} stream Current Stream in use.
- * @return {?string} Facing-mode in use.
- */
-cca.views.camera.Options.prototype.updateValues =
-    async function(constraints, stream) {
-  var track = stream.getVideoTracks()[0];
-  var trackSettings = track.getSettings && track.getSettings();
-  let facingMode = trackSettings && trackSettings.facingMode;
-  if (this.isV1NoFacingConfig_ === null) {
-    // Because the facing mode of external camera will be set to undefined on
-    // all devices, to distinguish HALv1 device without facing configuration,
-    // assume the first opened camera is built-in camera. Device without facing
-    // configuration won't set facing of built-in cameras. Also if HALv1 device
-    // with facing configuration opened external camera first after CCA launched
-    // the logic here may misjudge it as this category.
-    this.isV1NoFacingConfig_ = facingMode === undefined;
+  /**
+   * Switches to the next available camera device.
+   * @private
+   */
+  async switchDevice_() {
+    if (!state.get(state.State.STREAMING) || state.get(state.State.TAKING)) {
+      return;
+    }
+    state.set(PerfEvent.CAMERA_SWITCHING, true);
+    const devices = await this.infoUpdater_.getDevicesInfo();
+    util.animateOnce(assertInstanceof(
+        document.querySelector('#switch-device'), HTMLElement));
+    let index =
+        devices.findIndex((entry) => entry.deviceId === this.videoDeviceId_);
+    if (index === -1) {
+      index = 0;
+    }
+    if (devices.length > 0) {
+      index = (index + 1) % devices.length;
+      this.videoDeviceId_ = devices[index].deviceId;
+    }
+    const isSuccess = await this.doSwitchDevice_();
+    state.set(PerfEvent.CAMERA_SWITCHING, false, {hasError: !isSuccess});
   }
-  facingMode = this.isV1NoFacingConfig_ ? null : facingMode || 'external';
-  this.updateVideoDeviceId_(constraints, trackSettings);
-  this.updateMirroring_(facingMode);
-  this.audioTrack_ = stream.getAudioTracks()[0];
-  this.updateAudioByMic_();
-  return facingMode;
-};
 
-/**
- * Updates the video device id by the new stream.
- * @param {Object} constraints Stream constraints in use.
- * @param {MediaTrackSettings} trackSettings Video track settings in use.
- * @private
- */
-cca.views.camera.Options.prototype.updateVideoDeviceId_ = function(
-    constraints, trackSettings) {
-  if (constraints.video.deviceId) {
-    // For non-default cameras fetch the deviceId from constraints.
-    // Works on all supported Chrome versions.
-    this.videoDeviceId_ = constraints.video.deviceId.exact;
-  } else {
-    // For default camera, obtain the deviceId from settings, which is
-    // a feature available only from 59. For older Chrome versions,
-    // it's impossible to detect the device id. As a result, if the
-    // default camera was changed to rear in chrome://settings, then
-    // toggling the camera may not work when pressed for the first time
-    // (the same camera would be opened).
+  /**
+   * Animates the preview grid.
+   * @private
+   */
+  animatePreviewGrid_() {
+    Array.from(document.querySelector('#preview-grid').children)
+        .forEach((grid) => util.animateOnce(grid));
+  }
+
+  /**
+   * Maps MediaTrackSettings.facingMode to CCA facing type.
+   * @param {string|undefined} facing The target facingMode to map.
+   * @return {!Facing} The mapped CCA facing.
+   * @private
+   */
+  mapFacing_(facing) {
+    switch (facing) {
+      case undefined:
+        return Facing.EXTERNAL;
+      case 'user':
+        return Facing.USER;
+      case 'environment':
+        return Facing.ENVIRONMENT;
+      default:
+        throw new Error('Unknown facing: ' + facing);
+    }
+  }
+
+  /**
+   * Updates the options' values for the current constraints and stream.
+   * @param {!MediaStream} stream Current Stream in use.
+   * @return {!Promise<!Facing>} Facing-mode in use.
+   */
+  async updateValues(stream) {
+    const track = stream.getVideoTracks()[0];
+    const trackSettings = track.getSettings && track.getSettings();
+    const facingMode = trackSettings && trackSettings.facingMode;
+    if (this.isV1NoFacingConfig_ === null) {
+      // Because the facing mode of external camera will be set to undefined on
+      // all devices, to distinguish HALv1 device without facing configuration,
+      // assume the first opened camera is built-in camera. Device without
+      // facing configuration won't set facing of built-in cameras. Also if
+      // HALv1 device with facing configuration opened external camera first
+      // after CCA launched the logic here may misjudge it as this category.
+      this.isV1NoFacingConfig_ = facingMode === undefined;
+    }
+    const facing =
+        this.isV1NoFacingConfig_ ? Facing.NOT_SET : this.mapFacing_(facingMode);
     this.videoDeviceId_ = trackSettings && trackSettings.deviceId || null;
-  }
-};
-
-/**
- * Updates mirroring for a new stream.
- * @param {string} facingMode Facing-mode of the stream.
- * @private
- */
-cca.views.camera.Options.prototype.updateMirroring_ = function(facingMode) {
-  // Update mirroring by detected facing-mode. Enable mirroring by default if
-  // facing-mode isn't available.
-  var enabled = facingMode ? facingMode != 'environment' : true;
-
-  // Override mirroring only if mirroring was toggled manually.
-  if (this.videoDeviceId_ in this.mirroringToggles_) {
-    enabled = this.mirroringToggles_[this.videoDeviceId_];
-  }
-  this.toggleMirror_.toggleChecked(enabled);
-};
-
-/**
- * Saves the toggled mirror state for the current video device.
- * @private
- */
-cca.views.camera.Options.prototype.saveMirroring_ = function() {
-  this.mirroringToggles_[this.videoDeviceId_] = this.toggleMirror_.checked;
-  cca.proxy.browserProxy.localStorageSet(
-      {mirroringToggles: this.mirroringToggles_});
-};
-
-/**
- * Enables/disables the current audio track by the microphone option.
- * @private
- */
-cca.views.camera.Options.prototype.updateAudioByMic_ = function() {
-  if (this.audioTrack_) {
-    this.audioTrack_.enabled = this.toggleMic_.checked;
-  }
-};
-
-/**
- * Gets the video device ids sorted by preference.
- * @async
- * @return {Array<?string>} May contain null for user facing camera on HALv1
- *     devices.
- * @throws {Error} Throws exception for no available video devices.
- */
-cca.views.camera.Options.prototype.videoDeviceIds = async function() {
-  const camera3Info = await this.infoUpdater_.getCamera3DevicesInfo();
-
-  let facings = null;
-  if (camera3Info) {
-    var devices = camera3Info;
-    facings = camera3Info.reduce(
-        (facings, info) =>
-            Object.assign(facings, {[info.deviceId]: info.facing}),
-        {});
-    devices = camera3Info;
-    this.isV1NoFacingConfig_ = false;
-  } else {
-    devices = await this.infoUpdater_.getDevicesInfo();
+    this.updateMirroring_(facing);
+    this.audioTrack_ = stream.getAudioTracks()[0];
+    this.updateAudioByMic_();
+    return facing;
   }
 
-  const defaultFacing =
-      await cca.mojo.ChromeHelper.getInstance().isTabletMode() ?
-      cros.mojom.CameraFacing.CAMERA_FACING_BACK :
-      cros.mojom.CameraFacing.CAMERA_FACING_FRONT;
-  // Put the selected video device id first.
-  var sorted = devices.map((device) => device.deviceId).sort((a, b) => {
-    if (a == b) {
-      return 0;
+  /**
+   * Updates mirroring for a new stream.
+   * @param {!Facing} facing Facing of the stream.
+   * @private
+   */
+  updateMirroring_(facing) {
+    // Update mirroring by detected facing-mode. Enable mirroring by default if
+    // facing-mode isn't available.
+    let enabled = facing !== Facing.ENVIRONMENT;
+
+    // Override mirroring only if mirroring was toggled manually.
+    if (this.videoDeviceId_ in this.mirroringToggles_) {
+      enabled = this.mirroringToggles_[this.videoDeviceId_];
     }
-    if (this.videoDeviceId_ ? a === this.videoDeviceId_ :
-                              (facings && facings[a] === defaultFacing)) {
-      return -1;
-    }
-    return 1;
-  });
-  // Prepended 'null' deviceId means the system default camera on HALv1
-  // device. Add it only when the app is launched (no video-device-id set).
-  if (!facings && this.videoDeviceId_ === null) {
-    sorted.unshift(null);
+
+    util.toggleChecked(this.toggleMirror_, enabled);
   }
-  return sorted;
-};
+
+  /**
+   * Saves the toggled mirror state for the current video device.
+   * @private
+   */
+  saveMirroring_() {
+    this.mirroringToggles_[this.videoDeviceId_] = this.toggleMirror_.checked;
+    browserProxy.localStorageSet({mirroringToggles: this.mirroringToggles_});
+  }
+
+  /**
+   * Enables/disables the current audio track by the microphone option.
+   * @private
+   */
+  updateAudioByMic_() {
+    if (this.audioTrack_) {
+      this.audioTrack_.enabled = this.toggleMic_.checked;
+    }
+  }
+
+  /**
+   * Gets the video device ids sorted by preference.
+   * @return {!Promise<!Array<?string>>} May contain null for user facing camera
+   *     on HALv1 devices.
+   */
+  async videoDeviceIds() {
+    /** @type {!Array<(!Camera3DeviceInfo|!MediaDeviceInfo)>} */
+    let devices;
+    /**
+     * Object mapping from device id to facing. Set to null on HALv1 device.
+     * @type {?Object<string, !Facing>}
+     */
+    let facings = null;
+
+    const camera3Info = await this.infoUpdater_.getCamera3DevicesInfo();
+    if (camera3Info) {
+      devices = camera3Info;
+      facings = {};
+      for (const {deviceId, facing} of camera3Info) {
+        facings[deviceId] = facing;
+      }
+      this.isV1NoFacingConfig_ = false;
+    } else {
+      devices = await this.infoUpdater_.getDevicesInfo();
+    }
+
+    const defaultFacing = await ChromeHelper.getInstance().isTabletMode() ?
+        Facing.ENVIRONMENT :
+        Facing.USER;
+    // Put the selected video device id first.
+    const sorted = devices.map((device) => device.deviceId).sort((a, b) => {
+      if (a === b) {
+        return 0;
+      }
+      if (this.videoDeviceId_ ? a === this.videoDeviceId_ :
+                                (facings && facings[a] === defaultFacing)) {
+        return -1;
+      }
+      return 1;
+    });
+    // Prepended 'null' deviceId means the system default camera on HALv1
+    // device. Add it only when the app is launched (no video-device-id set).
+    if (!facings && this.videoDeviceId_ === null) {
+      sorted.unshift(null);
+    }
+    return sorted;
+  }
+}

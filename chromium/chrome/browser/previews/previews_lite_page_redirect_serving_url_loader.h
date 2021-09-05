@@ -14,11 +14,14 @@
 #include "base/sequence_checker.h"
 #include "base/timer/timer.h"
 #include "content/public/browser/url_loader_request_interceptor.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
-#include "services/network/public/mojom/url_loader.mojom.h"
+#include "services/network/public/mojom/url_loader.mojom-forward.h"
+#include "services/network/public/mojom/url_response_head.mojom-forward.h"
 
 namespace previews {
 
@@ -33,12 +36,12 @@ enum class ServingLoaderResult {
 using ResultCallback =
     base::OnceCallback<void(ServingLoaderResult,
                             base::Optional<net::RedirectInfo> redirect_info,
-                            scoped_refptr<network::ResourceResponse> response)>;
+                            network::mojom::URLResponseHeadPtr response)>;
 
-using RequestHandler =
-    base::OnceCallback<void(const network::ResourceRequest& resource_request,
-                            network::mojom::URLLoaderRequest,
-                            network::mojom::URLLoaderClientPtr)>;
+using RequestHandler = base::OnceCallback<void(
+    const network::ResourceRequest& resource_request,
+    mojo::PendingReceiver<network::mojom::URLLoader>,
+    mojo::PendingRemote<network::mojom::URLLoaderClient>)>;
 
 // This class attempts to fetch a LitePage from the LitePage server, and if
 // successful, calls a success callback. Otherwise, it calls fallback in the
@@ -88,9 +91,9 @@ class PreviewsLitePageRedirectServingURLLoader
       mojo::ScopedDataPipeConsumerHandle body) override;
   void OnComplete(const network::URLLoaderCompletionStatus& status) override;
 
-  // When a connection error occurs in either mojo pipe, this objects lifetime
+  // When a disconnection occurs in either mojo pipe, this object's lifetime
   // needs to be managed and the connections need to be closed.
-  void OnConnectionError();
+  void OnMojoDisconnect();
 
   // Calls |result_callback_| with kFallback and cleans up.
   void Fallback();
@@ -106,12 +109,12 @@ class PreviewsLitePageRedirectServingURLLoader
   // navigation path.
   void SetUpForwardingClient(
       const network::ResourceRequest&,
-      network::mojom::URLLoaderRequest request,
-      network::mojom::URLLoaderClientPtr forwarding_client);
+      mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> forwarding_client);
 
-  // The network URLLoader that fetches the LitePage URL and its binding.
-  network::mojom::URLLoaderPtr network_url_loader_;
-  mojo::Binding<network::mojom::URLLoaderClient> url_loader_binding_;
+  // The network URLLoader that fetches the LitePage URL and its receiver.
+  mojo::Remote<network::mojom::URLLoader> network_url_loader_;
+  mojo::Receiver<network::mojom::URLLoaderClient> url_loader_receiver_{this};
 
   // When a result is determined, this callback should be run with the
   // appropriate ServingLoaderResult.
@@ -120,7 +123,7 @@ class PreviewsLitePageRedirectServingURLLoader
   // Once the LitePage response is received and is ready to be served, the
   // response info related to the request. When this becomes populated, the
   // network URL Loader calls are paused.
-  scoped_refptr<network::ResourceResponse> resource_response_;
+  network::mojom::URLResponseHeadPtr resource_response_;
 
   // The frame tree node id associated with the request. Used to get the
   // BrowserContext on the UI thread for the request.
@@ -132,9 +135,9 @@ class PreviewsLitePageRedirectServingURLLoader
   // The timer that triggers a timeout when the request takes too long.
   base::OneShotTimer timeout_timer_;
 
-  // Forwarding client binding.
-  mojo::Binding<network::mojom::URLLoader> binding_;
-  network::mojom::URLLoaderClientPtr forwarding_client_;
+  // Forwarding client receiver.
+  mojo::Receiver<network::mojom::URLLoader> receiver_{this};
+  mojo::Remote<network::mojom::URLLoaderClient> forwarding_client_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

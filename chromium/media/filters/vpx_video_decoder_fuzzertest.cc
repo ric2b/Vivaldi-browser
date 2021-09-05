@@ -12,8 +12,8 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/task_environment.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media.h"
 #include "media/base/media_util.h"
@@ -27,7 +27,7 @@ struct Env {
   }
 
   base::AtExitManager at_exit_manager;
-  base::MessageLoop message_loop;
+  base::test::SingleThreadTaskEnvironment task_environment;
 };
 
 void OnDecodeComplete(const base::Closure& quit_closure,
@@ -37,8 +37,8 @@ void OnDecodeComplete(const base::Closure& quit_closure,
 
 void OnInitDone(const base::Closure& quit_closure,
                 bool* success_dest,
-                bool success) {
-  *success_dest = success;
+                media::Status status) {
+  *success_dest = status.is_ok();
   quit_closure.Run();
 }
 
@@ -92,7 +92,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                 : media::VideoDecoderConfig::AlphaMode::kIsOpaque,
       color_space, media::VideoTransformation(rotation, reflection), coded_size,
       visible_rect, natural_size, media::EmptyExtraData(),
-      media::Unencrypted());
+      media::EncryptionScheme::kUnencrypted);
 
   if (!config.IsValidConfig())
     return 0;
@@ -104,7 +104,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     bool success = false;
     decoder.Initialize(
         config, true /* low_delay */, nullptr /* cdm_context */,
-        base::Bind(&OnInitDone, run_loop.QuitClosure(), &success),
+        base::BindOnce(&OnInitDone, run_loop.QuitClosure(), &success),
         base::Bind(&OnOutputComplete), base::NullCallback());
     run_loop.Run();
     if (!success)
@@ -115,7 +115,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     base::RunLoop run_loop;
     auto buffer = media::DecoderBuffer::CopyFrom(data, size);
     decoder.Decode(buffer,
-                   base::Bind(&OnDecodeComplete, run_loop.QuitClosure()));
+                   base::BindOnce(&OnDecodeComplete, run_loop.QuitClosure()));
     run_loop.Run();
   }
 

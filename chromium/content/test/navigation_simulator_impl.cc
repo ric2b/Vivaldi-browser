@@ -6,6 +6,7 @@
 
 #include <utility>
 #include "base/bind.h"
+#include "base/debug/stack_trace.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "content/browser/frame_host/debug_urls.h"
@@ -293,9 +294,9 @@ NavigationSimulatorImpl::CreateFromPendingInFrame(
     request = test_frame_host->navigation_requests().begin()->second.get();
   CHECK(request);
 
-  // Simulate the BeforeUnload ACK if needed.
+  // Simulate the BeforeUnload completion callback if needed.
   if (request->state() == NavigationRequest::WAITING_FOR_RENDERER_RESPONSE)
-    test_frame_host->SendBeforeUnloadACK(true /*proceed */);
+    test_frame_host->SimulateBeforeUnloadCompleted(true /* proceed */);
 
   auto simulator = base::WrapUnique(new NavigationSimulatorImpl(
       GURL(), request->browser_initiated(),
@@ -342,15 +343,10 @@ NavigationSimulatorImpl::NavigationSimulatorImpl(
       transition_ = ui::PAGE_TRANSITION_MANUAL_SUBFRAME;
   }
 
-  service_manager::mojom::InterfaceProviderPtr stub_interface_provider;
-  interface_provider_request_ = mojo::MakeRequest(&stub_interface_provider);
-
-  document_interface_broker_content_receiver_ =
-      mojo::PendingRemote<blink::mojom::DocumentInterfaceBroker>()
-          .InitWithNewPipeAndPassReceiver();
-  document_interface_broker_blink_receiver_ =
-      mojo::PendingRemote<blink::mojom::DocumentInterfaceBroker>()
-          .InitWithNewPipeAndPassReceiver();
+  mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+      stub_interface_provider;
+  interface_provider_receiver_ =
+      stub_interface_provider.InitWithNewPipeAndPassReceiver();
   browser_interface_broker_receiver_ =
       mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>()
           .InitWithNewPipeAndPassReceiver();
@@ -476,16 +472,15 @@ void NavigationSimulatorImpl::Redirect(const GURL& new_url) {
   redirect_info.status_code = 302;
   redirect_info.new_method = "GET";
   redirect_info.new_url = new_url;
-  redirect_info.new_site_for_cookies = new_url;
+  redirect_info.new_site_for_cookies = net::SiteForCookies::FromUrl(new_url);
   redirect_info.new_referrer = referrer_->url.spec();
   redirect_info.new_referrer_policy =
       Referrer::ReferrerPolicyForUrlRequest(referrer_->policy);
-  scoped_refptr<network::ResourceResponse> response(
-      new network::ResourceResponse);
-  response->head.connection_info = http_connection_info_;
-  response->head.ssl_info = ssl_info_;
+  auto response = network::mojom::URLResponseHead::New();
+  response->connection_info = http_connection_info_;
+  response->ssl_info = ssl_info_;
 
-  url_loader->CallOnRequestRedirected(redirect_info, response);
+  url_loader->CallOnRequestRedirected(redirect_info, std::move(response));
 
   MaybeWaitForThrottleChecksComplete(base::BindOnce(
       &NavigationSimulatorImpl::RedirectComplete, weak_factory_.GetWeakPtr(),
@@ -516,8 +511,9 @@ void NavigationSimulatorImpl::ReadyToCommit() {
          "navigation has finished";
 
   if (state_ < STARTED) {
-    if (block_on_before_unload_ack_ && state_ == WAITING_BEFORE_UNLOAD) {
-      // The user should have simulated the BeforeUnloadACK by themselves.
+    if (block_invoking_before_unload_completed_callback_ &&
+        state_ == WAITING_BEFORE_UNLOAD) {
+      // The user should have simulated the BeforeUnloadCompleted by themselves.
       // Finish the initialization and skip the Start simulation.
       InitializeFromStartedRequest(request_);
     } else {
@@ -595,10 +591,14 @@ void NavigationSimulatorImpl::Commit() {
   RenderFrameHostImpl* previous_rfh =
       render_frame_host_->frame_tree_node()->current_frame_host();
 
+  // RenderDocument: Do not dispatch UnloadACK if the navigation was committed
+  // in the same SiteInstance. This has already been dispatched during the
+  // navigation in the renderer process.
+  if (previous_rfh->GetSiteInstance() == render_frame_host_->GetSiteInstance())
+    drop_unload_ack_ = true;
+
   if (same_document_) {
-    interface_provider_request_ = nullptr;
-    document_interface_broker_content_receiver_.reset();
-    document_interface_broker_blink_receiver_.reset();
+    interface_provider_receiver_.reset();
     browser_interface_broker_receiver_.reset();
   }
 
@@ -610,23 +610,13 @@ void NavigationSimulatorImpl::Commit() {
     request_->set_response_headers_for_testing(response_headers);
   }
 
-  bool is_cross_process_navigation =
-      previous_rfh->GetProcess() != render_frame_host_->GetProcess();
-
   auto params = BuildDidCommitProvisionalLoadParams(
-      false /* same_document */, false /* failed_navigation */);
+      same_document_ /* same_document */, false /* failed_navigation */);
   render_frame_host_->SimulateCommitProcessed(
-      request_, std::move(params), std::move(interface_provider_request_),
-      std::move(document_interface_broker_content_receiver_),
-      std::move(document_interface_broker_blink_receiver_),
+      request_, std::move(params), std::move(interface_provider_receiver_),
       std::move(browser_interface_broker_receiver_), same_document_);
 
-  // Simulate the UnloadACK in the old RenderFrameHost if it was swapped out at
-  // commit time.
-  if (is_cross_process_navigation && !drop_swap_out_ack_) {
-    previous_rfh->OnMessageReceived(
-        FrameHostMsg_SwapOut_ACK(previous_rfh->GetRoutingID()));
-  }
+  SimulateUnloadCompletionCallbackForPreviousFrameIfNeeded(previous_rfh);
 
   loading_scenario_ =
       TestRenderFrameHost::LoadingScenario::NewDocumentNavigation;
@@ -660,6 +650,22 @@ void NavigationSimulatorImpl::AbortCommit() {
   CHECK_EQ(1, num_did_finish_navigation_called_);
 }
 
+void NavigationSimulatorImpl::AbortFromRenderer() {
+  CHECK(!browser_initiated_)
+      << "NavigationSimulatorImpl::AbortFromRenderer cannot be called for "
+         "browser-initiated navigation.";
+  CHECK_LE(state_, FAILED)
+      << "NavigationSimulatorImpl::AbortFromRenderer cannot be called after "
+         "NavigationSimulatorImpl::Commit or  "
+         "NavigationSimulatorImpl::CommitErrorPage.";
+
+  was_aborted_ = true;
+  request_->RendererAbortedNavigationForTesting();
+  state_ = FINISHED;
+
+  CHECK_EQ(1, num_did_finish_navigation_called_);
+}
+
 void NavigationSimulatorImpl::FailWithResponseHeaders(
     int error_code,
     scoped_refptr<net::HttpResponseHeaders> response_headers) {
@@ -685,6 +691,7 @@ void NavigationSimulatorImpl::FailWithResponseHeaders(
       static_cast<TestNavigationURLLoader*>(request_->loader_for_testing());
   CHECK(url_loader);
   network::URLLoaderCompletionStatus status(error_code);
+  status.resolve_error_info = resolve_error_info_;
   status.ssl_info = ssl_info_;
   url_loader->SimulateErrorWithStatus(status);
 
@@ -738,26 +745,24 @@ void NavigationSimulatorImpl::CommitErrorPage() {
 
   // Keep a pointer to the current RenderFrameHost that may be pending deletion
   // after commit.
+  // RenderDocument: The |previous_rfh| might also be immediately deleted after
+  // commit, because it has already run its unload handler.
   RenderFrameHostImpl* previous_rfh =
       render_frame_host_->frame_tree_node()->current_frame_host();
 
-  bool is_cross_process_navigation =
-      previous_rfh->GetProcess() != render_frame_host_->GetProcess();
+  // RenderDocument: Do not dispatch UnloadACK if the navigation was committed
+  // in the same SiteInstance. This has already been dispatched during the
+  // navigation in the renderer process.
+  if (previous_rfh->GetSiteInstance() == render_frame_host_->GetSiteInstance())
+    drop_unload_ack_ = true;
 
   auto params = BuildDidCommitProvisionalLoadParams(
       false /* same_document */, true /* failed_navigation */);
   render_frame_host_->SimulateCommitProcessed(
-      request_, std::move(params), std::move(interface_provider_request_),
-      std::move(document_interface_broker_content_receiver_),
-      std::move(document_interface_broker_blink_receiver_),
+      request_, std::move(params), std::move(interface_provider_receiver_),
       std::move(browser_interface_broker_receiver_), false /* same_document */);
 
-  // Simulate the UnloadACK in the old RenderFrameHost if it was swapped out at
-  // commit time.
-  if (is_cross_process_navigation && !drop_swap_out_ack_) {
-    previous_rfh->OnMessageReceived(
-        FrameHostMsg_SwapOut_ACK(previous_rfh->GetRoutingID()));
-  }
+  SimulateUnloadCompletionCallbackForPreviousFrameIfNeeded(previous_rfh);
 
   state_ = FINISHED;
   if (!keep_loading_)
@@ -772,22 +777,21 @@ void NavigationSimulatorImpl::CommitSameDocument() {
         << "NavigationSimulatorImpl::CommitSameDocument should be the only "
            "navigation event function called on the NavigationSimulatorImpl";
   } else {
-    CHECK(same_document_);
-    CHECK_EQ(STARTED, state_);
+    // This function is intended for same document navigations initiating from
+    // the renderer. For regular same document navigations simply use Commit().
+    Commit();
+    return;
   }
 
   auto params = BuildDidCommitProvisionalLoadParams(
       true /* same_document */, false /* failed_navigation */);
 
-  interface_provider_request_ = nullptr;
-  document_interface_broker_content_receiver_.reset();
-  document_interface_broker_blink_receiver_.reset();
+  interface_provider_receiver_.reset();
   browser_interface_broker_receiver_.reset();
 
   render_frame_host_->SimulateCommitProcessed(
-      request_, std::move(params), nullptr /* interface_provider_request_ */,
-      mojo::NullReceiver() /* document_interface_broker_content_receiver */,
-      mojo::NullReceiver() /* document_interface_broker_blink_receiver */,
+      request_, std::move(params),
+      mojo::NullReceiver() /* interface_provider_receiver_ */,
       mojo::NullReceiver() /* browser_interface_broker_receiver */,
       true /* same_document */);
 
@@ -898,12 +902,12 @@ void NavigationSimulatorImpl::SetIsSignedExchangeInnerResponse(
   is_signed_exchange_inner_response_ = is_signed_exchange_inner_response;
 }
 
-void NavigationSimulatorImpl::SetInterfaceProviderRequest(
-    service_manager::mojom::InterfaceProviderRequest request) {
-  CHECK_LE(state_, STARTED) << "The InterfaceProviderRequest cannot be set "
+void NavigationSimulatorImpl::SetInterfaceProviderReceiver(
+    mojo::PendingReceiver<service_manager::mojom::InterfaceProvider> receiver) {
+  CHECK_LE(state_, STARTED) << "The InterfaceProvider cannot be set "
                                "after the navigation has committed or failed";
-  CHECK(request.is_pending());
-  interface_provider_request_ = std::move(request);
+  CHECK(receiver.is_valid());
+  interface_provider_receiver_ = std::move(receiver);
 }
 
 void NavigationSimulatorImpl::SetContentsMimeType(
@@ -926,6 +930,11 @@ void NavigationSimulatorImpl::SetLoadURLParams(
 
 void NavigationSimulatorImpl::SetAutoAdvance(bool auto_advance) {
   auto_advance_ = auto_advance;
+}
+
+void NavigationSimulatorImpl::SetResolveErrorInfo(
+    const net::ResolveErrorInfo& resolve_error_info) {
+  resolve_error_info_ = resolve_error_info;
 }
 
 void NavigationSimulatorImpl::SetSSLInfo(const net::SSLInfo& ssl_info) {
@@ -1018,7 +1027,24 @@ void NavigationSimulatorImpl::DidFinishNavigation(
   NavigationRequest* request = NavigationRequest::From(navigation_handle);
   if (request == request_) {
     num_did_finish_navigation_called_++;
+    if (navigation_handle->IsServedFromBackForwardCache()) {
+      // Back-forward cache navigations commit and finish synchronously, unlike
+      // all other navigations, which wait for a reply from the renderer.
+      // The |state_| is normally updated to 'FINISHED' when we simulate a
+      // renderer reply at the end of the NavigationSimulatorImpl::Commit()
+      // function, but we have not reached this stage yet.
+      // Set |state_| to FINISHED to ensure that we would not try to simulate
+      // navigation commit for the second time.
+      RenderFrameHostImpl* previous_rfh = RenderFrameHostImpl::FromID(
+          navigation_handle->GetPreviousRenderFrameHostId());
+      CHECK(previous_rfh) << "Previous RenderFrameHost should not be destroyed "
+                             "without a Unload_ACK";
+      SimulateUnloadCompletionCallbackForPreviousFrameIfNeeded(previous_rfh);
+      state_ = FINISHED;
+    }
     request_ = nullptr;
+    if (was_aborted_)
+      CHECK_EQ(net::ERR_ABORTED, request->GetNetErrorCode());
   }
 }
 
@@ -1042,18 +1068,18 @@ bool NavigationSimulatorImpl::SimulateBrowserInitiatedStart() {
   if (state_ == INITIALIZATION)
     BrowserInitiatedStartAndWaitBeforeUnload();
 
-  // Simulate the BeforeUnload ACK if needed.
+  // Simulate the BeforeUnload completion callback if needed.
   NavigationRequest* request = frame_tree_node_->navigation_request();
   if (request &&
       request->state() == NavigationRequest::WAITING_FOR_RENDERER_RESPONSE) {
-    if (block_on_before_unload_ack_) {
-      // Since we do not simulate the BeforeUnloadACK, DidStartNavigation will
-      // not have been called, and |request_| will not be properly set. Do it
-      // manually.
+    if (block_invoking_before_unload_completed_callback_) {
+      // Since we do not simulate the BeforeUnloadCompleted, DidStartNavigation
+      // will not have been called, and |request_| will not be properly set. Do
+      // it manually.
       request_ = request;
       return false;
     }
-    render_frame_host_->SendBeforeUnloadACK(true /*proceed */);
+    render_frame_host_->SimulateBeforeUnloadCompleted(true /* proceed */);
   }
 
   // Note: WillStartRequest checks can destroy the request synchronously, or
@@ -1102,13 +1128,15 @@ bool NavigationSimulatorImpl::SimulateRendererInitiatedStart() {
           std::string() /* headers */, net::LOAD_NORMAL,
           false /* skip_service_worker */,
           blink::mojom::RequestContextType::HYPERLINK,
+          network::mojom::RequestDestination::kDocument,
           blink::WebMixedContentContextType::kBlockable, is_form_submission_,
           was_initiated_by_link_click_, GURL() /* searchable_form_url */,
           std::string() /* searchable_form_encoding */,
           GURL() /* client_side_redirect_url */,
-          base::nullopt /* detools_initiator_info */);
-  mojom::CommonNavigationParamsPtr common_params =
-      mojom::CommonNavigationParams::New();
+          base::nullopt /* detools_initiator_info */,
+          false /* attach_same_site_cookies */,
+          nullptr /* trust_token_params */);
+  auto common_params = CreateCommonNavigationParams();
   common_params->navigation_start = base::TimeTicks::Now();
   common_params->url = navigation_url_;
   common_params->initiator_origin = url::Origin();
@@ -1120,28 +1148,17 @@ bool NavigationSimulatorImpl::SimulateRendererInitiatedStart() {
           ? mojom::NavigationType::RELOAD
           : mojom::NavigationType::DIFFERENT_DOCUMENT;
   common_params->has_user_gesture = has_user_gesture_;
-  common_params->initiator_csp_info =
-      InitiatorCSPInfo(should_check_main_world_csp_,
-                       std::vector<ContentSecurityPolicy>(), base::nullopt);
+  common_params->initiator_csp_info = mojom::InitiatorCSPInfo::New(
+      should_check_main_world_csp_,
+      std::vector<network::mojom::ContentSecurityPolicyPtr>(), nullptr);
 
-  if (IsPerNavigationMojoInterfaceEnabled()) {
-    mojo::PendingAssociatedRemote<mojom::NavigationClient>
-        navigation_client_remote;
-    navigation_client_receiver_ =
-        navigation_client_remote.InitWithNewEndpointAndPassReceiver();
-    render_frame_host_->frame_host_receiver_for_testing()
-        .impl()
-        ->BeginNavigation(std::move(common_params), std::move(begin_params),
-                          mojo::NullRemote(),
-                          std::move(navigation_client_remote),
-                          mojo::NullRemote());
-  } else {
-    render_frame_host_->frame_host_receiver_for_testing()
-        .impl()
-        ->BeginNavigation(std::move(common_params), std::move(begin_params),
-                          mojo::NullRemote(), mojo::NullAssociatedRemote(),
-                          mojo::NullRemote());
-  }
+  mojo::PendingAssociatedRemote<mojom::NavigationClient>
+      navigation_client_remote;
+  navigation_client_receiver_ =
+      navigation_client_remote.InitWithNewEndpointAndPassReceiver();
+  render_frame_host_->frame_host_receiver_for_testing().impl()->BeginNavigation(
+      std::move(common_params), std::move(begin_params), mojo::NullRemote(),
+      std::move(navigation_client_remote), mojo::NullRemote());
 
   NavigationRequest* request =
       render_frame_host_->frame_tree_node()->navigation_request();
@@ -1177,7 +1194,7 @@ void NavigationSimulatorImpl::Wait() {
   run_loop.Run();
 }
 
-void NavigationSimulatorImpl::OnThrottleChecksComplete(
+bool NavigationSimulatorImpl::OnThrottleChecksComplete(
     NavigationThrottle::ThrottleCheckResult result) {
   CHECK(!last_throttle_check_result_);
   last_throttle_check_result_ = result;
@@ -1185,13 +1202,14 @@ void NavigationSimulatorImpl::OnThrottleChecksComplete(
     std::move(wait_closure_).Run();
   if (throttle_checks_complete_closure_)
     std::move(throttle_checks_complete_closure_).Run();
+  return false;
 }
 
 void NavigationSimulatorImpl::PrepareCompleteCallbackOnRequest() {
   last_throttle_check_result_.reset();
   request_->set_complete_callback_for_testing(
       base::BindOnce(&NavigationSimulatorImpl::OnThrottleChecksComplete,
-                     weak_factory_.GetWeakPtr()));
+                     base::Unretained(this)));
 }
 
 RenderFrameHost* NavigationSimulatorImpl::GetFinalRenderFrameHost() {
@@ -1331,6 +1349,15 @@ NavigationSimulatorImpl::BuildDidCommitProvisionalLoadParams(
     params->document_sequence_number = ++g_unique_identifier;
   }
 
+  // Simulate embedding token creation.
+  if (!same_document && !request_->IsInMainFrame()) {
+    RenderFrameHostImpl* parent = request_->GetParentFrame();
+    if (parent && parent->GetSiteInstance() !=
+                      request_->GetRenderFrameHost()->GetSiteInstance()) {
+      params->embedding_token = base::UnguessableToken::Create();
+    }
+  }
+
   params->page_state =
       page_state_.value_or(PageState::CreateForTestingWithSequenceNumbers(
           navigation_url_, params->item_sequence_number,
@@ -1348,12 +1375,27 @@ void NavigationSimulatorImpl::StopLoading() {
   render_frame_host_->SimulateLoadingCompleted(loading_scenario_);
 }
 
-void NavigationSimulatorImpl::FailLoading(
-    const GURL& url,
-    int error_code,
-    const base::string16& error_description) {
+void NavigationSimulatorImpl::FailLoading(const GURL& url, int error_code) {
   CHECK(render_frame_host_);
-  render_frame_host_->DidFailLoadWithError(url, error_code, error_description);
+  render_frame_host_->DidFailLoadWithError(url, error_code);
+}
+
+void NavigationSimulatorImpl::
+    SimulateUnloadCompletionCallbackForPreviousFrameIfNeeded(
+        RenderFrameHostImpl* previous_rfh) {
+  // Do not dispatch FrameHostMsg_Unload_ACK if the navigation was committed in
+  // the same RenderFrameHost.
+  if (previous_rfh == render_frame_host_)
+    return;
+  if (drop_unload_ack_)
+    return;
+  // The previous RenderFrameHost entered the back-forward cache and hasn't been
+  // requested to unload. The browser process do not expect
+  // FrameHostMsg_Unload_ACK.
+  if (previous_rfh->is_in_back_forward_cache())
+    return;
+  previous_rfh->OnMessageReceived(
+      FrameHostMsg_Unload_ACK(previous_rfh->GetRoutingID()));
 }
 
 }  // namespace content

@@ -19,7 +19,7 @@
 #include "chrome/browser/sessions/session_restore_delegate.h"
 #include "chrome/browser/sessions/session_service.h"
 #include "chrome/browser/sessions/session_service_utils.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/session_command.h"
 #include "components/sessions/core/session_constants.h"
 #include "components/sessions/core/session_service_commands.h"
@@ -53,6 +53,8 @@ class VivaldiSessionService {
   bool Load(const base::FilePath& file_name,
             Browser* browser,
             const SessionOptions& opts);
+  std::vector<std::unique_ptr<sessions::SessionCommand>> LoadSettingInfo(
+      const base::FilePath& path);
 
  private:
   void ResetFile(const base::FilePath& file_name);
@@ -60,8 +62,9 @@ class VivaldiSessionService {
   bool AppendCommandsToFile(
       base::File* file,
       const std::vector<std::unique_ptr<sessions::SessionCommand>>& commands);
-  bool Read(std::vector<std::unique_ptr<sessions::SessionCommand>>* commands);
-  bool FillBuffer();
+  bool Read(base::File* file,
+            std::vector<std::unique_ptr<sessions::SessionCommand>>* commands);
+  bool FillBuffer(base::File* file);
   Browser* ProcessSessionWindows(
       std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
       const SessionID& active_window_id,
@@ -89,7 +92,7 @@ class VivaldiSessionService {
   // either there are no commands, or there was an error. Use errored_ to
   // distinguish the two. If NULL is returned, and there is no error, it means
   // the end of file was successfully reached.
-  std::unique_ptr<sessions::SessionCommand> ReadCommand();
+  std::unique_ptr<sessions::SessionCommand> ReadCommand(base::File* file);
 
   const std::vector<std::unique_ptr<sessions::SessionCommand>>&
   pending_commands() {

@@ -59,8 +59,6 @@
 
 namespace blink {
 
-using namespace media_feature_names;
-
 enum MediaFeaturePrefix { kMinPrefix, kMaxPrefix, kNoPrefix };
 
 using EvalFunc = bool (*)(const MediaQueryExpValue&,
@@ -86,7 +84,7 @@ MediaQueryEvaluator::MediaQueryEvaluator(
 
 MediaQueryEvaluator::~MediaQueryEvaluator() = default;
 
-void MediaQueryEvaluator::Trace(blink::Visitor* visitor) {
+void MediaQueryEvaluator::Trace(Visitor* visitor) {
   visitor->Trace(media_values_);
 }
 
@@ -103,9 +101,8 @@ const String MediaQueryEvaluator::MediaType() const {
 bool MediaQueryEvaluator::MediaTypeMatch(
     const String& media_type_to_match) const {
   return media_type_to_match.IsEmpty() ||
-         DeprecatedEqualIgnoringCase(media_type_to_match,
-                                     media_type_names::kAll) ||
-         DeprecatedEqualIgnoringCase(media_type_to_match, MediaType());
+         EqualIgnoringASCIICase(media_type_to_match, media_type_names::kAll) ||
+         EqualIgnoringASCIICase(media_type_to_match, MediaType());
 }
 
 static bool ApplyRestrictor(MediaQuery::RestrictorType r, bool value) {
@@ -158,6 +155,15 @@ bool MediaQueryEvaluator::Eval(
                   device_dependent_media_query_results);
 
   return result;
+}
+
+bool MediaQueryEvaluator::DidResultsChange(
+    const MediaQueryResultList& results) const {
+  for (auto& result : results) {
+    if (Eval(result.Expression()) != result.Result())
+      return true;
+  }
+  return false;
 }
 
 template <typename T>
@@ -325,11 +331,11 @@ static bool EvalResolution(const MediaQueryExpValue& value,
   // this method only got called if this media type matches the one defined
   // in the query. Thus, if if the document's media type is "print", the
   // media type of the query will either be "print" or "all".
-  if (DeprecatedEqualIgnoringCase(media_values.MediaType(),
-                                  media_type_names::kScreen)) {
+  if (EqualIgnoringASCIICase(media_values.MediaType(),
+                             media_type_names::kScreen)) {
     actual_resolution = clampTo<float>(media_values.DevicePixelRatio());
-  } else if (DeprecatedEqualIgnoringCase(media_values.MediaType(),
-                                         media_type_names::kPrint)) {
+  } else if (EqualIgnoringASCIICase(media_values.MediaType(),
+                                    media_type_names::kPrint)) {
     // The resolution of images while printing should not depend on the DPI
     // of the screen. Until we support proper ways of querying this info
     // we use 300px which is considered minimum for current printers.
@@ -689,6 +695,15 @@ static bool AnyHoverMediaFeatureEval(const MediaQueryExpValue& value,
   }
 }
 
+static bool OriginTrialTestMediaFeatureEval(const MediaQueryExpValue& value,
+                                            MediaFeaturePrefix,
+                                            const MediaValues& media_values) {
+  // The test feature only supports a 'no-value' parsing. So if we've gotten
+  // to this point it will always match.
+  DCHECK(!value.IsValid());
+  return true;
+}
+
 static bool PointerMediaFeatureEval(const MediaQueryExpValue& value,
                                     MediaFeaturePrefix,
                                     const MediaValues& media_values) {
@@ -771,8 +786,7 @@ static bool ScanMediaFeatureEval(const MediaQueryExpValue& value,
                                  MediaFeaturePrefix,
                                  const MediaValues& media_values) {
   // Scan only applies to 'tv' media.
-  if (!DeprecatedEqualIgnoringCase(media_values.MediaType(),
-                                   media_type_names::kTv))
+  if (!EqualIgnoringASCIICase(media_values.MediaType(), media_type_names::kTv))
     return false;
 
   if (!value.IsValid())

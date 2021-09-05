@@ -21,13 +21,13 @@ std::unique_ptr<Renderer> DecryptingRendererFactory::CreateRenderer(
     const scoped_refptr<base::TaskRunner>& worker_task_runner,
     AudioRendererSink* audio_renderer_sink,
     VideoRendererSink* video_renderer_sink,
-    const RequestOverlayInfoCB& request_overlay_info_cb,
+    RequestOverlayInfoCB request_overlay_info_cb,
     const gfx::ColorSpace& target_color_space,
     bool use_platform_media_pipeline) {
   std::unique_ptr<media::Renderer> renderer = renderer_factory_->CreateRenderer(
       media_task_runner, worker_task_runner, audio_renderer_sink,
-      video_renderer_sink, request_overlay_info_cb, target_color_space,
-      use_platform_media_pipeline);
+      video_renderer_sink, std::move(request_overlay_info_cb),
+      target_color_space, use_platform_media_pipeline);
 
   return std::make_unique<DecryptingRenderer>(std::move(renderer), media_log_,
                                               media_task_runner);

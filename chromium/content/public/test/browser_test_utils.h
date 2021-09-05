@@ -23,6 +23,7 @@
 #include "base/process/process.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "content/public/browser/browser_message_filter.h"
@@ -33,18 +34,19 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/context_menu_params.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/page_type.h"
+#include "content/public/common/untrustworthy_context_menu_params.h"
 #include "ipc/message_filter.h"
 #include "net/base/load_flags.h"
 #include "services/network/public/mojom/network_service.mojom.h"
-#include "storage/common/fileapi/file_system_types.h"
+#include "storage/common/file_system/file_system_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/frame/user_activation_update_type.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom-test-utils.h"
+#include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -70,6 +72,10 @@ class EmbeddedTestServer;
 using test_server::EmbeddedTestServer;
 }
 
+namespace ui {
+class AXPlatformNodeDelegate;
+}
+
 #if defined(OS_WIN)
 namespace Microsoft {
 namespace WRL {
@@ -90,7 +96,6 @@ typedef int PROPERTYID;
 
 namespace content {
 
-class BrowserAccessibility;
 class BrowserContext;
 struct FrameVisualProperties;
 class FrameTreeNode;
@@ -129,7 +134,7 @@ void NavigateToURLBlockUntilNavigationsComplete(WebContents* web_contents,
 // finishes.  Uses a renderer-initiated navigation from script code in the
 // main frame.
 bool NavigateIframeToURL(WebContents* web_contents,
-                         std::string iframe_id,
+                         const std::string& iframe_id,
                          const GURL& url);
 
 // Generate a URL for a file path including a query string.
@@ -325,14 +330,11 @@ void SimulateKeyPressWithoutChar(WebContents* web_contents,
 // Reset touch action for the embedder of a BrowserPluginGuest.
 void ResetTouchAction(RenderWidgetHost* host);
 
-// In some cases when an event is send to guest view, it gets resent to the
-// embedder.
-void ResendGestureScrollUpdateToEmbedder(WebContents* guest_web_contents,
-                                         const blink::WebInputEvent& event);
-
-// When a guest view is pre-processing a mouse/touch event, send a synthetic
-// tap gesture to its RenderWidgetHostView.
-void MaybeSendSyntheticTapGesture(WebContents* guest_web_contents);
+// Requests mouse lock on the implementation of the given RenderWidgetHost
+void RequestMouseLock(RenderWidgetHost* host,
+                      bool user_gesture,
+                      bool privileged,
+                      bool request_unadjusted_movement);
 
 // Spins a run loop until effects of previously forwarded input are fully
 // realized.
@@ -384,7 +386,7 @@ class ScopedSimulateModifierKeyPress {
 bool IsWebcamAvailableOnSystem(WebContents* web_contents);
 
 // Allow ExecuteScript* methods to target either a WebContents or a
-// RenderFrameHost.  Targetting a WebContents means executing the script in the
+// RenderFrameHost.  Targeting a WebContents means executing the script in the
 // RenderFrameHost returned by WebContents::GetMainFrame(), which is the main
 // frame.  Pass a specific RenderFrameHost to target it. Embedders may declare
 // additional ConvertToRenderFrameHost functions for convenience.
@@ -546,9 +548,9 @@ void ConvertToBaseValueList(base::Value::ListStorage* list,
 // string literals. |args| can be a mix of different types.
 template <typename... Args>
 base::ListValue ListValueOf(Args&&... args) {
-  base::ListValue result;
-  ConvertToBaseValueList(&result.GetList(), std::forward<Args>(args)...);
-  return result;
+  base::Value::ListStorage values;
+  ConvertToBaseValueList(&values, std::forward<Args>(args)...);
+  return base::ListValue(std::move(values));
 }
 
 // Replaces $1, $2, $3, etc in |script_template| with JS literal values
@@ -787,6 +789,18 @@ EvalJsResult EvalJsWithManualReply(const ToRenderFrameHost& execution_target,
                                    int32_t world_id = ISOLATED_WORLD_ID_GLOBAL)
     WARN_UNUSED_RESULT;
 
+// Like EvalJs(), but runs |raf_script| inside a requestAnimationFrame handler,
+// and runs |script| after the rendering update has completed. By the time
+// this method returns, any IPCs sent from the renderer process to the browser
+// process during the lifecycle update should already have been received and
+// processed by the browser.
+EvalJsResult EvalJsAfterLifecycleUpdate(
+    const ToRenderFrameHost& execution_target,
+    const std::string& raf_script,
+    const std::string& script,
+    int options = EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+    int32_t world_id = ISOLATED_WORLD_ID_GLOBAL) WARN_UNUSED_RESULT;
+
 // Run a script exactly the same as EvalJs(), but ignore the resulting value.
 //
 // Returns AssertionSuccess() if |script| ran successfully, and
@@ -808,7 +822,7 @@ EvalJsResult EvalJsWithManualReply(const ToRenderFrameHost& execution_target,
 // frame matches.
 RenderFrameHost* FrameMatchingPredicate(
     WebContents* web_contents,
-    const base::Callback<bool(RenderFrameHost*)>& predicate);
+    base::RepeatingCallback<bool(RenderFrameHost*)> predicate);
 
 // Predicates for use with FrameMatchingPredicate.
 bool FrameMatchesName(const std::string& name, RenderFrameHost* frame);
@@ -826,18 +840,28 @@ RenderFrameHost* ChildFrameAt(RenderFrameHost* frame, size_t index);
 bool ExecuteWebUIResourceTest(WebContents* web_contents,
                               const std::vector<int>& js_resource_ids);
 
-// Returns the serialized cookie string for the given url.
-std::string GetCookies(BrowserContext* browser_context, const GURL& url);
+// Returns the serialized cookie string for the given url. Uses an inclusive
+// SameSiteCookieContext by default, which gets cookies regardless of their
+// SameSite attribute.
+std::string GetCookies(
+    BrowserContext* browser_context,
+    const GURL& url,
+    net::CookieOptions::SameSiteCookieContext context =
+        net::CookieOptions::SameSiteCookieContext::MakeInclusive());
 
 // Returns the canonical cookies for the given url.
 std::vector<net::CanonicalCookie> GetCanonicalCookies(
     BrowserContext* browser_context,
     const GURL& url);
 
-// Sets a cookie for the given url. Returns true on success.
+// Sets a cookie for the given url. Uses an inclusive SameSiteCookieContext by
+// default, which gets cookies regardless of their SameSite attribute. Returns
+// true on success.
 bool SetCookie(BrowserContext* browser_context,
                const GURL& url,
-               const std::string& value);
+               const std::string& value,
+               net::CookieOptions::SameSiteCookieContext context =
+                   net::CookieOptions::SameSiteCookieContext::MakeInclusive());
 
 // Fetch the histograms data from other processes. This should be called after
 // the test code has been executed but before performing assertions.
@@ -904,7 +928,7 @@ void WaitForAccessibilityTreeToContainNodeWithName(WebContents* web_contents,
 ui::AXTreeUpdate GetAccessibilityTreeSnapshot(WebContents* web_contents);
 
 // Returns the root accessibility node for the given WebContents.
-BrowserAccessibility* GetRootAccessibilityNode(WebContents* web_contents);
+ui::AXPlatformNodeDelegate* GetRootAccessibilityNode(WebContents* web_contents);
 
 // Finds an accessibility node matching the given criteria.
 struct FindAccessibilityNodeCriteria {
@@ -913,18 +937,18 @@ struct FindAccessibilityNodeCriteria {
   base::Optional<ax::mojom::Role> role;
   base::Optional<std::string> name;
 };
-BrowserAccessibility* FindAccessibilityNode(
+ui::AXPlatformNodeDelegate* FindAccessibilityNode(
     WebContents* web_contents,
     const FindAccessibilityNodeCriteria& criteria);
-BrowserAccessibility* FindAccessibilityNodeInSubtree(
-    BrowserAccessibility* node,
+ui::AXPlatformNodeDelegate* FindAccessibilityNodeInSubtree(
+    ui::AXPlatformNodeDelegate* node,
     const FindAccessibilityNodeCriteria& criteria);
 
 #if defined(OS_WIN)
 // Retrieve the specified interface from an accessibility node.
 template <typename T>
 Microsoft::WRL::ComPtr<T> QueryInterfaceFromNode(
-    BrowserAccessibility* browser_accessibility);
+    ui::AXPlatformNodeDelegate* node);
 
 // Call GetPropertyValue with the given UIA property id with variant type
 // VT_ARRAY | VT_UNKNOWN  on the target browser accessibility node to retrieve
@@ -932,7 +956,7 @@ Microsoft::WRL::ComPtr<T> QueryInterfaceFromNode(
 // automation elements with the expected names.
 void UiaGetPropertyValueVtArrayVtUnknownValidate(
     PROPERTYID property_id,
-    BrowserAccessibility* target_browser_accessibility,
+    ui::AXPlatformNodeDelegate* target_node,
     const std::vector<std::string>& expected_names);
 #endif
 
@@ -976,6 +1000,9 @@ std::vector<RenderWidgetHostView*> GetInputEventRouterRenderWidgetHostViews(
 
 // Returns the focused RenderWidgetHost.
 RenderWidgetHost* GetFocusedRenderWidgetHost(WebContents* web_contents);
+
+// Returns whether or not the RenderWidgetHost thinks it is focused.
+bool IsRenderWidgetHostFocused(const RenderWidgetHost*);
 
 // Returns the focused WebContents.
 WebContents* GetFocusedWebContents(WebContents* web_contents);
@@ -1046,7 +1073,7 @@ class RenderProcessHostWatcher : public RenderProcessHostObserver {
 
   RenderProcessHostWatcher(RenderProcessHost* render_process_host,
                            WatchType type);
-  // Waits for the render process that contains the specified web contents.
+  // Waits for the renderer process that contains the specified web contents.
   RenderProcessHostWatcher(WebContents* web_contents, WatchType type);
   ~RenderProcessHostWatcher() override;
 
@@ -1075,6 +1102,67 @@ class RenderProcessHostWatcher : public RenderProcessHostObserver {
   base::OnceClosure quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderProcessHostWatcher);
+};
+
+// Implementation helper for:
+// *) content-internal content::RenderProcessHostBadIpcMessageWaiter
+//    (declared in //content/test/content_browser_test_utils_internal.h)
+// *) content-public content::RenderProcessHostBadMojoMessageWaiter
+//    (declared below)
+// *) maybe in the future: similar helpers for chrome-layer BadMessageReason
+class RenderProcessHostKillWaiter {
+ public:
+  // |uma_name| is the name of the histogram from which the |bad_message_reason|
+  // can be extracted.
+  RenderProcessHostKillWaiter(RenderProcessHost* render_process_host,
+                              const std::string& uma_name);
+
+  RenderProcessHostKillWaiter(const RenderProcessHostKillWaiter&) = delete;
+  RenderProcessHostKillWaiter& operator=(const RenderProcessHostKillWaiter&) =
+      delete;
+
+  // Waits until the renderer process exits.  Extracts and returns the bad
+  // message reason that should be logged in the |uma_name_| histogram.
+  // Returns |base::nullopt| if the renderer exited normally or didn't log
+  // the |uma_name_| histogram.
+  base::Optional<int> Wait() WARN_UNUSED_RESULT;
+
+ private:
+  RenderProcessHostWatcher exit_watcher_;
+  base::HistogramTester histogram_tester_;
+  std::string uma_name_;
+};
+
+// Helps tests to wait until the given renderer process is terminated because of
+// a bad/invalid mojo message.
+//
+// Example usage:
+//   RenderProcessHostBadMojoMessageWaiter kill_waiter(render_process_host);
+//   ... test code that triggers a renderer kill ...
+//   EXPECT_EQ("expected error message", kill_waiter.Wait());
+class RenderProcessHostBadMojoMessageWaiter {
+ public:
+  explicit RenderProcessHostBadMojoMessageWaiter(
+      RenderProcessHost* render_process_host);
+  ~RenderProcessHostBadMojoMessageWaiter();
+
+  RenderProcessHostBadMojoMessageWaiter(
+      const RenderProcessHostBadMojoMessageWaiter&) = delete;
+  RenderProcessHostBadMojoMessageWaiter& operator=(
+      const RenderProcessHostBadMojoMessageWaiter&) = delete;
+
+  // Waits until |render_process_host| from the constructor is terminated
+  // because of a bad/invalid mojo message and returns the associated error
+  // string.  Returns base::nullopt if the process was terminated for an
+  // unrelated reason.
+  base::Optional<std::string> Wait() WARN_UNUSED_RESULT;
+
+ private:
+  void OnBadMojoMessage(int render_process_id, const std::string& error);
+
+  int monitored_render_process_id_;
+  base::Optional<std::string> observed_mojo_error_;
+  RenderProcessHostKillWaiter kill_waiter_;
 };
 
 // Watches for responses from the DOMAutomationController and keeps them in a
@@ -1147,7 +1235,7 @@ class WebContentsAddedObserver {
   void WebContentsCreated(WebContents* web_contents);
 
   // Callback to WebContentCreated(). Cached so that we can unregister it.
-  base::Callback<void(WebContents*)> web_contents_created_callback_;
+  base::RepeatingCallback<void(WebContents*)> web_contents_created_callback_;
 
   WebContents* web_contents_;
   std::unique_ptr<RenderViewCreatedObserver> child_observer_;
@@ -1526,7 +1614,58 @@ class NavigationHandleCommitObserver : public content::WebContentsObserver {
   bool was_renderer_initiated_;
 };
 
+// A test utility that monitors console messages sent to a WebContents. This
+// can be used to wait for a message that matches a specific filter, an
+// arbitrary message, or monitor all messages sent to the WebContents' console.
+// TODO(devlin): Convert existing tests to Use this in lieu of
+// ConsoleObserverDelegate, since it doesn't require overriding the WebContents'
+// delegate (which isn't always appropriate in a test).
+class WebContentsConsoleObserver : public WebContentsObserver {
+ public:
+  struct Message {
+    blink::mojom::ConsoleMessageLevel log_level;
+    base::string16 message;
+    int32_t line_no;
+    base::string16 source_id;
+  };
+
+  // A filter to apply to incoming console messages to determine whether to
+  // record them. The filter should return `true` if the observer should record
+  // the message, and stop waiting (if it was waiting).
+  using Filter = base::RepeatingCallback<bool(const Message& message)>;
+
+  explicit WebContentsConsoleObserver(content::WebContents* web_contents);
+  ~WebContentsConsoleObserver() override;
+
+  // Waits for a message to come in that matches the set filter, if any. If no
+  // filter is set, waits for the first message that comes in.
+  void Wait();
+
+  // Sets a custom filter to be used while waiting for a message, allowing
+  // more custom filtering (e.g. based on source).
+  void SetFilter(Filter filter);
+
+  // A convenience method to just match the message against a string pattern.
+  void SetPattern(std::string pattern);
+
+  const std::vector<Message>& messages() const { return messages_; }
+
+ private:
+  // WebContentsObserver:
+  void OnDidAddMessageToConsole(blink::mojom::ConsoleMessageLevel log_level,
+                                const base::string16& message,
+                                int32_t line_no,
+                                const base::string16& source_id) override;
+
+  Filter filter_;
+  std::string pattern_;
+  base::RunLoop run_loop_;
+  std::vector<Message> messages_;
+};
+
 // A WebContentsDelegate that catches messages sent to the console.
+// DEPRECATED. Prefer WebContentsConsoleObserver.
+// TODO(devlin): Update usages and remove this.
 class ConsoleObserverDelegate : public WebContentsDelegate {
  public:
   ConsoleObserverDelegate(WebContents* web_contents, const std::string& filter);
@@ -1578,12 +1717,10 @@ class PwnMessageHelper {
                               std::string blob_uuid,
                               int64_t position);
 
-  // Sends WidgetHostMsg_LockMouse
-  static void LockMouse(RenderProcessHost* process,
-                        int routing_id,
-                        bool user_gesture,
-                        bool privileged,
-                        bool request_unadjusted_movement);
+  // Sends FrameHostMsg_OpenURL
+  static void OpenURL(RenderProcessHost* process,
+                      int routing_id,
+                      const GURL& url);
 
  private:
   PwnMessageHelper();  // Not instantiable.
@@ -1592,27 +1729,17 @@ class PwnMessageHelper {
 };
 
 #if defined(USE_AURA)
-// Mock of an OverscrollController so we can inspect the scroll events that it
-// receives. Note that this is only a partial mock as the methods of a real
-// OverscrollController are being invoked.
-// TODO(mcnee): Tests needing this are BrowserPlugin specific. Remove after
-// removing BrowserPlugin (crbug.com/533069).
-class MockOverscrollController {
- public:
-  // Creates a mock and installs it on the given RenderWidgetHostViewAura.
-  // The returned mock is owned by the RWHVA.
-  static MockOverscrollController* Create(RenderWidgetHostView* rwhv);
 
-  virtual ~MockOverscrollController() {}
+// Tests that a |render_widget_host_view| stores a stale content when its frame
+// gets evicted. |render_widget_host_view| has to be a RenderWidgetHostViewAura.
+void VerifyStaleContentOnFrameEviction(
+    RenderWidgetHostView* render_widget_host_view);
 
-  // Waits until the mock receives a consumed GestureScrollUpdate.
-  virtual void WaitForConsumedScroll() = 0;
-};
 #endif  // defined(USE_AURA)
 
-// This class filters for FrameHostMsg_ContextMenu messages coming in
-// from a renderer process, and allows observing the ContextMenuParams
-// as sent by the renderer.
+// This class filters for FrameHostMsg_ContextMenu messages coming in from a
+// renderer process, and allows observing the UntrustworthyContextMenuParams as
+// sent by the renderer.
 class ContextMenuFilter : public content::BrowserMessageFilter {
  public:
   ContextMenuFilter();
@@ -1620,36 +1747,39 @@ class ContextMenuFilter : public content::BrowserMessageFilter {
   bool OnMessageReceived(const IPC::Message& message) override;
   void Wait();
 
-  content::ContextMenuParams get_params() { return last_params_; }
+  content::UntrustworthyContextMenuParams get_params() { return last_params_; }
 
  private:
   ~ContextMenuFilter() override;
 
-  void OnContextMenu(const content::ContextMenuParams& params);
+  void OnContextMenu(const content::UntrustworthyContextMenuParams& params);
 
   std::unique_ptr<base::RunLoop> run_loop_;
   base::OnceClosure quit_closure_;
-  content::ContextMenuParams last_params_;
+  content::UntrustworthyContextMenuParams last_params_;
 
   DISALLOW_COPY_AND_ASSIGN(ContextMenuFilter);
 };
 
-// This class allows tests to wait until FrameHostMsg_UpdateUserActivationState
-// IPC reaches the browser process from a renderer.
-class UpdateUserActivationStateMsgWaiter : public BrowserMessageFilter {
+class UpdateUserActivationStateInterceptor
+    : public blink::mojom::LocalFrameHostInterceptorForTesting {
  public:
-  UpdateUserActivationStateMsgWaiter() : BrowserMessageFilter(FrameMsgStart) {}
+  UpdateUserActivationStateInterceptor();
+  ~UpdateUserActivationStateInterceptor() override;
 
-  bool OnMessageReceived(const IPC::Message& message) override;
-  void Wait();
+  void Init(content::RenderFrameHost* render_frame_host);
+  void set_quit_handler(base::OnceClosure handler);
+  bool update_user_activation_state() { return update_user_activation_state_; }
+
+  blink::mojom::LocalFrameHost* GetForwardingInterface() override;
+  void UpdateUserActivationState(
+      blink::mojom::UserActivationUpdateType update_type) override;
 
  private:
-  ~UpdateUserActivationStateMsgWaiter() override = default;
-
-  void OnUpdateUserActivationState(blink::UserActivationUpdateType);
-
-  bool received_ = false;
-  base::RunLoop run_loop_;
+  content::RenderFrameHost* render_frame_host_;
+  blink::mojom::LocalFrameHost* impl_;
+  base::OnceClosure quit_handler_;
+  bool update_user_activation_state_ = false;
 };
 
 WebContents* GetEmbedderForGuest(content::WebContents* guest);
@@ -1671,16 +1801,13 @@ bool HasValidProcessForProcessGroup(const std::string& process_group_name);
 
 // Performs a simple auto-resize flow and ensures that the embedder gets a
 // single response messages back from the guest, with the expected values.
-bool TestChildOrGuestAutoresize(bool is_guest,
-                                RenderProcessHost* embedder_rph,
-                                RenderWidgetHost* guest_rwh);
+bool TestGuestAutoresize(RenderProcessHost* embedder_rph,
+                         RenderWidgetHost* guest_rwh);
 
-// Class to sniff incoming IPCs for either
-// FrameHostMsg_SynchronizeVisualProperties or
-// BrowserPluginHostMsg_SynchronizeVisualProperties messages. This allows the
-// message to continue to the target child so that processing can be verified by
-// tests.
-// It also monitors for GesturePinchBegin/End events.
+// Class to sniff incoming IPCs for FrameHostMsg_SynchronizeVisualProperties
+// messages. This allows the message to continue to the target child so that
+// processing can be verified by tests. It also monitors for
+// GesturePinchBegin/End events.
 class SynchronizeVisualPropertiesMessageFilter
     : public content::BrowserMessageFilter {
  public:
@@ -1711,9 +1838,6 @@ class SynchronizeVisualPropertiesMessageFilter
   void OnSynchronizeFrameHostVisualProperties(
       const viz::FrameSinkId& frame_sink_id,
       const FrameVisualProperties& visual_properties);
-  void OnSynchronizeBrowserPluginVisualProperties(
-      int browser_plugin_guest_instance_id,
-      FrameVisualProperties visual_properties);
   void OnSynchronizeVisualProperties(
       const viz::FrameSinkId& frame_sink_id,
       const FrameVisualProperties& visual_properties);
@@ -1724,7 +1848,6 @@ class SynchronizeVisualPropertiesMessageFilter
 
   bool OnMessageReceived(const IPC::Message& message) override;
 
-  static const uint32_t kMessageClassesToFilter[2];
   viz::FrameSinkId frame_sink_id_;
   base::RunLoop frame_sink_id_run_loop_;
 

@@ -17,6 +17,7 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/location.h"
@@ -28,7 +29,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
-#include "base/task_runner.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -42,8 +43,8 @@
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/chromeos/login/enterprise_user_session_metrics.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
-#include "chrome/browser/chromeos/login/signin/auth_sync_observer.h"
-#include "chrome/browser/chromeos/login/signin/auth_sync_observer_factory.h"
+#include "chrome/browser/chromeos/login/signin/auth_error_observer.h"
+#include "chrome/browser/chromeos/login/signin/auth_error_observer_factory.h"
 #include "chrome/browser/chromeos/login/users/affiliation.h"
 #include "chrome/browser/chromeos/login/users/avatar/user_image_manager_impl.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_util.h"
@@ -52,6 +53,7 @@
 #include "chrome/browser/chromeos/login/users/supervised_user_manager_impl.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_network_configuration_updater.h"
+#include "chrome/browser/chromeos/policy/external_data_handlers/crostini_ansible_playbook_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/external_data_handlers/native_printers_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/external_data_handlers/print_servers_external_data_handler.h"
 #include "chrome/browser/chromeos/policy/external_data_handlers/user_avatar_image_external_data_handler.h"
@@ -129,8 +131,6 @@ const char kDeviceLocalAccountPendingDataRemoval[] =
 // data.
 const char kDeviceLocalAccountsWithSavedData[] = "PublicAccounts";
 
-constexpr char kGoogleDotCom[] = "@google.com";
-
 constexpr char kBluetoothLoggingUpstartJob[] = "bluetoothlog";
 
 // If the service doesn't exist or the policy is not set, enable managed
@@ -175,7 +175,7 @@ bool GetUserLockAttributes(const user_manager::User* user,
   return true;
 }
 
-// Sets the neccessary delegates in Public Session. They will be active for the
+// Sets the necessary delegates in Public Session. They will be active for the
 // whole user-session and they will go away together with the browser process
 // during logout (the browser process is destroyed during logout), ie. they are
 // not freed and they leak but that is fine.
@@ -197,15 +197,13 @@ policy::MinimumVersionPolicyHandler* GetMinimumVersionPolicyHandler() {
       ->GetMinimumVersionPolicyHandler();
 }
 
-// Starts bluetooth logging service for accounts ending with |kGoogleDotCom|
-// and certain devices.
+// Starts bluetooth logging service for internal accounts and certain devices.
 void MaybeStartBluetoothLogging(const AccountId& account_id) {
-  if (!base::EndsWith(account_id.GetUserEmail(), kGoogleDotCom,
-                      base::CompareCase::INSENSITIVE_ASCII)) {
+  if (!gaia::IsGoogleInternalAccountEmail(account_id.GetUserEmail()))
     return;
-  }
+
   chromeos::UpstartClient::Get()->StartJob(kBluetoothLoggingUpstartJob, {},
-                                           EmptyVoidDBusMethodCallback());
+                                           base::DoNothing());
 }
 
 bool IsManagedSessionEnabled(policy::DeviceLocalAccountPolicyBroker* broker) {
@@ -215,16 +213,6 @@ bool IsManagedSessionEnabled(policy::DeviceLocalAccountPolicyBroker* broker) {
   if (!entry)
     return kManagedSessionEnabledByDefault;
   return entry->value && entry->value->GetBool();
-}
-
-const base::Value::ListStorage* GetListPolicyValue(
-    const policy::PolicyMap& policy_map,
-    const char* policy_key) {
-  const policy::PolicyMap::Entry* entry = policy_map.Get(policy_key);
-  if (!entry || !entry->value || !entry->value->is_list())
-    return nullptr;
-
-  return &entry->value->GetList();
 }
 
 bool AreRiskyPoliciesUsed(policy::DeviceLocalAccountPolicyBroker* broker) {
@@ -254,39 +242,6 @@ bool IsProxyUsed(const PrefService* local_state_prefs) {
   if (!proxy_config || !proxy_config->GetMode(&mode))
     return false;
   return mode != ProxyPrefs::MODE_DIRECT;
-}
-
-bool AreRiskyExtensionsForceInstalled(
-    policy::DeviceLocalAccountPolicyBroker* broker) {
-  const policy::PolicyMap& policy_map = broker->core()->store()->policy_map();
-
-  const base::Value::ListStorage* forcelist =
-      GetListPolicyValue(policy_map, policy::key::kExtensionInstallForcelist);
-
-  // Extension is risky if it's present in force-installed extensions and is not
-  // whitelisted for public sessions.
-
-  if (!forcelist || forcelist->empty())
-    return false;
-
-  for (const base::Value& extension : *forcelist) {
-    if (!extension.is_string())
-      continue;
-
-    // Each extension entry contains an extension id and optional update URL
-    // separated by ';'.
-    std::vector<std::string> extension_items =
-        base::SplitString(extension.GetString(), ";", base::TRIM_WHITESPACE,
-                          base::SPLIT_WANT_NONEMPTY);
-    if (extension_items.empty())
-      continue;
-
-    // If current force-installed extension is not whitelisted for public
-    // sessions, consider the extension risky.
-    if (!extensions::IsWhitelistedForPublicSession(extension_items[0]))
-      return true;
-  }
-  return false;
 }
 
 bool PolicyHasWebTrustedAuthorityCertificate(
@@ -357,7 +312,7 @@ void ChromeUserManagerImpl::ResetPublicAccountDelegatesForTesting() {
 ChromeUserManagerImpl::ChromeUserManagerImpl()
     : ChromeUserManager(base::ThreadTaskRunnerHandle::IsSet()
                             ? base::ThreadTaskRunnerHandle::Get()
-                            : scoped_refptr<base::TaskRunner>()),
+                            : nullptr),
       cros_settings_(CrosSettings::Get()),
       device_local_account_policy_service_(NULL),
       supervised_user_manager_(new SupervisedUserManagerImpl(this)) {
@@ -413,17 +368,20 @@ ChromeUserManagerImpl::ChromeUserManagerImpl()
     GetMinimumVersionPolicyHandler()->AddObserver(this);
   }
 
-  cloud_external_data_policy_handlers_.emplace_back(
+  cloud_external_data_policy_handlers_.push_back(
       std::make_unique<policy::UserAvatarImageExternalDataHandler>(
           cros_settings_, device_local_account_policy_service));
-  cloud_external_data_policy_handlers_.emplace_back(
+  cloud_external_data_policy_handlers_.push_back(
       std::make_unique<policy::WallpaperImageExternalDataHandler>(
           cros_settings_, device_local_account_policy_service));
-  cloud_external_data_policy_handlers_.emplace_back(
+  cloud_external_data_policy_handlers_.push_back(
       std::make_unique<policy::NativePrintersExternalDataHandler>(
           cros_settings_, device_local_account_policy_service));
-  cloud_external_data_policy_handlers_.emplace_back(
+  cloud_external_data_policy_handlers_.push_back(
       std::make_unique<policy::PrintServersExternalDataHandler>(
+          cros_settings_, device_local_account_policy_service));
+  cloud_external_data_policy_handlers_.push_back(
+      std::make_unique<policy::CrostiniAnsiblePlaybookExternalDataHandler>(
           cros_settings_, device_local_account_policy_service));
 
   // Record the stored session length for enrolled device.
@@ -637,12 +595,11 @@ void ChromeUserManagerImpl::Observe(
     const content::NotificationDetails& details) {
   DCHECK_EQ(type, chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED);
   Profile* profile = content::Details<Profile>(details).ptr();
-  if (IsUserLoggedIn() && !IsLoggedInAsGuest() && !IsLoggedInAsKioskApp() &&
-      !IsLoggedInAsArcKioskApp()) {
+  if (IsUserLoggedIn() && !IsLoggedInAsGuest() && !IsLoggedInAsAnyKioskApp()) {
     if (!profile->IsOffTheRecord()) {
-      if (AuthSyncObserver::ShouldObserve(profile)) {
-        AuthSyncObserver* sync_observer =
-            AuthSyncObserverFactory::GetInstance()->GetForProfile(profile);
+      if (AuthErrorObserver::ShouldObserve(profile)) {
+        AuthErrorObserver* sync_observer =
+            AuthErrorObserverFactory::GetInstance()->GetForProfile(profile);
         sync_observer->StartObserving();
       }
       multi_profile_user_controller_->StartObserving(profile);
@@ -1018,8 +975,28 @@ void ChromeUserManagerImpl::ArcKioskAppLoggedIn(user_manager::User* user) {
       user_manager::User::USER_IMAGE_INVALID, false);
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  command_line->AppendSwitch(::switches::kForceAndroidAppMode);
+  command_line->AppendSwitch(::switches::kForceAppMode);
   command_line->AppendSwitch(::switches::kSilentLaunch);
+
+  // Disable window animation since kiosk app runs in a single full screen
+  // window and window animation causes start-up janks.
+  command_line->AppendSwitch(wm::switches::kWindowAnimationsDisabled);
+}
+
+void ChromeUserManagerImpl::WebKioskAppLoggedIn(user_manager::User* user) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  active_user_ = user;
+  active_user_->SetStubImage(
+      std::make_unique<user_manager::UserImage>(
+          *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+              IDR_LOGIN_DEFAULT_USER)),
+      user_manager::User::USER_IMAGE_INVALID, false);
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  command_line->AppendSwitch(::switches::kForceAppMode);
+  command_line->AppendSwitch(
+      ::switches::kSilentLaunch);  // To open no extra windows.
 
   // Disable window animation since kiosk app runs in a single full screen
   // window and window animation causes start-up janks.
@@ -1300,6 +1277,15 @@ void ChromeUserManagerImpl::OnProfileAdded(Profile* profile) {
 
     if (user->HasGaiaAccount())
       GetUserImageManager(user->GetAccountId())->UserProfileCreated();
+
+    // Allow managed guest session user to lock if
+    // |kLoginExtensionApiLaunchExtensionId| is set.
+    if (user->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT &&
+        !profile->GetPrefs()
+             ->GetString(prefs::kLoginExtensionApiLaunchExtensionId)
+             .empty()) {
+      user->set_can_lock(true);
+    }
   }
 
   // If there is pending user switch, do it now.
@@ -1318,8 +1304,7 @@ bool ChromeUserManagerImpl::IsUserAllowed(
 
   return chrome_user_manager_util::IsUserAllowed(
       user, AreSupervisedUsersAllowed(), IsGuestSessionAllowed(),
-      user.HasGaiaAccount() && IsGaiaUserAllowed(user),
-      GetMinimumVersionPolicyHandler()->RequirementsAreSatisfied());
+      user.HasGaiaAccount() && IsGaiaUserAllowed(user));
 }
 
 UserFlow* ChromeUserManagerImpl::GetDefaultUserFlow() const {
@@ -1440,7 +1425,8 @@ bool ChromeUserManagerImpl::IsFullManagementDisclosureNeeded(
     policy::DeviceLocalAccountPolicyBroker* broker) const {
   return IsManagedSessionEnabled(broker) &&
          (AreRiskyPoliciesUsed(broker) ||
-          AreRiskyExtensionsForceInstalled(broker) ||
+          g_browser_process->local_state()->GetBoolean(
+              prefs::kManagedSessionUseFullLoginWarning) ||
           PolicyHasWebTrustedAuthorityCertificate(broker) ||
           IsProxyUsed(GetLocalState()));
 }
@@ -1518,9 +1504,8 @@ void ChromeUserManagerImpl::ScheduleResolveLocale(
     const std::string& locale,
     base::OnceClosure on_resolved_callback,
     std::string* out_resolved_locale) const {
-  base::PostTaskAndReply(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+  base::ThreadPool::PostTaskAndReply(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(ResolveLocale, locale,
                      base::Unretained(out_resolved_locale)),
       std::move(on_resolved_callback));
@@ -1548,6 +1533,9 @@ ChromeUserManagerImpl::CreateUserFromDeviceLocalAccount(
       break;
     case policy::DeviceLocalAccount::TYPE_ARC_KIOSK_APP:
       user.reset(user_manager::User::CreateArcKioskAppUser(account_id));
+      break;
+    case policy::DeviceLocalAccount::TYPE_WEB_KIOSK_APP:
+      user.reset(user_manager::User::CreateWebKioskAppUser(account_id));
       break;
     default:
       NOTREACHED();

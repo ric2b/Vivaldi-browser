@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/core/input/fallback_cursor_event_manager.h"
 
-#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -129,7 +129,7 @@ FallbackCursorEventManager::FallbackCursorEventManager(LocalFrame& root_frame)
   ResetCurrentScrollable();
 }
 
-void FallbackCursorEventManager::Trace(blink::Visitor* visitor) {
+void FallbackCursorEventManager::Trace(Visitor* visitor) {
   visitor->Trace(root_frame_);
   visitor->Trace(current_node_);
 }
@@ -355,8 +355,8 @@ void FallbackCursorEventManager::HandleMouseMoveEvent(const WebMouseEvent& e) {
   if (!root_frame_->GetDocument() || !root_frame_->GetDocument()->View())
     return;
 
-  IntPoint location_in_root_frame{e.PositionInRootFrame().x,
-                                  e.PositionInRootFrame().y};
+  IntPoint location_in_root_frame{e.PositionInRootFrame().x(),
+                                  e.PositionInRootFrame().y()};
 
   // Make sure we unlock all movement if the cursor is outside our bounds. This
   // can happen when the cursor is enabled/disabled (e.g. position: -1,-1).
@@ -388,7 +388,7 @@ void FallbackCursorEventManager::HandleMousePressEvent(const WebMouseEvent& e) {
   ResetCurrentScrollable();
 
   // Re hit test since we need a hit test with child frame.
-  IntPoint location{e.PositionInRootFrame().x, e.PositionInRootFrame().y};
+  IntPoint location{e.PositionInRootFrame().x(), e.PositionInRootFrame().y()};
   HitTestResult hit_test_result =
       HitTest(root_frame_->GetDocument()->GetLayoutView(), location);
   Node* node = hit_test_result.InnerNode();

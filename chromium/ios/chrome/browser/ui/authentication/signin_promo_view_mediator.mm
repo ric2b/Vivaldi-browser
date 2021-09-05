@@ -70,6 +70,9 @@ bool IsSupportedAccessPoint(signin_metrics::AccessPoint access_point) {
     case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
+    case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return false;
   }
@@ -116,6 +119,9 @@ void RecordImpressionsTilSigninButtonsHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
+    case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
@@ -164,6 +170,9 @@ void RecordImpressionsTilDismissHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
+    case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
@@ -212,6 +221,9 @@ void RecordImpressionsTilXButtonHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
+    case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
@@ -252,6 +264,9 @@ const char* DisplayedCountPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
+    case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return nullptr;
   }
@@ -290,6 +305,9 @@ const char* AlreadySeenSigninViewPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
+    case signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN:
+    case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_RENAMED:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return nullptr;
   }
@@ -312,7 +330,7 @@ const char* AlreadySeenSigninViewPreferenceKey(
 @property(nonatomic, weak, readonly) id<SigninPresenter> presenter;
 
 // The coordinator's BrowserState.
-@property(nonatomic, assign, readonly) ios::ChromeBrowserState* browserState;
+@property(nonatomic, assign, readonly) ChromeBrowserState* browserState;
 
 // The access point for the sign-in promo view.
 @property(nonatomic, assign, readonly) signin_metrics::AccessPoint accessPoint;
@@ -345,8 +363,8 @@ const char* AlreadySeenSigninViewPreferenceKey(
 
 + (BOOL)shouldDisplaySigninPromoViewWithAccessPoint:
             (signin_metrics::AccessPoint)accessPoint
-                                       browserState:(ios::ChromeBrowserState*)
-                                                        browserState {
+                                       browserState:
+                                           (ChromeBrowserState*)browserState {
   PrefService* prefs = browserState->GetPrefs();
   const char* displayedCountPreferenceKey =
       DisplayedCountPreferenceKey(accessPoint);
@@ -364,7 +382,7 @@ const char* AlreadySeenSigninViewPreferenceKey(
   return YES;
 }
 
-- (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
+- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
                          accessPoint:(signin_metrics::AccessPoint)accessPoint
                            presenter:(id<SigninPresenter>)presenter {
   self = [super init];

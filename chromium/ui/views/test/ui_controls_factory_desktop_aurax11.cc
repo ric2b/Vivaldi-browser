@@ -2,9 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/views/test/ui_controls_factory_desktop_aurax11.h"
+
+#include <utility>
+#include <vector>
+
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/test/aura_test_utils.h"
@@ -15,9 +23,8 @@
 #include "ui/base/x/x11_util.h"
 #include "ui/compositor/dip_util.h"
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
-#include "ui/events/test/platform_event_waiter.h"
+#include "ui/events/test/x11_event_waiter.h"
 #include "ui/gfx/x/x11.h"
-#include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_connection.h"
 #include "ui/views/test/test_desktop_screen_x11.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_x11.h"
@@ -36,17 +43,6 @@ using ui_controls::UP;
 
 // Mask of the buttons currently down.
 unsigned button_down_mask = 0;
-
-// Returns atom that indidates that the XEvent is marker event.
-Atom MarkerEventAtom() {
-  return gfx::GetAtom("marker_event");
-}
-
-// Returns true when the event is a marker event.
-bool Matcher(const ui::PlatformEvent& event) {
-  return event->xany.type == ClientMessage &&
-      event->xclient.message_type == MarkerEventAtom();
-}
 
 class UIControlsDesktopX11 : public UIControlsAura {
  public:
@@ -103,8 +99,7 @@ class UIControlsDesktopX11 : public UIControlsAura {
     if (alt)
       SetKeycodeAndSendThenMask(host, &xevent, XK_Alt_L, Mod1Mask);
     xevent.xkey.keycode =
-        XKeysymToKeycode(x_display_,
-                         ui::XKeysymForWindowsKeyCode(key, shift));
+        XKeysymToKeycode(x_display_, ui::XKeysymForWindowsKeyCode(key, shift));
     aura::test::PostEventToWindowTreeHost(xevent, host);
 
     // Send key release events.
@@ -122,18 +117,18 @@ class UIControlsDesktopX11 : public UIControlsAura {
     return true;
   }
 
-  bool SendMouseMove(long screen_x, long screen_y) override {
+  bool SendMouseMove(int screen_x, int screen_y) override {
     return SendMouseMoveNotifyWhenDone(screen_x, screen_y, base::OnceClosure());
   }
-  bool SendMouseMoveNotifyWhenDone(long screen_x,
-                                   long screen_y,
+  bool SendMouseMoveNotifyWhenDone(int screen_x,
+                                   int screen_y,
                                    base::OnceClosure closure) override {
     gfx::Point screen_location(screen_x, screen_y);
     gfx::Point root_location = screen_location;
     aura::Window* root_window = RootWindowForPoint(screen_location);
 
     aura::client::ScreenPositionClient* screen_position_client =
-          aura::client::GetScreenPositionClient(root_window);
+        aura::client::GetScreenPositionClient(root_window);
     if (screen_position_client) {
       screen_position_client->ConvertPointFromScreen(root_window,
                                                      &root_location);
@@ -183,7 +178,7 @@ class UIControlsDesktopX11 : public UIControlsAura {
     gfx::Point mouse_loc = aura::Env::GetInstance()->last_mouse_location();
     aura::Window* root_window = RootWindowForPoint(mouse_loc);
     aura::client::ScreenPositionClient* screen_position_client =
-          aura::client::GetScreenPositionClient(root_window);
+        aura::client::GetScreenPositionClient(root_window);
     if (screen_position_client)
       screen_position_client->ConvertPointFromScreen(root_window, &mouse_loc);
     xbutton->x = mouse_loc.x();
@@ -233,19 +228,9 @@ class UIControlsDesktopX11 : public UIControlsAura {
   void RunClosureAfterAllPendingUIEvents(base::OnceClosure closure) {
     if (closure.is_null())
       return;
-    static XEvent* marker_event = nullptr;
-    if (!marker_event) {
-      marker_event = new XEvent();
-      marker_event->xclient.type = ClientMessage;
-      marker_event->xclient.display = x_display_;
-      marker_event->xclient.window = x_window_;
-      marker_event->xclient.format = 8;
-    }
-    marker_event->xclient.message_type = MarkerEventAtom();
-    XSendEvent(x_display_, x_window_, x11::False, 0, marker_event);
-    ui::PlatformEventWaiter::Create(std::move(closure),
-                                    base::BindRepeating(&Matcher));
+    ui::XEventWaiter::Create(x_window_, std::move(closure));
   }
+
  private:
   aura::Window* RootWindowForPoint(const gfx::Point& point) {
     // Most interactive_ui_tests run inside of the aura_test_helper

@@ -214,7 +214,7 @@ class ModelTypeWorkerTest : public ::testing::Test {
     // We don't get to own this object. The |worker_| keeps a unique_ptr to it.
     auto processor = std::make_unique<MockModelTypeProcessor>();
     mock_type_processor_ = processor.get();
-    processor->SetDisconnectCallback(base::Bind(
+    processor->SetDisconnectCallback(base::BindOnce(
         &ModelTypeWorkerTest::DisconnectProcessor, base::Unretained(this)));
 
     std::unique_ptr<Cryptographer> cryptographer_copy;
@@ -470,6 +470,15 @@ class ModelTypeWorkerTest : public ::testing::Test {
     contribution->CleanUp();
   }
 
+  void DoCommitFailure() {
+    std::unique_ptr<CommitContribution> contribution(
+        worker()->GetContribution(INT_MAX));
+    DCHECK(contribution);
+
+    contribution->ProcessCommitFailure(SyncCommitError::kNetworkError);
+    contribution->CleanUp();
+  }
+
   // Callback when processor got disconnected with sync.
   void DisconnectProcessor() {
     DCHECK(!is_processor_disconnected_);
@@ -583,6 +592,7 @@ TEST_F(ModelTypeWorkerTest, SimpleCommit) {
                     /*expected_deletion_count=*/0);
 
   // Exhaustively verify the commit response returned to the model thread.
+  ASSERT_EQ(0U, processor()->GetNumCommitFailures());
   ASSERT_EQ(1U, processor()->GetNumCommitResponses());
   EXPECT_EQ(1U, processor()->GetNthCommitResponse(0).size());
   ASSERT_TRUE(processor()->HasCommitResponse(kHash1));
@@ -727,7 +737,7 @@ TEST_F(ModelTypeWorkerTest, ReceiveUpdates) {
 
   ASSERT_TRUE(processor()->HasUpdateResponse(kHash1));
   const UpdateResponseData& update = processor()->GetUpdateResponse(kHash1);
-  const EntityData& entity = *update.entity;
+  const EntityData& entity = update.entity;
 
   EXPECT_FALSE(entity.id.empty());
   EXPECT_EQ(tag_hash, entity.client_tag_hash);
@@ -757,11 +767,11 @@ TEST_F(ModelTypeWorkerTest, ReceiveUpdates_NoDuplicateHash) {
       processor()->GetNthUpdateResponse(0);
   ASSERT_EQ(3u, result.size());
   ASSERT_TRUE(result[0]);
-  EXPECT_EQ(GenerateTagHash(kTag1), result[0]->entity->client_tag_hash);
+  EXPECT_EQ(GenerateTagHash(kTag1), result[0]->entity.client_tag_hash);
   ASSERT_TRUE(result[1]);
-  EXPECT_EQ(GenerateTagHash(kTag2), result[1]->entity->client_tag_hash);
+  EXPECT_EQ(GenerateTagHash(kTag2), result[1]->entity.client_tag_hash);
   ASSERT_TRUE(result[2]);
-  EXPECT_EQ(GenerateTagHash(kTag3), result[2]->entity->client_tag_hash);
+  EXPECT_EQ(GenerateTagHash(kTag3), result[2]->entity.client_tag_hash);
 }
 
 TEST_F(ModelTypeWorkerTest, ReceiveUpdates_DuplicateHashWithinPartialUpdate) {
@@ -778,8 +788,8 @@ TEST_F(ModelTypeWorkerTest, ReceiveUpdates_DuplicateHashWithinPartialUpdate) {
       processor()->GetNthUpdateResponse(0);
   ASSERT_EQ(1u, result.size());
   ASSERT_TRUE(result[0]);
-  EXPECT_EQ(GenerateTagHash(kTag1), result[0]->entity->client_tag_hash);
-  EXPECT_EQ(kValue2, result[0]->entity->specifics.preference().value());
+  EXPECT_EQ(GenerateTagHash(kTag1), result[0]->entity.client_tag_hash);
+  EXPECT_EQ(kValue2, result[0]->entity.specifics.preference().value());
 }
 
 TEST_F(ModelTypeWorkerTest, ReceiveUpdates_DuplicateHashAcrossPartialUpdates) {
@@ -797,8 +807,8 @@ TEST_F(ModelTypeWorkerTest, ReceiveUpdates_DuplicateHashAcrossPartialUpdates) {
       processor()->GetNthUpdateResponse(0);
   ASSERT_EQ(1u, result.size());
   ASSERT_TRUE(result[0]);
-  EXPECT_EQ(GenerateTagHash(kTag1), result[0]->entity->client_tag_hash);
-  EXPECT_EQ(kValue2, result[0]->entity->specifics.preference().value());
+  EXPECT_EQ(GenerateTagHash(kTag1), result[0]->entity.client_tag_hash);
+  EXPECT_EQ(kValue2, result[0]->entity.specifics.preference().value());
 }
 
 TEST_F(ModelTypeWorkerTest,
@@ -829,9 +839,9 @@ TEST_F(ModelTypeWorkerTest,
       processor()->GetNthUpdateResponse(0);
   ASSERT_EQ(2u, result.size());
   ASSERT_TRUE(result[0]);
-  EXPECT_EQ(entity1.id_string(), result[0]->entity->id);
+  EXPECT_EQ(entity1.id_string(), result[0]->entity.id);
   ASSERT_TRUE(result[1]);
-  EXPECT_EQ(entity2.id_string(), result[1]->entity->id);
+  EXPECT_EQ(entity2.id_string(), result[1]->entity.id);
 }
 
 TEST_F(ModelTypeWorkerTest, ReceiveUpdates_MultipleDuplicateHashes) {
@@ -856,19 +866,18 @@ TEST_F(ModelTypeWorkerTest, ReceiveUpdates_MultipleDuplicateHashes) {
   ASSERT_TRUE(result[0]);
   ASSERT_TRUE(result[1]);
   ASSERT_TRUE(result[2]);
-  EXPECT_EQ(GenerateTagHash(kTag1), result[0]->entity->client_tag_hash);
-  EXPECT_EQ(GenerateTagHash(kTag2), result[1]->entity->client_tag_hash);
-  EXPECT_EQ(GenerateTagHash(kTag3), result[2]->entity->client_tag_hash);
-  EXPECT_EQ(kValue1, result[0]->entity->specifics.preference().value());
-  EXPECT_EQ(kValue2, result[1]->entity->specifics.preference().value());
-  EXPECT_EQ(kValue3, result[2]->entity->specifics.preference().value());
+  EXPECT_EQ(GenerateTagHash(kTag1), result[0]->entity.client_tag_hash);
+  EXPECT_EQ(GenerateTagHash(kTag2), result[1]->entity.client_tag_hash);
+  EXPECT_EQ(GenerateTagHash(kTag3), result[2]->entity.client_tag_hash);
+  EXPECT_EQ(kValue1, result[0]->entity.specifics.preference().value());
+  EXPECT_EQ(kValue2, result[1]->entity.specifics.preference().value());
+  EXPECT_EQ(kValue3, result[2]->entity.specifics.preference().value());
 }
 
+// Covers the scenario where two updates have the same client tag hash but
+// different server IDs. This scenario is considered a bug on the server.
 TEST_F(ModelTypeWorkerTest,
        ReceiveUpdates_DuplicateClientTagHashesForDistinctServerIds) {
-  // This is testing that in a a scenario where two updates are having the same
-  // client tag hashes and different server ids, the proper UMA metrics are
-  // emitted. This scenario is considered a bug on the server.
   NormalInitialize();
 
   // First create two entities with different tags, so they get assigned
@@ -894,7 +903,84 @@ TEST_F(ModelTypeWorkerTest,
       processor()->GetNthUpdateResponse(0);
   ASSERT_EQ(1u, result.size());
   ASSERT_TRUE(result[0]);
-  EXPECT_EQ(entity2.id_string(), result[0]->entity->id);
+  EXPECT_EQ(entity2.id_string(), result[0]->entity.id);
+}
+
+// Covers the scenario where two updates have the same GUID as originator client
+// item ID but different server IDs. This scenario is considered a bug on the
+// server.
+TEST_F(ModelTypeWorkerTest,
+       ReceiveUpdates_DuplicateOriginatorClientIdForDistinctServerIds) {
+  const std::string kOriginatorClientItemId = base::GenerateGUID();
+  const std::string kURL1 = "http://url1";
+  const std::string kURL2 = "http://url2";
+  const std::string kServerId1 = "serverid1";
+  const std::string kServerId2 = "serverid2";
+
+  NormalInitialize();
+
+  sync_pb::SyncEntity entity1;
+  sync_pb::SyncEntity entity2;
+
+  // Generate two entities with the same originator client item ID.
+  entity1.set_id_string(kServerId1);
+  entity2.set_id_string(kServerId2);
+  entity1.mutable_specifics()->mutable_bookmark()->set_url(kURL1);
+  entity2.mutable_specifics()->mutable_bookmark()->set_url(kURL2);
+  entity1.set_originator_client_item_id(kOriginatorClientItemId);
+  entity2.set_originator_client_item_id(kOriginatorClientItemId);
+
+  worker()->ProcessGetUpdatesResponse(
+      server()->GetProgress(), server()->GetContext(), {&entity1, &entity2},
+      status_controller());
+
+  ApplyUpdates();
+
+  // Make sure the first update has been discarded.
+  ASSERT_EQ(1u, processor()->GetNumUpdateResponses());
+  std::vector<const UpdateResponseData*> result =
+      processor()->GetNthUpdateResponse(0);
+  ASSERT_EQ(1u, result.size());
+  ASSERT_TRUE(result[0]);
+  EXPECT_EQ(kURL2, result[0]->entity.specifics.bookmark().url());
+}
+
+// Covers the scenario where two updates have the same originator client item ID
+// but different originator cache GUIDs. This is only possible for legacy
+// bookmarks created before 2015.
+TEST_F(
+    ModelTypeWorkerTest,
+    ReceiveUpdates_DuplicateOriginatorClientIdForDistinctOriginatorCacheGuids) {
+  const std::string kOriginatorClientItemId = "1";
+  const std::string kURL1 = "http://url1";
+  const std::string kURL2 = "http://url2";
+  const std::string kServerId1 = "serverid1";
+  const std::string kServerId2 = "serverid2";
+
+  NormalInitialize();
+
+  sync_pb::SyncEntity entity1;
+  sync_pb::SyncEntity entity2;
+
+  // Generate two entities with the same originator client item ID.
+  entity1.set_id_string(kServerId1);
+  entity2.set_id_string(kServerId2);
+  entity1.mutable_specifics()->mutable_bookmark()->set_url(kURL1);
+  entity2.mutable_specifics()->mutable_bookmark()->set_url(kURL2);
+  entity1.set_originator_cache_guid(base::GenerateGUID());
+  entity2.set_originator_cache_guid(base::GenerateGUID());
+  entity1.set_originator_client_item_id(kOriginatorClientItemId);
+  entity2.set_originator_client_item_id(kOriginatorClientItemId);
+
+  worker()->ProcessGetUpdatesResponse(
+      server()->GetProgress(), server()->GetContext(), {&entity1, &entity2},
+      status_controller());
+
+  ApplyUpdates();
+
+  // Both updates should have made through.
+  ASSERT_EQ(1u, processor()->GetNumUpdateResponses());
+  EXPECT_EQ(2u, processor()->GetNthUpdateResponse(0).size());
 }
 
 // Test that an update download coming in multiple parts gets accumulated into
@@ -915,9 +1001,9 @@ TEST_F(ModelTypeWorkerTest, ReceiveMultiPartUpdates) {
       processor()->GetNthUpdateResponse(0);
   ASSERT_EQ(2U, updates.size());
   ASSERT_TRUE(updates[0]);
-  EXPECT_EQ(GenerateTagHash(kTag1), updates[0]->entity->client_tag_hash);
+  EXPECT_EQ(GenerateTagHash(kTag1), updates[0]->entity.client_tag_hash);
   ASSERT_TRUE(updates[1]);
-  EXPECT_EQ(GenerateTagHash(kTag2), updates[1]->entity->client_tag_hash);
+  EXPECT_EQ(GenerateTagHash(kTag2), updates[1]->entity.client_tag_hash);
 
   // A subsequent update doesn't pass the same entities again.
   TriggerUpdateFromServer(10, kTag3, kValue3);
@@ -925,7 +1011,7 @@ TEST_F(ModelTypeWorkerTest, ReceiveMultiPartUpdates) {
   updates = processor()->GetNthUpdateResponse(1);
   ASSERT_EQ(1U, updates.size());
   ASSERT_TRUE(updates[0]);
-  EXPECT_EQ(GenerateTagHash(kTag3), updates[0]->entity->client_tag_hash);
+  EXPECT_EQ(GenerateTagHash(kTag3), updates[0]->entity.client_tag_hash);
 }
 
 // Test that updates with no entities behave correctly.
@@ -1072,8 +1158,8 @@ TEST_F(ModelTypeWorkerTest, ReceiveDecryptableEntities) {
   // Test some basic properties regarding the update.
   ASSERT_TRUE(processor()->HasUpdateResponse(kHash1));
   const UpdateResponseData& update1 = processor()->GetUpdateResponse(kHash1);
-  EXPECT_EQ(kTag1, update1.entity->specifics.preference().name());
-  EXPECT_EQ(kValue1, update1.entity->specifics.preference().value());
+  EXPECT_EQ(kTag1, update1.entity.specifics.preference().name());
+  EXPECT_EQ(kValue1, update1.entity.specifics.preference().value());
   EXPECT_TRUE(update1.encryption_key_name.empty());
 
   // Set received updates to be encrypted using the new nigori.
@@ -1085,8 +1171,8 @@ TEST_F(ModelTypeWorkerTest, ReceiveDecryptableEntities) {
   // Test its basic features and the value of encryption_key_name.
   ASSERT_TRUE(processor()->HasUpdateResponse(kHash2));
   const UpdateResponseData& update2 = processor()->GetUpdateResponse(kHash2);
-  EXPECT_EQ(kTag2, update2.entity->specifics.preference().name());
-  EXPECT_EQ(kValue2, update2.entity->specifics.preference().value());
+  EXPECT_EQ(kTag2, update2.entity.specifics.preference().name());
+  EXPECT_EQ(kValue2, update2.entity.specifics.preference().value());
   EXPECT_FALSE(update2.encryption_key_name.empty());
 }
 
@@ -1212,8 +1298,8 @@ TEST_F(ModelTypeWorkerTest, ReceiveUndecryptableEntries) {
   EXPECT_EQ(1U, processor()->GetNumUpdateResponses());
   ASSERT_TRUE(processor()->HasUpdateResponse(kHash1));
   const UpdateResponseData& update = processor()->GetUpdateResponse(kHash1);
-  EXPECT_EQ(kTag1, update.entity->specifics.preference().name());
-  EXPECT_EQ(kValue1, update.entity->specifics.preference().value());
+  EXPECT_EQ(kTag1, update.entity.specifics.preference().name());
+  EXPECT_EQ(kValue1, update.entity.specifics.preference().value());
   EXPECT_EQ(GetLocalCryptographerKeyName(), update.encryption_key_name);
 }
 
@@ -1346,7 +1432,7 @@ TEST_F(ModelTypeWorkerTest, PopulateUpdateResponseData) {
   EXPECT_EQ(ModelTypeWorker::SUCCESS,
             ModelTypeWorker::PopulateUpdateResponseData(
                 &cryptographer, PREFERENCES, entity, &response_data));
-  const EntityData& data = *response_data.entity;
+  const EntityData& data = response_data.entity;
   EXPECT_FALSE(data.id.empty());
   EXPECT_FALSE(data.parent_id.empty());
   EXPECT_FALSE(data.is_folder);
@@ -1380,7 +1466,7 @@ TEST_F(ModelTypeWorkerTest, PopulateUpdateResponseDataForBookmarkTombstone) {
             ModelTypeWorker::PopulateUpdateResponseData(
                 &cryptographer, BOOKMARKS, entity, &response_data));
 
-  const EntityData& data = *response_data.entity;
+  const EntityData& data = response_data.entity;
   // A tombstone should remain a tombstone after populating the response data.
   EXPECT_TRUE(data.is_deleted());
 }
@@ -1403,7 +1489,7 @@ TEST_F(ModelTypeWorkerTest,
   EXPECT_EQ(ModelTypeWorker::SUCCESS,
             ModelTypeWorker::PopulateUpdateResponseData(
                 &cryptographer, BOOKMARKS, entity, &response_data));
-  const EntityData& data = *response_data.entity;
+  const EntityData& data = response_data.entity;
   EXPECT_TRUE(
       syncer::UniquePosition::FromProto(data.unique_position).IsValid());
 
@@ -1431,7 +1517,7 @@ TEST_F(ModelTypeWorkerTest,
   EXPECT_EQ(ModelTypeWorker::SUCCESS,
             ModelTypeWorker::PopulateUpdateResponseData(
                 &cryptographer, BOOKMARKS, entity, &response_data));
-  const EntityData& data = *response_data.entity;
+  const EntityData& data = response_data.entity;
   EXPECT_TRUE(
       syncer::UniquePosition::FromProto(data.unique_position).IsValid());
 
@@ -1459,7 +1545,7 @@ TEST_F(ModelTypeWorkerTest,
   EXPECT_EQ(ModelTypeWorker::SUCCESS,
             ModelTypeWorker::PopulateUpdateResponseData(
                 &cryptographer, BOOKMARKS, entity, &response_data));
-  const EntityData& data = *response_data.entity;
+  const EntityData& data = response_data.entity;
   EXPECT_TRUE(
       syncer::UniquePosition::FromProto(data.unique_position).IsValid());
   histogram_tester.ExpectUniqueSample(
@@ -1488,7 +1574,7 @@ TEST_F(ModelTypeWorkerTest,
   EXPECT_EQ(ModelTypeWorker::SUCCESS,
             ModelTypeWorker::PopulateUpdateResponseData(
                 &cryptographer, BOOKMARKS, entity, &response_data));
-  const EntityData& data = *response_data.entity;
+  const EntityData& data = response_data.entity;
   EXPECT_FALSE(
       syncer::UniquePosition::FromProto(data.unique_position).IsValid());
   histogram_tester.ExpectUniqueSample("Sync.Entities.PositioningScheme",
@@ -1512,11 +1598,21 @@ TEST_F(ModelTypeWorkerTest,
   EXPECT_EQ(ModelTypeWorker::SUCCESS,
             ModelTypeWorker::PopulateUpdateResponseData(
                 &cryptographer, PREFERENCES, entity, &response_data));
-  const EntityData& data = *response_data.entity;
+  const EntityData& data = response_data.entity;
   EXPECT_FALSE(
       syncer::UniquePosition::FromProto(data.unique_position).IsValid());
   histogram_tester.ExpectTotalCount("Sync.Entities.PositioningScheme",
                                     /*count=*/0);
+}
+
+TEST_F(ModelTypeWorkerTest, ShouldPropagateCommitFailure) {
+  NormalInitialize();
+  processor()->SetCommitRequest(GenerateCommitRequest(kTag1, kValue1));
+
+  DoCommitFailure();
+
+  EXPECT_EQ(1U, processor()->GetNumCommitFailures());
+  EXPECT_EQ(0U, processor()->GetNumCommitResponses());
 }
 
 TEST_F(ModelTypeWorkerTest, PopulateUpdateResponseDataForBookmarkWithGUID) {
@@ -1539,7 +1635,7 @@ TEST_F(ModelTypeWorkerTest, PopulateUpdateResponseDataForBookmarkWithGUID) {
             ModelTypeWorker::PopulateUpdateResponseData(
                 &cryptographer, BOOKMARKS, entity, &response_data));
 
-  const EntityData& data = *response_data.entity;
+  const EntityData& data = response_data.entity;
 
   EXPECT_EQ(kGuid1, data.specifics.bookmark().guid());
   EXPECT_EQ(kGuid2, data.originator_client_item_id);
@@ -1564,7 +1660,7 @@ TEST_F(ModelTypeWorkerTest,
             ModelTypeWorker::PopulateUpdateResponseData(
                 &cryptographer, BOOKMARKS, entity, &response_data));
 
-  const EntityData& data = *response_data.entity;
+  const EntityData& data = response_data.entity;
 
   EXPECT_EQ(kGuid1, data.originator_client_item_id);
   EXPECT_EQ(kGuid1, data.specifics.bookmark().guid());
@@ -1590,10 +1686,30 @@ TEST_F(ModelTypeWorkerTest,
             ModelTypeWorker::PopulateUpdateResponseData(
                 &cryptographer, BOOKMARKS, entity, &response_data));
 
-  const EntityData& data = *response_data.entity;
+  const EntityData& data = response_data.entity;
 
   EXPECT_EQ(kInvalidOCII, data.originator_client_item_id);
-  EXPECT_TRUE(data.specifics.bookmark().guid().empty());
+  EXPECT_TRUE(base::IsValidGUIDOutputString(data.specifics.bookmark().guid()));
+}
+
+TEST_F(ModelTypeWorkerTest,
+       PopulateUpdateResponseDataForWalletDataWithMissingClientTagHash) {
+  NormalInitialize();
+  UpdateResponseData response_data;
+  DirectoryCryptographer cryptographer;
+
+  // Set up the entity with an arbitrary value for an arbitrary field in the
+  // specifics (so that it _has_ autofill wallet specifics).
+  sync_pb::SyncEntity entity;
+  entity.mutable_specifics()->mutable_autofill_wallet()->set_type(
+      sync_pb::AutofillWalletSpecifics::POSTAL_ADDRESS);
+
+  ASSERT_EQ(ModelTypeWorker::SUCCESS,
+            ModelTypeWorker::PopulateUpdateResponseData(
+                &cryptographer, AUTOFILL_WALLET_DATA, entity, &response_data));
+
+  // The client tag hash gets filled in by the worker.
+  EXPECT_FALSE(response_data.entity.client_tag_hash.value().empty());
 }
 
 class GetLocalChangesRequestTest : public testing::Test {
@@ -1761,11 +1877,11 @@ TEST_F(ModelTypeWorkerPasswordsTest, ReceiveDecryptablePasswordEntities) {
   // Test its basic features and the value of encryption_key_name.
   ASSERT_TRUE(processor()->HasUpdateResponse(kHash1));
   const UpdateResponseData& update = processor()->GetUpdateResponse(kHash1);
-  EXPECT_FALSE(update.entity->specifics.password().has_encrypted());
-  EXPECT_FALSE(update.entity->specifics.has_encrypted());
+  EXPECT_FALSE(update.entity.specifics.password().has_encrypted());
+  EXPECT_FALSE(update.entity.specifics.has_encrypted());
   ASSERT_TRUE(
-      update.entity->specifics.password().has_client_only_encrypted_data());
-  EXPECT_EQ(kPassword, update.entity->specifics.password()
+      update.entity.specifics.password().has_client_only_encrypted_data());
+  EXPECT_EQ(kPassword, update.entity.specifics.password()
                            .client_only_encrypted_data()
                            .password_value());
 }
@@ -1838,11 +1954,11 @@ TEST_F(ModelTypeWorkerPasswordsTest, ReceiveUndecryptablePasswordEntries) {
   ASSERT_TRUE(processor()->HasUpdateResponse(kHash1));
   const UpdateResponseData& update = processor()->GetUpdateResponse(kHash1);
   // Password should now be decrypted and sent to the processor.
-  EXPECT_TRUE(update.entity->specifics.has_password());
-  EXPECT_FALSE(update.entity->specifics.password().has_encrypted());
+  EXPECT_TRUE(update.entity.specifics.has_password());
+  EXPECT_FALSE(update.entity.specifics.password().has_encrypted());
   ASSERT_TRUE(
-      update.entity->specifics.password().has_client_only_encrypted_data());
-  EXPECT_EQ(kPassword, update.entity->specifics.password()
+      update.entity.specifics.password().has_client_only_encrypted_data());
+  EXPECT_EQ(kPassword, update.entity.specifics.password()
                            .client_only_encrypted_data()
                            .password_value());
 }
@@ -1901,7 +2017,10 @@ TEST_F(ModelTypeWorkerBookmarksTest, CanDecryptUpdateWithMissingBookmarkGUID) {
   // Generate specifics without a GUID.
   sync_pb::SyncEntity entity;
   entity.mutable_specifics()->mutable_bookmark()->set_url("www.foo.com");
-  entity.mutable_specifics()->mutable_bookmark()->set_title("Title");
+  entity.mutable_specifics()
+      ->mutable_bookmark()
+      ->set_legacy_canonicalized_title("Title");
+  entity.set_id_string("testserverid");
   entity.set_originator_client_item_id(kGuid1);
   *entity.mutable_unique_position() =
       UniquePosition::InitialPosition(UniquePosition::RandomSuffix()).ToProto();
@@ -1927,12 +2046,12 @@ TEST_F(ModelTypeWorkerBookmarksTest, CanDecryptUpdateWithMissingBookmarkGUID) {
   EXPECT_EQ(kGuid1, processor()
                         ->GetNthUpdateResponse(1)
                         .at(0)
-                        ->entity->originator_client_item_id);
+                        ->entity.originator_client_item_id);
 
   EXPECT_EQ(kGuid1, processor()
                         ->GetNthUpdateResponse(1)
                         .at(0)
-                        ->entity->specifics.bookmark()
+                        ->entity.specifics.bookmark()
                         .guid());
 }
 
@@ -1949,7 +2068,10 @@ TEST_F(ModelTypeWorkerBookmarksTest,
   // originator_client_item_id.
   sync_pb::SyncEntity entity;
   entity.mutable_specifics()->mutable_bookmark()->set_url("www.foo.com");
-  entity.mutable_specifics()->mutable_bookmark()->set_title("Title");
+  entity.mutable_specifics()
+      ->mutable_bookmark()
+      ->set_legacy_canonicalized_title("Title");
+  entity.set_id_string("testserverid");
   entity.set_originator_client_item_id(kInvalidOCII);
   *entity.mutable_unique_position() =
       UniquePosition::InitialPosition(UniquePosition::RandomSuffix()).ToProto();
@@ -1975,13 +2097,13 @@ TEST_F(ModelTypeWorkerBookmarksTest,
   EXPECT_EQ(kInvalidOCII, processor()
                               ->GetNthUpdateResponse(1)
                               .at(0)
-                              ->entity->originator_client_item_id);
+                              ->entity.originator_client_item_id);
 
-  EXPECT_EQ("", processor()
-                    ->GetNthUpdateResponse(1)
-                    .at(0)
-                    ->entity->specifics.bookmark()
-                    .guid());
+  EXPECT_TRUE(base::IsValidGUIDOutputString(processor()
+                                                ->GetNthUpdateResponse(1)
+                                                .at(0)
+                                                ->entity.specifics.bookmark()
+                                                .guid()));
 }
 
 TEST_F(ModelTypeWorkerBookmarksTest,
@@ -1996,6 +2118,7 @@ TEST_F(ModelTypeWorkerBookmarksTest,
   // Generate specifics without a GUID.
   sync_pb::SyncEntity entity;
   entity.mutable_specifics()->mutable_bookmark();
+  entity.set_id_string("testserverid");
   entity.set_originator_client_item_id(kGuid1);
   *entity.mutable_unique_position() =
       UniquePosition::InitialPosition(UniquePosition::RandomSuffix()).ToProto();
@@ -2015,12 +2138,12 @@ TEST_F(ModelTypeWorkerBookmarksTest,
   EXPECT_EQ(kGuid1, processor()
                         ->GetNthUpdateResponse(0)
                         .at(0)
-                        ->entity->originator_client_item_id);
+                        ->entity.originator_client_item_id);
 
   EXPECT_EQ(kGuid1, processor()
                         ->GetNthUpdateResponse(0)
                         .at(0)
-                        ->entity->specifics.bookmark()
+                        ->entity.specifics.bookmark()
                         .guid());
 }
 
@@ -2037,6 +2160,7 @@ TEST_F(ModelTypeWorkerBookmarksTest,
   // originator_client_item_id.
   sync_pb::SyncEntity entity;
   entity.mutable_specifics()->mutable_bookmark();
+  entity.set_id_string("testserverid");
   entity.set_originator_client_item_id(kInvalidOCII);
   *entity.mutable_unique_position() =
       UniquePosition::InitialPosition(UniquePosition::RandomSuffix()).ToProto();
@@ -2056,14 +2180,13 @@ TEST_F(ModelTypeWorkerBookmarksTest,
   EXPECT_EQ(kInvalidOCII, processor()
                               ->GetNthUpdateResponse(0)
                               .at(0)
-                              ->entity->originator_client_item_id);
+                              ->entity.originator_client_item_id);
 
-  EXPECT_TRUE(processor()
-                  ->GetNthUpdateResponse(0)
-                  .at(0)
-                  ->entity->specifics.bookmark()
-                  .guid()
-                  .empty());
+  EXPECT_TRUE(base::IsValidGUIDOutputString(processor()
+                                                ->GetNthUpdateResponse(0)
+                                                .at(0)
+                                                ->entity.specifics.bookmark()
+                                                .guid()));
 }
 
 }  // namespace syncer

@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/svg/properties/svg_list_property_helper.h"
 #include "third_party/blink/renderer/core/svg/svg_number.h"
 #include "third_party/blink/renderer/core/svg/svg_parsing_error.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
@@ -53,7 +54,7 @@ class SVGNumberList final
   String ValueAsString() const override;
 
   void Add(SVGPropertyBase*, SVGElement*) override;
-  void CalculateAnimatedValue(SVGAnimationElement*,
+  void CalculateAnimatedValue(const SVGAnimateElement&,
                               float percentage,
                               unsigned repeat_count,
                               SVGPropertyBase* from_value,
@@ -72,7 +73,12 @@ class SVGNumberList final
   SVGParsingError Parse(const CharType*& ptr, const CharType* end);
 };
 
-DEFINE_SVG_PROPERTY_TYPE_CASTS(SVGNumberList);
+template <>
+struct DowncastTraits<SVGNumberList> {
+  static bool AllowFrom(const SVGPropertyBase& value) {
+    return value.GetType() == SVGNumberList::ClassType();
+  }
+};
 
 }  // namespace blink
 

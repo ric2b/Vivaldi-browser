@@ -23,6 +23,7 @@
 #include "base/posix/eintr_wrapper.h"
 #include "base/rand_util.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -295,11 +296,11 @@ void UDPSocketPosix::Close() {
     return;
 
   // Zero out any pending read/write callback state.
-  read_buf_ = NULL;
+  read_buf_.reset();
   read_buf_len_ = 0;
   read_callback_.Reset();
   recv_from_address_ = NULL;
-  write_buf_ = NULL;
+  write_buf_.reset();
   write_buf_len_ = 0;
   write_callback_.Reset();
   send_to_address_.reset();
@@ -739,7 +740,7 @@ void UDPSocketPosix::DidCompleteRead() {
   int result =
       InternalRecvFrom(read_buf_.get(), read_buf_len_, recv_from_address_);
   if (result != ERR_IO_PENDING) {
-    read_buf_ = NULL;
+    read_buf_.reset();
     read_buf_len_ = 0;
     recv_from_address_ = NULL;
     bool ok = read_socket_watcher_.StopWatchingFileDescriptor();
@@ -776,7 +777,7 @@ void UDPSocketPosix::DidCompleteWrite() {
       InternalSendTo(write_buf_.get(), write_buf_len_, send_to_address_.get());
 
   if (result != ERR_IO_PENDING) {
-    write_buf_ = NULL;
+    write_buf_.reset();
     write_buf_len_ = 0;
     send_to_address_.reset();
     write_socket_watcher_.StopWatchingFileDescriptor();
@@ -1328,10 +1329,8 @@ void UDPSocketPosix::FlushPending() {
 // some tests it seemed like following the advice just broke in other
 // ways.
 base::SequencedTaskRunner* UDPSocketPosix::GetTaskRunner() {
-  if (task_runner_ == nullptr) {
-    task_runner_ =
-        CreateSequencedTaskRunner(base::TaskTraits(base::ThreadPool()));
-  }
+  if (task_runner_ == nullptr)
+    task_runner_ = base::ThreadPool::CreateSequencedTaskRunner({});
   return task_runner_.get();
 }
 

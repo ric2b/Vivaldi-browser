@@ -23,6 +23,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/value_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -47,14 +48,15 @@
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "net/base/mime_util.h"
-#include "storage/browser/fileapi/external_mount_points.h"
-#include "storage/browser/fileapi/file_system_context.h"
-#include "storage/browser/fileapi/file_system_operation_runner.h"
-#include "storage/browser/fileapi/isolated_context.h"
-#include "storage/common/fileapi/file_system_types.h"
-#include "storage/common/fileapi/file_system_util.h"
+#include "storage/browser/file_system/external_mount_points.h"
+#include "storage/browser/file_system/file_system_context.h"
+#include "storage/browser/file_system/file_system_operation_runner.h"
+#include "storage/browser/file_system/isolated_context.h"
+#include "storage/common/file_system/file_system_types.h"
+#include "storage/common/file_system/file_system_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
+#include "url/origin.h"
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_browser_finder.h"
@@ -190,7 +192,7 @@ void PassFileInfoToUIThread(const FileInfoOptCallback& callback,
   std::unique_ptr<base::File::Info> file_info(
       result == base::File::FILE_OK ? new base::File::Info(info) : NULL);
   base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(callback, base::Passed(&file_info)));
+                 base::BindOnce(callback, std::move(file_info)));
 }
 
 // Gets a WebContents instance handle for a platform app hosted in
@@ -337,9 +339,8 @@ ExtensionFunction::ResponseAction FileSystemGetWritableEntryFunction::Run() {
     return RespondNow(Error(error));
   }
 
-  base::PostTaskAndReply(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+  base::ThreadPool::PostTaskAndReply(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&FileSystemGetWritableEntryFunction::SetIsDirectoryAsync,
                      this),
       base::BindOnce(
@@ -523,9 +524,8 @@ void FileSystemChooseEntryFunction::FilesSelected(
                                       browser_context(), paths[0]);
 #endif
 
-    base::PostTask(
-        FROM_HERE,
-        {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
         base::BindOnce(
             &FileSystemChooseEntryFunction::ConfirmDirectoryAccessAsync, this,
             non_native_path, paths, web_contents));
@@ -602,9 +602,10 @@ void FileSystemChooseEntryFunction::ConfirmSensitiveDirectoryAccess(
   delegate->ConfirmSensitiveDirectoryAccess(
       app_file_handler_util::HasFileSystemWritePermission(extension_.get()),
       base::UTF8ToUTF16(extension_->name()), web_contents,
-      base::Bind(&FileSystemChooseEntryFunction::OnDirectoryAccessConfirmed,
-                 this, paths),
-      base::Bind(&FileSystemChooseEntryFunction::FileSelectionCanceled, this));
+      base::BindOnce(&FileSystemChooseEntryFunction::OnDirectoryAccessConfirmed,
+                     this, paths),
+      base::BindOnce(&FileSystemChooseEntryFunction::FileSelectionCanceled,
+                     this));
 }
 
 void FileSystemChooseEntryFunction::OnDirectoryAccessConfirmed(
@@ -757,7 +758,7 @@ ExtensionFunction::ResponseAction FileSystemChooseEntryFunction::Run() {
     return RespondLater();
   }
 
-  base::Callback<void(bool)> set_initial_path_callback = base::Bind(
+  base::OnceCallback<void(bool)> set_initial_path_callback = base::BindOnce(
       &FileSystemChooseEntryFunction::SetInitialPathAndShowPicker, this,
       previous_path, suggested_name, file_type_info, picker_type);
 
@@ -767,16 +768,15 @@ ExtensionFunction::ResponseAction FileSystemChooseEntryFunction::Run() {
       ExtensionsAPIClient::Get()->GetNonNativeFileSystemDelegate();
   if (delegate &&
       delegate->IsUnderNonNativeLocalPath(browser_context(), previous_path)) {
-    delegate->IsNonNativeLocalPathDirectory(browser_context(), previous_path,
-                                            set_initial_path_callback);
+    delegate->IsNonNativeLocalPathDirectory(
+        browser_context(), previous_path, std::move(set_initial_path_callback));
     return RespondLater();
   }
 #endif
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::Bind(&base::DirectoryExists, previous_path),
-      set_initial_path_callback);
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(&base::DirectoryExists, previous_path),
+      std::move(set_initial_path_callback));
 
   return RespondLater();
 }
@@ -816,14 +816,14 @@ ExtensionFunction::ResponseAction FileSystemRetainEntryFunction::Run() {
     if (!storage::CrackIsolatedFileSystemName(filesystem_name, &filesystem_id))
       return RespondNow(Error(kRetainEntryError));
 
-    const GURL site =
-        util::GetSiteForExtensionId(extension_id(), browser_context());
     storage::FileSystemContext* const context =
-        content::BrowserContext::GetStoragePartitionForSite(browser_context(),
-                                                            site)
+        util::GetStoragePartitionForExtensionId(extension_id(),
+                                                browser_context())
             ->GetFileSystemContext();
+    const GURL origin =
+        util::GetSiteForExtensionId(extension_id(), browser_context());
     const storage::FileSystemURL url = context->CreateCrackedFileSystemURL(
-        site, storage::kFileSystemTypeIsolated,
+        url::Origin::Create(origin), storage::kFileSystemTypeIsolated,
         storage::IsolatedContext::GetInstance()
             ->CreateVirtualRootPath(filesystem_id)
             .Append(base::FilePath::FromUTF8Unsafe(filesystem_path)));

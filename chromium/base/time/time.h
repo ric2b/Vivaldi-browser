@@ -121,9 +121,11 @@ class BASE_EXPORT TimeDelta {
   constexpr TimeDelta() : delta_(0) {}
 
   // Converts units of time to TimeDeltas.
-  // WARNING: Floating point arithmetic is such that FromXXXD(t.InXXXF()) may
-  // not precisely equal |t|. Hence, floating point values should not be used
-  // for storage.
+  // These conversions treat minimum argument values as min type values or -inf,
+  // and maximum ones as max type values or +inf; and their results will produce
+  // an is_min() or is_max() TimeDelta. WARNING: Floating point arithmetic is
+  // such that FromXXXD(t.InXXXF()) may not precisely equal |t|. Hence, floating
+  // point values should not be used for storage.
   static constexpr TimeDelta FromDays(int days);
   static constexpr TimeDelta FromHours(int hours);
   static constexpr TimeDelta FromMinutes(int minutes);
@@ -206,14 +208,16 @@ class BASE_EXPORT TimeDelta {
   ABI::Windows::Foundation::DateTime ToWinrtDateTime() const;
 #endif
 
-  // Returns the time delta in some unit. The InXYZF versions return a floating
+  // Returns the time delta in some unit. Minimum argument values return as
+  // -inf for doubles and min type values otherwise. Maximum ones are treated as
+  // +inf for doubles and max type values otherwise. Their results will produce
+  // an is_min() or is_max() TimeDelta. The InXYZF versions return a floating
   // point value. The InXYZ versions return a truncated value (aka rounded
   // towards zero, std::trunc() behavior). The InXYZFloored() versions round to
   // lesser integers (std::floor() behavior). The XYZRoundedUp() versions round
-  // up to greater integers (std::ceil() behavior).
-  // WARNING: Floating point arithmetic is such that FromXXXD(t.InXXXF()) may
-  // not precisely equal |t|. Hence, floating point values should not be used
-  // for storage.
+  // up to greater integers (std::ceil() behavior). WARNING: Floating point
+  // arithmetic is such that FromXXXD(t.InXXXF()) may not precisely equal |t|.
+  // Hence, floating point values should not be used for storage.
   int InDays() const;
   int InDaysFloored() const;
   int InHours() const;
@@ -241,7 +245,15 @@ class BASE_EXPORT TimeDelta {
   constexpr TimeDelta& operator-=(TimeDelta other) {
     return *this = (*this - other);
   }
-  constexpr TimeDelta operator-() const { return TimeDelta(-delta_); }
+  constexpr TimeDelta operator-() const {
+    if (is_max()) {
+      return Min();
+    }
+    if (is_min()) {
+      return Max();
+    }
+    return TimeDelta(-delta_);
+  }
 
   // Computations with numeric types.
   template <typename T>
@@ -276,9 +288,33 @@ class BASE_EXPORT TimeDelta {
     return *this = (*this / a);
   }
 
-  constexpr int64_t operator/(TimeDelta a) const { return delta_ / a.delta_; }
+  constexpr int64_t operator/(TimeDelta a) const {
+    if (a.delta_ == 0) {
+      return delta_ < 0 ? std::numeric_limits<int64_t>::min()
+                        : std::numeric_limits<int64_t>::max();
+    }
+    if (is_max()) {
+      if (a.delta_ < 0) {
+        return std::numeric_limits<int64_t>::min();
+      }
+      return std::numeric_limits<int64_t>::max();
+    }
+    if (is_min()) {
+      if (a.delta_ > 0) {
+        return std::numeric_limits<int64_t>::min();
+      }
+      return std::numeric_limits<int64_t>::max();
+    }
+    if (a.is_max()) {
+      return 0;
+    }
+    return delta_ / a.delta_;
+  }
 
   constexpr TimeDelta operator%(TimeDelta a) const {
+    if (a.is_min() || a.is_max()) {
+      return TimeDelta(delta_);
+    }
     return TimeDelta(delta_ % a.delta_);
   }
   TimeDelta& operator%=(TimeDelta other) { return *this = (*this % other); }
@@ -488,6 +524,7 @@ inline constexpr TimeClass operator+(TimeDelta delta, TimeClass t) {
 
 // Represents a wall clock time in UTC. Values are not guaranteed to be
 // monotonically non-decreasing and are subject to large amounts of skew.
+// Time is stored internally as microseconds since the Windows epoch (1601).
 class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
  public:
   // Offset of UNIX epoch (1970-01-01 00:00:00 UTC) from Windows FILETIME epoch
@@ -513,7 +550,7 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
 #if defined(OS_WIN)
   static constexpr int kExplodedMinYear = 1601;
   static constexpr int kExplodedMaxYear = 30827;
-#elif defined(OS_IOS)
+#elif defined(OS_IOS) && !__LP64__
   static constexpr int kExplodedMinYear = std::numeric_limits<int>::min();
   static constexpr int kExplodedMaxYear = std::numeric_limits<int>::max();
 #elif defined(OS_MACOSX)
@@ -606,8 +643,14 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   // Converts to/from the Javascript convention for times, a number of
   // milliseconds since the epoch:
   // https://developer.mozilla.org/en/JavaScript/Reference/Global_Objects/Date/getTime.
+  //
+  // Don't use ToJsTime() in new code, since it contains a subtle hack (only
+  // exactly 1601-01-01 00:00 UTC is represented as 1970-01-01 00:00 UTC), and
+  // that is not appropriate for general use. Try to use ToJsTimeIgnoringNull()
+  // unless you have a very good reason to use ToJsTime().
   static Time FromJsTime(double ms_since_epoch);
   double ToJsTime() const;
+  double ToJsTimeIgnoringNull() const;
 
   // Converts to/from Java convention for times, a number of milliseconds since
   // the epoch. Because the Java format has less resolution, converting to Java
@@ -641,6 +684,11 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
 
   // Enable or disable Windows high resolution timer.
   static void EnableHighResolutionTimer(bool enable);
+
+  // Read the minimum timer interval from the feature list. This should be
+  // called once after the feature list is initialized. This is needed for
+  // an experiment - see https://crbug.com/927165
+  static void ReadMinTimerIntervalLowResMs();
 
   // Activates or deactivates the high resolution timer based on the |activate|
   // flag.  If the HighResolutionTimer is not Enabled (see
@@ -730,7 +778,8 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
  private:
   friend class time_internal::TimeBase<Time>;
 
-  constexpr explicit Time(int64_t us) : TimeBase(us) {}
+  constexpr explicit Time(int64_t microseconds_since_win_epoch)
+      : TimeBase(microseconds_since_win_epoch) {}
 
   // Explodes the given time to either local time |is_local = true| or UTC
   // |is_local = false|.
@@ -762,6 +811,15 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   // Comparison does not consider |day_of_week| when doing the operation.
   static bool ExplodedMostlyEquals(const Exploded& lhs,
                                    const Exploded& rhs) WARN_UNUSED_RESULT;
+
+  // Converts the provided time in milliseconds since the Unix epoch (1970) to a
+  // Time object, avoiding overflows.
+  static bool FromMillisecondsSinceUnixEpoch(int64_t unix_milliseconds,
+                                             Time* time) WARN_UNUSED_RESULT;
+
+  // Returns the milliseconds since the Unix epoch (1970), rounding the
+  // microseconds towards -infinity.
+  int64_t ToRoundedDownMillisecondsSinceUnixEpoch() const;
 };
 
 // static

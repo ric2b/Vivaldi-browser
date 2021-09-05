@@ -5,6 +5,7 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
+  generate_java = true
   sources = [
     "cursor.mojom",
     "ui_base_types.mojom",
@@ -12,6 +13,7 @@ mojom("mojom") {
   ]
 
   public_deps = [
+    ":cursor_type",
     "//mojo/public/mojom/base",
     "//skia/public/mojom",
     "//ui/gfx/geometry/mojom",
@@ -19,16 +21,21 @@ mojom("mojom") {
   ]
 }
 
+mojom("cursor_type") {
+  generate_java = true
+
+  sources = [ "cursor_type.mojom" ]
+}
+
 source_set("unittests") {
   testonly = true
-  sources = [
-    "cursor_mojom_traits_unittest.cc",
-  ]
+  sources = [ "cursor_mojom_traits_unittest.cc" ]
   deps = [
     ":mojom",
     "//skia/public/mojom",
     "//testing/gtest",
     "//ui/base",
+    "//ui/base/cursor",
     "//ui/events",
     "//ui/gfx/geometry/mojom:mojom_traits",
   ]

@@ -37,8 +37,8 @@ class DummyFrameScheduler : public FrameScheduler {
   bool IsPageVisible() const override { return true; }
   void SetPaused(bool) override {}
   void SetShouldReportPostedTasksWhenDisabled(bool) override {}
-  void SetCrossOrigin(bool) override {}
-  bool IsCrossOrigin() const override { return false; }
+  void SetCrossOriginToMainFrame(bool) override {}
+  bool IsCrossOriginToMainFrame() const override { return false; }
   void SetIsAdFrame() override {}
   bool IsAdFrame() const override { return false; }
   void TraceUrlChange(const String&) override {}
@@ -121,6 +121,11 @@ class DummyPageScheduler : public PageScheduler {
     return false;
   }
   bool RequestBeginMainFrameNotExpected(bool) override { return false; }
+  WebScopedVirtualTimePauser CreateWebScopedVirtualTimePauser(
+      const String& name,
+      WebScopedVirtualTimePauser::VirtualTaskDuration) override {
+    return WebScopedVirtualTimePauser();
+  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(DummyPageScheduler);
@@ -167,6 +172,10 @@ class DummyThreadScheduler : public ThreadScheduler {
   }
 
   scoped_refptr<base::SingleThreadTaskRunner> IPCTaskRunner() override {
+    return base::ThreadTaskRunnerHandle::Get();
+  }
+
+  scoped_refptr<base::SingleThreadTaskRunner> NonWakingTaskRunner() override {
     return base::ThreadTaskRunnerHandle::Get();
   }
 
@@ -222,11 +231,6 @@ class DummyWebThreadScheduler : public WebThreadScheduler,
   }
 
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override {
-    DCHECK(WTF::IsMainThread());
-    return base::ThreadTaskRunnerHandle::Get();
-  }
-
-  scoped_refptr<base::SingleThreadTaskRunner> InputTaskRunner() override {
     DCHECK(WTF::IsMainThread());
     return base::ThreadTaskRunnerHandle::Get();
   }

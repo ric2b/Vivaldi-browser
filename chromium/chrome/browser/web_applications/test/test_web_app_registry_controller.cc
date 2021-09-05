@@ -52,11 +52,37 @@ void TestWebAppRegistryController::UnregisterAll() {
     update->DeleteApp(app_id);
 }
 
+void TestWebAppRegistryController::SetInstallWebAppsAfterSyncDelegate(
+    InstallWebAppsAfterSyncDelegate delegate) {
+  install_web_apps_after_sync_delegate_ = delegate;
+}
+
+void TestWebAppRegistryController::SetUninstallWebAppsAfterSyncDelegate(
+    UninstallWebAppsAfterSyncDelegate delegate) {
+  uninstall_web_apps_after_sync_delegate_ = delegate;
+}
+
 void TestWebAppRegistryController::InstallWebAppsAfterSync(
-    std::vector<WebApp*> web_apps) {}
+    std::vector<WebApp*> web_apps,
+    RepeatingInstallCallback callback) {
+  if (install_web_apps_after_sync_delegate_) {
+    install_web_apps_after_sync_delegate_.Run(std::move(web_apps), callback);
+  } else {
+    for (WebApp* web_app : web_apps)
+      callback.Run(web_app->app_id(), InstallResultCode::kSuccessNewInstall);
+  }
+}
 
 void TestWebAppRegistryController::UninstallWebAppsAfterSync(
-    std::vector<std::unique_ptr<WebApp>> web_apps) {}
+    std::vector<std::unique_ptr<WebApp>> web_apps,
+    RepeatingUninstallCallback callback) {
+  if (uninstall_web_apps_after_sync_delegate_) {
+    uninstall_web_apps_after_sync_delegate_.Run(std::move(web_apps), callback);
+  } else {
+    for (const std::unique_ptr<WebApp>& web_app : web_apps)
+      callback.Run(web_app->app_id(), /*uninstalled=*/true);
+  }
+}
 
 void TestWebAppRegistryController::DestroySubsystems() {
   mutable_registrar_.reset();

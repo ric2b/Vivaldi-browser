@@ -67,8 +67,8 @@ void ImageButton::SetBackgroundImage(SkColor color,
     return;
   }
 
-  background_image_ = gfx::ImageSkiaOperations::CreateButtonBackground(color,
-     *image, *mask);
+  background_image_ =
+      gfx::ImageSkiaOperations::CreateButtonBackground(color, *image, *mask);
 }
 
 ImageButton::HorizontalAlignment ImageButton::GetImageHorizontalAlignment()
@@ -213,9 +213,7 @@ const gfx::Point ImageButton::ComputeImagePaintPosition(
 // ToggleImageButton, public:
 
 ToggleImageButton::ToggleImageButton(ButtonListener* listener)
-    : ImageButton(listener),
-      toggled_(false) {
-}
+    : ImageButton(listener), toggled_(false) {}
 
 ToggleImageButton::~ToggleImageButton() = default;
 
@@ -228,7 +226,7 @@ void ToggleImageButton::SetToggled(bool toggled) {
   toggled_ = toggled;
   SchedulePaint();
 
-  NotifyAccessibilityEvent(ax::mojom::Event::kAriaAttributeChanged, true);
+  NotifyAccessibilityEvent(ax::mojom::Event::kCheckedStateChanged, true);
 }
 
 void ToggleImageButton::SetToggledImage(ButtonState image_state,

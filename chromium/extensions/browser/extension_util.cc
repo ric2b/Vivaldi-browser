@@ -4,16 +4,21 @@
 
 #include "extensions/browser/extension_util.h"
 
+#include "base/no_destructor.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/site_instance.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/ui_util.h"
+#include "extensions/common/extension.h"
 #include "extensions/common/features/behavior_feature.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/common/features/feature_provider.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
+#include "extensions/common/permissions/permissions_data.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -60,18 +65,25 @@ bool CanCrossIncognito(const Extension* extension,
 
 GURL GetSiteForExtensionId(const std::string& extension_id,
                            content::BrowserContext* context) {
-  return content::SiteInstance::GetSiteForURL(
+  GURL site = content::SiteInstance::GetSiteForURL(
       context, Extension::GetBaseURLFromExtensionId(extension_id));
+  DCHECK_EQ(extension_id, site.host());
+  return site;
+}
+
+const std::string& GetPartitionDomainForExtension(const Extension* extension) {
+  // Extensions use their own ID for a partition domain.
+  return extension->id();
 }
 
 content::StoragePartition* GetStoragePartitionForExtensionId(
     const std::string& extension_id,
-    content::BrowserContext* browser_context) {
-  GURL site_url = content::SiteInstance::GetSiteForURL(
-      browser_context, Extension::GetBaseURLFromExtensionId(extension_id));
+    content::BrowserContext* browser_context,
+    bool can_create) {
+  GURL site_url = GetSiteForExtensionId(extension_id, browser_context);
   content::StoragePartition* storage_partition =
       content::BrowserContext::GetStoragePartitionForSite(browser_context,
-                                                          site_url);
+                                                          site_url, can_create);
   return storage_partition;
 }
 
@@ -132,6 +144,44 @@ bool MapUrlToLocalFilePath(const ExtensionSet* extensions,
 
   *file_path = resource_file_path;
   return true;
+}
+
+bool CanWithholdPermissionsFromExtension(const Extension& extension) {
+  return CanWithholdPermissionsFromExtension(
+      extension.id(), extension.GetType(), extension.location());
+}
+
+bool CanWithholdPermissionsFromExtension(const ExtensionId& extension_id,
+                                         Manifest::Type type,
+                                         Manifest::Location location) {
+  // Some extensions must retain privilege to all requested host permissions.
+  // Specifically, extensions that don't show up in chrome:extensions (where
+  // withheld permissions couldn't be granted), extensions that are part of
+  // chrome or corporate policy, and extensions that are whitelisted to script
+  // everywhere must always have permission to run on a page.
+  return ui_util::ShouldDisplayInExtensionSettings(type, location) &&
+         !Manifest::IsPolicyLocation(location) &&
+         !Manifest::IsComponentLocation(location) &&
+         !PermissionsData::CanExecuteScriptEverywhere(extension_id, location);
+}
+
+// The below functionality maps a context to a unique id by increasing a static
+// counter.
+int GetBrowserContextId(content::BrowserContext* context) {
+  using ContextIdMap = std::map<content::BrowserContext*, int>;
+
+  static int next_id = 0;
+  static base::NoDestructor<ContextIdMap> context_map;
+
+  // we need to get the original context to make sure we take the right context.
+  content::BrowserContext* original_context =
+      ExtensionsBrowserClient::Get()->GetOriginalContext(context);
+  auto iter = context_map->find(original_context);
+  if (iter == context_map->end()) {
+    iter =
+        context_map->insert(std::make_pair(original_context, next_id++)).first;
+  }
+  return iter->second;
 }
 
 }  // namespace util

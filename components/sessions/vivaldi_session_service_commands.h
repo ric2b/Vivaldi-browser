@@ -3,14 +3,20 @@
 #ifndef COMPONENTS_SESSIONS_VIVALDI_SESSION_SERVICE_COMMANDS_H_
 #define COMPONENTS_SESSIONS_VIVALDI_SESSION_SERVICE_COMMANDS_H_
 
+#include <map>
 #include <memory>
 #include <string>
 
+#include "base/token.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/sessions_export.h"
+#include "components/tab_groups/tab_group_id.h"
 
 namespace sessions {
 class SessionCommand;
+struct SessionTab;
+struct SessionWindow;
+struct SessionTabGroup;
 }
 
 using sessions::SessionCommand;
@@ -47,6 +53,24 @@ SESSIONS_EXPORT bool RestoreSetWindowExtDataCommand(
 // Functions implemented via incfile for session_service_command.cc,
 // have to be defined inside that scope due to constants defined there
 namespace sessions {
+
+using IdToSessionTab = std::map<SessionID, std::unique_ptr<SessionTab>>;
+using IdToSessionWindow = std::map<SessionID, std::unique_ptr<SessionWindow>>;
+using TokenToSessionTabGroup =
+    std::map<tab_groups::TabGroupId, std::unique_ptr<SessionTabGroup>>;
+
+// The following functions create sequentialized change commands which are
+// used to reconstruct the current/previous session state.
+// It is up to the caller to delete the returned SessionCommand* object.
+SESSIONS_EXPORT bool VivaldiCreateTabsAndWindows(
+  const std::vector<std::unique_ptr<sessions::SessionCommand>>& data,
+  IdToSessionTab* tabs,
+  TokenToSessionTabGroup* tab_groups,
+  IdToSessionWindow* windows,
+  SessionID* active_window_id);
+
+SESSIONS_EXPORT std::unique_ptr<SessionCommand>
+CreateSetSelectedTabInWindowCommand(const SessionID& window_id, int index);
 
 SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetWindowExtDataCommand(
     const SessionID& window_id,

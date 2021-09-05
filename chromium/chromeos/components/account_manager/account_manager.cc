@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/location.h"
@@ -15,6 +16,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chromeos/constants/chromeos_pref_names.h"
@@ -179,9 +181,8 @@ void AccountManager::Initialize(
     base::OnceClosure initialization_callback) {
   Initialize(
       home_dir, url_loader_factory, std::move(delay_network_call_runner),
-      base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN,
-           base::MayBlock()}),
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::TaskShutdownBehavior::BLOCK_SHUTDOWN, base::MayBlock()}),
       std::move(initialization_callback));
 }
 
@@ -401,20 +402,18 @@ void AccountManager::RemoveAccountByEmailInternal(const std::string& email) {
 
 void AccountManager::UpsertAccount(const AccountKey& account_key,
                                    const std::string& raw_email,
-                                   const std::string& token,
-                                   bool revoke_old_token) {
+                                   const std::string& token) {
   DCHECK_NE(init_state_, InitializationState::kNotStarted);
   DCHECK(!raw_email.empty());
 
   base::OnceClosure closure = base::BindOnce(
       &AccountManager::UpsertAccountInternal, weak_factory_.GetWeakPtr(),
-      account_key, AccountInfo{raw_email, token}, revoke_old_token);
+      account_key, AccountInfo{raw_email, token});
   RunOnInitialization(std::move(closure));
 }
 
 void AccountManager::UpdateToken(const AccountKey& account_key,
-                                 const std::string& token,
-                                 bool revoke_old_token) {
+                                 const std::string& token) {
   DCHECK_NE(init_state_, InitializationState::kNotStarted);
 
   if (account_key.account_type ==
@@ -422,23 +421,21 @@ void AccountManager::UpdateToken(const AccountKey& account_key,
     DCHECK_EQ(token, kActiveDirectoryDummyToken);
   }
 
-  base::OnceClosure closure = base::BindOnce(
-      &AccountManager::UpdateTokenInternal, weak_factory_.GetWeakPtr(),
-      account_key, token, revoke_old_token);
+  base::OnceClosure closure =
+      base::BindOnce(&AccountManager::UpdateTokenInternal,
+                     weak_factory_.GetWeakPtr(), account_key, token);
   RunOnInitialization(std::move(closure));
 }
 
 void AccountManager::UpdateTokenInternal(const AccountKey& account_key,
-                                         const std::string& token,
-                                         bool revoke_old_token) {
+                                         const std::string& token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(init_state_, InitializationState::kInitialized);
 
   auto it = accounts_.find(account_key);
   DCHECK(it != accounts_.end())
       << "UpdateToken cannot be used for adding accounts";
-  UpsertAccountInternal(account_key, AccountInfo{it->second.raw_email, token},
-                        revoke_old_token);
+  UpsertAccountInternal(account_key, AccountInfo{it->second.raw_email, token});
 }
 
 void AccountManager::UpdateEmail(const AccountKey& account_key,
@@ -460,13 +457,11 @@ void AccountManager::UpdateEmailInternal(const AccountKey& account_key,
   auto it = accounts_.find(account_key);
   DCHECK(it != accounts_.end())
       << "UpdateEmail cannot be used for adding accounts";
-  UpsertAccountInternal(account_key, AccountInfo{raw_email, it->second.token},
-                        false /* revoke_old_token */);
+  UpsertAccountInternal(account_key, AccountInfo{raw_email, it->second.token});
 }
 
 void AccountManager::UpsertAccountInternal(const AccountKey& account_key,
-                                           const AccountInfo& account,
-                                           bool revoke_old_token) {
+                                           const AccountInfo& account) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(init_state_, InitializationState::kInitialized);
   DCHECK(account_key.IsValid()) << "Invalid account_key: " << account_key;
@@ -508,9 +503,6 @@ void AccountManager::UpsertAccountInternal(const AccountKey& account_key,
 
   if (did_token_change) {
     NotifyTokenObservers(Account{account_key, account.raw_email});
-  }
-  if (did_token_change && revoke_old_token) {
-    MaybeRevokeTokenOnServer(account_key, old_token);
   }
 }
 

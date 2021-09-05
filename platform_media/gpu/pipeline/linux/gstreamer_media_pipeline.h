@@ -16,16 +16,14 @@ namespace media {
 class DataSource;
 
 class GStreamerMediaPipeline : public PlatformMediaPipeline {
-public:
-
-  GStreamerMediaPipeline(DataSource* data_source,
-                         const AudioConfigChangedCB& audio_config_changed_cb,
-                         const VideoConfigChangedCB& video_config_changed_cb);
+ public:
+  GStreamerMediaPipeline();
 
   ~GStreamerMediaPipeline() override;
 
-  void Initialize(const std::string& mime_type,
-                  const InitializeCB& initialize_cb) override;
+  void Initialize(ipc_data_source::Reader source_reader,
+                  ipc_data_source::Info source_info,
+                  InitializeCB initialize_cb) override;
 
   void ReadAudioData(const ReadDataCB& read_audio_data_cb) override;
 
@@ -33,14 +31,9 @@ public:
 
   void WillSeek() override;
 
-  void Seek(base::TimeDelta time, const SeekCB& seek_cb) override;
-
-private:
-  DataSource* data_source_;
-  AudioConfigChangedCB audio_config_changed_cb_;
-  VideoConfigChangedCB video_config_changed_cb_;
+  void Seek(base::TimeDelta time, SeekCB seek_cb) override;
 };
 
-}
+}  // namespace media
 
 #endif  // PLATFORM_MEDIA_GPU_PIPELINE_LINUX_GSTREAMER_MEDIA_PIPELINE_H_

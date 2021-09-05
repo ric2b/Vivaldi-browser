@@ -31,10 +31,13 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_FRAME_WIDGET_H_
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_FRAME_WIDGET_H_
 
-#include "third_party/blink/public/common/frame/occlusion_state.h"
+#include "third_party/blink/public/mojom/page/widget.mojom-shared.h"
+#include "third_party/blink/public/platform/cross_variant_mojo_util.h"
+#include "third_party/blink/public/platform/viewport_intersection_state.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_touch_action.h"
+#include "third_party/blink/public/web/web_swap_result.h"
 #include "third_party/blink/public/web/web_widget.h"
 
 namespace blink {
@@ -43,7 +46,6 @@ class WebDragData;
 class WebLocalFrame;
 class WebInputMethodController;
 class WebWidgetClient;
-struct WebFloatPoint;
 
 class WebFrameWidget : public WebWidget {
  public:
@@ -51,12 +53,26 @@ class WebFrameWidget : public WebWidget {
   // RenderView/WebView, for a new local main frame.
   BLINK_EXPORT static WebFrameWidget* CreateForMainFrame(
       WebWidgetClient*,
-      WebLocalFrame* main_frame);
+      WebLocalFrame* main_frame,
+      CrossVariantMojoAssociatedRemote<mojom::FrameWidgetHostInterfaceBase>
+          frame_widget_host,
+      CrossVariantMojoAssociatedReceiver<mojom::FrameWidgetInterfaceBase>
+          frame_widget,
+      CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
+          widget_host,
+      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget);
   // Makes a WebFrameWidget that wraps a WebLocalFrame that is not a main frame,
   // providing a WebWidget to interact with the child local root frame.
   BLINK_EXPORT static WebFrameWidget* CreateForChildLocalRoot(
       WebWidgetClient*,
-      WebLocalFrame* local_root);
+      WebLocalFrame* local_root,
+      CrossVariantMojoAssociatedRemote<mojom::FrameWidgetHostInterfaceBase>
+          frame_widget_host,
+      CrossVariantMojoAssociatedReceiver<mojom::FrameWidgetInterfaceBase>
+          frame_widget,
+      CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
+          widget_host,
+      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget);
 
   // Returns the local root of this WebFrameWidget.
   virtual WebLocalFrame* LocalRoot() const = 0;
@@ -77,25 +93,25 @@ class WebFrameWidget : public WebWidget {
   // on the WebFrameWidget.
   virtual WebDragOperation DragTargetDragEnter(
       const WebDragData&,
-      const WebFloatPoint& point_in_viewport,
-      const WebFloatPoint& screen_point,
+      const gfx::PointF& point_in_viewport,
+      const gfx::PointF& screen_point,
       WebDragOperationsMask operations_allowed,
       int modifiers) = 0;
   virtual WebDragOperation DragTargetDragOver(
-      const WebFloatPoint& point_in_viewport,
-      const WebFloatPoint& screen_point,
+      const gfx::PointF& point_in_viewport,
+      const gfx::PointF& screen_point,
       WebDragOperationsMask operations_allowed,
       int modifiers) = 0;
-  virtual void DragTargetDragLeave(const WebFloatPoint& point_in_viewport,
-                                   const WebFloatPoint& screen_point) = 0;
+  virtual void DragTargetDragLeave(const gfx::PointF& point_in_viewport,
+                                   const gfx::PointF& screen_point) = 0;
   virtual void DragTargetDrop(const WebDragData&,
-                              const WebFloatPoint& point_in_viewport,
-                              const WebFloatPoint& screen_point,
+                              const gfx::PointF& point_in_viewport,
+                              const gfx::PointF& screen_point,
                               int modifiers) = 0;
 
   // Notifies the WebFrameWidget that a drag has terminated.
-  virtual void DragSourceEndedAt(const WebFloatPoint& point_in_viewport,
-                                 const WebFloatPoint& screen_point,
+  virtual void DragSourceEndedAt(const gfx::PointF& point_in_viewport,
+                                 const gfx::PointF& screen_point,
                                  WebDragOperation) = 0;
 
   // Notifies the WebFrameWidget that the system drag and drop operation has
@@ -106,8 +122,8 @@ class WebFrameWidget : public WebWidget {
   // and indicates whether the frame may be painted over or obscured in the
   // parent. This is needed for out-of-process iframes to know if they are
   // clipped or obscured by ancestor frames in another process.
-  virtual void SetRemoteViewportIntersection(const WebRect&,
-                                             FrameOcclusionState) {}
+  virtual void SetRemoteViewportIntersection(const ViewportIntersectionState&) {
+  }
 
   // Sets the inert bit on an out-of-process iframe, causing it to ignore
   // input.
@@ -136,6 +152,18 @@ class WebFrameWidget : public WebWidget {
   // This function provides zooming for find in page results when browsing with
   // page autosize.
   virtual void ZoomToFindInPageRect(const WebRect& rect_in_root_frame) = 0;
+
+  // Applies viewport related properties that are normally provided by the
+  // compositor. Useful for tests that don't use a compositor.
+  virtual void ApplyViewportChangesForTesting(
+      const cc::ApplyViewportChangesArgs& args) = 0;
+
+  // The |callback| will be fired when the corresponding renderer frame is
+  // submitted (still called "swapped") to the display compositor (either with
+  // DidSwap or DidNotSwap).
+  virtual void NotifySwapAndPresentationTime(
+      WebReportTimeCallback swap_callback,
+      WebReportTimeCallback presentation_callback) = 0;
 
  private:
   // This private constructor and the class/friend declaration ensures that

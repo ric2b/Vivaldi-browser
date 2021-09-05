@@ -9,21 +9,27 @@
 
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/single_thread_task_runner.h"
 #include "base/system/sys_info.h"
-#include "base/task_runner.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/user_names.h"
 #include "components/user_manager/user_type.h"
 
 namespace {
 
-class FakeTaskRunner : public base::TaskRunner {
+class FakeTaskRunner : public base::SingleThreadTaskRunner {
  public:
+  // base::SingleThreadTaskRunner:
   bool PostDelayedTask(const base::Location& from_here,
                        base::OnceClosure task,
                        base::TimeDelta delay) override {
     std::move(task).Run();
     return true;
+  }
+  bool PostNonNestableDelayedTask(const base::Location& from_here,
+                                  base::OnceClosure task,
+                                  base::TimeDelta delay) override {
+    return PostDelayedTask(from_here, std::move(task), delay);
   }
   bool RunsTasksInCurrentSequence() const override { return true; }
 
@@ -258,6 +264,17 @@ bool FakeUserManager::IsLoggedInAsArcKioskApp() const {
   const User* active_user = GetActiveUser();
   return active_user ? active_user->GetType() == USER_TYPE_ARC_KIOSK_APP
                      : false;
+}
+
+bool FakeUserManager::IsLoggedInAsWebKioskApp() const {
+  const User* active_user = GetActiveUser();
+  return active_user ? active_user->GetType() == USER_TYPE_WEB_KIOSK_APP
+                     : false;
+}
+
+bool FakeUserManager::IsLoggedInAsAnyKioskApp() const {
+  const User* active_user = GetActiveUser();
+  return active_user && active_user->IsKioskType();
 }
 
 bool FakeUserManager::IsLoggedInAsStub() const {

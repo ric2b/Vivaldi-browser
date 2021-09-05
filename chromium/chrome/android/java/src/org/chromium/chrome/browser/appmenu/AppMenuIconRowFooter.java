@@ -6,18 +6,21 @@ package org.chromium.chrome.browser.appmenu;
 
 import android.content.Context;
 import android.graphics.drawable.Drawable;
-import android.support.v4.graphics.drawable.DrawableCompat;
-import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.graphics.drawable.DrawableCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 
 /**
  * A {@link LinearLayout} that displays a horizontal row of icons for page actions.
@@ -59,7 +62,8 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
         // See https://crbug.com/891593 for details.
         Drawable icon = AppCompatResources.getDrawable(getContext(), R.drawable.btn_reload_stop);
         DrawableCompat.setTintList(icon,
-                AppCompatResources.getColorStateList(getContext(), R.color.standard_mode_tint));
+                AppCompatResources.getColorStateList(
+                        getContext(), R.color.default_icon_color_tint_list));
         mReloadButton.setImageDrawable(icon);
     }
 

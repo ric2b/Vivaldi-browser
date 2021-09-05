@@ -147,6 +147,25 @@ Example of tracing asynchronous tests:
 
 [simple-blob-measure-async.html](https://chromium.googlesource.com/chromium/src/+/master/third_party/blink/perf_tests/test_data/simple-blob-measure-async.html)
 
+
+### Service Worker Perf Tests
+You can also run perf tests in service workers. You need to trigger the test
+with `PerfTestRunner.startMeasureValuesInWorker()` in a page. Within the `run`
+method provided to this function, you can initialize a worker and ask the
+worker to run the workload by using `measureRunsPerSecond()` defined in
+[worker-test-helper.js](https://chromium.googlesource.com/chromium/src/+/master/third_party/blink/perf_tests/resources/worker-test-helper.js).
+
+`measureRunsPerSecond()` returns a promise which resolves to the test result.
+The worker should send the result back to the page, and the page records the
+result by `PerfTestRunner.recordResultFromWorker()`. After the result is
+recorded, the test finishes.
+
+Here is an example for testing Cache Storage API of service workers:
+
+[cache-open-add-delete-10K-service-worker.html](https://chromium.googlesource.com/chromium/src/+/master/third_party/blink/perf_tests/service_worker/cache-open-add-delete-10K-service-worker.html)
+
+[cache-open-add-delete-10K-service-worker.js](https://chromium.googlesource.com/chromium/src/+/master/third_party/blink/perf_tests/service_worker/resources/cache-open-add-delete-10K-service-worker.js)
+
 ## Canvas Tests
 
 The sub-framework [canvas_runner.js](https://chromium.googlesource.com/chromium/src/+/master/third_party/blink/perf_tests/canvas/resources/canvas_runner.js) is used for
@@ -180,9 +199,13 @@ viewer won't be supported.
 
 **Running tests with Telemetry**
 
-Assuming your current directory is `chromium/src/`, you can run tests with:
+There are several `blink_perf` benchmarks. You can see the full list in
+`third_party/blink/perf_tests` or by running
+`tools/perf/run_benchmark list | grep blink_perf`. If you want to run the
+`blink_perf.paint` benchmark and your current directory is `chromium/src/`, you
+can run tests with:
 
-`./tools/perf/run_benchmark run blink_perf [--test-path=<path to your tests>]`
+`./tools/perf/run_benchmark run blink_perf.paint [--story-filter=<test_file_name>]`
 
 For information about all supported options, run:
 

@@ -120,10 +120,25 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
-    public void didFailLoad(
-            boolean isMainFrame, int errorCode, String description, String failingUrl) {
+    public void loadProgressChanged(float progress) {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didFailLoad(isMainFrame, errorCode, description, failingUrl);
+            mObserversIterator.next().loadProgressChanged(progress);
+        }
+    }
+
+    @Override
+    @CalledByNative
+    public void didChangeVisibleSecurityState() {
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().didChangeVisibleSecurityState();
+        }
+    }
+
+    @Override
+    @CalledByNative
+    public void didFailLoad(boolean isMainFrame, int errorCode, String failingUrl) {
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().didFailLoad(isMainFrame, errorCode, failingUrl);
         }
     }
 
@@ -225,9 +240,9 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
-    public void didChangeThemeColor(int color) {
+    public void didChangeThemeColor() {
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
-            mObserversIterator.next().didChangeThemeColor(color);
+            mObserversIterator.next().didChangeThemeColor();
         }
     }
 

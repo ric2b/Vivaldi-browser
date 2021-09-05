@@ -6,7 +6,7 @@
 
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/certificate_viewer_webui.h"
-#include "chrome/browser/ui/webui/localized_string.h"
+#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
@@ -15,6 +15,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "ui/base/webui/web_ui_util.h"
 #include "ui/web_dialogs/web_dialog_delegate.h"
 
 namespace {
@@ -23,7 +24,7 @@ content::WebUIDataSource* GetWebUIDataSource(const std::string& host) {
   content::WebUIDataSource* html_source =
       content::WebUIDataSource::Create(host);
 
-  static constexpr LocalizedString kStrings[] = {
+  static constexpr webui::LocalizedString kStrings[] = {
       {"general", IDS_CERT_INFO_GENERAL_TAB_LABEL},
       {"details", IDS_CERT_INFO_DETAILS_TAB_LABEL},
       {"close", IDS_CLOSE},
@@ -44,7 +45,7 @@ content::WebUIDataSource* GetWebUIDataSource(const std::string& host) {
       {"certFields", IDS_CERT_DETAILS_CERTIFICATE_FIELDS_LABEL},
       {"certFieldVal", IDS_CERT_DETAILS_CERTIFICATE_FIELD_VALUE_LABEL},
   };
-  AddLocalizedStringsBulk(html_source, kStrings, base::size(kStrings));
+  AddLocalizedStringsBulk(html_source, kStrings);
 
   html_source->UseStringsJs();
 

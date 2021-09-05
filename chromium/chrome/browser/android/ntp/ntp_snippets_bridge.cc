@@ -19,16 +19,16 @@
 #include "base/feature_list.h"
 #include "base/time/time.h"
 #include "chrome/android/chrome_jni_headers/SnippetsBridge_jni.h"
-#include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/ntp/get_remote_suggestions_scheduler.h"
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/ntp_snippets/content_suggestions_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
+#include "components/feed/core/shared_prefs/pref_names.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/content_suggestions_metrics.h"
-#include "components/ntp_snippets/pref_names.h"
 #include "components/ntp_snippets/remote/remote_suggestions_provider.h"
 #include "components/ntp_snippets/remote/remote_suggestions_scheduler.h"
 #include "ui/base/window_open_disposition.h"
@@ -128,7 +128,7 @@ NTPSnippetsBridge::NTPSnippetsBridge(JNIEnv* env,
 
   pref_change_registrar_.Init(profile->GetPrefs());
   pref_change_registrar_.Add(
-      ntp_snippets::prefs::kArticlesListVisible,
+      feed::prefs::kArticlesListVisible,
       base::BindRepeating(
           &NTPSnippetsBridge::OnSuggestionsVisibilityChanged,
           base::Unretained(this),

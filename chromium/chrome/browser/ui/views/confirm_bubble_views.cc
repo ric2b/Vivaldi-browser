@@ -28,10 +28,10 @@
 namespace {
 
 std::unique_ptr<views::View> CreateExtraView(views::ButtonListener* listener) {
-  auto help_button = CreateVectorImageButton(listener);
+  auto help_button = CreateVectorImageButtonWithNativeTheme(
+      listener, vector_icons::kHelpOutlineIcon);
   help_button->SetFocusForPlatform();
   help_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_LEARN_MORE));
-  SetImageFromVectorIcon(help_button.get(), vector_icons::kHelpOutlineIcon);
   return help_button;
 }
 
@@ -40,12 +40,15 @@ std::unique_ptr<views::View> CreateExtraView(views::ButtonListener* listener) {
 ConfirmBubbleViews::ConfirmBubbleViews(
     std::unique_ptr<ConfirmBubbleModel> model)
     : model_(std::move(model)), help_button_(nullptr) {
-  DialogDelegate::set_button_label(
-      ui::DIALOG_BUTTON_OK,
-      model_->GetButtonLabel(ConfirmBubbleModel::BUTTON_OK));
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtonLabel(
+      ui::DIALOG_BUTTON_OK, model_->GetButtonLabel(ui::DIALOG_BUTTON_OK));
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_CANCEL,
-      model_->GetButtonLabel(ConfirmBubbleModel::BUTTON_CANCEL));
+      model_->GetButtonLabel(ui::DIALOG_BUTTON_CANCEL));
+  DialogDelegate::SetAcceptCallback(base::BindOnce(
+      &ConfirmBubbleModel::Accept, base::Unretained(model_.get())));
+  DialogDelegate::SetCancelCallback(base::BindOnce(
+      &ConfirmBubbleModel::Cancel, base::Unretained(model_.get())));
   help_button_ = DialogDelegate::SetExtraView(::CreateExtraView(this));
 
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
@@ -77,28 +80,6 @@ ConfirmBubbleViews::ConfirmBubbleViews(
 ConfirmBubbleViews::~ConfirmBubbleViews() {
 }
 
-bool ConfirmBubbleViews::IsDialogButtonEnabled(ui::DialogButton button) const {
-  switch (button) {
-    case ui::DIALOG_BUTTON_OK:
-      return !!(model_->GetButtons() & ConfirmBubbleModel::BUTTON_OK);
-    case ui::DIALOG_BUTTON_CANCEL:
-      return !!(model_->GetButtons() & ConfirmBubbleModel::BUTTON_CANCEL);
-    default:
-      NOTREACHED();
-      return false;
-  }
-}
-
-bool ConfirmBubbleViews::Cancel() {
-  model_->Cancel();
-  return true;
-}
-
-bool ConfirmBubbleViews::Accept() {
-  model_->Accept();
-  return true;
-}
-
 ui::ModalType ConfirmBubbleViews::GetModalType() const {
   return ui::MODAL_TYPE_WINDOW;
 }
@@ -119,13 +100,9 @@ void ConfirmBubbleViews::ButtonPressed(views::Button* sender,
   }
 }
 
-void ConfirmBubbleViews::ViewHierarchyChanged(
-    const views::ViewHierarchyChangedDetails& details) {
-  if (details.is_add && details.child == this && GetWidget()) {
-    GetWidget()->GetRootView()->GetViewAccessibility().OverrideDescribedBy(
-        label_);
-  }
-  DialogDelegateView::ViewHierarchyChanged(details);
+void ConfirmBubbleViews::OnDialogInitialized() {
+  GetWidget()->GetRootView()->GetViewAccessibility().OverrideDescribedBy(
+      label_);
 }
 
 namespace chrome {

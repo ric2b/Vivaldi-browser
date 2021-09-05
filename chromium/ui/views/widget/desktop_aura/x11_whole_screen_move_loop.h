@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -28,7 +30,7 @@ namespace ui {
 class MouseEvent;
 class ScopedEventDispatcher;
 class XScopedEventSelector;
-}
+}  // namespace ui
 
 namespace views {
 
@@ -61,6 +63,8 @@ class X11WholeScreenMoveLoop : public X11MoveLoop,
 
   // Dispatch mouse movement event to |delegate_| in a posted task.
   void DispatchMouseMovement();
+
+  void PostDispatchIfNeeded(const ui::MouseEvent& event);
 
   X11MoveLoopDelegate* delegate_;
 

@@ -28,6 +28,7 @@
 
 #include "third_party/blink/renderer/core/page/spatial_navigation.h"
 
+#include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -43,6 +44,7 @@
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/page/frame_tree.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
 
@@ -53,10 +55,10 @@ namespace blink {
 // std::numeric_limits<double>::lowest() because, if subtracted, it becomes
 // NaN which will make all following arithmetic NaN too (an unusable number).
 constexpr double kMinDistance = std::numeric_limits<int>::lowest();
+constexpr double kPriorityClassA = kMinDistance;
+constexpr double kPriorityClassB = kMinDistance / 2;
 
 constexpr int kFudgeFactor = 2;
-
-static void DeflateIfOverlapped(PhysicalRect&, PhysicalRect&);
 
 FocusCandidate::FocusCandidate(Node* node, SpatialNavigationDirection direction)
     : visible_node(nullptr), focusable_node(nullptr), is_offscreen(true) {
@@ -135,6 +137,23 @@ static bool IsRectInDirection(SpatialNavigationDirection direction,
       NOTREACHED();
       return false;
   }
+}
+
+bool IsFragmentedInline(Node& node) {
+  const LayoutObject* layout_object = node.GetLayoutObject();
+  if (!layout_object->IsInline() || layout_object->IsAtomicInlineLevel())
+    return false;
+
+  // If it has empty quads, it's most likely not a fragmented text.
+  // <a><div></div></a> has for example one empty rect.
+  Vector<FloatQuad> quads;
+  layout_object->AbsoluteQuads(quads);
+  for (const FloatQuad& quad : quads) {
+    if (quad.IsEmpty())
+      return false;
+  }
+
+  return quads.size() > 1;
 }
 
 FloatRect RectInViewport(const Node& node) {
@@ -292,24 +311,8 @@ bool ScrollInDirection(Node* container, SpatialNavigationDirection direction) {
   if (!scroller)
     return false;
 
-  scroller->ScrollBy(ScrollOffset(dx, dy), kUserScroll);
+  scroller->ScrollBy(ScrollOffset(dx, dy), mojom::blink::ScrollType::kUser);
   return true;
-}
-
-static void DeflateIfOverlapped(PhysicalRect& a, PhysicalRect& b) {
-  if (!a.Intersects(b) || a.Contains(b) || b.Contains(a))
-    return;
-
-  LayoutUnit deflate_factor = LayoutUnit(-kFudgeFactor);
-
-  // Avoid negative width or height values.
-  if ((a.Width() + 2 * deflate_factor > 0) &&
-      (a.Height() + 2 * deflate_factor > 0))
-    a.Inflate(deflate_factor);
-
-  if ((b.Width() + 2 * deflate_factor > 0) &&
-      (b.Height() + 2 * deflate_factor > 0))
-    b.Inflate(deflate_factor);
 }
 
 bool IsScrollableNode(const Node* node) {
@@ -400,16 +403,16 @@ bool CanScrollInDirection(const LocalFrame* frame,
   LayoutView* layoutView = frame->ContentLayoutObject();
   if (!layoutView)
     return false;
-  ScrollbarMode vertical_mode;
-  ScrollbarMode horizontal_mode;
+  mojom::blink::ScrollbarMode vertical_mode;
+  mojom::blink::ScrollbarMode horizontal_mode;
   layoutView->CalculateScrollbarModes(horizontal_mode, vertical_mode);
   if ((direction == SpatialNavigationDirection::kLeft ||
        direction == SpatialNavigationDirection::kRight) &&
-      ScrollbarMode::kAlwaysOff == horizontal_mode)
+      mojom::blink::ScrollbarMode::kAlwaysOff == horizontal_mode)
     return false;
   if ((direction == SpatialNavigationDirection::kUp ||
        direction == SpatialNavigationDirection::kDown) &&
-      ScrollbarMode::kAlwaysOff == vertical_mode)
+      mojom::blink::ScrollbarMode::kAlwaysOff == vertical_mode)
     return false;
   ScrollableArea* scrollable_area = frame->View()->GetScrollableArea();
   LayoutSize size(scrollable_area->ContentsSize());
@@ -582,11 +585,29 @@ double Alignment(SpatialNavigationDirection direction,
   }
 }
 
+bool BothOnTopmostPaintLayerInStackingContext(
+    const FocusCandidate& current_interest,
+    const FocusCandidate& candidate) {
+  if (!current_interest.visible_node)
+    return false;
+
+  const LayoutObject* origin = current_interest.visible_node->GetLayoutObject();
+  const PaintLayer* focused_layer = origin->PaintingLayer();
+  if (!focused_layer || focused_layer->IsRootLayer())
+    return false;
+
+  const LayoutObject* next = candidate.visible_node->GetLayoutObject();
+  const PaintLayer* candidate_layer = next->PaintingLayer();
+  if (focused_layer != candidate_layer)
+    return false;
+
+  return !candidate_layer->HasVisibleDescendant();
+}
+
 double ComputeDistanceDataForNode(SpatialNavigationDirection direction,
                                   const FocusCandidate& current_interest,
                                   const FocusCandidate& candidate) {
   double distance = 0.0;
-  double overlap = 0.0;
   PhysicalRect node_rect = candidate.rect_in_root_frame;
   PhysicalRect current_rect = current_interest.rect_in_root_frame;
   if (node_rect.Contains(current_rect)) {
@@ -597,9 +618,10 @@ double ComputeDistanceDataForNode(SpatialNavigationDirection direction,
   }
 
   if (current_rect.Contains(node_rect)) {
-    // We give priority to "insiders", candidates that are completely inside the
-    // current focus rect, by giving them a negative, < 0, distance number.
-    distance = kMinDistance;
+    // We give highest priority to "insiders", candidates that are completely
+    // inside the current focus rect, by giving them a negative, < 0, distance
+    // number.
+    distance = kPriorityClassA;
 
     // For insiders we cannot meassure the distance from the outer box. Instead,
     // we meassure distance _from_ the focused container's rect's "opposite
@@ -612,11 +634,11 @@ double ComputeDistanceDataForNode(SpatialNavigationDirection direction,
     // "outsider".
   } else if (!IsRectInDirection(direction, current_rect, node_rect)) {
     return kMaxDistance;
-  } else {
-    DeflateIfOverlapped(current_rect, node_rect);
-    PhysicalRect intersection_rect = Intersection(current_rect, node_rect);
-    overlap =
-        (intersection_rect.Width() * intersection_rect.Height()).ToDouble();
+  } else if (BothOnTopmostPaintLayerInStackingContext(current_interest,
+                                                      candidate)) {
+    // Prioritize "popup candidates" over other candidates by giving them a
+    // negative, < 0, distance number.
+    distance = kPriorityClassB;
   }
 
   LayoutPoint exit_point;
@@ -666,10 +688,11 @@ double ComputeDistanceDataForNode(SpatialNavigationDirection direction,
       return kMaxDistance;
   }
 
-  // Distance calculation is based on https://drafts.csswg.org/css-nav-1/.
-  return distance + navigation_axis_distance -
-         Alignment(direction, current_rect, node_rect) +
-         weighted_orthogonal_axis_distance - sqrt(overlap);
+  // We try to formalize this distance calculation at
+  // https://drafts.csswg.org/css-nav-1/.
+  distance += weighted_orthogonal_axis_distance.ToDouble() +
+              navigation_axis_distance.ToDouble();
+  return distance - Alignment(direction, current_rect, node_rect);
 }
 
 // Returns a thin rectangle that represents one of |box|'s edges.
@@ -720,13 +743,55 @@ PhysicalRect StartEdgeForAreaElement(const HTMLAreaElement& area,
 }
 
 HTMLFrameOwnerElement* FrameOwnerElement(const FocusCandidate& candidate) {
-  return DynamicTo<HTMLFrameOwnerElement>(candidate.visible_node.Get());
+  return DynamicTo<HTMLFrameOwnerElement>(candidate.visible_node);
 }
 
 // The visual viewport's rect (given in the root frame's coordinate space).
 PhysicalRect RootViewport(const LocalFrame* current_frame) {
   return PhysicalRect::EnclosingRect(
       current_frame->GetPage()->GetVisualViewport().VisibleRect());
+}
+
+// Ignores fragments that are completely offscreen.
+// Returns the first one that is not offscreen, in the given iterator range.
+template <class Iterator>
+PhysicalRect FirstVisibleFragment(const PhysicalRect& visibility,
+                                  Iterator fragment,
+                                  Iterator end) {
+  while (fragment != end) {
+    PhysicalRect physical_fragment(EnclosedIntRect(fragment->BoundingBox()));
+    physical_fragment.Intersect(visibility);
+    if (!physical_fragment.IsEmpty())
+      return physical_fragment;
+    ++fragment;
+  }
+  return visibility;
+}
+
+PhysicalRect SearchOriginFragment(const PhysicalRect& visible_part,
+                                  const LayoutObject& fragmented,
+                                  const SpatialNavigationDirection direction) {
+  // For accuracy, use the first visible fragment (not the fragmented element's
+  // entire bounding rect which is a union of all fragments) as search origin.
+  Vector<FloatQuad> fragments;
+  fragmented.AbsoluteQuads(
+      fragments, kTraverseDocumentBoundaries | kApplyRemoteRootFrameOffset);
+  switch (direction) {
+    case SpatialNavigationDirection::kLeft:
+    case SpatialNavigationDirection::kDown:
+      // Search from the topmost fragment.
+      return FirstVisibleFragment(visible_part, fragments.begin(),
+                                  fragments.end());
+    case SpatialNavigationDirection::kRight:
+    case SpatialNavigationDirection::kUp:
+      // Search from the bottommost fragment.
+      return FirstVisibleFragment(visible_part, fragments.rbegin(),
+                                  fragments.rend());
+    case SpatialNavigationDirection::kNone:
+      break;
+      // Nothing to do.
+  }
+  return visible_part;
 }
 
 // Spatnav uses this rectangle to measure distances to focus candidates.
@@ -755,7 +820,14 @@ PhysicalRect SearchOrigin(const PhysicalRect& viewport_rect_of_root_frame,
       return StartEdgeForAreaElement(*area_element, direction);
 
     PhysicalRect box_in_root_frame = NodeRectInRootFrame(focus_node);
-    return Intersection(box_in_root_frame, viewport_rect_of_root_frame);
+    PhysicalRect visible_part =
+        Intersection(box_in_root_frame, viewport_rect_of_root_frame);
+
+    if (IsFragmentedInline(*focus_node)) {
+      return SearchOriginFragment(visible_part, *focus_node->GetLayoutObject(),
+                                  direction);
+    }
+    return visible_part;
   }
 
   Node* container = ScrollableAreaOrDocumentOf(focus_node);
@@ -766,10 +838,8 @@ PhysicalRect SearchOrigin(const PhysicalRect& viewport_rect_of_root_frame,
       return OppositeEdge(direction, Intersection(box_in_root_frame,
                                                   viewport_rect_of_root_frame));
     }
-
     container = ScrollableAreaOrDocumentOf(container);
   }
-
   return OppositeEdge(direction, viewport_rect_of_root_frame);
 }
 

@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_AUTOFILL_CONTENT_RENDERER_FIELD_DATA_MANAGER_H_
 #define COMPONENTS_AUTOFILL_CONTENT_RENDERER_FIELD_DATA_MANAGER_H_
 
+#include <stdint.h>
+
 #include <map>
 
 #include "base/optional.h"
@@ -19,10 +21,13 @@ namespace autofill {
 
 // This class provides the meathods to update and get the field data (the pair
 // of user typed value and field properties mask).
-class FieldDataManager {
+class FieldDataManager : public base::RefCounted<FieldDataManager> {
  public:
+  using FieldDataMap =
+      std::map<uint32_t,
+               std::pair<base::Optional<base::string16>, FieldPropertiesMask>>;
+
   FieldDataManager();
-  ~FieldDataManager();
 
   void ClearData();
   bool HasFieldData(uint32_t id) const;
@@ -45,10 +50,18 @@ class FieldDataManager {
   // Check if the string |value| is saved in |field_value_and_properties_map_|.
   bool FindMachedValue(const base::string16& value) const;
 
+  bool DidUserType(uint32_t id) const;
+
+  const FieldDataMap& field_data_map() const {
+    return field_value_and_properties_map_;
+  }
+
  private:
-  std::map<uint32_t,
-           std::pair<base::Optional<base::string16>, FieldPropertiesMask>>
-      field_value_and_properties_map_;
+  friend class base::RefCounted<FieldDataManager>;
+
+  ~FieldDataManager();
+
+  FieldDataMap field_value_and_properties_map_;
 };
 
 }  // namespace autofill

@@ -24,6 +24,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
@@ -105,6 +106,8 @@ base::Value NetLogSSLInfoParams(SSLClientSocketImpl* socket) {
                   ssl_info.handshake_type == SSLInfo::HANDSHAKE_RESUME);
   dict.SetIntKey("cipher_suite",
                  SSLConnectionStatusToCipherSuite(ssl_info.connection_status));
+  dict.SetIntKey("key_exchange_group", ssl_info.key_exchange_group);
+  dict.SetIntKey("peer_signature_algorithm", ssl_info.peer_signature_algorithm);
 
   dict.SetStringKey("next_proto",
                     NextProtoToString(socket->GetNegotiatedProtocol()));
@@ -323,6 +326,12 @@ class SSLClientSocketImpl::SSLContext {
         ssl_ctx_.get(), TLSEXT_cert_compression_brotli,
         nullptr /* compression not supported */, DecompressBrotliCert);
 #endif
+
+    if (base::FeatureList::IsEnabled(features::kPostQuantumCECPQ2)) {
+      static const int kCurves[] = {NID_CECPQ2, NID_X25519,
+                                    NID_X9_62_prime256v1, NID_secp384r1};
+      SSL_CTX_set1_curves(ssl_ctx_.get(), kCurves, base::size(kCurves));
+    }
   }
 
   static int ClientCertRequestCallback(SSL* ssl, void* arg) {
@@ -840,6 +849,8 @@ int SSLClientSocketImpl::Init() {
 
   if (ssl_config_.require_ecdhe)
     command.append(":!kRSA");
+  if (ssl_config_.disable_legacy_crypto)
+    command.append(":!3DES");
 
   // Remove any disabled ciphers.
   for (uint16_t id : context_->config().disabled_cipher_suites) {
@@ -853,6 +864,19 @@ int SSLClientSocketImpl::Init() {
   if (!SSL_set_strict_cipher_list(ssl_.get(), command.c_str())) {
     LOG(ERROR) << "SSL_set_cipher_list('" << command << "') failed";
     return ERR_UNEXPECTED;
+  }
+
+  if (ssl_config_.disable_legacy_crypto) {
+    static const uint16_t kVerifyPrefs[] = {
+        SSL_SIGN_ECDSA_SECP256R1_SHA256, SSL_SIGN_RSA_PSS_RSAE_SHA256,
+        SSL_SIGN_RSA_PKCS1_SHA256,       SSL_SIGN_ECDSA_SECP384R1_SHA384,
+        SSL_SIGN_RSA_PSS_RSAE_SHA384,    SSL_SIGN_RSA_PKCS1_SHA384,
+        SSL_SIGN_RSA_PSS_RSAE_SHA512,    SSL_SIGN_RSA_PKCS1_SHA512,
+    };
+    if (!SSL_set_verify_algorithm_prefs(ssl_.get(), kVerifyPrefs,
+                                        base::size(kVerifyPrefs))) {
+      return ERR_UNEXPECTED;
+    }
   }
 
   if (!ssl_config_.alpn_protos.empty()) {
@@ -943,9 +967,6 @@ int SSLClientSocketImpl::DoHandshake() {
 }
 
 int SSLClientSocketImpl::DoHandshakeComplete(int result) {
-  if (in_confirm_handshake_)
-    MaybeRecordEarlyDataResult();
-
   if (result < 0)
     return result;
 
@@ -1072,12 +1093,18 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
       details = SSLHandshakeDetails::kTLS12Full;
     }
   } else {
+    bool used_hello_retry_request = SSL_used_hello_retry_request(ssl_.get());
     if (SSL_in_early_data(ssl_.get())) {
+      DCHECK(!used_hello_retry_request);
       details = SSLHandshakeDetails::kTLS13Early;
     } else if (SSL_session_reused(ssl_.get())) {
-      details = SSLHandshakeDetails::kTLS13Resume;
+      details = used_hello_retry_request
+                    ? SSLHandshakeDetails::kTLS13ResumeWithHelloRetryRequest
+                    : SSLHandshakeDetails::kTLS13Resume;
     } else {
-      details = SSLHandshakeDetails::kTLS13Full;
+      details = used_hello_retry_request
+                    ? SSLHandshakeDetails::kTLS13FullWithHelloRetryRequest
+                    : SSLHandshakeDetails::kTLS13Full;
     }
   }
   UMA_HISTOGRAM_ENUMERATION("Net.SSLHandshakeDetails", details);
@@ -1143,7 +1170,9 @@ ssl_verify_result_t SSLClientSocketImpl::VerifyCert() {
   }
 
   net_log_.AddEvent(NetLogEventType::SSL_CERTIFICATES_RECEIVED, [&] {
-    return NetLogX509CertificateParams(server_cert_.get());
+    base::Value dict(base::Value::Type::DICTIONARY);
+    dict.SetKey("certificates", NetLogX509CertificateList(server_cert_.get()));
+    return dict;
   });
 
   // If the certificate is bad and has been previously accepted, use
@@ -1251,8 +1280,24 @@ ssl_verify_result_t SSLClientSocketImpl::HandleVerifyResult() {
       result = ct_result;
   }
 
+  // If no other errors occurred, check whether the connection used a legacy TLS
+  // version.
+  if (result == OK &&
+      SSL_version(ssl_.get()) < context_->config().version_min_warn &&
+      base::FeatureList::IsEnabled(features::kLegacyTLSEnforced) &&
+      !context_->ssl_config_service()->ShouldSuppressLegacyTLSWarning(
+          host_and_port_.host())) {
+    server_cert_verify_result_.cert_status |= CERT_STATUS_LEGACY_TLS;
+
+    // Only set the resulting net error if it hasn't been previously bypassed.
+    if (!ssl_config_.IsAllowedBadCert(server_cert_.get(), nullptr))
+      result = ERR_SSL_OBSOLETE_VERSION;
+  }
+
   is_fatal_cert_error_ =
       IsCertStatusError(server_cert_verify_result_.cert_status) &&
+      result != ERR_CERT_KNOWN_INTERCEPTION_BLOCKED &&
+      result != ERR_SSL_OBSOLETE_VERSION &&
       context_->transport_security_state()->ShouldSSLErrorsBeFatal(
           host_and_port_.host());
 
@@ -1372,8 +1417,6 @@ int SSLClientSocketImpl::DoPayloadRead(IOBuffer* buf, int buf_len) {
       DCHECK_NE(kSSLClientSocketNoPendingResult, signature_result_);
       pending_read_error_ = ERR_IO_PENDING;
     } else {
-      if (pending_read_ssl_error_ == SSL_ERROR_EARLY_DATA_REJECTED)
-        MaybeRecordEarlyDataResult();
       pending_read_error_ = MapLastOpenSSLError(
           pending_read_ssl_error_, err_tracer, &pending_read_error_info_);
     }
@@ -1390,8 +1433,6 @@ int SSLClientSocketImpl::DoPayloadRead(IOBuffer* buf, int buf_len) {
     // Return any bytes read to the caller. The error will be deferred to the
     // next call of DoPayloadRead.
     rv = total_bytes_read;
-
-    MaybeRecordEarlyDataResult();
 
     // Do not treat insufficient data as an error to return in the next call to
     // DoPayloadRead() - instead, let the call fall through to check SSL_read()
@@ -1455,6 +1496,29 @@ void SSLClientSocketImpl::DoPeek() {
   }
 
   crypto::OpenSSLErrStackTracer err_tracer(FROM_HERE);
+
+  if (ssl_config_.early_data_enabled && !recorded_early_data_result_) {
+    // |SSL_peek| will implicitly run |SSL_do_handshake| if needed, but run it
+    // manually to pick up the reject reason.
+    int rv = SSL_do_handshake(ssl_.get());
+    int ssl_err = SSL_get_error(ssl_.get(), rv);
+    if (ssl_err == SSL_ERROR_WANT_READ || ssl_err == SSL_ERROR_WANT_WRITE) {
+      return;
+    }
+
+    // Since the two-parameter version of the macro (which asks for a max value)
+    // requires that the max value sentinel be named |kMaxValue|, transform the
+    // max-value sentinel into a one-past-the-end ("boundary") sentinel by
+    // adding 1, in order to be able to use the three-parameter macro.
+    UMA_HISTOGRAM_ENUMERATION("Net.SSLHandshakeEarlyDataReason",
+                              SSL_get_early_data_reason(ssl_.get()),
+                              ssl_early_data_reason_max_value + 1);
+    recorded_early_data_result_ = true;
+    if (ssl_err != SSL_ERROR_NONE) {
+      peek_complete_ = true;
+      return;
+    }
+  }
 
   char byte;
   int rv = SSL_peek(ssl_.get(), &byte, 1);
@@ -1609,6 +1673,19 @@ int SSLClientSocketImpl::ClientCertRequestCallback(SSL* ssl) {
   // Clear any currently configured certificates.
   SSL_certs_clear(ssl_.get());
 
+  // VB-56661: Don't disconnect when a client certificate is requested but none
+  // present. Allows connections to smtp.outlook.com:587 which doesn't care if
+  // empty response is provided.
+  if (!send_client_cert_) {
+    uint16_t port = host_and_port_.port();
+    if (port == 25 || port == 110 || port == 465 || port == 587 ||
+        port == 993 || port == 995) {
+      net_log_.AddEventWithIntParams(NetLogEventType::SSL_CLIENT_CERT_PROVIDED,
+                                    "cert_count", 0);
+      return 1;
+    }
+  }
+
 #if defined(OS_IOS)
   // TODO(droger): Support client auth on iOS. See http://crbug.com/145954).
   LOG(WARNING) << "Client auth is not supported";
@@ -1693,6 +1770,7 @@ SSLClientSessionCache::Key SSLClientSocketImpl::GetSessionCacheKey(
     key.network_isolation_key = ssl_config_.network_isolation_key;
   }
   key.privacy_mode = ssl_config_.privacy_mode;
+  key.disable_legacy_crypto = ssl_config_.disable_legacy_crypto;
   return key;
 }
 
@@ -1815,22 +1893,6 @@ void SSLClientSocketImpl::LogConnectEndEvent(int rv) {
 void SSLClientSocketImpl::RecordNegotiatedProtocol() const {
   UMA_HISTOGRAM_ENUMERATION("Net.SSLNegotiatedAlpnProtocol",
                             negotiated_protocol_, kProtoLast + 1);
-}
-
-void SSLClientSocketImpl::MaybeRecordEarlyDataResult() {
-  DCHECK(ssl_);
-  if (!ssl_config_.early_data_enabled || recorded_early_data_result_)
-    return;
-
-  recorded_early_data_result_ = true;
-  // Since the two-parameter version of the macro (which asks for a max
-  // value) requires that the max value sentinel be named |kMaxValue|,
-  // transform the max-value sentinel into a one-past-the-end ("boundary")
-  // sentinel by adding 1, in order to be able to use the three-parameter
-  // macro.
-  UMA_HISTOGRAM_ENUMERATION("Net.SSLHandshakeEarlyDataReason",
-                            SSL_get_early_data_reason(ssl_.get()),
-                            ssl_early_data_reason_max_value + 1);
 }
 
 int SSLClientSocketImpl::MapLastOpenSSLError(

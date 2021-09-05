@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
+<translation id="1169602411434249000">トラッカーのブロック</translation>
 <translation id="1397811292916898096"><ph name="PRODUCT_NAME" /> で検索</translation>
+<translation id="1598449788754183301">通常タブとプライベートタブの切替</translation>
 <translation id="1644574205037202324">履歴</translation>
 <translation id="17513872634828108">開いているタブ</translation>
 <translation id="1829244130665387512">ページ内検索</translation>
@@ -10,9 +12,11 @@
 <translation id="2633278372998075009">プライベートタブ</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. All rights reserved.</translation>
 <translation id="3234355010754616171">新しいプライベートタブ</translation>
+<translation id="3518985090088779359">同意して続行</translation>
 <translation id="3700829948786686853">Vivaldiへようこそ</translation>
 <translation id="4121750346708795461">このアプリケーションを使用すると、Vivaldiの<ph name="BEGIN_LINK1" />利用規約<ph name="END_LINK1" />と<ph name="BEGIN_LINK2" />プライバシーポリシー<ph name="END_LINK2" />に同意したことになります。</translation>
 <translation id="4243710787042215766">プライベートタブで開く</translation>
+<translation id="4526803704855831732">プライベートタブ</translation>
 <translation id="4883379392681899581">プライベートモードを離れる</translation>
 <translation id="4943872375798546930">見つかりません</translation>
 <translation id="5118676864324397542">Vivaldi <ph name="APP_NAME" /> ストレージ</translation>
@@ -31,7 +35,6 @@
 <translation id="7519434535192513364">「タップして検索」は、GoogleがVivaldiのデフォルト検索エンジンに設定されている場合のみ使用可能です。選択した単語と現在のページがコンテキストとして Google検索に送信されます。これは [<ph name="BEGIN_LINK" />設定<ph name="END_LINK" />] で無効にすることができます。</translation>
 <translation id="7649070708921625228">ヘルプ</translation>
 <translation id="804786196054284061">Vivaldi利用規約</translation>
-<translation id="8428213095426709021">設定</translation>
 <translation id="8820817407110198400">ブックマーク</translation>
 <translation id="9063523880881406963">[デスクトップ版サイトを見る] をオフにします</translation>
 <translation id="9080642952018487277">プライベートモードにする</translation>

@@ -340,11 +340,8 @@ void DownloadShelfView::AddedToWidget() {
 }
 
 void DownloadShelfView::OnThemeChanged() {
+  views::AccessiblePaneView::OnThemeChanged();
   UpdateColorsFromTheme();
-}
-
-void DownloadShelfView::LinkClicked(views::Link* source, int event_flags) {
-  chrome::ShowDownloads(browser_);
 }
 
 void DownloadShelfView::ButtonPressed(

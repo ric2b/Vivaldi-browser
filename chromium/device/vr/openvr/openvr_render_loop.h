@@ -15,7 +15,6 @@
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/vr_device.h"
 #include "device/vr/windows/compositor_base.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "third_party/openvr/src/headers/openvr.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -36,7 +35,6 @@ class OpenVRRenderLoop : public XRCompositorCommon {
  private:
   // XRDeviceAbstraction:
   mojom::XRFrameDataPtr GetNextFrameData() override;
-  mojom::XRGamepadDataPtr GetNextGamepadData() override;
   bool StartRuntime() override;
   void StopRuntime() override;
   void OnSessionStart() override;
@@ -44,7 +42,6 @@ class OpenVRRenderLoop : public XRCompositorCommon {
   bool SubmitCompositedFrame() override;
 
   // Helpers to implement XRDeviceAbstraction.
-  mojom::VRPosePtr GetPose();
   std::vector<mojom::XRInputSourceStatePtr> GetInputState(
       vr::TrackedDevicePose_t* poses,
       uint32_t count);

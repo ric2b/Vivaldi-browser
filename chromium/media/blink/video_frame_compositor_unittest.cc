@@ -92,12 +92,21 @@ class VideoFrameCompositorTest : public VideoRendererSink::RenderCallback,
   }
 
   scoped_refptr<VideoFrame> CreateOpaqueFrame() {
-    gfx::Size size(8, 8);
+    return CreateOpaqueFrame(8, 8);
+  }
+
+  scoped_refptr<VideoFrame> CreateOpaqueFrame(int width, int height) {
+    gfx::Size size(width, height);
     return VideoFrame::CreateFrame(PIXEL_FORMAT_I420, size, gfx::Rect(size),
                                    size, base::TimeDelta());
   }
 
   VideoFrameCompositor* compositor() { return compositor_.get(); }
+
+  VideoFrameCompositor::OnNewFramePresentedCB GetNewFramePresentedCB() {
+    return base::BindOnce(&VideoFrameCompositorTest::OnNewFramePresented,
+                          base::Unretained(this));
+  }
 
  protected:
   bool IsSurfaceLayerForVideoEnabled() { return GetParam(); }
@@ -108,6 +117,7 @@ class VideoFrameCompositorTest : public VideoRendererSink::RenderCallback,
                                          base::TimeTicks,
                                          bool));
   MOCK_METHOD0(OnFrameDropped, void());
+  MOCK_METHOD0(OnNewFramePresented, void());
 
   base::TimeDelta GetPreferredRenderInterval() override {
     return preferred_render_interval_;
@@ -188,6 +198,63 @@ TEST_P(VideoFrameCompositorTest, PaintSingleFrame) {
   scoped_refptr<VideoFrame> actual = compositor()->GetCurrentFrame();
   EXPECT_EQ(expected, actual);
   EXPECT_EQ(1, submitter_->did_receive_frame_count());
+}
+
+TEST_P(VideoFrameCompositorTest, RenderFiresPrensentationCallback) {
+  // Advance the clock so we can differentiate between base::TimeTicks::Now()
+  // and base::TimeTicks().
+  tick_clock_.Advance(base::TimeDelta::FromSeconds(1));
+
+  scoped_refptr<VideoFrame> opaque_frame = CreateOpaqueFrame();
+  EXPECT_CALL(*this, Render(_, _, true)).WillRepeatedly(Return(opaque_frame));
+  EXPECT_CALL(*this, OnNewFramePresented());
+  compositor()->SetOnFramePresentedCallback(GetNewFramePresentedCB());
+  StartVideoRendererSink();
+  StopVideoRendererSink(true);
+
+  auto metadata = compositor()->GetLastPresentedFrameMetadata();
+  EXPECT_NE(base::TimeTicks(), metadata->presentation_time);
+  EXPECT_NE(base::TimeTicks(), metadata->expected_display_time);
+}
+
+TEST_P(VideoFrameCompositorTest, MultiplePresentationCallbacks) {
+  // Advance the clock so we can differentiate between base::TimeTicks::Now()
+  // and base::TimeTicks().
+  tick_clock_.Advance(base::TimeDelta::FromSeconds(1));
+
+  // Create frames of different sizes so we can differentiate them.
+  constexpr int kSize1 = 8;
+  constexpr int kSize2 = 16;
+  constexpr int kSize3 = 24;
+  scoped_refptr<VideoFrame> opaque_frame_1 = CreateOpaqueFrame(kSize1, kSize1);
+  scoped_refptr<VideoFrame> opaque_frame_2 = CreateOpaqueFrame(kSize2, kSize2);
+  scoped_refptr<VideoFrame> opaque_frame_3 = CreateOpaqueFrame(kSize3, kSize3);
+
+  EXPECT_CALL(*this, OnNewFramePresented()).Times(1);
+  compositor()->SetOnFramePresentedCallback(GetNewFramePresentedCB());
+  compositor()->PaintSingleFrame(opaque_frame_1);
+
+  auto metadata = compositor()->GetLastPresentedFrameMetadata();
+  EXPECT_EQ(metadata->width, kSize1);
+  uint32_t first_presented_frames = metadata->presented_frames;
+
+  // Callbacks are one-shot, and shouldn't fire if they are not re-queued.
+  EXPECT_CALL(*this, OnNewFramePresented()).Times(0);
+  compositor()->PaintSingleFrame(opaque_frame_2);
+
+  // We should get the 2nd frame's metadata when we query for it.
+  metadata = compositor()->GetLastPresentedFrameMetadata();
+  EXPECT_EQ(first_presented_frames + 1, metadata->presented_frames);
+  EXPECT_EQ(metadata->width, kSize2);
+
+  EXPECT_CALL(*this, OnNewFramePresented()).Times(1);
+  compositor()->SetOnFramePresentedCallback(GetNewFramePresentedCB());
+  compositor()->PaintSingleFrame(opaque_frame_3);
+
+  // The presentated frames counter should have gone up twice by now.
+  metadata = compositor()->GetLastPresentedFrameMetadata();
+  EXPECT_EQ(first_presented_frames + 2, metadata->presented_frames);
+  EXPECT_EQ(metadata->width, kSize3);
 }
 
 TEST_P(VideoFrameCompositorTest, VideoRendererSinkFrameDropped) {

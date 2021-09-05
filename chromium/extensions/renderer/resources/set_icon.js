@@ -12,8 +12,7 @@ function loadImagePath(path, callback) {
   img.onload = function() {
     var canvas = document.createElement('canvas');
     canvas.width = img.width;
-    canvas.height = img.height;
-
+    canvas.height = img.height
     var canvas_context = canvas.getContext('2d');
     canvas_context.clearRect(0, 0, canvas.width, canvas.height);
     canvas_context.drawImage(img, 0, 0, canvas.width, canvas.height);

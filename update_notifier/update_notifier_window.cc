@@ -28,8 +28,6 @@ const int kNotificationUid = 1;
 const int kNotificationCallbackMessage = WM_USER + 1;
 
 const int kUpdateMenuItemId = 1;
-const int kIgnoreMenuItemId = 2;
-const int kQuitMenuItemId = 3;
 
 const wchar_t kUpdateNotifierWindowClassName[] = L"VivaldiUpdateNotifierWindow";
 const wchar_t kUpdateNotifierWindowName[] = L"Vivaldi Update Notifier";
@@ -105,15 +103,9 @@ bool UpdateNotifierWindow::Init() {
   }
 
   return notification_menu_.AppendStringMenuItem(
-             l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFIER_UPDATE_VIVALDI),
-             MFS_DEFAULT, kUpdateMenuItemId) &&
-         notification_menu_.AppendSeparator() &&
-         notification_menu_.AppendStringMenuItem(
-             l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFIER_IGNORE_UPDATE), 0,
-             kIgnoreMenuItemId) &&
-         notification_menu_.AppendStringMenuItem(
-             l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFIER_STOP_NOTIFYING), 0,
-             kQuitMenuItemId);
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFIER_UPDATE_VIVALDI),
+      MFS_DEFAULT,
+      kUpdateMenuItemId);
 }
 
 UpdateNotifierWindow::~UpdateNotifierWindow() {
@@ -252,24 +244,6 @@ bool UpdateNotifierWindow::HandleMessage(UINT message,
         switch (LOWORD(wparam)) {
           case kUpdateMenuItemId: {
             UpdateNotifierManager::GetInstance()->TriggerUpdate();
-            FALLTHROUGH;
-          }
-          // Fall through
-          case kIgnoreMenuItemId: {
-            RemoveNotification();
-            return true;
-          }
-
-          case kQuitMenuItemId: {
-            if (MessageBox(NULL,
-                           l10n_util::GetStringUTF16(
-                               IDS_UPDATE_NOTIFIER_QUIT_MESSAGE_TEXT)
-                               .c_str(),
-                           l10n_util::GetStringUTF16(
-                               IDS_UPDATE_NOTIFIER_QUIT_MESSAGE_TITLE)
-                               .c_str(),
-                           MB_OKCANCEL) == IDOK)
-              UpdateNotifierManager::GetInstance()->Disable();
             return true;
           }
         }

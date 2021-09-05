@@ -1,5 +1,14 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
 
+update_template_instance("//chrome/browser:browser") {
+  public_deps += [
+    "//vivaldi/sync:browser",
+  ]
+  allow_circular_includes_from += [
+    "//vivaldi/sync:browser",
+  ]
+}
+
 update_target("//chrome:browser_dependencies") {
   public_deps += [ "//vivaldi/sync:browser" ]
 }
@@ -10,18 +19,13 @@ if (is_android) {
   }
 }
 
-update_target("//components/browser_sync:browser_sync") {
-  deps += [ "//vivaldi/sync/glue" ]
-}
-
 if (!is_android) {
-  update_template_instance("//chrome/test:sync_integration_tests") {
-    deps += [ "//vivaldi/sync" ]
-  }
-
   update_target("//chrome/test:sync_integration_test_support") {
     public_deps += [
       "//vivaldi/sync/test:fake_server",
+      "//vivaldi/sync/test:sync_integration_testsupport",
+    ]
+    allow_circular_includes_from = [
       "//vivaldi/sync/test:sync_integration_testsupport",
     ]
   }
@@ -31,6 +35,19 @@ if (!is_android) {
       "//vivaldi/sync/test:fake_server",
       "//vivaldi/sync/test:unit_tests",
     ]
+    allow_circular_includes_from = [
+      "//vivaldi/sync/test:fake_server",
+    ]
+  }
+  update_target("//components:components_unittests") {
+    deps += [
+      "//vivaldi/sync/notes:sync_notes",
+    ]
+  }
+  update_target("//components/browser_sync:browser_sync") {
+    deps += [
+      "//vivaldi/sync/notes:sync_notes",
+    ]
   }
 }
 
@@ -38,10 +55,20 @@ update_target("//components/sync:rest_of_sync") {
   deps += [
     "//vivaldi/sync/test:fake_server",
   ]
+  allow_circular_includes_from = [
+    "//components/sync/base:base",
+    "//vivaldi/sync/test:fake_server",
+  ]
 }
 
 update_target("//components/sync_sessions:sync_sessions") {
   deps += [
     "//vivaldi/prefs:prefs_files_generator",
+  ]
+}
+
+update_target("//components/sync/protocol:util") {
+  allow_circular_includes_from = [
+    "//components/sync/base:base",
   ]
 }

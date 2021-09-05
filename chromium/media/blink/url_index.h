@@ -126,20 +126,20 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   void set_is_cors_cross_origin(bool is_cors_cross_origin);
   void set_has_access_control();
 
-  // A redirect has occured (or we've found a better UrlData for the same
+  // A redirect has occurred (or we've found a better UrlData for the same
   // resource).
   void RedirectTo(const scoped_refptr<UrlData>& to);
 
-  // Fail, tell all clients that a failure has occured.
+  // Fail, tell all clients that a failure has occurred.
   void Fail();
 
-  // Callback for receving notifications when a redirect occurs.
-  typedef base::Callback<void(const scoped_refptr<UrlData>&)> RedirectCB;
+  // Callback for receiving notifications when a redirect occurs.
+  using RedirectCB = base::OnceCallback<void(const scoped_refptr<UrlData>&)>;
 
   // Register a callback to be called when a redirect occurs.
   // Callbacks are cleared when a redirect occurs, so clients must call
   // OnRedirect again if they wish to continue receiving callbacks.
-  void OnRedirect(const RedirectCB& cb);
+  void OnRedirect(RedirectCB cb);
 
   // Returns true it is valid to keep using this to access cached data.
   // A single media player instance may choose to ignore this for resources
@@ -149,17 +149,8 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   // Virtual so we can override it for testing.
   virtual ResourceMultiBuffer* multibuffer();
 
-  // Callback for reporting number of bytes received by the network.
-  using BytesReceivedCB = base::RepeatingCallback<void(uint64_t)>;
-
-  // Register a BytesReceivedCallback for this UrlData. These callbacks will be
-  // copied to another UrlData if there is a redirect.
-  void AddBytesReceivedCallback(BytesReceivedCB bytes_received_cb);
-
   void AddBytesRead(int64_t b) { bytes_read_from_cache_ += b; }
   int64_t BytesReadFromCache() const { return bytes_read_from_cache_; }
-  void AddBytesReadFromNetwork(int64_t b);
-  int64_t BytesReadFromNetwork() const { return bytes_read_from_network_; }
 
   const std::string& mime_type() const { return mime_type_; }
   void set_mime_type(std::string mime_type);
@@ -198,9 +189,6 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   // Number of bytes read from this resource.
   int64_t bytes_read_from_cache_ = 0;
 
-  // Number of bytes read from network into the cache for this resource.
-  int64_t bytes_read_from_network_ = 0;
-
   // Does the server support ranges?
   bool range_supported_;
 
@@ -230,10 +218,6 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
 
   ResourceMultiBuffer multibuffer_;
   std::vector<RedirectCB> redirect_callbacks_;
-
-  std::vector<BytesReceivedCB> bytes_received_callbacks_;
-
-  std::vector<base::OnceClosure> waiting_load_callbacks_;
 
   base::ThreadChecker thread_checker_;
 

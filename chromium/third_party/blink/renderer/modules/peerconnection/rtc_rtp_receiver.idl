@@ -6,13 +6,15 @@
 [Exposed=Window]
 interface RTCRtpReceiver {
     readonly attribute MediaStreamTrack track;
-    [RuntimeEnabled=RTCDtlsTransport] readonly attribute RTCDtlsTransport? transport;
-    [RuntimeEnabled=RTCDtlsTransport] readonly attribute RTCDtlsTransport? rtcpTransport;
+    readonly attribute RTCDtlsTransport? transport;
+    readonly attribute RTCDtlsTransport? rtcpTransport;
     // https://henbos.github.io/webrtc-extensions/#dom-rtcrtpreceiver-playoutdelayhint
-    [RaisesException, Measure] attribute double? playoutDelayHint;
+    [RaisesException=Setter, Measure] attribute double? playoutDelayHint;
     static RTCRtpCapabilities?            getCapabilities(DOMString kind);
     RTCRtpReceiveParameters               getParameters();
     sequence<RTCRtpSynchronizationSource> getSynchronizationSources();
     sequence<RTCRtpContributingSource> getContributingSources();
     [CallWith=ScriptState] Promise<RTCStatsReport> getStats();
+    [Measure, RuntimeEnabled=RTCInsertableStreams, CallWith=ScriptState, RaisesException] RTCInsertableStreams createEncodedAudioStreams();
+    [Measure, RuntimeEnabled=RTCInsertableStreams, CallWith=ScriptState, RaisesException] RTCInsertableStreams createEncodedVideoStreams();
 };

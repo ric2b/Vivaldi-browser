@@ -9,7 +9,7 @@
 
 namespace vivaldi {
 
-ScopedGroupNotesActions::ScopedGroupNotesActions(Notes_Model* model)
+ScopedGroupNotesActions::ScopedGroupNotesActions(NotesModel* model)
     : model_(model) {
   if (model_)
     model_->BeginGroupedChanges();

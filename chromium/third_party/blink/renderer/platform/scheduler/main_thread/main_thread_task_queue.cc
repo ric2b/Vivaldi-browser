@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/frame_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 
@@ -62,6 +63,8 @@ const char* MainThreadTaskQueue::NameForQueueType(
       return "other_tq";
     case MainThreadTaskQueue::QueueType::kWebScheduling:
       return "web_scheduling_tq";
+    case MainThreadTaskQueue::QueueType::kNonWaking:
+      return "non_waking_tq";
     case MainThreadTaskQueue::QueueType::kCount:
       NOTREACHED();
       return nullptr;
@@ -94,6 +97,7 @@ bool MainThreadTaskQueue::IsPerFrameTaskQueue(
     case MainThreadTaskQueue::QueueType::kInput:
     case MainThreadTaskQueue::QueueType::kDetached:
     case MainThreadTaskQueue::QueueType::kCleanup:
+    case MainThreadTaskQueue::QueueType::kNonWaking:
     case MainThreadTaskQueue::QueueType::kOther:
       return false;
     case MainThreadTaskQueue::QueueType::kCount:
@@ -113,6 +117,7 @@ MainThreadTaskQueue::QueueClass MainThreadTaskQueue::QueueClassForQueueType(
     case QueueType::kTest:
     case QueueType::kV8:
     case QueueType::kIPC:
+    case QueueType::kNonWaking:
     case QueueType::kCleanup:
       return QueueClass::kNone;
     case QueueType::kFrameLoading:
@@ -249,6 +254,14 @@ void MainThreadTaskQueue::SetNetRequestPriority(
 base::Optional<net::RequestPriority> MainThreadTaskQueue::net_request_priority()
     const {
   return net_request_priority_;
+}
+
+void MainThreadTaskQueue::SetWebSchedulingPriority(
+    WebSchedulingPriority priority) {
+  if (web_scheduling_priority_ == priority)
+    return;
+  web_scheduling_priority_ = priority;
+  frame_scheduler_->OnWebSchedulingTaskQueuePriorityChanged(this);
 }
 
 base::Optional<WebSchedulingPriority>

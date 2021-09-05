@@ -15,6 +15,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/task_runner_util.h"
+#include "base/task/task_traits.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -22,11 +23,11 @@
 #include "media/base/data_buffer.h"
 #include "media/base/data_source.h"
 #include "media/base/timestamp_constants.h"
-#include "media/base/win/mf_initializer.h"
 
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_mime_util.h"
 #include "platform_media/common/win/mf_util.h"
+#include "platform_media/gpu/data_source/ipc_data_source.h"
 
 using namespace platform_media;
 
@@ -247,294 +248,197 @@ void WMFMediaPipeline::AudioTimestampCalculator::UpdateFrameCounter(
   frame_sum_ += frames_count;
 }
 
-WMFMediaPipeline::WMFMediaPipeline(
-    DataSource* data_source,
-    const AudioConfigChangedCB& audio_config_changed_cb,
-    const VideoConfigChangedCB& video_config_changed_cb)
-    : audio_config_changed_cb_(audio_config_changed_cb),
-      video_config_changed_cb_(video_config_changed_cb),
-      byte_stream_(Microsoft::WRL::Make<WMFByteStream>(data_source)),
-      threaded_impl_(std::make_unique<ThreadedImpl>(data_source)),
-      media_pipeline_thread_("media_pipeline_thread"),
-      media_pipeline_task_runner_(media_pipeline_thread_.task_runner()),
-      weak_ptr_factory_(this) {
-  DCHECK(!audio_config_changed_cb_.is_null());
-  DCHECK(!video_config_changed_cb_.is_null());
-}
+WMFMediaPipeline::WMFMediaPipeline() = default;
 
 WMFMediaPipeline::~WMFMediaPipeline() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  media_pipeline_task_runner_->DeleteSoon(FROM_HERE, threaded_impl_.release());
-  if (byte_stream_)
-    byte_stream_->Stop();
+
+  // base::Unretained(threaded_impl_) usage in this class methods when posting
+  // to the media pipeline worker sequence is safe since the posted tasks will
+  // be executed strictly before the following DeleteSoon.
+  if (threaded_impl_) {
+    DCHECK(media_pipeline_task_runner_);
+    media_pipeline_task_runner_->DeleteSoon(FROM_HERE,
+                                            threaded_impl_.release());
+  }
 }
 
-void WMFMediaPipeline::Initialize(const std::string& mime_type,
-                                  const InitializeCB& initialize_cb) {
+void WMFMediaPipeline::Initialize(ipc_data_source::Reader source_reader,
+                                  ipc_data_source::Info source_info,
+                                  InitializeCB initialize_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " mime type "
-            << mime_type;
+  LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " mime_type="
+            << source_info.mime_type;
 
-  media_pipeline_thread_.Start();
-  media_pipeline_task_runner_ = media_pipeline_thread_.task_runner();
+  media_pipeline_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+  threaded_impl_ = std::make_unique<ThreadedImpl>();
 
-  initialize_cb_ = initialize_cb;
-
-  // We set up the byte_stream to run on the main thread, so that it can receive
-  // the result of reads when one or another call into the IMFSourceReader ends
-  // up hanging while waiting for the result of a read, therefore avoiding
-  // deadlocks.
-  if (FAILED(byte_stream_->Initialize(
-          std::wstring(mime_type.begin(), mime_type.end()).c_str()))) {
-    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to create byte stream.";
-    InitializeDone(false, -1, PlatformMediaTimeInfo(), PlatformAudioConfig(),
-                   PlatformVideoConfig());
-    return;
-  }
-
+  // See comments in the destructor about base::Unretained().
   media_pipeline_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&WMFMediaPipeline::ThreadedImpl::Initialize,
                      base::Unretained(threaded_impl_.get()),
-                     weak_ptr_factory_.GetWeakPtr(), byte_stream_, mime_type));
+                     std::move(source_reader), std::move(source_info),
+                     std::move(initialize_cb)));
 }
 
-void WMFMediaPipeline::InitializeDone(bool success,
-                                      int bitrate,
-                                      PlatformMediaTimeInfo time_info,
-                                      PlatformAudioConfig audio_config,
-                                      PlatformVideoConfig video_config) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(initialize_cb_);
-  std::move(initialize_cb_)
-      .Run(success, bitrate, time_info, audio_config, video_config);
-}
-
-void WMFMediaPipeline::ReadAudioData(const ReadDataCB& read_audio_data_cb) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(read_audio_data_cb_.is_null());
-  read_audio_data_cb_ = read_audio_data_cb;
-
-  media_pipeline_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&WMFMediaPipeline::ThreadedImpl::ReadData,
-                            base::Unretained(threaded_impl_.get()),
-                            PlatformMediaDataType::PLATFORM_MEDIA_AUDIO));
-}
-
-void WMFMediaPipeline::ReadVideoData(const ReadDataCB& read_video_data_cb) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(read_video_data_cb_.is_null());
-  read_video_data_cb_ = read_video_data_cb;
-
-  media_pipeline_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&WMFMediaPipeline::ThreadedImpl::ReadData,
-                            base::Unretained(threaded_impl_.get()),
-                            PlatformMediaDataType::PLATFORM_MEDIA_VIDEO));
-}
-
-void WMFMediaPipeline::ReadDataDone(PlatformMediaDataType type,
-                                    scoped_refptr<DataBuffer> decoded_data) {
+void WMFMediaPipeline::ReadMediaData(IPCDecodingBuffer ipc_decoding_buffer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  switch (type) {
-    case PlatformMediaDataType::PLATFORM_MEDIA_AUDIO:
-      DCHECK(read_audio_data_cb_);
-      std::move(read_audio_data_cb_).Run(decoded_data);
-      return;
-    case PlatformMediaDataType::PLATFORM_MEDIA_VIDEO:
-      DCHECK(read_video_data_cb_);
-      std::move(read_video_data_cb_).Run(decoded_data);
-      return;
-    default:
-      NOTREACHED() << "Unknown stream type";
+  // We might have some data ready to send, see comments in
+  // WMFMediaPipeline::ThreadedImpl::OnReadSample.
+  if (ipc_decoding_buffer.status() == MediaDataStatus::kConfigChanged &&
+      ipc_decoding_buffer.data_size() > 0) {
+    ipc_decoding_buffer.set_status(MediaDataStatus::kOk);
+    IPCDecodingBuffer::Reply(std::move(ipc_decoding_buffer));
+    return;
   }
+
+  // See comments in the destructor about base::Unretained().
+  media_pipeline_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&WMFMediaPipeline::ThreadedImpl::ReadData,
+                                base::Unretained(threaded_impl_.get()),
+                                std::move(ipc_decoding_buffer)));
 }
 
-void WMFMediaPipeline::Seek(base::TimeDelta time, const SeekCB& seek_cb) {
+void WMFMediaPipeline::Seek(base::TimeDelta time, SeekCB seek_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": time " << time;
 
-  seek_cb_ = seek_cb;
+  // See comments in the destructor about base::Unretained().
   media_pipeline_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&WMFMediaPipeline::ThreadedImpl::Seek,
-                            base::Unretained(threaded_impl_.get()), time));
+      FROM_HERE, base::BindOnce(&WMFMediaPipeline::ThreadedImpl::Seek,
+                                base::Unretained(threaded_impl_.get()), time,
+                                std::move(seek_cb)));
 }
 
-void WMFMediaPipeline::SeekDone(bool success) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(seek_cb_);
-  std::move(seek_cb_).Run(success);
-}
-
-void WMFMediaPipeline::AudioConfigChanged(PlatformAudioConfig audio_config) {
-  read_audio_data_cb_.Reset();
-  audio_config_changed_cb_.Run(audio_config);
-}
-
-void WMFMediaPipeline::VideoConfigChanged(PlatformVideoConfig video_config) {
-  read_video_data_cb_.Reset();
-  video_config_changed_cb_.Run(video_config);
-}
-
-WMFMediaPipeline::ThreadedImpl::ThreadedImpl(DataSource* data_source)
+WMFMediaPipeline::ThreadedImpl::ThreadedImpl()
     :  // We are constructing this object on the main thread
       main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      data_source_(data_source),
       audio_timestamp_calculator_(new AudioTimestampCalculator),
       get_stride_function_(nullptr),
       weak_ptr_factory_(this) {
-  std::fill(
-      stream_indices_,
-      stream_indices_ + PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT,
-      static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX));
+  std::fill(std::begin(stream_indices_), std::end(stream_indices_),
+            static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX));
   DETACH_FROM_SEQUENCE(sequence_checker_);
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": threaded_impl=" << this;
 }
 
 WMFMediaPipeline::ThreadedImpl::~ThreadedImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": threaded_impl=" << this;
 }
 
 void WMFMediaPipeline::ThreadedImpl::Initialize(
-    base::WeakPtr<WMFMediaPipeline> wmf_media_pipeline,
-    scoped_refptr<WMFByteStream> byte_stream,
-    const std::string& mime_type) {
+    ipc_data_source::Reader ipc_source_reader,
+    ipc_data_source::Info ipc_source_info,
+    InitializeCB initialize_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(data_source_);
   DCHECK(!source_reader_worker_.hasReader());
 
-  wmf_media_pipeline_ = wmf_media_pipeline;
+  is_streaming_ = ipc_source_info.is_streaming;
 
+  bool ok = false;
   PlatformMediaTimeInfo time_info;
   int bitrate = 0;
   PlatformAudioConfig audio_config;
   PlatformVideoConfig video_config;
 
-  // We've already made this check in WebMediaPlayerImpl, but that's been in
-  // a different process, so let's take its result with a grain of salt.
-  const bool has_platform_support = IsPlatformMediaPipelineAvailable(
-      PlatformMediaCheckType::FULL);
+  do {
+    // We've already made this check in WebMediaPlayerImpl, but that's been in
+    // a different process, so let's take its result with a grain of salt.
+    const bool has_platform_support =
+        IsPlatformMediaPipelineAvailable(PlatformMediaCheckType::FULL);
 
-  get_stride_function_ = reinterpret_cast<decltype(get_stride_function_)>(
-      GetFunctionFromLibrary("MFGetStrideForBitmapInfoHeader",
-                                    "evr.dll"));
+    get_stride_function_ = reinterpret_cast<decltype(get_stride_function_)>(
+        GetFunctionFromLibrary("MFGetStrideForBitmapInfoHeader", "evr.dll"));
 
-  if (!has_platform_support || !get_stride_function_) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Can't access required media libraries in the system";
-    main_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&WMFMediaPipeline::InitializeDone, wmf_media_pipeline_,
-                       false, bitrate, time_info, audio_config, video_config));
-    return;
-  }
-
-  InitializeMediaFoundation();
-
-  Microsoft::WRL::ComPtr<IMFAttributes> source_reader_attributes;
-  if (!CreateSourceReaderCallbackAndAttributes(&source_reader_attributes)) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Failed to create source reader attributes";
-    main_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&WMFMediaPipeline::InitializeDone, wmf_media_pipeline_,
-                       false, bitrate, time_info, audio_config, video_config));
-    return;
-  }
-
-  Microsoft::WRL::ComPtr<IMFSourceReader> source_reader;
-  const HRESULT hr = MFCreateSourceReaderFromByteStream(
-      byte_stream.get(), source_reader_attributes.Get(),
-      source_reader.GetAddressOf());
-  if (FAILED(hr)) {
-    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to create SOFTWARE source reader.";
-    source_reader.Reset();
-    main_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&WMFMediaPipeline::InitializeDone, wmf_media_pipeline_,
-                       false, bitrate, time_info, audio_config, video_config));
-    return;
-  }
-
-  source_reader_worker_.SetReader(source_reader);
-
-  if (!RetrieveStreamIndices()) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Failed to find streams";
-    main_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&WMFMediaPipeline::InitializeDone, wmf_media_pipeline_,
-                       false, bitrate, time_info, audio_config, video_config));
-    return;
-  }
-
-  if (!ConfigureSourceReader()) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Failed configure source reader";
-    main_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&WMFMediaPipeline::InitializeDone, wmf_media_pipeline_,
-                       false, bitrate, time_info, audio_config, video_config));
-    return;
-  }
-
-  time_info.duration = GetDuration();
-  bitrate = GetBitrate(time_info.duration);
-
-  if (HasMediaStream(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO)) {
-    if (!GetAudioDecoderConfig(&audio_config)) {
+    if (!has_platform_support || !get_stride_function_) {
       LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                   << " Failed to get Audio Decoder Config";
-      main_task_runner_->PostTask(
-          FROM_HERE, base::BindOnce(&WMFMediaPipeline::InitializeDone,
-                                    wmf_media_pipeline_, false, bitrate,
-                                    time_info, audio_config, video_config));
-      return;
+                   << " Can't access required media libraries in the system";
+      break;
     }
-  }
 
-  if (HasMediaStream(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO)) {
-    if (!GetVideoDecoderConfig(&video_config)) {
+    Microsoft::WRL::ComPtr<IMFAttributes> source_reader_attributes;
+    if (!CreateSourceReaderCallbackAndAttributes(ipc_source_info.mime_type,
+                                                 &source_reader_attributes)) {
       LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                   << " Failed to get Video Decoder Config";
-      main_task_runner_->PostTask(
-          FROM_HERE, base::BindOnce(&WMFMediaPipeline::InitializeDone,
-                                    wmf_media_pipeline_, false, bitrate,
-                                    time_info, audio_config, video_config));
-      return;
+                   << " Failed to create source reader attributes";
+      break;
     }
-  }
 
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " FinalizeInitialization successful with PlatformAudioConfig :"
-          << Loggable(audio_config);
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " FinalizeInitialization successful with PlatformVideoConfig :"
-          << Loggable(video_config);
+    Microsoft::WRL::ComPtr<WMFByteStream> byte_stream(
+        Microsoft::WRL::Make<WMFByteStream>());
+    byte_stream->Initialize(main_task_runner_, std::move(ipc_source_reader),
+                            ipc_source_info.is_streaming, ipc_source_info.size);
+
+    Microsoft::WRL::ComPtr<IMFSourceReader> source_reader;
+    const HRESULT hr = MFCreateSourceReaderFromByteStream(
+        byte_stream.Get(), source_reader_attributes.Get(),
+        source_reader.GetAddressOf());
+    if (FAILED(hr)) {
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Failed to create SOFTWARE source reader.";
+      source_reader.Reset();
+      break;
+    }
+
+    source_reader_worker_.SetReader(source_reader);
+
+    if (!RetrieveStreamIndices()) {
+      LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                   << " Failed to find streams";
+      break;
+    }
+
+    if (!ConfigureSourceReader()) {
+      LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                   << " Failed configure source reader";
+      break;
+    }
+
+    time_info.duration = GetDuration();
+    bitrate = GetBitrate(time_info.duration);
+
+    if (HasMediaStream(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO)) {
+      if (!GetAudioDecoderConfig(&audio_config)) {
+        LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                     << " Failed to get Audio Decoder Config";
+        break;
+      }
+    }
+
+    if (HasMediaStream(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO)) {
+      if (!GetVideoDecoderConfig(&video_config)) {
+        LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                     << " Failed to get Video Decoder Config";
+        break;
+      }
+    }
+
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " FinalizeInitialization successful with PlatformAudioConfig :"
+            << Loggable(audio_config);
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " FinalizeInitialization successful with PlatformVideoConfig :"
+            << Loggable(video_config);
+    ok = true;
+  } while (false);
 
   main_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&WMFMediaPipeline::InitializeDone, wmf_media_pipeline_,
-                     true, bitrate, time_info, audio_config, video_config));
-  return;
+      FROM_HERE, base::BindOnce(std::move(initialize_cb), ok, bitrate,
+                                time_info, audio_config, video_config));
 }
 
-void WMFMediaPipeline::ThreadedImpl::ReadData(PlatformMediaDataType type) {
+void WMFMediaPipeline::ThreadedImpl::ReadData(
+    IPCDecodingBuffer ipc_decoding_buffer) {
+  PlatformMediaDataType type = ipc_decoding_buffer.type();
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!ipc_decoding_buffers_[type]);
 
   VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-
-  // We might have some data ready to send.
-  if (pending_decoded_data_[type]) {
-    scoped_refptr<DataBuffer> decoded_data = pending_decoded_data_[type];
-    pending_decoded_data_[type] = nullptr;
-    main_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&WMFMediaPipeline::ReadDataDone,
-                              wmf_media_pipeline_, type, decoded_data));
-    return;
-  }
 
   DCHECK(source_reader_worker_.hasReader());
 
@@ -543,10 +447,12 @@ void WMFMediaPipeline::ThreadedImpl::ReadData(PlatformMediaDataType type) {
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to read audio sample";
+    ipc_decoding_buffer.set_status(MediaDataStatus::kMediaError);
     main_task_runner_->PostTask(FROM_HERE,
-                                base::Bind(&WMFMediaPipeline::ReadDataDone,
-                                           wmf_media_pipeline_, type, nullptr));
+                                base::BindOnce(&IPCDecodingBuffer::Reply,
+                                               std::move(ipc_decoding_buffer)));
   }
+  ipc_decoding_buffers_[type] = std::move(ipc_decoding_buffer);
 }
 
 void WMFMediaPipeline::ThreadedImpl::OnReadSample(
@@ -555,7 +461,8 @@ void WMFMediaPipeline::ThreadedImpl::OnReadSample(
     const Microsoft::WRL::ComPtr<IMFSample>& sample) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ", status: " << (int)status;
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << ", status: " << (int)status;
 
   PlatformMediaDataType media_type =
       PlatformMediaDataType::PLATFORM_MEDIA_AUDIO;
@@ -566,17 +473,21 @@ void WMFMediaPipeline::ThreadedImpl::OnReadSample(
              stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO]) {
     NOTREACHED() << "Unknown stream type";
   }
-  DCHECK(!pending_decoded_data_[media_type]);
+  DCHECK(ipc_decoding_buffers_[media_type]);
+  if (!ipc_decoding_buffers_[media_type])
+    return;
 
-  scoped_refptr<DataBuffer> data_buffer;
+  IPCDecodingBuffer ipc_decoding_buffer =
+      std::move(ipc_decoding_buffers_[media_type]);
+  DCHECK(ipc_decoding_buffer.type() == media_type);
   switch (status) {
     case MediaDataStatus::kOk:
       DCHECK(sample);
-      data_buffer = CreateDataBuffer(sample.Get(), media_type);
+      if (!CreateDataBuffer(sample.Get(), &ipc_decoding_buffer)) {
+        status = MediaDataStatus::kMediaError;
+      }
       break;
-
     case MediaDataStatus::kEOS:
-      data_buffer = DataBuffer::CreateEOSBuffer();
       break;
 
     case MediaDataStatus::kMediaError:
@@ -584,59 +495,56 @@ void WMFMediaPipeline::ThreadedImpl::OnReadSample(
                  << " status MediaDataStatus::kMediaError";
       break;
 
-    case MediaDataStatus::kConfigChanged: {
-      // Chromium's pipeline does not want any decoded data when we report
-      // that configuration has changed. We need to buffer the sample and
-      // send it during next read operation.
-      pending_decoded_data_[media_type] =
-          CreateDataBuffer(sample.Get(), media_type);
-
-      if (media_type == PlatformMediaDataType::PLATFORM_MEDIA_AUDIO) {
-        PlatformAudioConfig audio_config;
-        if (GetAudioDecoderConfig(&audio_config)) {
-          VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                  << Loggable(audio_config);
-          main_task_runner_->PostTask(
-              FROM_HERE, base::Bind(&WMFMediaPipeline::AudioConfigChanged,
-                                    wmf_media_pipeline_, audio_config));
-          return;
-        }
-
-        LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                   << " Error while getting decoder audio configuration"
-                   << " changing status to MediaDataStatus::kMediaError";
-        status = MediaDataStatus::kMediaError;
-        break;
-      } else if (media_type == PlatformMediaDataType::PLATFORM_MEDIA_VIDEO) {
-        PlatformVideoConfig video_config;
-        if (GetVideoDecoderConfig(&video_config)) {
-          main_task_runner_->PostTask(
-              FROM_HERE, base::Bind(&WMFMediaPipeline::VideoConfigChanged,
-                                    wmf_media_pipeline_, video_config));
-          return;
-        }
-
-        LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                   << " Error while getting decoder video configuration"
-                   << " changing status to MediaDataStatus::kMediaError";
+    case MediaDataStatus::kConfigChanged:
+      // Chromium's pipeline does not want any decoded data together with the
+      // config change messages. So we copy the decoded data into the buffer now
+      // but send them the next time we will be asked for data, see
+      // WMFMediaPipeline::ReadMediaData.
+      DCHECK(sample);
+      if (!CreateDataBuffer(sample.Get(), &ipc_decoding_buffer)) {
         status = MediaDataStatus::kMediaError;
         break;
       }
-      // Fallthrough.
-      FALLTHROUGH;
-    }
-
-    default:
-      NOTREACHED();
+      switch (media_type) {
+        case PlatformMediaDataType::PLATFORM_MEDIA_AUDIO: {
+          PlatformAudioConfig audio_config;
+          if (!GetAudioDecoderConfig(&audio_config)) {
+            LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                       << " Error while getting decoder audio configuration"
+                       << " changing status to MediaDataStatus::kMediaError";
+            status = MediaDataStatus::kMediaError;
+            break;
+          }
+          VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                  << Loggable(audio_config);
+          ipc_decoding_buffer.GetAudioConfig() = audio_config;
+          break;
+        }
+        case PlatformMediaDataType::PLATFORM_MEDIA_VIDEO: {
+          PlatformVideoConfig video_config;
+          if (!GetVideoDecoderConfig(&video_config)) {
+            LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                       << " Error while getting decoder video configuration"
+                       << " changing status to MediaDataStatus::kMediaError";
+            status = MediaDataStatus::kMediaError;
+            break;
+          }
+          ipc_decoding_buffer.GetVideoConfig() = video_config;
+          break;
+        }
+      }
+      break;
   }
 
-  main_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&WMFMediaPipeline::ReadDataDone,
-                            wmf_media_pipeline_, media_type, data_buffer));
+  ipc_decoding_buffer.set_status(status);
+  main_task_runner_->PostTask(FROM_HERE,
+                              base::BindOnce(&IPCDecodingBuffer::Reply,
+                                             std::move(ipc_decoding_buffer)));
 }
 
-scoped_refptr<DataBuffer>
-WMFMediaPipeline::ThreadedImpl::CreateDataBufferFromMemory(IMFSample* sample) {
+bool WMFMediaPipeline::ThreadedImpl::CreateDataBufferFromMemory(
+    IMFSample* sample,
+    IPCDecodingBuffer* decoding_buffer) {
   VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 
   // Get a pointer to the IMFMediaBuffer in the sample.
@@ -645,7 +553,7 @@ WMFMediaPipeline::ThreadedImpl::CreateDataBufferFromMemory(IMFSample* sample) {
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to get pointer to data in sample.";
-    return nullptr;
+    return false;
   }
 
   // Get the actual data from the IMFMediaBuffer
@@ -655,27 +563,26 @@ WMFMediaPipeline::ThreadedImpl::CreateDataBufferFromMemory(IMFSample* sample) {
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to lock buffer.";
-    return nullptr;
+    return false;
   }
-  scoped_refptr<DataBuffer> data_buffer =
-      DataBuffer::CopyFrom(data, data_size);
+  uint8_t* memory = decoding_buffer->PrepareMemory(data_size);
+  if (memory) {
+    memcpy(memory, data, data_size);
+  }
 
   // Unlock the IMFMediaBuffer buffer.
   output_buffer->Unlock();
 
-  return data_buffer;
+  return memory != nullptr;
 }
 
-scoped_refptr<DataBuffer> WMFMediaPipeline::ThreadedImpl::CreateDataBuffer(
+bool WMFMediaPipeline::ThreadedImpl::CreateDataBuffer(
     IMFSample* sample,
-    PlatformMediaDataType media_type) {
+    IPCDecodingBuffer* decoding_buffer) {
   VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 
-  scoped_refptr<DataBuffer> data_buffer;
-
-  data_buffer = CreateDataBufferFromMemory(sample);
-  if (!data_buffer)
-    return nullptr;
+  if (!CreateDataBufferFromMemory(sample, decoding_buffer))
+    return false;
 
   int64_t timestamp_hns;  // timestamp in hundreds of nanoseconds
   HRESULT hr = sample->GetSampleTime(&timestamp_hns);
@@ -695,58 +602,61 @@ scoped_refptr<DataBuffer> WMFMediaPipeline::ThreadedImpl::CreateDataBuffer(
     discontinuity = 0;
   }
 
-  if (media_type == PlatformMediaDataType::PLATFORM_MEDIA_AUDIO) {
-    // We calculate the timestamp and the duration based on the number of
-    // audio frames we've already played. We don't trust the timestamp
-    // stored on the IMFSample, as sometimes it's wrong, possibly due to
-    // buggy encoders?
-    data_buffer->set_timestamp(audio_timestamp_calculator_->GetTimestamp(
-        timestamp_hns, discontinuity != 0));
-    int64_t frames_count = audio_timestamp_calculator_->GetFramesCount(
-        static_cast<int64_t>(data_buffer->data_size()));
-    data_buffer->set_duration(
-        audio_timestamp_calculator_->GetDuration(frames_count));
-    audio_timestamp_calculator_->UpdateFrameCounter(frames_count);
-  } else if (media_type == PlatformMediaDataType::PLATFORM_MEDIA_VIDEO) {
-    data_buffer->set_timestamp(
-        base::TimeDelta::FromMicroseconds(timestamp_hns / 10));
-    data_buffer->set_duration(
-        base::TimeDelta::FromMicroseconds(duration_hns / 10));
+  switch (decoding_buffer->type()) {
+    case PlatformMediaDataType::PLATFORM_MEDIA_AUDIO: {
+      // We calculate the timestamp and the duration based on the number of
+      // audio frames we've already played. We don't trust the timestamp
+      // stored on the IMFSample, as sometimes it's wrong, possibly due to
+      // buggy encoders?
+      decoding_buffer->set_timestamp(audio_timestamp_calculator_->GetTimestamp(
+          timestamp_hns, discontinuity != 0));
+      int64_t frames_count = audio_timestamp_calculator_->GetFramesCount(
+          static_cast<int64_t>(decoding_buffer->data_size()));
+      decoding_buffer->set_duration(
+          audio_timestamp_calculator_->GetDuration(frames_count));
+      audio_timestamp_calculator_->UpdateFrameCounter(frames_count);
+      break;
+    }
+    case PlatformMediaDataType::PLATFORM_MEDIA_VIDEO: {
+      decoding_buffer->set_timestamp(
+          base::TimeDelta::FromMicroseconds(timestamp_hns / 10));
+      decoding_buffer->set_duration(
+          base::TimeDelta::FromMicroseconds(duration_hns / 10));
+      break;
+    }
   }
 
-  return data_buffer;
+  return true;
 }
 
-void WMFMediaPipeline::ThreadedImpl::Seek(base::TimeDelta time) {
+void WMFMediaPipeline::ThreadedImpl::Seek(base::TimeDelta time, SeekCB seek_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  // Seek requests on a streaming data source can confuse WMF.
-  // Chromium sometimes seeks to the beginning of a stream when starting up.
-  // Since that should be a no-op, we just pretend it succeeded.
-  if (data_source_->IsStreaming() && time == base::TimeDelta()) {
-    main_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&WMFMediaPipeline::SeekDone, wmf_media_pipeline_,
-                              true));
-    return;
-  }
+  bool success = false;
+  do {
+    // Seek requests on a streaming data source can confuse WMF.
+    // Chromium sometimes seeks to the beginning of a stream when starting up.
+    // Since that should be a no-op, we just pretend it succeeded.
+    if (is_streaming_ && time == base::TimeDelta()) {
+      success = true;
+      break;
+    }
 
-  AutoPropVariant position;
-  // IMFSourceReader::SetCurrentPosition expects position in 100-nanosecond
-  // units, so we have to multiply time in microseconds by 10.
-  HRESULT hr =
-      InitPropVariantFromInt64(time.InMicroseconds() * 10, position.get());
-  if (FAILED(hr)) {
-    main_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(&WMFMediaPipeline::SeekDone, wmf_media_pipeline_, false));
-    return;
-  }
+    AutoPropVariant position;
+    // IMFSourceReader::SetCurrentPosition expects position in 100-nanosecond
+    // units, so we have to multiply time in microseconds by 10.
+    HRESULT hr =
+        InitPropVariantFromInt64(time.InMicroseconds() * 10, position.get());
+    if (FAILED(hr))
+      break;
 
-  audio_timestamp_calculator_->RecapturePosition();
-  hr = source_reader_worker_.SetCurrentPosition(position);
-  main_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&WMFMediaPipeline::SeekDone, wmf_media_pipeline_,
-                            SUCCEEDED(hr)));
+    audio_timestamp_calculator_->RecapturePosition();
+    hr = source_reader_worker_.SetCurrentPosition(position);
+    success = SUCCEEDED(hr);
+  } while (false);
+
+  main_task_runner_->PostTask(FROM_HERE,
+                              base::BindOnce(std::move(seek_cb), success));
 }
 
 bool WMFMediaPipeline::ThreadedImpl::HasMediaStream(
@@ -963,7 +873,7 @@ bool WMFMediaPipeline::ThreadedImpl::GetVideoDecoderConfig(
 }
 
 bool WMFMediaPipeline::ThreadedImpl::CreateSourceReaderCallbackAndAttributes(
-    Microsoft::WRL::ComPtr<IMFAttributes>* attributes) {
+    const std::string& mime_type, Microsoft::WRL::ComPtr<IMFAttributes>* attributes) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!source_reader_callback_.Get());
 
@@ -982,6 +892,12 @@ bool WMFMediaPipeline::ThreadedImpl::CreateSourceReaderCallbackAndAttributes(
   hr = (*attributes)
            ->SetUnknown(MF_SOURCE_READER_ASYNC_CALLBACK,
                         source_reader_callback_.Get());
+  if (FAILED(hr))
+    return false;
+
+  std::wstring mime_type_wstr(mime_type.begin(), mime_type.end());
+  hr = (*attributes)
+           ->SetString(MF_BYTESTREAM_CONTENT_TYPE, mime_type_wstr.c_str());
   if (FAILED(hr))
     return false;
 
@@ -1091,7 +1007,7 @@ bool WMFMediaPipeline::ThreadedImpl::ConfigureSourceReader() {
       PlatformMediaDataType::PLATFORM_MEDIA_AUDIO,
       PlatformMediaDataType::PLATFORM_MEDIA_VIDEO};
   static_assert(base::size(media_types) ==
-                    PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT,
+                    kPlatformMediaDataTypeCount,
                 "Not all media types chosen to be configured.");
 
   bool status = false;
@@ -1115,8 +1031,7 @@ base::TimeDelta WMFMediaPipeline::ThreadedImpl::GetDuration() {
 
   HRESULT hr = source_reader_worker_.GetDuration(var);
   if (FAILED(hr)) {
-    DLOG_IF(WARNING, !data_source_->IsStreaming())
-        << "Failed to obtain media duration.";
+    DLOG_IF(WARNING, !is_streaming_) << "Failed to obtain media duration.";
     return media::kInfiniteDuration;
   }
 
@@ -1153,7 +1068,7 @@ int WMFMediaPipeline::ThreadedImpl::GetBitrate(base::TimeDelta duration) {
     video_bitrate = 0;
 
   const int bitrate = std::max(audio_bitrate + video_bitrate, 0);
-  if (bitrate == 0 && !data_source_->IsStreaming()) {
+  if (bitrate == 0 && !is_streaming_) {
     // If we have a valid bitrate we can use it, otherwise we have to calculate
     // it from file size and duration.
       hr = source_reader_worker_.GetFileSize(var);

@@ -21,6 +21,7 @@ class SocketBuffer;
 // Fake StreamSocket that communicates with another instance in memory.
 class FakeStreamSocket : public net::StreamSocket {
  public:
+  FakeStreamSocket();
   explicit FakeStreamSocket(const net::IPEndPoint& local_address);
   ~FakeStreamSocket() override;
 
@@ -60,6 +61,8 @@ class FakeStreamSocket : public net::StreamSocket {
   void ApplySocketTag(const net::SocketTag& tag) override;
 
  private:
+  void RemoteDisconnected();
+
   const net::IPEndPoint local_address_;
   const std::unique_ptr<SocketBuffer> buffer_;
   FakeStreamSocket* peer_;

@@ -2,13 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/feature_list.h"
 #include "base/macros.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/instant_service_observer.h"
+#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -30,18 +33,18 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/color_utils.h"
 
-class TestThemeInfoObserver : public InstantServiceObserver {
+class TestNtpThemeObserver : public InstantServiceObserver {
  public:
-  explicit TestThemeInfoObserver(InstantService* service) : service_(service) {
+  explicit TestNtpThemeObserver(InstantService* service) : service_(service) {
     service_->AddObserver(this);
   }
 
-  ~TestThemeInfoObserver() override { service_->RemoveObserver(this); }
+  ~TestNtpThemeObserver() override { service_->RemoveObserver(this); }
 
   void WaitForThemeApplied(bool theme_installed) {
     DCHECK(!quit_closure_);
     theme_installed_ = theme_installed;
-    if (hasThemeInstalled(theme_info_) == theme_installed_) {
+    if (hasThemeInstalled(theme_) == theme_installed_) {
       return;
     }
 
@@ -51,10 +54,10 @@ class TestThemeInfoObserver : public InstantServiceObserver {
   }
 
  private:
-  void ThemeInfoChanged(const ThemeBackgroundInfo& theme_info) override {
-    theme_info_ = theme_info;
+  void NtpThemeChanged(const NtpTheme& theme) override {
+    theme_ = theme;
 
-    if (quit_closure_ && hasThemeInstalled(theme_info) == theme_installed_) {
+    if (quit_closure_ && hasThemeInstalled(theme) == theme_installed_) {
       std::move(quit_closure_).Run();
       quit_closure_.Reset();
     }
@@ -62,13 +65,11 @@ class TestThemeInfoObserver : public InstantServiceObserver {
 
   void MostVisitedInfoChanged(const InstantMostVisitedInfo&) override {}
 
-  bool hasThemeInstalled(const ThemeBackgroundInfo& theme_info) {
-    return theme_info.theme_id != "";
-  }
+  bool hasThemeInstalled(const NtpTheme& theme) { return theme.theme_id != ""; }
 
   InstantService* const service_;
 
-  ThemeBackgroundInfo theme_info_;
+  NtpTheme theme_;
 
   bool theme_installed_;
   base::OnceClosure quit_closure_;
@@ -153,7 +154,7 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeBackgroundAccess) {
       browser(), GURL(chrome::kChromeUINewTabURL),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_TAB |
-          ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+          ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   // The "Instant" New Tab should have access to chrome-search: scheme but not
   // chrome: scheme.
@@ -174,7 +175,7 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeAppliedToExistingTab) {
   ASSERT_EQ(0, browser()->tab_strip_model()->active_index());
 
   const std::string helper_js = "document.body.style.cssText";
-  TestThemeInfoObserver observer(
+  TestNtpThemeObserver observer(
       InstantServiceFactory::GetForProfile(browser()->profile()));
 
   // Open new tab.
@@ -219,12 +220,16 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeAppliedToExistingTab) {
 }
 
 IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeAppliedToNewTab) {
+  if (base::FeatureList::IsEnabled(ntp_features::kRealboxMatchOmniboxTheme)) {
+    return;
+  }
+
   // On the existing tab.
   ASSERT_EQ(1, browser()->tab_strip_model()->count());
   ASSERT_EQ(0, browser()->tab_strip_model()->active_index());
 
   const std::string helper_js = "document.body.style.cssText";
-  TestThemeInfoObserver observer(
+  TestNtpThemeObserver observer(
       InstantServiceFactory::GetForProfile(browser()->profile()));
   // Open new tab.
   content::WebContents* active_tab =
@@ -265,13 +270,21 @@ IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeAppliedToNewTab) {
   EXPECT_EQ(css_text, new_tab_css_text);
 }
 
-IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeChangedWhenApplyingNewTheme) {
+// The test is flaky on linux asan. crbug.com/1045708.
+#if defined(OS_LINUX) && defined(ADDRESS_SANITIZER)
+#define MAYBE_ThemeChangedWhenApplyingNewTheme \
+  DISABLED_ThemeChangedWhenApplyingNewTheme
+#else
+#define MAYBE_ThemeChangedWhenApplyingNewTheme ThemeChangedWhenApplyingNewTheme
+#endif
+IN_PROC_BROWSER_TEST_F(InstantThemeTest,
+                       MAYBE_ThemeChangedWhenApplyingNewTheme) {
   // On the existing tab.
   ASSERT_EQ(1, browser()->tab_strip_model()->count());
   ASSERT_EQ(0, browser()->tab_strip_model()->active_index());
 
   const std::string helper_js = "document.body.style.cssText";
-  TestThemeInfoObserver observer(
+  TestNtpThemeObserver observer(
       InstantServiceFactory::GetForProfile(browser()->profile()));
 
   // Open new tab.

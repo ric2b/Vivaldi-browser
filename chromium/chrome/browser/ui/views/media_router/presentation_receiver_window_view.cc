@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -26,6 +27,8 @@
 #include "chrome/browser/ui/views/accelerator_table.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
 #include "chrome/browser/ui/views/media_router/presentation_receiver_window_frame.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory.h"
+#include "components/autofill/core/browser/autofill_manager.h"
 #include "components/omnibox/browser/location_bar_model_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
@@ -142,6 +145,11 @@ void PresentationReceiverWindowView::Init() {
   SecurityStateTabHelper::CreateForWebContents(web_contents);
   ChromeTranslateClient::CreateForWebContents(web_contents);
   autofill::ChromeAutofillClient::CreateForWebContents(web_contents);
+  autofill::ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
+      web_contents,
+      autofill::ChromeAutofillClient::FromWebContents(web_contents),
+      g_browser_process->GetApplicationLocale(),
+      autofill::AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER);
   ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
       web_contents,
       autofill::ChromeAutofillClient::FromWebContents(web_contents));
@@ -283,7 +291,8 @@ bool PresentationReceiverWindowView::IsFullscreen() const {
 
 void PresentationReceiverWindowView::EnterFullscreen(
     const GURL& url,
-    ExclusiveAccessBubbleType bubble_type) {
+    ExclusiveAccessBubbleType bubble_type,
+    const int64_t display_id) {
   frame_->SetFullscreen(true);
 #if !defined(OS_CHROMEOS)
   OnFullscreenChanged();
@@ -305,7 +314,7 @@ void PresentationReceiverWindowView::UpdateExclusiveAccessExitBubbleContent(
     ExclusiveAccessBubbleType bubble_type,
     ExclusiveAccessBubbleHideCallback bubble_first_hide_callback,
     bool force_update) {
-#if defined(CHROMEOS)
+#if defined(OS_CHROMEOS)
   // On Chrome OS, we will not show the toast for the normal browser fullscreen
   // mode.  The 'F11' text is confusing since how to access F11 on a Chromebook
   // is not common knowledge and there is also a dedicated fullscreen toggle

@@ -191,7 +191,7 @@ struct OldSelectedNodes {
     selected_map = std::move(other.selected_map);
   }
 
-  Member<SelectionPaintRange> paint_range;
+  SelectionPaintRange* paint_range;
   HeapHashMap<Member<const Node>, SelectionState> selected_map;
 
  private:
@@ -230,7 +230,7 @@ struct NewPaintRangeAndSelectedNodes {
 #endif
   }
 
-  Member<SelectionPaintRange> paint_range;
+  SelectionPaintRange* paint_range;
   HeapHashSet<Member<const Node>> selected_objects;
 
  private:
@@ -480,7 +480,7 @@ static bool IsPositionValidText(const Position& position) {
   if (position.AnchorNode()->IsTextNode() && position.IsOffsetInAnchor())
     return true;
   if ((IsA<HTMLBRElement>(position.AnchorNode()) ||
-       IsHTMLWBRElement(position.AnchorNode())) &&
+       IsA<HTMLWBRElement>(position.AnchorNode())) &&
       (position.IsBeforeAnchor() || position.IsAfterAnchor()))
     return true;
   return false;
@@ -514,7 +514,7 @@ static base::Optional<unsigned> GetTextContentOffsetStart(
     return GetTextContentOffset(Position(node, node_offset.value()));
   }
 
-  DCHECK(IsHTMLWBRElement(node) || IsA<HTMLBRElement>(node)) << node;
+  DCHECK(IsA<HTMLWBRElement>(node) || IsA<HTMLBRElement>(node)) << node;
   DCHECK(!node_offset.has_value()) << node;
   return GetTextContentOffset(Position::BeforeNode(node));
 }
@@ -531,7 +531,7 @@ static base::Optional<unsigned> GetTextContentOffsetEnd(
     return GetTextContentOffset(Position(node, node_offset.value()));
   }
 
-  DCHECK(IsHTMLWBRElement(node) || IsA<HTMLBRElement>(node)) << node;
+  DCHECK(IsA<HTMLWBRElement>(node) || IsA<HTMLBRElement>(node)) << node;
   DCHECK(!node_offset.has_value()) << node;
   return GetTextContentOffset(Position::AfterNode(node));
 }
@@ -584,9 +584,10 @@ static SelectionState GetSelectionStateFor(const LayoutText& layout_text) {
 }
 
 static SelectionState GetSelectionStateFor(const NGInlineCursor& cursor) {
-  DCHECK(cursor.CurrentLayoutObject() &&
-         cursor.CurrentLayoutObject()->IsText());
-  return GetSelectionStateFor(ToLayoutText(*cursor.CurrentLayoutObject()));
+  DCHECK(cursor.Current().GetLayoutObject() &&
+         cursor.Current().GetLayoutObject()->IsText());
+  return GetSelectionStateFor(
+      ToLayoutText(*cursor.Current().GetLayoutObject()));
 }
 
 bool LayoutSelection::IsSelected(const LayoutObject& layout_object) {
@@ -661,10 +662,11 @@ LayoutTextSelectionStatus FrameSelection::ComputeLayoutSelectionStatus(
 LayoutSelectionStatus LayoutSelection::ComputeSelectionStatus(
     const NGInlineCursor& cursor) const {
   // We don't paint selection on ellipsis.
-  if (cursor.IsEllipsis())
+  if (cursor.Current().IsEllipsis())
     return {0, 0, SelectSoftLineBreak::kNotSelected};
-  const unsigned start_offset = cursor.CurrentTextStartOffset();
-  const unsigned end_offset = cursor.CurrentTextEndOffset();
+  const NGTextOffset offset = cursor.Current().TextOffset();
+  const unsigned start_offset = offset.start;
+  const unsigned end_offset = offset.end;
   switch (GetSelectionStateFor(cursor)) {
     case SelectionState::kStart: {
       const unsigned start_in_block = paint_range_->start_offset.value();
@@ -802,7 +804,7 @@ void LayoutSelection::Commit() {
   paint_range_ = new_range.paint_range;
 }
 
-void LayoutSelection::OnDocumentShutdown() {
+void LayoutSelection::ContextDestroyed() {
   has_pending_selection_ = false;
   paint_range_->start_node = nullptr;
   paint_range_->start_offset = base::nullopt;

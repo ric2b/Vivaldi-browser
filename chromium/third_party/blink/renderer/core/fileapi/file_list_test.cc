@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/fileapi/file_list.h"
 
+#include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/platform/file_metadata.h"
 
@@ -13,12 +14,13 @@ TEST(FileListTest, pathsForUserVisibleFiles) {
   auto* const file_list = MakeGarbageCollected<FileList>();
 
   // Native file.
-  file_list->Append(File::Create("/native/path"));
+  file_list->Append(MakeGarbageCollected<File>("/native/path"));
 
   // Blob file.
   const scoped_refptr<BlobDataHandle> blob_data_handle =
       BlobDataHandle::Create();
-  file_list->Append(File::Create("name", 0.0, blob_data_handle));
+  file_list->Append(MakeGarbageCollected<File>("name", base::Time::UnixEpoch(),
+                                               blob_data_handle));
 
   // User visible snapshot file.
   {
@@ -40,8 +42,10 @@ TEST(FileListTest, pathsForUserVisibleFiles) {
   {
     KURL url(
         "filesystem:http://example.com/isolated/hash/visible-non-native-file");
-    file_list->Append(File::CreateForFileSystemFile(url, FileMetadata(),
-                                                    File::kIsUserVisible));
+    FileMetadata metadata;
+    metadata.length = 0;
+    file_list->Append(
+        File::CreateForFileSystemFile(url, metadata, File::kIsUserVisible));
   }
 
   // Not user visible file system URL file.
@@ -49,8 +53,10 @@ TEST(FileListTest, pathsForUserVisibleFiles) {
     KURL url(
         "filesystem:http://example.com/isolated/hash/"
         "not-visible-non-native-file");
-    file_list->Append(File::CreateForFileSystemFile(url, FileMetadata(),
-                                                    File::kIsNotUserVisible));
+    FileMetadata metadata;
+    metadata.length = 0;
+    file_list->Append(
+        File::CreateForFileSystemFile(url, metadata, File::kIsNotUserVisible));
   }
 
   Vector<base::FilePath> paths = file_list->PathsForUserVisibleFiles();

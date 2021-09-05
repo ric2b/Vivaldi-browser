@@ -23,6 +23,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "printing/metafile.h"
@@ -58,7 +59,8 @@ void DebugDumpPageTask(const base::string16& doc_name,
                   base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
   page->metafile()->SaveTo(&file);
 }
-#else
+#endif  // defined(OS_WIN)
+
 void DebugDumpTask(const base::string16& doc_name,
                    const MetafilePlayer* metafile) {
   DCHECK(PrintedDocument::HasDebugDumpPath());
@@ -70,9 +72,12 @@ void DebugDumpTask(const base::string16& doc_name,
   base::FilePath path = PrintedDocument::CreateDebugDumpPath(name, kExtension);
   base::File file(path,
                   base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+#if defined(OS_ANDROID)
+  metafile->SaveToFileDescriptor(file.GetPlatformFile());
+#else
   metafile->SaveTo(&file);
+#endif  // defined(OS_ANDROID)
 }
-#endif
 
 void DebugDumpDataTask(const base::string16& doc_name,
                        const base::FilePath::StringType& extension,
@@ -94,9 +99,8 @@ void DebugDumpSettings(const base::string16& doc_name,
       job_settings, base::JSONWriter::OPTIONS_PRETTY_PRINT, &settings_str);
   scoped_refptr<base::RefCountedMemory> data =
       base::RefCountedString::TakeString(&settings_str);
-  base::PostTask(
-      FROM_HERE,
-      {base::ThreadPool(), base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
       base::BindOnce(&DebugDumpDataTask, doc_name, FILE_PATH_LITERAL(".json"),
                      base::RetainedRef(data)));
 }
@@ -139,9 +143,8 @@ void PrintedDocument::SetPage(int page_number,
   }
 
   if (HasDebugDumpPath()) {
-    base::PostTask(
-        FROM_HERE,
-        {base::ThreadPool(), base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
         base::BindOnce(&DebugDumpPageTask, name(), base::RetainedRef(page)));
   }
 }
@@ -157,7 +160,15 @@ scoped_refptr<PrintedPage> PrintedDocument::GetPage(int page_number) {
   return page;
 }
 
-#else
+void PrintedDocument::DropPage(const PrintedPage* page) {
+  base::AutoLock lock(lock_);
+  PrintedPages::const_iterator it =
+      mutable_.pages_.find(page->page_number() - 1);
+  DCHECK_EQ(page, it->second.get());
+  mutable_.pages_.erase(it);
+}
+#endif  // defined(OS_WIN)
+
 void PrintedDocument::SetDocument(std::unique_ptr<MetafilePlayer> metafile,
                                   const gfx::Size& page_size,
                                   const gfx::Rect& page_content_rect) {
@@ -171,9 +182,8 @@ void PrintedDocument::SetDocument(std::unique_ptr<MetafilePlayer> metafile,
   }
 
   if (HasDebugDumpPath()) {
-    base::PostTask(
-        FROM_HERE,
-        {base::ThreadPool(), base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
         base::BindOnce(&DebugDumpTask, name(), mutable_.metafile_.get()));
   }
 }
@@ -181,8 +191,6 @@ void PrintedDocument::SetDocument(std::unique_ptr<MetafilePlayer> metafile,
 const MetafilePlayer* PrintedDocument::GetMetafile() {
   return mutable_.metafile_.get();
 }
-
-#endif
 
 bool PrintedDocument::IsComplete() const {
   base::AutoLock lock(lock_);
@@ -271,9 +279,8 @@ void PrintedDocument::DebugDumpData(
     const base::RefCountedMemory* data,
     const base::FilePath::StringType& extension) {
   DCHECK(HasDebugDumpPath());
-  base::PostTask(
-      FROM_HERE,
-      {base::ThreadPool(), base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
       base::BindOnce(&DebugDumpDataTask, name(), extension,
                      base::RetainedRef(data)));
 }

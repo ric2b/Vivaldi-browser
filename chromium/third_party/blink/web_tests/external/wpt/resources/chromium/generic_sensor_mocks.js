@@ -155,8 +155,8 @@ var GenericSensorTest = (() => {
       ]);
       this.binding_ = new mojo.Binding(device.mojom.SensorProvider, this);
 
-      this.interceptor_ = new MojoInterfaceInterceptor(
-          device.mojom.SensorProvider.name, "context", true);
+      this.interceptor_ =
+          new MojoInterfaceInterceptor(device.mojom.SensorProvider.name);
       this.interceptor_.oninterfacerequest = e => {
         this.bindToPipe(e.handle);
       };
@@ -309,18 +309,15 @@ var GenericSensorTest = (() => {
       Object.freeze(this); // Make it immutable.
     }
 
-    initialize() {
+    async initialize() {
       if (testInternal.initialized)
         throw new Error('Call reset() before initialize().');
 
-      if (window.testRunner) {
-        // Grant sensor permissions for Chromium testrunner.
-        ['accelerometer', 'gyroscope',
-         'magnetometer', 'ambient-light-sensor'].forEach((entry) => {
-          window.testRunner.setPermission(entry, 'granted',
-                                          location.origin, location.origin);
-        });
-      }
+      // Grant sensor permissions for Chromium testdriver.
+      for (const entry of ['accelerometer', 'gyroscope',
+          'magnetometer', 'ambient-light-sensor']) {
+        await test_driver.set_permission({ name: entry }, 'granted', false);
+      };
 
       testInternal.sensorProvider = new MockSensorProvider;
       testInternal.initialized = true;

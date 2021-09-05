@@ -5,11 +5,11 @@
 #include "content/browser/renderer_host/cursor_manager.h"
 
 #include "build/build_config.h"
+#include "content/browser/renderer_host/frame_token_message_queue.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/cursors/webcursor.h"
-#include "content/public/common/cursor_info.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
@@ -18,6 +18,8 @@
 #include "content/test/test_render_view_host.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/cursor/cursor.h"
+#include "ui/base/mojom/cursor_type.mojom-shared.h"
 
 // CursorManager is only instantiated on Aura and Mac.
 #if defined(USE_AURA) || defined(OS_MACOSX)
@@ -71,7 +73,8 @@ class MockRenderWidgetHost : public RenderWidgetHostImpl {
                              process,
                              routing_id,
                              std::move(widget),
-                             false),
+                             /*hidden=*/false,
+                             std::make_unique<FrameTokenMessageQueue>()),
         widget_impl_(std::move(widget_impl)) {}
 
   std::unique_ptr<MockWidgetImpl> widget_impl_;
@@ -132,8 +135,7 @@ TEST_F(CursorManagerTest, CursorOnSingleView) {
   // The view should be using the default cursor.
   EXPECT_EQ(top_view_->cursor(), WebCursor());
 
-  CursorInfo cursor_info(ui::CursorType::kHand);
-  WebCursor cursor_hand(cursor_info);
+  WebCursor cursor_hand(ui::mojom::CursorType::kHand);
 
   // Update the view with a non-default cursor.
   top_view_->GetCursorManager()->UpdateCursor(top_view_, cursor_hand);
@@ -149,8 +151,7 @@ TEST_F(CursorManagerTest, CursorOverChildView) {
   std::unique_ptr<MockRenderWidgetHostViewForCursors> child_view(
       new MockRenderWidgetHostViewForCursors(widget_host.get(), false));
 
-  CursorInfo cursor_info(ui::CursorType::kHand);
-  WebCursor cursor_hand(cursor_info);
+  WebCursor cursor_hand(ui::mojom::CursorType::kHand);
 
   // Set the child frame's cursor to a hand. This should not propagate to the
   // top-level view without the mouse moving over the child frame.
@@ -177,14 +178,11 @@ TEST_F(CursorManagerTest, CursorOverMultipleChildViews) {
   std::unique_ptr<MockRenderWidgetHostViewForCursors> child_view2(
       new MockRenderWidgetHostViewForCursors(widget_host2.get(), false));
 
-  CursorInfo cursor_info_hand(ui::CursorType::kHand);
-  WebCursor cursor_hand(cursor_info_hand);
+  WebCursor cursor_hand(ui::mojom::CursorType::kHand);
 
-  CursorInfo cursor_info_cross(ui::CursorType::kCross);
-  WebCursor cursor_cross(cursor_info_cross);
+  WebCursor cursor_cross(ui::mojom::CursorType::kCross);
 
-  CursorInfo cursor_info_pointer(ui::CursorType::kPointer);
-  WebCursor cursor_pointer(cursor_info_pointer);
+  WebCursor cursor_pointer(ui::mojom::CursorType::kPointer);
 
   // Initialize each View to a different cursor.
   top_view_->GetCursorManager()->UpdateCursor(top_view_, cursor_hand);

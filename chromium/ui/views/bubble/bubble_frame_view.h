@@ -42,8 +42,7 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
       const base::string16& title_text);
 
   // Creates a close button used in the corner of the dialog.
-  static std::unique_ptr<Button> CreateCloseButton(ButtonListener* listener,
-                                                   bool should_use_dark_colors);
+  static std::unique_ptr<Button> CreateCloseButton(ButtonListener* listener);
 
   // NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override;
@@ -108,6 +107,7 @@ class VIEWS_EXPORT BubbleFrameView : public NonClientFrameView,
   // line and has a solid background by being embedded in a
   // FootnoteContainerView. An example footnote would be some help text.
   void SetFootnoteView(std::unique_ptr<View> view);
+  View* GetFootnoteView() const;
   void set_footnote_margins(const gfx::Insets& footnote_margins) {
     footnote_margins_ = footnote_margins;
   }

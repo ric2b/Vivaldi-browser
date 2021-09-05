@@ -24,6 +24,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 
 using ::base::test::RunCallback;
+using ::base::test::RunOnceCallback;
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::Invoke;
@@ -41,7 +42,8 @@ static constexpr uint8_t kFakeIv[DecryptConfig::kDecryptionKeySize] = {0};
 namespace {
 
 ACTION_P(ReturnBuffer, buffer) {
-  arg0.Run(buffer.get() ? DemuxerStream::kOk : DemuxerStream::kAborted, buffer);
+  std::move(arg0).Run(
+      buffer.get() ? DemuxerStream::kOk : DemuxerStream::kAborted, buffer);
 }
 
 }  // namespace
@@ -211,17 +213,17 @@ TEST_F(DecryptingMediaResourceTest,
 TEST_F(DecryptingMediaResourceTest, WaitingCallback) {
   AddStream(DemuxerStream::VIDEO, /* encrypted = */ true);
 
-  EXPECT_CALL(*streams_.front(), Read(_))
+  EXPECT_CALL(*streams_.front(), OnRead(_))
       .WillRepeatedly(ReturnBuffer(encrypted_buffer_));
   EXPECT_CALL(decryptor_, Decrypt(_, encrypted_buffer_, _))
-      .WillRepeatedly(
-          RunCallback<2>(Decryptor::kNoKey, scoped_refptr<DecoderBuffer>()));
+      .WillRepeatedly(RunOnceCallback<2>(Decryptor::kNoKey,
+                                         scoped_refptr<DecoderBuffer>()));
   EXPECT_CALL(decrypting_media_resource_init_cb_, Run(true));
   EXPECT_CALL(waiting_cb_, Run(WaitingReason::kNoDecryptionKey));
 
   decrypting_media_resource_->Initialize(
       decrypting_media_resource_init_cb_.Get(), waiting_cb_.Get());
-  decrypting_media_resource_->GetAllStreams().front()->Read(base::BindRepeating(
+  decrypting_media_resource_->GetAllStreams().front()->Read(base::BindOnce(
       &DecryptingMediaResourceTest::BufferReady, base::Unretained(this)));
   task_environment_.RunUntilIdle();
 }

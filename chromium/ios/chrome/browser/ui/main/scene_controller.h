@@ -7,10 +7,22 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/app/application_delegate/tab_opening.h"
+#import "ios/chrome/app/application_delegate/tab_switching.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/main/scene_controller_guts.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
+#import "ios/chrome/browser/ui/tab_grid/tab_switcher.h"
+
+@protocol MainControllerGuts;
 
 // The controller object for a scene. Reacts to scene state changes.
-@interface SceneController : NSObject <SceneStateObserver>
+@interface SceneController : NSObject <SceneStateObserver,
+                                       ApplicationCommands,
+                                       TabSwitcherDelegate,
+                                       TabSwitching,
+                                       SceneControllerGuts,
+                                       TabOpening>
 
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithSceneState:(SceneState*)sceneState
@@ -18,6 +30,17 @@
 
 // The state of the scene controlled by this object.
 @property(nonatomic, weak, readonly) SceneState* sceneState;
+
+// Returns whether the scene is showing or partially showing the
+// incognito panel.
+@property(nonatomic, assign, readonly) BOOL incognitoContentVisible;
+
+// A temporary pointer to MainController.
+@property(nonatomic, weak) id<MainControllerGuts> mainController;
+
+// The interface provider for this scene.
+@property(nonatomic, strong, readonly) id<BrowserInterfaceProvider>
+    interfaceProvider;
 
 @end
 

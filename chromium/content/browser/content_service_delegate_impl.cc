@@ -6,6 +6,7 @@
 
 #include "base/macros.h"
 #include "base/optional.h"
+#include "content/public/browser/focused_node_details.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -131,6 +132,11 @@ class NavigableContentsDelegateImpl : public content::NavigableContentsDelegate,
     client_->DidAutoResizeView(new_size);
   }
 
+  void NavigationStateChanged(WebContents* source,
+                              InvalidateTypes changed_flags) override {
+    MaybeNotifyCanGoBack();
+  }
+
   // WebContentsObserver:
   void RenderViewReady() override {
     if (background_color_) {
@@ -175,6 +181,28 @@ class NavigableContentsDelegateImpl : public content::NavigableContentsDelegate,
 
   void DidStopLoading() override { client_->DidStopLoading(); }
 
+  void NavigationEntriesDeleted() override { MaybeNotifyCanGoBack(); }
+
+  void DidAttachInterstitialPage() override { MaybeNotifyCanGoBack(); }
+
+  void DidDetachInterstitialPage() override { MaybeNotifyCanGoBack(); }
+
+  // Notifies the client whether the web contents can navigate back in its
+  // history stack.
+  void MaybeNotifyCanGoBack() {
+    const bool can_go_back = web_contents_->GetController().CanGoBack();
+    if (can_go_back_ == can_go_back)
+      return;
+
+    can_go_back_ = can_go_back;
+    client_->UpdateCanGoBack(can_go_back);
+  }
+
+  void OnFocusChangedInPage(FocusedNodeDetails* details) override {
+    client_->FocusedNodeChanged(details->is_editable_node,
+                                details->node_bounds_in_screen);
+  }
+
   std::unique_ptr<WebContents> web_contents_;
   mojom::NavigableContentsClient* const client_;
 
@@ -182,6 +210,8 @@ class NavigableContentsDelegateImpl : public content::NavigableContentsDelegate,
   const gfx::Size auto_resize_min_size_;
   const gfx::Size auto_resize_max_size_;
   const base::Optional<SkColor> background_color_;
+
+  bool can_go_back_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(NavigableContentsDelegateImpl);
 };

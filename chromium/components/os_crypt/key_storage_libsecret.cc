@@ -7,6 +7,7 @@
 #include "base/base64.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/time/time.h"
 #include "build/branding_buildflags.h"
 #include "components/os_crypt/libsecret_util_linux.h"
 
@@ -54,6 +55,25 @@ SecretValue* ToSingleSecret(GList* secret_items) {
   return secret_value;
 }
 
+// Checks the timestamps of the secret item and prints findings to logs. We
+// presume that at most one secret item can be present.
+void AnalyseKeyHistory(GList* secret_items) {
+  GList* first = g_list_first(secret_items);
+  if (first == nullptr)
+    return;
+
+  SecretItem* secret_item = static_cast<SecretItem*>(first->data);
+  auto created = base::Time::FromTimeT(
+      LibsecretLoader::secret_item_get_created(secret_item));
+  auto last_modified = base::Time::FromTimeT(
+      LibsecretLoader::secret_item_get_modified(secret_item));
+
+  VLOG(1) << "Libsecret key created: " << created;
+  VLOG(1) << "Libsecret key last modified: " << last_modified;
+  LOG_IF(WARNING, created != last_modified)
+      << "the encryption key has been modified since it was created.";
+}
+
 }  // namespace
 
 std::string KeyStorageLibsecret::AddRandomPasswordInLibsecret() {
@@ -96,6 +116,7 @@ std::string KeyStorageLibsecret::GetKeyImpl() {
       return password;
     return AddRandomPasswordInLibsecret();
   }
+  AnalyseKeyHistory(helper.results());
   std::string password(
       LibsecretLoader::secret_value_get_text(password_libsecret));
   LibsecretLoader::secret_value_unref(password_libsecret);

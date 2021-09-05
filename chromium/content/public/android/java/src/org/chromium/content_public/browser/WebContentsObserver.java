@@ -76,14 +76,23 @@ public abstract class WebContentsObserver {
     public void didStopLoading(String url) {}
 
     /**
+     * Called when a page's load progress has changed.
+     * @param progress The load progress in the range of [0,1].
+     */
+    public void loadProgressChanged(float progress) {}
+
+    /**
+     * Called when a page's visible security state has changed.
+     */
+    public void didChangeVisibleSecurityState() {}
+
+    /**
      * Called when an error occurs while loading a page and/or the page fails to load.
      * @param isMainFrame Whether the navigation occurred in main frame.
      * @param errorCode Error code for the occurring error.
-     * @param description The description for the error.
      * @param failingUrl The url that was loading when the error occurred.
      */
-    public void didFailLoad(
-            boolean isMainFrame, int errorCode, String description, String failingUrl) {}
+    public void didFailLoad(boolean isMainFrame, int errorCode, String failingUrl) {}
 
     /**
      * Called when the page had painted something non-empty.
@@ -152,9 +161,8 @@ public abstract class WebContentsObserver {
 
     /**
      * Called when the theme color was changed.
-     * @param color the new color in ARGB format
      */
-    public void didChangeThemeColor(int color) {}
+    public void didChangeThemeColor() {}
 
     /**
      * Called when the Web Contents leaves or enters fullscreen mode.

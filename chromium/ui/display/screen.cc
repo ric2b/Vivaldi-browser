@@ -76,4 +76,15 @@ bool Screen::GetDisplayWithDisplayId(int64_t display_id,
   return false;
 }
 
+void Screen::SetPanelRotationForTesting(int64_t display_id,
+                                        Display::Rotation rotation) {
+  // Not implemented.
+  DCHECK(false);
+}
+
+std::string Screen::GetCurrentWorkspace() {
+  NOTIMPLEMENTED_LOG_ONCE();
+  return {};
+}
+
 }  // namespace display

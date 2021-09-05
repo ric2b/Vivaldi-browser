@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">Încărcați</translation>
 <translation id="1249250836236328755">Gen</translation>
 <translation id="1278813325885878377">Tastatură maghiară QWERTY</translation>
+<translation id="1293556467332435079">Fișiere</translation>
 <translation id="1297922636971898492">Google Drive nu este disponibil momentan. Încărcarea va reporni automat când Google Drive va putea fi accesat.</translation>
 <translation id="1307931752636661898">Fișierele Linux nu pot fi afișate</translation>
 <translation id="1310751437842832374">Transliterație (mausam → ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">S-a salvat</translation>
 <translation id="1864756863218646478">Fișierul nu a putut fi găsit.</translation>
 <translation id="1921986354447415460">Tastatură turcă-F</translation>
+<translation id="1924372192547904021">S-a formatat <ph name="DRIVE_NAME" /></translation>
 <translation id="1931134289871235022">Slovacă</translation>
 <translation id="1933345018156373194">Mutarea nu a reușit, eroare neprevăzută: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">Finlandeză</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">Tastatură germană NEO 2</translation>
 <translation id="2943400156390503548">Prezentări</translation>
 <translation id="2943503720238418293">Folosește un nume mai scurt</translation>
+<translation id="2949781154072577687">Se formatează <ph name="DRIVE_NAME" />...</translation>
 <translation id="2951236788251446349">Meduză</translation>
 <translation id="2963783323012015985">Tastatură turcă</translation>
 <translation id="2966459079597787514">Tastatură suedeză</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">Operația de copiere nu a reușit. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Pepene galben</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">Link extern</translation>
 <translation id="4425149324548788773">Contul meu Drive</translation>
 <translation id="4465830120256509958">Tastatură braziliană</translation>
 <translation id="4470564870223067757">Hangul setul 2</translation>
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">Tastatură devanagari (Fonetică)</translation>
 <translation id="6885780034956018177">Melc</translation>
 <translation id="6896758677409633944">Copiază</translation>
+<translation id="6898028766943174120">Mai multe subdosare...</translation>
 <translation id="691516599546977041">Fișierele nu pot fi salvate în <ph name="FOLDER_NAME" />. Imaginile editate vor fi salvate în dosarul Descărcări.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">S.U.A. Workman</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">Activează sincronizarea prin date mobile</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6970230597523682626">Bulgară</translation>
+<translation id="6973630695168034713">Dosare</translation>
 <translation id="6978611942794658017">Acest fișier este destinat pentru un PC ce utilizează software-ul Windows. Acesta nu este compatibil cu dispozitivul tău care rulează sistemul de operare Chrome. Caută o aplicație de înlocuire potrivită în Magazinul web Chrome.</translation>
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">Nu aveți spațiu suficient</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">Așteptați puțin</translation>
 <translation id="7603724359189955920">Grile</translation>
 <translation id="7627790789328695202">Hopa, <ph name="FILE_NAME" /> există deja. Redenumiți și încercați din nou.</translation>
+<translation id="7628656427739290098"><ph name="PERCENT" /> % finalizat</translation>
 <translation id="7649070708921625228">Ajutor</translation>
 <translation id="7654209398114106148">Se mută <ph name="NUMBER_OF_ITEMS" /> elemente…</translation>
 <translation id="7658239707568436148">Anulează</translation>
+<translation id="7695430100978772476">Nu s-a putut formata <ph name="DRIVE_NAME" /></translation>
 <translation id="770015031906360009">Greacă</translation>
 <translation id="7706319470528945664">Tastatură portugheză</translation>
 <translation id="7711920809702896782">Informații despre fișierul imagine</translation>

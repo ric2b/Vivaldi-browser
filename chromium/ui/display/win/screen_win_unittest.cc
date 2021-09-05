@@ -44,13 +44,13 @@ class TestScreenWin : public ScreenWin {
  protected:
   // win::ScreenWin:
   HWND GetHWNDFromNativeView(gfx::NativeView window) const override {
-    // NativeView is only used as an identifier in this tests, so interchange
-    // NativeView with an HWND for convenience.
+    // NativeView is only used as an identifier in these tests, so interchange
+    // a NativeView for an HWND for convenience.
     return reinterpret_cast<HWND>(window);
   }
 
   gfx::NativeWindow GetNativeWindowFromHWND(HWND hwnd) const override {
-    // NativeWindow is only used as an identifier in this tests, so interchange
+    // NativeWindow is only used as an identifier in these tests, so interchange
     // an HWND for a NativeWindow for convenience.
     return reinterpret_cast<gfx::NativeWindow>(hwnd);
   }
@@ -157,7 +157,8 @@ class TestScreenWinManager final : public TestScreenWinInitializer {
         win::test::CreateMonitorInfo(pixel_bounds, pixel_work, device_name);
     monitor_infos_.push_back(monitor_info);
     display_infos_.push_back(DisplayInfo(monitor_info, device_scale_factor,
-                                         1.0f, Display::ROTATE_0, 60));
+                                         1.0f, Display::ROTATE_0, 60,
+                                         gfx::Vector2dF()));
   }
 
   HWND CreateFakeHwnd(const gfx::Rect& bounds) override {
@@ -1343,6 +1344,15 @@ TEST_F(ScreenWinTestTwoDisplays2x, GetDisplayMatching) {
 TEST_F(ScreenWinTestTwoDisplays2x, GetPrimaryDisplay) {
   Screen* screen = GetScreen();
   EXPECT_EQ(gfx::Point(0, 0), screen->GetPrimaryDisplay().bounds().origin());
+}
+
+TEST_F(ScreenWinTestTwoDisplays2x, CheckIdStability) {
+  // Callers may use the display ID as a way to persist data like window
+  // coordinates across runs. As a result, the IDs must remain stable.
+  Screen* screen = GetScreen();
+  ASSERT_EQ(2, screen->GetNumDisplays());
+  EXPECT_EQ(711638480, screen->GetAllDisplays()[0].id());
+  EXPECT_EQ(1158792510, screen->GetAllDisplays()[1].id());
 }
 
 namespace {

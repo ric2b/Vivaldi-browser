@@ -46,9 +46,7 @@ TEST_F(PasswordGenerationPopupControllerImplTest, GetOrCreateTheSame) {
       gfx::RectF(100, 20), /*max_length=*/20, base::ASCIIToUTF16("element"),
       /*generation_element_id=*/100,
       /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      autofill::PasswordForm());
-  ui_data.password_form.username_value = base::ASCIIToUTF16("Name");
-  ui_data.password_form.password_value = base::ASCIIToUTF16("12345");
+      autofill::FormData());
   auto driver = CreateDriver();
   std::unique_ptr<content::WebContents> web_contents = CreateTestWebContents();
   base::WeakPtr<PasswordGenerationPopupControllerImpl> controller1 =
@@ -70,9 +68,7 @@ TEST_F(PasswordGenerationPopupControllerImplTest, GetOrCreateDifferentBounds) {
       rect, /*max_length=*/20, base::ASCIIToUTF16("element"),
       /*generation_element_id=*/100,
       /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      autofill::PasswordForm());
-  ui_data.password_form.username_value = base::ASCIIToUTF16("Name");
-  ui_data.password_form.password_value = base::ASCIIToUTF16("12345");
+      autofill::FormData());
   auto driver = CreateDriver();
   std::unique_ptr<content::WebContents> web_contents = CreateTestWebContents();
   base::WeakPtr<PasswordGenerationPopupControllerImpl> controller1 =
@@ -95,9 +91,7 @@ TEST_F(PasswordGenerationPopupControllerImplTest, GetOrCreateDifferentTabs) {
       gfx::RectF(100, 20), /*max_length=*/20, base::ASCIIToUTF16("element"),
       /*generation_element_id=*/100,
       /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      autofill::PasswordForm());
-  ui_data.password_form.username_value = base::ASCIIToUTF16("Name");
-  ui_data.password_form.password_value = base::ASCIIToUTF16("12345");
+      autofill::FormData());
   auto driver = CreateDriver();
   std::unique_ptr<content::WebContents> web_contents = CreateTestWebContents();
   base::WeakPtr<PasswordGenerationPopupControllerImpl> controller1 =
@@ -120,9 +114,7 @@ TEST_F(PasswordGenerationPopupControllerImplTest, GetOrCreateDifferentDrivers) {
       gfx::RectF(100, 20), /*max_length=*/20, base::ASCIIToUTF16("element"),
       /*generation_element_id=*/100,
       /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      autofill::PasswordForm());
-  ui_data.password_form.username_value = base::ASCIIToUTF16("Name");
-  ui_data.password_form.password_value = base::ASCIIToUTF16("12345");
+      autofill::FormData());
   auto driver = CreateDriver();
   std::unique_ptr<content::WebContents> web_contents = CreateTestWebContents();
   base::WeakPtr<PasswordGenerationPopupControllerImpl> controller1 =
@@ -146,7 +138,7 @@ TEST_F(PasswordGenerationPopupControllerImplTest,
       gfx::RectF(100, 20), /*max_length=*/20, base::ASCIIToUTF16("element"),
       /*generation_element_id=*/100,
       /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      autofill::PasswordForm());
+      autofill::FormData());
   auto driver = CreateDriver();
   std::unique_ptr<content::WebContents> web_contents = CreateTestWebContents();
   base::WeakPtr<PasswordGenerationPopupControllerImpl> controller1 =
@@ -169,7 +161,7 @@ TEST_F(PasswordGenerationPopupControllerImplTest, DestroyInPasswordAccepted) {
       gfx::RectF(100, 20), /*max_length=*/20, base::ASCIIToUTF16("element"),
       /*generation_element_id=*/100,
       /*is_generation_element_password_type=*/true, base::i18n::TextDirection(),
-      autofill::PasswordForm());
+      autofill::FormData());
   auto driver = CreateDriver();
   std::unique_ptr<content::WebContents> web_contents = CreateTestWebContents();
   base::WeakPtr<PasswordGenerationPopupController> controller =
@@ -181,7 +173,9 @@ TEST_F(PasswordGenerationPopupControllerImplTest, DestroyInPasswordAccepted) {
   // crash.
   EXPECT_CALL(*driver,
               GeneratedPasswordAccepted(_, 100 /*generation_element_id*/, _))
-      .WillOnce([controller](auto, auto, auto) { controller->Hide(); });
+      .WillOnce([controller](auto, auto, auto) {
+        controller->Hide(autofill::PopupHidingReason::kViewDestroyed);
+      });
   controller->PasswordAccepted();
 }
 

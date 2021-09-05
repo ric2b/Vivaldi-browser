@@ -1,6 +1,6 @@
 // Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved
 
-#include "chrome/browser/ui/webui/settings/settings_import_data_handler.h"
+#include "chrome/browser/ui/webui/settings/import_data_handler.h"
 
 #include "content/public/browser/browser_thread.h"
 

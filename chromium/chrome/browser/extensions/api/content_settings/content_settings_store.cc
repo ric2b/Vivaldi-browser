@@ -17,7 +17,6 @@
 #include "base/values.h"
 #include "chrome/browser/extensions/api/content_settings/content_settings_api_constants.h"
 #include "chrome/browser/extensions/api/content_settings/content_settings_helpers.h"
-#include "chrome/common/chrome_features.h"
 #include "components/content_settings/core/browser/content_settings_info.h"
 #include "components/content_settings/core/browser/content_settings_origin_identifier_value_map.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
@@ -25,6 +24,7 @@
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
+#include "components/permissions/features.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
@@ -351,7 +351,7 @@ void ContentSettingsStore::SetExtensionContentSettingFromList(
     ContentSettingsType content_settings_type =
         content_settings_helpers::StringToContentSettingsType(
             content_settings_type_str);
-    if (content_settings_type == CONTENT_SETTINGS_TYPE_DEFAULT) {
+    if (content_settings_type == ContentSettingsType::DEFAULT) {
       // We'll end up with DEFAULT here if the type string isn't recognised.
       // This could be if it's a string from an old settings type that has been
       // deleted. DCHECK to make sure this is the case (not some random string).
@@ -370,7 +370,8 @@ void ContentSettingsStore::SetExtensionContentSettingFromList(
     if (primary_pattern != secondary_pattern &&
         secondary_pattern != ContentSettingsPattern::Wildcard() &&
         !info->website_settings_info()->SupportsEmbeddedExceptions() &&
-        base::FeatureList::IsEnabled(::features::kPermissionDelegation)) {
+        base::FeatureList::IsEnabled(
+            permissions::features::kPermissionDelegation)) {
       // Some types may have had embedded exceptions written even though they
       // aren't supported. This will implicitly delete these old settings from
       // the pref store when it is written back.

@@ -7,14 +7,19 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "chrome/browser/chromeos/crostini/crostini_installer_types.mojom.h"
+#include "chrome/browser/chromeos/crostini/ansible/ansible_management_test_helper.h"
 #include "chrome/browser/chromeos/crostini/crostini_installer_ui_delegate.h"
 #include "chrome/browser/chromeos/crostini/crostini_test_helper.h"
+#include "chrome/browser/chromeos/crostini/crostini_types.mojom.h"
+#include "chrome/test/base/scoped_testing_local_state.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chromeos/dbus/concierge/service.pb.h"
+#include "chromeos/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_concierge_client.h"
 #include "chromeos/disks/disk_mount_manager.h"
@@ -107,7 +112,9 @@ class CrostiniInstallerTest : public testing::Test {
     base::OnceClosure quit_closure_;
   };
 
-  CrostiniInstallerTest() = default;
+  CrostiniInstallerTest()
+      : local_state_(std::make_unique<ScopedTestingLocalState>(
+            TestingBrowserProcess::GetGlobal())) {}
 
   void SetUp() override {
     waiting_fake_concierge_client_ = new WaitingFakeConciergeClient;
@@ -126,9 +133,13 @@ class CrostiniInstallerTest : public testing::Test {
 
     crostini_installer_ = std::make_unique<CrostiniInstaller>(profile_.get());
     crostini_installer_->set_skip_launching_terminal_for_testing();
+
+    g_browser_process->platform_part()
+        ->InitializeSchedulerConfigurationManager();
   }
 
   void TearDown() override {
+    g_browser_process->platform_part()->ShutdownSchedulerConfigurationManager();
     crostini_installer_->Shutdown();
     crostini_installer_.reset();
     crostini_test_helper_.reset();
@@ -139,7 +150,10 @@ class CrostiniInstallerTest : public testing::Test {
   }
 
   void Install() {
+    CrostiniManager::GetForProfile(profile_.get())
+        ->SetCrostiniDialogStatus(DialogType::INSTALLER, true);
     crostini_installer_->Install(
+        CrostiniManager::RestartOptions{},
         base::BindRepeating(&MockCallbacks::OnProgress,
                             base::Unretained(&mock_callbacks_)),
         base::BindRepeating(&MockCallbacks::OnFinished,
@@ -167,6 +181,8 @@ class CrostiniInstallerTest : public testing::Test {
   std::unique_ptr<CrostiniInstaller> crostini_installer_;
 
  private:
+  std::unique_ptr<ScopedTestingLocalState> local_state_;
+
   DISALLOW_COPY_AND_ASSIGN(CrostiniInstallerTest);
 };
 
@@ -189,6 +205,53 @@ TEST_F(CrostiniInstallerTest, InstallFlow) {
       .After(expectation_set);
 
   Install();
+  mount_path_waiter_.WaitForMountPathCalled();
+
+  ASSERT_TRUE(mount_path_waiter_.get_mount_point_info());
+  disk_mount_manager_mock_->NotifyMountEvent(
+      chromeos::disks::DiskMountManager::MountEvent::MOUNTING,
+      chromeos::MountError::MOUNT_ERROR_NONE,
+      *mount_path_waiter_.get_mount_point_info());
+
+  task_environment_.RunUntilIdle();
+  histogram_tester_.ExpectUniqueSample(
+      "Crostini.SetupResult",
+      static_cast<base::HistogramBase::Sample>(
+          CrostiniInstaller::SetupResult::kSuccess),
+      1);
+  histogram_tester_.ExpectTotalCount("Crostini.Setup.Started", 1);
+  histogram_tester_.ExpectTotalCount("Crostini.Restarter.Started", 0);
+
+  EXPECT_TRUE(crostini_installer_->CanInstall())
+      << "Installer should recover to installable state";
+}
+
+TEST_F(CrostiniInstallerTest, InstallFlowWithAnsibleInfra) {
+  AnsibleManagementTestHelper test_helper(profile_.get());
+  test_helper.SetUpAnsibleInfra();
+
+  double last_progress = 0.0;
+  auto greater_equal_last_progress = Truly(
+      [&last_progress](double progress) { return progress >= last_progress; });
+
+  ExpectationSet expectation_set;
+  expectation_set +=
+      EXPECT_CALL(mock_callbacks_,
+                  OnProgress(_, AllOf(greater_equal_last_progress, Le(1.0))))
+          .WillRepeatedly(SaveArg<1>(&last_progress));
+  expectation_set +=
+      EXPECT_CALL(*disk_mount_manager_mock_,
+                  MountPath("sshfs://test@hostname:", _, _, _, _, _))
+          .WillOnce(Invoke(&mount_path_waiter_, &MountPathWaiter::MountPath));
+  // |OnProgress()| should not happens after |OnFinished()|
+  EXPECT_CALL(mock_callbacks_, OnFinished(InstallerError::kNone))
+      .After(expectation_set);
+
+  Install();
+
+  task_environment_.RunUntilIdle();
+  test_helper.SendSucceededApplySignal();
+
   mount_path_waiter_.WaitForMountPathCalled();
 
   ASSERT_TRUE(mount_path_waiter_.get_mount_point_info());
@@ -256,7 +319,8 @@ TEST_F(CrostiniInstallerTest, CancelAfterStart) {
 TEST_F(CrostiniInstallerTest, CancelAfterStartBeforeCheckDisk) {
   EXPECT_CALL(mock_callbacks_, OnCanceled());
 
-  crostini_installer_->Install(base::DoNothing(), base::DoNothing());
+  crostini_installer_->Install(CrostiniManager::RestartOptions{},
+                               base::DoNothing(), base::DoNothing());
   Cancel();  // Cancel immediately
 
   task_environment_.RunUntilIdle();
@@ -290,6 +354,34 @@ TEST_F(CrostiniInstallerTest, InstallerError) {
       "Crostini.SetupResult",
       static_cast<base::HistogramBase::Sample>(
           CrostiniInstaller::SetupResult::kErrorStartingTermina),
+      1);
+  histogram_tester_.ExpectTotalCount("Crostini.Setup.Started", 1);
+  histogram_tester_.ExpectTotalCount("Crostini.Restarter.Started", 0);
+
+  EXPECT_TRUE(crostini_installer_->CanInstall())
+      << "Installer should recover to installable state";
+}
+
+TEST_F(CrostiniInstallerTest, InstallerErrorWhileConfiguring) {
+  AnsibleManagementTestHelper test_helper(profile_.get());
+  test_helper.SetUpAnsibleInfra();
+  test_helper.SetUpAnsibleInstallation(
+      vm_tools::cicerone::InstallLinuxPackageResponse::FAILED);
+
+  Expectation expect_progresses =
+      EXPECT_CALL(mock_callbacks_, OnProgress(_, _)).Times(AnyNumber());
+  // |OnProgress()| should not happens after |OnFinished()|
+  EXPECT_CALL(mock_callbacks_,
+              OnFinished(InstallerError::kErrorConfiguringContainer))
+      .After(expect_progresses);
+
+  Install();
+
+  task_environment_.RunUntilIdle();
+  histogram_tester_.ExpectUniqueSample(
+      "Crostini.SetupResult",
+      static_cast<base::HistogramBase::Sample>(
+          CrostiniInstaller::SetupResult::kErrorConfiguringContainer),
       1);
 
   EXPECT_TRUE(crostini_installer_->CanInstall())

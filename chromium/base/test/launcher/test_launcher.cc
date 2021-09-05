@@ -15,6 +15,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/environment.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
@@ -64,6 +65,7 @@
 #endif
 
 #if defined(OS_WIN)
+#include "base/strings/string_util_win.h"
 #include "base/win/windows_version.h"
 #endif
 
@@ -238,8 +240,6 @@ CommandLine PrepareCommandLineForGTest(const CommandLine& command_line,
   // Handled by the launcher process.
   switches.erase(kGTestRepeatFlag);
   switches.erase(kIsolatedScriptTestRepeatFlag);
-  switches.erase(kGTestShuffleFlag);
-  switches.erase(kGTestRandomSeedFlag);
 
   // Don't try to write the final XML report in child processes.
   switches.erase(kGTestOutputFlag);
@@ -254,7 +254,7 @@ CommandLine PrepareCommandLineForGTest(const CommandLine& command_line,
   // on a CommandLine with a wrapper is known to break.
   // TODO(phajdan.jr): Give it a try to support CommandLine removing switches.
 #if defined(OS_WIN)
-  new_command_line.PrependWrapper(ASCIIToUTF16(wrapper));
+  new_command_line.PrependWrapper(UTF8ToWide(wrapper));
 #else
   new_command_line.PrependWrapper(wrapper);
 #endif
@@ -466,10 +466,36 @@ struct ChildProcessResults {
   int exit_code;
 };
 
+// Returns the path to a temporary directory within |task_temp_dir| for the
+// child process of index |child_index|, or an empty FilePath if per-child temp
+// dirs are not supported.
+FilePath CreateChildTempDirIfSupported(const FilePath& task_temp_dir,
+                                       int child_index) {
+  if (!TestLauncher::SupportsPerChildTempDirs())
+    return FilePath();
+  FilePath child_temp = task_temp_dir.AppendASCII(NumberToString(child_index));
+  CHECK(CreateDirectoryAndGetError(child_temp, nullptr));
+  return child_temp;
+}
+
+// Adds the platform-specific variable setting |temp_dir| as a process's
+// temporary directory to |environment|.
+void SetTemporaryDirectory(const FilePath& temp_dir,
+                           EnvironmentMap* environment) {
+#if defined(OS_WIN)
+  environment->emplace(L"TMP", temp_dir.value());
+#elif defined(OS_MACOSX)
+  environment->emplace("MAC_CHROMIUM_TMPDIR", temp_dir.value());
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
+  environment->emplace("TMPDIR", temp_dir.value());
+#endif
+}
+
 // This launches the child test process, waits for it to complete,
 // and returns child process results.
 ChildProcessResults DoLaunchChildTestProcess(
     const CommandLine& command_line,
+    const FilePath& process_temp_dir,
     TimeDelta timeout,
     const TestLauncher::LaunchOptions& test_launch_options,
     bool redirect_stdio,
@@ -487,6 +513,10 @@ ChildProcessResults DoLaunchChildTestProcess(
   }
 
   LaunchOptions options;
+
+  // Tell the child process to use its designated temporary directory.
+  if (!process_temp_dir.empty())
+    SetTemporaryDirectory(process_temp_dir, &options.environment);
 #if defined(OS_WIN)
 
   options.inherit_mode = test_launch_options.inherit_mode;
@@ -582,25 +612,26 @@ class TestRunner {
  private:
   // Called to check if the next batch has to run on the same
   // sequence task runner and using the same temporary directory.
-  bool ShouldReuseStateFromLastBatch(
+  static bool ShouldReuseStateFromLastBatch(
       const std::vector<std::string>& test_names) {
     return test_names.size() == 1u &&
            test_names.front().find(kPreTestPrefix) != std::string::npos;
   }
 
-  // Launch next child process on |task_runner|,
-  // and clear |temp_dir| from previous process.
-  void LaunchNextTask(scoped_refptr<TaskRunner> task_runner, FilePath temp_dir);
+  // Launches the next child process on |task_runner| and clears
+  // |last_task_temp_dir| from the previous task.
+  void LaunchNextTask(scoped_refptr<TaskRunner> task_runner,
+                      const FilePath& last_task_temp_dir);
 
-  // Forward |temp_dir| and Launch next task on main thread.
+  // Forwards |last_task_temp_dir| and launches the next task on main thread.
   // The method is called on |task_runner|.
   void ClearAndLaunchNext(scoped_refptr<TaskRunner> main_thread_runner,
                           scoped_refptr<TaskRunner> task_runner,
-                          const FilePath& temp_dir) {
+                          const FilePath& last_task_temp_dir) {
     main_thread_runner->PostTask(
         FROM_HERE,
         BindOnce(&TestRunner::LaunchNextTask, weak_ptr_factory_.GetWeakPtr(),
-                 task_runner, temp_dir));
+                 task_runner, last_task_temp_dir));
   }
 
   ThreadChecker thread_checker_;
@@ -629,8 +660,8 @@ void TestRunner::Run(const std::vector<std::string>& test_names) {
   runners_done_ = 0;
   task_runners_.clear();
   for (size_t i = 0; i < runner_count_; i++) {
-    task_runners_.push_back(CreateSequencedTaskRunner(
-        {ThreadPool(), MayBlock(), TaskShutdownBehavior::BLOCK_SHUTDOWN}));
+    task_runners_.push_back(ThreadPool::CreateSequencedTaskRunner(
+        {MayBlock(), TaskShutdownBehavior::BLOCK_SHUTDOWN}));
     ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         BindOnce(&TestRunner::LaunchNextTask, weak_ptr_factory_.GetWeakPtr(),
@@ -640,12 +671,13 @@ void TestRunner::Run(const std::vector<std::string>& test_names) {
 }
 
 void TestRunner::LaunchNextTask(scoped_refptr<TaskRunner> task_runner,
-                                FilePath temp_dir) {
+                                const FilePath& last_task_temp_dir) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // delete previous temporary directory
-  if (!temp_dir.empty() && !DeleteFileRecursively(temp_dir)) {
+  if (!last_task_temp_dir.empty() &&
+      !DeleteFileRecursively(last_task_temp_dir)) {
     // This needs to be non-fatal at least for Windows.
-    LOG(WARNING) << "Failed to delete " << temp_dir.AsUTF8Unsafe();
+    LOG(WARNING) << "Failed to delete " << last_task_temp_dir.AsUTF8Unsafe();
   }
 
   // No more tests to run, finish sequence.
@@ -657,10 +689,17 @@ void TestRunner::LaunchNextTask(scoped_refptr<TaskRunner> task_runner,
     return;
   }
 
-  CreateNewTempDirectory(FilePath::StringType(), &temp_dir);
+  // Create a temporary directory for this task. This directory will hold the
+  // flags and results files for the child processes as well as their User Data
+  // dir, where appropriate. For platforms that support per-child temp dirs,
+  // this directory will also contain one subdirectory per child for that
+  // child's process-wide temp dir.
+  base::FilePath task_temp_dir;
+  CHECK(CreateNewTempDirectory(FilePath::StringType(), &task_temp_dir));
   bool post_to_current_runner = true;
   size_t batch_size = (batch_size_ == 0) ? tests_to_run_.size() : batch_size_;
 
+  int child_index = 0;
   while (post_to_current_runner && !tests_to_run_.empty()) {
     batch_size = std::min(batch_size, tests_to_run_.size());
     std::vector<std::string> batch(tests_to_run_.rbegin(),
@@ -669,13 +708,29 @@ void TestRunner::LaunchNextTask(scoped_refptr<TaskRunner> task_runner,
     task_runner->PostTask(
         FROM_HERE,
         BindOnce(&TestLauncher::LaunchChildGTestProcess, Unretained(launcher_),
-                 ThreadTaskRunnerHandle::Get(), batch, temp_dir));
+                 ThreadTaskRunnerHandle::Get(), batch, task_temp_dir,
+                 CreateChildTempDirIfSupported(task_temp_dir, child_index++)));
     post_to_current_runner = ShouldReuseStateFromLastBatch(batch);
   }
   task_runner->PostTask(
       FROM_HERE,
       BindOnce(&TestRunner::ClearAndLaunchNext, Unretained(this),
-               ThreadTaskRunnerHandle::Get(), task_runner, temp_dir));
+               ThreadTaskRunnerHandle::Get(), task_runner, task_temp_dir));
+}
+
+// Returns the number of files and directories in |dir|, or 0 if |dir| is empty.
+int CountItemsInDirectory(const FilePath& dir) {
+  if (dir.empty())
+    return 0;
+  int items = 0;
+  FileEnumerator file_enumerator(
+      dir, /*recursive=*/false,
+      FileEnumerator::FILES | FileEnumerator::DIRECTORIES);
+  for (FilePath name = file_enumerator.Next(); !name.empty();
+       name = file_enumerator.Next()) {
+    ++items;
+  }
+  return items;
 }
 
 }  // namespace
@@ -768,6 +823,10 @@ std::string TestLauncher::TestInfo::GetPrefixStrippedName() const {
 }
 
 TestLauncherDelegate::~TestLauncherDelegate() = default;
+
+bool TestLauncherDelegate::ShouldRunTest(const TestIdentifier& test) {
+  return true;
+}
 
 TestLauncher::LaunchOptions::LaunchOptions() = default;
 TestLauncher::LaunchOptions::LaunchOptions(const LaunchOptions& other) =
@@ -865,10 +924,11 @@ bool TestLauncher::Run(CommandLine* command_line) {
 void TestLauncher::LaunchChildGTestProcess(
     scoped_refptr<TaskRunner> task_runner,
     const std::vector<std::string>& test_names,
-    const FilePath& temp_dir) {
+    const FilePath& task_temp_dir,
+    const FilePath& child_temp_dir) {
   FilePath result_file;
-  CommandLine cmd_line =
-      launcher_delegate_->GetCommandLine(test_names, temp_dir, &result_file);
+  CommandLine cmd_line = launcher_delegate_->GetCommandLine(
+      test_names, task_temp_dir, &result_file);
 
   // Record the exact command line used to launch the child.
   CommandLine new_command_line(
@@ -877,8 +937,9 @@ void TestLauncher::LaunchChildGTestProcess(
   options.flags = launcher_delegate_->GetLaunchOptions();
 
   ChildProcessResults process_results = DoLaunchChildTestProcess(
-      new_command_line, launcher_delegate_->GetTimeout() * test_names.size(),
-      options, redirect_stdio_, launcher_delegate_);
+      new_command_line, child_temp_dir,
+      launcher_delegate_->GetTimeout() * test_names.size(), options,
+      redirect_stdio_, launcher_delegate_);
 
   // Invoke ProcessTestResults on the original thread, not
   // on a worker pool thread.
@@ -887,7 +948,8 @@ void TestLauncher::LaunchChildGTestProcess(
       BindOnce(&TestLauncher::ProcessTestResults, Unretained(this), test_names,
                result_file, process_results.output_file_contents,
                process_results.elapsed_time, process_results.exit_code,
-               process_results.was_timeout));
+               process_results.was_timeout,
+               CountItemsInDirectory(child_temp_dir)));
 }
 
 // Determines which result status will be assigned for missing test results.
@@ -917,7 +979,8 @@ void TestLauncher::ProcessTestResults(
     const std::string& output,
     TimeDelta elapsed_time,
     int exit_code,
-    bool was_timeout) {
+    bool was_timeout,
+    int leaked_items) {
   std::vector<TestResult> test_results;
   bool crashed = false;
   bool have_test_results =
@@ -996,6 +1059,9 @@ void TestLauncher::ProcessTestResults(
     // Fix the output snippet after possible changes to the test result.
     i.output_snippet = GetTestOutputSnippet(i, output);
   }
+
+  if (leaked_items)
+    results_tracker_.AddLeakedItems(leaked_items, test_names);
 
   launcher_delegate_->ProcessTestResults(final_results, elapsed_time);
 
@@ -1265,8 +1331,8 @@ bool TestLauncher::Init(CommandLine* command_line) {
     auto filter =
         command_line->GetSwitchValueNative(switches::kTestLauncherFilterFile);
     for (auto filter_file :
-         SplitString(filter, FILE_PATH_LITERAL(";"), base::TRIM_WHITESPACE,
-                     base::SPLIT_WANT_ALL)) {
+         SplitStringPiece(filter, FILE_PATH_LITERAL(";"), base::TRIM_WHITESPACE,
+                          base::SPLIT_WANT_ALL)) {
       base::FilePath filter_file_path =
           base::MakeAbsoluteFilePath(FilePath(filter_file));
       if (!LoadFilterFile(filter_file_path, &positive_file_filter,
@@ -1428,7 +1494,15 @@ bool TestLauncher::InitTests() {
   }
   for (const TestIdentifier& test_id : tests) {
     TestInfo test_info(test_id);
-    tests_.push_back(test_info);
+    if (test_id.test_case_name == "GoogleTestVerification") {
+      LOG(INFO) << "The following parameterized test case is not instantiated: "
+                << test_id.test_name;
+      continue;
+    }
+    // TODO(isamsonov): crbug.com/1004417 remove when windows builders
+    // stop flaking on MANAUAL_ tests.
+    if (launcher_delegate_->ShouldRunTest(test_id))
+      tests_.push_back(test_info);
   }
   return true;
 }

@@ -8,9 +8,8 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "third_party/blink/public/platform/web_rtc_key_params.h"
-#include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/webrtc/api/peer_connection_interface.h"
 
 namespace base {
@@ -25,8 +24,6 @@ using RTCCertificateCallback =
 // Chromium's WebRTCCertificateGenerator implementation; uses the
 // PeerConnectionIdentityStore/SSLIdentity::Generate to generate the identity,
 // rtc::RTCCertificate and blink::RTCCertificate.
-//
-// TODO(crbug.com/787254): Convert use of WebString to WTF::String.
 class MODULES_EXPORT RTCCertificateGenerator {
  public:
   RTCCertificateGenerator() {}
@@ -36,11 +33,11 @@ class MODULES_EXPORT RTCCertificateGenerator {
   // same thread that called generateCertificate when the operation is
   // completed.
   void GenerateCertificate(
-      const blink::WebRTCKeyParams& key_params,
+      const rtc::KeyParams& key_params,
       blink::RTCCertificateCallback completion_callback,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   void GenerateCertificateWithExpiration(
-      const blink::WebRTCKeyParams& key_params,
+      const rtc::KeyParams& key_params,
       uint64_t expires_ms,
       blink::RTCCertificateCallback completion_callback,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
@@ -48,13 +45,12 @@ class MODULES_EXPORT RTCCertificateGenerator {
   // Determines if the parameters are supported by |GenerateCertificate|.
   // For example, if the number of bits of some parameter is too small or too
   // large we may want to reject it for security or performance reasons.
-  bool IsSupportedKeyParams(const blink::WebRTCKeyParams& key_params);
+  bool IsSupportedKeyParams(const rtc::KeyParams& key_params);
 
   // Creates a certificate from the PEM strings. See also
   // |rtc::RTCCertificate::ToPEM|.
-  rtc::scoped_refptr<rtc::RTCCertificate> FromPEM(
-      blink::WebString pem_private_key,
-      blink::WebString pem_certificate);
+  rtc::scoped_refptr<rtc::RTCCertificate> FromPEM(String pem_private_key,
+                                                  String pem_certificate);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(RTCCertificateGenerator);

@@ -26,7 +26,7 @@ Serial* NavigatorSerial::serial(Navigator& navigator) {
   return NavigatorSerial::From(navigator).serial();
 }
 
-void NavigatorSerial::Trace(blink::Visitor* visitor) {
+void NavigatorSerial::Trace(Visitor* visitor) {
   visitor->Trace(serial_);
   Supplement<Navigator>::Trace(visitor);
 }
@@ -35,8 +35,8 @@ NavigatorSerial::NavigatorSerial(Navigator& navigator)
     : Supplement<Navigator>(navigator) {
   if (navigator.GetFrame()) {
     DCHECK(navigator.GetFrame()->GetDocument());
-    serial_ =
-        MakeGarbageCollected<Serial>(*navigator.GetFrame()->GetDocument());
+    serial_ = MakeGarbageCollected<Serial>(
+        *navigator.GetFrame()->GetDocument()->ToExecutionContext());
   }
 }
 

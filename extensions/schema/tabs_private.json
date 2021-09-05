@@ -103,6 +103,45 @@
             "description": "True if the drag was initiated from touch. Default is false."
           }
         }
+      },
+      {
+        "id": "NavigationRect",
+        "type": "object",
+        "description": "Rect struct for spatial navigation.",
+        "properties": {
+          "left": {
+            "type": "integer",
+            "description": "left"
+          },
+          "top": {
+            "type": "integer",
+            "description": "top"
+          },
+          "width": {
+            "type": "integer",
+            "description": "width"
+          },
+          "height": {
+            "type": "integer",
+            "description": "height"
+          },
+          "right": {
+            "type": "integer",
+            "description": "right"
+          },
+          "bottom": {
+            "type": "integer",
+            "description": "bottom"
+          },
+          "path": {
+            "type": "string",
+            "description": "Element path to uniquely identify element."
+          },
+          "href": {
+            "type": "string",
+            "description": "Url of focused element in case it's a link."
+          }
+        }
       }
     ],
     "functions": [
@@ -202,10 +241,94 @@
             "description": "Whether to scroll up or down, and by how much"
           },
           {
+            "name": "scrollAmount",
+            "type": "integer",
+            "optional": "true",
+            "description": "The amount to scroll by"
+          },
+          {
             "name": "callback",
             "type": "function",
             "description": "Callback function used for error handling",
             "parameters": []
+          }
+        ]
+      },
+      {
+        "name": "getSpatialNavigationRects",
+        "type": "function",
+        "description": "Get rectangles for spatially navigable elements.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "navigationRectList",
+                "type": "array",
+                "items": { "$ref": "NavigationRect" },
+                "description": "All navigable rects on the page."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getScrollPosition",
+        "type": "function",
+        "description": "Get scroll position of webview. Corresponds to window.scrollX and window.scrollY.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": false,
+            "parameters": [
+              {
+                "name": "scrollX",
+                "type": "integer",
+                "description": "Horizontal scroll coordinate"
+              },
+              {
+                "name": "scrollY",
+                "type": "integer",
+                "description": "Vertical scroll coordinate"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "activateElementFromPoint",
+        "type": "function",
+        "description": "Find element from given coordinates and activate it.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "name": "x",
+            "type": "integer",
+            "minimum": 0,
+            "description": "Horizontal co-ordinate from the left"
+          },
+          {
+            "name": "y",
+            "type": "integer",
+            "minimum": 0,
+            "description": "Vertical co-ordinate from the top"
           }
         ]
       }
@@ -323,6 +446,11 @@
         "description": "Fires for all keyboard changes that have not been consumed by the browser",
         "parameters": [
           {
+            "type": "integer",
+            "name": "windowId",
+            "description": "Id of the browser window this keyboard event originates from."
+          },
+          {
             "type": "boolean",
             "name": "down",
             "description": "True when pressed, false when released"
@@ -341,6 +469,18 @@
             "type": "boolean",
             "name": "afterGesture",
             "description": "True when the keyboard event completed a mouse or wheel gesture"
+          }
+        ]
+      },
+      {
+        "name": "onMouseChanged",
+        "type": "function",
+        "description": "Fires when mouse state has changed.",
+        "parameters": [
+          {
+            "type": "boolean",
+            "name": "motion",
+            "description": "True when mouse has moved, false when mouse is pressed/released."
           }
         ]
       },

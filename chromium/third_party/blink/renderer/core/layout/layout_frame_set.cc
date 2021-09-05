@@ -32,7 +32,7 @@
 #include "third_party/blink/renderer/core/layout/layout_frame.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/paint/frame_set_painter.h"
-#include "third_party/blink/renderer/platform/cursor.h"
+#include "third_party/blink/renderer/platform/cursors.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 
 namespace blink {
@@ -49,7 +49,7 @@ static int AdjustSizeToRemainingSize(int current,
 }
 
 LayoutFrameSet::LayoutFrameSet(HTMLFrameSetElement* frame_set)
-    : LayoutBox(frame_set), is_resizing_(false), is_child_resizing_(false) {
+    : LayoutBox(frame_set), is_resizing_(false) {
   SetInline(false);
 }
 
@@ -63,12 +63,6 @@ HTMLFrameSetElement* LayoutFrameSet::FrameSet() const {
 
 void LayoutFrameSet::Paint(const PaintInfo& paint_info) const {
   FrameSetPainter(*this).Paint(paint_info);
-}
-
-void LayoutFrameSet::ComputePreferredLogicalWidths() {
-  min_preferred_logical_width_ = LayoutUnit();
-  max_preferred_logical_width_ = LayoutUnit();
-  ClearPreferredLogicalWidthsDirty();
 }
 
 void LayoutFrameSet::GridAxis::Resize(int size) {
@@ -517,11 +511,6 @@ bool LayoutFrameSet::UserResize(const MouseEvent& evt) {
 
 void LayoutFrameSet::SetIsResizing(bool is_resizing) {
   is_resizing_ = is_resizing;
-  for (LayoutObject* ancestor = Parent(); ancestor;
-       ancestor = ancestor->Parent()) {
-    if (ancestor->IsFrameSet())
-      ToLayoutFrameSet(ancestor)->is_child_resizing_ = is_resizing;
-  }
   if (LocalFrame* frame = GetFrame()) {
     frame->GetEventHandler().SetResizingFrameSet(is_resizing ? FrameSet()
                                                              : nullptr);
@@ -582,7 +571,7 @@ bool LayoutFrameSet::IsChildAllowed(LayoutObject* child,
 }
 
 CursorDirective LayoutFrameSet::GetCursor(const PhysicalOffset& point,
-                                          Cursor& cursor) const {
+                                          ui::Cursor& cursor) const {
   IntPoint rounded_point = RoundedIntPoint(point);
   if (CanResizeRow(rounded_point)) {
     cursor = RowResizeCursor();

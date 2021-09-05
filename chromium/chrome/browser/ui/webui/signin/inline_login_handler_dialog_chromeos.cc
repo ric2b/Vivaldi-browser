@@ -7,15 +7,21 @@
 #include <algorithm>
 #include <string>
 
+#include "ash/public/cpp/window_backdrop.h"
+#include "ash/public/cpp/window_properties.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/chromeos/system_web_dialog_delegate.h"
 #include "chrome/common/webui_url_constants.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/session_manager/core/session_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
+#include "content/public/browser/web_ui.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "net/base/url_util.h"
 #include "ui/aura/window.h"
@@ -32,40 +38,80 @@ InlineLoginHandlerDialogChromeOS* dialog = nullptr;
 constexpr int kSigninDialogWidth = 768;
 constexpr int kSigninDialogHeight = 640;
 
+// Keep in sync with resources/chromeos/account_manager_error.js
+enum class AccountManagerErrorType {
+  kSecondaryAccountsDisabled = 0,
+  kChildUserArcDisabled = 1
+};
+
 bool IsDeviceAccountEmail(const std::string& email) {
   auto* active_user = user_manager::UserManager::Get()->GetActiveUser();
   return active_user &&
          gaia::AreEmailsSame(active_user->GetDisplayEmail(), email);
 }
 
+GURL GetUrlWithEmailParam(base::StringPiece url_string,
+                          const std::string& email) {
+  GURL url = GURL(url_string);
+  if (!email.empty()) {
+    url = net::AppendQueryParameter(url, "email", email);
+    url = net::AppendQueryParameter(url, "readOnlyEmail", "true");
+  }
+  return url;
+}
+
+GURL GetInlineLoginUrl(const std::string& email) {
+  if (IsDeviceAccountEmail(email)) {
+    // It's a device account re-auth.
+    return GetUrlWithEmailParam(chrome::kChromeUIChromeSigninURL, email);
+  }
+  if (!ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
+          chromeos::prefs::kSecondaryGoogleAccountSigninAllowed)) {
+    // Addition of secondary Google Accounts is not allowed.
+    return GURL(chrome::kChromeUIAccountManagerErrorURL);
+  }
+
+  // Addition of secondary Google Accounts is allowed.
+  if (!ProfileManager::GetActiveUserProfile()->IsChild()) {
+    return GetUrlWithEmailParam(chrome::kChromeUIChromeSigninURL, email);
+  }
+  // User type is Child.
+  if (!features::IsEduCoexistenceEnabled()) {
+    return GURL(chrome::kChromeUIAccountManagerErrorURL);
+  }
+  DCHECK_EQ(std::string(chrome::kChromeUIChromeSigninURL).back(), '/');
+  // chrome://chrome-signin/edu
+  const std::string kEduAccountLoginURL =
+      std::string(chrome::kChromeUIChromeSigninURL) + "edu";
+  return GetUrlWithEmailParam(kEduAccountLoginURL, email);
+}
+
 }  // namespace
 
 // static
-void InlineLoginHandlerDialogChromeOS::Show(const std::string& email) {
+void InlineLoginHandlerDialogChromeOS::Show(const std::string& email,
+                                            const Source& source) {
+  // If the dialog was triggered as a response to background request, it could
+  // get displayed on the lock screen. In this case it is safe to ignore it,
+  // since in this case user will get it again after a request to Google
+  // properties.
+  if (session_manager::SessionManager::Get()->IsUserSessionBlocked())
+    return;
+
   if (dialog) {
     dialog->dialog_window()->Focus();
     return;
   }
 
-  GURL url;
-  if (ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
-          chromeos::prefs::kSecondaryGoogleAccountSigninAllowed) ||
-      IsDeviceAccountEmail(email)) {
-    // Addition of secondary Google Accounts is allowed OR it's a primary
-    // account re-auth.
-    url = GURL(chrome::kChromeUIChromeSigninURL);
-    if (!email.empty()) {
-      url = net::AppendQueryParameter(url, "email", email);
-      url = net::AppendQueryParameter(url, "readOnlyEmail", "true");
-    }
-  } else {
-    // Addition of secondary Google Accounts is not allowed.
-    url = GURL(chrome::kChromeUIAccountManagerErrorURL);
-  }
-
   // Will be deleted by |SystemWebDialogDelegate::OnDialogClosed|.
-  dialog = new InlineLoginHandlerDialogChromeOS(url);
+  dialog =
+      new InlineLoginHandlerDialogChromeOS(GetInlineLoginUrl(email), source);
   dialog->ShowSystemDialog();
+
+  // TODO(crbug.com/1016828): Remove/update this after the dialog behavior on
+  // Chrome OS is defined.
+  ash::WindowBackdrop::Get(dialog->dialog_window())
+      ->SetBackdropType(ash::WindowBackdrop::BackdropType::kSemiOpaque);
 }
 
 void InlineLoginHandlerDialogChromeOS::AdjustWidgetInitParams(
@@ -98,9 +144,12 @@ void InlineLoginHandlerDialogChromeOS::RemoveObserver(
     web_modal::ModalDialogHostObserver* observer) {}
 
 InlineLoginHandlerDialogChromeOS::InlineLoginHandlerDialogChromeOS(
-    const GURL& url)
+    const GURL& url,
+    const Source& source)
     : SystemWebDialogDelegate(url, base::string16() /* title */),
-      delegate_(this) {}
+      delegate_(this),
+      source_(source),
+      url_(url) {}
 
 InlineLoginHandlerDialogChromeOS::~InlineLoginHandlerDialogChromeOS() {
   DCHECK_EQ(this, dialog);
@@ -115,17 +164,34 @@ void InlineLoginHandlerDialogChromeOS::GetDialogSize(gfx::Size* size) const {
 }
 
 std::string InlineLoginHandlerDialogChromeOS::GetDialogArgs() const {
-  return std::string();
+  if (url_.GetWithEmptyPath() !=
+      GURL(chrome::kChromeUIAccountManagerErrorURL)) {
+    return std::string();
+  }
+
+  AccountManagerErrorType error =
+      AccountManagerErrorType::kSecondaryAccountsDisabled;
+  if (source_ == Source::kArc &&
+      ProfileManager::GetActiveUserProfile()->IsChild() &&
+      ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
+          chromeos::prefs::kSecondaryGoogleAccountSigninAllowed) &&
+      features::IsEduCoexistenceEnabled()) {
+    error = AccountManagerErrorType::kChildUserArcDisabled;
+  }
+
+  std::string data;
+  base::DictionaryValue dialog_args;
+  dialog_args.SetInteger("errorType", static_cast<int>(error));
+  base::JSONWriter::Write(dialog_args, &data);
+  return data;
 }
 
 bool InlineLoginHandlerDialogChromeOS::ShouldShowDialogTitle() const {
   return false;
 }
 
-void InlineLoginHandlerDialogChromeOS::OnDialogShown(
-    content::WebUI* webui,
-    content::RenderViewHost* render_view_host) {
-  SystemWebDialogDelegate::OnDialogShown(webui, render_view_host);
+void InlineLoginHandlerDialogChromeOS::OnDialogShown(content::WebUI* webui) {
+  SystemWebDialogDelegate::OnDialogShown(webui);
   web_modal::WebContentsModalDialogManager::CreateForWebContents(
       webui->GetWebContents());
   web_modal::WebContentsModalDialogManager::FromWebContents(

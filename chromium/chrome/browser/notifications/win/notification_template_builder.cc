@@ -23,7 +23,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/url_formatter/elide_url.h"
-#include "third_party/libxml/chromium/libxml_utils.h"
+#include "third_party/libxml/chromium/xml_writer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "url/gurl.h"
@@ -57,6 +57,7 @@ const char kHintCrop[] = "hint-crop";
 const char kHintCropNone[] = "none";
 const char kImageElement[] = "image";
 const char kImageUri[] = "imageUri";
+const char kIndeterminate[] = "indeterminate";
 const char kInputElement[] = "input";
 const char kInputId[] = "id";
 const char kInputType[] = "type";
@@ -223,9 +224,17 @@ void WriteProgressElement(XmlWriter* xml_writer,
   // valueStringOverride: A string that replaces the percentage on the right.
   xml_writer->StartElement(kProgress);
   // Status is mandatory, without it the progress bar is not shown.
-  xml_writer->AddAttribute(kStatus, std::string());
-  xml_writer->AddAttribute(
-      kValue, base::StringPrintf("%3.2f", 1.0 * notification.progress() / 100));
+  xml_writer->AddAttribute(kStatus,
+                           base::UTF16ToUTF8(notification.progress_status()));
+
+  // Show indeterminate spinner for values outside the [0-100] range.
+  if (notification.progress() < 0 || notification.progress() > 100) {
+    xml_writer->AddAttribute(kValue, kIndeterminate);
+  } else {
+    double value = 1.0 * notification.progress() / 100;
+    xml_writer->AddAttribute(kValue, base::StringPrintf("%3.2f", value));
+  }
+
   xml_writer->EndElement();
 }
 

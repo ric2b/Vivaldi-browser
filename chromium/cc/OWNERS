@@ -6,9 +6,9 @@
 # ask for informal reviews.
 
 # layers
-enne@chromium.org
 danakj@chromium.org
 pdr@chromium.org
+wangxianzhu@chromium.org
 
 # mac-specific
 ccameron@chromium.org
@@ -30,6 +30,7 @@ flackr@chromium.org
 chrishtr@chromium.org
 weiliangc@chromium.org
 pdr@chromium.org
+wangxianzhu@chromium.org
 
 # animation
 flackr@chromium.org
@@ -41,9 +42,9 @@ khushalsagar@chromium.org
 vmpstr@chromium.org
 
 # surfaces
-enne@chromium.org
 kylechar@chromium.org
 samans@chromium.org
+jonross@chromium.org
 
 # input, scrolling
 bokan@chromium.org
@@ -55,7 +56,6 @@ majidvp@chromium.org
 sadrul@chromium.org
 
 # general
-enne@chromium.org
 danakj@chromium.org
 vmpstr@chromium.org
 

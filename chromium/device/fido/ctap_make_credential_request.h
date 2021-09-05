@@ -15,6 +15,7 @@
 #include "base/containers/span.h"
 #include "base/macros.h"
 #include "base/optional.h"
+#include "device/fido/client_data.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/public_key_credential_descriptor.h"
 #include "device/fido/public_key_credential_params.h"
@@ -33,6 +34,11 @@ namespace device {
 struct COMPONENT_EXPORT(DEVICE_FIDO) CtapMakeCredentialRequest {
  public:
   using ClientDataHash = std::array<uint8_t, kClientDataHashLength>;
+
+  // Decodes a CTAP2 authenticatorMakeCredential request message. The request's
+  // |client_data_json| will be empty and |client_data_hash| will be set.
+  static base::Optional<CtapMakeCredentialRequest> Parse(
+      const cbor::Value::MapValue& request_map);
 
   CtapMakeCredentialRequest(
       std::string client_data_json,
@@ -64,7 +70,7 @@ struct COMPONENT_EXPORT(DEVICE_FIDO) CtapMakeCredentialRequest {
   bool is_u2f_only = false;
   bool is_incognito_mode = false;
 
-  base::Optional<std::vector<PublicKeyCredentialDescriptor>> exclude_list;
+  std::vector<PublicKeyCredentialDescriptor> exclude_list;
   base::Optional<std::vector<uint8_t>> pin_auth;
   base::Optional<uint8_t> pin_protocol;
   AttestationConveyancePreference attestation_preference =
@@ -78,6 +84,8 @@ struct COMPONENT_EXPORT(DEVICE_FIDO) CtapMakeCredentialRequest {
   // provided by the target authenticator for the MakeCredential request to be
   // sent.
   base::Optional<std::pair<CredProtect, bool>> cred_protect;
+
+  base::Optional<AndroidClientDataExtensionInput> android_client_data_ext;
 };
 
 // Serializes MakeCredential request parameter into CBOR encoded map with

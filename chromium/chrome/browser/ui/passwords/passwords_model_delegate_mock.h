@@ -15,7 +15,7 @@
 
 class PasswordsModelDelegateMock
     : public PasswordsModelDelegate,
-      public base::SupportsWeakPtr<PasswordsModelDelegateMock>{
+      public base::SupportsWeakPtr<PasswordsModelDelegateMock> {
  public:
   PasswordsModelDelegateMock();
   ~PasswordsModelDelegateMock() override;
@@ -23,9 +23,13 @@ class PasswordsModelDelegateMock
   MOCK_CONST_METHOD0(GetWebContents, content::WebContents*());
   MOCK_METHOD0(GetPasswordFormMetricsRecorder,
                password_manager::PasswordFormMetricsRecorder*());
+  MOCK_METHOD0(GetPasswordFeatureManager,
+               password_manager::PasswordFeatureManager*());
   MOCK_CONST_METHOD0(GetOrigin, const GURL&());
   MOCK_CONST_METHOD0(GetState, password_manager::ui::State());
   MOCK_CONST_METHOD0(GetPendingPassword, const autofill::PasswordForm&());
+  MOCK_CONST_METHOD0(GetUnsyncedCredentials,
+                     const std::vector<autofill::PasswordForm>&());
   MOCK_CONST_METHOD0(GetCredentialSource,
                      password_manager::metrics_util::CredentialSourceType());
   MOCK_CONST_METHOD0(
@@ -43,8 +47,9 @@ class PasswordsModelDelegateMock
   MOCK_METHOD0(OnPasswordsRevealed, void());
   MOCK_METHOD2(SavePassword,
                void(const base::string16&, const base::string16&));
-  MOCK_METHOD2(ChooseCredential, void(const autofill::PasswordForm&,
-                                      password_manager::CredentialType));
+  MOCK_METHOD2(ChooseCredential,
+               void(const autofill::PasswordForm&,
+                    password_manager::CredentialType));
   MOCK_METHOD1(NavigateToPasswordManagerAccountDashboard,
                void(password_manager::ManagePasswordsReferrer));
   MOCK_METHOD1(NavigateToPasswordManagerSettingsPage,
@@ -53,6 +58,10 @@ class PasswordsModelDelegateMock
                void(const AccountInfo& account, bool is_default_promo_account));
   MOCK_METHOD0(OnDialogHidden, void());
   MOCK_METHOD0(AuthenticateUser, bool());
+  MOCK_METHOD3(AuthenticateUserForAccountStoreOptInAndSavePassword,
+               void(CoreAccountId,
+                    const base::string16&,
+                    const base::string16&));
   MOCK_CONST_METHOD0(ArePasswordsRevealedWhenBubbleIsOpened, bool());
 
  private:

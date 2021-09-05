@@ -45,7 +45,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
@@ -53,6 +52,7 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/http/http_util.h"
+#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "services/network/test/test_utils.h"
@@ -195,16 +195,11 @@ class ConfigParserTest : public testing::Test {
   }
 
  private:
-  std::unique_ptr<network::SimpleURLLoader> CreateFakeURLLoader(
-      const GURL& url,
-      const std::string& response_data,
-      net::HttpStatusCode response_code,
-      net::URLRequestStatus::Status status);
-
   MOCK_METHOD0(Callback, void(void));
 
   content::BrowserTaskEnvironment task_environment_;
   network::TestURLLoaderFactory test_url_loader_factory_;
+  data_decoder::test::InProcessDataDecoder data_decoder_;
 };
 
 ConfigParserTest::ConfigParserTest()
@@ -457,8 +452,8 @@ TEST_F(ProfileResetterTest, ResetContentSettings) {
       content_settings::ContentSettingsRegistry::GetInstance();
   for (const content_settings::ContentSettingsInfo* info : *registry) {
     ContentSettingsType content_type = info->website_settings_info()->type();
-    if (content_type == CONTENT_SETTINGS_TYPE_MIXEDSCRIPT ||
-        content_type == CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS) {
+    if (content_type == ContentSettingsType::MIXEDSCRIPT ||
+        content_type == ContentSettingsType::PROTOCOL_HANDLERS) {
       // These types are excluded because one can't call
       // GetDefaultContentSetting() for them.
       continue;
@@ -490,8 +485,8 @@ TEST_F(ProfileResetterTest, ResetContentSettings) {
 
   for (const content_settings::ContentSettingsInfo* info : *registry) {
     ContentSettingsType content_type = info->website_settings_info()->type();
-    if (content_type == CONTENT_SETTINGS_TYPE_MIXEDSCRIPT ||
-        content_type == CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS)
+    if (content_type == ContentSettingsType::MIXEDSCRIPT ||
+        content_type == ContentSettingsType::PROTOCOL_HANDLERS)
       continue;
     ContentSetting default_setting =
         host_content_settings_map->GetDefaultContentSetting(content_type,

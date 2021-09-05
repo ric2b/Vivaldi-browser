@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CONTENT_BROWSER_FILEAPI_MOCK_FILE_CHANGE_OBSERVER_H_
-#define CONTENT_BROWSER_FILEAPI_MOCK_FILE_CHANGE_OBSERVER_H_
+#ifndef STORAGE_BROWSER_TEST_MOCK_FILE_CHANGE_OBSERVER_H_
+#define STORAGE_BROWSER_TEST_MOCK_FILE_CHANGE_OBSERVER_H_
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "storage/browser/fileapi/file_observers.h"
-#include "storage/browser/fileapi/file_system_url.h"
-#include "storage/browser/fileapi/task_runner_bound_observer_list.h"
+#include "storage/browser/file_system/file_observers.h"
+#include "storage/browser/file_system/file_system_url.h"
+#include "storage/browser/file_system/task_runner_bound_observer_list.h"
 
 namespace storage {
 
@@ -100,4 +100,4 @@ class MockFileChangeObserver : public FileChangeObserver {
 
 }  // namespace storage
 
-#endif  // CONTENT_BROWSER_FILEAPI_MOCK_FILE_CHANGE_OBSERVER_H_
+#endif  // STORAGE_BROWSER_TEST_MOCK_FILE_CHANGE_OBSERVER_H_

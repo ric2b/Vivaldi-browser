@@ -10,9 +10,11 @@
 #include <map>
 #include <set>
 
+#include "android_webview/browser/gfx/begin_frame_source_webview.h"
 #include "android_webview/browser/gfx/child_frame.h"
 #include "android_webview/browser/gfx/compositor_frame_producer.h"
 #include "android_webview/browser/gfx/parent_compositor_draw_constraints.h"
+#include "android_webview/browser/gfx/root_frame_sink_proxy.h"
 #include "base/callback.h"
 #include "base/cancelable_callback.h"
 #include "base/macros.h"
@@ -36,6 +38,7 @@ class WebContents;
 
 namespace android_webview {
 
+class AwAttachingToWindowRecorder;
 class BrowserViewRendererClient;
 class ChildFrame;
 class CompositorFrameConsumer;
@@ -44,7 +47,8 @@ class RootFrameSinkProxy;
 // Interface for all the WebView-specific content rendering operations.
 // Provides software and hardware rendering and the Capture Picture API.
 class BrowserViewRenderer : public content::SynchronousCompositorClient,
-                            public CompositorFrameProducer {
+                            public CompositorFrameProducer,
+                            public RootFrameSinkProxyClient {
  public:
   static void CalculateTileMemoryPolicy();
   static BrowserViewRenderer* FromWebContents(
@@ -113,6 +117,7 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
   bool IsVisible() const;
   gfx::Rect GetScreenRect() const;
   bool attached_to_window() const { return attached_to_window_; }
+  bool was_attached() const { return was_attached_; }
   gfx::Size size() const { return size_; }
 
   bool IsClientVisible() const;
@@ -125,6 +130,7 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
                             const viz::FrameSinkId& frame_sink_id) override;
   void PostInvalidate(content::SynchronousCompositor* compositor) override;
   void DidUpdateContent(content::SynchronousCompositor* compositor) override;
+  void OnInputEvent();
 
   // |total_scroll_offset|, |total_max_scroll_offset|, and |scrollable_size| are
   // in DIP scale when --use-zoom-for-dsf is disabled. Otherwise, they are in
@@ -146,6 +152,8 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
       content::SynchronousCompositor* compositor,
       std::unique_ptr<viz::CopyOutputRequest> copy_request) override;
 
+  void AddBeginFrameCompletionCallback(base::OnceClosure callback) override;
+
   // CompositorFrameProducer overrides
   base::WeakPtr<CompositorFrameProducer> GetWeakPtr() override;
   void RemoveCompositorFrameConsumer(
@@ -159,6 +167,13 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
       bool view_tree_force_dark_state) override;
 
   void SetActiveFrameSinkId(const viz::FrameSinkId& frame_sink_id);
+
+  // RootFrameSinkProxy overrides
+  void Invalidate() override;
+  void ReturnResourcesFromViz(
+      viz::FrameSinkId frame_sink_id,
+      uint32_t layer_tree_frame_sink_id,
+      std::vector<viz::ReturnedResource> resources) override;
 
   // Visible for testing.
   content::SynchronousCompositor* GetActiveCompositorForTesting() const {
@@ -182,7 +197,7 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
       CompositorFrameConsumer* compositor_frame_consumer);
   void ReleaseHardware();
   bool DoUpdateParentDrawData();
-  void SetNeedsBeginFrames(bool needs_begin_frames);
+  void UpdateBeginFrameSource();
 
   gfx::Vector2d max_scroll_offset() const;
 
@@ -255,6 +270,10 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
   base::Optional<gfx::Vector2d> scroll_on_scroll_state_update_;
 
   ParentCompositorDrawConstraints external_draw_constraints_;
+
+  std::unique_ptr<BeginFrameSourceWebView> begin_frame_source_;
+
+  scoped_refptr<AwAttachingToWindowRecorder> recorder_;
 
   base::WeakPtrFactory<CompositorFrameProducer> weak_ptr_factory_{this};
 

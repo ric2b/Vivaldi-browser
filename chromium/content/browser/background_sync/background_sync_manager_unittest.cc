@@ -29,6 +29,7 @@
 #include "content/browser/background_sync/background_sync_status.h"
 #include "content/browser/devtools/devtools_background_services_context_impl.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
+#include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_registration_object_host.h"
@@ -166,11 +167,13 @@ class BackgroundSyncManagerTest
     options2.scope = GURL(kScope2);
     helper_->context()->RegisterServiceWorker(
         GURL(kScript1), options1,
+        blink::mojom::FetchClientSettingsObject::New(),
         base::BindOnce(&RegisterServiceWorkerCallback, &called_1,
                        &sw_registration_id_1_));
 
     helper_->context()->RegisterServiceWorker(
         GURL(kScript2), options2,
+        blink::mojom::FetchClientSettingsObject::New(),
         base::BindOnce(&RegisterServiceWorkerCallback, &called_2,
                        &sw_registration_id_2_));
     base::RunLoop().RunUntilIdle();
@@ -270,6 +273,11 @@ class BackgroundSyncManagerTest
   void RevivePeriodicSyncRegistrations(url::Origin origin) {
     GetController()->ReviveSuspendedPeriodicSyncOrigin(origin);
     test_background_sync_manager()->RevivePeriodicSyncRegistrations(origin);
+  }
+
+  void BlockContentSettingFor(url::Origin origin) {
+    GetController()->RemoveFromTrackedOrigins(origin);
+    test_background_sync_manager()->UnregisterPeriodicSyncForOrigin(origin);
   }
 
  protected:
@@ -525,7 +533,7 @@ class BackgroundSyncManagerTest
   void UnregisterServiceWorker(uint64_t sw_registration_id) {
     bool called = false;
     helper_->context()->UnregisterServiceWorker(
-        ScopeForSWId(sw_registration_id),
+        ScopeForSWId(sw_registration_id), /*is_immediate=*/false,
         base::BindOnce(&UnregisterServiceWorkerCallback, &called));
     base::RunLoop().RunUntilIdle();
     EXPECT_TRUE(called);
@@ -886,7 +894,7 @@ TEST_F(BackgroundSyncManagerTest, RegisterWithoutLiveSWRegistration) {
   ASSERT_TRUE(provider_host);
 
   // Remove the registration object host.
-  provider_host->registration_object_hosts_.clear();
+  provider_host->container_host()->registration_object_hosts_.clear();
 
   // Ensure |sw_registration_1_| is the last reference to the registration.
   ASSERT_TRUE(sw_registration_1_->HasOneRef());
@@ -1038,7 +1046,6 @@ TEST_F(BackgroundSyncManagerTest, GetRegistrationsBadBackend) {
   test_background_sync_manager()->set_corrupt_backend(false);
   EXPECT_FALSE(GetOneShotSyncRegistrations());
 }
-
 
 TEST_F(BackgroundSyncManagerTest, Reregister) {
   EXPECT_TRUE(Register(sync_options_1_));
@@ -1373,6 +1380,26 @@ TEST_F(BackgroundSyncManagerTest, TestSupensionAndRevival) {
   Unregister(sync_options_2_);
 }
 
+TEST_F(BackgroundSyncManagerTest, UnregisterForOrigin) {
+  InitPeriodicSyncEventTest();
+  auto thirteen_hours = base::TimeDelta::FromHours(13);
+  sync_options_2_.min_interval = thirteen_hours.InMilliseconds();
+  sync_options_1_.min_interval = thirteen_hours.InMilliseconds();
+
+  auto origin = url::Origin::Create(GURL(kScope1).GetOrigin());
+
+  EXPECT_TRUE(Register(sync_options_1_));
+  EXPECT_TRUE(GetRegistration(sync_options_1_));
+  EXPECT_TRUE(Register(sync_options_2_));
+  EXPECT_TRUE(GetRegistration(sync_options_2_));
+
+  BlockContentSettingFor(std::move(origin));
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(GetRegistration(sync_options_1_));
+  EXPECT_FALSE(GetRegistration(sync_options_2_));
+}
+
 TEST_F(BackgroundSyncManagerTest, ReregisterMidSyncFirstAttemptFails) {
   InitDelayedSyncEventTest();
   RegisterAndVerifySyncEventDelayed(sync_options_1_);
@@ -1632,13 +1659,13 @@ TEST_F(BackgroundSyncManagerTest, KillManagerMidSync) {
 }
 
 TEST_F(BackgroundSyncManagerTest, RegisterWithoutMainFrame) {
-  test_background_sync_manager()->set_has_main_frame_provider_host(false);
+  test_background_sync_manager()->set_has_main_frame_window_client(false);
   EXPECT_FALSE(Register(sync_options_1_));
 }
 
 TEST_F(BackgroundSyncManagerTest, RegisterExistingWithoutMainFrame) {
   EXPECT_TRUE(Register(sync_options_1_));
-  test_background_sync_manager()->set_has_main_frame_provider_host(false);
+  test_background_sync_manager()->set_has_main_frame_window_client(false);
   EXPECT_FALSE(Register(sync_options_1_));
 }
 

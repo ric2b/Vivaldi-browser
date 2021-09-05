@@ -230,13 +230,13 @@ void TrackedCallback::MarkAsCompletedWithLock() {
   // We may not have a valid resource, in which case we're not in the tracker.
   if (resource_id_)
     tracker_->Remove(thiz);
-  tracker_ = NULL;
+  tracker_.reset();
 
   // Relax the cross-thread access restriction to non-thread-safe RefCount.
   // |lock_| protects the access to Resource instances.
   base::ScopedAllowCrossThreadRefCountAccess
       allow_cross_thread_ref_count_access;
-  target_loop_ = NULL;
+  target_loop_.reset();
 }
 
 void TrackedCallback::PostRunWithLock(int32_t result) {
@@ -256,17 +256,17 @@ void TrackedCallback::PostRunWithLock(int32_t result) {
     // directly.
     SignalBlockingCallback(result);
   } else {
-    base::Closure callback_closure(
-        RunWhileLocked(base::Bind(&TrackedCallback::Run, this, result)));
+    base::OnceClosure callback_closure(
+        RunWhileLocked(base::BindOnce(&TrackedCallback::Run, this, result)));
     if (target_loop_) {
-      target_loop_->PostClosure(FROM_HERE, callback_closure, 0);
+      target_loop_->PostClosure(FROM_HERE, std::move(callback_closure), 0);
     } else {
       // We must be running in-process and on the main thread (the Enter
       // classes protect against having a null target_loop_ otherwise).
       DCHECK(IsMainThread());
       DCHECK(PpapiGlobals::Get()->IsHostGlobals());
-      base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                    callback_closure);
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, std::move(callback_closure));
     }
   }
   is_scheduled_ = true;

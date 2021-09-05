@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/chromecast_buildflags.h"
 #include "cc/base/switches.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
@@ -64,6 +65,7 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "components/viz/service/display_embedder/gl_output_surface_chromeos.h"
 #include "components/viz/service/display_embedder/output_surface_unified.h"
 #endif
 
@@ -126,7 +128,7 @@ std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
           renderer_settings);
     }
     if (!output_surface) {
-#if defined(OS_CHROMEOS) || defined(IS_CHROMECAST)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST)
       // GPU compositing is expected to always work on Chrome OS so we should
       // never encounter fatal context error. This could be an unrecoverable
       // hardware error or a bug.
@@ -164,7 +166,7 @@ std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
 #endif
 
       if (IsFatalOrSurfaceFailure(context_result)) {
-#if defined(OS_CHROMEOS) || defined(IS_CHROMECAST)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST)
         // GL compositing is expected to always work on Chrome OS so we should
         // never encounter fatal context error. This could be an unrecoverable
         // hardware error or a bug.
@@ -180,22 +182,11 @@ std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
       output_surface = std::make_unique<GLOutputSurfaceOffscreen>(
           std::move(context_provider));
     } else if (context_provider->ContextCapabilities().surfaceless) {
-#if defined(USE_OZONE)
+#if defined(USE_OZONE) || defined(OS_MACOSX) || defined(OS_ANDROID)
       output_surface = std::make_unique<GLOutputSurfaceBufferQueue>(
           std::move(context_provider), surface_handle,
-          gpu_memory_buffer_manager_.get(),
-          display::DisplaySnapshot::PrimaryFormat());
-#elif defined(OS_MACOSX)
-      output_surface = std::make_unique<GLOutputSurfaceBufferQueue>(
-          std::move(context_provider), surface_handle,
-          gpu_memory_buffer_manager_.get(), gfx::BufferFormat::RGBA_8888);
-#elif defined(OS_ANDROID)
-      auto buffer_format = context_provider->UseRGB565PixelFormat()
-                               ? gfx::BufferFormat::BGR_565
-                               : gfx::BufferFormat::RGBA_8888;
-      output_surface = std::make_unique<GLOutputSurfaceBufferQueue>(
-          std::move(context_provider), surface_handle,
-          gpu_memory_buffer_manager_.get(), buffer_format);
+          std::make_unique<BufferQueue>(
+              context_provider->SharedImageInterface(), surface_handle));
 #else
       NOTREACHED();
 #endif
@@ -206,6 +197,9 @@ std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
 #elif defined(OS_ANDROID)
       output_surface = std::make_unique<GLOutputSurfaceAndroid>(
           std::move(context_provider), surface_handle);
+#elif defined(OS_CHROMEOS)
+      output_surface = std::make_unique<GLOutputSurfaceChromeOS>(
+          std::move(context_provider), surface_handle);
 #else
       output_surface = std::make_unique<GLOutputSurface>(
           std::move(context_provider), surface_handle);
@@ -214,6 +208,13 @@ std::unique_ptr<OutputSurface> OutputSurfaceProviderImpl::CreateOutputSurface(
   }
 
   return output_surface;
+}
+
+gpu::SharedImageManager* OutputSurfaceProviderImpl::GetSharedImageManager() {
+  if (!gpu_service_impl_)
+    return nullptr;
+
+  return gpu_service_impl_->shared_image_manager();
 }
 
 std::unique_ptr<SoftwareOutputDevice>
@@ -237,11 +238,12 @@ OutputSurfaceProviderImpl::CreateSoftwareOutputDeviceForPlatform(
       ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
   std::unique_ptr<ui::PlatformWindowSurface> platform_window_surface =
       factory->CreatePlatformWindowSurface(surface_handle);
+  bool in_host_process =
+      !gpu_service_impl_ || gpu_service_impl_->in_host_process();
   std::unique_ptr<ui::SurfaceOzoneCanvas> surface_ozone =
-      factory->CreateCanvasForWidget(surface_handle,
-                                     gpu_service_impl_->in_host_process()
-                                         ? nullptr
-                                         : gpu_service_impl_->main_runner());
+      factory->CreateCanvasForWidget(
+          surface_handle,
+          in_host_process ? nullptr : gpu_service_impl_->main_runner());
   CHECK(surface_ozone);
   return std::make_unique<SoftwareOutputDeviceOzone>(
       std::move(platform_window_surface), std::move(surface_ozone));

@@ -88,6 +88,11 @@ class AuxGPUInfoEnumerator : public gpu::GPUInfo::Enumerator {
       dictionary_->setDouble(name, value.InSecondsF());
   }
 
+  void AddBinary(const char* name,
+                 const base::span<const uint8_t>& value) override {
+    // TODO(penghuang): send vulkan info to devtool
+  }
+
   void BeginGPUDevice() override {}
 
   void EndGPUDevice() override {}
@@ -107,6 +112,10 @@ class AuxGPUInfoEnumerator : public gpu::GPUInfo::Enumerator {
   void BeginDx12VulkanVersionInfo() override {}
 
   void EndDx12VulkanVersionInfo() override {}
+
+  void BeginOverlayInfo() override {}
+
+  void EndOverlayInfo() override {}
 
   void BeginAuxAttributes() override {
     in_aux_attributes_ = true;

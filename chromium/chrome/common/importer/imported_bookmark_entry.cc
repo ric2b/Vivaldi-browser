@@ -23,7 +23,6 @@ bool ImportedBookmarkEntry::operator==(
           // <Vivaldi
           nickname == other.nickname &&
           description == other.description &&
-          visited_time == other.visited_time &&
           // Vivaldi />
           creation_time == other.creation_time);
 }

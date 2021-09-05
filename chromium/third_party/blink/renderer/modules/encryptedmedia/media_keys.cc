@@ -32,6 +32,7 @@
 #include "third_party/blink/public/platform/web_content_decryption_module.h"
 #include "third_party/blink/public/platform/web_encrypted_media_key_information.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_keys_policy.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
@@ -39,7 +40,7 @@
 #include "third_party/blink/renderer/modules/encryptedmedia/content_decryption_module_result_promise.h"
 #include "third_party/blink/renderer/modules/encryptedmedia/encrypted_media_utils.h"
 #include "third_party/blink/renderer/modules/encryptedmedia/media_key_session.h"
-#include "third_party/blink/renderer/modules/encryptedmedia/media_keys_policy.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters.h"
@@ -95,7 +96,7 @@ class MediaKeys::PendingAction final
                 const String& string_data)
       : type_(type), result_(result), data_(data), string_data_(string_data) {}
 
-  void Trace(blink::Visitor* visitor) {
+  void Trace(Visitor* visitor) {
     visitor->Trace(result_);
     visitor->Trace(data_);
   }
@@ -153,7 +154,7 @@ class SetCertificateResultPromise
         exception_code, system_code, error_message);
   }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(media_keys_);
     ContentDecryptionModuleResultPromise::Trace(visitor);
   }
@@ -189,7 +190,7 @@ class GetStatusForPolicyResultPromise
     Resolve(EncryptedMediaUtils::ConvertKeyStatusToString(key_status));
   }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(media_keys_);
     ContentDecryptionModuleResultPromise::Trace(visitor);
   }
@@ -204,7 +205,7 @@ MediaKeys::MediaKeys(
     ExecutionContext* context,
     const WebVector<WebEncryptedMediaSessionType>& supported_session_types,
     std::unique_ptr<WebContentDecryptionModule> cdm)
-    : ContextLifecycleObserver(context),
+    : ExecutionContextLifecycleObserver(context),
       supported_session_types_(supported_session_types),
       cdm_(std::move(cdm)),
       media_element_(nullptr),
@@ -271,7 +272,8 @@ MediaKeySession* MediaKeys::createSession(ScriptState* script_state,
 
 ScriptPromise MediaKeys::setServerCertificate(
     ScriptState* script_state,
-    const DOMArrayPiece& server_certificate) {
+    const DOMArrayPiece& server_certificate,
+    ExceptionState& exception_state) {
   // From https://w3c.github.io/encrypted-media/#setServerCertificate
   // The setServerCertificate(serverCertificate) method provides a server
   // certificate to be used to encrypt messages to the license server.
@@ -284,17 +286,15 @@ ScriptPromise MediaKeys::setServerCertificate(
   //
   // 2. If serverCertificate is an empty array, return a promise rejected
   //    with a new a newly created TypeError.
-  if (!server_certificate.ByteLength()) {
-    return ScriptPromise::Reject(
-        script_state, V8ThrowException::CreateTypeError(
-                          script_state->GetIsolate(),
-                          "The serverCertificate parameter is empty."));
+  if (!server_certificate.ByteLengthAsSizeT()) {
+    exception_state.ThrowTypeError("The serverCertificate parameter is empty.");
+    return ScriptPromise();
   }
 
   // 3. Let certificate be a copy of the contents of the serverCertificate
   //    parameter.
   DOMArrayBuffer* server_certificate_buffer = DOMArrayBuffer::Create(
-      server_certificate.Data(), server_certificate.ByteLength());
+      server_certificate.Data(), server_certificate.ByteLengthAsSizeT());
 
   // 4. Let promise be a new promise.
   SetCertificateResultPromise* result =
@@ -323,7 +323,7 @@ void MediaKeys::SetServerCertificateTask(
   // 5.2 Use the cdm to process certificate.
   cdm->SetServerCertificate(
       static_cast<unsigned char*>(server_certificate->Data()),
-      server_certificate->ByteLength(), result->Result());
+      server_certificate->ByteLengthAsSizeT(), result->Result());
 
   // 5.3 If any of the preceding steps failed, reject promise with a
   //     new DOMException whose name is the appropriate error name.
@@ -423,19 +423,19 @@ WebContentDecryptionModule* MediaKeys::ContentDecryptionModule() {
   return cdm_.get();
 }
 
-void MediaKeys::Trace(blink::Visitor* visitor) {
+void MediaKeys::Trace(Visitor* visitor) {
   visitor->Trace(pending_actions_);
   visitor->Trace(media_element_);
   ScriptWrappable::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
-void MediaKeys::ContextDestroyed(ExecutionContext*) {
+void MediaKeys::ContextDestroyed() {
   timer_.Stop();
   pending_actions_.clear();
 
   // We don't need the CDM anymore. Only destroyed after all related
-  // ContextLifecycleObservers have been stopped.
+  // ExecutionContextLifecycleObservers have been stopped.
   cdm_.reset();
 }
 

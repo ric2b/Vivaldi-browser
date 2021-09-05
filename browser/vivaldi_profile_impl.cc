@@ -8,12 +8,16 @@
 #include "calendar/calendar_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/translate/core/browser/translate_language_list.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "contact/contact_model_loaded_observer.h"
 #include "contact/contact_service_factory.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/buildflags/buildflags.h"
+#include "menus/menu_model.h"
+#include "menus/menu_model_loaded_observer.h"
+#include "menus/menu_service_factory.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
 #include "notes/notes_model_loaded_observer.h"
@@ -25,15 +29,21 @@
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #endif
 
-
 namespace vivaldi {
 void VivaldiInitProfile(Profile* profile) {
   PrefService* pref_service = profile->GetPrefs();
   pref_service->SetBoolean(prefs::kOfferTranslateEnabled, false);
-#if !defined(OS_ANDROID)
-  vivaldi::Notes_Model* notes_model =
+
+  adblock_filter::RuleServiceFactory::GetForBrowserContext(profile);
+
+  vivaldi::NotesModel* notes_model =
       vivaldi::NotesModelFactory::GetForBrowserContext(profile);
   notes_model->AddObserver(new vivaldi::NotesModelLoadedObserver(profile));
+
+#if !defined(OS_ANDROID)
+  menus::Menu_Model* menu_model =
+      menus::MenuServiceFactory::GetForBrowserContext(profile);
+  menu_model->AddObserver(new menus::MenuModelLoadedObserver());
 
   calendar::CalendarService* calendar_service =
       calendar::CalendarServiceFactory::GetForProfile(profile);
@@ -57,15 +67,6 @@ void VivaldiInitProfile(Profile* profile) {
     vivaldi::CommandLineAppendSwitchNoDup(
         base::CommandLine::ForCurrentProcess(),
         switches::kDisableSmoothScrolling);
-  }
-  int spatnav =
-      pref_service->GetInteger(vivaldiprefs::kWebpagesSpatialNavigationMethod);
-  if (spatnav ==
-      static_cast<int>(
-          vivaldiprefs::WebpagesSpatialNavigationMethodValues::BLINK)) {
-    vivaldi::CommandLineAppendSwitchNoDup(
-        base::CommandLine::ForCurrentProcess(),
-        switches::kEnableSpatialNavigation);
   }
 #endif
 }

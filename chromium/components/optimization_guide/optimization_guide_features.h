@@ -11,6 +11,7 @@
 #include "base/feature_list.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "components/optimization_guide/proto/models.pb.h"
 #include "net/nqe/effective_connection_type.h"
 #include "url/gurl.h"
 
@@ -20,8 +21,8 @@ namespace features {
 extern const base::Feature kOptimizationHints;
 extern const base::Feature kOptimizationHintsExperiments;
 constexpr char kOptimizationHintsExperimentNameParam[] = "experiment_name";
-extern const base::Feature kOptimizationHintsFetching;
-extern const base::Feature kOptimizationGuideKeyedService;
+extern const base::Feature kRemoteOptimizationGuideFetching;
+extern const base::Feature kRemoteOptimizationGuideFetchingAnonymousDataConsent;
 extern const base::Feature kOptimizationTargetPrediction;
 
 // The maximum number of hosts that can be stored in the
@@ -35,6 +36,10 @@ size_t MaxHintsFetcherTopHostBlacklistSize();
 // remote Optimzation Guide Service.
 size_t MaxHostsForOptimizationGuideServiceHintsFetch();
 
+// The maximum number of URLs allowed to be requested by the client to the
+// remote Optimzation Guide Service.
+size_t MaxUrlsForOptimizationGuideServiceHintsFetch();
+
 // The maximum number of hosts allowed to be stored as covered by the hints
 // fetcher.
 size_t MaxHostsForRecordingSuccessfullyCovered();
@@ -44,7 +49,7 @@ size_t MaxHostsForRecordingSuccessfullyCovered();
 double MinTopHostEngagementScoreThreshold();
 
 // The amount of time a fetched hint will be considered fresh enough
-// to be used and remain in the HintCacheStore.
+// to be used and remain in the OptimizationGuideStore.
 base::TimeDelta StoredFetchedHintsFreshnessDuration();
 
 // The duration of time after the blacklist initialization for which the low
@@ -56,19 +61,23 @@ base::TimeDelta DurationApplyLowEngagementScoreThreshold();
 // The API key for the One Platform Optimization Guide Service.
 std::string GetOptimizationGuideServiceAPIKey();
 
-// The host for the One Platform Optimization Guide Service.
-GURL GetOptimizationGuideServiceURL();
+// The host for the One Platform Optimization Guide Service for hints.
+GURL GetOptimizationGuideServiceGetHintsURL();
+
+// The host for the One Platform Optimization Guide Service for Models and Host
+// Model Features.
+GURL GetOptimizationGuideServiceGetModelsURL();
 
 // Whether server optimization hints are enabled.
 bool IsOptimizationHintsEnabled();
 
-// Returns true if the feature to fetch hints from the remote Optimization Guide
+// Returns true if the feature to fetch from the remote Optimization Guide
 // Service is enabled.
-bool IsHintsFetchingEnabled();
+bool IsRemoteFetchingEnabled();
 
-// Returns true if the initialization of the Optimization Guide Keyed Service is
-// enabled.
-bool IsOptimizationGuideKeyedServiceEnabled();
+// Returns true if the feature to fetch data for users that have consented to
+// anonymous data collection is enabled but are not Data Saver users.
+bool IsRemoteFetchingForAnonymousDataConsentEnabled();
 
 // The maximum data byte size for a server-provided bloom filter. This is
 // a client-side safety limit for RAM use in case server sends too large of
@@ -87,8 +96,46 @@ GetMaxEffectiveConnectionTypeForNavigationHintsFetch();
 // GetHintsFetchRefreshDuration().
 base::TimeDelta GetHintsFetchRefreshDuration();
 
+// Returns the max number of concurrent fetches to the remote Optimization Guide
+// Service that should be allowed.
+size_t MaxConcurrentPageNavigationFetches();
+
 // Returns true if optimization target prediction is enabled.
 bool IsOptimizationTargetPredictionEnabled();
+
+// The amount of time host model features will be considered fresh enough
+// to be used and remain in the OptimizationGuideStore.
+base::TimeDelta StoredHostModelFeaturesFreshnessDuration();
+
+// The amount of time URL-keyed hints within the hint cache will be
+// allowed to be used and not be purged.
+base::TimeDelta URLKeyedHintValidCacheDuration();
+
+// The maximum number of hosts allowed to be requested by the client to the
+// remote Optimzation Guide Service for use by prediction models.
+size_t MaxHostsForOptimizationGuideServiceModelsFetch();
+
+// The maximum number of hosts allowed to be maintained in a least-recently-used
+// cache by the prediction manager.
+size_t MaxHostModelFeaturesCacheSize();
+
+// The maximum number of hints allowed to be maintained in a least-recently-used
+// cache.
+size_t MaxURLKeyedHintCacheSize();
+
+// Returns true if the optimization target decision for |optimization_target|
+// should not be propagated to the caller in an effort to fully understand the
+// statistics for the served model and not taint the resulting data.
+bool ShouldOverrideOptimizationTargetDecisionForMetricsPurposes(
+    proto::OptimizationTarget optimization_target);
+
+// Returns the minimum number of seconds to randomly delay before starting to
+// fetch for prediction models and host model features.
+int PredictionModelFetchRandomMinDelaySecs();
+
+// Returns the maximum number of seconds to randomly delay before starting to
+// fetch for prediction models and host model features.
+int PredictionModelFetchRandomMaxDelaySecs();
 
 }  // namespace features
 }  // namespace optimization_guide

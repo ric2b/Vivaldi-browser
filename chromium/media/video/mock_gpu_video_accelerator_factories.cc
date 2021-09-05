@@ -28,8 +28,8 @@ class GpuMemoryBufferImpl : public gfx::GpuMemoryBuffer {
     DCHECK(gfx::BufferFormat::R_8 == format_ ||
            gfx::BufferFormat::RG_88 == format_ ||
            gfx::BufferFormat::YUV_420_BIPLANAR == format_ ||
-           gfx::BufferFormat::BGRX_1010102 == format_ ||
-           gfx::BufferFormat::RGBX_1010102 == format_ ||
+           gfx::BufferFormat::BGRA_1010102 == format_ ||
+           gfx::BufferFormat::RGBA_1010102 == format_ ||
            gfx::BufferFormat::RGBA_8888 == format_ ||
            gfx::BufferFormat::BGRA_8888 == format_);
     DCHECK(num_planes_ <= kMaxPlanes);
@@ -113,14 +113,6 @@ MockGpuVideoAcceleratorFactories::CreateGpuMemoryBuffer(
       new GpuMemoryBufferImpl(size, format));
   created_memory_buffers_.push_back(ret.get());
   return ret;
-}
-
-std::unique_ptr<base::SharedMemory>
-MockGpuVideoAcceleratorFactories::CreateSharedMemory(size_t size) {
-  std::unique_ptr<base::SharedMemory> shared_memory(new base::SharedMemory);
-  if (shared_memory->CreateAndMapAnonymous(size))
-    return shared_memory;
-  return nullptr;
 }
 
 base::UnsafeSharedMemoryRegion

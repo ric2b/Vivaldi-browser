@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/single_thread_task_runner.h"
+#include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/proxy_resolution/proxy_config_service.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
@@ -18,14 +19,13 @@ URLRequestContextGetter::URLRequestContextGetter(
     scoped_refptr<base::SingleThreadTaskRunner> network_task_runner)
     : network_task_runner_(network_task_runner),
       proxy_config_service_(
-          net::ProxyResolutionService::CreateSystemProxyConfigService(
+          net::ConfiguredProxyResolutionService::CreateSystemProxyConfigService(
               network_task_runner)) {}
 
 net::URLRequestContext* URLRequestContextGetter::GetURLRequestContext() {
   if (!url_request_context_.get()) {
+    CreateVlogNetLogObserver();
     net::URLRequestContextBuilder builder;
-    net_log_.reset(new VlogNetLog());
-    builder.set_net_log(net_log_.get());
     builder.DisableHttpCache();
     builder.set_proxy_config_service(std::move(proxy_config_service_));
     url_request_context_ = builder.Build();

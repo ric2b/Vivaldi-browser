@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "cc/input/snap_fling_controller.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
@@ -42,7 +43,7 @@ class CORE_EXPORT ScrollManager : public GarbageCollected<ScrollManager>,
  public:
   explicit ScrollManager(LocalFrame&);
   virtual ~ScrollManager() = default;
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
   void Clear();
 
@@ -61,14 +62,14 @@ class CORE_EXPORT ScrollManager : public GarbageCollected<ScrollManager>,
   // granularity - The units that the  scroll delta parameter is in.
   // startNode - Optional. If provided, start chaining from the given node.
   //             If not, use the current focus or last clicked node.
-  bool LogicalScroll(ScrollDirection,
+  bool LogicalScroll(mojom::blink::ScrollDirection,
                      ScrollGranularity,
                      Node* start_node,
                      Node* mouse_press_node);
 
   // Performs a logical scroll that chains, crossing frames, starting from
   // the given node or a reasonable default (focus/last clicked).
-  bool BubblingScroll(ScrollDirection,
+  bool BubblingScroll(mojom::blink::ScrollDirection,
                       ScrollGranularity,
                       Node* starting_node,
                       Node* mouse_press_node);
@@ -96,11 +97,12 @@ class CORE_EXPORT ScrollManager : public GarbageCollected<ScrollManager>,
   void SetResizeScrollableArea(PaintLayer*, IntPoint);
 
   // SnapFlingClient implementation.
-  bool GetSnapFlingInfo(const gfx::Vector2dF& natural_displacement,
-                        gfx::Vector2dF* out_initial_position,
-                        gfx::Vector2dF* out_target_position) const override;
+  bool GetSnapFlingInfoAndSetAnimatingSnapTarget(
+      const gfx::Vector2dF& natural_displacement,
+      gfx::Vector2dF* out_initial_position,
+      gfx::Vector2dF* out_target_position) const override;
   gfx::Vector2dF ScrollByForSnapFling(const gfx::Vector2dF& delta) override;
-  void ScrollEndForSnapFling() override;
+  void ScrollEndForSnapFling(bool did_finish) override;
   void RequestAnimationForSnapFling() override;
 
   void AnimateSnapFling(base::TimeTicks monotonic_time);
@@ -141,7 +143,8 @@ class CORE_EXPORT ScrollManager : public GarbageCollected<ScrollManager>,
   WebGestureEvent SynthesizeGestureScrollBegin(
       const WebGestureEvent& update_event);
 
-  bool SnapAtGestureScrollEnd(const WebGestureEvent& end_event);
+  bool SnapAtGestureScrollEnd(const WebGestureEvent& end_event,
+                              base::ScopedClosureRunner callback);
 
   void NotifyScrollPhaseBeginForCustomizedScroll(const ScrollState&);
   void NotifyScrollPhaseEndForCustomizedScroll();

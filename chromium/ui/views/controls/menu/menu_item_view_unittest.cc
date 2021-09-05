@@ -13,6 +13,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/canvas_painter.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/native_theme/themed_vector_icon.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/controls/menu/submenu_view.h"
 #include "ui/views/controls/menu/test_menu_item_view.h"
@@ -29,7 +30,7 @@ TEST_F(MenuItemViewUnitTest, AddAndRemoveChildren) {
   views::TestMenuItemView root_menu;
   root_menu.set_owned_by_client();
 
-  auto* item = root_menu.AppendMenuItemWithLabel(0, base::string16());
+  auto* item = root_menu.AppendMenuItem(0);
 
   views::SubmenuView* submenu = root_menu.GetSubmenu();
   ASSERT_TRUE(submenu);
@@ -63,11 +64,10 @@ TEST_F(MenuItemViewUnitTest, TestMenuItemViewWithFlexibleWidthChild) {
 
   // Append a normal MenuItemView.
   views::MenuItemView* label_view =
-      root_menu.AppendMenuItemWithLabel(1, base::ASCIIToUTF16("item 1"));
+      root_menu.AppendMenuItem(1, base::ASCIIToUTF16("item 1"));
 
   // Append a second MenuItemView that has a child SquareView.
-  views::MenuItemView* flexible_view =
-      root_menu.AppendMenuItemWithLabel(2, base::string16());
+  views::MenuItemView* flexible_view = root_menu.AppendMenuItem(2);
   flexible_view->AddChildView(new SquareView());
   // Set margins to 0 so that we know width should match height.
   flexible_view->SetMargins(0, 0);
@@ -99,9 +99,9 @@ TEST_F(MenuItemViewUnitTest, TestMenuItemViewWithFlexibleWidthChild) {
 TEST_F(MenuItemViewUnitTest, TestEmptyTopLevelWhenAllItemsAreHidden) {
   views::TestMenuItemView root_menu;
   views::MenuItemView* item1 =
-      root_menu.AppendMenuItemWithLabel(1, base::ASCIIToUTF16("item 1"));
+      root_menu.AppendMenuItem(1, base::ASCIIToUTF16("item 1"));
   views::MenuItemView* item2 =
-      root_menu.AppendMenuItemWithLabel(2, base::ASCIIToUTF16("item 2"));
+      root_menu.AppendMenuItem(2, base::ASCIIToUTF16("item 2"));
 
   // Set menu items to hidden.
   item1->SetVisible(false);
@@ -131,10 +131,10 @@ TEST_F(MenuItemViewUnitTest, TestEmptySubmenuWhenAllChildItemsAreHidden) {
   views::TestMenuItemView root_menu;
   MenuItemView* submenu_item =
       root_menu.AppendSubMenu(1, base::ASCIIToUTF16("My Submenu"));
-  MenuItemView* child1 = submenu_item->AppendMenuItemWithLabel(
-      1, base::ASCIIToUTF16("submenu item 1"));
-  MenuItemView* child2 = submenu_item->AppendMenuItemWithLabel(
-      2, base::ASCIIToUTF16("submenu item 2"));
+  MenuItemView* child1 =
+      submenu_item->AppendMenuItem(1, base::ASCIIToUTF16("submenu item 1"));
+  MenuItemView* child2 =
+      submenu_item->AppendMenuItem(2, base::ASCIIToUTF16("submenu item 2"));
 
   // Set submenu children to hidden.
   child1->SetVisible(false);
@@ -166,9 +166,9 @@ TEST_F(MenuItemViewUnitTest, TestEmptySubmenuWhenAllChildItemsAreHidden) {
 TEST_F(MenuItemViewUnitTest, UseMnemonicOnPlatform) {
   views::TestMenuItemView root_menu;
   views::MenuItemView* item1 =
-      root_menu.AppendMenuItemWithLabel(1, base::ASCIIToUTF16("&Item 1"));
+      root_menu.AppendMenuItem(1, base::ASCIIToUTF16("&Item 1"));
   views::MenuItemView* item2 =
-      root_menu.AppendMenuItemWithLabel(2, base::ASCIIToUTF16("I&tem 2"));
+      root_menu.AppendMenuItem(2, base::ASCIIToUTF16("I&tem 2"));
 
   root_menu.set_has_mnemonics(true);
 
@@ -183,8 +183,7 @@ TEST_F(MenuItemViewUnitTest, UseMnemonicOnPlatform) {
 
 class MenuItemViewLayoutTest : public ViewsTestBase {
  public:
-  MenuItemViewLayoutTest()
-      : test_item_(root_menu_.AppendMenuItemWithLabel(1, base::string16())) {}
+  MenuItemViewLayoutTest() : test_item_(root_menu_.AppendMenuItem(1)) {}
   ~MenuItemViewLayoutTest() override = default;
 
  protected:
@@ -324,16 +323,18 @@ class MenuItemViewPaintUnitTest : public ViewsTestBase {
 // Provides assertion coverage for painting minor text and icons.
 TEST_F(MenuItemViewPaintUnitTest, MinorTextAndIconAssertionCoverage) {
   auto AddItem = [this](auto label, auto minor_label, auto minor_icon) {
-    menu_item_view()->AddMenuItemAt(0, 1000, base::ASCIIToUTF16(label),
-                                    minor_label, minor_icon, gfx::ImageSkia(),
-                                    nullptr, views::MenuItemView::NORMAL,
-                                    ui::NORMAL_SEPARATOR);
+    menu_item_view()->AddMenuItemAt(
+        0, 1000, base::ASCIIToUTF16(label), minor_label, minor_icon,
+        gfx::ImageSkia(), ui::ThemedVectorIcon(),
+        views::MenuItemView::Type::kNormal, ui::NORMAL_SEPARATOR);
   };
-  AddItem("No minor content", base::string16(), nullptr);
-  AddItem("Minor text only", base::ASCIIToUTF16("minor text"), nullptr);
-  AddItem("Minor icon only", base::string16(), &views::kMenuCheckIcon);
+  AddItem("No minor content", base::string16(), ui::ThemedVectorIcon());
+  AddItem("Minor text only", base::ASCIIToUTF16("minor text"),
+          ui::ThemedVectorIcon());
+  AddItem("Minor icon only", base::string16(),
+          ui::ThemedVectorIcon(&views::kMenuCheckIcon));
   AddItem("Minor text and icon", base::ASCIIToUTF16("minor text"),
-          &views::kMenuCheckIcon);
+          ui::ThemedVectorIcon(&views::kMenuCheckIcon));
 
   menu_runner()->RunMenuAt(widget(), nullptr, gfx::Rect(),
                            MenuAnchorPosition::kTopLeft,

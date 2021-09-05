@@ -2,8 +2,11 @@
 
 import("//build/config/jumbo.gni")
 
-jumbo_static_library("calendar") {
+static_library("calendar") {
   sources = [
+    "account_table.cc",
+    "account_table.h",
+    "account_type.h",
     "calendar_backend.cc",
     "calendar_backend.h",
     "calendar_backend_notifier.h",
@@ -26,11 +29,20 @@ jumbo_static_library("calendar") {
     "calendar_type.h",
     "event_database.cc",
     "event_database.h",
+    "event_exception_type.cc",
     "event_exception_type.h",
     "event_type.cc",
     "event_type.h",
     "event_type_database.cc",
     "event_type_database.h",
+    "invite_table.cc",
+    "invite_table.h",
+    "invite_type.cc",
+    "invite_type.h",
+    "notification_table.cc",
+    "notification_table.h",
+    "notification_type.cc",
+    "notification_type.h",
     "recurrence_exception_table.cc",
     "recurrence_exception_table.h",
     "recurrence_exception_type.h",
@@ -38,11 +50,15 @@ jumbo_static_library("calendar") {
   deps = [
     "//base:base",
     "//chrome:strings",
+    "//chrome/common:constants",
     "//components/keyed_service/core:core",
     "//components/keyed_service/content:content",
+    "//components/prefs",
+    "//components/variations",
     "//content/public/browser",
-    "//vivaldi/app:vivaldi_native_resources",
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
+    "//sql",
+    "//vivaldi/app:resources",
+    "//vivaldi/prefs:prefs_strings",
   ]
   public_deps = [
     #"//components/sync/protocol",

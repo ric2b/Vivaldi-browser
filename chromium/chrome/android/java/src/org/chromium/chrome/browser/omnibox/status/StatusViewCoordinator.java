@@ -5,16 +5,19 @@
 package org.chromium.chrome.browser.omnibox.status;
 
 import android.content.res.Resources;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.view.View;
 
 import androidx.annotation.DrawableRes;
+import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
+import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
+import org.chromium.chrome.browser.omnibox.UrlBar.UrlTextChangeListener;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.page_info.PageInfoController;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
@@ -27,7 +30,7 @@ import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
  * A component for displaying a status icon (e.g. security icon or navigation icon) and optional
  * verbose status text.
  */
-public class StatusViewCoordinator implements View.OnClickListener, TextWatcher {
+public class StatusViewCoordinator implements View.OnClickListener, UrlTextChangeListener {
     private final StatusView mStatusView;
     private final StatusMediator mMediator;
     private final PropertyModel mModel;
@@ -46,13 +49,11 @@ public class StatusViewCoordinator implements View.OnClickListener, TextWatcher 
         mIsTablet = isTablet;
         mStatusView = statusView;
 
-        mModel = new PropertyModel.Builder(StatusProperties.ALL_KEYS)
-                         .with(StatusProperties.STATUS_ICON_TINT_RES, R.color.divider_bg_color)
-                         .build();
+        mModel = new PropertyModel(StatusProperties.ALL_KEYS);
 
         PropertyModelChangeProcessor.create(mModel, mStatusView, new StatusViewBinder());
-        mMediator = new StatusMediator(
-                mModel, mStatusView.getResources(), urlBarEditingTextStateProvider);
+        mMediator = new StatusMediator(mModel, mStatusView.getResources(), mStatusView.getContext(),
+                urlBarEditingTextStateProvider, isTablet);
 
         Resources res = mStatusView.getResources();
         mMediator.setUrlMinWidth(res.getDimensionPixelSize(R.dimen.location_bar_min_url_width)
@@ -146,7 +147,7 @@ public class StatusViewCoordinator implements View.OnClickListener, TextWatcher 
         mMediator.setSecurityIconResource(mToolbarDataProvider.getSecurityIconResource(mIsTablet));
         mMediator.setSecurityIconTint(mToolbarDataProvider.getSecurityIconColorStateList());
         mMediator.setSecurityIconDescription(
-                mToolbarDataProvider.getSecurityIconContentDescription());
+                mToolbarDataProvider.getSecurityIconContentDescriptionResourceId());
 
         // TODO(ender): drop these during final cleanup round.
         updateVerboseStatusVisibility();
@@ -167,13 +168,19 @@ public class StatusViewCoordinator implements View.OnClickListener, TextWatcher 
         return mMediator.isSecurityButtonShown();
     }
 
-    /**
-     * @return The ID of the drawable currently shown in the security icon.
-     */
-    @VisibleForTesting
+    /** @return The ID of the drawable currently shown in the security icon. */
     @DrawableRes
-    public int getSecurityIconResourceId() {
-        return mModel.get(StatusProperties.STATUS_ICON_RES);
+    public int getSecurityIconResourceIdForTesting() {
+        return mModel.get(StatusProperties.STATUS_ICON_RESOURCE) == null
+                ? 0
+                : mModel.get(StatusProperties.STATUS_ICON_RESOURCE).getIconResForTesting();
+    }
+
+    /** @return The icon identifier used for custom resources. */
+    public String getSecurityIconIdentifierForTesting() {
+        return mModel.get(StatusProperties.STATUS_ICON_RESOURCE) == null
+                ? null
+                : mModel.get(StatusProperties.STATUS_ICON_RESOURCE).getIconIdentifierForTesting();
     }
 
     /**
@@ -197,8 +204,11 @@ public class StatusViewCoordinator implements View.OnClickListener, TextWatcher 
             return;
         }
 
-        PageInfoController.show(mToolbarDataProvider.getTab().getActivity(),
-                mToolbarDataProvider.getTab(), null, PageInfoController.OpenedFromSource.TOOLBAR);
+        Tab tab = mToolbarDataProvider.getTab();
+        PageInfoController.show(((TabImpl) tab).getActivity(), tab.getWebContents(), null,
+                PageInfoController.OpenedFromSource.TOOLBAR,
+                /*offlinePageLoadUrlDelegate=*/
+                new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(tab));
     }
 
     /**
@@ -222,6 +232,8 @@ public class StatusViewCoordinator implements View.OnClickListener, TextWatcher 
      */
     public void setShowIconsWhenUrlFocused(boolean showIconsWithUrlFocused) {
         mMediator.setShowIconsWhenUrlFocused(showIconsWithUrlFocused);
+        if (!ChromeApplication.isVivaldi()) // In Vivaldi this kills status icon and search icon.
+        reconcileVisualState(showIconsWithUrlFocused);
     }
 
     /**
@@ -241,6 +253,40 @@ public class StatusViewCoordinator implements View.OnClickListener, TextWatcher 
     }
 
     /**
+     * Temporary workaround for the divergent logic for status icon visibility changes for the dse
+     * icon experiment. Should be removed when the dse icon launches (crbug.com/1019488).
+     *
+     * When transitioning to incognito, the first visible view when focused will be assigned to
+     * UrlBar. When the UrlBar is the first visible view when focused, the StatusView's alpha
+     * will be set to 0 in LocationBarPhone#populateFadeAnimations. When transitioning back from
+     * incognito, StatusView's state needs to be reset to match the current state of the status view
+     * {@link org.chromium.chrome.browser.omnibox.LocationBarPhone#updateVisualsForState}.
+     * property model.
+     **/
+    private void reconcileVisualState(boolean showStatusIconWhenFocused) {
+        // No reconciliation is needed on tablet because the status icon is always shown.
+        if (mIsTablet) return;
+
+        // State requirements:
+        // - The ToolbarDataProvider and views are not null.
+        // - The status icon will be shown when focused.
+        // - Incognito isn't active.
+        // - The search engine logo should be shown.
+        if (mToolbarDataProvider == null || mStatusView == null || getSecurityIconView() == null
+                || !showStatusIconWhenFocused || mToolbarDataProvider.isIncognito()
+                || !SearchEngineLogoUtils.shouldShowSearchEngineLogo(
+                        mToolbarDataProvider.isIncognito())) {
+            return;
+        }
+        View securityIconView = getSecurityIconView();
+
+        mStatusView.setAlpha(1f);
+        securityIconView.setAlpha(mModel.get(StatusProperties.STATUS_ICON_ALPHA));
+        securityIconView.setVisibility(
+                mModel.get(StatusProperties.SHOW_STATUS_ICON) ? View.VISIBLE : View.GONE);
+    }
+
+    /**
      * @return Width of the status icon including start/end margins.
      */
     public int getStatusIconWidth() {
@@ -248,13 +294,7 @@ public class StatusViewCoordinator implements View.OnClickListener, TextWatcher 
     }
 
     @Override
-    public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-    @Override
-    public void onTextChanged(CharSequence charSequence, int start, int before, int count) {
-        mMediator.onTextChanged(charSequence);
+    public void onTextChanged(String textWithoutAutocomplete, String textWithAutocomplete) {
+        mMediator.onTextChanged(textWithoutAutocomplete);
     }
-
-    @Override
-    public void afterTextChanged(Editable editable) {}
 }

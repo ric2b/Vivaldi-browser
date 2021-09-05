@@ -47,6 +47,8 @@ CalendarEvent::CalendarEvent(const CalendarEvent& event)
       sequence(event.sequence),
       ical(event.ical),
       rrule(event.rrule),
+      organizer(event.organizer),
+      timezone(event.timezone),
       updateFields(event.updateFields) {}
 
 CalendarEvent::~CalendarEvent() {}
@@ -57,6 +59,8 @@ EventRow::EventRow() {
   all_day_ = false;
   trash_ = false;
   is_recurring_ = false;
+  task_ = false;
+  complete_ = false;
 }
 
 EventRow::EventRow(EventID id,
@@ -82,7 +86,11 @@ EventRow::EventRow(EventID id,
                    base::Time trash_time,
                    int sequence,
                    base::string16 ical,
-                   std::string rrule)
+                   std::string rrule,
+                   std::string organizer,
+                   NotificationsToCreate notifications_to_create,
+                   InvitesToCreate invites_to_create,
+                   std::string timezone)
     : id_(id),
       calendar_id_(calendar_id),
       alarm_id_(alarm_id),
@@ -106,7 +114,11 @@ EventRow::EventRow(EventID id,
       trash_time_(trash_time),
       sequence_(sequence),
       ical_(ical),
-      rrule_(rrule) {}
+      rrule_(rrule),
+      organizer_(organizer),
+      notifications_to_create_(notifications_to_create),
+      invites_to_create_(invites_to_create),
+      timezone_(timezone) {}
 
 EventRow::~EventRow() {}
 
@@ -136,6 +148,11 @@ void EventRow::Swap(EventRow* other) {
   std::swap(ical_, other->ical_);
   std::swap(event_exceptions_, other->event_exceptions_);
   std::swap(rrule_, other->rrule_);
+  std::swap(notifications_, other->notifications_);
+  std::swap(invites_, other->invites_);
+  std::swap(organizer_, other->organizer_);
+  std::swap(notifications_to_create_, other->notifications_to_create_);
+  std::swap(timezone_, other->timezone_);
 }
 
 EventRow::EventRow(const EventRow& other) = default;
@@ -154,6 +171,7 @@ EventRow::EventRow(const EventRow&& other) noexcept
       start_recurring_(other.start_recurring_),
       end_recurring_(other.end_recurring_),
       location_(other.location_),
+      url_(other.url_),
       recurrence_exceptions_(other.recurrence_exceptions_),
       etag_(other.etag_),
       href_(other.href_),
@@ -166,7 +184,13 @@ EventRow::EventRow(const EventRow&& other) noexcept
       sequence_(other.sequence_),
       ical_(other.ical_),
       event_exceptions_(other.event_exceptions_),
-      rrule_(other.rrule_) {}
+      rrule_(other.rrule_),
+      notifications_(other.notifications_),
+      invites_(other.invites_),
+      organizer_(other.organizer_),
+      notifications_to_create_(other.notifications_to_create_),
+      invites_to_create_(other.invites_to_create_),
+      timezone_(other.timezone_) {}
 
 EventResult::EventResult() {}
 

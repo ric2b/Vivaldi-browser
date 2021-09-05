@@ -18,19 +18,22 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/trace_event/trace_log.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/wait.h"
-#include "services/tracing/perfetto/json_trace_exporter.h"
 #include "services/tracing/perfetto/perfetto_service.h"
-#include "services/tracing/perfetto/track_event_json_exporter.h"
 #include "services/tracing/public/cpp/trace_event_args_whitelist.h"
+#include "third_party/perfetto/include/perfetto/ext/trace_processor/export_json.h"
 #include "third_party/perfetto/include/perfetto/ext/tracing/core/observable_events.h"
+#include "third_party/perfetto/include/perfetto/ext/tracing/core/slice.h"
 #include "third_party/perfetto/include/perfetto/ext/tracing/core/trace_packet.h"
 #include "third_party/perfetto/include/perfetto/ext/tracing/core/trace_stats.h"
+#include "third_party/perfetto/include/perfetto/trace_processor/basic_types.h"
+#include "third_party/perfetto/include/perfetto/trace_processor/trace_processor_storage.h"
 #include "third_party/perfetto/include/perfetto/tracing/core/trace_config.h"
 #include "third_party/perfetto/protos/perfetto/config/trace_config.pb.h"
 
@@ -40,26 +43,53 @@ namespace {
 
 const int32_t kEnableTracingTimeoutSeconds = 10;
 
-perfetto::TraceConfig AdjustTraceConfig(
-    const perfetto::TraceConfig& trace_config) {
-  perfetto::TraceConfig trace_config_copy(trace_config);
-  // Clock snapshotting is incompatible with chrome's process sandboxing.
-  // Telemetry uses its own way of snapshotting clocks anyway.
-  auto* builtin_data_sources = trace_config_copy.mutable_builtin_data_sources();
-  builtin_data_sources->set_disable_clock_snapshotting(true);
-  return trace_config_copy;
-}
+class JsonStringOutputWriter
+    : public perfetto::trace_processor::json::OutputWriter {
+ public:
+  using FlushCallback =
+      base::RepeatingCallback<void(std::string json, bool has_more)>;
+
+  JsonStringOutputWriter(FlushCallback flush_callback)
+      : flush_callback_(std::move(flush_callback)) {
+    buffer_.reserve(kBufferReserveCapacity);
+  }
+
+  ~JsonStringOutputWriter() override {
+    flush_callback_.Run(std::move(buffer_), false);
+  }
+
+  perfetto::trace_processor::util::Status AppendString(
+      const std::string& string) override {
+    buffer_ += string;
+    if (buffer_.size() > kBufferLimitInBytes) {
+      flush_callback_.Run(std::move(buffer_), true);
+      // Reset the buffer_ after moving it above.
+      buffer_.clear();
+      buffer_.reserve(kBufferReserveCapacity);
+    }
+    return perfetto::trace_processor::util::OkStatus();
+  }
+
+ private:
+  static constexpr size_t kBufferLimitInBytes = 100 * 1024;
+  // Since we write each string before checking the limit, we'll always go
+  // slightly over and hence we reserve some extra space to avoid most
+  // reallocs.
+  static constexpr size_t kBufferReserveCapacity = kBufferLimitInBytes * 5 / 4;
+
+  FlushCallback flush_callback_;
+  std::string buffer_;
+};
 
 }  // namespace
 
 class ConsumerHost::StreamWriter {
  public:
-  using Slices = std::vector<std::string>;
+  using Slice = std::string;
 
   static scoped_refptr<base::SequencedTaskRunner> CreateTaskRunner() {
-    return base::CreateSequencedTaskRunner({base::ThreadPool(),
-                                            base::WithBaseSyncPrimitives(),
-                                            base::TaskPriority::BEST_EFFORT});
+    return base::ThreadPool::CreateSequencedTaskRunner(
+        {base::WithBaseSyncPrimitives(), base::TaskPriority::BEST_EFFORT});
   }
 
   StreamWriter(mojo::ScopedDataPipeProducerHandle stream,
@@ -71,34 +101,32 @@ class ConsumerHost::StreamWriter {
         disconnect_callback_(std::move(disconnect_callback)),
         callback_task_runner_(callback_task_runner) {}
 
-  void WriteToStream(std::unique_ptr<Slices> slices, bool has_more) {
+  void WriteToStream(std::unique_ptr<Slice> slice, bool has_more) {
     DCHECK(stream_.is_valid());
-    for (const auto& slice : *slices) {
-      uint32_t write_position = 0;
 
-      while (write_position < slice.size()) {
-        uint32_t write_bytes = slice.size() - write_position;
+    uint32_t write_position = 0;
+    while (write_position < slice->size()) {
+      uint32_t write_bytes = slice->size() - write_position;
 
-        MojoResult result =
-            stream_->WriteData(slice.data() + write_position, &write_bytes,
-                               MOJO_WRITE_DATA_FLAG_NONE);
+      MojoResult result =
+          stream_->WriteData(slice->data() + write_position, &write_bytes,
+                             MOJO_WRITE_DATA_FLAG_NONE);
 
-        if (result == MOJO_RESULT_OK) {
-          write_position += write_bytes;
-          continue;
+      if (result == MOJO_RESULT_OK) {
+        write_position += write_bytes;
+        continue;
+      }
+
+      if (result == MOJO_RESULT_SHOULD_WAIT) {
+        result = mojo::Wait(stream_.get(), MOJO_HANDLE_SIGNAL_WRITABLE);
+      }
+
+      if (result != MOJO_RESULT_OK) {
+        if (!disconnect_callback_.is_null()) {
+          callback_task_runner_->PostTask(FROM_HERE,
+                                          std::move(disconnect_callback_));
         }
-
-        if (result == MOJO_RESULT_SHOULD_WAIT) {
-          result = mojo::Wait(stream_.get(), MOJO_HANDLE_SIGNAL_WRITABLE);
-        }
-
-        if (result != MOJO_RESULT_OK) {
-          if (!disconnect_callback_.is_null()) {
-            callback_task_runner_->PostTask(FROM_HERE,
-                                            std::move(disconnect_callback_));
-          }
-          return;
-        }
+        return;
       }
     }
 
@@ -148,10 +176,9 @@ ConsumerHost::TracingSession::TracingSession(
     }
   }
 #endif
-  perfetto::TraceConfig trace_config_copy = AdjustTraceConfig(trace_config);
 
   filtered_pids_.clear();
-  for (const auto& ds_config : trace_config_copy.data_sources()) {
+  for (const auto& ds_config : trace_config.data_sources()) {
     if (ds_config.config().name() == mojom::kTraceEventDataSourceName) {
       for (const auto& filter : ds_config.producer_name_filter()) {
         base::ProcessId pid;
@@ -167,7 +194,7 @@ ConsumerHost::TracingSession::TracingSession(
   base::EraseIf(*pending_enable_tracing_ack_pids_,
                 [this](base::ProcessId pid) { return !IsExpectedPid(pid); });
 
-  host_->consumer_endpoint()->EnableTracing(trace_config_copy);
+  host_->consumer_endpoint()->EnableTracing(trace_config);
   MaybeSendEnableTracingAck();
 
   if (pending_enable_tracing_ack_pids_) {
@@ -285,8 +312,7 @@ void ConsumerHost::TracingSession::ChangeTraceConfig(
     const perfetto::TraceConfig& trace_config) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  perfetto::TraceConfig trace_config_copy = AdjustTraceConfig(trace_config);
-  host_->consumer_endpoint()->ChangeTraceConfig(trace_config_copy);
+  host_->consumer_endpoint()->ChangeTraceConfig(trace_config);
 }
 
 void ConsumerHost::TracingSession::DisableTracing() {
@@ -303,7 +329,7 @@ void ConsumerHost::TracingSession::OnTracingDisabled() {
 
   tracing_session_client_->OnTracingDisabled();
 
-  if (json_trace_exporter_) {
+  if (trace_processor_) {
     host_->consumer_endpoint()->ReadBuffers();
   }
 
@@ -355,6 +381,25 @@ void ConsumerHost::TracingSession::DisableTracingAndEmitJson(
                      weak_factory_.GetWeakPtr()),
       base::SequencedTaskRunnerHandle::Get());
 
+  if (privacy_filtering_enabled) {
+    // For filtering/whitelisting to be possible at JSON export time,
+    // filtering must not have been enabled during proto emission time
+    // (or there's nothing to pass through the whitelist).
+    DCHECK(!privacy_filtering_enabled_);
+    privacy_filtering_enabled_ = true;
+  }
+
+  json_agent_label_filter_ = agent_label_filter;
+
+  perfetto::trace_processor::Config processor_config;
+  trace_processor_ =
+      perfetto::trace_processor::TraceProcessorStorage::CreateInstance(
+          processor_config);
+
+  DisableTracing();
+}
+
+void ConsumerHost::TracingSession::ExportJson() {
   // In legacy backend, the trace event agent sets the predicate used by
   // TraceLog. For perfetto backend, ensure that predicate is always set
   // before creating the exporter. The agent can be created later than this
@@ -368,36 +413,56 @@ void ConsumerHost::TracingSession::DisableTracingAndEmitJson(
         base::BindRepeating(&IsMetadataWhitelisted));
   }
 
-  JSONTraceExporter::ArgumentFilterPredicate arg_filter_predicate;
-  JSONTraceExporter::MetadataFilterPredicate metadata_filter_predicate;
-  if (privacy_filtering_enabled) {
-    // For filtering/whitelisting to be possible at JSON export time,
-    // filtering must not have been enabled during proto emission time
-    // (or there's nothing to pass through the whitelist).
-    DCHECK(!privacy_filtering_enabled_);
+  perfetto::trace_processor::json::ArgumentFilterPredicate argument_filter;
+  perfetto::trace_processor::json::MetadataFilterPredicate metadata_filter;
+  perfetto::trace_processor::json::LabelFilterPredicate label_filter;
+
+  if (privacy_filtering_enabled_) {
     auto* trace_log = base::trace_event::TraceLog::GetInstance();
-    arg_filter_predicate = trace_log->GetArgumentFilterPredicate();
-    metadata_filter_predicate = trace_log->GetMetadataFilterPredicate();
+    base::trace_event::ArgumentFilterPredicate argument_filter_predicate =
+        trace_log->GetArgumentFilterPredicate();
+    argument_filter =
+        [argument_filter_predicate](
+            const char* category_group_name, const char* event_name,
+            perfetto::trace_processor::json::ArgumentNameFilterPredicate*
+                name_filter) {
+          base::trace_event::ArgumentNameFilterPredicate name_filter_predicate;
+          bool result = argument_filter_predicate.Run(
+              category_group_name, event_name, &name_filter_predicate);
+          if (name_filter_predicate) {
+            *name_filter = [name_filter_predicate](const char* arg_name) {
+              return name_filter_predicate.Run(arg_name);
+            };
+          }
+          return result;
+        };
+    base::trace_event::MetadataFilterPredicate metadata_filter_predicate =
+        trace_log->GetMetadataFilterPredicate();
+    metadata_filter = [metadata_filter_predicate](const char* metadata_name) {
+      return metadata_filter_predicate.Run(metadata_name);
+    };
   }
-  json_trace_exporter_ = std::make_unique<TrackEventJSONExporter>(
-      std::move(arg_filter_predicate), std::move(metadata_filter_predicate),
-      base::BindRepeating(&ConsumerHost::TracingSession::OnJSONTraceData,
-                          base::Unretained(this)));
 
-  json_trace_exporter_->set_label_filter(agent_label_filter);
+  if (!json_agent_label_filter_.empty()) {
+    label_filter = [this](const char* label) {
+      return strcmp(label, json_agent_label_filter_.c_str()) == 0;
+    };
+  }
 
-  DisableTracing();
+  JsonStringOutputWriter output_writer(base::BindRepeating(
+      &ConsumerHost::TracingSession::OnJSONTraceData, base::Unretained(this)));
+  auto status = perfetto::trace_processor::json::ExportJson(
+      trace_processor_.get(), &output_writer, argument_filter, metadata_filter,
+      label_filter);
+  DCHECK(status.ok()) << status.message();
 }
 
-void ConsumerHost::TracingSession::OnJSONTraceData(
-    std::string* json,
-    base::DictionaryValue* metadata,
-    bool has_more) {
-  auto slices = std::make_unique<StreamWriter::Slices>();
-  slices->push_back(std::string());
-  slices->back().swap(*json);
+void ConsumerHost::TracingSession::OnJSONTraceData(std::string json,
+                                                   bool has_more) {
+  auto slice = std::make_unique<StreamWriter::Slice>();
+  slice->swap(json);
   read_buffers_stream_writer_.Post(FROM_HERE, &StreamWriter::WriteToStream,
-                                   std::move(slices), has_more);
+                                   std::move(slice), has_more);
 
   if (!has_more) {
     read_buffers_stream_writer_.Reset();
@@ -408,27 +473,60 @@ void ConsumerHost::TracingSession::OnTraceData(
     std::vector<perfetto::TracePacket> packets,
     bool has_more) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (json_trace_exporter_) {
-    json_trace_exporter_->OnTraceData(std::move(packets), has_more);
+
+  // Calculate space needed for trace chunk. Each packet has a preamble and
+  // payload size.
+  size_t max_size = packets.size() * perfetto::TracePacket::kMaxPreambleBytes;
+  for (const auto& packet : packets) {
+    max_size += packet.size();
+  }
+
+  if (trace_processor_) {
+    // Copy packets into a trace file chunk.
+    size_t position = 0;
+    std::unique_ptr<uint8_t[]> data(new uint8_t[max_size]);
+    for (perfetto::TracePacket& packet : packets) {
+      char* preamble;
+      size_t preamble_size;
+      std::tie(preamble, preamble_size) = packet.GetProtoPreamble();
+      DCHECK_LT(position + preamble_size, max_size);
+      memcpy(&data[position], preamble, preamble_size);
+      position += preamble_size;
+      for (const perfetto::Slice& slice : packet.slices()) {
+        DCHECK_LT(position + slice.size, max_size);
+        memcpy(&data[position], slice.start, slice.size);
+        position += slice.size;
+      }
+    }
+
+    auto status = trace_processor_->Parse(std::move(data), position);
+    // TODO(eseckler): There's no way to propagate this error at the moment - If
+    // one occurs on production builds, we silently ignore it and will end up
+    // producing an empty JSON result.
+    DCHECK(status.ok()) << status.message();
     if (!has_more) {
-      json_trace_exporter_.reset();
+      trace_processor_->NotifyEndOfFile();
+      ExportJson();
+      trace_processor_.reset();
     }
     return;
   }
 
-  auto copy = std::make_unique<StreamWriter::Slices>();
+  // Copy packets into a trace slice.
+  auto chunk = std::make_unique<StreamWriter::Slice>();
+  chunk->reserve(max_size);
   for (auto& packet : packets) {
     char* data;
     size_t size;
     std::tie(data, size) = packet.GetProtoPreamble();
-    copy->emplace_back(data, size);
+    chunk->append(data, size);
     auto& slices = packet.slices();
     for (auto& slice : slices) {
-      copy->emplace_back(static_cast<const char*>(slice.start), slice.size);
+      chunk->append(static_cast<const char*>(slice.start), slice.size);
     }
   }
   read_buffers_stream_writer_.Post(FROM_HERE, &StreamWriter::WriteToStream,
-                                   std::move(copy), has_more);
+                                   std::move(chunk), has_more);
   if (!has_more) {
     read_buffers_stream_writer_.Reset();
   }
@@ -481,8 +579,7 @@ void ConsumerHost::TracingSession::Flush(
 // static
 void ConsumerHost::BindConsumerReceiver(
     PerfettoService* service,
-    mojo::PendingReceiver<mojom::ConsumerHost> receiver,
-    const service_manager::BindSourceInfo& source_info) {
+    mojo::PendingReceiver<mojom::ConsumerHost> receiver) {
   mojo::MakeSelfOwnedReceiver(std::make_unique<ConsumerHost>(service),
                               std::move(receiver));
 }
@@ -492,8 +589,7 @@ ConsumerHost::ConsumerHost(PerfettoService* service) : service_(service) {
   consumer_endpoint_ =
       service_->GetService()->ConnectConsumer(this, 0 /*uid_t*/);
   consumer_endpoint_->ObserveEvents(
-      perfetto::TracingService::ConsumerEndpoint::ObservableEventType::
-          kDataSourceInstances);
+      perfetto::ObservableEvents::TYPE_DATA_SOURCES_INSTANCES);
 }
 
 ConsumerHost::~ConsumerHost() {

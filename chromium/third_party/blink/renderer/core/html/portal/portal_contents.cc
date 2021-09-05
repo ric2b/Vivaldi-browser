@@ -4,10 +4,12 @@
 
 #include "third_party/blink/renderer/core/html/portal/portal_contents.h"
 
+#include "base/compiler_specific.h"
+#include "third_party/blink/public/mojom/portal/portal.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/referrer.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
-#include "third_party/blink/renderer/core/dom/document_shutdown_observer.h"
 #include "third_party/blink/renderer/core/dom/increment_load_event_delay_count.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/html/portal/document_portals.h"
 #include "third_party/blink/renderer/core/html/portal/html_portal_element.h"
@@ -31,7 +33,7 @@ PortalContents::PortalContents(
       remote_portal_(std::move(remote_portal)),
       portal_client_receiver_(this, std::move(portal_client_receiver)) {
   remote_portal_.set_disconnect_handler(
-      WTF::Bind(&PortalContents::Destroy, WrapWeakPersistent(this)));
+      WTF::Bind(&PortalContents::DisconnectHandler, WrapWeakPersistent(this)));
   DocumentPortals::From(GetDocument()).RegisterPortalContents(this);
 }
 
@@ -67,17 +69,64 @@ ScriptPromise PortalContents::Activate(ScriptState* script_state,
   return activate_resolver_->Promise();
 }
 
-void PortalContents::OnActivateResponse(bool was_adopted) {
-  if (was_adopted)
-    GetDocument().GetPage()->SetInsidePortal(true);
+void PortalContents::OnActivateResponse(
+    mojom::blink::PortalActivateResult result) {
+  auto reject = [&](DOMExceptionCode code, const char* message) {
+    if (GetDocument().IsContextDestroyed())
+      return;
+
+    ScriptState* script_state = activate_resolver_->GetScriptState();
+    ScriptState::Scope scope(script_state);
+    // TODO(jbroman): It's slightly unfortunate to hard-code the string
+    // HTMLPortalElement here. Ideally this would be threaded through from
+    // there and carried with the ScriptPromiseResolver. See
+    // https://crbug.com/991544.
+    ExceptionState exception_state(script_state->GetIsolate(),
+                                   ExceptionState::kExecutionContext,
+                                   "HTMLPortalElement", "activate");
+    exception_state.ThrowDOMException(code, message);
+    activate_resolver_->Reject(exception_state);
+  };
+
+  bool should_destroy_contents = false;
+  switch (result) {
+    case mojom::blink::PortalActivateResult::kPredecessorWasAdopted:
+      GetDocument().GetPage()->SetInsidePortal(true);
+      FALLTHROUGH;
+    case mojom::blink::PortalActivateResult::kPredecessorWillUnload:
+      activate_resolver_->Resolve();
+      should_destroy_contents = true;
+      break;
+
+    case mojom::blink::PortalActivateResult::
+        kRejectedDueToPredecessorNavigation:
+      reject(DOMExceptionCode::kInvalidStateError,
+             "A top-level navigation is in progress.");
+      break;
+    case mojom::blink::PortalActivateResult::kRejectedDueToPortalNotReady:
+      reject(DOMExceptionCode::kInvalidStateError,
+             "The portal was not yet ready or was blocked.");
+      break;
+    case mojom::blink::PortalActivateResult::kDisconnected:
+      // Only called when |remote_portal_| is disconnected. This usually happens
+      // when the browser/test runner is being shut down.
+      activate_resolver_->Detach();
+      break;
+    case mojom::blink::PortalActivateResult::kAbortedDueToBug:
+      // This should never happen. Ignore this and wait for the frame to be
+      // discarded by the browser, if it hasn't already.
+      activate_resolver_->Detach();
+      return;
+  }
 
   DocumentPortals& document_portals = DocumentPortals::From(GetDocument());
   DCHECK_EQ(document_portals.GetActivatingPortalContents(), this);
   document_portals.ClearActivatingPortalContents();
 
-  activate_resolver_->Resolve();
   activate_resolver_ = nullptr;
-  Destroy();
+
+  if (should_destroy_contents)
+    Destroy();
 }
 
 void PortalContents::PostMessageToGuest(
@@ -93,7 +142,7 @@ void PortalContents::Navigate(
     return;
 
   if (!url.ProtocolIsInHTTPFamily()) {
-    GetDocument().AddConsoleMessage(ConsoleMessage::Create(
+    GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kRendering,
         mojom::ConsoleMessageLevel::kWarning,
         "Portals only allow navigation to protocols in the HTTP family."));
@@ -125,12 +174,20 @@ void PortalContents::Navigate(
 
 void PortalContents::Destroy() {
   DCHECK(!IsActivating());
-  if (HTMLPortalElement* element = std::exchange(portal_element_, nullptr))
-    element->ConsumePortal();
+  if (portal_element_) {
+    portal_element_->PortalContentsWillBeDestroyed(this);
+    portal_element_ = nullptr;
+  }
   portal_token_ = base::UnguessableToken();
   remote_portal_.reset();
   portal_client_receiver_.reset();
   DocumentPortals::From(GetDocument()).DeregisterPortalContents(this);
+}
+
+void PortalContents::DisconnectHandler() {
+  if (IsActivating())
+    OnActivateResponse(mojom::blink::PortalActivateResult::kDisconnected);
+  Destroy();
 }
 
 void PortalContents::ForwardMessageFromGuest(

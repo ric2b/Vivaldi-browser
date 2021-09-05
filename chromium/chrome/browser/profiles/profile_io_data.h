@@ -29,13 +29,9 @@
 #include "content/public/browser/resource_context.h"
 #include "extensions/buildflags/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
-#include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/network_service.mojom-forward.h"
 
 class HostContentSettingsMap;
-
-namespace chromeos {
-class CertificateProvider;
-}
 
 namespace content_settings {
 class CookieSettings;
@@ -45,17 +41,14 @@ namespace extensions {
 class InfoMap;
 }
 
-namespace net {
-class ClientCertStore;
-}  // namespace net
-
 // Conceptually speaking, the ProfileIOData represents data that lives on the IO
 // thread that is owned by a Profile.  Profile owns ProfileIOData, but will make
 // sure to delete it on the IO thread (except possibly in unit tests where there
 // is no IO thread).
 class ProfileIOData {
  public:
-  virtual ~ProfileIOData();
+  ProfileIOData();
+  ~ProfileIOData();
 
   static ProfileIOData* FromResourceContext(content::ResourceContext* rc);
 
@@ -80,46 +73,24 @@ class ProfileIOData {
   content_settings::CookieSettings* GetCookieSettings() const;
   HostContentSettingsMap* GetHostContentSettingsMap() const;
 
-  BooleanPrefMember* safe_browsing_enabled() const {
-    return &safe_browsing_enabled_;
-  }
-
 #if defined(OS_CHROMEOS)
   std::string username_hash() const {
     return username_hash_;
   }
 #endif
 
-  void set_client_cert_store_factory_for_testing(
-      const base::Callback<std::unique_ptr<net::ClientCertStore>()>& factory) {
-    client_cert_store_factory_ = factory;
-  }
+  void InitializeOnUIThread(Profile* profile);
 
-  // Get platform ClientCertStore. May return nullptr.
-  std::unique_ptr<net::ClientCertStore> CreateClientCertStore();
+  // Called when the Profile is destroyed. Triggers destruction of the
+  // ProfileIOData.
+  void ShutdownOnUIThread();
 
  protected:
-#if defined(OS_CHROMEOS)
-  // Defines possible ways in which a profile may use the Chrome OS system
-  // token.
-  enum class SystemKeySlotUseType {
-    // This profile does not use the system key slot.
-    kNone,
-    // This profile only uses the system key slot for client certiticates.
-    kUseForClientAuth,
-    // This profile uses the system key slot for client certificates and for
-    // certificate management.
-    kUseForClientAuthAndCertManagement
-  };
-#endif
-
   // Created on the UI thread, read on the IO thread during ProfileIOData lazy
   // initialization.
   struct ProfileParams {
     ProfileParams();
     ~ProfileParams();
-
-    base::FilePath path;
 
     scoped_refptr<content_settings::CookieSettings> cookie_settings;
     scoped_refptr<HostContentSettingsMap> host_content_settings_map;
@@ -129,32 +100,9 @@ class ProfileIOData {
 
 #if defined(OS_CHROMEOS)
     std::string username_hash;
-    SystemKeySlotUseType system_key_slot_use_type = SystemKeySlotUseType::kNone;
-    std::unique_ptr<chromeos::CertificateProvider> certificate_provider;
+    bool user_is_affiliated = false;
 #endif
-
-    // The profile this struct was populated from. It's passed as a void* to
-    // ensure it's not accidently used on the IO thread. Before using it on the
-    // UI thread, call ProfileManager::IsValidProfile to ensure it's alive.
-    void* profile = nullptr;
   };
-
-  ProfileIOData();
-
-  void InitializeOnUIThread(Profile* profile);
-
-  // Called when the Profile is destroyed. Triggers destruction of the
-  // ProfileIOData.
-  void ShutdownOnUIThread();
-
-  bool initialized() const {
-    return initialized_;
-  }
-
-  // Destroys the ResourceContext first, to cancel any URLRequests that are
-  // using it still, before we destroy the member variables that those
-  // URLRequests may be accessing.
-  void DestroyResourceContext();
 
  private:
   class ResourceContext : public content::ResourceContext {
@@ -168,36 +116,12 @@ class ProfileIOData {
     ProfileIOData* const io_data_;
   };
 
-  // --------------------------------------------
-  // Virtual interface for subtypes to implement:
-  // --------------------------------------------
-
-  // The order *DOES* matter for the majority of these member variables, so
-  // don't move them around unless you know what you're doing!
-  // General rules:
-  //   * ResourceContext references the URLRequestContexts, so
-  //   URLRequestContexts must outlive ResourceContext, hence ResourceContext
-  //   should be destroyed first.
-  //   * URLRequestContexts reference a whole bunch of members, so
-  //   URLRequestContext needs to be destroyed before them.
-  //   * Therefore, ResourceContext should be listed last, and then the
-  //   URLRequestContexts, and then the URLRequestContext members.
-  //   * Note that URLRequestContext members have a directed dependency graph
-  //   too, so they must themselves be ordered correctly.
-
   // Tracks whether or not we've been lazily initialized.
   mutable bool initialized_;
 
   // Data from the UI thread from the Profile, used to initialize ProfileIOData.
   // Deleted after lazy initialization.
   mutable std::unique_ptr<ProfileParams> profile_params_;
-
-  // Used for testing.
-  mutable base::Callback<std::unique_ptr<net::ClientCertStore>()>
-      client_cert_store_factory_;
-
-  // Member variables which are pointed to by the various context objects.
-  mutable BooleanPrefMember safe_browsing_enabled_;
 
   // Pointed to by URLRequestContext.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -206,8 +130,6 @@ class ProfileIOData {
 
 #if defined(OS_CHROMEOS)
   mutable std::string username_hash_;
-  mutable SystemKeySlotUseType system_key_slot_use_type_;
-  mutable std::unique_ptr<chromeos::CertificateProvider> certificate_provider_;
 #endif
 
   mutable std::unique_ptr<ResourceContext> resource_context_;

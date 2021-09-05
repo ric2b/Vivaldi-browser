@@ -19,12 +19,14 @@ import android.provider.MediaStore;
 import android.text.TextUtils;
 import android.webkit.MimeTypeMap;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ContentUriUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.PathUtils;
+import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
@@ -460,9 +462,12 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
                     | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             camera.putExtra(MediaStore.EXTRA_OUTPUT, mCameraOutputUri);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-                camera.setClipData(
-                        ClipData.newUri(ContextUtils.getApplicationContext().getContentResolver(),
-                                UiUtils.IMAGE_FILE_PATH, mCameraOutputUri));
+                // ClipData.newUri may access the disk (for reading mime types).
+                try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
+                    camera.setClipData(ClipData.newUri(
+                            ContextUtils.getApplicationContext().getContentResolver(),
+                            UiUtils.IMAGE_FILE_PATH, mCameraOutputUri));
+                }
             }
             if (mDirectToCamera) {
                 mWindow.showIntent(camera, mCallback, R.string.low_memory_error);

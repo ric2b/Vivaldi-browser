@@ -33,15 +33,27 @@ class GFX_EXPORT GlobalFontConfig {
     // being used (see http://crbug.com/1004254).
     fc_config_ = FcConfigGetCurrent();
     FcConfigReference(fc_config_);
+
+    // Set rescan interval to 0 to disable re-scan. Re-scanning in the
+    // background is a source of thread safety issues.
+    // See in http://crbug.com/1004254.
+    FcBool result = FcConfigSetRescanInterval(fc_config_, 0);
+    DCHECK_EQ(result, FcTrue);
   }
 
   ~GlobalFontConfig() { FcConfigDestroy(fc_config_); }
 
   // Retrieve the native font-config FcConfig pointer.
-  FcConfig* Get() const { return fc_config_; }
+  FcConfig* Get() const {
+    DCHECK_EQ(fc_config_, FcConfigGetCurrent());
+    return fc_config_;
+  }
 
   // Override the font-config configuration.
-  void OverrideForTesting(FcConfig* config) { fc_config_ = config; }
+  void OverrideForTesting(FcConfig* config) {
+    FcConfigSetCurrent(config);
+    fc_config_ = config;
+  }
 
   // Retrieve the global font-config configuration.
   static GlobalFontConfig* GetInstance() {

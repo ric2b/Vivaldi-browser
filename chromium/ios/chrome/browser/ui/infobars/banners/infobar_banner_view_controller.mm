@@ -4,13 +4,16 @@
 
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_view_controller.h"
 
+#import "base/ios/block_types.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "ios/chrome/browser/infobars/infobar_metrics_recorder.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_constants.h"
+#import "ios/chrome/browser/ui/infobars/banners/infobar_banner_container.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_delegate.h"
+#import "ios/chrome/browser/ui/infobars/infobar_feature.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -54,6 +57,14 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
 
 @interface InfobarBannerViewController ()
 
+// Properties backing the InfobarBannerConsumer protocol.
+@property(nonatomic, copy) NSString* bannerAccessibilityLabel;
+@property(nonatomic, copy) NSString* buttonText;
+@property(nonatomic, strong) UIImage* iconImage;
+@property(nonatomic, assign) BOOL presentsModal;
+@property(nonatomic, copy) NSString* titleText;
+@property(nonatomic, copy) NSString* subtitleText;
+
 // The original position of this InfobarVC view in the parent's view coordinate
 // system.
 @property(nonatomic, assign) CGPoint originalCenter;
@@ -66,6 +77,8 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
 @property(nonatomic, assign) BOOL touchInProgress;
 // YES if the view should be dismissed after any touch gesture has ended.
 @property(nonatomic, assign) BOOL shouldDismissAfterTouchesEnded;
+// UIButton which opens the modal.
+@property(nonatomic, strong) UIButton* openModalButton;
 // UIButton with title |self.buttonText|, which triggers the Infobar action.
 @property(nonatomic, strong) UIButton* infobarButton;
 // UILabel displaying |self.titleText|.
@@ -79,12 +92,13 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
 // YES if the banner on screen time metric has already been recorded for this
 // banner.
 @property(nonatomic, assign) BOOL bannerOnScreenTimeWasRecorded;
-// YES if the banner should be able to present a Modal.
-@property(nonatomic, assign) BOOL presentsModal;
 
 @end
 
 @implementation InfobarBannerViewController
+// Synthesized from InfobarBannerContained.
+@synthesize infobarBannerContainer = _infobarBannerContainer;
+// Synthesized from InfobarBannerInteractable.
 @synthesize interactionDelegate = _interactionDelegate;
 
 - (instancetype)initWithDelegate:(id<InfobarBannerDelegate>)delegate
@@ -172,9 +186,12 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
   self.titleLabel.textColor = [UIColor colorNamed:kTextPrimaryColor];
   self.titleLabel.numberOfLines = 0;
   self.titleLabel.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
+  [self.titleLabel
+      setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                      forAxis:UILayoutConstraintAxisVertical];
 
   self.subTitleLabel = [[UILabel alloc] init];
-  self.subTitleLabel.text = self.subTitleText;
+  self.subTitleLabel.text = self.subtitleText;
   self.subTitleLabel.font =
       [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   self.subTitleLabel.adjustsFontForContentSizeCategory = YES;
@@ -182,7 +199,7 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
   self.subTitleLabel.numberOfLines = 0;
   // If |self.subTitleText| hasn't been set or is empty, hide the label to keep
   // the title label centered in the Y axis.
-  self.subTitleLabel.hidden = ![self.subTitleText length];
+  self.subTitleLabel.hidden = !self.subtitleText.length;
 
   UIStackView* labelsStackView = [[UIStackView alloc]
       initWithArrangedSubviews:@[ self.titleLabel, self.subTitleLabel ]];
@@ -216,24 +233,27 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
   }
   // Add labels.
   [containerStack addArrangedSubview:labelsStackView];
-  // Check if it should have an Open Modal button.
-  if (self.presentsModal) {
     // Open Modal Button setup.
-    UIButton* openModalButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    UIImage* gearImage = [[UIImage imageNamed:@"infobar_settings_icon"]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    [openModalButton setImage:gearImage forState:UIControlStateNormal];
-    openModalButton.tintColor = [UIColor colorNamed:kTextSecondaryColor];
-    [openModalButton addTarget:self
-                        action:@selector(animateBannerTappedAndPresentModal)
-              forControlEvents:UIControlEventTouchUpInside];
-    [openModalButton
-        setContentHuggingPriority:UILayoutPriorityDefaultHigh
-                          forAxis:UILayoutConstraintAxisHorizontal];
-    openModalButton.accessibilityIdentifier =
-        kInfobarBannerOpenModalButtonIdentifier;
-    [containerStack addArrangedSubview:openModalButton];
-  }
+  self.openModalButton = [UIButton buttonWithType:UIButtonTypeSystem];
+  UIImage* gearImage = [[UIImage imageNamed:@"infobar_settings_icon"]
+      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  [self.openModalButton setImage:gearImage forState:UIControlStateNormal];
+  self.openModalButton.tintColor = [UIColor colorNamed:kTextSecondaryColor];
+  [self.openModalButton addTarget:self
+                           action:@selector(animateBannerTappedAndPresentModal)
+                 forControlEvents:UIControlEventTouchUpInside];
+  [self.openModalButton
+      setContentHuggingPriority:UILayoutPriorityDefaultHigh
+                        forAxis:UILayoutConstraintAxisHorizontal];
+  [self.openModalButton
+      setContentCompressionResistancePriority:UILayoutPriorityRequired
+                                      forAxis:UILayoutConstraintAxisHorizontal];
+  self.openModalButton.accessibilityIdentifier =
+      kInfobarBannerOpenModalButtonIdentifier;
+  [containerStack addArrangedSubview:self.openModalButton];
+  // Hide open modal button if user shouldn't be allowed to open the modal.
+  self.openModalButton.hidden = !self.presentsModal;
+
   // Add accept button.
   [containerStack addArrangedSubview:self.infobarButton];
   // Configure it.
@@ -289,6 +309,12 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
   [super viewDidAppear:animated];
   [self.metricsRecorder recordBannerEvent:MobileMessagesBannerEvent::Presented];
   self.bannerAppearedTime = [NSDate timeIntervalSinceReferenceDate];
+  // Once the Banner animation has completed check if the banner container
+  // should still present banners.
+  if ([self.infobarBannerContainer shouldDismissBanner]) {
+    [self.presentingViewController dismissViewControllerAnimated:NO
+                                                      completion:nil];
+  }
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -300,7 +326,14 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
 
 - (void)viewDidDisappear:(BOOL)animated {
   [self.metricsRecorder recordBannerEvent:MobileMessagesBannerEvent::Dismissed];
-  [self.delegate infobarBannerWasDismissed];
+  // If the delegate exists at the time of dismissal it should handle the
+  // dismissal cleanup. Otherwise the BannerContainer needs to be informed that
+  // this banner was dismissed in case it needs to present a queued one.
+  if (self.delegate) {
+    [self.delegate infobarBannerWasDismissed];
+  } else {
+    [self.infobarBannerContainer infobarBannerFinishedPresenting];
+  }
   [super viewDidDisappear:animated];
 }
 
@@ -324,12 +357,44 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
   if (!self.touchInProgress) {
     [self.metricsRecorder
         recordBannerDismissType:MobileMessagesBannerDismissType::TimedOut];
-    [self.delegate dismissInfobarBanner:self
-                               animated:YES
-                             completion:nil
-                          userInitiated:NO];
+    [self.delegate dismissInfobarBannerForUserInteraction:NO];
   }
   self.shouldDismissAfterTouchesEnded = YES;
+}
+
+#pragma mark - Getters/Setters
+
+- (void)setTitleText:(NSString*)titleText {
+  _titleText = titleText;
+  self.titleLabel.text = _titleText;
+}
+
+- (void)setSubtitleText:(NSString*)subtitleText {
+  _subtitleText = subtitleText;
+  self.subTitleLabel.text = _subtitleText;
+}
+
+- (void)setButtonText:(NSString*)buttonText {
+  _buttonText = buttonText;
+  [self.infobarButton setTitle:_buttonText forState:UIControlStateNormal];
+}
+
+- (void)setPresentsModal:(BOOL)presentsModal {
+  // TODO(crbug.com/961343): Write a test for setting this to NO;
+  if (_presentsModal == presentsModal)
+    return;
+  _presentsModal = presentsModal;
+  self.openModalButton.hidden = !presentsModal;
+  self.view.accessibilityCustomActions = [self accessibilityActions];
+}
+
+- (void)setInfobarBannerContainer:
+    (id<InfobarBannerContainer>)infobarBannerContainer {
+  _infobarBannerContainer = infobarBannerContainer;
+  // infobarBannerContainer should only be set when the banner by the
+  // InfobarContainerCoordinator and not Overlays. Once we migrate to Overlays
+  // InfobarBannerContainer shouldn't be necessary.
+  DCHECK(!IsInfobarOverlayUIEnabled());
 }
 
 #pragma mark - Private Methods
@@ -373,17 +438,11 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
       if (dragUpExceededThreshold) {
         [self.metricsRecorder
             recordBannerDismissType:MobileMessagesBannerDismissType::SwipedUp];
-        [self.delegate dismissInfobarBanner:self
-                                   animated:YES
-                                 completion:nil
-                              userInitiated:YES];
+        [self.delegate dismissInfobarBannerForUserInteraction:YES];
       } else {
         [self.metricsRecorder
             recordBannerDismissType:MobileMessagesBannerDismissType::TimedOut];
-        [self.delegate dismissInfobarBanner:self
-                                   animated:YES
-                                 completion:nil
-                              userInitiated:NO];
+        [self.delegate dismissInfobarBannerForUserInteraction:NO];
       }
     } else {
       [self.metricsRecorder
@@ -527,22 +586,18 @@ const CGFloat kLongPressTimeDurationInSeconds = 0.4;
 }
 
 - (BOOL)dismiss {
-  [self.delegate dismissInfobarBanner:self
-                             animated:YES
-                           completion:nil
-                        userInitiated:YES];
+  [self.delegate dismissInfobarBannerForUserInteraction:YES];
   return NO;
 }
 
 - (NSString*)accessibilityLabel {
-  if ([self.optionalAccessibilityLabel length])
-    return self.optionalAccessibilityLabel;
-  NSString* accessibilityLabel = self.titleText;
-  if ([self.subTitleText length]) {
-    accessibilityLabel =
-        [NSString stringWithFormat:@"%@,%@", self.titleText, self.subTitleText];
+  if ([self.bannerAccessibilityLabel length])
+    return self.bannerAccessibilityLabel;
+  if (self.subtitleText.length) {
+    return
+        [NSString stringWithFormat:@"%@,%@", self.titleText, self.subtitleText];
   }
-  return accessibilityLabel;
+  return self.titleText;
 }
 
 @end

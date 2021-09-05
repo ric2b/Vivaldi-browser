@@ -228,9 +228,7 @@ component("bluetooth") {
     "//ui/base",
   ]
 
-  public_deps = [
-    "//device/bluetooth/public/cpp",
-  ]
+  public_deps = [ "//device/bluetooth/public/cpp" ]
 
   if (is_android) {
     deps += [ ":jni_headers" ]
@@ -324,6 +322,8 @@ component("bluetooth") {
         "dbus/bluetooth_agent_service_provider.h",
         "dbus/bluetooth_dbus_client_bundle.cc",
         "dbus/bluetooth_dbus_client_bundle.h",
+        "dbus/bluetooth_debug_manager_client.cc",
+        "dbus/bluetooth_debug_manager_client.h",
         "dbus/bluetooth_device_client.cc",
         "dbus/bluetooth_device_client.h",
         "dbus/bluetooth_gatt_application_service_provider.cc",
@@ -383,6 +383,8 @@ component("bluetooth") {
         "dbus/fake_bluetooth_agent_manager_client.h",
         "dbus/fake_bluetooth_agent_service_provider.cc",
         "dbus/fake_bluetooth_agent_service_provider.h",
+        "dbus/fake_bluetooth_debug_manager_client.cc",
+        "dbus/fake_bluetooth_debug_manager_client.h",
         "dbus/fake_bluetooth_device_client.cc",
         "dbus/fake_bluetooth_device_client.h",
         "dbus/fake_bluetooth_gatt_application_service_provider.cc",
@@ -511,6 +513,8 @@ if (is_android) {
     "android/java/src/org/chromium/device/bluetooth/ChromeBluetoothRemoteGattCharacteristic.java",
     "android/java/src/org/chromium/device/bluetooth/ChromeBluetoothRemoteGattDescriptor.java",
     "android/java/src/org/chromium/device/bluetooth/ChromeBluetoothRemoteGattService.java",
+    "android/java/src/org/chromium/device/bluetooth/ChromeBluetoothScanFilterBuilder.java",
+    "android/java/src/org/chromium/device/bluetooth/ChromeBluetoothScanFilterList.java",
     "android/java/src/org/chromium/device/bluetooth/Wrappers.java",
   ]
 
@@ -519,7 +523,7 @@ if (is_android) {
   }
 
   android_library("java") {
-    java_files = java_sources_needing_jni
+    sources = java_sources_needing_jni
     deps = [
       "//base:base_java",
       "//base:jni_java",

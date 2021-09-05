@@ -23,54 +23,28 @@
 #include "base/strings/utf_string_conversions.h"
 #include "printing/backend/cups_connection.h"
 #include "printing/backend/cups_ipp_constants.h"
-#include "printing/backend/cups_ipp_util.h"
+#include "printing/backend/cups_ipp_helper.h"
 #include "printing/backend/cups_printer.h"
 #include "printing/metafile.h"
 #include "printing/print_job_constants.h"
 #include "printing/print_settings.h"
-#include "printing/printing_features_chromeos.h"
+#include "printing/printing_features.h"
 #include "printing/units.h"
 
 namespace printing {
 
 namespace {
 
-// convert from a ColorMode setting to a print-color-mode value from PWG 5100.13
+// Convert from a ColorMode setting to a print-color-mode value from PWG 5100.13
 const char* GetColorModelForMode(int color_mode) {
   const char* mode_string;
-  switch (color_mode) {
-    case COLOR:
-    case CMYK:
-    case CMY:
-    case KCMY:
-    case CMY_K:
-    case RGB:
-    case RGB16:
-    case RGBA:
-    case COLORMODE_COLOR:
-    case BROTHER_CUPS_COLOR:
-    case BROTHER_BRSCRIPT3_COLOR:
-    case HP_COLOR_COLOR:
-    case PRINTOUTMODE_NORMAL:
-    case PROCESSCOLORMODEL_CMYK:
-    case PROCESSCOLORMODEL_RGB:
-      mode_string = CUPS_PRINT_COLOR_MODE_COLOR;
-      break;
-    case GRAY:
-    case BLACK:
-    case GRAYSCALE:
-    case COLORMODE_MONOCHROME:
-    case BROTHER_CUPS_MONO:
-    case BROTHER_BRSCRIPT3_BLACK:
-    case HP_COLOR_BLACK:
-    case PRINTOUTMODE_NORMAL_GRAY:
-    case PROCESSCOLORMODEL_GREYSCALE:
-      mode_string = CUPS_PRINT_COLOR_MODE_MONOCHROME;
-      break;
-    default:
-      mode_string = nullptr;
-      LOG(WARNING) << "Unrecognized color mode";
-      break;
+  base::Optional<bool> is_color =
+      PrintingContextChromeos::ColorModeIsColor(color_mode);
+  if (is_color.has_value()) {
+    mode_string = is_color.value() ? CUPS_PRINT_COLOR_MODE_COLOR
+                                   : CUPS_PRINT_COLOR_MODE_MONOCHROME;
+  } else {
+    mode_string = nullptr;
   }
 
   return mode_string;
@@ -180,7 +154,8 @@ std::vector<ScopedCupsOption> SettingsToCupsOptions(
     options.push_back(ConstructOption(kIppPinEncryption, kPinEncryptionNone));
   }
 
-  if (base::FeatureList::IsEnabled(printing::kAdvancedPpdAttributes)) {
+  if (base::FeatureList::IsEnabled(
+          printing::features::kAdvancedPpdAttributes)) {
     size_t regular_attr_count = options.size();
     std::map<std::string, std::vector<std::string>> multival;
     for (const auto& setting : settings.advanced_settings()) {
@@ -214,8 +189,44 @@ std::vector<ScopedCupsOption> SettingsToCupsOptions(
   return options;
 }
 
+// Given an integral |value| expressed in PWG units (1/100 mm), returns
+// the same value expressed in device units.
+int PwgUnitsToDeviceUnits(int value, float micrometers_per_device_unit) {
+  return ConvertUnitDouble(value, micrometers_per_device_unit, 10);
+}
+
+// Given a |media_size|, the specification of the media's |margins|, and
+// the number of micrometers per device unit, returns the rectangle
+// bounding the apparent printable area of said media.
+gfx::Rect RepresentPrintableArea(const gfx::Size& media_size,
+                                 const CupsPrinter::CupsMediaMargins& margins,
+                                 float micrometers_per_device_unit) {
+  // These values express inward encroachment by margins, away from the
+  // edges of the |media_size|.
+  int left_bound =
+      PwgUnitsToDeviceUnits(margins.left, micrometers_per_device_unit);
+  int bottom_bound =
+      PwgUnitsToDeviceUnits(margins.bottom, micrometers_per_device_unit);
+  int right_bound =
+      PwgUnitsToDeviceUnits(margins.right, micrometers_per_device_unit);
+  int top_bound =
+      PwgUnitsToDeviceUnits(margins.top, micrometers_per_device_unit);
+
+  // These values express the bounding box of the printable area on the
+  // page.
+  int printable_width = media_size.width() - (left_bound + right_bound);
+  int printable_height = media_size.height() - (top_bound + bottom_bound);
+
+  if (printable_width > 0 && printable_height > 0) {
+    return {left_bound, bottom_bound, printable_width, printable_height};
+  }
+
+  return {0, 0, media_size.width(), media_size.height()};
+}
+
 void SetPrintableArea(PrintSettings* settings,
                       const PrintSettings::RequestedMedia& media,
+                      const CupsPrinter::CupsMediaMargins& margins,
                       bool flip) {
   if (!media.size_microns.IsEmpty()) {
     float device_microns_per_device_unit =
@@ -224,7 +235,8 @@ void SetPrintableArea(PrintSettings* settings,
         gfx::Size(media.size_microns.width() / device_microns_per_device_unit,
                   media.size_microns.height() / device_microns_per_device_unit);
 
-    gfx::Rect paper_rect(0, 0, paper_size.width(), paper_size.height());
+    gfx::Rect paper_rect = RepresentPrintableArea(
+        paper_size, margins, device_microns_per_device_unit);
     settings->SetPrinterPrintableArea(paper_size, paper_rect, flip);
   }
 }
@@ -243,6 +255,41 @@ PrintingContextChromeos::PrintingContextChromeos(Delegate* delegate)
 
 PrintingContextChromeos::~PrintingContextChromeos() {
   ReleaseContext();
+}
+
+// static
+base::Optional<bool> PrintingContextChromeos::ColorModeIsColor(int color_mode) {
+  switch (color_mode) {
+    case COLOR:
+    case CMYK:
+    case CMY:
+    case KCMY:
+    case CMY_K:
+    case RGB:
+    case RGB16:
+    case RGBA:
+    case COLORMODE_COLOR:
+    case BROTHER_CUPS_COLOR:
+    case BROTHER_BRSCRIPT3_COLOR:
+    case HP_COLOR_COLOR:
+    case PRINTOUTMODE_NORMAL:
+    case PROCESSCOLORMODEL_CMYK:
+    case PROCESSCOLORMODEL_RGB:
+      return true;
+    case GRAY:
+    case BLACK:
+    case GRAYSCALE:
+    case COLORMODE_MONOCHROME:
+    case BROTHER_CUPS_MONO:
+    case BROTHER_BRSCRIPT3_BLACK:
+    case HP_COLOR_BLACK:
+    case PRINTOUTMODE_NORMAL_GRAY:
+    case PROCESSCOLORMODEL_GREYSCALE:
+      return false;
+    default:
+      LOG(WARNING) << "Unrecognized color mode.";
+      return base::nullopt;
+  }
 }
 
 void PrintingContextChromeos::AskUserForSettings(
@@ -285,7 +332,9 @@ PrintingContext::Result PrintingContextChromeos::UseDefaultSettings() {
   media.size_microns = paper.size_um;
   settings_->set_requested_media(media);
 
-  SetPrintableArea(settings_.get(), media, true /* flip landscape */);
+  CupsPrinter::CupsMediaMargins margins =
+      printer_->GetMediaMarginsByName(paper.vendor_id);
+  SetPrintableArea(settings_.get(), media, margins, true /* flip landscape */);
 
   return OK;
 }
@@ -335,8 +384,8 @@ PrintingContext::Result PrintingContextChromeos::UpdatePrinterSettings(
   // compute paper size
   PrintSettings::RequestedMedia media = settings_->requested_media();
 
+  DCHECK(printer_);
   if (media.IsDefault()) {
-    DCHECK(printer_);
     PrinterSemanticCapsAndDefaults::Paper paper = DefaultPaper(*printer_);
 
     media.vendor_id = paper.vendor_id;
@@ -344,9 +393,20 @@ PrintingContext::Result PrintingContextChromeos::UpdatePrinterSettings(
     settings_->set_requested_media(media);
   }
 
-  SetPrintableArea(settings_.get(), media, true);
+  CupsPrinter::CupsMediaMargins margins =
+      printer_->GetMediaMarginsByName(media.vendor_id);
+  SetPrintableArea(settings_.get(), media, margins, true);
   cups_options_ = SettingsToCupsOptions(*settings_);
   send_user_info_ = settings_->send_user_info();
+  if (send_user_info_) {
+    DCHECK(printer_);
+    std::string uri_string = printer_->GetUri();
+    const base::StringPiece uri(uri_string);
+    if (!uri.starts_with("ipps:") && !uri.starts_with("https:") &&
+        !uri.starts_with("usb:") && !uri.starts_with("ippusb:")) {
+      return OnError();
+    }
+  }
   username_ = send_user_info_ ? settings_->username() : std::string();
 
   return OK;

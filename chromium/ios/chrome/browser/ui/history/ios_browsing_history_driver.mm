@@ -23,7 +23,7 @@ using history::BrowsingHistoryService;
 #pragma mark - IOSBrowsingHistoryDriver
 
 IOSBrowsingHistoryDriver::IOSBrowsingHistoryDriver(
-    ios::ChromeBrowserState* browser_state,
+    ChromeBrowserState* browser_state,
     id<HistoryConsumer> consumer)
     : browser_state_(browser_state), consumer_(consumer) {
   DCHECK(browser_state_);
@@ -86,7 +86,7 @@ history::WebHistoryService* IOSBrowsingHistoryDriver::GetWebHistoryService() {
 void IOSBrowsingHistoryDriver::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
     const syncer::SyncService* sync_service,
     history::WebHistoryService* history_service,
-    base::Callback<void(bool)> callback) {
+    base::OnceCallback<void(bool)> callback) {
   browsing_data::ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
       sync_service, history_service, std::move(callback));
 }

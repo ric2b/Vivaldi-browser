@@ -11,6 +11,8 @@
 #include "base/threading/thread_checker.h"
 #include "chromeos/services/assistant/public/mojom/assistant_audio_decoder.mojom.h"
 #include "media/base/data_source.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 
 namespace chromeos {
 namespace assistant {
@@ -21,7 +23,8 @@ namespace assistant {
 class IPCDataSource : public media::DataSource {
  public:
   // May only be called on the utility thread.
-  explicit IPCDataSource(mojom::AssistantMediaDataSourcePtr media_data_source);
+  explicit IPCDataSource(
+      mojo::PendingRemote<mojom::AssistantMediaDataSource> media_data_source);
   ~IPCDataSource() override;
 
   // media::DataSource implementation. The methods may be called on any single
@@ -31,20 +34,20 @@ class IPCDataSource : public media::DataSource {
   void Read(int64_t position,
             int size,
             uint8_t* destination,
-            const ReadCB& callback) override;
+            ReadCB callback) override;
   bool GetSize(int64_t* size_out) override;
   bool IsStreaming() override;
   void SetBitrate(int bitrate) override;
 
  private:
   // Media data read helpers: must be run on the utility thread.
-  void ReadMediaData(uint8_t* destination, const ReadCB& callback, int size);
+  void ReadMediaData(uint8_t* destination, ReadCB callback, int size);
   void ReadDone(uint8_t* destination,
-                const ReadCB& callback,
+                ReadCB callback,
                 uint32_t requested_size,
                 const std::vector<uint8_t>& data);
 
-  mojom::AssistantMediaDataSourcePtr media_data_source_;
+  mojo::Remote<mojom::AssistantMediaDataSource> media_data_source_;
 
   scoped_refptr<base::SequencedTaskRunner> utility_task_runner_;
 

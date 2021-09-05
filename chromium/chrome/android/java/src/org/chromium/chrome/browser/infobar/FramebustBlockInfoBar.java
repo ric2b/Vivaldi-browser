@@ -10,10 +10,13 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarCompactLayout;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarControlLayout;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarLayout;
 import org.chromium.components.url_formatter.UrlFormatter;
 
 /**

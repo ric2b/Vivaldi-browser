@@ -69,6 +69,12 @@ class TestUserRegistrationMainExtra : public ChromeBrowserMainExtraParts {
         user_type_update->SetKey(user.account_id.GetAccountIdKey(),
                                  base::Value(static_cast<int>(user.user_type)));
 
+        DictionaryPrefUpdate user_token_update(g_browser_process->local_state(),
+                                               "OAuthTokenStatus");
+        user_token_update->SetKey(
+            user.account_id.GetUserEmail(),
+            base::Value(static_cast<int>(user.token_status)));
+
         user_manager::known_user::UpdateId(user.account_id);
 
         if (user.user_type == user_manager::USER_TYPE_CHILD) {
@@ -96,6 +102,19 @@ UserContext LoginManagerMixin::CreateDefaultUserContext(
   UserContext user_context(user_info.user_type, user_info.account_id);
   user_context.SetKey(Key("password"));
   return user_context;
+}
+
+std::vector<LoginManagerMixin::TestUserInfo>
+LoginManagerMixin::CreateRegularUsers(int n) {
+  std::vector<LoginManagerMixin::TestUserInfo> users;
+  for (int i = 0; i < n; ++i) {
+    const std::string email =
+        "test_user_" + base::NumberToString(i) + "@gmail.com";
+    const std::string gaia_id = base::NumberToString(i) + "111111111";
+    users.push_back(LoginManagerMixin::TestUserInfo(
+        AccountId::FromUserEmailGaiaId(email, gaia_id)));
+  }
+  return users;
 }
 
 LoginManagerMixin::LoginManagerMixin(

@@ -4,6 +4,8 @@
 
 #include "device/udev_linux/udev_watcher.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -12,9 +14,9 @@ namespace device {
 
 UdevWatcher::Filter::Filter(base::StringPiece subsystem_in,
                             base::StringPiece devtype_in) {
-  if (subsystem_in.data())
+  if (!subsystem_in.empty())
     subsystem_ = subsystem_in.as_string();
-  if (devtype_in.data())
+  if (!devtype_in.empty())
     devtype_ = devtype_in.as_string();
 }
 
@@ -115,8 +117,8 @@ UdevWatcher::UdevWatcher(ScopedUdevPtr udev,
       observer_(observer),
       udev_filters_(filters) {
   file_watcher_ = base::FileDescriptorWatcher::WatchReadable(
-      monitor_fd,
-      base::Bind(&UdevWatcher::OnMonitorReadable, base::Unretained(this)));
+      monitor_fd, base::BindRepeating(&UdevWatcher::OnMonitorReadable,
+                                      base::Unretained(this)));
 }
 
 void UdevWatcher::OnMonitorReadable() {

@@ -9,8 +9,6 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/strings/string16.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "net/proxy_resolution/proxy_bypass_rules.h"
-#include "services/network/public/mojom/proxy_config.mojom.h"
 
 namespace content {
 class RenderFrameHost;
@@ -43,6 +41,10 @@ class JsJavaConfiguratorHost : public content::WebContentsObserver {
   void RemoveWebMessageListener(
       JNIEnv* env,
       const base::android::JavaParamRef<jstring>& js_object_name);
+
+  base::android::ScopedJavaLocalRef<jobjectArray> GetJsObjectsInfo(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jclass>& clazz);
 
   // content::WebContentsObserver implementations
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;

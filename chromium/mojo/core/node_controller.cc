@@ -110,20 +110,20 @@ ports::ScopedEvent DeserializeEventMessage(
 class ThreadDestructionObserver
     : public base::MessageLoopCurrent::DestructionObserver {
  public:
-  static void Create(scoped_refptr<base::TaskRunner> task_runner,
-                     const base::Closure& callback) {
+  static void Create(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+                     base::OnceClosure callback) {
     if (task_runner->RunsTasksInCurrentSequence()) {
       // Owns itself.
-      new ThreadDestructionObserver(callback);
+      new ThreadDestructionObserver(std::move(callback));
     } else {
-      task_runner->PostTask(FROM_HERE,
-                            base::BindOnce(&Create, task_runner, callback));
+      task_runner->PostTask(
+          FROM_HERE, base::BindOnce(&Create, task_runner, std::move(callback)));
     }
   }
 
  private:
-  explicit ThreadDestructionObserver(const base::Closure& callback)
-      : callback_(callback) {
+  explicit ThreadDestructionObserver(base::OnceClosure callback)
+      : callback_(std::move(callback)) {
     base::MessageLoopCurrent::Get()->AddDestructionObserver(this);
   }
 
@@ -133,11 +133,11 @@ class ThreadDestructionObserver
 
   // base::MessageLoopCurrent::DestructionObserver:
   void WillDestroyCurrentMessageLoop() override {
-    callback_.Run();
+    std::move(callback_).Run();
     delete this;
   }
 
-  const base::Closure callback_;
+  base::OnceClosure callback_;
 
   DISALLOW_COPY_AND_ASSIGN(ThreadDestructionObserver);
 };
@@ -154,11 +154,11 @@ NodeController::NodeController(Core* core)
 }
 
 void NodeController::SetIOTaskRunner(
-    scoped_refptr<base::TaskRunner> task_runner) {
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   io_task_runner_ = task_runner;
   ThreadDestructionObserver::Create(
       io_task_runner_,
-      base::Bind(&NodeController::DropAllPeers, base::Unretained(this)));
+      base::BindOnce(&NodeController::DropAllPeers, base::Unretained(this)));
 }
 
 void NodeController::SendBrokerClientInvitation(
@@ -247,8 +247,8 @@ void NodeController::ConnectIsolated(ConnectionParams connection_params,
   io_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&NodeController::ConnectIsolatedOnIOThread,
-                     base::Unretained(this), base::Passed(&connection_params),
-                     port, connection_name.as_string()));
+                     base::Unretained(this), std::move(connection_params), port,
+                     connection_name.as_string()));
 }
 
 void NodeController::SetPortObserver(const ports::PortRef& port,
@@ -312,10 +312,10 @@ base::WritableSharedMemoryRegion NodeController::CreateSharedBuffer(
   return base::WritableSharedMemoryRegion::Create(num_bytes);
 }
 
-void NodeController::RequestShutdown(const base::Closure& callback) {
+void NodeController::RequestShutdown(base::OnceClosure callback) {
   {
     base::AutoLock lock(shutdown_lock_);
-    shutdown_callback_ = callback;
+    shutdown_callback_ = std::move(callback);
     shutdown_callback_flag_.Set(true);
   }
 
@@ -325,8 +325,14 @@ void NodeController::RequestShutdown(const base::Closure& callback) {
 void NodeController::NotifyBadMessageFrom(const ports::NodeName& source_node,
                                           const std::string& error) {
   scoped_refptr<NodeChannel> peer = GetPeerChannel(source_node);
-  if (peer)
-    peer->NotifyBadMessage(error);
+  DCHECK(peer);
+  DCHECK(peer->HasBadMessageHandler());
+  peer->NotifyBadMessage(error);
+}
+
+bool NodeController::HasBadMessageHandler(const ports::NodeName& source_node) {
+  scoped_refptr<NodeChannel> peer = GetPeerChannel(source_node);
+  return peer ? peer->HasBadMessageHandler() : false;
 }
 
 void NodeController::ForceDisconnectProcessForTesting(
@@ -1272,7 +1278,7 @@ void NodeController::AttemptShutdownIfRequested() {
   if (!shutdown_callback_flag_)
     return;
 
-  base::Closure callback;
+  base::OnceClosure callback;
   {
     base::AutoLock lock(shutdown_lock_);
     if (shutdown_callback_.is_null())
@@ -1283,14 +1289,13 @@ void NodeController::AttemptShutdownIfRequested() {
       return;
     }
 
-    callback = shutdown_callback_;
-    shutdown_callback_.Reset();
+    callback = std::move(shutdown_callback_);
     shutdown_callback_flag_.Set(false);
   }
 
   DCHECK(!callback.is_null());
 
-  callback.Run();
+  std::move(callback).Run();
 }
 
 void NodeController::ForceDisconnectProcessForTestingOnIOThread(

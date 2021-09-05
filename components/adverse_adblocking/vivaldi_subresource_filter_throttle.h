@@ -79,9 +79,7 @@ class VivaldiSubresourceFilterAdblockingThrottle
       const SubresourceFilterSafeBrowsingClient::CheckResult& result);
   // Gets the ActivationDecision for the given Configuration.
   // Returns it, or ACTIVATION_CONDITIONS_NOT_MET if no Configuration.
-  ActivationDecision GetActivationDecision(
-      const std::vector<ConfigResult>& configs,
-      ConfigResult* selected_config);
+  ActivationDecision GetActivationDecision(const ConfigResult& selected_config);
   bool DoesMainFrameURLSatisfyActivationConditions(
       const Configuration::ActivationConditions& conditions,
       ActivationList matched_list) const;

@@ -5,11 +5,11 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_ORIGIN_TRIALS_TRIAL_TOKEN_VALIDATOR_H_
 #define THIRD_PARTY_BLINK_PUBLIC_COMMON_ORIGIN_TRIALS_TRIAL_TOKEN_VALIDATOR_H_
 
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "third_party/blink/public/common/common_export.h"
@@ -35,16 +35,18 @@ class BLINK_COMMON_EXPORT TrialTokenValidator {
   TrialTokenValidator();
   virtual ~TrialTokenValidator();
 
-  using FeatureToTokensMap = std::map<std::string /* feature_name */,
-                                      std::vector<std::string /* token */>>;
+  using FeatureToTokensMap =
+      base::flat_map<std::string /* feature_name */,
+                     std::vector<std::string /* token */>>;
 
   // If token validates, |*feature_name| is set to the name of the feature the
-  // token enables.
+  // token enables and |*expiry_time| is set to the expiry time of the token.
   // This method is thread-safe.
   virtual OriginTrialTokenStatus ValidateToken(base::StringPiece token,
                                                const url::Origin& origin,
+                                               base::Time current_time,
                                                std::string* feature_name,
-                                               base::Time current_time) const;
+                                               base::Time* expiry_time) const;
 
   bool RequestEnablesFeature(const net::URLRequest* request,
                              base::StringPiece feature_name,
@@ -73,9 +75,7 @@ class BLINK_COMMON_EXPORT TrialTokenValidator {
   static void ResetOriginTrialPolicyGetter();
   static OriginTrialPolicy* Policy();
 
- private:
-  bool IsTrialPossibleOnOrigin(const url::Origin& origin) const;
-  bool IsTrialPossibleOnOrigin(const GURL& url) const;
+  static bool IsTrialPossibleOnOrigin(const GURL& url);
 };  // class TrialTokenValidator
 
 }  // namespace blink

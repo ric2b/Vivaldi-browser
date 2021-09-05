@@ -24,7 +24,7 @@
 
     <uses-sdk
         android:minSdkVersion="19"
-        android:targetSdkVersion="28" />
+        android:targetSdkVersion="29" />
 
     <application
         android:icon="@mipmap/ic_launcher"
@@ -59,6 +59,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
         <activity android:name="org.chromium.webapk.shell_apk.h2o.SplashActivity"
                   android:theme="@style/SplashTheme"
@@ -76,6 +77,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
 
         {{#share_template}}
@@ -134,7 +136,9 @@
 
         <meta-data android:name="org.chromium.webapk.shell_apk.defaultBackgroundColorId" android:resource="@color/webapp_default_bg" />
         <meta-data android:name="org.chromium.webapk.shell_apk.iconId" android:resource="@mipmap/app_icon" />
+        {{#has_maskable_icon}}
         <meta-data android:name="org.chromium.webapk.shell_apk.maskableIconId" android:resource="@mipmap/maskable_app_icon"/>
+        {{/has_maskable_icon}}
         <meta-data android:name="org.chromium.webapk.shell_apk.splashId" android:resource="@drawable/splash_icon" />
         <meta-data android:name="org.chromium.webapk.shell_apk.isSplashIconMaskableBooleanId" android:resource="@bool/is_splash_icon_maskable"/>
         <meta-data android:name="org.chromium.webapk.shell_apk.distributor" android:value="{{{distributor}}}" />
@@ -145,7 +149,6 @@
         <meta-data android:name="org.chromium.webapk.shell_apk.iconUrlsAndIconMurmur2Hashes" android:value="{{{icon_urls_and_icon_murmur2_hashes}}}" />
 
         <meta-data android:name="org.chromium.webapk.shell_apk.webManifestUrl" android:value="{{{web_manifest_url}}}" />
-        {{#badge_icon_id}}<meta-data android:name="org.chromium.webapk.shell_apk.badgeIconId" android:resource="{{{badge_icon_id}}}" />{{/badge_icon_id}}
         <service
             android:name="org.chromium.webapk.shell_apk.WebApkServiceFactory"
             android:exported="true"

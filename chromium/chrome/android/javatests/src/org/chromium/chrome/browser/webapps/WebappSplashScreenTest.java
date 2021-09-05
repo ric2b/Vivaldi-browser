@@ -28,12 +28,14 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabTestUtils;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
+import org.chromium.ui.test.util.UiRestriction;
 import org.chromium.webapk.lib.common.splash.R;
 
 /**
@@ -79,14 +81,20 @@ public class WebappSplashScreenTest {
 
     @Test
     @SmallTest
-    @Feature({"Webapps"})
+    @Feature({"StatusBar", "Webapps"})
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
     public void testThemeColorWhenNotSpecified() {
         mActivityTestRule.startWebappActivityAndWaitForSplashScreen();
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
 
+        // Status bar color should be white on M+ to match CCTs and WebAPK shell.
+        int expectedColor = Color.WHITE;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            expectedColor = Color.BLACK;
+        }
         Assert.assertEquals(
-                Color.BLACK, mActivityTestRule.getActivity().getWindow().getStatusBarColor());
+                expectedColor, mActivityTestRule.getActivity().getWindow().getStatusBarColor());
     }
 
     @Test

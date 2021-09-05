@@ -39,9 +39,11 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/developer_tools_policy_handler.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -53,14 +55,16 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/test_chrome_web_ui_controller_factory.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/app_modal/javascript_app_modal_dialog.h"
-#include "components/app_modal/native_app_modal_dialog.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_manager_test_delegate.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/javascript_dialogs/app_modal_dialog_controller.h"
+#include "components/javascript_dialogs/app_modal_dialog_view.h"
+#include "components/keep_alive_registry/keep_alive_registry.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/policy_constants.h"
@@ -99,8 +103,8 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "services/network/public/cpp/features.h"
-#include "services/network/public/cpp/resource_response.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/gl/gl_switches.h"
 #include "url/gurl.h"
@@ -109,8 +113,6 @@
 #include "chromeos/constants/chromeos_switches.h"
 #endif
 
-using app_modal::JavaScriptAppModalDialog;
-using app_modal::NativeAppModalDialog;
 using content::BrowserThread;
 using content::DevToolsAgentHost;
 using content::DevToolsAgentHostObserver;
@@ -118,6 +120,7 @@ using content::NavigationController;
 using content::RenderFrameHost;
 using content::WebContents;
 using extensions::Extension;
+using javascript_dialogs::AppModalDialogView;
 
 namespace {
 
@@ -394,20 +397,21 @@ class DevToolsBeforeUnloadTest: public DevToolsSanityTest {
   }
 
   void AcceptModalDialog() {
-    NativeAppModalDialog* native_dialog = GetDialog();
-    native_dialog->AcceptAppModalDialog();
+    AppModalDialogView* view = GetDialog();
+    view->AcceptAppModalDialog();
   }
 
   void CancelModalDialog() {
-    NativeAppModalDialog* native_dialog = GetDialog();
-    native_dialog->CancelAppModalDialog();
+    AppModalDialogView* view = GetDialog();
+    view->CancelAppModalDialog();
   }
 
-  NativeAppModalDialog* GetDialog() {
-    JavaScriptAppModalDialog* dialog = ui_test_utils::WaitForAppModalDialog();
-    NativeAppModalDialog* native_dialog = dialog->native_dialog();
-    EXPECT_TRUE(native_dialog);
-    return native_dialog;
+  AppModalDialogView* GetDialog() {
+    javascript_dialogs::AppModalDialogController* dialog =
+        ui_test_utils::WaitForAppModalDialog();
+    AppModalDialogView* view = dialog->view();
+    EXPECT_TRUE(view);
+    return view;
   }
 };
 
@@ -829,7 +833,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestShowScriptsTab) {
 // hadn't been shown by the moment inspected paged refreshed.
 // @see http://crbug.com/26312
 // This test is flaky on windows and linux asan. See https://crbug.com/1013003
-#if defined(OS_WIN) || defined(OS_MACOSX)
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
 #define MAYBE_TestScriptsTabIsPopulatedOnInspectedPageRefresh \
   DISABLED_TestScriptsTabIsPopulatedOnInspectedPageRefresh
 #else
@@ -878,7 +882,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
 
   // Now that we know the panel is loaded, switch to it.
   SwitchToExtensionPanel(window_, extension, "iframe_panel");
-  content::WaitForLoadStop(main_web_contents());
+  EXPECT_TRUE(content::WaitForLoadStop(main_web_contents()));
 
   std::vector<RenderFrameHost*> rfhs = main_web_contents()->GetAllFrames();
   EXPECT_EQ(7U, rfhs.size());
@@ -1550,21 +1554,21 @@ bool InterceptURLLoad(content::URLLoaderInterceptor::RequestParams* params) {
     return false;
   }
 
-  network::ResourceResponseHead response;
+  auto response = network::mojom::URLResponseHead::New();
 
-  response.headers = new net::HttpResponseHeaders("200 OK\r\n\r\n");
+  response->headers = new net::HttpResponseHeaders("200 OK\r\n\r\n");
 
   auto start_time =
       base::TimeTicks::Now() - base::TimeDelta::FromMilliseconds(10);
-  response.request_start = start_time;
-  response.response_start = base::TimeTicks::Now();
-  response.request_time =
+  response->request_start = start_time;
+  response->response_start = base::TimeTicks::Now();
+  response->request_time =
       base::Time::Now() - base::TimeDelta::FromMilliseconds(10);
-  response.response_time = base::Time::Now();
+  response->response_time = base::Time::Now();
 
-  auto& load_timing = response.load_timing;
+  auto& load_timing = response->load_timing;
   load_timing.request_start = start_time;
-  load_timing.request_start_time = response.request_time;
+  load_timing.request_start_time = response->request_time;
   load_timing.send_start = start_time;
   load_timing.send_end = base::TimeTicks::Now();
   load_timing.receive_headers_end = base::TimeTicks::Now();
@@ -1572,7 +1576,7 @@ bool InterceptURLLoad(content::URLLoaderInterceptor::RequestParams* params) {
   if (url.query() != kPushUseNullEndTime)
     load_timing.push_end = base::TimeTicks::Now();
 
-  params->client->OnReceiveResponse(response);
+  params->client->OnReceiveResponse(std::move(response));
   mojo::DataPipe pipe;  // The response's body is empty. The pipe is not filled.
   params->client->OnStartLoadingResponseBody(std::move(pipe.consumer_handle));
   params->client->OnComplete(network::URLLoaderCompletionStatus());
@@ -1793,7 +1797,9 @@ IN_PROC_BROWSER_TEST_F(DevToolsAutoOpenerTest, TestAutoOpenForTabs) {
 }
 
 // Flaky timeouts on Win7 Tests (dbg)(1); see https://crbug.com/985255.
-#if defined(OS_WIN) && !defined(NDEBUG)
+// Flaky timeouts and failures on Win7 (32) Tests; see
+// https://crbug.com/1025411.
+#if defined(OS_WIN)
 #define MAYBE_DevToolsReattachAfterCrashTest \
   DISABLED_DevToolsReattachAfterCrashTest
 #else
@@ -1846,7 +1852,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, SecondTabAfterDevTools) {
       browser(), spawned_test_server()->GetURL(kDebuggerTestPage),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_TAB |
-          ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+          ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   WebContents* second = browser()->tab_strip_model()->GetActiveWebContents();
 
   scoped_refptr<content::DevToolsAgentHost> agent(
@@ -2140,11 +2146,11 @@ class StaticURLDataSource : public content::URLDataSource {
 
   // content::URLDataSource:
   std::string GetSource() override { return source_; }
-  void StartDataRequest(const std::string& path,
+  void StartDataRequest(const GURL& url,
                         const content::WebContents::Getter& wc_getter,
-                        const GotDataCallback& callback) override {
+                        GotDataCallback callback) override {
     std::string data(content_);
-    callback.Run(base::RefCountedString::TakeString(&data));
+    std::move(callback).Run(base::RefCountedString::TakeString(&data));
   }
   std::string GetMimeType(const std::string& path) override {
     return "text/html";
@@ -2272,7 +2278,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, TestOpenInNewTabFilter) {
 
   TabStripModel* tabs = browser()->tab_strip_model();
   int i = 0;
-  for (const std::pair<const std::string, const std::string> pair : tests) {
+  for (const std::pair<const std::string, const std::string>& pair : tests) {
     bindings_delegate_->OpenInNewTab(pair.first);
     i++;
 
@@ -2339,7 +2345,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsSanityTest, InspectElement) {
 
   navigation_manager.WaitForNavigationFinished();
   navigation_manager_iframe.WaitForNavigationFinished();
-  content::WaitForLoadStop(tab);
+  EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   std::vector<RenderFrameHost*> frames = GetInspectedTab()->GetAllFrames();
   ASSERT_EQ(2u, frames.size());
@@ -2356,6 +2362,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsSanityTest, InspectElement) {
 }
 
 IN_PROC_BROWSER_TEST_F(InProcessBrowserTest, BrowserCloseWithBeforeUnload) {
+  EXPECT_FALSE(KeepAliveRegistry::GetInstance()->IsOriginRegistered(
+      KeepAliveOrigin::REMOTE_DEBUGGING));
   ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(content::ExecuteScript(
@@ -2366,6 +2374,30 @@ IN_PROC_BROWSER_TEST_F(InProcessBrowserTest, BrowserCloseWithBeforeUnload) {
   BrowserHandler handler(nullptr, std::string());
   handler.Close();
   ui_test_utils::WaitForBrowserToClose(browser());
+}
+
+class KeepAliveDevToolsTest : public InProcessBrowserTest {
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(switches::kRemoteDebuggingPort, "0");
+    command_line->AppendSwitch(switches::kNoStartupWindow);
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(KeepAliveDevToolsTest, KeepsAliveUntilBrowserClose) {
+  EXPECT_FALSE(browser_shutdown::IsTryingToQuit());
+  EXPECT_TRUE(BrowserList::GetInstance()->empty());
+  EXPECT_TRUE(KeepAliveRegistry::GetInstance()->IsKeepingAlive());
+  EXPECT_TRUE(KeepAliveRegistry::GetInstance()->IsOriginRegistered(
+      KeepAliveOrigin::REMOTE_DEBUGGING));
+  chrome::NewEmptyWindow(ProfileManager::GetLastUsedProfile());
+  EXPECT_FALSE(BrowserList::GetInstance()->empty());
+  BrowserHandler handler(nullptr, std::string());
+  handler.Close();
+  ui_test_utils::WaitForBrowserToClose();
+  EXPECT_FALSE(KeepAliveRegistry::GetInstance()->IsKeepingAlive());
+  EXPECT_FALSE(KeepAliveRegistry::GetInstance()->IsOriginRegistered(
+      KeepAliveOrigin::REMOTE_DEBUGGING));
 }
 
 class DevToolsPolicyTest : public InProcessBrowserTest {
@@ -2383,7 +2415,7 @@ class DevToolsPolicyTest : public InProcessBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(DevToolsPolicyTest, OpenBlackListedDevTools) {
   base::ListValue blacklist;
-  blacklist.AppendString("chrome-devtools://*");
+  blacklist.AppendString("devtools://*");
   policy::PolicyMap policies;
   policies.Set(policy::key::kURLBlacklist, policy::POLICY_LEVEL_MANDATORY,
                policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
@@ -2423,7 +2455,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsSanityTest,
 
   navigation_manager.WaitForNavigationFinished();
   navigation_manager_iframe.WaitForNavigationFinished();
-  content::WaitForLoadStop(tab);
+  EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   for (auto* frame : GetInspectedTab()->GetAllFrames()) {
     content::WaitForHitTestData(frame);

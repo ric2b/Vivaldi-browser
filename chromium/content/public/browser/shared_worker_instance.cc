@@ -4,8 +4,6 @@
 
 #include "content/public/browser/shared_worker_instance.h"
 
-#include <tuple>
-
 #include "base/logging.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
@@ -14,13 +12,17 @@ namespace content {
 
 SharedWorkerInstance::SharedWorkerInstance(
     const GURL& url,
+    blink::mojom::ScriptType script_type,
+    network::mojom::CredentialsMode credentials_mode,
     const std::string& name,
     const url::Origin& constructor_origin,
     const std::string& content_security_policy,
-    blink::mojom::ContentSecurityPolicyType security_policy_type,
+    network::mojom::ContentSecurityPolicyType security_policy_type,
     network::mojom::IPAddressSpace creation_address_space,
     blink::mojom::SharedWorkerCreationContextType creation_context_type)
     : url_(url),
+      script_type_(script_type),
+      credentials_mode_(credentials_mode),
       name_(name),
       constructor_origin_(constructor_origin),
       content_security_policy_(content_security_policy),
@@ -40,12 +42,6 @@ SharedWorkerInstance::SharedWorkerInstance(const SharedWorkerInstance& other) =
 SharedWorkerInstance::SharedWorkerInstance(SharedWorkerInstance&& other) =
     default;
 
-SharedWorkerInstance& SharedWorkerInstance::operator=(
-    const SharedWorkerInstance& other) = default;
-
-SharedWorkerInstance& SharedWorkerInstance::operator=(
-    SharedWorkerInstance&& other) = default;
-
 SharedWorkerInstance::~SharedWorkerInstance() = default;
 
 bool SharedWorkerInstance::Matches(
@@ -58,8 +54,9 @@ bool SharedWorkerInstance::Matches(
   // options's name member, then set worker global scope to that
   // SharedWorkerGlobalScope object."
   if (!constructor_origin_.IsSameOriginWith(constructor_origin) ||
-      url_ != url || name_ != name)
+      url_ != url || name_ != name) {
     return false;
+  }
 
   // TODO(https://crbug.com/794098): file:// URLs should be treated as opaque
   // origins, but not in url::Origin. Therefore, we manually check it here.
@@ -67,19 +64,6 @@ bool SharedWorkerInstance::Matches(
     return false;
 
   return true;
-}
-
-bool SharedWorkerInstance::Matches(const SharedWorkerInstance& other) const {
-  return Matches(other.url(), other.name(), other.constructor_origin());
-}
-
-bool operator<(const SharedWorkerInstance& lhs,
-               const SharedWorkerInstance& rhs) {
-  if (lhs.Matches(rhs))
-    return false;
-
-  return std::tie(lhs.url(), lhs.name(), lhs.constructor_origin()) <
-         std::tie(rhs.url(), rhs.name(), rhs.constructor_origin());
 }
 
 }  // namespace content

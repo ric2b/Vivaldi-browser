@@ -10,12 +10,16 @@
 #include <utility>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/component_export.h"
+#include "base/debug/debugging_buildflags.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/profiler/sampling_profiler_thread_token.h"
 #include "base/profiler/stack_sampling_profiler.h"
 #include "base/sequence_checker.h"
 #include "base/threading/platform_thread.h"
+#include "build/build_config.h"
 #include "services/tracing/public/cpp/perfetto/interning_index.h"
 #include "third_party/perfetto/include/perfetto/ext/tracing/core/trace_writer.h"
 
@@ -39,14 +43,18 @@ class COMPONENT_EXPORT(TRACING_CPP) TracingSamplerProfiler {
   class COMPONENT_EXPORT(TRACING_CPP) TracingProfileBuilder
       : public base::ProfileBuilder {
    public:
-    TracingProfileBuilder(base::PlatformThreadId sampled_thread_id,
-                          std::unique_ptr<perfetto::TraceWriter> trace_writer,
-                          bool should_enable_filtering);
+    TracingProfileBuilder(
+        base::PlatformThreadId sampled_thread_id,
+        std::unique_ptr<perfetto::TraceWriter> trace_writer,
+        bool should_enable_filtering,
+        const base::RepeatingClosure& sample_callback_for_testing =
+            base::RepeatingClosure());
     ~TracingProfileBuilder() override;
 
     // base::ProfileBuilder
     base::ModuleCache* GetModuleCache() override;
-    void OnSampleCompleted(std::vector<base::Frame> frames) override;
+    void OnSampleCompleted(std::vector<base::Frame> frames,
+                           base::TimeTicks sample_timestamp) override;
     void OnProfileCompleted(base::TimeDelta profile_duration,
                             base::TimeDelta sampling_period) override {}
 
@@ -78,19 +86,24 @@ class COMPONENT_EXPORT(TRACING_CPP) TracingSamplerProfiler {
     const base::PlatformThreadId sampled_thread_id_;
     base::Lock trace_writer_lock_;
     std::unique_ptr<perfetto::TraceWriter> trace_writer_;
-    InterningIndex<size_t> interned_callstacks_{1000};
-    InterningIndex<std::pair<std::string, std::string>,
-                   std::pair<uintptr_t, std::string>>
-        interned_frames_{1000, 1000};
-    InterningIndex<std::string> interned_frame_names_{1000};
-    InterningIndex<std::string> interned_module_names_{1000};
-    InterningIndex<std::string> interned_module_ids_{1000};
-    InterningIndex<uintptr_t> interned_modules_{1000};
+    InterningIndex<TypeList<size_t>, SizeList<1024>> interned_callstacks_{};
+    InterningIndex<TypeList<std::pair<std::string, std::string>,
+                            std::pair<uintptr_t, std::string>>,
+                   SizeList<1024, 1024>>
+        interned_frames_{};
+    InterningIndex<TypeList<std::string>, SizeList<1024>>
+        interned_frame_names_{};
+    InterningIndex<TypeList<std::string>, SizeList<1024>>
+        interned_module_names_{};
+    InterningIndex<TypeList<std::string>, SizeList<1024>>
+        interned_module_ids_{};
+    InterningIndex<TypeList<uintptr_t>, SizeList<1024>> interned_modules_{};
     bool reset_incremental_state_ = true;
     uint32_t last_incremental_state_reset_id_ = 0;
     int32_t last_emitted_process_priority_ = -1;
     base::TimeTicks last_timestamp_;
     const bool should_enable_filtering_;
+    base::RepeatingClosure sample_callback_for_testing_;
   };
 
   // Creates sampling profiler on main thread. The profiler *must* be
@@ -105,26 +118,45 @@ class COMPONENT_EXPORT(TRACING_CPP) TracingSamplerProfiler {
   // Registers the TracingSamplerProfiler as a Perfetto data source
   static void RegisterDataSource();
 
-  static void SetupStartupTracing();
-
   // For tests.
+  static void SetupStartupTracingForTesting();
   static void DeleteOnChildThreadForTesting();
   static void StartTracingForTesting(tracing::PerfettoProducer* producer);
   static void StopTracingForTesting();
+  static void MangleModuleIDIfNeeded(std::string* module_id);
 
-  explicit TracingSamplerProfiler(base::PlatformThreadId sampled_thread_id);
+  // Returns whether of not the sampler profiling is able to unwind the stack
+  // on this platform.
+  constexpr static bool IsStackUnwindingSupported() {
+#if defined(OS_MACOSX) || defined(OS_WIN) && defined(_WIN64) ||     \
+    (defined(OS_ANDROID) && BUILDFLAG(CAN_UNWIND_WITH_CFI_TABLE) && \
+     defined(OFFICIAL_BUILD))
+    return true;
+#else
+    return false;
+#endif
+  }
+
+  explicit TracingSamplerProfiler(
+      base::SamplingProfilerThreadToken sampled_thread_token);
   virtual ~TracingSamplerProfiler();
+
+  // The given callback will be called for every received sample, and can be
+  // called on any thread. Must be called before tracing is started.
+  void SetSampleCallbackForTesting(
+      const base::RepeatingClosure& sample_callback_for_testing);
 
   void StartTracing(std::unique_ptr<perfetto::TraceWriter> trace_writer,
                     bool should_enable_filtering);
   void StopTracing();
 
  private:
-  const base::PlatformThreadId sampled_thread_id_;
+  const base::SamplingProfilerThreadToken sampled_thread_token_;
 
   base::Lock lock_;
   std::unique_ptr<base::StackSamplingProfiler> profiler_;  // under |lock_|
   TracingProfileBuilder* profile_builder_ = nullptr;
+  base::RepeatingClosure sample_callback_for_testing_;
 
   DISALLOW_COPY_AND_ASSIGN(TracingSamplerProfiler);
 };

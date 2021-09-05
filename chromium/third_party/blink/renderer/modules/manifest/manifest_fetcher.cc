@@ -33,8 +33,8 @@ void ManifestFetcher::Start(Document& document,
   ResourceLoaderOptions resource_loader_options;
   resource_loader_options.data_buffering_policy = kDoNotBufferData;
 
-  loader_ = MakeGarbageCollected<ThreadableLoader>(document, this,
-                                                   resource_loader_options);
+  loader_ = MakeGarbageCollected<ThreadableLoader>(
+      *document.ToExecutionContext(), this, resource_loader_options);
   loader_->Start(request);
 }
 
@@ -88,7 +88,7 @@ void ManifestFetcher::DidFailRedirectCheck() {
   DidFail(ResourceError::Failure(NullURL()));
 }
 
-void ManifestFetcher::Trace(blink::Visitor* visitor) {
+void ManifestFetcher::Trace(Visitor* visitor) {
   visitor->Trace(loader_);
   ThreadableLoaderClient::Trace(visitor);
 }

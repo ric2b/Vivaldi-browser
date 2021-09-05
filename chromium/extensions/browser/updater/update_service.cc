@@ -4,6 +4,9 @@
 
 #include "extensions/browser/updater/update_service.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_functions.h"
@@ -22,7 +25,6 @@
 #include "extensions/browser/updater/extension_update_data.h"
 #include "extensions/browser/updater/update_data_provider.h"
 #include "extensions/browser/updater/update_service_factory.h"
-#include "extensions/common/extension_updater_uma.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest_url_handlers.h"
 
@@ -36,38 +38,6 @@ UpdateService* update_service_override = nullptr;
 constexpr size_t kMaxExtensionsPerUpdate = 22;
 
 void SendUninstallPingCompleteCallback(update_client::Error error) {}
-
-void ReportUpdateCheckResult(ExtensionUpdaterUpdateResult update_result,
-                             int error_code) {
-  UMA_HISTOGRAM_ENUMERATION("Extensions.ExtensionUpdaterUpdateResults",
-                            update_result,
-                            ExtensionUpdaterUpdateResult::UPDATE_RESULT_COUNT);
-
-  // This UMA histogram measures update check results of the unified extension
-  // updater.
-  UMA_HISTOGRAM_ENUMERATION("Extensions.UnifiedExtensionUpdaterUpdateResults",
-                            update_result,
-                            ExtensionUpdaterUpdateResult::UPDATE_RESULT_COUNT);
-
-  switch (update_result) {
-    case ExtensionUpdaterUpdateResult::UPDATE_CHECK_ERROR:
-      base::UmaHistogramSparse(
-          "Extensions.UnifiedExtensionUpdaterUpdateCheckErrors", error_code);
-      break;
-    case ExtensionUpdaterUpdateResult::UPDATE_DOWNLOAD_ERROR:
-      base::UmaHistogramSparse(
-          "Extensions.UnifiedExtensionUpdaterDownloadErrors", error_code);
-      break;
-    case ExtensionUpdaterUpdateResult::UPDATE_SERVICE_ERROR:
-      UMA_HISTOGRAM_ENUMERATION(
-          "Extensions.UnifiedExtensionUpdaterUpdateServiceErrors",
-          static_cast<update_client::Error>(error_code),
-          update_client::Error::MAX_VALUE);
-      break;
-    default:
-      break;
-  }
-}
 
 }  // namespace
 
@@ -150,17 +120,14 @@ void UpdateService::OnEvent(Events event, const std::string& extension_id) {
   switch (event) {
     case Events::COMPONENT_UPDATED:
       complete_event = true;
-      ReportUpdateCheckResult(ExtensionUpdaterUpdateResult::UPDATE_SUCCESS, 0);
       break;
     case Events::COMPONENT_UPDATE_ERROR:
       complete_event = true;
       finish_delayed_installation = true;
-      HandleComponentUpdateErrorEvent(extension_id);
       break;
     case Events::COMPONENT_NOT_UPDATED:
       complete_event = true;
       finish_delayed_installation = true;
-      ReportUpdateCheckResult(ExtensionUpdaterUpdateResult::NO_UPDATE, 0);
       break;
     case Events::COMPONENT_UPDATE_FOUND:
       HandleComponentUpdateFoundEvent(extension_id);
@@ -175,7 +142,7 @@ void UpdateService::OnEvent(Events event, const std::string& extension_id) {
   if (complete_event) {
     // The update check for |extension_id| has completed, thus it can be
     // removed from all in-progress update checks.
-    DCHECK(updating_extension_ids_.count(extension_id) > 0);
+    DCHECK_GT(updating_extension_ids_.count(extension_id), 0u);
     updating_extension_ids_.erase(extension_id);
 
     bool install_immediately = false;
@@ -275,19 +242,12 @@ void UpdateService::StartUpdateCheck(
       batch_data.emplace(it->first, std::move(it->second));
     }
 
-    UMA_HISTOGRAM_COUNTS_100("Extensions.ExtensionUpdaterUpdateCalls",
-                             batch_size);
-    // This UMA histogram measures update check requests of the unified
-    // extension updater.
-    UMA_HISTOGRAM_COUNTS_100("Extensions.UnifiedExtensionUpdaterUpdateCalls",
-                             batch_size);
-
     update_client_->Update(
         batch_ids,
         base::BindOnce(&UpdateDataProvider::GetData, update_data_provider_,
                        update_params.install_immediately,
                        std::move(batch_data)),
-        update_params.priority == ExtensionUpdateCheckParams::FOREGROUND,
+        {}, update_params.priority == ExtensionUpdateCheckParams::FOREGROUND,
         base::BindOnce(&UpdateService::UpdateCheckComplete,
                        weak_ptr_factory_.GetWeakPtr()));
   }
@@ -332,43 +292,8 @@ void UpdateService::RemoveUpdateClientObserver(
     update_client_->RemoveObserver(observer);
 }
 
-void UpdateService::HandleComponentUpdateErrorEvent(
-    const std::string& extension_id) const {
-  update_client::ErrorCategory error_category =
-      update_client::ErrorCategory::kNone;
-  int error_code = 0;
-  update_client::CrxUpdateItem update_item;
-  if (update_client_->GetCrxUpdateState(extension_id, &update_item)) {
-    error_category = update_item.error_category;
-    error_code = update_item.error_code;
-  }
-
-  switch (error_category) {
-    case update_client::ErrorCategory::kUpdateCheck:
-      ReportUpdateCheckResult(ExtensionUpdaterUpdateResult::UPDATE_CHECK_ERROR,
-                              error_code);
-      break;
-    case update_client::ErrorCategory::kDownload:
-      ReportUpdateCheckResult(
-          ExtensionUpdaterUpdateResult::UPDATE_DOWNLOAD_ERROR, error_code);
-      break;
-    case update_client::ErrorCategory::kUnpack:
-    case update_client::ErrorCategory::kInstall:
-      ReportUpdateCheckResult(
-          ExtensionUpdaterUpdateResult::UPDATE_INSTALL_ERROR, 0);
-      break;
-    case update_client::ErrorCategory::kNone:
-    case update_client::ErrorCategory::kService:
-      ReportUpdateCheckResult(
-          ExtensionUpdaterUpdateResult::UPDATE_SERVICE_ERROR, error_code);
-      break;
-  }
-}
-
 void UpdateService::HandleComponentUpdateFoundEvent(
     const std::string& extension_id) const {
-  UMA_HISTOGRAM_COUNTS_100("Extensions.ExtensionUpdaterUpdateFoundCount", 1);
-
   update_client::CrxUpdateItem update_item;
   if (!update_client_->GetCrxUpdateState(extension_id, &update_item)) {
     return;

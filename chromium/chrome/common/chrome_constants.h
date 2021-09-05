@@ -73,6 +73,7 @@ extern const base::FilePath::CharType kSingletonLockFilename[];
 extern const base::FilePath::CharType kSingletonSocketFilename[];
 extern const base::FilePath::CharType kSupervisedUserSettingsFilename[];
 extern const base::FilePath::CharType kThemePackFilename[];
+extern const base::FilePath::CharType kTrustTokenFilename[];
 extern const base::FilePath::CharType kWebAppDirname[];
 extern const base::FilePath::CharType kReportingAndNelStoreFilename[];
 
@@ -94,13 +95,6 @@ extern const wchar_t kUserDataDirname[];
 // enough render processes and not be starved when a lot of extensions are
 // installed.
 extern const float kMaxShareOfExtensionProcesses;
-
-#if defined(OS_LINUX)
-// The highest and lowest assigned OOM score adjustment
-// (oom_score_adj) used by the OomPriority Manager.
-extern const int kLowestRendererOomScore;
-extern const int kHighestRendererOomScore;
-#endif
 
 #if defined(OS_CHROMEOS)
 // Chrome OS profile directories have custom prefix.

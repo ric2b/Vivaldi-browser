@@ -368,7 +368,6 @@ void ControllerImpl::RemoveCleanupEligibleDownloads() {
     DCHECK(client);
     bool client_ok =
         client->CanServiceRemoveDownloadedFile(entry->guid, mandatory_cleanup);
-    entry->cleanup_attempt_count++;
 
     if (client_ok || mandatory_cleanup) {
       entries_to_remove.push_back(entry);
@@ -966,7 +965,6 @@ void ControllerImpl::UpdateDriverState(Entry* entry) {
         entry->resumption_count++;
         model_->Update(*entry);
 
-        stats::LogEntryResumptionCount(entry->resumption_count);
         stats::LogEntryEvent(stats::DownloadEvent::RESUME);
 
         if (entry->resumption_count > config_->max_resumption_count) {
@@ -1115,7 +1113,7 @@ void ControllerImpl::HandleStartDownloadResponse(
     DownloadClient client,
     const std::string& guid,
     DownloadParams::StartResult result,
-    const DownloadParams::StartCallback& callback) {
+    DownloadParams::StartCallback callback) {
   stats::LogStartDownloadResult(client, result);
 
   // UNEXPECTED_GUID means the guid was already in use.  Don't remove this entry
@@ -1131,7 +1129,7 @@ void ControllerImpl::HandleStartDownloadResponse(
   if (callback.is_null())
     return;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(callback, guid, result));
+      FROM_HERE, base::BindOnce(std::move(callback), guid, result));
 }
 
 void ControllerImpl::HandleCompleteDownload(CompletionType type,

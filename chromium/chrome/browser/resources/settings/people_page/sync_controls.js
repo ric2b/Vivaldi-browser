@@ -23,6 +23,16 @@ const SyncPrefsIndividualDataTypes = [
 ];
 
 /**
+ * Names of the radio buttons which allow the user to choose their data sync
+ * mechanism.
+ * @enum {string}
+ */
+const RadioButtonNames = {
+  SYNC_EVERYTHING: 'sync-everything',
+  CUSTOMIZE_SYNC: 'customize-sync',
+};
+
+/**
  * @fileoverview
  * 'settings-sync-controls' contains all sync data type controls.
  */
@@ -54,6 +64,17 @@ Polymer({
       type: Object,
       observer: 'syncStatusChanged_',
     },
+
+    /**
+     * If sync page friendly settings is enabled.
+     * @private
+     */
+    syncSetupFriendlySettings_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('syncSetupFriendlySettings');
+      }
+    },
   },
 
   /** @private {?settings.SyncBrowserProxy} */
@@ -67,16 +88,17 @@ Polymer({
   cachedSyncPrefs_: null,
 
   /** @override */
-  created: function() {
+  created() {
     this.browserProxy_ = settings.SyncBrowserProxyImpl.getInstance();
   },
 
   /** @override */
-  attached: function() {
+  attached() {
     this.addWebUIListener(
         'sync-prefs-changed', this.handleSyncPrefsChanged_.bind(this));
 
-    if (settings.getCurrentRoute() == settings.routes.SYNC_ADVANCED) {
+    const router = settings.Router.getInstance();
+    if (router.getCurrentRoute() === router.getRoutes().SYNC_ADVANCED) {
       this.browserProxy_.didNavigateToSyncPage();
     }
   },
@@ -85,7 +107,7 @@ Polymer({
    * Handler for when the sync preferences are updated.
    * @private
    */
-  handleSyncPrefsChanged_: function(syncPrefs) {
+  handleSyncPrefsChanged_(syncPrefs) {
     this.syncPrefs = syncPrefs;
 
     // If autofill is not registered or synced, force Payments integration off.
@@ -95,12 +117,42 @@ Polymer({
   },
 
   /**
+   * @return {string} Computed binding returning the selected sync data radio
+   *     button.
+   * @private
+   */
+  selectedSyncDataRadio_: function() {
+    return this.syncPrefs.syncAllDataTypes ? RadioButtonNames.SYNC_EVERYTHING :
+                                             RadioButtonNames.CUSTOMIZE_SYNC;
+  },
+
+  /**
+   * Called when the sync data radio button selection changes.
+   * @param {!CustomEvent<{value: string}>} event
+   * @private
+   */
+  onSyncDataRadioSelectionChanged_: function(event) {
+    const syncAllDataTypes =
+        event.detail.value === RadioButtonNames.SYNC_EVERYTHING;
+    this.set('syncPrefs.syncAllDataTypes', syncAllDataTypes);
+    this.handleSyncAllDataTypesChanged_(syncAllDataTypes);
+  },
+
+  /**
    * Handler for when the sync all data types checkbox is changed.
    * @param {!Event} event
    * @private
    */
-  onSyncAllDataTypesChanged_: function(event) {
-    if (event.target.checked) {
+  onSyncAllDataTypesChanged_(event) {
+    this.handleSyncAllDataTypesChanged_(event.target.checked);
+  },
+
+  /**
+   * @param {boolean} syncAllDataTypes
+   * @private
+   */
+  handleSyncAllDataTypesChanged_: function(syncAllDataTypes) {
+    if (syncAllDataTypes) {
       this.set('syncPrefs.syncAllDataTypes', true);
 
       // Cache the previously selected preference before checking every box.
@@ -117,7 +169,8 @@ Polymer({
         this.set(['syncPrefs', dataType], this.cachedSyncPrefs_[dataType]);
       }
     }
-
+    chrome.metricsPrivate.recordUserAction(
+        syncAllDataTypes ? 'Sync_SyncEverything' : 'Sync_CustomizeSync');
     this.onSingleSyncDataTypeChanged_();
   },
 
@@ -125,7 +178,7 @@ Polymer({
    * Handler for when any sync data type checkbox is changed (except autofill).
    * @private
    */
-  onSingleSyncDataTypeChanged_: function() {
+  onSingleSyncDataTypeChanged_() {
     assert(this.syncPrefs);
     this.browserProxy_.setSyncDatatypes(this.syncPrefs);
   },
@@ -134,7 +187,7 @@ Polymer({
    * Handler for when the autofill data type checkbox is changed.
    * @private
    */
-  onAutofillDataTypeChanged_: function() {
+  onAutofillDataTypeChanged_() {
     this.set(
         'syncPrefs.paymentsIntegrationEnabled', this.syncPrefs.autofillSynced);
 
@@ -145,17 +198,8 @@ Polymer({
    * Handler for when the autofill data type checkbox is changed.
    * @private
    */
-  onTypedUrlsDataTypeChanged_: function() {
+  onTypedUrlsDataTypeChanged_() {
     this.onSingleSyncDataTypeChanged_();
-  },
-
-  /**
-   * @param {boolean} syncAllDataTypes
-   * @param {boolean} enforced
-   * @return {boolean} Whether the sync checkbox should be disabled.
-   */
-  shouldSyncCheckboxBeDisabled_: function(syncAllDataTypes, enforced) {
-    return syncAllDataTypes || enforced;
   },
 
   /**
@@ -163,16 +207,16 @@ Polymer({
    * @param {boolean} autofillSynced
    * @return {boolean} Whether the sync checkbox should be disabled.
    */
-  shouldPaymentsCheckboxBeDisabled_: function(
-      syncAllDataTypes, autofillSynced) {
+  shouldPaymentsCheckboxBeDisabled_(syncAllDataTypes, autofillSynced) {
     return syncAllDataTypes || !autofillSynced;
   },
 
   /** @private */
-  syncStatusChanged_: function() {
-    if (settings.getCurrentRoute() == settings.routes.SYNC_ADVANCED &&
+  syncStatusChanged_() {
+    const router = settings.Router.getInstance();
+    if (router.getCurrentRoute() == router.getRoutes().SYNC_ADVANCED &&
         this.syncControlsHidden_()) {
-      settings.navigateTo(settings.routes.SYNC);
+      router.navigateTo(router.getRoutes().SYNC);
     }
   },
 
@@ -180,7 +224,7 @@ Polymer({
    * @return {boolean} Whether the sync controls are hidden.
    * @private
    */
-  syncControlsHidden_: function() {
+  syncControlsHidden_() {
     if (!this.syncStatus) {
       // Show sync controls by default.
       return false;
@@ -191,7 +235,10 @@ Polymer({
     }
 
     return !!this.syncStatus.hasError &&
-        this.syncStatus.statusAction !== settings.StatusAction.ENTER_PASSPHRASE;
+        this.syncStatus.statusAction !==
+        settings.StatusAction.ENTER_PASSPHRASE &&
+        this.syncStatus.statusAction !==
+        settings.StatusAction.RETRIEVE_TRUSTED_VAULT_KEYS;
   },
 });
 })();

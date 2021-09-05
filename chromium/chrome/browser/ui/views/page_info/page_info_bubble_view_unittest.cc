@@ -10,10 +10,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
-#include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
-#include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/hover_button.h"
 #include "chrome/browser/ui/views/page_info/chosen_object_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_hover_button.h"
@@ -21,13 +19,14 @@
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chrome/test/views/chrome_test_views_delegate.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/permissions/permission_uma_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/ssl_status.h"
-#include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_web_contents_factory.h"
@@ -80,7 +79,6 @@ class PageInfoBubbleViewTestApi {
     views::View* anchor_view = nullptr;
     view_ = new PageInfoBubbleView(
         anchor_view, gfx::Rect(), parent_, profile_, web_contents_, GURL(kUrl),
-        security_state::NONE, security_state::VisibleSecurityState(),
         base::BindOnce(&PageInfoBubbleViewTestApi::OnPageInfoBubbleClosed,
                        base::Unretained(this), run_loop_.QuitClosure()));
   }
@@ -196,25 +194,25 @@ class PageInfoBubbleViewTest : public testing::Test {
 
   // testing::Test:
   void SetUp() override {
-    views_helper_.test_views_delegate()->set_layout_provider(
-        ChromeLayoutProvider::CreateLayoutProvider());
     views::Widget::InitParams parent_params;
     parent_params.context = views_helper_.GetContext();
     parent_window_ = new views::Widget();
     parent_window_->Init(std::move(parent_params));
 
     content::WebContents* web_contents = web_contents_helper_.web_contents();
-    TabSpecificContentSettings::CreateForWebContents(web_contents);
     api_ = std::make_unique<test::PageInfoBubbleViewTestApi>(
         parent_window_->GetNativeView(), web_contents_helper_.profile(),
         web_contents);
   }
 
-  void TearDown() override { parent_window_->CloseNow(); }
+  void TearDown() override {
+    parent_window_->CloseNow();
+  }
 
  protected:
   ScopedWebContentsTestHelper web_contents_helper_;
-  views::ScopedViewsTestHelper views_helper_;
+  views::ScopedViewsTestHelper views_helper_{
+      std::make_unique<ChromeTestViewsDelegate<>>()};
 
   views::Widget* parent_window_ = nullptr;  // Weak. Owned by the NativeWidget.
   std::unique_ptr<test::PageInfoBubbleViewTestApi> api_;
@@ -242,7 +240,7 @@ class FlashContentSettingsChangeWaiter : public content_settings::Observer {
       const ContentSettingsPattern& secondary_pattern,
       ContentSettingsType content_type,
       const std::string& resource_identifier) override {
-    if (content_type == CONTENT_SETTINGS_TYPE_PLUGINS)
+    if (content_type == ContentSettingsType::PLUGINS)
       Proceed();
   }
 
@@ -280,7 +278,7 @@ TEST_F(PageInfoBubbleViewTest, NotificationPermissionRevokeUkm) {
       origin_queried_waiter.QuitClosure());
 
   PermissionInfoList list(1);
-  list.back().type = CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
+  list.back().type = ContentSettingsType::NOTIFICATIONS;
   list.back().source = content_settings::SETTING_SOURCE_USER;
   list.back().is_incognito = false;
 
@@ -298,12 +296,11 @@ TEST_F(PageInfoBubbleViewTest, NotificationPermissionRevokeUkm) {
 
   ukm_recorder.ExpectEntrySourceHasUrl(entry, origin_url);
   EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "Source"),
-            static_cast<int64_t>(PermissionSourceUI::OIB));
+            static_cast<int64_t>(permissions::PermissionSourceUI::OIB));
   EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "PermissionType"),
-            static_cast<int64_t>(
-                ContentSettingsType::CONTENT_SETTINGS_TYPE_NOTIFICATIONS));
+            static_cast<int64_t>(ContentSettingsType::NOTIFICATIONS));
   EXPECT_EQ(*ukm_recorder.GetEntryMetric(entry, "Action"),
-            static_cast<int64_t>(PermissionAction::REVOKED));
+            static_cast<int64_t>(permissions::PermissionAction::REVOKED));
 }
 
 // Test UI construction and reconstruction via
@@ -322,7 +319,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfo) {
       /* no_db= */ false));
 
   PermissionInfoList list(1);
-  list.back().type = CONTENT_SETTINGS_TYPE_GEOLOCATION;
+  list.back().type = ContentSettingsType::GEOLOCATION;
   list.back().source = content_settings::SETTING_SOURCE_USER;
   list.back().is_incognito = false;
   list.back().setting = CONTENT_SETTING_BLOCK;
@@ -564,7 +561,7 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoForUsbGuard) {
   // This test creates settings that are left at their defaults, leading to zero
   // checked options, and checks that the text on the MenuButtons is right.
   PermissionInfoList list(1);
-  list.back().type = CONTENT_SETTINGS_TYPE_USB_GUARD;
+  list.back().type = ContentSettingsType::USB_GUARD;
   list.back().source = content_settings::SETTING_SOURCE_USER;
   list.back().is_incognito = false;
   list.back().setting = CONTENT_SETTING_ASK;
@@ -648,18 +645,18 @@ TEST_F(PageInfoBubbleViewTest, ChangingFlashSettingForSiteIsRemembered) {
       HostContentSettingsMapFactory::GetForProfile(profile);
   // Make sure the site being tested doesn't already have this marker set.
   EXPECT_EQ(nullptr,
-            map->GetWebsiteSetting(url, url, CONTENT_SETTINGS_TYPE_PLUGINS_DATA,
+            map->GetWebsiteSetting(url, url, ContentSettingsType::PLUGINS_DATA,
                                    std::string(), nullptr));
   EXPECT_EQ(0u, api_->permissions_view()->children().size());
 
   // Change the Flash setting.
-  map->SetContentSettingDefaultScope(url, url, CONTENT_SETTINGS_TYPE_PLUGINS,
+  map->SetContentSettingDefaultScope(url, url, ContentSettingsType::PLUGINS,
                                      std::string(), CONTENT_SETTING_ALLOW);
   waiter.Wait();
 
   // Check that this site has now been marked for displaying Flash always.
   EXPECT_NE(nullptr,
-            map->GetWebsiteSetting(url, url, CONTENT_SETTINGS_TYPE_PLUGINS_DATA,
+            map->GetWebsiteSetting(url, url, ContentSettingsType::PLUGINS_DATA,
                                    std::string(), nullptr));
 
   // Check the Flash permission is now showing since it's non-default.
@@ -669,7 +666,7 @@ TEST_F(PageInfoBubbleViewTest, ChangingFlashSettingForSiteIsRemembered) {
   EXPECT_EQ(base::ASCIIToUTF16("Flash"), label->GetText());
 
   // Change the Flash setting back to the default.
-  map->SetContentSettingDefaultScope(url, url, CONTENT_SETTINGS_TYPE_PLUGINS,
+  map->SetContentSettingDefaultScope(url, url, ContentSettingsType::PLUGINS,
                                      std::string(), CONTENT_SETTING_DEFAULT);
   EXPECT_EQ(kViewsPerPermissionRow, children.size());
 
@@ -683,7 +680,6 @@ TEST_F(PageInfoBubbleViewTest, ChangingFlashSettingForSiteIsRemembered) {
 // Tests opening the bubble between navigation start and finish. The bubble
 // should be updated to reflect the secure state after the navigation commits.
 TEST_F(PageInfoBubbleViewTest, OpenPageInfoBubbleAfterNavigationStart) {
-  content::BrowserSideNavigationSetUp();
   SecurityStateTabHelper::CreateForWebContents(
       web_contents_helper_.web_contents());
   std::unique_ptr<content::NavigationSimulator> navigation =
@@ -728,7 +724,6 @@ TEST_F(PageInfoBubbleViewTest, EnsureCloseCallback) {
 }
 
 TEST_F(PageInfoBubbleViewTest, CertificateButtonShowsEvCertDetails) {
-  content::BrowserSideNavigationSetUp();
   SecurityStateTabHelper::CreateForWebContents(
       web_contents_helper_.web_contents());
   std::unique_ptr<content::NavigationSimulator> navigation =

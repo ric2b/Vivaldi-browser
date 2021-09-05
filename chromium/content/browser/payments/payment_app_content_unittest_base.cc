@@ -109,7 +109,11 @@ class PaymentAppContentUnitTestBase::PaymentAppForWorkerTestHelper
 
       mojo::Remote<payments::mojom::PaymentHandlerResponseCallback>
           response_callback(std::move(pending_response_callback));
-      response_callback->OnResponseForCanMakePayment(can_make_payment);
+      response_callback->OnResponseForCanMakePayment(
+          payments::mojom::CanMakePaymentResponse::New(
+              payments::mojom::CanMakePaymentEventResponseType::SUCCESS,
+              can_make_payment, /*ready_for_minimal_ui=*/false,
+              /*account_balance=*/""));
       std::move(callback).Run(
           blink::mojom::ServiceWorkerEventStatus::COMPLETED);
     }
@@ -191,6 +195,7 @@ PaymentManager* PaymentAppContentUnitTestBase::CreatePaymentManager(
   registration_opt.scope = scope_url;
   worker_helper_->context()->RegisterServiceWorker(
       sw_script_url, registration_opt,
+      blink::mojom::FetchClientSettingsObject::New(),
       base::BindOnce(&RegisterServiceWorkerCallback, &called,
                      &registration_id));
   base::RunLoop().RunUntilIdle();
@@ -246,7 +251,8 @@ void PaymentAppContentUnitTestBase::UnregisterServiceWorker(
   // Unregister service worker.
   bool called = false;
   worker_helper_->context()->UnregisterServiceWorker(
-      scope_url, base::BindOnce(&UnregisterServiceWorkerCallback, &called));
+      scope_url, /*is_immediate=*/false,
+      base::BindOnce(&UnregisterServiceWorkerCallback, &called));
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
 }

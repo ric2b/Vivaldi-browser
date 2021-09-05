@@ -13,14 +13,15 @@
 #include "build/build_config.h"
 #include "components/cast_channel/cast_auth_util.h"
 #include "components/cast_channel/enum_table.h"
-#include "components/cast_channel/proto/cast_channel.pb.h"
+#include "third_party/openscreen/src/cast/common/channel/proto/cast_channel.pb.h"
 
 using base::Value;
 using cast_util::EnumToString;
 using cast_util::StringToEnum;
-
 namespace cast_util {
 
+using ::cast::channel::AuthChallenge;
+using ::cast::channel::CastMessage;
 using cast_channel::CastMessageType;
 using cast_channel::GetAppAvailabilityResult;
 
@@ -29,8 +30,9 @@ const EnumTable<CastMessageType> EnumTable<CastMessageType>::instance(
     {
         {CastMessageType::kPing, "PING"},
         {CastMessageType::kPong, "PONG"},
+        {CastMessageType::kRpc, "RPC"},
         {CastMessageType::kGetAppAvailability, "GET_APP_AVAILABILITY"},
-        {CastMessageType::kReceiverStatusRequest, "GET_STATUS"},
+        {CastMessageType::kGetStatus, "GET_STATUS"},
         {CastMessageType::kConnect, "CONNECT"},
         {CastMessageType::kCloseConnection, "CLOSE"},
         {CastMessageType::kBroadcast, "APPLICATION_BROADCAST"},
@@ -41,6 +43,15 @@ const EnumTable<CastMessageType> EnumTable<CastMessageType>::instance(
         {CastMessageType::kLaunchError, "LAUNCH_ERROR"},
         {CastMessageType::kOffer, "OFFER"},
         {CastMessageType::kAnswer, "ANSWER"},
+        {CastMessageType::kCapabilitiesResponse, "CAPABILITIES_RESPONSE"},
+        {CastMessageType::kStatusResponse, "STATUS_RESPONSE"},
+        {CastMessageType::kMultizoneStatus, "MULTIZONE_STATUS"},
+        {CastMessageType::kInvalidPlayerState, "INVALID_PLAYER_STATE"},
+        {CastMessageType::kLoadFailed, "LOAD_FAILED"},
+        {CastMessageType::kLoadCancelled, "LOAD_CANCELLED"},
+        {CastMessageType::kInvalidRequest, "INVALID_REQUEST"},
+        {CastMessageType::kPresentation, "PRESENTATION"},
+        {CastMessageType::kGetCapabilities, "GET_CAPABILITIES"},
         {CastMessageType::kOther},
     },
     CastMessageType::kMaxValue);
@@ -95,6 +106,10 @@ constexpr int kVirtualConnectSdkType = 2;
 // The value used for "connectionType" in a virtual connect request. This value
 // stands for CONNECTION_TYPE_LOCAL, which is the only type used in Chrome.
 constexpr int kVirtualConnectTypeLocal = 1;
+
+// The reason code passed to the virtual connection CLOSE message indicating
+// that the connection has been gracefully closed by the sender.
+constexpr int kVirtualConnectionClosedByPeer = 5;
 
 void FillCommonCastMessageFields(CastMessage* message,
                                  const std::string& source_id,
@@ -172,7 +187,7 @@ std::ostream& operator<<(std::ostream& lhs, const CastMessage& rhs) {
     lhs << "payload_utf8: " << rhs.payload_utf8();
   }
   if (rhs.has_payload_binary()) {
-    lhs << "payload_binary: ...";
+    lhs << "payload_binary: (" << rhs.payload_binary().size() << " bytes)";
   }
   lhs << "}";
   return lhs;
@@ -186,9 +201,11 @@ bool IsCastMessageValid(const CastMessage& message_proto) {
       message_proto.destination_id().empty()) {
     return false;
   }
-  return (message_proto.payload_type() == CastMessage_PayloadType_STRING &&
+  return (message_proto.payload_type() ==
+              cast::channel::CastMessage_PayloadType_STRING &&
           message_proto.has_payload_utf8()) ||
-         (message_proto.payload_type() == CastMessage_PayloadType_BINARY &&
+         (message_proto.payload_type() ==
+              cast::channel::CastMessage_PayloadType_BINARY &&
           message_proto.has_payload_binary());
 }
 
@@ -212,7 +229,7 @@ const char* ToString(CastMessageType message_type) {
 
 // TODO(jrw): Eliminate this function.
 const char* ToString(V2MessageType message_type) {
-  return EnumToString(message_type).value_or(nullptr).data();
+  return EnumToString(message_type).value_or("").data();
 }
 
 // TODO(jrw): Eliminate this function.
@@ -255,17 +272,18 @@ void CreateAuthChallengeMessage(CastMessage* message_proto,
   CHECK(message_proto);
   DeviceAuthMessage auth_message;
 
-  AuthChallenge* challenge = auth_message.mutable_challenge();
+  cast::channel::AuthChallenge* challenge = auth_message.mutable_challenge();
   DCHECK(challenge);
   challenge->set_sender_nonce(auth_context.nonce());
-  challenge->set_hash_algorithm(SHA256);
+  challenge->set_hash_algorithm(cast::channel::SHA256);
 
   std::string auth_message_string;
   auth_message.SerializeToString(&auth_message_string);
 
   FillCommonCastMessageFields(message_proto, kPlatformSenderId,
                               kPlatformReceiverId, kAuthNamespace);
-  message_proto->set_payload_type(CastMessage_PayloadType_BINARY);
+  message_proto->set_payload_type(
+      cast::channel::CastMessage_PayloadType_BINARY);
   message_proto->set_payload_binary(auth_message_string);
 }
 
@@ -335,6 +353,18 @@ CastMessage CreateVirtualConnectionRequest(
                            destination_id);
 }
 
+CastMessage CreateVirtualConnectionClose(const std::string& source_id,
+                                         const std::string& destination_id) {
+  Value dict(Value::Type::DICTIONARY);
+  dict.SetKey(
+      "type",
+      Value(
+          EnumToString<CastMessageType, CastMessageType::kCloseConnection>()));
+  dict.SetKey("reasonCode", Value(kVirtualConnectionClosedByPeer));
+  return CreateCastMessage(kConnectionNamespace, dict, source_id,
+                           destination_id);
+}
+
 CastMessage CreateGetAppAvailabilityRequest(const std::string& source_id,
                                             int request_id,
                                             const std::string& app_id) {
@@ -354,9 +384,9 @@ CastMessage CreateGetAppAvailabilityRequest(const std::string& source_id,
 CastMessage CreateReceiverStatusRequest(const std::string& source_id,
                                         int request_id) {
   Value dict(Value::Type::DICTIONARY);
-  dict.SetKey("type",
-              Value(EnumToString<CastMessageType,
-                                 CastMessageType::kReceiverStatusRequest>()));
+  dict.SetKey(
+      "type",
+      Value(EnumToString<CastMessageType, CastMessageType::kGetStatus>()));
   dict.SetKey("requestId", Value(request_id));
   return CreateCastMessage(kReceiverNamespace, dict, source_id,
                            kPlatformReceiverId);
@@ -483,7 +513,7 @@ bool IsMediaRequestMessageType(V2MessageType type) {
 
 // TODO(jrw): Eliminate this function.
 const char* ToString(GetAppAvailabilityResult result) {
-  return EnumToString(result).value_or(nullptr).data();
+  return EnumToString(result).value_or("").data();
 }
 
 base::Optional<int> GetRequestIdFromResponse(const Value& payload) {

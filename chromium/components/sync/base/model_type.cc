@@ -149,9 +149,6 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {USER_EVENTS, "USER_EVENT", "user_events", "User Events",
      sync_pb::EntitySpecifics::kUserEventFieldNumber,
      ModelTypeForHistograms::kUserEvents},
-    {MOUNTAIN_SHARES, "MOUNTAIN_SHARE", "mountain_shares", "Mountain Shares",
-     sync_pb::EntitySpecifics::kMountainShareFieldNumber,
-     ModelTypeForHistograms::kMountainShares},
     {USER_CONSENTS, "USER_CONSENT", "user_consent", "User Consents",
      sync_pb::EntitySpecifics::kUserConsentFieldNumber,
      ModelTypeForHistograms::kUserConsents},
@@ -175,6 +172,9 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
      "os_priority_preferences", "OS Priority Preferences",
      sync_pb::EntitySpecifics::kOsPriorityPreferenceFieldNumber,
      ModelTypeForHistograms::kOsPriorityPreferences},
+    {SHARING_MESSAGE, "SHARING_MESSAGE", "sharing_message", "Sharing Message",
+     sync_pb::EntitySpecifics::kSharingMessageFieldNumber,
+     ModelTypeForHistograms::kSharingMessage},
     {NOTES, "NOTES", "vivaldi_notes", "Notes",
      sync_pb::EntitySpecifics::kNotesFieldNumber,
      ModelTypeForHistograms::kNotes},
@@ -197,8 +197,8 @@ static_assert(41 + 1 /* notes */ == syncer::ModelType::NUM_ENTRIES,
               "and suffix SyncModelType in histograms.xml.");
 
 static_assert(41 + 1 /* notes */ == syncer::ModelType::NUM_ENTRIES,
-              "When adding a new type, update kAllocatorDumpNameWhitelist in "
-              "base/trace_event/memory_infra_background_whitelist.cc.");
+              "When adding a new type, update kAllocatorDumpNameAllowlist in "
+              "base/trace_event/memory_infra_background_allowlist.cc.");
 
 void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
   switch (type) {
@@ -293,9 +293,6 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case SECURITY_EVENTS:
       specifics->mutable_security_event();
       break;
-    case MOUNTAIN_SHARES:
-      specifics->mutable_mountain_share();
-      break;
     case USER_CONSENTS:
       specifics->mutable_user_consent();
       break;
@@ -322,6 +319,9 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
       break;
     case OS_PRIORITY_PREFERENCES:
       specifics->mutable_os_priority_preference();
+      break;
+    case SHARING_MESSAGE:
+      specifics->mutable_sharing_message();
       break;
     // <Vivaldi
     case NOTES:
@@ -429,8 +429,6 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return READING_LIST;
   if (specifics.has_user_event())
     return USER_EVENTS;
-  if (specifics.has_mountain_share())
-    return MOUNTAIN_SHARES;
   if (specifics.has_user_consent())
     return USER_CONSENTS;
   if (specifics.has_nigori())
@@ -449,6 +447,8 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return OS_PREFERENCES;
   if (specifics.has_os_priority_preference())
     return OS_PRIORITY_PREFERENCES;
+  if (specifics.has_sharing_message())
+    return SHARING_MESSAGE;
 
   if (specifics.has_notes())
     return NOTES;
@@ -484,6 +484,8 @@ ModelTypeSet EncryptableUserTypes() {
   encryptable_user_types.Remove(USER_EVENTS);
   encryptable_user_types.Remove(USER_CONSENTS);
   encryptable_user_types.Remove(SECURITY_EVENTS);
+  // Sharing message is not encrypted since it is consumed server-side.
+  encryptable_user_types.Remove(SHARING_MESSAGE);
   // Proxy types have no sync representation and are therefore not encrypted.
   // Note however that proxy types map to one or more protocol types, which
   // may or may not be encrypted themselves.

@@ -63,12 +63,13 @@ bool AwSSLHostStateDelegate::DidHostRunInsecureContent(
 
 void AwSSLHostStateDelegate::AllowCert(const std::string& host,
                                        const net::X509Certificate& cert,
-                                       int error) {
+                                       int error,
+                                       content::WebContents* web_contents) {
   cert_policy_for_host_[host].Allow(cert, error);
 }
 
 void AwSSLHostStateDelegate::Clear(
-    const base::Callback<bool(const std::string&)>& host_filter) {
+    base::RepeatingCallback<bool(const std::string&)> host_filter) {
   if (host_filter.is_null()) {
     cert_policy_for_host_.clear();
     return;
@@ -88,7 +89,8 @@ void AwSSLHostStateDelegate::Clear(
 SSLHostStateDelegate::CertJudgment AwSSLHostStateDelegate::QueryPolicy(
     const std::string& host,
     const net::X509Certificate& cert,
-    int error) {
+    int error,
+    content::WebContents* web_contents) {
   return cert_policy_for_host_[host].Check(cert, error)
              ? SSLHostStateDelegate::ALLOWED
              : SSLHostStateDelegate::DENIED;
@@ -99,7 +101,9 @@ void AwSSLHostStateDelegate::RevokeUserAllowExceptions(
   cert_policy_for_host_.erase(host);
 }
 
-bool AwSSLHostStateDelegate::HasAllowException(const std::string& host) {
+bool AwSSLHostStateDelegate::HasAllowException(
+    const std::string& host,
+    content::WebContents* web_contents) {
   auto policy_iterator = cert_policy_for_host_.find(host);
   return policy_iterator != cert_policy_for_host_.end() &&
          policy_iterator->second.HasAllowException();

@@ -8,14 +8,12 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "components/autofill/core/browser/ui/accessory_sheet_data.h"
-#include "components/autofill/core/common/mojom/autofill_types.mojom.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom-forward.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "ui/gfx/image/image.h"
 
 // Controller interface for the view that includes the keyboard accessory and
 // the accessory sheet below it. Implementations of this interface create and
@@ -51,8 +49,6 @@ class ManualFillingController {
     TOUCH_TO_FILL,
   };
 
-  using IconCallback = base::OnceCallback<void(const gfx::Image&)>;
-
   ManualFillingController() = default;
   virtual ~ManualFillingController() = default;
 
@@ -61,6 +57,11 @@ class ManualFillingController {
   // and attaches it to the WebContents; the same instance is returned by all
   // future invocations for the same WebContents.
   static base::WeakPtr<ManualFillingController> GetOrCreate(
+      content::WebContents* contents);
+
+  // Returns a weak pointer to the unique ManualFillingController instance
+  // associated with a WebContents.
+  static base::WeakPtr<ManualFillingController> Get(
       content::WebContents* contents);
 
   // --------------------------------------------
@@ -110,14 +111,10 @@ class ManualFillingController {
   virtual void OnOptionSelected(
       autofill::AccessoryAction selected_action) const = 0;
 
-  // The given |credential_origin| can be empty if the UI doesn't display it. An
-  // empty |credential_origin| means, that requested favicon originates from the
-  // same origin that the currently focused points to.
-  // In either case, the callback is invoked with a favicon image or with an
-  // |IsEmpty()| image if a favicon could not be retrieved.
-  virtual void GetFavicon(int desired_size_in_pixel,
-                          const std::string& credential_origin,
-                          IconCallback icon_callback) = 0;
+  // Called by the UI code because a user toggled the |toggled_action|,
+  // such as "Save passwords for this site".
+  virtual void OnToggleChanged(autofill::AccessoryAction toggled_action,
+                               bool enabled) const = 0;
 
   // -----------------
   // Member accessors:

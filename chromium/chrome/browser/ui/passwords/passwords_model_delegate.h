@@ -12,6 +12,7 @@
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
+#include "google_apis/gaia/core_account_id.h"
 
 namespace autofill {
 struct PasswordForm;
@@ -21,6 +22,7 @@ class WebContents;
 }
 namespace password_manager {
 struct InteractionsStats;
+class PasswordFeatureManager;
 class PasswordFormMetricsRecorder;
 namespace metrics_util {
 enum class CredentialSourceType;
@@ -44,6 +46,9 @@ class PasswordsModelDelegate {
   virtual password_manager::PasswordFormMetricsRecorder*
   GetPasswordFormMetricsRecorder() = 0;
 
+  virtual password_manager::PasswordFeatureManager*
+  GetPasswordFeatureManager() = 0;
+
   // Returns the URL of the site the current forms are retrieved for.
   virtual const GURL& GetOrigin() const = 0;
 
@@ -54,6 +59,10 @@ class PasswordsModelDelegate {
   // PENDING_PASSWORD_UPDATE_STATE, the saved password in CONFIRMATION_STATE,
   // the returned credential in AUTO_SIGNIN_STATE.
   virtual const autofill::PasswordForm& GetPendingPassword() const = 0;
+
+  // Returns unsynced credentials being deleted upon signout.
+  virtual const std::vector<autofill::PasswordForm>& GetUnsyncedCredentials()
+      const = 0;
 
   // Returns the source of the credential to be saved.
   virtual password_manager::metrics_util::CredentialSourceType
@@ -115,13 +124,22 @@ class PasswordsModelDelegate {
   // Called from the dialog controller when the dialog is hidden.
   virtual void OnDialogHidden() = 0;
 
-  // Called from the model when re-auth is needed to show passwords. Returns
-  // true immediately if user authentication is not available for the given
-  // platform. Otherwise, the method schedules a task to show an authentication
-  // dialog and reopens the bubble afterwards, then the method returns false.
-  // The password in the reopened bubble will be revealed if the authentication
-  // was successful.
+  // Called from the Save/Update bubble controller when OS re-auth is needed to
+  // show passwords. Returns true immediately if user authentication is not
+  // available for the given platform. Otherwise, the method schedules a task to
+  // show an authentication dialog and reopens the bubble afterwards, then the
+  // method returns false. The password in the reopened bubble will be revealed
+  // if the authentication was successful.
   virtual bool AuthenticateUser() = 0;
+
+  // Called from the Save/Update bubble controller when gaia re-auth is needed
+  // to save passwords. This method triggers the reauth flow. Upon successful
+  // reauth, it saves the password if it's still relevant. Otherwise, it changes
+  // the default destination to local and reopens the save bubble.
+  virtual void AuthenticateUserForAccountStoreOptInAndSavePassword(
+      CoreAccountId account_id,
+      const base::string16& username,
+      const base::string16& password) = 0;
 
   // Returns true if the password values should be revealed when the bubble is
   // opened.
@@ -131,7 +149,7 @@ class PasswordsModelDelegate {
   virtual ~PasswordsModelDelegate() = default;
 };
 
-base::WeakPtr<PasswordsModelDelegate>
-PasswordsModelDelegateFromWebContents(content::WebContents* web_contents);
+base::WeakPtr<PasswordsModelDelegate> PasswordsModelDelegateFromWebContents(
+    content::WebContents* web_contents);
 
 #endif  // CHROME_BROWSER_UI_PASSWORDS_PASSWORDS_MODEL_DELEGATE_H_

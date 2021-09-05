@@ -10,13 +10,14 @@
 #include "third_party/blink/renderer/modules/sensor/sensor_provider_proxy.h"
 #include "third_party/blink/renderer/modules/sensor/sensor_proxy_inspector_impl.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
 SensorInspectorAgent::SensorInspectorAgent(Document* document)
     : provider_(SensorProviderProxy::From(document)) {}
 
-void SensorInspectorAgent::Trace(blink::Visitor* visitor) {
+void SensorInspectorAgent::Trace(Visitor* visitor) {
   visitor->Trace(provider_);
 }
 
@@ -79,7 +80,7 @@ void SensorInspectorAgent::SetOrientationSensorOverride(double alpha,
   if (!provider_->inspector_mode()) {
     Document* document = provider_->GetSupplementable();
     if (document) {
-      ConsoleMessage* console_message = ConsoleMessage::Create(
+      auto* console_message = MakeGarbageCollected<ConsoleMessage>(
           mojom::ConsoleMessageSource::kJavaScript,
           mojom::ConsoleMessageLevel::kInfo, kInspectorConsoleMessage);
       document->AddConsoleMessage(console_message);

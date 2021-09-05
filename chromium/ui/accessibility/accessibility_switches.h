@@ -11,21 +11,28 @@
 
 namespace switches {
 
-AX_EXPORT extern const char kEnableExperimentalAccessibilityFeatures[];
 AX_EXPORT extern const char kEnableExperimentalAccessibilityAutoclick[];
 AX_EXPORT extern const char kEnableExperimentalAccessibilityLabelsDebugging[];
 AX_EXPORT extern const char kEnableExperimentalAccessibilityLanguageDetection[];
+AX_EXPORT extern const char
+    kEnableExperimentalAccessibilityLanguageDetectionDynamic[];
 AX_EXPORT extern const char kEnableExperimentalAccessibilitySwitchAccess[];
 AX_EXPORT extern const char kEnableExperimentalAccessibilitySwitchAccessText[];
 AX_EXPORT extern const char
+    kEnableExperimentalAccessibilityChromeVoxAnnotations[];
+AX_EXPORT extern const char
     kEnableExperimentalAccessibilityChromeVoxLanguageSwitching[];
 AX_EXPORT extern const char
-    kEnableExperimentalAccessibilityChromeVoxSubNodeLanguageSwitching[];
+    kEnableExperimentalAccessibilityChromeVoxSearchMenus[];
 
 // Returns true if experimental accessibility language detection is enabled.
 AX_EXPORT bool IsExperimentalAccessibilityLanguageDetectionEnabled();
 
-// Returns true if experimental accessibility switch access text is enabled.
+// Returns true if experimental accessibility language detection support for
+// dynamic content is enabled.
+AX_EXPORT bool IsExperimentalAccessibilityLanguageDetectionDynamicEnabled();
+
+// Returns true if experimental accessibility Switch Access text is enabled.
 AX_EXPORT bool IsExperimentalAccessibilitySwitchAccessTextEnabled();
 
 #if defined(OS_WIN)

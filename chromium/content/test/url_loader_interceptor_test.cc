@@ -18,6 +18,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/base/filename_util.h"
@@ -163,10 +164,13 @@ class TestBrowserClientWithHeaderClient
       int render_process_id,
       URLLoaderFactoryType type,
       const url::Origin& request_initiator,
+      base::Optional<int64_t> navigation_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
-      bool* bypass_redirect_checks) override {
+      bool* bypass_redirect_checks,
+      bool* disable_secure_dns,
+      network::mojom::URLLoaderFactoryOverridePtr* factory_override) override {
     if (header_client)
       receivers_.Add(this, header_client->InitWithNewPipeAndPassReceiver());
     return true;
@@ -248,7 +252,7 @@ IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, InterceptSubresource) {
 IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, InterceptBrowser) {
   bool seen = false;
   GURL url = GetImageURL();
-  network::mojom::URLLoaderPtr loader;
+  mojo::PendingRemote<network::mojom::URLLoader> loader;
   network::TestURLLoaderClient client;
   network::ResourceRequest request;
   request.url = url;
@@ -267,7 +271,8 @@ IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, InterceptBrowser) {
                       ->GetURLLoaderFactoryForBrowserProcess()
                       .get();
   factory->CreateLoaderAndStart(
-      mojo::MakeRequest(&loader), 0, 0, 0, request, client.CreateInterfacePtr(),
+      loader.InitWithNewPipeAndPassReceiver(), 0, 0, 0, request,
+      client.CreateRemote(),
       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   client.RunUntilComplete();
   EXPECT_EQ(net::ERR_FAILED, client.completion_status().error_code);

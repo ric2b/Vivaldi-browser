@@ -21,7 +21,6 @@ class TabletModeWindowManager;
 class TabletModeControllerTestApi {
  public:
   static constexpr float kDegreesToRadians = 3.1415926f / 180.0f;
-  static constexpr float kMeanGravity = 9.8066f;
 
   TabletModeControllerTestApi();
   ~TabletModeControllerTestApi();
@@ -91,6 +90,12 @@ class TabletModeControllerTestApi {
   bool IsScreenshotShown() const {
     return !!tablet_mode_controller_->screenshot_layer_;
   }
+
+  bool IsInPhysicalTabletState() const {
+    return tablet_mode_controller_->is_in_tablet_physical_state();
+  }
+
+  float GetLidAngle() const { return tablet_mode_controller_->lid_angle(); }
 
  private:
   TabletModeController* tablet_mode_controller_;

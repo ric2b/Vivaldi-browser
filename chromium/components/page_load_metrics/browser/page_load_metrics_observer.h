@@ -15,12 +15,12 @@
 #include "components/page_load_metrics/common/page_load_timing.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/resource_type.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
 #include "net/cookies/canonical_cookie.h"
 #include "services/metrics/public/cpp/ukm_source.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -28,6 +28,16 @@ class RenderFrameHost;
 }  // namespace content
 
 namespace page_load_metrics {
+
+// Storage types reported to page load metrics observers on storage
+// accesses.
+enum class StorageType {
+  kLocalStorage,
+  kSessionStorage,
+  kFileSystem,
+  kIndexedDb,
+  kCacheStorage
+};
 
 // Information related to failed provisional loads.
 struct FailedProvisionalLoadInfo {
@@ -99,7 +109,7 @@ struct PageRenderData {
 // load.
 struct ExtraRequestCompleteInfo {
   ExtraRequestCompleteInfo(
-      const GURL& url,
+      const url::Origin& origin_of_final_url,
       const net::IPEndPoint& remote_endpoint,
       int frame_tree_node_id,
       bool was_cached,
@@ -107,7 +117,7 @@ struct ExtraRequestCompleteInfo {
       int64_t original_network_content_length,
       std::unique_ptr<data_reduction_proxy::DataReductionProxyData>
           data_reduction_proxy_data,
-      content::ResourceType detected_resource_type,
+      network::mojom::RequestDestination request_destination,
       int net_error,
       std::unique_ptr<net::LoadTimingInfo> load_timing_info);
 
@@ -115,8 +125,11 @@ struct ExtraRequestCompleteInfo {
 
   ~ExtraRequestCompleteInfo();
 
-  // The URL for the request.
-  const GURL url;
+  // The origin of the final URL for the request (final = after redirects).
+  //
+  // The full URL is not available, because in some cases the path and query
+  // be sanitized away - see https://crbug.com/973885.
+  const url::Origin origin_of_final_url;
 
   // The host (IP address) and port for the request.
   const net::IPEndPoint remote_endpoint;
@@ -142,7 +155,7 @@ struct ExtraRequestCompleteInfo {
   // be more accurate than the type in the ExtraRequestStartInfo since we can
   // examine the type headers that arrived with the request.  During XHRs, we
   // sometimes see resources come back as a different type than we expected.
-  const content::ResourceType resource_type;
+  const network::mojom::RequestDestination request_destination;
 
   // The network error encountered by the request, as defined by
   // net/base/net_error_list.h. If no error was encountered, this value will be
@@ -323,8 +336,6 @@ class PageLoadMetricsObserver {
   virtual void OnFirstMeaningfulPaintInMainFrameDocument(
       const mojom::PageLoadTiming& timing) {}
 
-  virtual void OnPageInteractive(const mojom::PageLoadTiming& timing) {}
-
   virtual void OnFirstInputInPage(const mojom::PageLoadTiming& timing) {}
 
   // Invoked when there is an update to the loading behavior_flags in the given
@@ -356,6 +367,15 @@ class PageLoadMetricsObserver {
   virtual void MediaStartedPlaying(
       const content::WebContentsObserver::MediaPlayerInfo& video_type,
       content::RenderFrameHost* render_frame_host) {}
+
+  // Invoked when a frame's intersections with page elements changes and an
+  // update is received. The main_frame_document_intersection_rect
+  // returns an empty rect for out of view subframes and the root document size
+  // for the main frame.
+  // TODO(crbug/1048175): Expose intersections to observers via shared delegate.
+  virtual void OnFrameIntersectionUpdate(
+      content::RenderFrameHost* rfh,
+      const mojom::FrameIntersectionUpdate& intersection_update) {}
 
   // Invoked when the UMA metrics subsystem is persisting metrics as the
   // application goes into the background, on platforms where the browser
@@ -425,12 +445,13 @@ class PageLoadMetricsObserver {
                               const net::CanonicalCookie& cookie,
                               bool blocked_by_policy) {}
 
-  // Called when a DOM storage is accessed via Window.localStorage or
-  // Window.sessionStorage.
-  virtual void OnDomStorageAccessed(const GURL& url,
-                                    const GURL& first_party_url,
-                                    bool local,
-                                    bool blocked_by_policy) {}
+  // Called when a storage access attempt by the origin |url| to |storage_type|
+  // is checked by the content settings manager. |blocked_by_policy| is false
+  // when cookie access is not allowed for |url|.
+  virtual void OnStorageAccessed(const GURL& url,
+                                 const GURL& first_party_url,
+                                 bool blocked_by_policy,
+                                 StorageType access_type) {}
 
   // Called when the event corresponding to |event_key| occurs in this page
   // load.

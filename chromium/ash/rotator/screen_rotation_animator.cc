@@ -5,6 +5,7 @@
 #include "ash/rotator/screen_rotation_animator.h"
 
 #include <memory>
+#include <utility>
 
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/shell_window_ids.h"
@@ -281,7 +282,7 @@ ScreenRotationAnimator::CreateAfterCopyCallbackBeforeRotation(
   return base::BindOnce(&ScreenRotationAnimator::
                             OnScreenRotationContainerLayerCopiedBeforeRotation,
                         weak_factory_.GetWeakPtr(),
-                        base::Passed(&rotation_request));
+                        std::move(rotation_request));
 }
 
 ScreenRotationAnimator::CopyCallback
@@ -290,7 +291,7 @@ ScreenRotationAnimator::CreateAfterCopyCallbackAfterRotation(
   return base::BindOnce(&ScreenRotationAnimator::
                             OnScreenRotationContainerLayerCopiedAfterRotation,
                         weak_factory_.GetWeakPtr(),
-                        base::Passed(&rotation_request));
+                        std::move(rotation_request));
 }
 
 void ScreenRotationAnimator::OnScreenRotationContainerLayerCopiedBeforeRotation(
@@ -385,6 +386,9 @@ std::unique_ptr<ui::LayerTreeOwner> ScreenRotationAnimator::CopyLayerTree(
       GetScreenRotationContainer(root_window_)->layer()->size());
   std::unique_ptr<ui::Layer> copy_layer = std::make_unique<ui::Layer>();
   copy_layer->SetBounds(rect);
+  // TODO(crbug.com/1040279): This is a workaround and should be removed once
+  // the issue is fixed.
+  copy_layer->SetFillsBoundsOpaquely(false);
   copy_layer->SetTransferableResource(transfer_resource,
                                       std::move(release_callback), rect.size());
   return std::make_unique<ui::LayerTreeOwner>(std::move(copy_layer));
@@ -472,8 +476,8 @@ void ScreenRotationAnimator::AnimateRotation(
   // Add an observer so that the cloned/copied layers can be cleaned up with the
   // animation completes/aborts.
   ui::CallbackLayerAnimationObserver* observer =
-      new ui::CallbackLayerAnimationObserver(
-          base::Bind(&AnimationEndedCallback, weak_factory_.GetWeakPtr()));
+      new ui::CallbackLayerAnimationObserver(base::BindRepeating(
+          &AnimationEndedCallback, weak_factory_.GetWeakPtr()));
   if (new_layer_tree_owner_)
     new_layer_animation_sequence->AddObserver(observer);
   new_layer_animator->StartAnimation(new_layer_animation_sequence.release());

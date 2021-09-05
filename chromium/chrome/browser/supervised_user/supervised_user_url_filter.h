@@ -42,6 +42,8 @@ class SharedURLLoaderFactory;
 //     sources.
 class SupervisedUserURLFilter {
  public:
+  // A Java counterpart will be generated for this enum.
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.superviseduser
   enum FilteringBehavior {
     ALLOW,
     WARN,
@@ -90,10 +92,11 @@ class SupervisedUserURLFilter {
   //   or accounts.google.com).
   // - If the pattern ends with ".*", it matches the host on any known TLD
   //   (e.g. the pattern "google.*" would match google.com or google.co.uk).
-  // See the SupervisedUserURLFilterTest.HostMatchesPattern unit test for more
-  // examples.
-  // Asterisks in other parts of the pattern are not allowed.
-  // |host| and |pattern| are assumed to be normalized to lower-case.
+  // If the |host| starts with "www." but the |pattern| starts with neither
+  // "www." nor "*.", the function strips the "www." part of |host| and tries to
+  // match again. See the SupervisedUserURLFilterTest.HostMatchesPattern unit
+  // test for more examples. Asterisks in other parts of the pattern are not
+  // allowed. |host| and |pattern| are assumed to be normalized to lower-case.
   // This method is public for testing.
   static bool HostMatchesPattern(const std::string& canonical_host,
                                  const std::string& pattern);

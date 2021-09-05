@@ -9,16 +9,19 @@
 #include <memory>
 #include <string>
 
+#include "base/containers/flat_set.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/predictors/loading_predictor_config.h"
 #include "chrome/browser/predictors/navigation_id.h"
-#include "content/public/common/resource_load_info.mojom.h"
-#include "content/public/common/resource_type.h"
+#include "services/network/public/mojom/fetch_api.mojom-forward.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-forward.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace predictors {
 
 class LoadingStatsCollector;
+struct OptimizationGuidePrediction;
 class ResourcePrefetchPredictor;
 
 // Data collected for origin-based prediction, for a single origin during a
@@ -28,7 +31,7 @@ struct OriginRequestSummary {
   OriginRequestSummary(const OriginRequestSummary& other);
   ~OriginRequestSummary();
 
-  GURL origin;
+  url::Origin origin;
   bool always_access_network = false;
   bool accessed_network = false;
   int first_occurrence = 0;
@@ -36,24 +39,28 @@ struct OriginRequestSummary {
 
 // Stores the data learned from a single navigation.
 struct PageRequestSummary {
-  explicit PageRequestSummary(const GURL& main_frame_url);
+  explicit PageRequestSummary(const NavigationID& navigation_id);
   PageRequestSummary(const PageRequestSummary& other);
   ~PageRequestSummary();
-  void UpdateOrAddToOrigins(
-      const content::mojom::ResourceLoadInfo& resource_load_info);
+  void UpdateOrAddResource(
+      const blink::mojom::ResourceLoadInfo& resource_load_info);
 
+  ukm::SourceId ukm_source_id;
   GURL main_frame_url;
   GURL initial_url;
   base::TimeTicks first_contentful_paint;
 
   // Map of origin -> OriginRequestSummary. Only one instance of each origin
   // is kept per navigation, but the summary is updated several times.
-  std::map<GURL, OriginRequestSummary> origins;
+  std::map<url::Origin, OriginRequestSummary> origins;
+
+  // Set of seen resource URLs.
+  base::flat_set<GURL> subresource_urls;
 
  private:
   void UpdateOrAddToOrigins(
-      const GURL& url,
-      const content::mojom::CommonNetworkInfoPtr& network_info);
+      const url::Origin& origin,
+      const blink::mojom::CommonNetworkInfoPtr& network_info);
 };
 
 // Records navigation events as reported by various observers to the database
@@ -75,12 +82,15 @@ class LoadingDataCollector {
                                       bool is_error_page);
   virtual void RecordResourceLoadComplete(
       const NavigationID& navigation_id,
-      const content::mojom::ResourceLoadInfo& resource_load_info);
+      const blink::mojom::ResourceLoadInfo& resource_load_info);
 
   // Called when the main frame of a page completes loading. We treat this point
   // as the "completion" of the navigation. The resources requested by the page
   // up to this point are the only ones considered.
-  virtual void RecordMainFrameLoadComplete(const NavigationID& navigation_id);
+  virtual void RecordMainFrameLoadComplete(
+      const NavigationID& navigation_id,
+      const base::Optional<OptimizationGuidePrediction>&
+          optimization_guide_prediction);
 
   // Called after the main frame's first contentful paint.
   virtual void RecordFirstContentfulPaint(
@@ -112,11 +122,12 @@ class LoadingDataCollector {
 
   bool ShouldRecordResourceLoad(
       const NavigationID& navigation_id,
-      const content::mojom::ResourceLoadInfo& resource_load_info) const;
+      const blink::mojom::ResourceLoadInfo& resource_load_info) const;
 
-  // Returns true if the subresource has a supported type.
-  static bool IsHandledResourceType(content::ResourceType resource_type,
-                                    const std::string& mime_type);
+  // Returns true if the resource has a supported type.
+  static bool IsHandledResourceType(
+      network::mojom::RequestDestination destination,
+      const std::string& mime_type);
 
   // Cleanup inflight_navigations_ and call a cleanup for stats_collector_.
   void CleanupAbandonedNavigations(const NavigationID& navigation_id);

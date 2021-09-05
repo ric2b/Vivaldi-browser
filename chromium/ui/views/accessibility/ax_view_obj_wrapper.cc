@@ -4,13 +4,14 @@
 
 #include "ui/views/accessibility/ax_view_obj_wrapper.h"
 
+#include <vector>
+
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/platform/ax_unique_id.h"
 #include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/accessibility/ax_virtual_view.h"
 #include "ui/views/accessibility/view_accessibility.h"
-#include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
 namespace views {
@@ -19,18 +20,13 @@ AXViewObjWrapper::AXViewObjWrapper(AXAuraObjCache* aura_obj_cache, View* view)
     : AXAuraObjWrapper(aura_obj_cache), view_(view) {
   if (view->GetWidget())
     aura_obj_cache_->GetOrCreate(view->GetWidget());
-  view->AddObserver(this);
+  observer_.Add(view);
 }
 
-AXViewObjWrapper::~AXViewObjWrapper() {
-  if (view_) {
-    view_->RemoveObserver(this);
-    view_ = nullptr;
-  }
-}
+AXViewObjWrapper::~AXViewObjWrapper() = default;
 
 bool AXViewObjWrapper::IsIgnored() {
-  return view_ ? view_->GetViewAccessibility().IsIgnored() : true;
+  return !view_ || view_->GetViewAccessibility().IsIgnored();
 }
 
 AXAuraObjWrapper* AXViewObjWrapper::GetParent() {
@@ -97,6 +93,7 @@ bool AXViewObjWrapper::HandleAccessibleAction(const ui::AXActionData& action) {
 }
 
 void AXViewObjWrapper::OnViewIsDeleting(View* observed_view) {
+  observer_.RemoveAll();
   view_ = nullptr;
 }
 

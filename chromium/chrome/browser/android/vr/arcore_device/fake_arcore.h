@@ -31,6 +31,7 @@ class FakeArCore : public ArCore {
       const base::span<const float> uvs) override;
   gfx::Transform GetProjectionMatrix(float near, float far) override;
   mojom::VRPosePtr Update(bool* camera_updated) override;
+  base::TimeDelta GetFrameTimestamp() override;
 
   void Pause() override;
   void Resume() override;
@@ -40,23 +41,31 @@ class FakeArCore : public ArCore {
   bool RequestHitTest(const mojom::XRRayPtr& ray,
                       std::vector<mojom::XRHitResultPtr>* hit_results) override;
 
-  base::Optional<uint32_t> SubscribeToHitTest(
+  base::Optional<uint64_t> SubscribeToHitTest(
       mojom::XRNativeOriginInformationPtr nativeOriginInformation,
+      const std::vector<mojom::EntityTypeForHitTest>& entity_types,
+      mojom::XRRayPtr ray) override;
+  base::Optional<uint64_t> SubscribeToHitTestForTransientInput(
+      const std::string& profile_name,
+      const std::vector<mojom::EntityTypeForHitTest>& entity_types,
       mojom::XRRayPtr ray) override;
 
   mojom::XRHitTestSubscriptionResultsDataPtr GetHitTestSubscriptionResults(
-      const device::mojom::VRPosePtr& pose) override;
+      const gfx::Transform& mojo_from_viewer,
+      const base::Optional<std::vector<mojom::XRInputSourceStatePtr>>&
+          maybe_input_state) override;
 
-  void UnsubscribeFromHitTest(uint32_t subscription_id) override;
+  void UnsubscribeFromHitTest(uint64_t subscription_id) override;
 
   mojom::XRPlaneDetectionDataPtr GetDetectedPlanesData() override;
   mojom::XRAnchorsDataPtr GetAnchorsData() override;
+  mojom::XRLightEstimationDataPtr GetLightEstimationData() override;
 
-  base::Optional<uint32_t> CreateAnchor(
-      const device::mojom::VRPosePtr& pose) override;
-  base::Optional<uint32_t> CreateAnchor(const device::mojom::VRPosePtr& pose,
-                                        uint32_t plane_id) override;
-  void DetachAnchor(uint32_t anchor_id) override;
+  base::Optional<uint64_t> CreateAnchor(
+      const device::mojom::Pose& pose) override;
+  base::Optional<uint64_t> CreateAnchor(const device::mojom::Pose& pose,
+                                        uint64_t plane_id) override;
+  void DetachAnchor(uint64_t anchor_id) override;
 
   void SetCameraAspect(float aspect) { camera_aspect_ = aspect; }
 
@@ -75,8 +84,8 @@ class FakeArCore : public ArCore {
     gfx::Quaternion orientation;
   };
 
-  uint32_t next_id_ = 100;
-  std::unordered_map<uint32_t, FakeAnchorData> anchors_;
+  uint64_t next_id_ = 100;
+  std::unordered_map<uint64_t, FakeAnchorData> anchors_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeArCore);
 };

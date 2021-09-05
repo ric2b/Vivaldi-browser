@@ -2,6 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import 'chrome://settings/settings.js';
+// #import 'chrome://test/cr_elements/cr_policy_strings.js';
+// #import {ChooserType,ContentSettingsTypes,SiteSettingSource,SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+// #import {createContentSettingTypeToValuePair,createRawChooserException,createRawSiteException,createSiteSettingsPrefs} from 'chrome://test/settings/test_util.m.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {TestSiteSettingsPrefsBrowserProxy} from 'chrome://test/settings/test_site_settings_prefs_browser_proxy.m.js';
+// clang-format on
+
 /** @fileoverview Suite of tests for chooser-exception-list. */
 
 /**
@@ -141,8 +150,8 @@ suite('ChooserExceptionList', function() {
     assertEquals(exception.chooserType, actualException.chooserType);
     assertDeepEquals(exception.object, actualException.object);
 
-    let sites = exception.sites;
-    let actualSites = actualException.sites;
+    const sites = exception.sites;
+    const actualSites = actualException.sites;
     assertEquals(sites.length, actualSites.length);
     for (let i = 0; i < sites.length; ++i) {
       assertSiteOriginsEquals(sites[i], actualSites[i]);
@@ -533,9 +542,7 @@ suite('ChooserExceptionList', function() {
               const siteListEntry =
                   chooserExceptionListEntry.$$('site-list-entry');
               assertTrue(!!siteListEntry);
-              assertNotEquals(
-                  siteListEntry.$.siteDescription.textContext,
-                  'Current incognito session');
+              assertTrue(siteListEntry.$.incognitoTooltip.hidden);
 
               // Simulate an incognito session being created.
               browserProxy.resetResolver('getChooserExceptionList');
@@ -557,11 +564,29 @@ suite('ChooserExceptionList', function() {
                   chooserExceptionListEntry.root.querySelectorAll(
                       'site-list-entry');
               assertEquals(2, siteListEntries.length);
-              assertTrue(Array.from(siteListEntries)
-                             .some(
-                                 entry => entry.$.siteDescription.textContent ==
-                                     'Current incognito session ' +
-                                         '(embedded on https://foo.com)'));
+
+              const tooltip = testElement.$.tooltip;
+              assertTrue(!!tooltip);
+              const innerTooltip = tooltip.$.tooltip;
+              assertTrue(!!innerTooltip);
+              const text =
+                  'This exception will be automatically removed after you ' +
+                  'exit the current Incognito session';
+              // This filtered array should be non-empty due to above test that
+              // checks for incognito exception.
+              Array.from(siteListEntries)
+                  .filter(entry => entry.incognito)
+                  .forEach(entry => {
+                    const incognitoTooltip = entry.$.incognitoTooltip;
+                    // Make sure it is not hidden if it is an incognito
+                    // exception
+                    assertFalse(incognitoTooltip.hidden);
+                    // Trigger mouse enter and check tooltip text
+                    incognitoTooltip.dispatchEvent(
+                        new MouseEvent('mouseenter'));
+                    assertFalse(innerTooltip.classList.contains('hidden'));
+                    assertEquals(text, tooltip.innerHTML.trim());
+                  });
             });
       });
 });

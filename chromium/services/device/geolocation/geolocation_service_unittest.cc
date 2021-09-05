@@ -15,7 +15,6 @@
 #include "services/device/device_service_test_base.h"
 #include "services/device/geolocation/geolocation_provider_impl.h"
 #include "services/device/geolocation/network_location_request.h"
-#include "services/device/public/mojom/constants.mojom.h"
 #include "services/device/public/mojom/geolocation.mojom.h"
 #include "services/device/public/mojom/geolocation_config.mojom.h"
 #include "services/device/public/mojom/geolocation_context.mojom.h"
@@ -48,12 +47,12 @@ class GeolocationServiceUnitTest : public DeviceServiceTestBase {
     // the device service.
     DeviceServiceTestBase::SetUp();
 
-    connector()->Connect(mojom::kServiceName,
-                         geolocation_control_.BindNewPipeAndPassReceiver());
+    device_service()->BindGeolocationControl(
+        geolocation_control_.BindNewPipeAndPassReceiver());
     geolocation_control_->UserDidOptIntoLocationServices();
 
-    connector()->Connect(mojom::kServiceName,
-                         geolocation_context_.BindNewPipeAndPassReceiver());
+    device_service()->BindGeolocationContext(
+        geolocation_context_.BindNewPipeAndPassReceiver());
     geolocation_context_->BindGeolocation(
         geolocation_.BindNewPipeAndPassReceiver());
   }
@@ -76,8 +75,8 @@ class GeolocationServiceUnitTest : public DeviceServiceTestBase {
   }
 
   void BindGeolocationConfig() {
-    connector()->Connect(mojom::kServiceName,
-                         geolocation_config_.BindNewPipeAndPassReceiver());
+    device_service()->BindGeolocationConfig(
+        geolocation_config_.BindNewPipeAndPassReceiver());
   }
 
   std::unique_ptr<net::NetworkChangeNotifier> network_change_notifier_;
@@ -112,12 +111,8 @@ TEST_F(GeolocationServiceUnitTest, UrlWithApiKey) {
 #endif
 
 // TODO(https://crbug.com/912057): Flaky on Chrome OS / Fails often on *San.
-#if defined(OS_CHROMEOS)
-#define MAYBE_GeolocationConfig DISABLED_GeolocationConfig
-#else
-#define MAYBE_GeolocationConfig GeolocationConfig
-#endif
-TEST_F(GeolocationServiceUnitTest, MAYBE_GeolocationConfig) {
+// TODO(https://crbug.com/999409): Also flaky on other platforms.
+TEST_F(GeolocationServiceUnitTest, DISABLED_GeolocationConfig) {
   BindGeolocationConfig();
   {
     base::RunLoop run_loop;

@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/ozone/platform/drm/gpu/crtc_controller.h"
@@ -42,13 +43,31 @@ HardwareDisplayPlaneManagerLegacy::HardwareDisplayPlaneManagerLegacy(
     DrmDevice* drm)
     : HardwareDisplayPlaneManager(drm) {}
 
-HardwareDisplayPlaneManagerLegacy::~HardwareDisplayPlaneManagerLegacy() {
+HardwareDisplayPlaneManagerLegacy::~HardwareDisplayPlaneManagerLegacy() =
+    default;
+
+bool HardwareDisplayPlaneManagerLegacy::Modeset(
+    uint32_t crtc_id,
+    uint32_t framebuffer_id,
+    uint32_t connector_id,
+    const drmModeModeInfo& mode,
+    const HardwareDisplayPlaneList&) {
+  return drm_->SetCrtc(crtc_id, framebuffer_id,
+                       std::vector<uint32_t>(1, connector_id), mode);
+}
+
+bool HardwareDisplayPlaneManagerLegacy::DisableModeset(uint32_t crtc_id,
+                                                       uint32_t connector) {
+  return drm_->DisableCrtc(crtc_id);
 }
 
 bool HardwareDisplayPlaneManagerLegacy::Commit(
     HardwareDisplayPlaneList* plane_list,
+    bool should_modeset,
     scoped_refptr<PageFlipRequest> page_flip_request,
     std::unique_ptr<gfx::GpuFence>* out_fence) {
+  DCHECK(!should_modeset);
+
   bool test_only = !page_flip_request;
   if (test_only) {
     for (HardwareDisplayPlane* plane : plane_list->plane_list) {
@@ -65,14 +84,14 @@ bool HardwareDisplayPlaneManagerLegacy::Commit(
   for (const auto& flip : plane_list->legacy_page_flips) {
     if (!drm_->PageFlip(flip.crtc_id, flip.framebuffer, page_flip_request)) {
       // 1) Permission Denied is a legitimate error.
-      // 2) Device or resource busy is possible if we're page flipping a
-      // disconnected CRTC. Pretend we're fine since a hotplug event is supposed
-      // to be on its way.
+      // 2) EBUSY or ENODEV are possible if we're page flipping a disconnected
+      // CRTC. Pretend we're fine since a hotplug event is supposed to be on
+      // its way.
       // NOTE: We could be getting EBUSY if we're trying to page flip a CRTC
       // that has a pending page flip, however the contract is that the caller
       // will never attempt this (since the caller should be waiting for the
       // page flip completion message).
-      if (errno != EACCES && errno != EBUSY) {
+      if (errno != EACCES && errno != EBUSY && errno != ENODEV) {
         PLOG(ERROR) << "Cannot page flip: crtc=" << flip.crtc_id
                     << " framebuffer=" << flip.framebuffer;
         ret = false;
@@ -121,10 +140,9 @@ bool HardwareDisplayPlaneManagerLegacy::ValidatePrimarySize(
 void HardwareDisplayPlaneManagerLegacy::RequestPlanesReadyCallback(
     DrmOverlayPlaneList planes,
     base::OnceCallback<void(DrmOverlayPlaneList planes)> callback) {
-  base::PostTaskAndReplyWithResult(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(),
-       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&WaitForPlaneFences, std::move(planes)),
       std::move(callback));
 }
@@ -178,8 +196,7 @@ bool HardwareDisplayPlaneManagerLegacy::SetPlaneData(
     HardwareDisplayPlane* hw_plane,
     const DrmOverlayPlane& overlay,
     uint32_t crtc_id,
-    const gfx::Rect& src_rect,
-    CrtcController* crtc) {
+    const gfx::Rect& src_rect) {
   // Legacy modesetting rejects transforms.
   if (overlay.plane_transform != gfx::OVERLAY_TRANSFORM_NONE)
     return false;
@@ -188,7 +205,7 @@ bool HardwareDisplayPlaneManagerLegacy::SetPlaneData(
       plane_list->legacy_page_flips.back().crtc_id != crtc_id) {
     plane_list->legacy_page_flips.push_back(
         HardwareDisplayPlaneList::PageFlipInfo(
-            crtc_id, overlay.buffer->opaque_framebuffer_id(), crtc));
+            crtc_id, overlay.buffer->opaque_framebuffer_id()));
   } else {
     return false;
   }

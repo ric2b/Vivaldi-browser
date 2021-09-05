@@ -7,20 +7,38 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "media/gpu/macros.h"
-#include "media/gpu/test/video_player/video.h"
+#include "media/gpu/test/video.h"
 #include "media/gpu/test/video_player/video_decoder_client.h"
-
-#define DVLOGF(level) DVLOG(level) << __func__ << "(): "
 
 namespace media {
 namespace test {
 
+namespace {
+// Get the name of the specified video player |event|.
+const char* EventName(VideoPlayerEvent event) {
+  switch (event) {
+    case VideoPlayerEvent::kInitialized:
+      return "Initialized";
+    case VideoPlayerEvent::kFrameDecoded:
+      return "FrameDecoded";
+    case VideoPlayerEvent::kFlushing:
+      return "Flushing";
+    case VideoPlayerEvent::kFlushDone:
+      return "FlushDone";
+    case VideoPlayerEvent::kResetting:
+      return "Resetting";
+    case VideoPlayerEvent::kResetDone:
+      return "ResetDone";
+    case VideoPlayerEvent::kConfigInfo:
+      return "ConfigInfo";
+    default:
+      return "Unknown";
+  }
+}
+}  // namespace
+
 VideoPlayer::VideoPlayer()
-    : video_(nullptr),
-      video_player_state_(VideoPlayerState::kUninitialized),
-      event_cv_(&event_lock_),
-      video_player_event_counts_{},
-      event_id_(0) {}
+    : event_cv_(&event_lock_), video_player_event_counts_{}, event_id_(0) {}
 
 VideoPlayer::~VideoPlayer() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -111,7 +129,7 @@ void VideoPlayer::Play() {
   DVLOGF(4);
 
   // Play until the end of the video.
-  PlayUntil(VideoPlayerEvent::kNumEvents, 0);
+  PlayUntil(VideoPlayerEvent::kNumEvents, std::numeric_limits<size_t>::max());
 }
 
 void VideoPlayer::PlayUntil(VideoPlayerEvent event, size_t event_count) {
@@ -164,7 +182,7 @@ FrameRenderer* VideoPlayer::GetFrameRenderer() const {
 bool VideoPlayer::WaitForEvent(VideoPlayerEvent event, size_t times) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_GE(times, 1u);
-  DVLOGF(4) << "Event ID: " << static_cast<size_t>(event);
+  DVLOGF(4) << "Event: " << EventName(event);
 
   base::TimeDelta time_waiting;
   base::AutoLock auto_lock(event_lock_);
@@ -183,8 +201,11 @@ bool VideoPlayer::WaitForEvent(VideoPlayerEvent event, size_t times) {
     }
 
     // Check whether we've exceeded the maximum time we're allowed to wait.
-    if (time_waiting >= event_timeout_)
+    if (time_waiting >= event_timeout_) {
+      LOG(ERROR) << "Timeout while waiting for '" << EventName(event)
+                 << "' event";
       return false;
+    }
 
     const base::TimeTicks start_time = base::TimeTicks::Now();
     event_cv_.TimedWait(event_timeout_ - time_waiting);

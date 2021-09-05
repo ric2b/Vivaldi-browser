@@ -2,7 +2,9 @@
 
 "[Clusterfuzz](https://google.github.io/clusterfuzz/) is a scalable fuzzing
 infrastructure which finds security and stabilty issues in software". Chromium
-uses Clusterfuzz to find bugs in sqlite, among others.
+uses Clusterfuzz to find bugs in sqlite, among others. One can view sqlite
+Fuzzing coverage [here](https://chromium-coverage.appspot.com/reports/709707_fuzzers_only/linux/chromium/src/third_party/sqlite/amalgamation/report.html),
+with more detailed data [here](https://clusterfuzz.com/fuzzer-stats?fuzzer=libFuzzer_sqlite3_lpm_fuzzer).
 
 Given access to a clusterfuzz test case, this README will describe how one can
 reproduce and help diagnose sqlite bugs found by clusterfuzz.
@@ -38,7 +40,7 @@ more data is needed, reproduce a bit more manually by first building the target.
 To build the target, first set .gn args to match those in the clusterfuzz link,
 then build and run the fuzzer.
 
-1. `export FUZZER_NAME=sqlite3_fts3_lpm_fuzzer  # FUZZER_NAME is listed in the crbug as the "Fuzz target binary"`
+1. `export FUZZER_NAME=sqlite3_fts3_lpm_fuzzer  # FUZZER_NAME is listed in the crbug as the "Fuzz Target"`
 2. Download the clusterfuzz minimized testcase.
 3. `export CLUSTERFUZZ_TESTCASE=./clusterfuzz-testcase-minimized-sqlite3_fts3_lpm_fuzzer-5756437473656832  # Set the clusterfuzz testcase path to CLUSTERFUZZ_TESTCASE`
 3. `gn args out/Fuzzer  # Set arguments to matches those in the clusterfuzz "Detailed report"'s "GN CONFIG (ARGS.GN)" section`

@@ -7,7 +7,6 @@
 
 #include "base/lazy_instance.h"
 #include "chrome/browser/ui/browser_list_observer.h"
-#include "components/app_modal/javascript_app_modal_dialog.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
@@ -79,6 +78,9 @@ class WindowPrivateCreateFunction : public ExtensionFunction {
 
  private:
   ResponseAction Run() override;
+
+  // Fired when the ui-document has loaded. |Window| is now valid.
+  void OnAppUILoaded(ResponseValue result_arg, bool did_finish);
 
   DISALLOW_COPY_AND_ASSIGN(WindowPrivateCreateFunction);
 };

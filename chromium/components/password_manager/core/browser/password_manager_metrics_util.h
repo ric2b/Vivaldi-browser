@@ -30,7 +30,8 @@ enum UIDisplayDisposition {
   MANUAL_WITH_PASSWORD_PENDING_UPDATE,
   AUTOMATIC_WITH_PASSWORD_PENDING_UPDATE,
   MANUAL_GENERATED_PASSWORD_CONFIRMATION,
-  NUM_DISPLAY_DISPOSITIONS
+  AUTOMATIC_SAVE_UNSYNCED_CREDENTIALS_LOCALLY,
+  NUM_DISPLAY_DISPOSITIONS,
 };
 
 // Metrics: "PasswordManager.UIDismissalReason"
@@ -224,13 +225,6 @@ enum class CredentialManagerGetResult {
   kMaxValue = kAutoSignIn,
 };
 
-// Metrics: "PasswordManager.HttpPasswordMigrationMode"
-enum HttpPasswordMigrationMode {
-  HTTP_PASSWORD_MIGRATION_MODE_MOVE,
-  HTTP_PASSWORD_MIGRATION_MODE_COPY,
-  HTTP_PASSWORD_MIGRATION_MODE_COUNT
-};
-
 enum PasswordReusePasswordFieldDetected {
   NO_PASSWORD_FIELD,
   HAS_PASSWORD_FIELD,
@@ -250,15 +244,19 @@ enum class SubmittedFormFrame {
 enum AccessPasswordInSettingsEvent {
   ACCESS_PASSWORD_VIEWED = 0,
   ACCESS_PASSWORD_COPIED = 1,
+  ACCESS_PASSWORD_EDITED = 2,
   ACCESS_PASSWORD_COUNT
 };
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. Needs to stay in sync with
+// "PasswordManager.ReauthResult" in enums.xml.
 // Metrics: PasswordManager.ReauthToAccessPasswordInSettings
-enum ReauthToAccessPasswordInSettingsEvent {
-  REAUTH_SUCCESS = 0,
-  REAUTH_FAILURE = 1,
-  REAUTH_SKIPPED = 2,
-  REAUTH_COUNT
+enum class ReauthResult {
+  kSuccess = 0,
+  kFailure = 1,
+  kSkipped = 2,
+  kMaxValue = kSkipped,
 };
 
 // Specifies the type of PasswordFormManagers and derived classes to distinguish
@@ -298,15 +296,14 @@ enum class GaiaPasswordHashChange {
   // Password hash saved event where the account is used to sign in to Chrome
   // (syncing).
   SAVED_ON_CHROME_SIGNIN = 0,
-  // Syncing account password hash saved in content area (syncing).
+  // Password hash saved in content area.
   SAVED_IN_CONTENT_AREA = 1,
-  // Clear syncing password hash when the account is signed out of Chrome
-  // (syncing).
+  // Clear password hash when the account is signed out of Chrome.
   CLEARED_ON_CHROME_SIGNOUT = 2,
   // Password hash changed event where the account is used to sign in to Chrome
   // (syncing).
   CHANGED_IN_CONTENT_AREA = 3,
-  // Password hash change event where the account is not syncing.
+  // Password hash changed event where the account is not syncing.
   NOT_SYNC_PASSWORD_CHANGE = 4,
   // Password hash change event for non-GAIA enterprise accounts.
   NON_GAIA_ENTERPRISE_PASSWORD_CHANGE = 5,
@@ -331,16 +328,19 @@ enum class IsSyncPasswordHashSaved {
 // Metrics:
 // - PasswordManager.ShowAllSavedPasswordsAcceptedContext
 // - PasswordManager.ShowAllSavedPasswordsShownContext
-enum ShowAllSavedPasswordsContext {
-  SHOW_ALL_SAVED_PASSWORDS_CONTEXT_NONE,
+//
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class ShowAllSavedPasswordsContext {
+  kNone = 0,
   // The "Show all saved passwords..." fallback is shown below a list of
   // available passwords.
-  SHOW_ALL_SAVED_PASSWORDS_CONTEXT_PASSWORD,
+  kPassword = 1,
   // Obsolete.
-  SHOW_ALL_SAVED_PASSWORDS_CONTEXT_MANUAL_FALLBACK_DEPRECATED,
+  kManualFallbackDeprecated = 2,
   // The "Show all saved  passwords..." fallback is shown in context menu.
-  SHOW_ALL_SAVED_PASSWORDS_CONTEXT_CONTEXT_MENU,
-  SHOW_ALL_SAVED_PASSWORDS_CONTEXT_COUNT
+  kContextMenu = 3,
+  kMaxValue = kContextMenu,
 };
 
 // Metrics: "PasswordManager.CertificateErrorsWhileSeeingForms"
@@ -506,12 +506,6 @@ void LogAutoSigninPromoUserAction(AutoSigninPromoUserAction action);
 void LogAccountChooserUserActionOneAccount(AccountChooserUserAction action);
 void LogAccountChooserUserActionManyAccounts(AccountChooserUserAction action);
 
-// Logs number of passwords migrated from HTTP to HTTPS.
-void LogCountHttpMigratedPasswords(int count);
-
-// Logs mode of HTTP password migration.
-void LogHttpPasswordMigrationMode(HttpPasswordMigrationMode mode);
-
 // Log the result of navigator.credentials.get.
 void LogCredentialManagerGetResult(CredentialManagerGetResult result,
                                    CredentialMediationRequirement mediation);
@@ -551,6 +545,9 @@ void LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
 // Log a frame of a submitted password form.
 void LogSubmittedFormFrame(SubmittedFormFrame frame);
 
+// Logs the result of a re-auth challenge in the password settings.
+void LogPasswordSettingsReauthResult(ReauthResult result);
+
 // Log a return value of LoginDatabase::DeleteUndecryptableLogins method.
 void LogDeleteUndecryptableLoginsReturnValue(
     DeleteCorruptedPasswordsResult result);
@@ -582,9 +579,11 @@ void LogIsSyncPasswordHashSaved(IsSyncPasswordHashSaved state,
                                 bool is_under_advanced_protection);
 
 // Log the number of Gaia password hashes saved, and the number of enterprise
-// password hashes saved.
+// password hashes saved. Currently only called on profile start up.
 void LogProtectedPasswordHashCounts(size_t gaia_hash_count,
-                                    size_t enterprise_hash_count);
+                                    size_t enterprise_hash_count,
+                                    bool does_primary_account_exists,
+                                    bool is_signed_in);
 
 #endif
 

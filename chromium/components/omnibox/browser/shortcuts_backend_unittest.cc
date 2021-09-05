@@ -60,8 +60,8 @@ class ShortcutsBackendTest : public testing::Test,
   TemplateURLService* GetTemplateURLService();
 
  private:
-  base::test::TaskEnvironment task_environment_;
   base::ScopedTempDir profile_dir_;
+  base::test::TaskEnvironment task_environment_;
   std::unique_ptr<TemplateURLService> template_url_service_;
   std::unique_ptr<history::HistoryService> history_service_;
 
@@ -107,10 +107,10 @@ void ShortcutsBackendTest::SetSearchProvider() {
 }
 
 void ShortcutsBackendTest::SetUp() {
+  ASSERT_TRUE(profile_dir_.CreateUniqueTempDir());
   template_url_service_.reset(new TemplateURLService(nullptr, 0));
-  if (profile_dir_.CreateUniqueTempDir())
-    history_service_ =
-        history::CreateHistoryService(profile_dir_.GetPath(), true);
+  history_service_ =
+      history::CreateHistoryService(profile_dir_.GetPath(), true);
   ASSERT_TRUE(history_service_);
 
   base::FilePath shortcuts_database_path =
@@ -124,7 +124,18 @@ void ShortcutsBackendTest::SetUp() {
 
 void ShortcutsBackendTest::TearDown() {
   backend_->RemoveObserver(this);
+  backend_->ShutdownOnUIThread();
+  backend_.reset();
+
+  // Explicitly shut down the history service and wait for its backend to be
+  // destroyed to prevent resource leaks.
+  base::RunLoop run_loop;
+  history_service_->SetOnBackendDestroyTask(run_loop.QuitClosure());
+  history_service_->Shutdown();
+  run_loop.Run();
+
   task_environment_.RunUntilIdle();
+  EXPECT_TRUE(profile_dir_.Delete());
 }
 
 void ShortcutsBackendTest::OnShortcutsLoaded() {
@@ -239,6 +250,47 @@ TEST_F(ShortcutsBackendTest, EntitySuggestionTest) {
   EXPECT_EQ("0,0", match_core.contents_class);
   EXPECT_EQ(base::string16(), match_core.description);
   EXPECT_TRUE(match_core.description_class.empty());
+}
+
+TEST_F(ShortcutsBackendTest, MatchCoreDescriptionTest) {
+  // When match.description_for_shortcuts is empty, match_core should use
+  // match.description.
+  {
+    AutocompleteMatch match;
+    match.description = base::UTF8ToUTF16("the cat");
+    match.description_class =
+        AutocompleteMatch::ClassificationsFromString("0,1");
+
+    SearchTermsData search_terms_data;
+    ShortcutsDatabase::Shortcut::MatchCore match_core =
+        ShortcutsBackend::MatchToMatchCore(match, GetTemplateURLService(),
+                                           &search_terms_data);
+    EXPECT_EQ(match_core.description, match.description);
+    EXPECT_EQ(
+        match_core.description_class,
+        AutocompleteMatch::ClassificationsToString(match.description_class));
+  }
+
+  // When match.description_for_shortcuts is set, match_core should use it
+  // instead of match.description.
+  {
+    AutocompleteMatch match;
+    match.description = base::UTF8ToUTF16("the cat");
+    match.description_class =
+        AutocompleteMatch::ClassificationsFromString("0,1");
+    match.description_for_shortcuts = base::UTF8ToUTF16("the elephant");
+    match.description_class_for_shortcuts =
+        AutocompleteMatch::ClassificationsFromString("0,4");
+
+    SearchTermsData search_terms_data;
+    ShortcutsDatabase::Shortcut::MatchCore match_core =
+        ShortcutsBackend::MatchToMatchCore(match, GetTemplateURLService(),
+                                           &search_terms_data);
+    EXPECT_EQ(match_core.description, match.description_for_shortcuts);
+    EXPECT_EQ(match_core.description_class,
+              AutocompleteMatch::ClassificationsToString(
+                  match.description_class_for_shortcuts));
+  }
 }
 
 TEST_F(ShortcutsBackendTest, AddAndUpdateShortcut) {

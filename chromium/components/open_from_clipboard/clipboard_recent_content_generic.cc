@@ -6,7 +6,9 @@
 
 #include <string>
 
+#include "base/bind.h"
 #include "base/strings/string_util.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard.h"
 
 namespace {
@@ -16,13 +18,24 @@ const char* kAuthorizedSchemes[] = {
     // TODO(mpearson): add support for chrome:// URLs.  Right now the scheme
     // for that lives in content and is accessible via
     // GetEmbedderRepresentationOfAboutScheme() or content::kChromeUIScheme
-    // TODO(mpearson): when adding desktop support, add kFileScheme, kFtpScheme,
-    // and kGopherScheme.
+    // TODO(mpearson): when adding desktop support, add kFileScheme, kFtpScheme.
 };
+
+void OnGetRecentImageFromClipboard(
+    ClipboardRecentContent::GetRecentImageCallback callback,
+    const SkBitmap& sk_bitmap) {
+  if (sk_bitmap.empty()) {
+    std::move(callback).Run(base::nullopt);
+    return;
+  }
+
+  std::move(callback).Run(gfx::Image::CreateFrom1xBitmap(sk_bitmap));
+}
 
 }  // namespace
 
-ClipboardRecentContentGeneric::ClipboardRecentContentGeneric() {}
+ClipboardRecentContentGeneric::ClipboardRecentContentGeneric() = default;
+ClipboardRecentContentGeneric::~ClipboardRecentContentGeneric() = default;
 
 base::Optional<GURL>
 ClipboardRecentContentGeneric::GetRecentURLFromClipboard() {
@@ -82,9 +95,23 @@ ClipboardRecentContentGeneric::GetRecentTextFromClipboard() {
   return text_from_clipboard;
 }
 
-base::Optional<gfx::Image>
-ClipboardRecentContentGeneric::GetRecentImageFromClipboard() {
-  return base::nullopt;
+void ClipboardRecentContentGeneric::GetRecentImageFromClipboard(
+    GetRecentImageCallback callback) {
+  if (GetClipboardContentAge() > MaximumAgeOfClipboard())
+    return;
+
+  ui::Clipboard::GetForCurrentThread()->ReadImage(
+      ui::ClipboardBuffer::kCopyPaste,
+      base::BindOnce(&OnGetRecentImageFromClipboard, std::move(callback)));
+}
+
+bool ClipboardRecentContentGeneric::HasRecentImageFromClipboard() {
+  if (GetClipboardContentAge() > MaximumAgeOfClipboard())
+    return false;
+
+  return ui::Clipboard::GetForCurrentThread()->IsFormatAvailable(
+      ui::ClipboardFormatType::GetBitmapType(),
+      ui::ClipboardBuffer::kCopyPaste);
 }
 
 base::TimeDelta ClipboardRecentContentGeneric::GetClipboardContentAge() const {

@@ -12,13 +12,6 @@ var WebViewPrivate = getInternalApi ? getInternalApi("webViewPrivate") : require
 
 function RegisterVivaldiWebViewExtensions(WebViewImpl) {
 
-WebViewImpl.prototype.setVisible = function (isVisible) {
-  if (!this.guest.getId()) {
-    return false;
-  }
-  WebViewPrivate.setVisible(this.guest.getId(), isVisible);
-};
-
 WebViewImpl.prototype.showPageInfo = function (pos) {
   if (!this.guest.getId()) {
     return false;

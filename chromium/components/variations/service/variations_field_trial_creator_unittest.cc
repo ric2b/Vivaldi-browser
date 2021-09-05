@@ -157,9 +157,8 @@ class TestVariationsServiceClient : public VariationsServiceClient {
   ~TestVariationsServiceClient() override = default;
 
   // VariationsServiceClient:
-  base::Callback<base::Version(void)> GetVersionForSimulationCallback()
-      override {
-    return base::Callback<base::Version(void)>();
+  VersionCallback GetVersionForSimulationCallback() override {
+    return base::NullCallback();
   }
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory()
       override {
@@ -268,7 +267,7 @@ class TestVariationsFieldTrialCreator : public VariationsFieldTrialCreator {
 
 class FieldTrialCreatorTest : public ::testing::Test {
  protected:
-  FieldTrialCreatorTest() : field_trial_list_(nullptr) {
+  FieldTrialCreatorTest() {
     VariationsService::RegisterPrefs(prefs_.registry());
     global_feature_list_ = base::FeatureList::ClearInstanceForTesting();
   }
@@ -287,9 +286,6 @@ class FieldTrialCreatorTest : public ::testing::Test {
  private:
   // The global feature list, which is ignored by tests in this suite.
   std::unique_ptr<base::FeatureList> global_feature_list_;
-
-  // A local FieldTrialList to hold any field trials created in this suite.
-  base::FieldTrialList field_trial_list_;
 
   DISALLOW_COPY_AND_ASSIGN(FieldTrialCreatorTest);
 };

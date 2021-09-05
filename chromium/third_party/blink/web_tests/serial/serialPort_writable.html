@@ -21,7 +21,7 @@ serial_test(async (t, fake) => {
 
   const writer = writable.getWriter();
   const data = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
-  await promise_rejects(t, 'InvalidStateError', writer.write(data));
+  await promise_rejects_dom(t, 'InvalidStateError', writer.write(data));
 }, 'open() and close() set and unset SerialPort.writable');
 
 serial_test(async (t, fake) => {
@@ -31,7 +31,7 @@ serial_test(async (t, fake) => {
   assert_true(port.writable instanceof WritableStream);
 
   const writer = port.writable.getWriter();
-  await promise_rejects(t, new TypeError(), port.close());
+  await promise_rejects_js(t, TypeError, port.close());
 
   writer.releaseLock();
   await port.close();
@@ -78,22 +78,88 @@ serial_test(async (t, fake) => {
 
 serial_test(async (t, fake) => {
   const { port, fakePort } = await getFakeSerialPort(fake);
+  await port.open({ baudrate: 9600 });
+
+  const writable = port.writable;
+  assert_true(writable instanceof WritableStream);
+  let writer = writable.getWriter();
+
+  fakePort.simulateSystemErrorOnWrite();
+  const data = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+  await promise_rejects_dom(t, 'UnknownError', writer.write(data));
+
+  assert_true(port.writable instanceof WritableStream);
+  assert_not_equals(port.writable, writable);
+
+  writer = port.writable.getWriter();
+  let writePromise = writer.write(data);
+  writer.close();
+  await fakePort.waitForWriteErrorCleared();
+  let { value, done } = await fakePort.read();
+  await writePromise;
+  compareArrays(value, data);
+
+  await port.close();
+  assert_equals(port.writable, null);
+}, 'System error closes writable and replaces it with a new stream');
+
+serial_test(async (t, fake) => {
+  const { port, fakePort } = await getFakeSerialPort(fake);
+  await port.open({ baudrate: 9600 });
+
+  assert_true(port.writable instanceof WritableStream);
+  const writer = port.writable.getWriter();
+
+  fakePort.simulateDisconnectOnWrite();
+  const data = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+  await promise_rejects_dom(t, 'NetworkError', writer.write(data));
+  assert_equals(port.writable, null);
+
+  await port.close();
+}, 'Disconnect error closes writable and sets it to null');
+
+serial_test(async (t, fake) => {
+  const { port, fakePort } = await getFakeSerialPort(fake);
 
   await port.open({ baudrate: 9600 });
   assert_true(port.writable instanceof WritableStream);
 
   const encoder = new TextEncoderStream();
-  const encodingComplete = encoder.readable.pipeTo(port.writable);
+  const streamClosed = encoder.readable.pipeTo(port.writable);
   const writer = encoder.writable.getWriter();
-  let writePromise = writer.write("Hello world!");
-  let { value, done } = await fakePort.read();
+  const writePromise = writer.write("Hello world!");
+  const { value, done } = await fakePort.read();
   await writePromise;
   assert_equals("Hello world!", new TextDecoder().decode(value));
   await writer.close();
-  await encodingComplete;
+  await streamClosed;
 
   await port.close();
   assert_equals(port.writable, null);
 }, 'Can pipe a stream to writable');
+
+serial_test(async (t, fake) => {
+  const { port, fakePort } = await getFakeSerialPort(fake);
+
+  await port.open({ baudrate: 9600 });
+  assert_true(port.writable instanceof WritableStream);
+
+  const transform = new TransformStream();
+  const readable = transform.readable.pipeThrough(new TextEncoderStream())
+                                     .pipeThrough(new TransformStream())
+                                     .pipeThrough(new TransformStream())
+                                     .pipeThrough(new TransformStream());
+  const streamClosed = readable.pipeTo(port.writable);
+  const writer = transform.writable.getWriter();
+  const writePromise = writer.write("Hello world!");
+  const { value, done } = await fakePort.read();
+  await writePromise;
+  assert_equals("Hello world!", new TextDecoder().decode(value));
+  await writer.close();
+  await streamClosed;
+
+  await port.close();
+  assert_equals(port.writable, null);
+}, 'Stream closure is observable through a long chain of transformers');
 
 </script>

@@ -19,14 +19,20 @@
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/passwords/password_manager_features.h"
 #import "ios/chrome/browser/web/error_page_util.h"
+#include "ios/chrome/browser/web/features.h"
+#include "ios/web/common/features.h"
 #import "ios/web/common/web_view_creation_util.h"
 #import "ios/web/public/test/error_test_util.h"
 #import "ios/web/public/test/fakes/test_web_state.h"
 #import "ios/web/public/test/js_test_util.h"
 #include "ios/web/public/test/scoped_testing_web_client.h"
+#include "net/ssl/ssl_info.h"
+#include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
 #include "testing/platform_test.h"
+#import "third_party/ocmock/OCMock/OCMock.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -58,11 +64,11 @@ class ChromeWebClientTest : public PlatformTest {
 
   ~ChromeWebClientTest() override = default;
 
-  ios::ChromeBrowserState* browser_state() { return browser_state_.get(); }
+  ChromeBrowserState* browser_state() { return browser_state_.get(); }
 
  private:
   base::test::TaskEnvironment environment_;
-  std::unique_ptr<ios::ChromeBrowserState> browser_state_;
+  std::unique_ptr<ChromeBrowserState> browser_state_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeWebClientTest);
 };
@@ -174,20 +180,6 @@ TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptCredentialManager) {
                              web_view, @"typeof navigator.credentials"));
 }
 
-// Tests that ChromeWebClient provides payment request script for WKWebView.
-TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptPaymentRequest) {
-  // Chrome scripts rely on __gCrWeb object presence.
-  WKWebView* web_view = web::BuildWKWebView(CGRectZero, browser_state());
-  web::test::ExecuteJavaScript(web_view, @"__gCrWeb = {};");
-
-  web::ScopedTestingWebClient web_client(std::make_unique<ChromeWebClient>());
-  NSString* script =
-      web_client.Get()->GetDocumentStartScriptForMainFrame(browser_state());
-  web::test::ExecuteJavaScript(web_view, script);
-  EXPECT_NSEQ(@"function", web::test::ExecuteJavaScript(
-                               web_view, @"typeof window.PaymentRequest"));
-}
-
 // Tests PrepareErrorPage wth non-post, not Off The Record error.
 TEST_F(ChromeWebClientTest, PrepareErrorPageNonPostNonOtr) {
   ChromeWebClient web_client;
@@ -202,7 +194,9 @@ TEST_F(ChromeWebClientTest, PrepareErrorPageNonPostNonOtr) {
   web::TestWebState test_web_state;
   web_client.PrepareErrorPage(&test_web_state, GURL(kTestUrl), error,
                               /*is_post=*/false,
-                              /*is_off_the_record=*/false, std::move(callback));
+                              /*is_off_the_record=*/false,
+                              /*info=*/base::nullopt,
+                              /*navigation_id=*/0, std::move(callback));
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool {
     base::RunLoop().RunUntilIdle();
     return callback_called;
@@ -226,7 +220,9 @@ TEST_F(ChromeWebClientTest, PrepareErrorPagePostNonOtr) {
   web::TestWebState test_web_state;
   web_client.PrepareErrorPage(&test_web_state, GURL(kTestUrl), error,
                               /*is_post=*/true,
-                              /*is_off_the_record=*/false, std::move(callback));
+                              /*is_off_the_record=*/false,
+                              /*info=*/base::nullopt,
+                              /*navigation_id=*/0, std::move(callback));
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool {
     base::RunLoop().RunUntilIdle();
     return callback_called;
@@ -250,7 +246,9 @@ TEST_F(ChromeWebClientTest, PrepareErrorPageNonPostOtr) {
   web::TestWebState test_web_state;
   web_client.PrepareErrorPage(&test_web_state, GURL(kTestUrl), error,
                               /*is_post=*/false,
-                              /*is_off_the_record=*/true, std::move(callback));
+                              /*is_off_the_record=*/true,
+                              /*info=*/base::nullopt,
+                              /*navigation_id=*/0, std::move(callback));
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool {
     base::RunLoop().RunUntilIdle();
     return callback_called;
@@ -274,7 +272,9 @@ TEST_F(ChromeWebClientTest, PrepareErrorPagePostOtr) {
   web::TestWebState test_web_state;
   web_client.PrepareErrorPage(&test_web_state, GURL(kTestUrl), error,
                               /*is_post=*/true,
-                              /*is_off_the_record=*/true, std::move(callback));
+                              /*is_off_the_record=*/true,
+                              /*info=*/base::nullopt,
+                              /*navigation_id=*/0, std::move(callback));
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool {
     base::RunLoop().RunUntilIdle();
     return callback_called;
@@ -282,4 +282,123 @@ TEST_F(ChromeWebClientTest, PrepareErrorPagePostOtr) {
   EXPECT_NSEQ(GetErrorPage(GURL(kTestUrl), error, /*is_post=*/true,
                            /*is_off_the_record=*/true),
               page);
+}
+
+// Tests PrepareErrorPage with SSLInfo, which results in an SSL committed
+// interstitial.
+TEST_F(ChromeWebClientTest, PrepareErrorPageWithSSLInfo) {
+  net::SSLInfo info;
+  info.cert =
+      net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
+  info.is_fatal_cert_error = false;
+  info.cert_status = net::CERT_STATUS_COMMON_NAME_INVALID;
+  base::Optional<net::SSLInfo> ssl_info =
+      base::make_optional<net::SSLInfo>(info);
+  ChromeWebClient web_client;
+  NSError* error =
+      [NSError errorWithDomain:NSURLErrorDomain
+                          code:NSURLErrorServerCertificateHasUnknownRoot
+                      userInfo:nil];
+  __block bool callback_called = false;
+  __block NSString* page = nil;
+  base::OnceCallback<void(NSString*)> callback =
+      base::BindOnce(^(NSString* error_html) {
+        callback_called = true;
+        page = error_html;
+      });
+  web::TestWebState test_web_state;
+  test_web_state.SetBrowserState(browser_state());
+  web_client.PrepareErrorPage(&test_web_state, GURL(kTestUrl), error,
+                              /*is_post=*/false,
+                              /*is_off_the_record=*/false,
+                              /*info=*/ssl_info,
+                              /*navigation_id=*/0, std::move(callback));
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool {
+    base::RunLoop().RunUntilIdle();
+    return callback_called;
+  }));
+  NSString* error_string = base::SysUTF8ToNSString(
+      net::ErrorToShortString(net::ERR_CERT_COMMON_NAME_INVALID));
+  EXPECT_TRUE([page containsString:error_string]);
+}
+
+// Tests the default user agent for different views.
+TEST_F(ChromeWebClientTest, DefaultUserAgent) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {web::features::kUseDefaultUserAgentInWebClient, web::kMobileGoogleSRP},
+      {});
+
+  ChromeWebClient web_client;
+  const GURL google_url = GURL("https://www.google.com/search?q=test");
+  const GURL non_google_url = GURL("http://wikipedia.org");
+
+  UITraitCollection* regular_vertical_size_class = [UITraitCollection
+      traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassRegular];
+  UITraitCollection* regular_horizontal_size_class = [UITraitCollection
+      traitCollectionWithHorizontalSizeClass:UIUserInterfaceSizeClassRegular];
+  UITraitCollection* compact_vertical_size_class = [UITraitCollection
+      traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassCompact];
+  UITraitCollection* compact_horizontal_size_class = [UITraitCollection
+      traitCollectionWithHorizontalSizeClass:UIUserInterfaceSizeClassCompact];
+
+  UIView* view = [[UIView alloc] init];
+  UITraitCollection* original_traits = view.traitCollection;
+
+  UITraitCollection* regular_regular =
+      [UITraitCollection traitCollectionWithTraitsFromCollections:@[
+        original_traits, regular_vertical_size_class,
+        regular_horizontal_size_class
+      ]];
+  UITraitCollection* regular_compact =
+      [UITraitCollection traitCollectionWithTraitsFromCollections:@[
+        original_traits, regular_vertical_size_class,
+        compact_horizontal_size_class
+      ]];
+  UITraitCollection* compact_regular =
+      [UITraitCollection traitCollectionWithTraitsFromCollections:@[
+        original_traits, compact_vertical_size_class,
+        regular_horizontal_size_class
+      ]];
+  UITraitCollection* compact_compact =
+      [UITraitCollection traitCollectionWithTraitsFromCollections:@[
+        original_traits, compact_vertical_size_class,
+        compact_horizontal_size_class
+      ]];
+
+  // Check that desktop is returned for Regular x Regular on non-Google URLs.
+  id mock_regular_regular_view = OCMClassMock([UIView class]);
+  OCMStub([mock_regular_regular_view traitCollection])
+      .andReturn(regular_regular);
+  EXPECT_EQ(web::UserAgentType::DESKTOP,
+            web_client.GetDefaultUserAgent(mock_regular_regular_view,
+                                           non_google_url));
+  EXPECT_EQ(
+      web::UserAgentType::MOBILE,
+      web_client.GetDefaultUserAgent(mock_regular_regular_view, google_url));
+
+  // Check that mobile is returned for all other combinations.
+  id mock_regular_compact_view = OCMClassMock([UIView class]);
+  OCMStub([mock_regular_compact_view traitCollection])
+      .andReturn(regular_compact);
+  EXPECT_EQ(web::UserAgentType::MOBILE,
+            web_client.GetDefaultUserAgent(mock_regular_compact_view,
+                                           non_google_url));
+  EXPECT_EQ(
+      web::UserAgentType::MOBILE,
+      web_client.GetDefaultUserAgent(mock_regular_regular_view, google_url));
+
+  id mock_compact_regular_view = OCMClassMock([UIView class]);
+  OCMStub([mock_compact_regular_view traitCollection])
+      .andReturn(compact_regular);
+  EXPECT_EQ(web::UserAgentType::MOBILE,
+            web_client.GetDefaultUserAgent(mock_compact_regular_view,
+                                           non_google_url));
+
+  id mock_compact_compact_view = OCMClassMock([UIView class]);
+  OCMStub([mock_compact_compact_view traitCollection])
+      .andReturn(compact_compact);
+  EXPECT_EQ(web::UserAgentType::MOBILE,
+            web_client.GetDefaultUserAgent(mock_compact_compact_view,
+                                           non_google_url));
 }

@@ -62,7 +62,7 @@ ByteStringOrNodeList::ByteStringOrNodeList(const ByteStringOrNodeList&) = defaul
 ByteStringOrNodeList::~ByteStringOrNodeList() = default;
 ByteStringOrNodeList& ByteStringOrNodeList::operator=(const ByteStringOrNodeList&) = default;
 
-void ByteStringOrNodeList::Trace(blink::Visitor* visitor) {
+void ByteStringOrNodeList::Trace(Visitor* visitor) {
   visitor->Trace(node_list_);
 }
 
@@ -115,3 +115,4 @@ ByteStringOrNodeList NativeValueTraits<ByteStringOrNodeList>::NativeValue(
 }
 
 }  // namespace blink
+

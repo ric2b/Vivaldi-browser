@@ -32,13 +32,17 @@ class CryptAuthFeatureStatusGetterImpl : public CryptAuthFeatureStatusGetter {
  public:
   class Factory {
    public:
-    static Factory* Get();
-    static void SetFactoryForTesting(Factory* test_factory);
-    virtual ~Factory();
-    virtual std::unique_ptr<CryptAuthFeatureStatusGetter> BuildInstance(
+    static std::unique_ptr<CryptAuthFeatureStatusGetter> Create(
         CryptAuthClientFactory* client_factory,
         std::unique_ptr<base::OneShotTimer> timer =
             std::make_unique<base::OneShotTimer>());
+    static void SetFactoryForTesting(Factory* test_factory);
+
+   protected:
+    virtual ~Factory();
+    virtual std::unique_ptr<CryptAuthFeatureStatusGetter> CreateInstance(
+        CryptAuthClientFactory* client_factory,
+        std::unique_ptr<base::OneShotTimer> timer) = 0;
 
    private:
     static Factory* test_factory_;
@@ -62,7 +66,7 @@ class CryptAuthFeatureStatusGetterImpl : public CryptAuthFeatureStatusGetter {
 
   void FinishAttempt(CryptAuthDeviceSyncResult::ResultCode result_code);
 
-  IdToFeatureStatusMap id_to_feature_status_map_;
+  IdToDeviceSoftwareFeatureInfoMap id_to_device_software_feature_info_map_;
 
   // The CryptAuthClient for the latest CryptAuth request. The client can only
   // be used for one call; therefore, for each API call, a new client needs to

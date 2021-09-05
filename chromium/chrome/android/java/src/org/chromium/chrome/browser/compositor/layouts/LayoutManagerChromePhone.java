@@ -13,12 +13,16 @@ import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
+
+import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * {@link LayoutManagerChromePhone} is the specialization of {@link LayoutManagerChrome} for the
@@ -26,7 +30,12 @@ import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
  */
 public class LayoutManagerChromePhone extends LayoutManagerChrome {
     // Layouts
-    private final SimpleAnimationLayout mSimpleAnimationLayout;
+    private SimpleAnimationLayout mSimpleAnimationLayout;
+
+    // Vivaldi
+    private StripLayoutHelperManager mTabStripLayoutHelperManager;
+    private SharedPreferencesManager.Observer mPreferenceObserver;
+    private boolean mTabStripAdded;
 
     /**
      * Creates an instance of a {@link LayoutManagerChromePhone}.
@@ -36,15 +45,18 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
      */
     public LayoutManagerChromePhone(LayoutManagerHost host, StartSurface startSurface) {
         super(host, true, startSurface);
-        Context context = host.getContext();
-        LayoutRenderHost renderHost = host.getLayoutRenderHost();
 
-        // Build Layouts
-        mSimpleAnimationLayout = new SimpleAnimationLayout(context, this, renderHost);
-
-        // Set up layout parameters
-        mStaticLayout.setLayoutHandlesTabLifecycles(false);
-        mToolbarSwipeLayout.setMovesToolbar(true);
+        // Vivaldi
+        Context context = mHost.getContext();
+        mTabStripLayoutHelperManager =
+                new StripLayoutHelperManager(context, this, mHost.getLayoutRenderHost());
+        mTabStripAdded = false;
+        mPreferenceObserver = key -> {
+            if (VivaldiPreferences.SHOW_TAB_STRIP.equals(key)){
+                updateGlobalSceneOverlay();
+            }
+        };
+        SharedPreferencesManager.getInstance().addObserver(mPreferenceObserver);
     }
 
     @Override
@@ -52,11 +64,28 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             TabContentManager content, ViewGroup androidContentContainer,
             ContextualSearchManagementDelegate contextualSearchDelegate,
             DynamicResourceLoader dynamicResourceLoader) {
+        Context context = mHost.getContext();
+        LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
+
+        // Build Layouts
+        mSimpleAnimationLayout = new SimpleAnimationLayout(context, this, renderHost);
+
+        // Set up layout parameters
+        mStaticLayout.setLayoutHandlesTabLifecycles(false);
+
         super.init(selector, creator, content, androidContentContainer, contextualSearchDelegate,
                 dynamicResourceLoader);
 
+        mToolbarSwipeLayout.setMovesToolbar(true);
+
         // Initialize Layouts
         mSimpleAnimationLayout.setTabModelSelector(selector, content);
+
+        // Vivaldi
+        if (mTabStripLayoutHelperManager != null) {
+            mTabStripLayoutHelperManager.setTabModelSelector(selector, creator);
+        }
+        updateGlobalSceneOverlay();
     }
 
     @Override
@@ -118,7 +147,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         }
         getActiveLayout().onTabClosed(time(), id, nextId, incognito);
         Tab nextTab = getTabById(nextId);
-        if (nextTab != null) nextTab.requestFocus();
+        if (nextTab != null && nextTab.getView() != null) nextTab.getView().requestFocus();
         boolean animate = !tabRemoved && animationsEnabled();
         if (getActiveLayout() != overviewLayout && showOverview && !animate) {
             showOverview(false);
@@ -153,7 +182,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
         if (willBeSelected) {
             Tab newTab = TabModelUtils.getTabById(getTabModelSelector().getModel(isIncognito), id);
-            if (newTab != null) newTab.requestFocus();
+            if (newTab != null && newTab.getView() != null) newTab.getView().requestFocus();
         }
     }
 
@@ -161,5 +190,34 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     public void releaseTabLayout(int id) {
         mTitleCache.remove(id);
         super.releaseTabLayout(id);
+    }
+
+    // Vivaldi
+    @Override
+    public void destroy() {
+        super.destroy();
+        if (mTabStripLayoutHelperManager != null) {
+            mTabStripLayoutHelperManager.destroy();
+            mTabStripLayoutHelperManager = null;
+        }
+        SharedPreferencesManager.getInstance().removeObserver(mPreferenceObserver);
+    }
+
+    // Vivaldi: Update the {@link SceneOverlay} according to the tab strip setting.
+    private void updateGlobalSceneOverlay() {
+        if (SharedPreferencesManager.getInstance().readBoolean(
+                    VivaldiPreferences.SHOW_TAB_STRIP, true)) {
+            if(!mTabStripAdded) {
+                addGlobalSceneOverlay(mTabStripLayoutHelperManager);
+                if (getTabModelSelector() != null)
+                    mTabStripLayoutHelperManager.tabModelSwitched(
+                            getTabModelSelector().isIncognitoSelected());
+                mTabStripAdded = true;
+            }
+        } else {
+            removeGlobalSceneOverlay(mTabStripLayoutHelperManager);
+            mSimpleAnimationLayout.removeSceneOverlay(mTabStripLayoutHelperManager);
+            mTabStripAdded = false;
+        }
     }
 }

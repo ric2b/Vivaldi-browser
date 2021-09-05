@@ -38,7 +38,10 @@ class BluetoothTestWin : public BluetoothTestBase,
   bool DenyPermission() override;
   void StartLowEnergyDiscoverySession() override;
   BluetoothDevice* SimulateLowEnergyDevice(int device_ordinal) override;
+  base::Optional<BluetoothUUID> GetTargetGattService(
+      BluetoothDevice* device) override;
   void SimulateGattConnection(BluetoothDevice* device) override;
+  void SimulateStatusChangeToDisconnect(BluetoothDevice* device) override;
   void SimulateGattServicesDiscovered(
       BluetoothDevice* device,
       const std::vector<std::string>& uuids) override;
@@ -116,6 +119,11 @@ class BluetoothTestWinrt : public BluetoothTestWin,
   BluetoothTestWinrt();
   ~BluetoothTestWinrt() override;
 
+  // Simulate a fake adapter whose power status cannot be
+  // controlled because of a Windows Privacy setting.
+  void InitFakeAdapterWithRadioAccessDenied();
+  void SimulateSpuriousRadioStateChangedEvent();
+
   // BluetoothTestBase:
   bool PlatformSupportsLowEnergy() override;
   void InitWithDefaultAdapter() override;
@@ -144,6 +152,7 @@ class BluetoothTestWinrt : public BluetoothTestWin,
   void SimulateDeviceBreaksConnection(BluetoothDevice* device) override;
   void SimulateGattNameChange(BluetoothDevice* device,
                               const std::string& new_name) override;
+  void SimulateStatusChangeToDisconnect(BluetoothDevice* device) override;
   void SimulateGattServicesDiscovered(
       BluetoothDevice* device,
       const std::vector<std::string>& uuids) override;

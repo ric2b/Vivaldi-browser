@@ -14,9 +14,12 @@
 #include <vector>
 
 #include "app/vivaldi_constants.h"
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/string_util.h"
+#include "base/task/post_task.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -25,6 +28,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 #include "components/sessions/core/session_service_commands.h"
+#include "components/sessions/vivaldi_session_service_commands.h"
 #include "content/public/browser/navigation_entry.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/schema/vivaldi_sessions.h"
@@ -127,22 +131,39 @@ ExtensionFunction::ResponseAction SessionsPrivateSaveOpenTabsFunction::Run() {
   return RespondNow(ArgumentList(Results::Create(error_code)));
 }
 
+SessionsPrivateGetAllFunction::SessionEntry::SessionEntry() {}
+
+SessionsPrivateGetAllFunction::SessionEntry::~SessionEntry() {}
+
 ExtensionFunction::ResponseAction SessionsPrivateGetAllFunction::Run() {
-  using vivaldi::sessions_private::SessionItem;
-  namespace Results = vivaldi::sessions_private::GetAll::Results;
-
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-
-  std::vector<SessionItem> sessions;
   Profile* profile = Profile::FromBrowserContext(browser_context());
   base::FilePath path(profile->GetPath());
   path = path.Append(kSessionPath);
 
+  base::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&SessionsPrivateGetAllFunction::RunOnFileThread, this,
+                     path),
+      base::BindOnce(&SessionsPrivateGetAllFunction::SendResponse, this));
+
+  return RespondLater();
+}
+
+std::vector<std::unique_ptr<SessionsPrivateGetAllFunction::SessionEntry>>
+SessionsPrivateGetAllFunction::RunOnFileThread(
+    base::FilePath path) {
+  using extensions::vivaldi::sessions_private::SessionItem;
+  namespace Results = vivaldi::sessions_private::GetAll::Results;
+  std::vector<std::unique_ptr<SessionEntry>> sessions;
+  ::vivaldi::VivaldiSessionService service;
+
   base::FileEnumerator iter(path, false, base::FileEnumerator::FILES,
-                            FILE_PATH_LITERAL("*.bin"));
+    FILE_PATH_LITERAL("*.bin"));
   for (base::FilePath name = iter.Next(); !name.empty(); name = iter.Next()) {
-    sessions.emplace_back();
-    SessionItem* new_item = &sessions.back();
+    std::unique_ptr<SessionEntry> entry = std::make_unique<SessionEntry>();
+    entry->item = std::make_unique<SessionItem>();
+    SessionItem* new_item = entry->item.get();
 #if defined(OS_POSIX)
     std::string filename = name.BaseName().value();
 #elif defined(OS_WIN)
@@ -158,8 +179,36 @@ ExtensionFunction::ResponseAction SessionsPrivateGetAllFunction::Run() {
     base::FileEnumerator::FileInfo info = iter.GetInfo();
     base::Time modified = info.GetLastModifiedTime();
     new_item->create_date_js = modified.ToJsTime();
+    auto commands = service.LoadSettingInfo(name);
+    entry->commands.swap(commands);
+
+    sessions.push_back(std::move(entry));
   }
-  return RespondNow(ArgumentList(Results::Create(sessions)));
+  return sessions;
+}
+
+void SessionsPrivateGetAllFunction::SendResponse(
+    std::vector<std::unique_ptr<SessionEntry>> sessions) {
+  namespace Results = vivaldi::sessions_private::GetAll::Results;
+  using extensions::vivaldi::sessions_private::SessionItem;
+  std::vector<SessionItem> retval;
+
+  for (auto& session_entry : sessions) {
+    sessions::IdToSessionTab tabs;
+    sessions::TokenToSessionTabGroup tab_groups;
+    sessions::IdToSessionWindow windows;
+    SessionID active_window_id = SessionID::InvalidValue();
+
+    if (sessions::VivaldiCreateTabsAndWindows(session_entry->commands, &tabs,
+                                              &tab_groups, &windows,
+                                              &active_window_id)) {
+      session_entry->item->tabs = tabs.size();
+      session_entry->item->windows = windows.size();
+
+      retval.push_back(std::move(*session_entry->item));
+    }
+  }
+  Respond(ArgumentList(Results::Create(retval)));
 }
 
 ExtensionFunction::ResponseAction SessionsPrivateOpenFunction::Run() {

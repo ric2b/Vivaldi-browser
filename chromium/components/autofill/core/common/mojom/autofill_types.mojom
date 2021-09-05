@@ -138,6 +138,8 @@ struct FormFieldData {
   array<mojo_base.mojom.String16> option_contents;
 
   LabelSource label_source;
+
+  gfx.mojom.RectF bounds;
 };
 
 struct ButtonTitleInfo {
@@ -182,10 +184,11 @@ struct FormDataPredictions {
   array<FormFieldDataPredictions> fields;
 };
 
-// autofill::PasswordAndRealm
-struct PasswordAndRealm {
+// autofill::PasswordAndMetadata
+struct PasswordAndMetadata {
   mojo_base.mojom.String16 password;
   string realm;
+  bool uses_account_store;
 };
 
 // autofill::PasswordFormFillData
@@ -197,7 +200,8 @@ struct PasswordFormFillData {
   FormFieldData password_field;
   bool username_may_use_prefilled_placeholder;
   string preferred_realm;
-  map<mojo_base.mojom.String16, PasswordAndRealm> additional_logins;
+  bool uses_account_store;
+  map<mojo_base.mojom.String16, PasswordAndMetadata> additional_logins;
   bool wait_for_username;
   bool has_renderer_ids;
 };
@@ -216,7 +220,7 @@ struct PasswordGenerationUIData {
   uint32 generation_element_id;
   bool is_generation_element_password_type;
   mojo_base.mojom.TextDirection text_direction;
-  PasswordForm password_form;
+  FormData form_data;
 };
 
 // autofill::ValueElementPair
@@ -278,7 +282,6 @@ struct PasswordForm {
   mojo_base.mojom.String16 new_password_value;
   bool new_password_marked_by_site;
   mojo_base.mojom.String16 confirmation_password_element;
-  bool preferred;
   mojo_base.mojom.Time date_created;
   mojo_base.mojom.Time date_synced;
   bool blacklisted_by_user;

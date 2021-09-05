@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -40,12 +41,11 @@ void VerifyPowerStateInChildProcess(mojom::PowerMonitorTest* power_monitor_test,
                                     bool expected_state) {
   base::RunLoop run_loop;
   power_monitor_test->QueryNextState(base::BindOnce(
-      [](const base::Closure& quit, bool expected_state,
-         bool on_battery_power) {
+      [](base::RunLoop* loop, bool expected_state, bool on_battery_power) {
         EXPECT_EQ(expected_state, on_battery_power);
-        quit.Run();
+        loop->Quit();
       },
-      run_loop.QuitClosure(), expected_state));
+      &run_loop, expected_state));
   run_loop.Run();
 }
 
@@ -56,7 +56,7 @@ void StartUtilityProcessOnIOThread(
   host->SetName(base::ASCIIToUTF16("TestProcess"));
   EXPECT_TRUE(host->Start());
 
-  BindInterface(host, std::move(receiver));
+  host->GetChildProcess()->BindReceiver(std::move(receiver));
 }
 
 void BindInterfaceForGpuOnIOThread(
@@ -175,7 +175,7 @@ class PowerMonitorTest : public ContentBrowserTest {
  protected:
   void StartUtilityProcess(
       mojo::Remote<mojom::PowerMonitorTest>* power_monitor_test,
-      base::Closure utility_bound_closure) {
+      base::OnceClosure utility_bound_closure) {
     utility_bound_closure_ = std::move(utility_bound_closure);
     base::PostTask(
         FROM_HERE, {BrowserThread::IO},
@@ -183,11 +183,11 @@ class PowerMonitorTest : public ContentBrowserTest {
                        power_monitor_test->BindNewPipeAndPassReceiver()));
   }
 
-  void set_renderer_bound_closure(base::Closure closure) {
+  void set_renderer_bound_closure(base::OnceClosure closure) {
     renderer_bound_closure_ = std::move(closure);
   }
 
-  void set_gpu_bound_closure(base::Closure closure) {
+  void set_gpu_bound_closure(base::OnceClosure closure) {
     gpu_bound_closure_ = std::move(closure);
   }
 
@@ -220,16 +220,14 @@ IN_PROC_BROWSER_TEST_F(PowerMonitorTest, TestRendererProcess) {
   run_loop.Run();
   EXPECT_EQ(1, request_count_from_renderer());
 
-  mojo::PendingRemote<mojom::PowerMonitorTest> pending_power_monitor_renderer;
+  mojo::Remote<mojom::PowerMonitorTest> power_monitor_renderer;
   RenderProcessHost* rph =
       shell()->web_contents()->GetMainFrame()->GetProcess();
-  BindInterface(rph, &pending_power_monitor_renderer);
+  rph->BindReceiver(power_monitor_renderer.BindNewPipeAndPassReceiver());
 
   // Ensure that the PowerMonitorTestImpl instance has been created and is
   // observing power state changes in the child process before simulating a
   // power state change.
-  mojo::Remote<mojom::PowerMonitorTest> power_monitor_renderer(
-      std::move(pending_power_monitor_renderer));
   power_monitor_renderer.FlushForTesting();
 
   SimulatePowerStateChange(true);

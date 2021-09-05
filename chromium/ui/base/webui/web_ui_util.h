@@ -20,6 +20,11 @@ class SkBitmap;
 
 namespace webui {
 
+struct LocalizedString {
+  const char* name;
+  int id;
+};
+
 // Convenience routine to convert SkBitmap object to data url
 // so that it can be used in WebUI.
 UI_BASE_EXPORT std::string GetBitmapDataUrl(const SkBitmap& bitmap);
@@ -83,6 +88,7 @@ UI_BASE_EXPORT std::string GetWebUiCssTextDefaultsMd();
 // inline stylesheet.
 UI_BASE_EXPORT void AppendWebUiCssTextDefaults(std::string* html);
 
+UI_BASE_EXPORT std::string GetA11yEnhanced();
 // Get some common font styles for all of WebUI.
 UI_BASE_EXPORT std::string GetFontFamily();
 UI_BASE_EXPORT std::string GetFontSize();

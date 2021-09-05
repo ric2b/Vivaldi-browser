@@ -7,8 +7,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
+#include "base/test/task_environment.h"
 #include "dbus/message.h"
 #include "dbus/mock_bus.h"
 #include "dbus/object_path.h"
@@ -22,10 +22,7 @@ using ::testing::Unused;
 
 namespace chromeos {
 
-ServiceProviderTestHelper::ServiceProviderTestHelper() {
-  if (!base::MessageLoopCurrent::Get())
-    message_loop_.reset(new base::MessageLoop());
-}
+ServiceProviderTestHelper::ServiceProviderTestHelper() = default;
 
 ServiceProviderTestHelper::~ServiceProviderTestHelper() = default;
 
@@ -75,9 +72,9 @@ void ServiceProviderTestHelper::SetUp(
 
 void ServiceProviderTestHelper::TearDown() {
   mock_bus_->ShutdownAndBlock();
-  mock_exported_object_ = NULL;
-  mock_object_proxy_ = NULL;
-  mock_bus_ = NULL;
+  mock_exported_object_.reset();
+  mock_object_proxy_.reset();
+  mock_bus_.reset();
 }
 
 void ServiceProviderTestHelper::SetUpReturnSignal(
@@ -114,7 +111,7 @@ void ServiceProviderTestHelper::MockExportMethod(
     dbus::ExportedObject::MethodCallCallback method_callback,
     dbus::ExportedObject::OnExportedCallback on_exported_callback) {
   // Tell the call back that the method is exported successfully.
-  on_exported_callback.Run(interface_name, method_name, true);
+  std::move(on_exported_callback).Run(interface_name, method_name, true);
   // Capture the callback, so we can run this at a later time.
   if (method_name == exported_method_name_) {
     method_callback_ = method_callback;
@@ -132,8 +129,8 @@ std::unique_ptr<dbus::Response> ServiceProviderTestHelper::CallMethodAndBlock(
   // will be received by |on_signal_callback_|.
   std::unique_ptr<dbus::Response> response;
   method_callback_.Run(method_call,
-                       base::Bind(&ServiceProviderTestHelper::OnResponse,
-                                  base::Unretained(this), &response));
+                       base::BindOnce(&ServiceProviderTestHelper::OnResponse,
+                                      base::Unretained(this), &response));
   // Check for a response.
   if (!response)
     base::RunLoop().Run();

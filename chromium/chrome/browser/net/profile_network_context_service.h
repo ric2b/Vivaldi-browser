@@ -6,8 +6,10 @@
 #define CHROME_BROWSER_NET_PROFILE_NETWORK_CONTEXT_SERVICE_H_
 
 #include <memory>
+#include <string>
 #include <utility>
 
+#include "base/callback_forward.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -28,6 +30,20 @@
 class PrefRegistrySimple;
 class Profile;
 class TrialComparisonCertVerifierController;
+
+namespace net {
+class ClientCertStore;
+
+// Enum that specifies which profiles are allowed to do
+// ambient authentication.
+enum class AmbientAuthAllowedProfileTypes {
+  REGULAR_ONLY = 0,
+  INCOGNITO_AND_REGULAR = 1,
+  GUEST_AND_REGULAR = 2,
+  ALL = 3,
+};
+
+}  // namespace net
 
 namespace user_prefs {
 class PrefRegistrySyncable;
@@ -70,6 +86,15 @@ class ProfileNetworkContextService
 
   static void SetDiscardDomainReliabilityUploadsForTesting(bool value);
 
+  void set_client_cert_store_factory_for_testing(
+      base::RepeatingCallback<std::unique_ptr<net::ClientCertStore>()>
+          factory) {
+    client_cert_store_factory_ = std::move(factory);
+  }
+
+  // Get platform ClientCertStore. May return nullptr.
+  std::unique_ptr<net::ClientCertStore> CreateClientCertStore();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(ProfileNetworkContextServiceBrowsertest,
                            DefaultCacheSize);
@@ -79,15 +104,14 @@ class ProfileNetworkContextService
       ProfileNetworkContextServiceCertVerifierBuiltinFeaturePolicyTest,
       Test);
 
+  friend class AmbientAuthenticationTestHelper;
+
   // Checks |quic_allowed_|, and disables QUIC if needed.
   void DisableQuicIfNotAllowed();
 
   // Forwards changes to |pref_accept_language_| to the NetworkContext, after
   // formatting them as appropriate.
   void UpdateAcceptLanguage();
-
-  // Forwards changes to |block_third_party_cookies_| to the NetworkContext.
-  void UpdateBlockThirdPartyCookies();
 
   // Computes appropriate value of Accept-Language header based on
   // |pref_accept_language_|
@@ -106,6 +130,9 @@ class ProfileNetworkContextService
 
   // Update the CORS mitigation list for the all of profiles_'s NetworkContexts.
   void UpdateCorsMitigationList();
+
+  bool ShouldSplitAuthCacheByNetworkIsolationKey() const;
+  void UpdateSplitAuthCacheByNetworkIsolationKey();
 
   // Creates parameters for the NetworkContext. Use |in_memory| instead of
   // |profile_->IsOffTheRecord()| because sometimes normal profiles want off the
@@ -151,6 +178,10 @@ class ProfileNetworkContextService
   std::unique_ptr<TrialComparisonCertVerifierController>
       trial_comparison_cert_verifier_controller_;
 #endif
+
+  // Used for testing.
+  base::RepeatingCallback<std::unique_ptr<net::ClientCertStore>()>
+      client_cert_store_factory_;
 
 #if defined(OS_CHROMEOS)
   bool using_builtin_cert_verifier_;

@@ -53,6 +53,9 @@ extern const char kKeyUsername[];
 extern const char kKeyDomain[];
 extern const char kKeyExitCode[];
 
+// AD attributes related to the device.
+extern const char kKeyIsAdJoinedUser[];
+
 // Name of registry value that holds user properties.
 extern const wchar_t kUserTokenHandle[];
 extern const wchar_t kUserEmail[];
@@ -72,6 +75,8 @@ extern const wchar_t kDesktopFullName[];
 // Google Update related registry paths.
 extern const wchar_t kRegUpdaterClientStateAppPath[];
 extern const wchar_t kRegUpdaterClientsAppPath[];
+extern const wchar_t kRegUninstallStringField[];
+extern const wchar_t kRegUninstallArgumentsField[];
 extern const wchar_t kRegUsageStatsName[];
 
 // These are command line switches passed to chrome to start it as a process
@@ -82,6 +87,7 @@ extern const char kEmailDomainsSwitch[];
 extern const char kGaiaIdSwitch[];
 extern const char kGcpwEndpointPathSwitch[];
 extern const char kGcpwAdditionalOauthScopes[];
+extern const char kShowTosSwitch[];
 
 // Parameter appended to sign in URL to pass valid signin domains to the inline
 // login handler. These domains are separated by ','.
@@ -90,8 +96,13 @@ extern const char kEmailDomainsSeparator[];
 extern const char kValidateGaiaIdSigninPromoParameter[];
 extern const char kGcpwEndpointPathPromoParameter[];
 
-// Crashpad related constants
+// Crashpad related constants.
 extern const wchar_t kRunAsCrashpadHandlerEntryPoint[];
+
+// Flags to manipulate behavior of Chrome when importing credentials for the
+// account signs in through GCPW.
+extern const wchar_t kAllowImportOnlyOnFirstRun[];
+extern const wchar_t kAllowImportWhenPrimaryAccountExists[];
 
 // HKCU account information path in the hive of the OS user.
 extern const wchar_t kRegHkcuAccountsPath[];

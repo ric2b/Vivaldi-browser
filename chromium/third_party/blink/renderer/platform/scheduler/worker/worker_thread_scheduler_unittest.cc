@@ -78,7 +78,7 @@ class WorkerThreadSchedulerForTest : public WorkerThreadScheduler {
   WorkerThreadSchedulerForTest(base::sequence_manager::SequenceManager* manager,
                                const base::TickClock* clock_,
                                Vector<String>* timeline)
-      : WorkerThreadScheduler(WebThreadType::kTestThread, manager, nullptr),
+      : WorkerThreadScheduler(ThreadType::kTestThread, manager, nullptr),
         clock_(clock_),
         timeline_(timeline) {}
 
@@ -86,7 +86,7 @@ class WorkerThreadSchedulerForTest : public WorkerThreadScheduler {
                                const base::TickClock* clock_,
                                Vector<String>* timeline,
                                WorkerSchedulerProxy* proxy)
-      : WorkerThreadScheduler(WebThreadType::kTestThread, manager, proxy),
+      : WorkerThreadScheduler(ThreadType::kTestThread, manager, proxy),
         clock_(clock_),
         timeline_(timeline) {}
 
@@ -464,6 +464,10 @@ class FrameSchedulerDelegateWithUkmSourceId : public FrameScheduler::Delegate {
 
   void UpdateActiveSchedulerTrackedFeatures(uint64_t features_mask) override {}
 
+  const base::UnguessableToken& GetAgentClusterId() const override {
+    return base::UnguessableToken::Null();
+  }
+
  private:
   ukm::SourceId source_id_;
 };
@@ -486,10 +490,10 @@ class WorkerThreadSchedulerWithProxyTest : public testing::Test {
     frame_scheduler_ = FakeFrameScheduler::Builder()
                            .SetIsPageVisible(false)
                            .SetFrameType(FrameScheduler::FrameType::kSubframe)
-                           .SetIsCrossOrigin(true)
+                           .SetIsCrossOriginToMainFrame(true)
                            .SetDelegate(frame_scheduler_delegate_.get())
                            .Build();
-    frame_scheduler_->SetCrossOrigin(true);
+    frame_scheduler_->SetCrossOriginToMainFrame(true);
 
     worker_scheduler_proxy_ =
         std::make_unique<WorkerSchedulerProxy>(frame_scheduler_.get());
@@ -549,7 +553,7 @@ TEST_F(WorkerThreadSchedulerWithProxyTest, UkmTaskRecording) {
   EXPECT_EQ(entries.size(), static_cast<size_t>(1));
 
   ukm::TestUkmRecorder::ExpectEntryMetric(
-      entries[0], "ThreadType", static_cast<int>(WebThreadType::kTestThread));
+      entries[0], "ThreadType", static_cast<int>(ThreadType::kTestThread));
   ukm::TestUkmRecorder::ExpectEntryMetric(entries[0], "RendererBackgrounded",
                                           true);
   ukm::TestUkmRecorder::ExpectEntryMetric(

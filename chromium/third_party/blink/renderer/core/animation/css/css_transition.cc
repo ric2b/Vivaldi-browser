@@ -4,25 +4,40 @@
 
 #include "third_party/blink/renderer/core/animation/css/css_transition.h"
 
-namespace blink {
+#include "third_party/blink/renderer/core/animation/css/css_animations.h"
+#include "third_party/blink/renderer/core/animation/keyframe_effect.h"
+#include "third_party/blink/renderer/core/dom/document.h"
 
-CSSTransition* CSSTransition::Create(AnimationEffect* effect,
-                                     AnimationTimeline* timeline,
-                                     const PropertyHandle& property) {
-  DCHECK(timeline && timeline->IsDocumentTimeline());
-  return MakeGarbageCollected<CSSTransition>(
-      timeline->GetDocument()->ContextDocument(), timeline, effect, property);
-}
+namespace blink {
 
 CSSTransition::CSSTransition(ExecutionContext* execution_context,
                              AnimationTimeline* timeline,
                              AnimationEffect* content,
                              const PropertyHandle& transition_property)
     : Animation(execution_context, timeline, content),
-      transition_property_(transition_property) {}
+      transition_property_(transition_property) {
+  // The owning_element does not always equal to the target element of an
+  // animation.
+  owning_element_ = To<KeyframeEffect>(effect())->target();
+}
 
 AtomicString CSSTransition::transitionProperty() const {
   return transition_property_.GetCSSPropertyName().ToAtomicString();
+}
+
+String CSSTransition::playState() const {
+  // TODO(1043778): Flush is likely not required once the CSSTransition is
+  // disassociated from its owning element.
+  if (GetDocument())
+    GetDocument()->UpdateStyleAndLayoutTree();
+  return Animation::playState();
+}
+
+AnimationEffect::EventDelegate* CSSTransition::CreateEventDelegate(
+    Element* target,
+    const AnimationEffect::EventDelegate* old_event_delegate) {
+  return CSSAnimations::CreateEventDelegate(target, transition_property_,
+                                            old_event_delegate);
 }
 
 }  // namespace blink

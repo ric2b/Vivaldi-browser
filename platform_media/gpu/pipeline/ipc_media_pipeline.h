@@ -11,10 +11,11 @@
 #include "platform_media/common/feature_toggles.h"
 
 #include "platform_media/common/platform_media_pipeline_types.h"
-#include "platform_media/gpu/pipeline/platform_media_pipeline.h"
+#include "platform_media/gpu/data_source/ipc_data_source_impl.h"
+#include "platform_media/gpu/pipeline/ipc_decoding_buffer.h"
 
-#include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/threading/thread_checker.h"
 #include "ipc/ipc_listener.h"
 
@@ -36,6 +37,7 @@ namespace media {
 
 class IPCDataSourceImpl;
 class PlatformMediaPipeline;
+class PlatformMediaPipelineFactory;
 
 // The IPC-facing participant of the media decoding implementation in the GPU
 // process.  It owns a PlatformMediaPipeline and uses it to handle media
@@ -45,8 +47,8 @@ class PlatformMediaPipeline;
 class IPCMediaPipeline : public IPC::Listener {
  public:
   IPCMediaPipeline(IPC::Sender* channel,
-                   int32_t routing_id
-                   );
+                   int32_t routing_id,
+                   PlatformMediaPipelineFactory* pipeline_factory);
   ~IPCMediaPipeline() override;
 
   // IPC::Listener implementation.
@@ -74,15 +76,14 @@ class IPCMediaPipeline : public IPC::Listener {
                    const PlatformAudioConfig& audio_config,
                    const PlatformVideoConfig& video_config);
 
-  void OnBufferForDecodedDataReady(PlatformMediaDataType type,
-                                   size_t buffer_size,
-                                   base::SharedMemoryHandle handle);
-  void DecodedDataReady(PlatformMediaDataType type,
-                        const scoped_refptr<DataBuffer>& buffer);
-  void DecodedDataReadyImpl(PlatformMediaDataType type,
-                            const scoped_refptr<DataBuffer>& buffer);
-  void OnAudioConfigChanged(const PlatformAudioConfig& audio_config);
-  void OnVideoConfigChanged(const PlatformVideoConfig& video_config);
+  void DecodedDataReady(IPCDecodingBuffer buffer);
+
+  // The method is static so we can call the callback with an error status after
+  // the week pointer to the pipeline becomes null.
+  static void ReadRawData(base::WeakPtr<IPCMediaPipeline> pipeline,
+                          int64_t position,
+                          int size,
+                          ipc_data_source::ReadCB read_cb);
 
   void OnWillSeek();
   void OnSeek(base::TimeDelta time);
@@ -92,21 +93,18 @@ class IPCMediaPipeline : public IPC::Listener {
 
   void OnReadDecodedData(PlatformMediaDataType type);
 
-  void SendAudioData(MediaDataStatus status,
-                     base::TimeDelta timestamp,
-                     base::TimeDelta duration);
-
   bool has_media_type(PlatformMediaDataType type) const {
-    DCHECK_LT(type, PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT);
+    DCHECK_LT(type, kPlatformMediaDataTypeCount);
     return has_media_type_[type];
   }
 
   State state_;
 
-  bool has_media_type_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+  bool has_media_type_[kPlatformMediaDataTypeCount];
 
   IPC::Sender* const channel_;
   const int32_t routing_id_;
+  PlatformMediaPipelineFactory* const pipeline_factory_;
 
   std::unique_ptr<IPCDataSourceImpl> data_source_;
   std::unique_ptr<PlatformMediaPipeline> media_pipeline_;
@@ -115,13 +113,7 @@ class IPCMediaPipeline : public IPC::Listener {
 
   // A buffer for decoded media data, shared with the render process.  Filled in
   // the GPU process, consumed in the renderer process.
-  std::unique_ptr<base::SharedMemory>
-      shared_decoded_data_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
-
-  // Holding place for decoded media data when it didn't fit into shared buffer
-  // or such buffer is not ready.
-  scoped_refptr<DataBuffer>
-      pending_output_buffers_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+  IPCDecodingBuffer ipc_decoding_buffers_[kPlatformMediaDataTypeCount];
 
   base::WeakPtrFactory<IPCMediaPipeline> weak_ptr_factory_;
 

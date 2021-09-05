@@ -14,6 +14,11 @@ const char kDebugVivaldi[] = "debug-vivaldi";
 const char kDisableVivaldi[] = "disable-vivaldi";
 const char kRunningVivaldi[] = "running-vivaldi";
 
+// Use this on Mac to force a particular media pipeline implementation. The
+// alloweed values are player to force older AVPlayer based code and reader to
+// select newer AVAssetReader.
+const char kVivaldiPlatformMedia[] = "platform-media";
+
 // Specifies a custom URL for an appcast.xml file to be used for testing
 // auto updates. This switch is for internal use only and the switch name is
 // pseudonymous and hard to guess due to security reasons.

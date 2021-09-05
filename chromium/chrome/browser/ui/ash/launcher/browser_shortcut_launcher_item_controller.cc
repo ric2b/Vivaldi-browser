@@ -16,7 +16,7 @@
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
-#include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
+#include "chrome/browser/ui/ash/launcher/shelf_context_menu.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -39,6 +39,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
+#include "ui/events/types/event_type.h"
 #include "ui/gfx/image/image.h"
 
 namespace {
@@ -179,9 +180,14 @@ void BrowserShortcutLauncherItemController::SetShelfIDForBrowserWindowContents(
     return;
   }
 
-  const ash::ShelfID shelf_id =
-      ChromeLauncherController::instance()->GetShelfIDForWebContents(
+  const std::string app_id =
+      ChromeLauncherController::instance()->GetAppIDForWebContents(
           web_contents);
+  browser->window()->GetNativeWindow()->SetProperty(ash::kAppIDKey,
+                                                    new std::string(app_id));
+
+  const ash::ShelfID shelf_id =
+      ChromeLauncherController::instance()->GetShelfIDForAppId(app_id);
   browser->window()->GetNativeWindow()->SetProperty(
       ash::kShelfIDKey, new std::string(shelf_id.Serialize()));
 }
@@ -276,7 +282,7 @@ void BrowserShortcutLauncherItemController::GetContextMenu(
     GetContextMenuCallback callback) {
   ChromeLauncherController* controller = ChromeLauncherController::instance();
   const ash::ShelfItem* item = controller->GetItem(shelf_id());
-  context_menu_ = LauncherContextMenu::Create(controller, item, display_id);
+  context_menu_ = ShelfContextMenu::Create(controller, item, display_id);
   context_menu_->GetMenuModel(std::move(callback));
 }
 

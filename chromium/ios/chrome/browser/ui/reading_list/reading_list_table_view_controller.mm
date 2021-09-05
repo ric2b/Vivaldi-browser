@@ -15,6 +15,7 @@
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/list_model/list_item+Controller.h"
 #import "ios/chrome/browser/ui/reading_list/empty_reading_list_message_util.h"
+#import "ios/chrome/browser/ui/reading_list/reading_list_constants.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_data_sink.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_data_source.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_list_item_updater.h"
@@ -83,7 +84,6 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 // Whether the table view is being edited by the swipe-to-delete button.
 @property(nonatomic, readonly, getter=isEditingWithSwipe) BOOL editingWithSwipe;
 // Whether to remove empty sections after editing is reset to NO.
-// TODO (crbug.com/1010836): remove when dropping iOS 12.
 @property(nonatomic, assign) BOOL needsSectionCleanupAfterEditing;
 
 @end
@@ -102,8 +102,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 @synthesize needsSectionCleanupAfterEditing = _needsSectionCleanupAfterEditing;
 
 - (instancetype)init {
-  self = [super initWithTableViewStyle:UITableViewStylePlain
-                           appBarStyle:ChromeTableViewControllerStyleNoAppBar];
+  self = [super initWithStyle:UITableViewStylePlain];
   if (self) {
     _toolbarManager = [[ReadingListToolbarButtonManager alloc] init];
     _toolbarManager.commandHandler = self;
@@ -189,7 +188,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 }
 
 + (NSString*)accessibilityIdentifier {
-  return @"ReadingListTableView";
+  return kReadingListViewID;
 }
 
 #pragma mark - UIViewController
@@ -208,9 +207,6 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   self.tableView.allowsMultipleSelection = YES;
   // Add a tableFooterView in order to disable separators at the bottom of the
   // tableView.
-  // TODO(crbug.com/863606): Remove this workaround when iOS10 is no longer
-  // supported, as it is not necessary in iOS 11.
-  self.tableView.tableFooterView = [[UIView alloc] init];
 
   // Add gesture recognizer for the context menu.
   UILongPressGestureRecognizer* longPressRecognizer =
@@ -244,21 +240,14 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   DCHECK_EQ(editingStyle, UITableViewCellEditingStyleDelete);
   base::RecordAction(base::UserMetricsAction("MobileReadingListDeleteEntry"));
 
-  if (@available(iOS 13, *)) {
-    [self deleteItemsAtIndexPaths:@[ indexPath ]
-                       endEditing:YES
-              removeEmptySections:YES];
-  } else {
-    // On IOS 12, the UIKit animation for the swipe-to-delete gesture throws an
-    // exception if the section of the deleted item is removed before the
-    // animation is finished. To prevent this from happening, record that
-    // cleanup is needed and remove the section when self.tableView.editing is
-    // reset to NO when the animation finishes.
-    self.needsSectionCleanupAfterEditing = YES;
-    [self deleteItemsAtIndexPaths:@[ indexPath ]
-                       endEditing:NO
-              removeEmptySections:NO];
-  }
+  // On IOS 12, the UIKit animation for the swipe-to-delete gesture throws an
+  // exception if the section of the deleted item is removed before the
+  // animation is finished. This is still needed on IOS 13 to prevent displaying
+  // Cancel and Mark all buttons, see crbug.com/1022763.
+  self.needsSectionCleanupAfterEditing = YES;
+  [self deleteItemsAtIndexPaths:@[ indexPath ]
+                     endEditing:NO
+            removeEmptySections:NO];
 }
 
 #pragma mark - UITableViewDelegate
@@ -303,6 +292,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 
 - (void)presentationControllerDidDismiss:
     (UIPresentationController*)presentationController {
+  base::RecordAction(base::UserMetricsAction("IOSReadingListCloseWithSwipe"));
   // Call the delegate dismissReadingListListViewController to clean up state
   // and stop the Coordinator.
   [self.delegate dismissReadingListListViewController:self];
@@ -787,9 +777,9 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     [self.dataSource removeEntryFromItem:item];
   };
   [self updateItemsAtIndexPaths:indexPaths withItemUpdater:updater];
-  if (endEditing)
+  if (endEditing) {
     [self exitEditingModeAnimated:YES];
-
+  }
   // Update the model and table view for the deleted items.
   UITableView* tableView = self.tableView;
   NSArray* sortedIndexPaths =

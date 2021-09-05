@@ -29,7 +29,7 @@ class ToughCanvasPage(rendering_story.RenderingStory):
 
   def RunPageInteractions(self, action_runner):
     with action_runner.CreateInteraction('CanvasAnimation'):
-      action_runner.Wait(5)
+      action_runner.Wait(10)
 
 
 class MicrosoftFirefliesPage(ToughCanvasPage):
@@ -46,6 +46,7 @@ class GeoAPIsPage(ToughCanvasPage):
 class RunwayPage(ToughCanvasPage):
   BASE_NAME = 'runway'
   URL = 'http://runway.countlessprojects.com/prototype/performance_test.html'
+  YEAR = '2019'
   TAGS = ToughCanvasPage.TAGS + [story_tags.REPRESENTATIVE_WIN_DESKTOP]
 
 
@@ -207,10 +208,6 @@ class BouncingClippedRectanglesPage(ToughCanvasPage):
   BASE_NAME = 'bouncing_clipped_rectangles'
   # pylint: disable=line-too-long
   URL = 'file://../tough_canvas_cases/rendering_throughput/bouncing_clipped_rectangles.html'
-  TAGS = ToughCanvasPage.TAGS + [
-    story_tags.REPRESENTATIVE_MOBILE,
-    story_tags.REPRESENTATIVE_MAC_DESKTOP
-  ]
 
 
 class BouncingGradientCirclesPage(ToughCanvasPage):

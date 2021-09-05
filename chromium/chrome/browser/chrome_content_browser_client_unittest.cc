@@ -20,12 +20,14 @@
 #include "build/build_config.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+#include "chrome/browser/captive_portal/captive_portal_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/common/webui_url_constants.h"
+#include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/captive_portal/core/buildflags.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/variations/entropy_provider.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
@@ -38,6 +40,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/mock_render_process_host.h"
 #include "media/media_buildflags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -51,6 +54,10 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/search_test_utils.h"
+#endif
+
+#if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
+#include "components/captive_portal/content/captive_portal_tab_helper.h"
 #endif
 
 using content::BrowsingDataFilterBuilder;
@@ -89,14 +96,7 @@ void CheckUserAgentStringOrdering(bool mobile_device) {
       buffer, " Safari/", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   ASSERT_EQ(2u, pieces.size());
   std::string product_str = pieces[0];
-
-  buffer = pieces[1];
-  pieces = base::SplitStringUsingSubstr(
-      buffer, " Vivaldi/", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  ASSERT_EQ(2u, pieces.size());
-
-  std::string safari_version_str = pieces[0];
-  std::string vivaldi_version_str = pieces[1];
+  std::string safari_version_str = pieces[1];
 
   // Not sure what can be done to better check the OS string, since it's highly
   // platform-dependent.
@@ -237,8 +237,7 @@ class BlinkSettingsFieldTrialTest : public testing::Test {
   static const char kFakeGroupName[];
 
   BlinkSettingsFieldTrialTest()
-      : trial_list_(NULL),
-        command_line_(base::CommandLine::NO_PROGRAM) {}
+      : command_line_(base::CommandLine::NO_PROGRAM) {}
 
   void SetUp() override {
     command_line_.AppendSwitchASCII(
@@ -281,7 +280,6 @@ class BlinkSettingsFieldTrialTest : public testing::Test {
   static const int kFakeChildProcessId = 1;
 
   ChromeContentBrowserClient client_;
-  base::FieldTrialList trial_list_;
   base::CommandLine command_line_;
 
   content::BrowserTaskEnvironment task_environment_;
@@ -326,12 +324,6 @@ namespace content {
 
 class InstantNTPURLRewriteTest : public BrowserWithTestWindowTest {
  protected:
-  void SetUp() override {
-    BrowserWithTestWindowTest::SetUp();
-    field_trial_list_.reset(new base::FieldTrialList(
-        std::make_unique<variations::SHA1EntropyProvider>("42")));
-  }
-
   void InstallTemplateURLWithNewTabPage(GURL new_tab_page_url) {
     TemplateURLServiceFactory::GetInstance()->SetTestingFactoryAndUse(
         profile(),
@@ -348,8 +340,6 @@ class InstantNTPURLRewriteTest : public BrowserWithTestWindowTest {
         template_url_service->Add(std::make_unique<TemplateURL>(data));
     template_url_service->SetUserSelectedDefaultSearchProvider(template_url);
   }
-
-  std::unique_ptr<base::FieldTrialList> field_trial_list_;
 };
 
 TEST_F(InstantNTPURLRewriteTest, UberURLHandler_InstantExtendedNewTabPage) {
@@ -454,7 +444,9 @@ TEST(ChromeContentBrowserClientTest, UserAgentStringFrozen) {
   {
     ChromeContentBrowserClient content_browser_client;
     std::string buffer = content_browser_client.GetUserAgent();
-    EXPECT_EQ(buffer, content::frozen_user_agent_strings::kAndroid);
+    EXPECT_EQ(buffer, base::StringPrintf(
+                          content::frozen_user_agent_strings::kAndroid,
+                          version_info::GetMajorVersionNumber().c_str()));
   }
 
   // Verify the mobile user agent string is returned when using a mobile user
@@ -464,13 +456,17 @@ TEST(ChromeContentBrowserClientTest, UserAgentStringFrozen) {
   {
     ChromeContentBrowserClient content_browser_client;
     std::string buffer = content_browser_client.GetUserAgent();
-    EXPECT_EQ(buffer, content::frozen_user_agent_strings::kAndroidMobile);
+    EXPECT_EQ(buffer, base::StringPrintf(
+                          content::frozen_user_agent_strings::kAndroidMobile,
+                          version_info::GetMajorVersionNumber().c_str()));
   }
 #else
   {
     ChromeContentBrowserClient content_browser_client;
     std::string buffer = content_browser_client.GetUserAgent();
-    EXPECT_EQ(buffer, content::frozen_user_agent_strings::kDesktop);
+    EXPECT_EQ(buffer, base::StringPrintf(
+                          content::frozen_user_agent_strings::kDesktop,
+                          version_info::GetMajorVersionNumber().c_str()));
   }
 #endif
 }
@@ -503,6 +499,92 @@ TEST(ChromeContentBrowserClientTest, UserAgentMetadata) {
   EXPECT_EQ(metadata.full_version, version_info::GetVersionNumber());
   EXPECT_EQ(metadata.major_version, version_info::GetMajorVersionNumber());
   EXPECT_EQ(metadata.platform, version_info::GetOSType());
-  EXPECT_EQ(metadata.architecture, "");
-  EXPECT_EQ(metadata.model, "");
+  EXPECT_EQ(metadata.architecture, content::BuildCpuInfo());
+  EXPECT_EQ(metadata.model, content::BuildModelInfo());
 }
+
+class CaptivePortalCheckProcessHost : public content::MockRenderProcessHost {
+ public:
+  explicit CaptivePortalCheckProcessHost(
+      content::BrowserContext* browser_context)
+      : MockRenderProcessHost(browser_context) {}
+
+  void CreateURLLoaderFactory(
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
+      network::mojom::URLLoaderFactoryParamsPtr params) override {
+    *invoked_url_factory_ = true;
+    DCHECK_EQ(expected_disable_secure_dns_, params->disable_secure_dns);
+  }
+
+  void SetupForTracking(bool* invoked_url_factory,
+                        bool expected_disable_secure_dns) {
+    invoked_url_factory_ = invoked_url_factory;
+    expected_disable_secure_dns_ = expected_disable_secure_dns;
+  }
+
+ private:
+  bool* invoked_url_factory_ = nullptr;
+  bool expected_disable_secure_dns_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(CaptivePortalCheckProcessHost);
+};
+
+class CaptivePortalCheckRenderProcessHostFactory
+    : public content::RenderProcessHostFactory {
+ public:
+  CaptivePortalCheckRenderProcessHostFactory() = default;
+
+  content::RenderProcessHost* CreateRenderProcessHost(
+      content::BrowserContext* browser_context,
+      content::SiteInstance* site_instance) override {
+    rph_ = new CaptivePortalCheckProcessHost(browser_context);
+    return rph_;
+  }
+
+  void SetupForTracking(bool* invoked_url_factory,
+                        bool expected_disable_secure_dns) {
+    rph_->SetupForTracking(invoked_url_factory, expected_disable_secure_dns);
+  }
+
+ private:
+  CaptivePortalCheckProcessHost* rph_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(CaptivePortalCheckRenderProcessHostFactory);
+};
+
+class ChromeContentBrowserClientCaptivePortalBrowserTest
+    : public ChromeRenderViewHostTestHarness {
+ public:
+ protected:
+  void SetUp() override {
+    SetRenderProcessHostFactory(&cp_rph_factory_);
+    ChromeRenderViewHostTestHarness::SetUp();
+  }
+
+  CaptivePortalCheckRenderProcessHostFactory cp_rph_factory_;
+};
+
+TEST_F(ChromeContentBrowserClientCaptivePortalBrowserTest,
+       NotCaptivePortalWindow) {
+  bool invoked_url_factory = false;
+  cp_rph_factory_.SetupForTracking(&invoked_url_factory,
+                                   false /* expected_disable_secure_dns */);
+  NavigateAndCommit(GURL("https://www.google.com"), ui::PAGE_TRANSITION_LINK);
+  EXPECT_TRUE(invoked_url_factory);
+}
+
+#if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
+TEST_F(ChromeContentBrowserClientCaptivePortalBrowserTest,
+       CaptivePortalWindow) {
+  bool invoked_url_factory = false;
+  cp_rph_factory_.SetupForTracking(&invoked_url_factory,
+                                   true /* expected_disable_secure_dns */);
+  captive_portal::CaptivePortalTabHelper::CreateForWebContents(
+      web_contents(), CaptivePortalServiceFactory::GetForProfile(profile()),
+      base::Callback<void(void)>());
+  captive_portal::CaptivePortalTabHelper::FromWebContents(web_contents())
+      ->set_is_captive_portal_window();
+  NavigateAndCommit(GURL("https://www.google.com"), ui::PAGE_TRANSITION_LINK);
+  EXPECT_TRUE(invoked_url_factory);
+}
+#endif

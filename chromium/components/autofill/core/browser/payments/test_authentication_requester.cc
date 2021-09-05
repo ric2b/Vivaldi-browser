@@ -27,15 +27,25 @@ void TestAuthenticationRequester::OnCVCAuthenticationComplete(
   }
 }
 
+bool TestAuthenticationRequester::ShouldOfferFidoAuth() const {
+  return false;
+}
+
 #if !defined(OS_IOS)
 void TestAuthenticationRequester::OnFIDOAuthenticationComplete(
     bool did_succeed,
-    const CreditCard* card) {
+    const CreditCard* card,
+    const base::string16& cvc) {
   did_succeed_ = did_succeed;
   if (did_succeed_) {
     DCHECK(card);
     number_ = card->number();
   }
+}
+
+void TestAuthenticationRequester::OnFidoAuthorizationComplete(
+    bool did_succeed) {
+  did_succeed_ = did_succeed;
 }
 
 void TestAuthenticationRequester::IsUserVerifiableCallback(

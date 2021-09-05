@@ -30,7 +30,6 @@
 #include "chromeos/components/multidevice/software_feature_state.h"
 #include "chromeos/components/proximity_auth/proximity_auth_local_state_pref_manager.h"
 #include "chromeos/components/proximity_auth/smart_lock_metrics_recorder.h"
-#include "chromeos/components/proximity_auth/switches.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/login/login_state/login_state.h"
@@ -176,8 +175,7 @@ EasyUnlockServiceSignin::EasyUnlockServiceSignin(
     : EasyUnlockService(profile, secure_channel_client),
       account_id_(EmptyAccountId()),
       user_pod_last_focused_timestamp_(base::TimeTicks::Now()),
-      remote_device_cache_(
-          multidevice::RemoteDeviceCache::Factory::Get()->BuildInstance()) {}
+      remote_device_cache_(multidevice::RemoteDeviceCache::Factory::Create()) {}
 
 EasyUnlockServiceSignin::~EasyUnlockServiceSignin() {}
 
@@ -225,10 +223,6 @@ EasyUnlockService::Type EasyUnlockServiceSignin::GetType() const {
 
 AccountId EasyUnlockServiceSignin::GetAccountId() const {
   return account_id_;
-}
-
-void EasyUnlockServiceSignin::ClearPermitAccess() {
-  NOTREACHED();
 }
 
 const base::ListValue* EasyUnlockServiceSignin::GetRemoteDevices() const {
@@ -523,15 +517,19 @@ void EasyUnlockServiceSignin::OnUserDataLoaded(
       PA_LOG(WARNING) << "No BeaconSeeds were loaded.";
     }
 
+    // Values such as the |instance_id| and |name| of the device are not
+    // provided in the device dictionary that is persisted to the TPM during the
+    // user session. However, in this particular scenario, we do not need these
+    // values to safely construct and use the RemoteDevice objects.
     multidevice::RemoteDevice remote_device(
-        account_id.GetUserEmail(), std::string() /* name */,
-        std::string() /* pii_free_name */, decoded_public_key,
-        decoded_psk /* persistent_symmetric_key */,
+        account_id.GetUserEmail(), std::string() /* instance_id */,
+        std::string() /* name */, std::string() /* pii_free_name */,
+        decoded_public_key, decoded_psk /* persistent_symmetric_key */,
         0L /* last_update_time_millis */, software_features, beacon_seeds);
 
     remote_devices.push_back(remote_device);
     PA_LOG(VERBOSE) << "Loaded Remote Device:\n"
-                    << "  user id: " << remote_device.user_id << "\n"
+                    << "  user email: " << remote_device.user_email << "\n"
                     << "  device id: "
                     << multidevice::RemoteDeviceRef::TruncateDeviceIdForLogs(
                            remote_device.GetDeviceId());
@@ -591,9 +589,13 @@ void EasyUnlockServiceSignin::OnUserDataLoaded(
   remote_device_cache_->SetRemoteDevices(remote_devices);
 
   base::Optional<multidevice::RemoteDeviceRef> unlock_key_device =
-      remote_device_cache_->GetRemoteDevice(unlock_key_id);
+      remote_device_cache_->GetRemoteDevice(
+          base::nullopt /* instance_id */,
+          unlock_key_id /* legacy_device_id */);
   base::Optional<multidevice::RemoteDeviceRef> local_device =
-      remote_device_cache_->GetRemoteDevice(local_device_id);
+      remote_device_cache_->GetRemoteDevice(
+          base::nullopt /* instance_id */,
+          local_device_id /* legacy_device_id */);
 
   // TODO(hansberry): It is possible that there may not be an unlock key by this
   // point. If this occurs, it is due to a bug in how device metadata is

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-var FilesMetadataBox = Polymer({
+const FilesMetadataEntry = Polymer({
   is: 'files-metadata-entry',
 
   properties: {
@@ -22,6 +22,25 @@ var FilesMetadataBox = Polymer({
       reflectToAttribute: true,
       value: false,
     },
+
+    /**
+     * True if files-ng is enabled.
+     * @const @type {boolean}
+     * @private
+     */
+    filesNg_: {
+      type: Boolean,
+      value: util.isFilesNg(),
+    }
   },
 
+  /**
+   * On element creation, set the files-ng attribute to enable files-ng
+   * specific CSS styling.
+   */
+  created: function() {
+    if (this.filesNg_) {
+      this.setAttribute('files-ng', '');
+    }
+  },
 });

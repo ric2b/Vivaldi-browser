@@ -7,11 +7,11 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/run_loop.h"
 #include "base/sync_socket.h"
 #include "base/test/task_environment.h"
-#include "media/audio/audio_output_controller.h"
 #include "media/mojo/mojom/audio_data_pipe.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -49,7 +49,7 @@ class TestCancelableSyncSocket : public base::CancelableSyncSocket {
     // closes it. We have to make sure we do not also retain the handle in the
     // sync socket, as the sync socket closes the handle on destruction.
     if (expect_ownership_transfer_)
-      EXPECT_EQ(handle(), kInvalidHandle);
+      EXPECT_FALSE(IsValid());
   }
 
  private:
@@ -104,10 +104,9 @@ class MockClient {
     ASSERT_TRUE(data_pipe->shared_memory.IsValid());
     ASSERT_TRUE(data_pipe->socket.is_valid());
 
-    base::PlatformFile fd;
-    mojo::UnwrapPlatformFile(std::move(data_pipe->socket), &fd);
-    socket_ = std::make_unique<base::CancelableSyncSocket>(fd);
-    EXPECT_NE(socket_->handle(), base::CancelableSyncSocket::kInvalidHandle);
+    socket_ = std::make_unique<base::CancelableSyncSocket>(
+        data_pipe->socket.TakePlatformFile());
+    EXPECT_TRUE(socket_->IsValid());
 
     shared_memory_region_ = std::move(data_pipe->shared_memory);
 

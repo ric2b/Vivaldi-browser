@@ -31,9 +31,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_PEERCONNECTION_RTC_ICE_CANDIDATE_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_PEERCONNECTION_RTC_ICE_CANDIDATE_H_
 
-#include "third_party/blink/public/platform/web_rtc_ice_candidate.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_ice_candidate_platform.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 
 namespace blink {
@@ -51,31 +51,41 @@ class MODULES_EXPORT RTCIceCandidate final : public ScriptWrappable {
   static RTCIceCandidate* Create(ExecutionContext*,
                                  const RTCIceCandidateInit*,
                                  ExceptionState&);
-  static RTCIceCandidate* Create(scoped_refptr<WebRTCICECandidate>);
+  static RTCIceCandidate* Create(RTCIceCandidatePlatform*);
 
-  explicit RTCIceCandidate(scoped_refptr<WebRTCICECandidate>);
+  explicit RTCIceCandidate(RTCIceCandidatePlatform*);
 
   String candidate() const;
   String sdpMid() const;
-  uint16_t sdpMLineIndex(bool& is_null) const;
+  base::Optional<uint16_t> sdpMLineIndex() const;
+  // TODO(crbug.com/1060971): Remove |is_null| version.
+  uint16_t sdpMLineIndex(bool& is_null) const;  // DEPRECATED
   String foundation() const;
   String component() const;
-  uint32_t priority(bool& is_null) const;
+  base::Optional<uint32_t> priority() const;
+  // TODO(crbug.com/1060971): Remove |is_null| version.
+  uint32_t priority(bool& is_null) const;  // DEPRECATED
   String address() const;
   String protocol() const;
-  uint16_t port(bool& is_null) const;
+  base::Optional<uint16_t> port() const;
+  // TODO(crbug.com/1060971): Remove |is_null| version.
+  uint16_t port(bool& is_null) const;  // DEPRECATED
   String type() const;
   String tcpType() const;
   String relatedAddress() const;
-  uint16_t relatedPort(bool& is_null) const;
+  base::Optional<uint16_t> relatedPort() const;
+  // TODO(crbug.com/1060971): Remove |is_null| version.
+  uint16_t relatedPort(bool& is_null) const;  // DEPRECATED
   String usernameFragment() const;
 
   ScriptValue toJSONForBinding(ScriptState*);
 
-  scoped_refptr<WebRTCICECandidate> WebCandidate() const;
+  RTCIceCandidatePlatform* PlatformCandidate() const;
+
+  void Trace(Visitor*) override;
 
  private:
-  scoped_refptr<WebRTCICECandidate> web_candidate_;
+  Member<RTCIceCandidatePlatform> platform_candidate_;
 };
 
 }  // namespace blink

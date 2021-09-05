@@ -22,6 +22,7 @@ ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierScale[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityVirtualKeyboardEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityMonoAudioEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityAutoclickEnabled[];
+ASH_PUBLIC_EXPORT extern const char kAccessibilityShortcutsEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityAutoclickDelayMs[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityAutoclickEventType[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityAutoclickRevertToLeftClick[];
@@ -44,8 +45,14 @@ ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessAutoScanEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessAutoScanSpeedMs[];
 ASH_PUBLIC_EXPORT extern const char
     kAccessibilitySwitchAccessAutoScanKeyboardSpeedMs[];
+ASH_PUBLIC_EXPORT extern const char
+    kAccessibilityTabletModeShelfNavigationButtonsEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityDictationEnabled[];
 ASH_PUBLIC_EXPORT extern const char kShouldAlwaysShowAccessibilityMenu[];
+
+ASH_PUBLIC_EXPORT extern const char kContextualTooltips[];
+
+ASH_PUBLIC_EXPORT extern const char kDesksNamesList[];
 
 ASH_PUBLIC_EXPORT extern const char kDockedMagnifierEnabled[];
 ASH_PUBLIC_EXPORT extern const char kDockedMagnifierScale[];
@@ -64,12 +71,15 @@ ASH_PUBLIC_EXPORT extern const char
 
 ASH_PUBLIC_EXPORT extern const char kDisplayMixedMirrorModeParams[];
 ASH_PUBLIC_EXPORT extern const char kDisplayPowerState[];
+ASH_PUBLIC_EXPORT extern const char kDisplayPrivacyScreenEnabled[];
 ASH_PUBLIC_EXPORT extern const char kDisplayProperties[];
 ASH_PUBLIC_EXPORT extern const char kDisplayRotationLock[];
 ASH_PUBLIC_EXPORT extern const char kDisplayTouchAssociations[];
 ASH_PUBLIC_EXPORT extern const char kDisplayTouchPortAssociations[];
 ASH_PUBLIC_EXPORT extern const char kExternalDisplayMirrorInfo[];
 ASH_PUBLIC_EXPORT extern const char kSecondaryDisplays[];
+
+ASH_PUBLIC_EXPORT extern const char kGestureEducationNotificationShown[];
 
 ASH_PUBLIC_EXPORT extern const char kHasSeenStylus[];
 ASH_PUBLIC_EXPORT extern const char kShownPaletteWelcomeBubble[];
@@ -82,6 +92,7 @@ ASH_PUBLIC_EXPORT extern const char kMessageCenterLockScreenModeShow[];
 ASH_PUBLIC_EXPORT extern const char kMessageCenterLockScreenModeHide[];
 ASH_PUBLIC_EXPORT extern const char kMessageCenterLockScreenModeHideSensitive[];
 
+ASH_PUBLIC_EXPORT extern const char kAmbientColorEnabled[];
 ASH_PUBLIC_EXPORT extern const char kNightLightEnabled[];
 ASH_PUBLIC_EXPORT extern const char kNightLightTemperature[];
 ASH_PUBLIC_EXPORT extern const char kNightLightScheduleType[];
@@ -89,6 +100,7 @@ ASH_PUBLIC_EXPORT extern const char kNightLightCustomStartTime[];
 ASH_PUBLIC_EXPORT extern const char kNightLightCustomEndTime[];
 ASH_PUBLIC_EXPORT extern const char kNightLightCachedLatitude[];
 ASH_PUBLIC_EXPORT extern const char kNightLightCachedLongitude[];
+ASH_PUBLIC_EXPORT extern const char kAutoNightLightNotificationDismissed[];
 
 ASH_PUBLIC_EXPORT extern const char kAllowScreenLock[];
 ASH_PUBLIC_EXPORT extern const char kEnableAutoScreenLock[];
@@ -170,6 +182,9 @@ ASH_PUBLIC_EXPORT extern const char kAssistantPrivacyInfoShownInLauncher[];
 ASH_PUBLIC_EXPORT extern const char kAssistantPrivacyInfoDismissedInLauncher[];
 
 ASH_PUBLIC_EXPORT extern const char kLockScreenMediaControlsEnabled[];
+
+ASH_PUBLIC_EXPORT extern const char kNaturalScroll[];
+ASH_PUBLIC_EXPORT extern const char kMouseReverseScroll[];
 
 }  // namespace prefs
 

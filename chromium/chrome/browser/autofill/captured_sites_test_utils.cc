@@ -23,13 +23,13 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/app_modal/javascript_app_modal_dialog.h"
-#include "components/app_modal/native_app_modal_dialog.h"
+#include "components/javascript_dialogs/app_modal_dialog_controller.h"
+#include "components/javascript_dialogs/app_modal_dialog_view.h"
+#include "components/permissions/permission_request_manager.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
@@ -330,8 +330,8 @@ void TestRecipeReplayer::SetUpCommandLine(base::CommandLine* command_line) {
       base::StringPrintf(
           "MAP *:80 127.0.0.1:%d,"
           "MAP *:443 127.0.0.1:%d,"
-          // Uncomment to use the live autofill prediction server.
-          // "EXCLUDE clients1.google.com,"
+          // Set to always exclude, allows cache_replayer overwrite
+          "EXCLUDE clients1.google.com,"
           "EXCLUDE localhost",
           kHostHttpPort, kHostHttpsPort));
   command_line->AppendSwitchASCII(
@@ -344,8 +344,9 @@ void TestRecipeReplayer::Setup() {
   CleanupSiteData();
 
   // Bypass permission dialogs.
-  PermissionRequestManager::FromWebContents(GetWebContents())
-      ->set_auto_response_for_test(PermissionRequestManager::ACCEPT_ALL);
+  permissions::PermissionRequestManager::FromWebContents(GetWebContents())
+      ->set_auto_response_for_test(
+          permissions::PermissionRequestManager::ACCEPT_ALL);
 }
 
 void TestRecipeReplayer::Cleanup() {
@@ -614,7 +615,7 @@ bool TestRecipeReplayer::RunWebPageReplayCmd(
           web_page_replay_support_file_dir.AppendASCII("wpr_key.pem").value())
           .c_str()));
 
-  for (const auto arg : args)
+  for (const auto& arg : args)
     full_command.AppendArg(arg);
 
   LOG(INFO) << full_command.GetArgumentsString();
@@ -679,6 +680,10 @@ bool TestRecipeReplayer::ReplayRecordedActions(
         return false;
     } else if (base::CompareCaseInsensitiveASCII(*type, "click") == 0) {
       if (!ExecuteClickAction(*action))
+        return false;
+    } else if (base::CompareCaseInsensitiveASCII(*type, "clickIfNotSeen") ==
+               0) {
+      if (!ExecuteClickIfNotSeenAction(*action))
         return false;
     } else if (base::CompareCaseInsensitiveASCII(*type, "closeTab") == 0) {
       if (!ExecuteCloseTabAction(*action))
@@ -838,6 +843,22 @@ bool TestRecipeReplayer::ExecuteClickAction(
 
   WaitTillPageIsIdle();
   return true;
+}
+
+bool TestRecipeReplayer::ExecuteClickIfNotSeenAction(
+    const base::DictionaryValue& action) {
+  std::string xpath;
+  content::RenderFrameHost* frame;
+  if (ExtractFrameAndVerifyElement(action, &xpath, &frame, false, false,
+                                   true)) {
+    return true;
+  } else {
+    const std::string* click_xpath_text =
+        FindPopulateString(action, "clickSelector", "click xpath selector");
+    base::Value click_action = action.Clone();
+    click_action.SetStringKey("selector", *click_xpath_text);
+    return ExecuteClickAction(base::Value::AsDictionaryValue(click_action));
+  }
 }
 
 bool TestRecipeReplayer::ExecuteCloseTabAction(
@@ -1128,13 +1149,14 @@ bool TestRecipeReplayer::ExecuteValidateFieldValueAction(
 
     // If we are validating the value of a Chrome autofilled field, print the
     // Chrome Autofill's field annotation for debugging purpose.
-    std::string title;
-    if (GetElementProperty(frame, xpath, "return target.getAttribute('title');",
-                           &title)) {
-      VLOG(1) << title;
+    std::string autofill_information;
+    if (GetElementProperty(
+            frame, xpath, "return target.getAttribute('autofill-information');",
+            &autofill_information)) {
+      VLOG(1) << autofill_information;
     } else {
-      ADD_FAILURE()
-          << "Failed to obtain the field's Chrome Autofill annotation!";
+      // Only used for logging purposes, so don't ADD_FAILURE() if it fails.
+      VLOG(1) << "Failed to obtain the field's Chrome Autofill annotation!";
     }
 
     std::string expected_autofill_prediction_type =
@@ -1308,7 +1330,8 @@ bool TestRecipeReplayer::ExtractFrameAndVerifyElement(
     std::string* xpath,
     content::RenderFrameHost** frame,
     bool set_focus,
-    bool relaxed_visibility) {
+    bool relaxed_visibility,
+    bool ignore_failure) {
   if (!GetTargetHTMLElementXpathFromAction(action, xpath))
     return false;
 
@@ -1326,7 +1349,8 @@ bool TestRecipeReplayer::ExtractFrameAndVerifyElement(
   if (relaxed_visibility)
     visibility_enum_val &= ~kReadyStateOnTop;
 
-  if (!WaitForElementToBeReady(*xpath, visibility_enum_val, *frame))
+  if (!WaitForElementToBeReady(*xpath, visibility_enum_val, *frame,
+                               ignore_failure))
     return false;
 
   if (set_focus) {
@@ -1369,9 +1393,7 @@ bool TestRecipeReplayer::GetIFramePathFromAction(
     ADD_FAILURE() << "The action's iframe path is not a list!";
     return false;
   }
-  base::span<const base::Value> iframe_xpath_list =
-      iframe_path_container->GetList();
-  for (const auto& xpath : iframe_xpath_list) {
+  for (const auto& xpath : iframe_path_container->GetList()) {
     if (!xpath.is_string()) {
       ADD_FAILURE() << "Failed to extract the iframe xpath from action!";
       return false;
@@ -1412,23 +1434,30 @@ bool TestRecipeReplayer::GetIFrameOffsetFromIFramePath(
 bool TestRecipeReplayer::WaitForElementToBeReady(
     const std::string& xpath,
     const int visibility_enum_val,
-    content::RenderFrameHost* frame) {
+    content::RenderFrameHost* frame,
+    bool ignore_failure) {
   std::vector<std::string> state_assertions;
   state_assertions.push_back(base::StringPrintf(
       "return automation_helper.isElementWithXpathReady(`%s`, %d);",
       xpath.c_str(), visibility_enum_val));
-  return WaitForStateChange(frame, state_assertions, default_action_timeout);
+  return WaitForStateChange(
+      frame, state_assertions,
+      ignore_failure ? click_fallback_timeout : default_action_timeout,
+      ignore_failure);
 }
 
 bool TestRecipeReplayer::WaitForStateChange(
     content::RenderFrameHost* frame,
     const std::vector<std::string>& state_assertions,
-    const base::TimeDelta& timeout) {
+    const base::TimeDelta& timeout,
+    bool ignore_failure) {
   base::TimeTicks start_time = base::TimeTicks::Now();
   while (!AllAssertionsPassed(frame, state_assertions)) {
     if (base::TimeTicks::Now() - start_time > timeout) {
+      if (!ignore_failure) {
         ADD_FAILURE() << "State change hasn't completed within timeout.";
-        return false;
+      }
+      return false;
     }
     WaitTillPageIsIdle();
   }
@@ -1736,9 +1765,9 @@ void TestRecipeReplayer::NavigateAwayAndDismissBeforeUnloadDialog() {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL(url::kAboutBlankURL), WindowOpenDisposition::CURRENT_TAB,
       ui_test_utils::BROWSER_TEST_NONE);
-  app_modal::JavaScriptAppModalDialog* alert =
+  javascript_dialogs::AppModalDialogController* alert =
       ui_test_utils::WaitForAppModalDialog();
-  alert->native_dialog()->AcceptAppModalDialog();
+  alert->view()->AcceptAppModalDialog();
 }
 
 bool TestRecipeReplayer::HasChromeStoredCredential(
@@ -1764,12 +1793,9 @@ bool TestRecipeReplayer::SetupSavedAutofillProfile(
     return false;
   }
 
-  base::span<const base::Value> profile_entries_list =
-      saved_autofill_profile_container.GetList();
-  for (auto it_entry = profile_entries_list.begin();
-       it_entry != profile_entries_list.end(); ++it_entry) {
+  for (const auto& list_entry : saved_autofill_profile_container.GetList()) {
     const base::DictionaryValue* entry;
-    if (!it_entry->GetAsDictionary(&entry)) {
+    if (!list_entry.GetAsDictionary(&entry)) {
       ADD_FAILURE() << "Failed to extract an entry!";
       return false;
     }
@@ -1792,7 +1818,7 @@ bool TestRecipeReplayer::SetupSavedAutofillProfile(
   // profiles. This block prevents these other tests from failing because
   // the test feature action executor does not know how to setup the autofill
   // profile.
-  if (profile_entries_list.size() == 0) {
+  if (saved_autofill_profile_container.GetList().empty()) {
     return true;
   }
 
@@ -1806,12 +1832,9 @@ bool TestRecipeReplayer::SetupSavedPasswords(
     return false;
   }
 
-  base::span<const base::Value> saved_password_list =
-      saved_password_list_container.GetList();
-  for (auto it_password = saved_password_list.begin();
-       it_password != saved_password_list.end(); ++it_password) {
+  for (const auto& entry : saved_password_list_container.GetList()) {
     const base::DictionaryValue* cred;
-    if (!it_password->GetAsDictionary(&cred)) {
+    if (!entry.GetAsDictionary(&cred)) {
       ADD_FAILURE() << "Failed to extract a saved password!";
       return false;
     }

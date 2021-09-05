@@ -8,6 +8,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/platform_locale_settings.h"
 #include "components/prefs/pref_service.h"
+#include "components/request_filter/request_filter_manager.h"
+#include "components/request_filter/request_filter_manager_factory.h"
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
@@ -66,7 +68,7 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
     // we show the context menu on mouse up on all platforms, not only on
     // Windows, to avoid showing it at the start of the gesture.
     if (prefs->GetBoolean(vivaldiprefs::kMouseGesturesEnabled) ||
-      prefs->GetBoolean(vivaldiprefs::kMouseGesturesRockerGesturesEnabled)) {
+        prefs->GetBoolean(vivaldiprefs::kMouseGesturesRockerGesturesEnabled)) {
       web_prefs->context_menu_on_mouse_up = true;
     }
     if (extensions::VivaldiRuntimeFeatures::IsEnabled(profile,

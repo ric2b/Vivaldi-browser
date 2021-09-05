@@ -7,7 +7,6 @@
 
 #include "cc/paint/skia_paint_canvas.h"
 #include "skia/ext/image_operations.h"
-#include "third_party/blink/public/platform/web_scroll_types.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_element.h"
 #include "third_party/blink/public/web/web_element_collection.h"
@@ -24,7 +23,7 @@
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/paint/cull_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
-#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
@@ -85,7 +84,8 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
 
   // Force an update of the lifecycle since we changed the painting method
   // of accelerated elements.
-  local_frame->View()->UpdateAllLifecyclePhasesExceptPaint();
+  local_frame->View()->UpdateAllLifecyclePhasesExceptPaint(
+      blink::DocumentUpdateReason::kSelection);
 
   blink::LayoutView* view = document->GetLayoutView();
   blink::PhysicalRect document_rect = view->DocumentRect();
@@ -174,10 +174,13 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
   // Crop to rect if required.
   scoped_refptr<blink::StaticBitmapImage> image;
   if (rect.IsEmpty() || full_page) {
-    image = blink::StaticBitmapImage::Create(surface->makeImageSnapshot());
+    image = blink::UnacceleratedStaticBitmapImage::Create(
+        surface->makeImageSnapshot());
   } else {
-    image = blink::StaticBitmapImage::Create(
-        surface->makeImageSnapshot(SkIRect(rect)));
+    sk_sp<SkImage> snapshotImage = surface->makeImageSnapshot(SkIRect(rect));
+    image = snapshotImage
+                ? blink::UnacceleratedStaticBitmapImage::Create(snapshotImage)
+                : nullptr;
   }
   return image ? ToSkBitmap(image, bitmap) : false;
 }

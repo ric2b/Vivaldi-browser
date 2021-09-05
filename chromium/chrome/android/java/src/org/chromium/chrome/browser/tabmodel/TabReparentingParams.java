@@ -17,6 +17,8 @@ import org.chromium.content_public.browser.WebContents;
  * Class for handling tab reparenting operations across multiple activities.
  */
 public class TabReparentingParams implements AsyncTabParams {
+    private static final int TAB_INDEX_NOT_SET = -1;
+
     private final Tab mTabToReparent;
     private final Intent mOriginalIntent;
     private final Runnable mFinalizeCallback;
@@ -59,6 +61,10 @@ public class TabReparentingParams implements AsyncTabParams {
     @Override
     public Tab getTabToReparent() {
         return mTabToReparent;
+    }
+
+    public boolean hasTabToReparent() {
+        return mTabToReparent != null;
     }
 
     /**

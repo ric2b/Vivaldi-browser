@@ -4,10 +4,11 @@
 
 #include "media/mojo/services/mojo_audio_decoder_service.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
-#include "media/base/cdm_context.h"
 #include "media/base/content_decryption_module.h"
 #include "media/mojo/common/media_type_converters.h"
 #include "media/mojo/common/mojo_decoder_buffer_converter.h"
@@ -27,7 +28,7 @@ MojoAudioDecoderService::MojoAudioDecoderService(
 MojoAudioDecoderService::~MojoAudioDecoderService() = default;
 
 void MojoAudioDecoderService::Construct(
-    mojom::AudioDecoderClientAssociatedPtrInfo client) {
+    mojo::PendingAssociatedRemote<mojom::AudioDecoderClient> client) {
   DVLOG(1) << __func__;
   client_.Bind(std::move(client));
 }
@@ -37,27 +38,38 @@ void MojoAudioDecoderService::Initialize(const AudioDecoderConfig& config,
                                          InitializeCallback callback) {
   DVLOG(1) << __func__ << " " << config.AsHumanReadableString();
 
-  // Get CdmContext from cdm_id if the stream is encrypted.
-  CdmContext* cdm_context = nullptr;
-  if (config.is_encrypted()) {
-    auto cdm_context_ref = mojo_cdm_service_context_->GetCdmContextRef(cdm_id);
-    if (!cdm_context_ref) {
-      DVLOG(1) << "CdmContextRef not found for CDM id: " << cdm_id;
-      std::move(callback).Run(false, false);
+  // |cdm_context_ref_| must be kept as long as |cdm_context| is used by the
+  // |decoder_|. We do NOT support resetting |cdm_context_ref_| because in
+  // general we don't support resetting CDM in the media pipeline.
+  if (cdm_id != CdmContext::kInvalidCdmId) {
+    if (cdm_id_ == CdmContext::kInvalidCdmId) {
+      DCHECK(!cdm_context_ref_);
+      cdm_id_ = cdm_id;
+      cdm_context_ref_ = mojo_cdm_service_context_->GetCdmContextRef(cdm_id);
+    } else if (cdm_id != cdm_id_) {
+      // TODO(xhwang): Replace with mojo::ReportBadMessage().
+      NOTREACHED() << "The caller should not switch CDM";
+      OnInitialized(std::move(callback),
+                    StatusCode::kDecoderMissingCdmForEncryptedContent);
       return;
     }
+  }
 
-    // |cdm_context_ref_| must be kept as long as |cdm_context| is used by the
-    // |decoder_|.
-    cdm_context_ref_ = std::move(cdm_context_ref);
-    cdm_context = cdm_context_ref_->GetCdmContext();
-    DCHECK(cdm_context);
+  // Get CdmContext, which could be null.
+  CdmContext* cdm_context =
+      cdm_context_ref_ ? cdm_context_ref_->GetCdmContext() : nullptr;
+
+  if (config.is_encrypted() && !cdm_context) {
+    DVLOG(1) << "CdmContext for " << cdm_id << " not found for encrypted audio";
+    OnInitialized(std::move(callback),
+                  StatusCode::kDecoderMissingCdmForEncryptedContent);
+    return;
   }
 
   decoder_->Initialize(
       config, cdm_context,
-      base::Bind(&MojoAudioDecoderService::OnInitialized, weak_this_,
-                 base::Passed(&callback)),
+      base::BindOnce(&MojoAudioDecoderService::OnInitialized, weak_this_,
+                     std::move(callback)),
       base::Bind(&MojoAudioDecoderService::OnAudioBufferReady, weak_this_),
       base::Bind(&MojoAudioDecoderService::OnWaiting, weak_this_));
 }
@@ -83,22 +95,22 @@ void MojoAudioDecoderService::Reset(ResetCallback callback) {
 
   // Reset the reader so that pending decodes will be dispatches first.
   mojo_decoder_buffer_reader_->Flush(
-      base::Bind(&MojoAudioDecoderService::OnReaderFlushDone, weak_this_,
-                 base::Passed(&callback)));
+      base::BindOnce(&MojoAudioDecoderService::OnReaderFlushDone, weak_this_,
+                     std::move(callback)));
 }
 
 void MojoAudioDecoderService::OnInitialized(InitializeCallback callback,
-                                            bool success) {
-  DVLOG(1) << __func__ << " success:" << success;
+                                            Status status) {
+  DVLOG(1) << __func__ << " success:" << status.is_ok();
 
-  if (!success) {
-    cdm_context_ref_.reset();
+  if (!status.is_ok()) {
     // Do not call decoder_->NeedsBitstreamConversion() if init failed.
-    std::move(callback).Run(false, false);
+    std::move(callback).Run(std::move(status), false);
     return;
   }
 
-  std::move(callback).Run(success, decoder_->NeedsBitstreamConversion());
+  std::move(callback).Run(std::move(status),
+                          decoder_->NeedsBitstreamConversion());
 }
 
 // The following methods are needed so that we can bind them with a weak pointer
@@ -119,8 +131,8 @@ void MojoAudioDecoderService::OnReadDone(DecodeCallback callback,
 }
 
 void MojoAudioDecoderService::OnReaderFlushDone(ResetCallback callback) {
-  decoder_->Reset(base::Bind(&MojoAudioDecoderService::OnResetDone, weak_this_,
-                             base::Passed(&callback)));
+  decoder_->Reset(base::BindOnce(&MojoAudioDecoderService::OnResetDone,
+                                 weak_this_, std::move(callback)));
 }
 
 void MojoAudioDecoderService::OnDecodeStatus(DecodeCallback callback,

@@ -79,6 +79,10 @@ class PortalContents : public GarbageCollected<PortalContents>,
   // down.
   void Destroy();
 
+  // Called when the connection to the browser-side Portal object is lost.
+  // Cleans up any remaining state.
+  void DisconnectHandler();
+
   // blink::mojom::PortalClient implementation
   void ForwardMessageFromGuest(
       BlinkTransferableMessage message,
@@ -94,10 +98,10 @@ class PortalContents : public GarbageCollected<PortalContents>,
   Document& GetDocument() const { return *document_; }
 
   // Called on response to the request to activate the portal contents.
-  void OnActivateResponse(bool was_adopted);
+  void OnActivateResponse(mojom::blink::PortalActivateResult);
 
   // The document which owns this contents.
-  // TODO(jbroman): Should this be a DocumentShutdownObserver instead?
+  // TODO(jbroman): Should this be a ExecutionContextLifecycleObserver instead?
   Member<Document> document_;
 
   // The element which owns this contents, if any.

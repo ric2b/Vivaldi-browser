@@ -11,12 +11,11 @@
 #import "base/mac/mac_util.h"
 #import "base/mac/scoped_cftyperef.h"
 #import "base/mac/scoped_nsobject.h"
-#import "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_shim/app_shim_host_bootstrap_mac.h"
 #include "chrome/browser/apps/app_shim/app_shim_host_mac.h"
-#include "chrome/browser/apps/app_shim/extension_app_shim_handler_mac.h"
+#include "chrome/browser/apps/app_shim/app_shim_manager_mac.h"
 #include "chrome/browser/apps/app_shim/test/app_shim_listener_test_api_mac.h"
 #include "chrome/browser/apps/launch_service/launch_service.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
@@ -482,7 +481,9 @@ IN_PROC_BROWSER_TEST_F(NativeAppWindowCocoaBrowserTest, Frameless) {
 
   // Windows created with NSBorderlessWindowMask by default don't have shadow,
   // but packaged apps should always have one.
-  EXPECT_TRUE([ns_window hasShadow]);
+  // This specific check is disabled because shadows are disabled on the
+  // bots - see https://crbug.com/899286.
+  // EXPECT_TRUE([ns_window hasShadow]);
 
   // Since the window has no constraints, it should have all of the following
   // style mask bits.

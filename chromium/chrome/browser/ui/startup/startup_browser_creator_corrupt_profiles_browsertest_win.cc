@@ -68,8 +68,7 @@ void CreateAndSwitchToProfile(const std::string& basepath) {
   // terminated by UnblockOnProfileCreation when the profile is created.
   run_loop.Run();
 
-  profiles::SwitchToProfile(path, false, ProfileManager::CreateCallback(),
-                            ProfileMetrics::SWITCH_PROFILE_ICON);
+  profiles::SwitchToProfile(path, false, ProfileManager::CreateCallback());
 }
 
 void CheckBrowserWindows(const std::vector<std::string>& expected_basepaths) {
@@ -123,7 +122,7 @@ class StartupBrowserCreatorCorruptProfileTest : public InProcessBrowserTest {
 
     base::FilePath dir_to_delete = user_data_dir.AppendASCII(basepath);
     return base::DirectoryExists(dir_to_delete) &&
-           base::DeleteFile(dir_to_delete, true);
+           base::DeleteFileRecursively(dir_to_delete);
   }
 
   bool RemoveCreateDirectoryPermissionForUserDataDirectory() {

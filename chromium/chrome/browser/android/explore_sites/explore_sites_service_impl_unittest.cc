@@ -10,8 +10,8 @@
 #include "base/test/mock_entropy_provider.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/explore_sites/catalog.pb.h"
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -48,7 +48,7 @@ class ExploreSitesServiceImplTest : public testing::Test {
         std::make_unique<ExploreSitesStore>(
             task_environment_.GetMainThreadTaskRunner());
     auto history_stats_reporter =
-        std::make_unique<HistoryStatisticsReporter>(nullptr, nullptr, nullptr);
+        std::make_unique<HistoryStatisticsReporter>(nullptr, nullptr);
     service_ = std::make_unique<ExploreSitesServiceImpl>(
         std::move(store),
         std::make_unique<TestURLLoaderFactoryGetter>(

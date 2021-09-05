@@ -24,10 +24,10 @@ import android.widget.TextView;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.VisibleForTesting;
+import org.chromium.base.MathUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.widget.TextViewWithClickableSpans;
 

@@ -9,11 +9,13 @@
 
 #include "ash/ash_export.h"
 #include "ash/wm/splitview/split_view_controller.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "ui/gfx/geometry/point_f.h"
 
 namespace ash {
 
+class OverviewGrid;
 class OverviewItem;
 class OverviewSession;
 class PresentationTimeRecorder;
@@ -44,21 +46,21 @@ class ASH_EXPORT OverviewWindowDragController {
   };
 
   enum class DragResult {
-    // The drag ended without ever being disambiguated between drag-to-snap and
+    // The drag ended without ever being disambiguated between a normal drag and
     // drag-to-close.
     kNeverDisambiguated,
+    // The drag was considered as a normal drag, and then the window was dropped
+    // back into overview, in the same grid or another one.
+    kDropIntoOverview,
     // The drag resulted in snapping the window.
-    kSuccessfulDragToSnap,
-    // The drag was considered as drag-to-snap, but did not result in snapping
-    // the window.
-    kCanceledDragToSnap,
+    kSnap,
+    // The drag resulted in moving the window to another desk.
+    kDragToDesk,
     // The drag resulted in closing the window.
     kSuccessfulDragToClose,
     // The drag was considered as drag-to-close, but did not result in closing
     // the window.
     kCanceledDragToClose,
-    // The drag resulted in moving the window to another desk.
-    kSuccessfulDragToDesk,
   };
 
   OverviewWindowDragController(OverviewSession* overview_session,
@@ -86,6 +88,8 @@ class ASH_EXPORT OverviewWindowDragController {
 
   DragBehavior current_drag_behavior() { return current_drag_behavior_; }
 
+  bool is_touch_dragging() const { return is_touch_dragging_; }
+
  private:
   void StartDragToCloseMode();
 
@@ -103,18 +107,20 @@ class ASH_EXPORT OverviewWindowDragController {
   void UpdateDragIndicatorsAndOverviewGrid(
       const gfx::PointF& location_in_screen);
 
-  gfx::Rect GetWorkAreaOfDisplayBeingDraggedIn() const;
-  SplitViewController* GetSplitViewControllerForDisplayBeingDraggedIn() const;
-
-  // Dragged items should not attempt to update the indicators or snap if
-  // the drag started in a snap region and has not been dragged pass the
-  // threshold.
-  bool ShouldUpdateDragIndicatorsOrSnap(const gfx::PointF& event_location);
+  aura::Window* GetRootWindowBeingDraggedIn() const;
 
   SplitViewController::SnapPosition GetSnapPosition(
       const gfx::PointF& location_in_screen) const;
 
-  void SnapWindow(SplitViewController::SnapPosition snap_position);
+  // Snaps and activates the window. Uses the divider spawn animation (see
+  // |SplitViewController::SnapWindow|). Sets |item_| to null because the
+  // overview item is destroyed.
+  void SnapWindow(SplitViewController* split_view_controller,
+                  SplitViewController::SnapPosition snap_position);
+
+  // Returns the item's overview grid, or the grid in which the item is being
+  // dragged if the multi display overview and split view feature is enabled.
+  OverviewGrid* GetCurrentGrid() const;
 
   OverviewSession* overview_session_;
 
@@ -130,28 +136,34 @@ class ASH_EXPORT OverviewWindowDragController {
   // new bounds on a drag event.
   gfx::PointF initial_centerpoint_;
 
-  // The scaled-down size of the dragged item once the drag location is on the
-  // DesksBarView. We size the item down so that it fits inside the desks'
-  // preview view.
-  const gfx::SizeF on_desks_bar_item_size_;
-
   // The original size of the dragged item after we scale it up when we start
   // dragging it. The item is restored to this size once it no longer intersects
   // with the DesksBarView.
   gfx::SizeF original_scaled_size_;
 
-  // Cached values related to dragging items while the desks bar is shown.
-  // |desks_bar_bounds_| is the bounds of the desks bar in screen coordinates.
-  // |shrink_bounds_| is a rectangle around the desks bar which the items starts
-  // shrinking when the event location is contained. The item will shrink until
-  // it is contained in |desks_bar_bounds_|, at which it has reached its minimum
-  // size and will no longer shrink. |shrink_region_distance_| is a vector
-  // contained the distance from the origin of |desks_bar_bounds_| to the origin
-  // of |shrink_bounds_|. It's used to determine the size of the dragged item
-  // when it's within |shrink_bounds_|.
-  gfx::RectF desks_bar_bounds_;
-  gfx::RectF shrink_bounds_;
-  gfx::Vector2dF shrink_region_distance_;
+  // Track the per-overview-grid desks bar data used to perform the window
+  // sizing operations when it is moved towards or on the desks bar.
+  struct GridDesksBarData {
+    // The scaled-down size of the dragged item once the drag location is on the
+    // DesksBarView of the corresponding grid. We size the item down so that it
+    // fits inside the desks' preview view.
+    gfx::SizeF on_desks_bar_item_size;
+
+    // Cached values related to dragging items while the desks bar is shown.
+    // |desks_bar_bounds| is the bounds of the desks bar in screen coordinates.
+    // |shrink_bounds| is a rectangle around the desks bar which the items
+    // starts shrinking when the event location is contained. The item will
+    // shrink until it is contained in |desks_bar_bounds|, at which it has
+    // reached its minimum size and will no longer shrink.
+    // |shrink_region_distance| is a vector contained the distance from the
+    // origin of |desks_bar_bounds| to the origin of |shrink_bounds|. It's
+    // used to determine the size of the dragged item when it's within
+    // |shrink_bounds|.
+    gfx::RectF desks_bar_bounds;
+    gfx::RectF shrink_bounds;
+    gfx::Vector2dF shrink_region_distance;
+  };
+  base::flat_map<OverviewGrid*, GridDesksBarData> per_grid_desks_bar_data_;
 
   const size_t display_count_;
 
@@ -165,12 +177,10 @@ class ASH_EXPORT OverviewWindowDragController {
   // True if the Virtual Desks bar is created and dragging to desks is enabled.
   const bool virtual_desks_bar_enabled_;
 
-  // False if the initial drag location was not a snap region, or if it was in
-  // a snap region but the drag has since moved out.
-  bool started_in_snap_region_ = false;
+  const bool are_multi_display_overview_and_splitview_enabled_;
 
   // The opacity of |item_| changes if we are in drag to close mode. Store the
-  // orginal opacity of |item_| and restore it to the item when we leave drag
+  // original opacity of |item_| and restore it to the item when we leave drag
   // to close mode.
   float original_opacity_ = 1.f;
 

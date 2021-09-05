@@ -9,7 +9,7 @@
 #include "ash/rotator/screen_rotation_animator_observer.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -57,9 +57,9 @@ class ScreenRotationTest
     int wait_seconds = (base::SysInfo::IsRunningOnChromeOS() ? 5 : 0) +
                        additional_browsers * cost_per_browser;
     base::RunLoop run_loop;
-
-    base::PostDelayedTask(FROM_HERE, run_loop.QuitClosure(),
-                          base::TimeDelta::FromSeconds(wait_seconds));
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(),
+        base::TimeDelta::FromSeconds(wait_seconds));
     run_loop.Run();
   }
 
@@ -100,34 +100,6 @@ class ScreenRotationWaiter : public ash::ScreenRotationAnimatorObserver {
   DISALLOW_COPY_AND_ASSIGN(ScreenRotationWaiter);
 };
 
-class WindowAnimationWaiter : public ui::LayerAnimationObserver {
- public:
-  explicit WindowAnimationWaiter(aura::Window* window)
-      : animator_(window->layer()->GetAnimator()) {
-    animator_->AddObserver(this);
-  }
-  ~WindowAnimationWaiter() override = default;
-
-  // ui::LayerAnimationObserver:
-  void OnLayerAnimationEnded(ui::LayerAnimationSequence* sequence) override {
-    if (!animator_->is_animating()) {
-      animator_->RemoveObserver(this);
-      run_loop_.Quit();
-    }
-  }
-  void OnLayerAnimationAborted(ui::LayerAnimationSequence* sequence) override {}
-  void OnLayerAnimationScheduled(
-      ui::LayerAnimationSequence* sequence) override {}
-
-  void Wait() { run_loop_.Run(); }
-
- private:
-  ui::LayerAnimator* animator_;
-  base::RunLoop run_loop_;
-
-  DISALLOW_COPY_AND_ASSIGN(WindowAnimationWaiter);
-};
-
 }  // namespace
 
 IN_PROC_BROWSER_TEST_P(ScreenRotationTest, RotateInTablet) {
@@ -162,8 +134,14 @@ IN_PROC_BROWSER_TEST_P(ScreenRotationTest, RotateInTabletOverview) {
   {
     auto windows = ash::ShellTestApi().GetItemWindowListInOverviewGrids();
     ASSERT_TRUE(windows.size() > 0);
-    WindowAnimationWaiter waiter(windows[0]);
-    waiter.Wait();
+    // Skipping the wait if the animation is not ongoing because it could get
+    // stuck if the window animation has already finished at this point. There
+    // might be a chance that window animation hasn't started yet, and if so
+    // the test can't measure the right performance, but not failing.
+    // TODO(mukai): Find the way to check if the animation has finished or not,
+    // and replace the waiter by CreateWaiterForFinishingWindowAnimation().
+    if (windows[0]->layer()->GetAnimator()->is_animating())
+      ash::ShellTestApi().WaitForWindowFinishAnimating(windows[0]);
   }
 
   ScreenRotationWaiter waiter(browser_window->GetRootWindow());
@@ -179,7 +157,7 @@ IN_PROC_BROWSER_TEST_P(ScreenRotationTest, RotateInTabletOverview) {
 // TODO(oshima): Support split screen in tablet mode.
 // TODO(oshima): Support overview mode.
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          ScreenRotationTest,
                          ::testing::Combine(::testing::Values(2, 8),
                                             /*blank=*/testing::Bool()));

@@ -21,13 +21,15 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.RetryOnFailure;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.UrlConstants;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
+import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TouchCommon;
@@ -55,8 +57,7 @@ public class NavigationHandlerTest {
     @Before
     public void setUp() throws InterruptedException {
         mActivityTestRule.startMainActivityOnBlankPage();
-        mActivityTestRule.getActivity().getLayoutManager().getAnimationHandler().setTestingMode(
-                true);
+        CompositorAnimationHandler.setTestingMode(true);
         DisplayMetrics displayMetrics = new DisplayMetrics();
         mActivityTestRule.getActivity().getWindowManager().getDefaultDisplay().getMetrics(
                 displayMetrics);
@@ -79,8 +80,8 @@ public class NavigationHandlerTest {
 
     private void assertNavigateOnSwipeFrom(boolean edge, String toUrl) {
         ChromeTabUtils.waitForTabPageLoaded(currentTab(), toUrl, () -> swipeFromEdge(edge), 10);
-        CriteriaHelper.pollUiThread(Criteria.equals(toUrl, () -> currentTab().getUrl()));
-        Assert.assertEquals("Didn't navigate back", toUrl, currentTab().getUrl());
+        CriteriaHelper.pollUiThread(Criteria.equals(toUrl, () -> currentTab().getUrlString()));
+        Assert.assertEquals("Didn't navigate back", toUrl, currentTab().getUrlString());
     }
 
     private void swipeFromEdge(boolean leftEdge) {
@@ -134,6 +135,7 @@ public class NavigationHandlerTest {
     @Test
     @SmallTest
     @RetryOnFailure
+    @FlakyTest(message = "crbug.com/1041233")
     public void testLeftSwipeNavigateBackOnRenderedPage() {
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         ChromeTabUtils.fullyLoadUrlInNewTab(InstrumentationRegistry.getInstrumentation(),
@@ -144,6 +146,7 @@ public class NavigationHandlerTest {
 
     @Test
     @SmallTest
+    @FlakyTest(message = "crbug.com/1051221")
     public void testRightSwipeNavigateForwardOnRenderedPage() {
         mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
         ChromeTabUtils.fullyLoadUrlInNewTab(InstrumentationRegistry.getInstrumentation(),

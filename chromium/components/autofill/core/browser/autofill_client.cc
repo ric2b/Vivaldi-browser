@@ -8,9 +8,6 @@
 
 namespace autofill {
 
-AutofillClient::UnmaskDetails::UnmaskDetails() {}
-AutofillClient::UnmaskDetails::~UnmaskDetails() {}
-
 version_info::Channel AutofillClient::GetChannel() const {
   return version_info::Channel::UNKNOWN;
 }
@@ -19,12 +16,20 @@ std::string AutofillClient::GetPageLanguage() const {
   return std::string();
 }
 
-LogManager* AutofillClient::GetLogManager() const {
-  return nullptr;
+std::string AutofillClient::GetVariationConfigCountryCode() const {
+  return std::string();
 }
 
-bool AutofillClient::CloseWebauthnOfferDialog() {
-  return false;
+#if !defined(OS_IOS)
+std::unique_ptr<InternalAuthenticator>
+AutofillClient::CreateCreditCardInternalAuthenticator(
+    content::RenderFrameHost* rfh) {
+  return nullptr;
+}
+#endif
+
+LogManager* AutofillClient::GetLogManager() const {
+  return nullptr;
 }
 
 }  // namespace autofill

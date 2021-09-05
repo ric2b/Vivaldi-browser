@@ -211,6 +211,12 @@ void ManagePasswordsState::ProcessLoginsChanged(
     client_->UpdateFormManagers();
 }
 
+void ManagePasswordsState::ProcessUnsyncedCredentialsWillBeDeleted(
+    const std::vector<autofill::PasswordForm>& unsynced_credentials) {
+  unsynced_credentials_ = unsynced_credentials;
+  SetState(password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE);
+}
+
 void ManagePasswordsState::ChooseCredential(const PasswordForm* form) {
   DCHECK_EQ(password_manager::ui::CREDENTIAL_REQUEST_STATE, state());
   DCHECK(!credentials_callback().is_null());

@@ -15,7 +15,10 @@ import androidx.annotation.Nullable;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarCompactLayout;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarInteractionHandler;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarLayout;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarUiItem;
 import org.chromium.ui.modelutil.PropertyModel;
 
 /**
@@ -23,15 +26,41 @@ import org.chromium.ui.modelutil.PropertyModel;
  * Note that infobars expire by default when a new navigation occurs.
  * Make sure to use setExpireOnNavigation(false) if you want an infobar to be sticky.
  */
-public abstract class InfoBar implements InfoBarView {
+public abstract class InfoBar implements InfoBarInteractionHandler, InfoBarUiItem {
     private static final String TAG = "InfoBar";
+
+    /**
+     * Interface for InfoBar to interact with its container.
+     */
+    public interface Container {
+        /**
+         * @return True if the infobar is in front.
+         */
+        boolean isFrontInfoBar(InfoBar infoBar);
+
+        /**
+         * Remove the infobar from its container.
+         * @param infoBar InfoBar to remove from the View hierarchy.
+         */
+        void removeInfoBar(InfoBar infoBar);
+
+        /**
+         * Notifies that an infobar's View ({@link InfoBar#getView}) has changed.
+         */
+        void notifyInfoBarViewChanged();
+
+        /**
+         * @return True if the container's destroy() method has been called.
+         */
+        boolean isDestroyed();
+    }
 
     private final int mIconDrawableId;
     private final Bitmap mIconBitmap;
     private final @ColorRes int mIconTintId;
     private final CharSequence mMessage;
 
-    private @Nullable InfoBarContainer mContainer;
+    private @Nullable Container mContainer;
     private @Nullable View mView;
     private @Nullable Context mContext;
 
@@ -70,10 +99,6 @@ public abstract class InfoBar implements InfoBarView {
     @CalledByNative
     protected void onNativeDestroyed() {
         mNativeInfoBarPtr = 0;
-    }
-
-    public SnackbarManager getSnackbarManager() {
-        return mContainer != null ? mContainer.getSnackbarManager() : null;
     }
 
     /**
@@ -130,6 +155,12 @@ public abstract class InfoBar implements InfoBarView {
     protected boolean usesCompactLayout() {
         return false;
     }
+
+    /**
+     * Prepares the InfoBar for display and adds InfoBar-specific controls to the layout.
+     * @param layout Layout containing all of the controls.
+     */
+    protected void createContent(InfoBarLayout layout) {}
 
     /**
      * Prepares and inserts views into an {@link InfoBarCompactLayout}.
@@ -200,7 +231,7 @@ public abstract class InfoBar implements InfoBarView {
     private boolean closeInfoBar() {
         if (!mIsDismissed) {
             mIsDismissed = true;
-            if (!mContainer.hasBeenDestroyed()) {
+            if (!mContainer.isDestroyed()) {
                 // If the container was destroyed, it's already been emptied of all its infobars.
                 onStartedHiding();
                 mContainer.removeInfoBar(this);
@@ -218,7 +249,7 @@ public abstract class InfoBar implements InfoBarView {
      *         infobars).
      */
     public boolean isFrontInfoBar() {
-        return mContainer.getFrontInfoBar() == this;
+        return mContainer.isFrontInfoBar(this);
     }
 
     /**
@@ -231,7 +262,7 @@ public abstract class InfoBar implements InfoBarView {
         return mNativeInfoBarPtr;
     }
 
-    void setInfoBarContainer(InfoBarContainer container) {
+    void setContainer(Container container) {
         mContainer = container;
     }
 
@@ -250,6 +281,11 @@ public abstract class InfoBar implements InfoBarView {
     @Override
     public void setControlsEnabled(boolean state) {
         mControlsEnabled = state;
+    }
+
+    @Override
+    public void onClick() {
+        setControlsEnabled(false);
     }
 
     @Override
@@ -276,10 +312,6 @@ public abstract class InfoBar implements InfoBarView {
         if (mNativeInfoBarPtr != 0 && !mIsDismissed) {
             InfoBarJni.get().onCloseButtonClicked(mNativeInfoBarPtr, InfoBar.this);
         }
-    }
-
-    @Override
-    public void createContent(InfoBarLayout layout) {
     }
 
     @InfoBarIdentifier

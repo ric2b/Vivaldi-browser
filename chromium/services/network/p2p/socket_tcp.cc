@@ -59,8 +59,8 @@ P2PSocketTcp::SendBuffer::~SendBuffer() = default;
 
 P2PSocketTcpBase::P2PSocketTcpBase(
     Delegate* delegate,
-    mojom::P2PSocketClientPtr client,
-    mojom::P2PSocketRequest socket,
+    mojo::PendingRemote<mojom::P2PSocketClient> client,
+    mojo::PendingReceiver<mojom::P2PSocket> socket,
     P2PSocketType type,
     ProxyResolvingClientSocketFactory* proxy_resolving_socket_factory)
     : P2PSocket(delegate, std::move(client), std::move(socket), P2PSocket::TCP),
@@ -236,6 +236,13 @@ bool P2PSocketTcpBase::OnPacket(std::vector<int8_t> data) {
     }
   }
 
+  if (data.size() == 0) {
+    // https://tools.ietf.org/html/rfc4571#section-2 allows null packets which
+    // are ignored.
+    LOG(WARNING) << "Ignoring empty RTP-over-TCP frame.";
+    return true;
+  }
+
   client_->DataReceived(
       remote_address_.ip_address, data,
       base::TimeTicks() + base::TimeDelta::FromNanoseconds(rtc::TimeNanos()));
@@ -395,8 +402,8 @@ void P2PSocketTcpBase::SetOption(P2PSocketOption option, int32_t value) {
 
 P2PSocketTcp::P2PSocketTcp(
     Delegate* delegate,
-    mojom::P2PSocketClientPtr client,
-    mojom::P2PSocketRequest socket,
+    mojo::PendingRemote<mojom::P2PSocketClient> client,
+    mojo::PendingReceiver<mojom::P2PSocket> socket,
     P2PSocketType type,
     ProxyResolvingClientSocketFactory* proxy_resolving_socket_factory)
     : P2PSocketTcpBase(delegate,
@@ -453,8 +460,8 @@ void P2PSocketTcp::DoSend(
 // P2PSocketStunTcp
 P2PSocketStunTcp::P2PSocketStunTcp(
     Delegate* delegate,
-    mojom::P2PSocketClientPtr client,
-    mojom::P2PSocketRequest socket,
+    mojo::PendingRemote<mojom::P2PSocketClient> client,
+    mojo::PendingReceiver<mojom::P2PSocket> socket,
     P2PSocketType type,
     ProxyResolvingClientSocketFactory* proxy_resolving_socket_factory)
     : P2PSocketTcpBase(delegate,

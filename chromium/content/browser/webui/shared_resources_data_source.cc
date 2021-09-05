@@ -15,6 +15,8 @@
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
+#include "content/browser/resources/media/grit/media_internals_resources.h"
+#include "content/browser/resources/media/grit/media_internals_resources_map.h"
 #include "content/grit/content_resources.h"
 #include "content/grit/content_resources_map.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -50,9 +52,6 @@ const char kPolymerHtml[] = "polymer/v1_0/polymer/polymer.html";
 const char kPolymerJs[] = "polymer/v1_0/polymer/polymer-extracted.js";
 const char kPolymer2Html[] = "polymer/v1_0/polymer2/polymer.html";
 const char kPolymer2Js[] = "polymer/v1_0/polymer2/polymer-extracted.js";
-const char kHtmlImportsJs[] = "polymer/v1_0/html-imports/html-imports.min.js";
-const char kHtmlImportsV0Js[] =
-    "polymer/v1_0/html-imports-v0/html-imports.min.js";
 
 // Utility for determining if both Polymer 1 and Polymer 2 are needed.
 bool UsingMultiplePolymerVersions() {
@@ -105,6 +104,8 @@ const std::map<int, std::string> CreateContentResourceIdToAliasMap() {
        "mojo/mojo/public/mojom/base/unguessable_token.mojom-lite.js"},
       {IDR_URL_MOJO_HTML, "mojo/url/mojom/url.mojom.html"},
       {IDR_URL_MOJO_JS, "mojo/url/mojom/url.mojom-lite.js"},
+      {IDR_VULKAN_INFO_MOJO_JS, "gpu/ipc/common/vulkan_info.mojom-lite.js"},
+      {IDR_VULKAN_TYPES_MOJO_JS, "gpu/ipc/common/vulkan_types.mojom-lite.js"},
   };
 }
 
@@ -126,6 +127,10 @@ const std::map<int, std::string> CreateMojoResourceIdToAliasMap() {
          "mojo/mojo/public/mojom/base/string16.mojom.html"},
         {IDR_MOJO_STRING16_MOJOM_LITE_JS,
          "mojo/mojo/public/mojom/base/string16.mojom-lite.js"},
+        {IDR_MOJO_TEXT_DIRECTION_MOJOM_HTML,
+         "mojo/mojo/public/mojom/base/text_direction.mojom.html"},
+        {IDR_MOJO_TEXT_DIRECTION_MOJOM_LITE_JS,
+         "mojo/mojo/public/mojom/base/text_direction.mojom-lite.js"},
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
         {IDR_MOJO_TIME_MOJOM_HTML,
          "mojo/mojo/public/mojom/base/time.mojom.html"},
@@ -156,12 +161,6 @@ const std::map<int, std::string> CreateChromeosMojoResourceIdToAliasMap() {
       {IDR_MULTIDEVICE_MULTIDEVICE_SETUP_MOJOM_LITE_JS,
        "mojo/chromeos/services/multidevice_setup/public/mojom/"
        "multidevice_setup.mojom-lite.js"},
-      {IDR_MULTIDEVICE_MULTIDEVICE_SETUP_CONSTANTS_MOJOM_HTML,
-       "mojo/chromeos/services/multidevice_setup/public/mojom/"
-       "constants.mojom.html"},
-      {IDR_MULTIDEVICE_MULTIDEVICE_SETUP_CONSTANTS_MOJOM_LITE_JS,
-       "mojo/chromeos/services/multidevice_setup/public/mojom/"
-       "constants.mojom-lite.js"},
       {IDR_MULTIDEVICE_MULTIDEVICE_TYPES_MOJOM_HTML,
        "mojo/chromeos/components/multidevice/mojom/"
        "multidevice_types.mojom.html"},
@@ -194,11 +193,7 @@ bool ShouldIgnore(std::string resource) {
   if (base::StartsWith(
           resource,
           "../../../third_party/polymer/v1_0/components-chromium/polymer/",
-          base::CompareCase::SENSITIVE) ||
-      base::StartsWith(resource,
-                       "../../../third_party/polymer/v1_0/components-chromium/"
-                       "html-imports-v0/",
-                       base::CompareCase::SENSITIVE)) {
+          base::CompareCase::SENSITIVE)) {
     return true;
   }
 
@@ -262,6 +257,9 @@ const ResourcesMap* CreateResourcesMap() {
   AddResourcesToMap(result);
   AddAliasedResourcesToMap(CreateContentResourceIdToAliasMap(),
                            kContentResources, kContentResourcesSize, result);
+  AddAliasedResourcesToMap(CreateContentResourceIdToAliasMap(),
+                           kMediaInternalsResources,
+                           kMediaInternalsResourcesSize, result);
   AddAliasedResourcesToMap(CreateMojoResourceIdToAliasMap(),
                            kMojoBindingsResources, kMojoBindingsResourcesSize,
                            result);
@@ -297,22 +295,18 @@ std::string SharedResourcesDataSource::GetSource() {
 }
 
 void SharedResourcesDataSource::StartDataRequest(
-    const std::string& path,
+    const GURL& url,
     const WebContents::Getter& wc_getter,
-    const URLDataSource::GotDataCallback& callback) {
+    URLDataSource::GotDataCallback callback) {
+  const std::string path = URLDataSource::URLToRequestPath(url);
   std::string updated_path = path;
 #if defined(OS_CHROMEOS)
   // If this is a Polymer request and multiple Polymer versions are enabled,
   // return the Polymer 2 path unless the request is from the
   // |disabled_polymer2_host_|.
-  if ((path == kPolymerHtml || path == kPolymerJs || path == kHtmlImportsJs) &&
-      UsingMultiplePolymerVersions()) {
-    bool polymer2 = !IsPolymer2DisabledForPage(wc_getter);
-    if (polymer2 && (path == kPolymerHtml || path == kPolymerJs)) {
-      updated_path = path == kPolymerHtml ? kPolymer2Html : kPolymer2Js;
-    } else if (!polymer2 && path == kHtmlImportsJs) {
-      updated_path = kHtmlImportsV0Js;
-    }
+  if ((path == kPolymerHtml || path == kPolymerJs) &&
+      UsingMultiplePolymerVersions() && !IsPolymer2DisabledForPage(wc_getter)) {
+    updated_path = path == kPolymerHtml ? kPolymer2Html : kPolymer2Js;
   }
 #endif  // defined(OS_CHROMEOS)
 
@@ -330,7 +324,7 @@ void SharedResourcesDataSource::StartDataRequest(
     bytes = GetContentClient()->GetDataResourceBytes(idr);
   }
 
-  callback.Run(std::move(bytes));
+  std::move(callback).Run(std::move(bytes));
 }
 
 bool SharedResourcesDataSource::AllowCaching() {

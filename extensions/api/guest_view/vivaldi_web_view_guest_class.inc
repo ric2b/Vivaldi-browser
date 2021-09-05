@@ -10,8 +10,7 @@
  public:
   void ShowPageInfo(gfx::Point pos);
 
-  void ExtendedLoadProgressChanged(content::WebContents* source,
-                                   double progress,
+  void ExtendedLoadProgressChanged(double progress,
                                    double loaded_bytes,
                                    int loaded_elements,
                                    int total_elements) override;
@@ -35,21 +34,22 @@
   bool IsVivaldiMail();
   bool IsVivaldiWebPanel();
 
-  void SetVisible(bool is_visible);
-
-  bool IsVisible();
-
   void SetIsFullscreen(bool is_fullscreen, bool skip_window_state);
 
   // contentblocking handling
-  void OnContentBlocked(ContentSettingsType settings_type,
-                        const base::string16& details);
+  void OnContentAllowed(ContentSettingsType settings_type);
+  void OnContentBlocked(ContentSettingsType settings_type);
+
   void AllowRunningInsecureContent();
 
   bool ShouldAllowRunningInsecureContent(content::WebContents* web_contents,
                                          bool allowed_per_prefs,
                                          const url::Origin& origin,
                                          const GURL& resource_url) override;
+
+  content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
+      content::WebContents* source,
+      const content::NativeWebKeyboardEvent& event) override;
 
   // Note(andre@vivaldi.com):
   // This is used for pages opened from extensions. The delegate is not set
@@ -82,6 +82,10 @@
   // Used to expose the view to extensions, only popups now.
   std::unique_ptr<::vivaldi::VivaldiExtensionHost> extension_host_;
 
+ protected:
+
+  WebContentsDelegate* GetDevToolsConnector() override;
+
  private:
   void VisibleSecurityStateChanged(content::WebContents* source) override;
 
@@ -107,9 +111,12 @@
   // vivaldi addition:
   bool IsMouseGesturesEnabled() const;
 
-  bool is_visible_;
   bool is_fullscreen_;
   ui::WindowShowState window_state_prior_to_fullscreen_ = ui::SHOW_STATE_NORMAL;
+
+  // NOTE(david@vivaldi.com): |connector_item_| is a proxy delegate which is
+  // required by Vivaldi.
+  scoped_refptr<extensions::DevtoolsConnectorItem> connector_item_;
 
 #if defined(USE_AURA)
 

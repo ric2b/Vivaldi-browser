@@ -462,24 +462,7 @@ bool AppWindow::HandleKeyboardEvent(
     Restore();
     return true;
   }
-  // NOTE(david@vivaldi.com): With SHIFT+CTRL+I we are now able to debug dev
-  // tools in undocked state.
-  if ((event.GetType() == blink::WebInputEvent::kRawKeyDown) &&
-      (event.GetModifiers() &
-       (blink::WebInputEvent::kShiftKey | blink::WebInputEvent::kControlKey))) {
-    if (event.windows_key_code == ui::VKEY_I) {
-      auto* guest_manager = guest_view::GuestViewManager::FromBrowserContext(
-          source->GetBrowserContext());
-      if (guest_manager) {
-        guest_manager->ForEachGuest(
-            source,
-            base::BindRepeating([](content::WebContents* contents) -> bool {
-              DevToolsWindow::OpenDevToolsWindow(contents);
-              return true;
-            }));
-      }
-    }
-  }
+
   return native_app_window_->HandleKeyboardEvent(event);
 }
 
@@ -516,6 +499,14 @@ content::PictureInPictureResult AppWindow::EnterPictureInPicture(
 
 void AppWindow::ExitPictureInPicture() {
   app_delegate_->ExitPictureInPicture();
+}
+
+bool AppWindow::ShouldShowStaleContentOnEviction(content::WebContents* source) {
+#if defined(OS_CHROMEOS)
+  return true;
+#else
+  return false;
+#endif  // defined(OS_CHROMEOS)
 }
 
 bool AppWindow::OnMessageReceived(const IPC::Message& message,
@@ -871,7 +862,8 @@ void AppWindow::StartAppIconDownload() {
   image_loader_ptr_factory_.InvalidateWeakPtrs();
   web_contents()->DownloadImage(
       app_icon_url_,
-      true,   // is a favicon
+      true,  // is a favicon
+      app_delegate_->PreferredIconSize(),
       0,      // no maximum size
       false,  // normal cache policy
       base::BindOnce(&AppWindow::DidDownloadFavicon,

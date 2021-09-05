@@ -32,7 +32,6 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/style/typography.h"
-#include "ui/views/window/dialog_client_view.h"
 
 namespace autofill {
 
@@ -50,10 +49,17 @@ LocalCardMigrationBubbleViews::LocalCardMigrationBubbleViews(
     : LocationBarBubbleDelegateView(anchor_view, web_contents),
       controller_(controller) {
   DCHECK(controller);
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK);
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(
           IDS_AUTOFILL_LOCAL_CARD_MIGRATION_BUBBLE_BUTTON_LABEL));
+  DialogDelegate::SetCancelCallback(
+      base::BindOnce(&LocalCardMigrationBubbleViews::OnDialogCancelled,
+                     base::Unretained(this)));
+  DialogDelegate::SetAcceptCallback(
+      base::BindOnce(&LocalCardMigrationBubbleViews::OnDialogAccepted,
+                     base::Unretained(this)));
 }
 
 void LocalCardMigrationBubbleViews::Show(DisplayReason reason) {
@@ -71,24 +77,16 @@ void LocalCardMigrationBubbleViews::Hide() {
   CloseBubble();
 }
 
-bool LocalCardMigrationBubbleViews::Accept() {
+void LocalCardMigrationBubbleViews::OnDialogAccepted() {
+  // TODO(https://crbug.com/1046793): Maybe delete this.
   if (controller_)
     controller_->OnConfirmButtonClicked();
-  return true;
 }
 
-bool LocalCardMigrationBubbleViews::Cancel() {
+void LocalCardMigrationBubbleViews::OnDialogCancelled() {
+  // TODO(https://crbug.com/1046793): Maybe delete this.
   if (controller_)
     controller_->OnCancelButtonClicked();
-  return true;
-}
-
-bool LocalCardMigrationBubbleViews::Close() {
-  return true;
-}
-
-int LocalCardMigrationBubbleViews::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_OK;
 }
 
 gfx::Size LocalCardMigrationBubbleViews::CalculatePreferredSize() const {

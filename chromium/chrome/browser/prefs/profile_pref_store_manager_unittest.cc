@@ -32,13 +32,10 @@
 #include "content/public/common/service_names.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "services/preferences/public/cpp/pref_service_main.h"
 #include "services/preferences/public/cpp/tracked/configuration.h"
 #include "services/preferences/public/cpp/tracked/mock_validation_delegate.h"
 #include "services/preferences/public/cpp/tracked/pref_names.h"
 #include "services/preferences/public/mojom/preferences.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/cpp/constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -247,7 +244,7 @@ class ProfilePrefStoreManagerTest : public testing::Test,
       run_loop.Run();
 
       pref_store_->RemoveObserver(&registry_verifier_);
-      pref_store_ = NULL;
+      pref_store_.reset();
       // Nothing should have to happen on the background threads, but just in
       // case...
       base::RunLoop().RunUntilIdle();
@@ -354,7 +351,6 @@ class ProfilePrefStoreManagerTest : public testing::Test,
 
   base::test::ScopedFeatureList feature_list_;
   bool reset_recorded_;
-  service_manager::mojom::ConnectorRequest connector_request_;
   mojo::ReceiverSet<prefs::mojom::ResetOnLoadObserver>
       reset_on_load_observer_receivers_;
 };

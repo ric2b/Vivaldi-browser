@@ -52,6 +52,8 @@ class PLATFORM_EXPORT CompositorPriorityExperiments {
     return alternating_compositor_priority_;
   }
 
+  void OnWillBeginMainFrame();
+
   void OnMainThreadSchedulerInitialized();
   void OnMainThreadSchedulerShutdown();
 
@@ -76,7 +78,8 @@ class PLATFORM_EXPORT CompositorPriorityExperiments {
     void UpdateCompositorBudgetState(base::TimeTicks now);
 
     void OnTaskCompleted(MainThreadTaskQueue* queue,
-                         MainThreadTaskQueue::TaskTiming* task_timing);
+                         MainThreadTaskQueue::TaskTiming* task_timing,
+                         bool have_seen_stop_signal);
 
     // Unimplemented methods.
     void AddQueueToBudgetPool(TaskQueue* queue,
@@ -90,17 +93,13 @@ class PLATFORM_EXPORT CompositorPriorityExperiments {
     CompositorPriorityExperiments* experiment_;
     std::unique_ptr<CPUTimeBudgetPool> compositor_budget_pool_;
     bool is_exhausted_ = false;
-
-    const base::TickClock* tick_clock_;  // Not owned.
   };
-
-  MainThreadSchedulerImpl* scheduler_;  // Not owned.
 
   static Experiment GetExperimentFromFeatureList();
 
-  void DoPrioritizeCompositingAfterDelay();
+  enum class StopSignalType { kAnyCompositorTask, kBeginMainFrameTask };
 
-  void PostPrioritizeCompositingAfterDelayTask();
+  MainThreadSchedulerImpl* scheduler_;  // Not owned.
 
   const Experiment experiment_;
 
@@ -108,11 +107,14 @@ class PLATFORM_EXPORT CompositorPriorityExperiments {
       QueuePriority::kVeryHighPriority;
 
   QueuePriority delay_compositor_priority_ = QueuePriority::kNormalPriority;
-  CancelableClosureHolder do_prioritize_compositing_after_delay_callback_;
+  base::TimeTicks last_compositor_task_time_;
   base::TimeDelta prioritize_compositing_after_delay_length_;
 
   QueuePriority budget_compositor_priority_ = QueuePriority::kVeryHighPriority;
   std::unique_ptr<CompositorBudgetPoolController> budget_pool_controller_;
+
+  const StopSignalType stop_signal_;
+  bool will_begin_main_frame_ = false;
 };
 
 }  // namespace scheduler

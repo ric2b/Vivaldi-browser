@@ -282,14 +282,14 @@ class CONTENT_EXPORT MediaStreamManager
   // Called by the tests to specify a factory for creating
   // FakeMediaStreamUIProxys to be used for generated streams.
   void UseFakeUIFactoryForTests(
-      base::Callback<std::unique_ptr<FakeMediaStreamUIProxy>(void)>
+      base::RepeatingCallback<std::unique_ptr<FakeMediaStreamUIProxy>(void)>
           fake_ui_factory);
 
   // Register and unregister a new callback for receiving native log entries.
   // Called on the IO thread.
   static void RegisterNativeLogCallback(
       int renderer_host_id,
-      const base::Callback<void(const std::string&)>& callback);
+      base::RepeatingCallback<void(const std::string&)> callback);
   static void UnregisterNativeLogCallback(int renderer_host_id);
 
   // Generates a hash of a device's unique ID usable by one
@@ -498,7 +498,7 @@ class CONTENT_EXPORT MediaStreamManager
   // Runs on the IO thread and does the actual [un]registration of callbacks.
   void DoNativeLogCallbackRegistration(
       int renderer_host_id,
-      const base::Callback<void(const std::string&)>& callback);
+      base::RepeatingCallback<void(const std::string&)> callback);
   void DoNativeLogCallbackUnregistration(int renderer_host_id);
 
   // Callback to handle the reply to a low-level enumeration request.
@@ -532,11 +532,12 @@ class CONTENT_EXPORT MediaStreamManager
   // All non-closed request. Must be accessed on IO thread.
   DeviceRequests requests_;
 
-  base::Callback<std::unique_ptr<FakeMediaStreamUIProxy>(void)>
+  base::RepeatingCallback<std::unique_ptr<FakeMediaStreamUIProxy>(void)>
       fake_ui_factory_;
 
   // Maps render process hosts to log callbacks. Used on the IO thread.
-  std::map<int, base::Callback<void(const std::string&)>> log_callbacks_;
+  std::map<int, base::RepeatingCallback<void(const std::string&)>>
+      log_callbacks_;
 
   std::unique_ptr<AudioServiceListener> audio_service_listener_;
 

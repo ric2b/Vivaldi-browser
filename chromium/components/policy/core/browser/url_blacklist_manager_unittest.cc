@@ -288,16 +288,7 @@ TEST_F(URLBlacklistManagerTest, Filtering) {
   blacklist.Allow(allowed.get());
   EXPECT_FALSE(blacklist.IsURLBlocked(GURL("http://example.com")));
 
-  // Treats chrome-devtools and devtools schemes the same way.
-  blocked.reset(new base::ListValue);
-  blocked->AppendString("*");
-  blacklist.Block(blocked.get());
-  allowed.reset(new base::ListValue);
-  allowed->AppendString("chrome-devtools://*");
-  blacklist.Allow(allowed.get());
-  EXPECT_FALSE(blacklist.IsURLBlocked(GURL("devtools://something.com")));
-  EXPECT_TRUE(blacklist.IsURLBlocked(GURL("https://something.com")));
-
+  // Devtools should not be blocked.
   blocked.reset(new base::ListValue);
   blocked->AppendString("*");
   blacklist.Block(blocked.get());
@@ -530,7 +521,6 @@ TEST_F(URLBlacklistManagerTest, BlacklistBasicCoverage) {
   EXPECT_TRUE(IsMatch("example.com", "ftp://example.com"));
   EXPECT_TRUE(IsMatch("example.com", "http://example.com"));
   EXPECT_TRUE(IsMatch("example.com", "https://example.com"));
-  EXPECT_TRUE(IsMatch("example.com", "gopher://example.com"));
   EXPECT_TRUE(IsMatch("example.com", "ws://example.com"));
   EXPECT_TRUE(IsMatch("example.com", "wss://example.com"));
 
@@ -540,6 +530,7 @@ TEST_F(URLBlacklistManagerTest, BlacklistBasicCoverage) {
   EXPECT_FALSE(IsMatch("example.com/*", "filesystem:///something"));
   EXPECT_FALSE(IsMatch("example.com", "custom://example.com"));
   EXPECT_FALSE(IsMatch("example", "custom://example"));
+  EXPECT_FALSE(IsMatch("example.com", "gopher://example.com"));
 
   // An optional '.' (dot) can prefix the host field to disable subdomain
   // matching, see below for details.

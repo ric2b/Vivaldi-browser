@@ -28,8 +28,8 @@ constexpr base::TimeDelta InputPredictor::kTimeInterval;
 constexpr base::TimeDelta InputPredictor::kMinTimeInterval;
 constexpr base::TimeDelta KalmanPredictor::kMaxTimeInQueue;
 
-KalmanPredictor::KalmanPredictor(HeuristicsMode heuristics_mode)
-    : heuristics_mode_(heuristics_mode) {}
+KalmanPredictor::KalmanPredictor(unsigned int prediction_options)
+    : prediction_options_(prediction_options) {}
 
 KalmanPredictor::~KalmanPredictor() = default;
 
@@ -70,24 +70,30 @@ bool KalmanPredictor::HasPrediction() const {
   return x_predictor_.Stable() && y_predictor_.Stable();
 }
 
-bool KalmanPredictor::GeneratePrediction(base::TimeTicks predict_time,
-                                         InputData* result) const {
+std::unique_ptr<InputPredictor::InputData> KalmanPredictor::GeneratePrediction(
+    base::TimeTicks predict_time) const {
   if (!HasPrediction())
-    return false;
+    return nullptr;
 
   DCHECK(last_points_.size());
   float pred_dt =
       (predict_time - last_points_.back().time_stamp).InMillisecondsF();
 
-  std::vector<InputData> pred_points;
-  gfx::Vector2dF position(last_points_.back().pos.x(),
-                          last_points_.back().pos.y());
+  gfx::PointF position(last_points_.back().pos.x(),
+                       last_points_.back().pos.y());
   gfx::Vector2dF velocity = PredictVelocity();
   gfx::Vector2dF acceleration = PredictAcceleration();
 
+  if (prediction_options_ & kDirectionCutOffEnabled) {
+    gfx::Vector2dF future_velocity =
+        velocity + ScaleVector2d(acceleration, pred_dt);
+    if (gfx::DotProduct(velocity, future_velocity) <= 0)
+      return nullptr;
+  }
+
   position += ScaleVector2d(velocity, kVelocityInfluence * pred_dt);
 
-  if (heuristics_mode_ == HeuristicsMode::kHeuristicsEnabled) {
+  if (prediction_options_ & kHeuristicsEnabled) {
     float points_angle = 0.0f;
     for (size_t i = 2; i < last_points_.size(); i++) {
       gfx::Vector2dF first_dir =
@@ -107,9 +113,7 @@ bool KalmanPredictor::GeneratePrediction(base::TimeTicks predict_time,
         ScaleVector2d(acceleration, kAccelerationInfluence * pred_dt * pred_dt);
   }
 
-  result->pos.set_x(position.x());
-  result->pos.set_y(position.y());
-  return true;
+  return std::make_unique<InputData>(position, predict_time);
 }
 
 base::TimeDelta KalmanPredictor::TimeInterval() const {

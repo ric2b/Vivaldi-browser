@@ -47,6 +47,8 @@ class CORE_EXPORT V8ScriptValueSerializer
   // DataCloneError message will be used.
   virtual bool WriteDOMObject(ScriptWrappable*, ExceptionState&);
 
+  ScriptState* GetScriptState() const { return script_state_; }
+
   void WriteTag(SerializationTag tag) {
     uint8_t tag_byte = tag;
     serializer_.WriteRawBytes(&tag_byte, 1);
@@ -68,6 +70,12 @@ class CORE_EXPORT V8ScriptValueSerializer
         "Only enums backed by uint32_t are accepted.");
     WriteUint32(static_cast<uint32_t>(value));
   }
+
+  SerializedScriptValue* GetSerializedScriptValue() {
+    return serialized_script_value_.get();
+  }
+
+  bool IsForStorage() const { return for_storage_; }
 
  private:
   // Transfer is split into two phases: scanning the transferables so that we
@@ -100,7 +108,9 @@ class CORE_EXPORT V8ScriptValueSerializer
                                size_t* actual_size) override;
   void FreeBufferMemory(void* buffer) override;
 
-  Member<ScriptState> script_state_;
+  bool TransferableStreamsEnabled() const;
+
+  ScriptState* script_state_;
   scoped_refptr<SerializedScriptValue> serialized_script_value_;
   v8::ValueSerializer serializer_;
   const Transferables* transferables_ = nullptr;

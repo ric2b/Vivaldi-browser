@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "base/sequenced_task_runner.h"
+#include "base/strings/string16.h"
 #include "device/base/device_monitor_win.h"
 #include "services/device/usb/usb_device_win.h"
 
@@ -29,21 +30,22 @@ class UsbServiceWin final : public DeviceMonitorWin::Observer,
   class BlockingTaskRunnerHelper;
 
   // device::UsbService implementation
-  void GetDevices(const GetDevicesCallback& callback) override;
+  void GetDevices(GetDevicesCallback callback) override;
 
   // device::DeviceMonitorWin::Observer implementation
   void OnDeviceAdded(const GUID& class_guid,
-                     const std::string& device_path) override;
+                     const base::string16& device_path) override;
   void OnDeviceRemoved(const GUID& class_guid,
-                       const std::string& device_path) override;
+                       const base::string16& device_path) override;
 
   // Methods called by BlockingThreadHelper
   void HelperStarted();
-  void CreateDeviceObject(const std::string& device_path,
-                          const std::string& hub_path,
+  void CreateDeviceObject(const base::string16& device_path,
+                          const base::string16& hub_path,
+                          const std::vector<base::string16>& child_device_paths,
                           uint32_t bus_number,
                           uint32_t port_number,
-                          const std::string& driver_name);
+                          const base::string16& driver_name);
 
   void DeviceReady(scoped_refptr<UsbDeviceWin> device, bool success);
 
@@ -58,7 +60,8 @@ class UsbServiceWin final : public DeviceMonitorWin::Observer,
 
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
   std::unique_ptr<BlockingTaskRunnerHelper, base::OnTaskRunnerDeleter> helper_;
-  std::unordered_map<std::string, scoped_refptr<UsbDeviceWin>> devices_by_path_;
+  std::unordered_map<base::string16, scoped_refptr<UsbDeviceWin>>
+      devices_by_path_;
 
   ScopedObserver<DeviceMonitorWin, DeviceMonitorWin::Observer> device_observer_;
 

@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 @JNINamespace("net::test_server")
 public class EmbeddedTestServerImpl extends IEmbeddedTestServerImpl.Stub {
-    private static final String TAG = "cr_TestServer";
+    private static final String TAG = "TestServer";
 
     private static AtomicInteger sCount = new AtomicInteger();
 
@@ -68,7 +68,8 @@ public class EmbeddedTestServerImpl extends IEmbeddedTestServerImpl.Stub {
         // This is necessary as EmbeddedTestServerImpl is in a different process than the tests
         // using it, so it needs to initialize its own application context.
         ContextUtils.initApplicationContext(mContext.getApplicationContext());
-        LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_BROWSER);
+        LibraryLoader.getInstance().setLibraryProcessType(LibraryProcessType.PROCESS_BROWSER);
+        LibraryLoader.getInstance().ensureInitialized();
 
         mHandlerThread = new HandlerThread("EmbeddedTestServer" + sCount.getAndIncrement());
         mHandlerThread.start();

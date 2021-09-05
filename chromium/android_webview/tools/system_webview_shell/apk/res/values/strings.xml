@@ -10,6 +10,7 @@
     <string name="title_activity_jank">WebView Jank Tester</string>
     <string name="title_activity_startup_time">WebView Startup Time Tester</string>
     <string name="title_activity_browser">WebView Browser Tester</string>
+    <string name="title_activity_browser_second_process">Second Process Browser Tester</string>
     <string name="title_activity_layout_test">WebView Layout Test</string>
     <string name="title_activity_thread_test">WebView Thread Test</string>
     <string name="title_activity_page_cycler">WebView Page Cycler Test</string>
@@ -17,9 +18,13 @@
     <string name="menu_reset_webview">Destroy and create new WebView</string>
     <string name="menu_clear_cache">Clear cache</string>
     <string name="menu_enable_tracing">Enable tracing</string>
+    <string name="menu_force_dark_off">Force Dark Off</string>
+    <string name="menu_force_dark_auto">Force Dark Auto</string>
+    <string name="menu_force_dark_on">Force Dark On</string>
     <string name="menu_start_animation_activity">Animation test</string>
     <string name="menu_print">Print</string>
     <string name="menu_about">About WebView</string>
+    <string name="menu_devui">WebView DevTools</string>
     <string name="load_url">Load URL</string>
 
     <!-- activity_webview_animation_test strings -->
@@ -27,6 +32,7 @@
     <string name="layer_button">Layer</string>
     <string name="rotate_button">Rotate</string>
     <string name="scale_button">Scale</string>
+    <string name="stencil_button">Rounded corner</string>
     <string name="translate_button">Translate</string>
 
     <!--  activity_web_platform_tests strings -->

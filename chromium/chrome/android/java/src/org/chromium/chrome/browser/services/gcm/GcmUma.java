@@ -8,8 +8,6 @@ import android.content.Context;
 
 import androidx.annotation.IntDef;
 
-import org.chromium.base.library_loader.LibraryProcessType;
-import org.chromium.base.metrics.CachedMetrics;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.content_public.browser.BrowserStartupController;
@@ -78,28 +76,17 @@ public class GcmUma {
         });
     }
 
-    public static void recordSubscriptionLazyCheckTime(long time) {
-        // Use {@link CachedMetrics} so this gets reported when native is loaded instead of calling
-        // native right away.
-        new CachedMetrics.TimesHistogramSample("PushMessaging.TimeToCheckIfSubscriptionLazy")
-                .record(time);
-    }
-
     public static void recordWebPushReceivedDeviceState(@WebPushDeviceState int state) {
-        // Use {@link CachedMetrics} so this gets reported when native is loaded instead of calling
-        // native right away.
-        new CachedMetrics
-                .EnumeratedHistogramSample(
-                        "GCM.WebPushReceived.DeviceState", WebPushDeviceState.NUM_ENTRIES)
-                .record(state);
+        RecordHistogram.recordEnumeratedHistogram(
+                "GCM.WebPushReceived.DeviceState", state, WebPushDeviceState.NUM_ENTRIES);
     }
 
     private static void onNativeLaunched(final Context context, final Runnable task) {
         PostTask.postTask(UiThreadTaskTraits.DEFAULT, new Runnable() {
             @Override
             public void run() {
-                BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
-                        .addStartupCompletedObserver(new StartupCallback() {
+                BrowserStartupController.getInstance().addStartupCompletedObserver(
+                        new StartupCallback() {
                             @Override
                             public void onSuccess() {
                                 task.run();

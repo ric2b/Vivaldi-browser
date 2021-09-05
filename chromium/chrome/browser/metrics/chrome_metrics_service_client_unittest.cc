@@ -21,7 +21,6 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/ukm/ukm_service.h"
 #include "content/public/test/browser_task_environment.h"
-#include "content/public/test/test_service_manager_context.h"
 #include "extensions/buildflags/buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -54,8 +53,6 @@ class ChromeMetricsServiceClientTest : public testing::Test {
             &ChromeMetricsServiceClientTest::LoadFakeClientInfoBackup,
             base::Unretained(this)));
     ASSERT_TRUE(profile_manager_.SetUp());
-    service_manager_context_ =
-        std::make_unique<content::TestServiceManagerContext>();
 #if defined(OS_CHROMEOS)
     // ChromeOs Metrics Provider require g_login_state and power manager client
     // initialized before they can be instantiated.
@@ -69,7 +66,6 @@ class ChromeMetricsServiceClientTest : public testing::Test {
     chromeos::LoginState::Shutdown();
     chromeos::PowerManagerClient::Shutdown();
 #endif  // defined(OS_CHROMEOS)
-    service_manager_context_.reset();
   }
 
  protected:
@@ -85,7 +81,6 @@ class ChromeMetricsServiceClientTest : public testing::Test {
   base::UserActionTester user_action_runner_;
   std::unique_ptr<metrics::MetricsStateManager> metrics_state_manager_;
   metrics::TestEnabledStateProvider enabled_state_provider_;
-  std::unique_ptr<content::TestServiceManagerContext> service_manager_context_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeMetricsServiceClientTest);
@@ -155,21 +150,21 @@ TEST_F(ChromeMetricsServiceClientTest, TestRegisterMetricsServiceProviders) {
   size_t expected_providers = 3;
 
   // This is the number of metrics providers that are outside any #if macros.
-  expected_providers += 18;
+  expected_providers += 21;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   expected_providers++;  // ExtensionsMetricsProvider.
 #endif                   // defined(ENABLE_EXTENSIONS)
 
 #if defined(OS_ANDROID)
-  // AndroidMetricsProvider and PageLoadMetricsProvider.
-  expected_providers += 2;
+  // AndroidMetricsProvider, ChromeAndroidMetricsProvider, and
+  // PageLoadMetricsProvider.
+  expected_providers += 3;
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_WIN)
-  // GoogleUpdateMetricsProviderWin, WatcherMetricsProviderWin and
-  // AntiVirusMetricsProvider.
-  expected_providers += 3;
+  // GoogleUpdateMetricsProviderWin and AntiVirusMetricsProvider.
+  expected_providers += 2;
 #endif  // defined(OS_WIN)
 
 #if BUILDFLAG(ENABLE_PLUGINS)

@@ -20,16 +20,21 @@ CASE 1, original layer tree:
     },
     {
       "name": "LayoutNGBlockFlow (relative positioned) DIV id='paragraph-b' class='overlapping lime'",
+      "position": [0, 100],
       "bounds": [200, 100],
       "contentsOpaque": true,
-      "backgroundColor": "#00FF00",
-      "transform": 2
+      "backgroundColor": "#00FF00"
     },
     {
       "name": "Squashing Layer (first squashed layer: LayoutNGBlockFlow (relative positioned) DIV id='paragraph-c' class='overlapping cyan')",
-      "position": [0, 100],
-      "bounds": [200, 300],
-      "transform": 2
+      "position": [0, 200],
+      "bounds": [200, 300]
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [785, 0],
+      "bounds": [15, 600],
+      "contentsOpaque": true
     }
   ],
   "transforms": [
@@ -40,15 +45,6 @@ CASE 1, original layer tree:
         [0, 1, 0, 0],
         [0, 0, 1, 0],
         [100, 150, 0, 1]
-      ]
-    },
-    {
-      "id": 2,
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 100, 0, 1]
       ]
     }
   ]
@@ -62,17 +58,9 @@ CASE 2, scrolling y to 80, new layers will be squashed, so things repaint:
       "bounds": [785, 1400],
       "contentsOpaque": true,
       "backgroundColor": "#FFFFFF",
-      "paintInvalidations": [
-        {
-          "object": "LayoutNGBlockFlow (relative positioned) DIV id='paragraph-f' class='overlapping lime'",
-          "rect": [0, 500, 200, 100],
-          "reason": "chunk disappeared"
-        },
-        {
-          "object": "LayoutNGBlockFlow (relative positioned) DIV id='paragraph-b' class='overlapping lime'",
-          "rect": [0, 100, 200, 100],
-          "reason": "chunk appeared"
-        }
+      "invalidations": [
+        [0, 500, 200, 100],
+        [0, 100, 200, 100]
       ],
       "transform": 1
     },
@@ -85,30 +73,29 @@ CASE 2, scrolling y to 80, new layers will be squashed, so things repaint:
     },
     {
       "name": "LayoutNGBlockFlow (relative positioned) DIV id='paragraph-c' class='overlapping cyan'",
+      "position": [0, 200],
       "bounds": [200, 100],
       "contentsOpaque": true,
       "backgroundColor": "#00FFFF",
-      "paintInvalidations": [
-        {
-          "object": "LayoutNGBlockFlow (relative positioned) DIV id='paragraph-c' class='overlapping cyan'",
-          "rect": [0, 0, 200, 100],
-          "reason": "full layer"
-        }
+      "invalidations": [
+        [0, 0, 200, 100]
       ],
-      "transform": 3
+      "transform": 1
     },
     {
       "name": "Squashing Layer (first squashed layer: LayoutNGBlockFlow (relative positioned) DIV id='paragraph-d' class='overlapping lime')",
-      "position": [0, 100],
+      "position": [0, 300],
       "bounds": [200, 300],
-      "paintInvalidations": [
-        {
-          "object": "Squashing Layer (first squashed layer: LayoutNGBlockFlow (relative positioned) DIV id='paragraph-d' class='overlapping lime')",
-          "rect": [0, 0, 200, 300],
-          "reason": "full layer"
-        }
+      "invalidations": [
+        [0, 0, 200, 300]
       ],
-      "transform": 3
+      "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [785, 0],
+      "bounds": [15, 600],
+      "contentsOpaque": true
     }
   ],
   "transforms": [
@@ -128,16 +115,6 @@ CASE 2, scrolling y to 80, new layers will be squashed, so things repaint:
         [0, 1, 0, 0],
         [0, 0, 1, 0],
         [100, 150, 0, 1]
-      ]
-    },
-    {
-      "id": 3,
-      "parent": 1,
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 200, 0, 1]
       ]
     }
   ]
@@ -162,16 +139,23 @@ CASE 3, scrolling y to 120, no repaints expected:
     },
     {
       "name": "LayoutNGBlockFlow (relative positioned) DIV id='paragraph-c' class='overlapping cyan'",
+      "position": [0, 200],
       "bounds": [200, 100],
       "contentsOpaque": true,
       "backgroundColor": "#00FFFF",
-      "transform": 3
+      "transform": 1
     },
     {
       "name": "Squashing Layer (first squashed layer: LayoutNGBlockFlow (relative positioned) DIV id='paragraph-d' class='overlapping lime')",
-      "position": [0, 100],
+      "position": [0, 300],
       "bounds": [200, 300],
-      "transform": 3
+      "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [785, 0],
+      "bounds": [15, 600],
+      "contentsOpaque": true
     }
   ],
   "transforms": [
@@ -192,16 +176,6 @@ CASE 3, scrolling y to 120, no repaints expected:
         [0, 0, 1, 0],
         [100, 150, 0, 1]
       ]
-    },
-    {
-      "id": 3,
-      "parent": 1,
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 200, 0, 1]
-      ]
     }
   ]
 }
@@ -214,17 +188,9 @@ CASE 4, scrolling y to 170 new layers will be squashed, so things repaint:
       "bounds": [785, 1400],
       "contentsOpaque": true,
       "backgroundColor": "#FFFFFF",
-      "paintInvalidations": [
-        {
-          "object": "LayoutNGBlockFlow (relative positioned) DIV id='paragraph-g' class='overlapping cyan'",
-          "rect": [0, 600, 200, 100],
-          "reason": "chunk disappeared"
-        },
-        {
-          "object": "LayoutNGBlockFlow (relative positioned) DIV id='paragraph-c' class='overlapping cyan'",
-          "rect": [0, 200, 200, 100],
-          "reason": "chunk appeared"
-        }
+      "invalidations": [
+        [0, 600, 200, 100],
+        [0, 200, 200, 100]
       ],
       "transform": 1
     },
@@ -237,30 +203,29 @@ CASE 4, scrolling y to 170 new layers will be squashed, so things repaint:
     },
     {
       "name": "LayoutNGBlockFlow (relative positioned) DIV id='paragraph-d' class='overlapping lime'",
+      "position": [0, 300],
       "bounds": [200, 100],
       "contentsOpaque": true,
       "backgroundColor": "#00FF00",
-      "paintInvalidations": [
-        {
-          "object": "LayoutNGBlockFlow (relative positioned) DIV id='paragraph-d' class='overlapping lime'",
-          "rect": [0, 0, 200, 100],
-          "reason": "full layer"
-        }
+      "invalidations": [
+        [0, 0, 200, 100]
       ],
-      "transform": 3
+      "transform": 1
     },
     {
       "name": "Squashing Layer (first squashed layer: LayoutNGBlockFlow (relative positioned) DIV id='paragraph-e' class='overlapping cyan')",
-      "position": [0, 100],
+      "position": [0, 400],
       "bounds": [200, 300],
-      "paintInvalidations": [
-        {
-          "object": "Squashing Layer (first squashed layer: LayoutNGBlockFlow (relative positioned) DIV id='paragraph-e' class='overlapping cyan')",
-          "rect": [0, 0, 200, 300],
-          "reason": "full layer"
-        }
+      "invalidations": [
+        [0, 0, 200, 300]
       ],
-      "transform": 3
+      "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [785, 0],
+      "bounds": [15, 600],
+      "contentsOpaque": true
     }
   ],
   "transforms": [
@@ -280,16 +245,6 @@ CASE 4, scrolling y to 170 new layers will be squashed, so things repaint:
         [0, 1, 0, 0],
         [0, 0, 1, 0],
         [100, 150, 0, 1]
-      ]
-    },
-    {
-      "id": 3,
-      "parent": 1,
-      "transform": [
-        [1, 0, 0, 0],
-        [0, 1, 0, 0],
-        [0, 0, 1, 0],
-        [0, 300, 0, 1]
       ]
     }
   ]

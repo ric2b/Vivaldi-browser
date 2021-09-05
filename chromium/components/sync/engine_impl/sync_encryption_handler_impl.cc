@@ -73,19 +73,6 @@ enum NigoriMigrationState {
   MIGRATION_STATE_SIZE,
 };
 
-// Enumeration of possible values for a key derivation method (including a
-// special value of "not set"). Used in UMA metrics. Do not re-order or delete
-// these entries; they are used in a UMA histogram.  Please edit
-// SyncCustomPassphraseKeyDerivationMethodState in enums.xml if a value is
-// added.
-enum class KeyDerivationMethodStateForMetrics {
-  NOT_SET = 0,
-  UNSUPPORTED = 1,
-  PBKDF2_HMAC_SHA1_1003 = 2,
-  SCRYPT_8192_8_11 = 3,
-  kMaxValue = SCRYPT_8192_8_11
-};
-
 // The new passphrase state is sufficient to determine whether a nigori node
 // is migrated to support keystore encryption. In addition though, we also
 // want to verify the conditions for proper keystore encryption functionality.
@@ -312,7 +299,7 @@ SyncEncryptionHandlerImpl::SyncEncryptionHandlerImpl(
     const base::RepeatingCallback<std::string()>& random_salt_generator)
     : user_share_(user_share),
       encryptor_(encryptor),
-      vault_unsafe_(SensitiveTypes(), kInitialPassphraseType),
+      vault_unsafe_(AlwaysEncryptedUserTypes(), kInitialPassphraseType),
       encrypt_everything_(false),
       nigori_overwrite_count_(0),
       random_salt_generator_(random_salt_generator),
@@ -405,8 +392,6 @@ bool SyncEncryptionHandlerImpl::Init() {
     UMA_HISTOGRAM_ENUMERATION("Sync.NigoriMigrationState",
                               NOT_MIGRATED_CRYPTO_NOT_READY,
                               MIGRATION_STATE_SIZE);
-    UMA_HISTOGRAM_BOOLEAN("Sync.EncryptEverythingWhenCryptographerNotReady",
-                          encrypt_everything_);
   } else if (keystore_key_.empty()) {
     // The client has no keystore key, either because it is not yet enabled or
     // the server is not sending a valid keystore key.
@@ -736,7 +721,7 @@ void SyncEncryptionHandlerImpl::SetDecryptionPassphrase(
 }
 
 void SyncEncryptionHandlerImpl::AddTrustedVaultDecryptionKeys(
-    const std::vector<std::string>& keys) {
+    const std::vector<std::vector<uint8_t>>& keys) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   NOTIMPLEMENTED();
 }
@@ -834,26 +819,26 @@ bool SyncEncryptionHandlerImpl::NeedKeystoreKey() const {
 }
 
 bool SyncEncryptionHandlerImpl::SetKeystoreKeys(
-    const std::vector<std::string>& keys) {
+    const std::vector<std::vector<uint8_t>>& keys) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   syncable::ReadTransaction trans(FROM_HERE, user_share_->directory.get());
   if (keys.empty())
     return false;
   // The last key in the vector is the current keystore key. The others are kept
   // around for decryption only.
-  const std::string& raw_keystore_key = keys.back();
+  const std::vector<uint8_t>& raw_keystore_key = keys.back();
   if (raw_keystore_key.empty())
     return false;
 
   // Note: in order to Pack the keys, they must all be base64 encoded (else
   // JSON serialization fails).
-  base::Base64Encode(raw_keystore_key, &keystore_key_);
+  keystore_key_ = base::Base64Encode(raw_keystore_key);
 
   // Go through and save the old keystore keys. We always persist all keystore
   // keys the server sends us.
   old_keystore_keys_.resize(keys.size() - 1);
   for (size_t i = 0; i < keys.size() - 1; ++i)
-    base::Base64Encode(keys[i], &old_keystore_keys_[i]);
+    old_keystore_keys_[i] = base::Base64Encode(keys[i]);
 
   DirectoryCryptographer* cryptographer =
       &UnlockVaultMutable(&trans)->cryptographer;
@@ -983,7 +968,7 @@ void SyncEncryptionHandlerImpl::ReEncryptEverything(WriteTransaction* trans) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(UnlockVault(trans->GetWrappedTrans()).cryptographer.CanEncrypt());
   for (ModelType type : UnlockVault(trans->GetWrappedTrans()).encrypted_types) {
-    if (type == PASSWORDS || type == WIFI_CONFIGURATIONS || IsControlType(type))
+    if (type == PASSWORDS || IsControlType(type))
       continue;  // These types handle encryption differently.
 
     ReadNode type_root(trans);
@@ -1025,22 +1010,6 @@ void SyncEncryptionHandlerImpl::ReEncryptEverything(WriteTransaction* trans) {
       if (child.InitByIdLookup(child_id) != BaseNode::INIT_OK)
         break;  // Possible if we failed to decrypt the data for some reason.
       child.SetPasswordSpecifics(child.GetPasswordSpecifics());
-      child_id = child.GetSuccessorId();
-    }
-  }
-
-  // Wifi configs are encrypted with their own legacy scheme and are always
-  // encrypted so we don't need to check GetEncryptedTypes().
-  ReadNode wifi_configurations_root(trans);
-  if (wifi_configurations_root.InitTypeRoot(WIFI_CONFIGURATIONS) ==
-      BaseNode::INIT_OK) {
-    int64_t child_id = wifi_configurations_root.GetFirstChildId();
-    while (child_id != kInvalidId) {
-      WriteNode child(trans);
-      if (child.InitByIdLookup(child_id) != BaseNode::INIT_OK)
-        break;  // Possible if we failed to decrypt the data for some reason.
-      child.SetWifiConfigurationSpecifics(
-          child.GetWifiConfigurationSpecifics());
       child_id = child.GetSuccessorId();
     }
   }
@@ -1310,13 +1279,13 @@ bool SyncEncryptionHandlerImpl::UpdateEncryptedTypesFromNigori(
 
   ModelTypeSet nigori_encrypted_types;
   nigori_encrypted_types = syncable::GetEncryptedTypesFromNigori(nigori);
-  nigori_encrypted_types.PutAll(SensitiveTypes());
+  nigori_encrypted_types.PutAll(AlwaysEncryptedUserTypes());
 
   // If anything more than the sensitive types were encrypted, and
   // encrypt_everything is not explicitly set to false, we assume it means
   // a client intended to enable encrypt everything.
   if (!nigori.has_encrypt_everything() &&
-      !Difference(nigori_encrypted_types, SensitiveTypes()).Empty()) {
+      !Difference(nigori_encrypted_types, AlwaysEncryptedUserTypes()).Empty()) {
     if (!encrypt_everything_) {
       encrypt_everything_ = true;
       *encrypted_types = EncryptableUserTypes();

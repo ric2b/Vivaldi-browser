@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/frame_owner.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
@@ -81,7 +82,7 @@ void LazyImageHelper::StartMonitoring(blink::Element* element) {
 
   using DeferralMessage = LazyLoadImageObserver::DeferralMessage;
   auto deferral_message = DeferralMessage::kNone;
-  if (auto* html_image = ToHTMLImageElementOrNull(element)) {
+  if (auto* html_image = DynamicTo<HTMLImageElement>(element)) {
     LoadingAttrValue loading_attr = GetLoadingAttrValue(*html_image);
     DCHECK_NE(loading_attr, LoadingAttrValue::kEager);
     if (loading_attr == LoadingAttrValue::kAuto) {
@@ -108,6 +109,11 @@ LazyImageHelper::DetermineEligibilityAndTrackVisibilityMetrics(
     HTMLImageElement* html_image,
     const KURL& url) {
   if (!url.ProtocolIsInHTTPFamily())
+    return LazyImageHelper::Eligibility::kDisabled;
+
+  // Do not lazyload image elements when JavaScript is disabled, regardless of
+  // the `loading` attribute.
+  if (!frame.GetDocument()->CanExecuteScripts(kNotAboutToExecuteScript))
     return LazyImageHelper::Eligibility::kDisabled;
 
   const auto lazy_load_image_setting = frame.GetLazyLoadImageSetting();

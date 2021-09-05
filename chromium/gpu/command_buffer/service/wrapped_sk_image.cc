@@ -18,6 +18,7 @@
 #include "gpu/command_buffer/service/shared_image_backing.h"
 #include "gpu/command_buffer/service/shared_image_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
+#include "skia/buildflags.h"
 #include "third_party/skia/include/core/SkPromiseImageTexture.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkSurfaceProps.h"
@@ -37,9 +38,13 @@ namespace raster {
 
 namespace {
 
-class WrappedSkImage : public SharedImageBacking {
+class WrappedSkImage : public ClearTrackingSharedImageBacking {
  public:
   ~WrappedSkImage() override {
+    promise_texture_.reset();
+    if (backend_texture_.isValid())
+      DeleteGrBackendTexture(context_state_, &backend_texture_);
+
     DCHECK(context_state_->context_lost() ||
            context_state_->IsCurrent(nullptr));
     if (!context_state_->context_lost())
@@ -50,15 +55,6 @@ class WrappedSkImage : public SharedImageBacking {
   bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) override {
     return false;
   }
-
-  void Destroy() override {
-    promise_texture_.reset();
-    image_.reset();
-  }
-
-  bool IsCleared() const override { return cleared_; }
-
-  void SetCleared() override { cleared_ = true; }
 
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override {}
 
@@ -89,7 +85,7 @@ class WrappedSkImage : public SharedImageBacking {
     DCHECK(context_state_->IsCurrent(nullptr));
 
     return SkSurface::MakeFromBackendTexture(
-        context_state_->gr_context(), image_->getBackendTexture(false),
+        context_state_->gr_context(), backend_texture_,
         kTopLeft_GrSurfaceOrigin, final_msaa_count, GetSkColorType(),
         color_space().ToSkColorSpace(), &surface_props);
   }
@@ -112,13 +108,13 @@ class WrappedSkImage : public SharedImageBacking {
                  uint32_t usage,
                  size_t estimated_size,
                  SharedContextState* context_state)
-      : SharedImageBacking(mailbox,
-                           format,
-                           size,
-                           color_space,
-                           usage,
-                           estimated_size,
-                           false /* is_thread_safe */),
+      : ClearTrackingSharedImageBacking(mailbox,
+                                        format,
+                                        size,
+                                        color_space,
+                                        usage,
+                                        estimated_size,
+                                        false /* is_thread_safe */),
         context_state_(context_state) {
     DCHECK(!!context_state_);
   }
@@ -143,25 +139,24 @@ class WrappedSkImage : public SharedImageBacking {
 
     if (!data.empty()) {
       if (format() == viz::ResourceFormat::ETC1) {
-        auto sk_data = SkData::MakeWithCopy(data.data(), data.size());
-        image_ = SkImage::MakeFromCompressed(
-            context_state_->gr_context(), sk_data, size().width(),
-            size().height(), SkImage::kETC1_CompressionType);
+        backend_texture_ =
+            context_state_->gr_context()->createCompressedBackendTexture(
+                size().width(), size().height(), SkImage::kETC1_CompressionType,
+                data.data(), data.size(), GrMipMapped::kNo, is_protected);
       } else {
         SkBitmap bitmap;
         if (!bitmap.installPixels(info, const_cast<uint8_t*>(data.data()),
                                   info.minRowBytes())) {
           return false;
         }
-        image_ = SkImage::MakeFromBitmap(bitmap);
-        // Move image to GPU
-        if (image_)
-          image_ = image_->makeTextureImage(context_state_->gr_context());
+        backend_texture_ = context_state_->gr_context()->createBackendTexture(
+            bitmap.pixmap(), GrRenderable::kNo, is_protected);
       }
 
-      if (!image_)
+      if (!backend_texture_.isValid())
         return false;
 
+      SetCleared();
       OnWriteSucceeded();
     } else {
       // Initializing to bright green makes it obvious if the pixels are not
@@ -169,38 +164,45 @@ class WrappedSkImage : public SharedImageBacking {
       // We don't do this on release builds because there is a slight overhead.
 
 #if DCHECK_IS_ON()
-      auto backend_texture = context_state_->gr_context()->createBackendTexture(
+      backend_texture_ = context_state_->gr_context()->createBackendTexture(
           size().width(), size().height(), GetSkColorType(), SkColors::kBlue,
           GrMipMapped::kNo, GrRenderable::kYes, is_protected);
 #else
-      auto backend_texture = context_state_->gr_context()->createBackendTexture(
+      backend_texture_ = context_state_->gr_context()->createBackendTexture(
           size().width(), size().height(), GetSkColorType(), GrMipMapped::kNo,
           GrRenderable::kYes, is_protected);
 #endif
-      image_ = SkImage::MakeFromAdoptedTexture(
-          context_state_->gr_context(), backend_texture,
-          GrSurfaceOrigin::kTopLeft_GrSurfaceOrigin, info.colorType(),
-          info.alphaType(), color_space().ToSkColorSpace());
     }
 
-    auto backend_texture = image_->getBackendTexture(true);
-    DCHECK(backend_texture.isValid());
+    if (!backend_texture_.isValid()) {
+      DLOG(ERROR) << "createBackendTexture() failed with SkColorType:"
+                  << GetSkColorType();
+      return false;
+    }
 
-    promise_texture_ = SkPromiseImageTexture::Make(backend_texture);
+    promise_texture_ = SkPromiseImageTexture::Make(backend_texture_);
 
-    switch (backend_texture.backend()) {
+    switch (backend_texture_.backend()) {
       case GrBackendApi::kOpenGL: {
         GrGLTextureInfo tex_info;
-        if (backend_texture.getGLTextureInfo(&tex_info))
+        if (backend_texture_.getGLTextureInfo(&tex_info))
           tracing_id_ = tex_info.fID;
         break;
       }
       case GrBackendApi::kVulkan: {
         GrVkImageInfo image_info;
-        if (backend_texture.getVkImageInfo(&image_info))
+        if (backend_texture_.getVkImageInfo(&image_info))
           tracing_id_ = reinterpret_cast<uint64_t>(image_info.fImage);
         break;
       }
+#if BUILDFLAG(SKIA_USE_DAWN)
+      case GrBackendApi::kDawn: {
+        GrDawnTextureInfo tex_info;
+        if (backend_texture_.getDawnTextureInfo(&tex_info))
+          tracing_id_ = reinterpret_cast<uint64_t>(tex_info.fTexture.Get());
+        break;
+      }
+#endif
       default:
         NOTREACHED();
         return false;
@@ -211,10 +213,8 @@ class WrappedSkImage : public SharedImageBacking {
 
   SharedContextState* const context_state_;
 
+  GrBackendTexture backend_texture_;
   sk_sp<SkPromiseImageTexture> promise_texture_;
-  sk_sp<SkImage> image_;
-
-  bool cleared_ = false;
 
   uint64_t tracing_id_ = 0;
 
@@ -259,6 +259,8 @@ class WrappedSkImageRepresentation : public SharedImageRepresentationSkia {
     // TODO(ericrk): Handle begin/end correctness checks.
   }
 
+  bool SupportsMultipleConcurrentReadAccess() override { return true; }
+
  private:
   WrappedSkImage* wrapped_sk_image() {
     return static_cast<WrappedSkImage*>(backing());
@@ -277,6 +279,7 @@ WrappedSkImageFactory::~WrappedSkImageFactory() = default;
 std::unique_ptr<SharedImageBacking> WrappedSkImageFactory::CreateSharedImage(
     const Mailbox& mailbox,
     viz::ResourceFormat format,
+    SurfaceHandle surface_handle,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     uint32_t usage,

@@ -9,10 +9,12 @@
 
 #include "base/bind_helpers.h"
 #include "base/lazy_instance.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_pump.h"
 #include "base/message_loop/message_pump_type.h"
+#include "base/no_destructor.h"
 #include "base/run_loop.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
@@ -44,6 +46,12 @@ namespace base {
 namespace test {
 
 namespace {
+
+ObserverList<TaskEnvironment::DestructionObserver>& GetDestructionObservers() {
+  static NoDestructor<ObserverList<TaskEnvironment::DestructionObserver>>
+      instance;
+  return *instance;
+}
 
 base::MessagePumpType GetMessagePumpTypeForMainThreadType(
     TaskEnvironment::MainThreadType main_thread_type) {
@@ -128,7 +136,7 @@ class TaskEnvironment::TestTaskTracker
   ConditionVariable can_run_tasks_cv_ GUARDED_BY(lock_);
 
   // Signaled when a task is completed.
-  ConditionVariable task_completed_ GUARDED_BY(lock_);
+  ConditionVariable task_completed_cv_ GUARDED_BY(lock_);
 
   // Number of tasks that are currently running.
   int num_tasks_running_ GUARDED_BY(lock_) = 0;
@@ -169,8 +177,12 @@ class TaskEnvironment::MockTimeDomain : public sequence_manager::TimeDomain,
 
   void AdvanceClock(TimeDelta delta) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    AutoLock lock(now_ticks_lock_);
-    now_ticks_ += delta;
+    {
+      AutoLock lock(now_ticks_lock_);
+      now_ticks_ += delta;
+    }
+    if (thread_pool_)
+      thread_pool_->ProcessRipeDelayedTasksForTesting();
   }
 
   static std::unique_ptr<TaskEnvironment::MockTimeDomain> CreateAndRegister(
@@ -347,11 +359,13 @@ TaskEnvironment::TaskEnvironment(
     MainThreadType main_thread_type,
     ThreadPoolExecutionMode thread_pool_execution_mode,
     ThreadingMode threading_mode,
+    ThreadPoolCOMEnvironment thread_pool_com_environment,
     bool subclass_creates_default_taskrunner,
     trait_helpers::NotATraitTag)
     : main_thread_type_(main_thread_type),
       thread_pool_execution_mode_(thread_pool_execution_mode),
       threading_mode_(threading_mode),
+      thread_pool_com_environment_(thread_pool_com_environment),
       subclass_creates_default_taskrunner_(subclass_creates_default_taskrunner),
       sequence_manager_(
           CreateSequenceManagerForMainThreadType(main_thread_type)),
@@ -371,22 +385,16 @@ TaskEnvironment::TaskEnvironment(
       scoped_lazy_task_runner_list_for_testing_(
           std::make_unique<internal::ScopedLazyTaskRunnerListForTesting>()),
       // TODO(https://crbug.com/922098): Enable Run() timeouts even for
-      // instances created with *MOCK_TIME.
+      // instances created with TimeSource::MOCK_TIME.
       run_loop_timeout_(
           mock_time_domain_
               ? nullptr
-              : std::make_unique<RunLoop::ScopedRunTimeoutForTest>(
+              : std::make_unique<ScopedRunLoopTimeout>(
+                    FROM_HERE,
                     TestTimeouts::action_timeout(),
-                    BindRepeating(
-                        [](sequence_manager::SequenceManager*
-                               sequence_manager) {
-                          ADD_FAILURE()
-                              << "RunLoop::Run() timed out with the following "
-                                 "pending task(s) in its TaskEnvironment's "
-                                 "main thread queue:\n"
-                              << sequence_manager->DescribeAllPendingTasks();
-                        },
-                        Unretained(sequence_manager_.get())))) {
+                    BindRepeating(&sequence_manager::SequenceManager::
+                                      DescribeAllPendingTasks,
+                                  Unretained(sequence_manager_.get())))) {
   CHECK(!base::ThreadTaskRunnerHandle::IsSet());
   // If |subclass_creates_default_taskrunner| is true then initialization is
   // deferred until DeferredInitFromSubclass().
@@ -427,18 +435,10 @@ void TaskEnvironment::InitializeThreadPool() {
   ThreadPoolInstance::InitParams init_params(kMaxThreads);
   init_params.suggested_reclaim_time = TimeDelta::Max();
 #if defined(OS_WIN)
-  // Enable the MTA in unit tests to match the browser process's
-  // ThreadPoolInstance configuration.
-  //
-  // This has the adverse side-effect of enabling the MTA in non-browser unit
-  // tests as well but the downside there is not as bad as not having it in
-  // browser unit tests. It just means some COM asserts may pass in unit tests
-  // where they wouldn't in integration tests or prod. That's okay because unit
-  // tests are already generally very loose on allowing I/O, waits, etc. Such
-  // misuse will still be caught in later phases (and COM usage should already
-  // be pretty much inexistent in sandboxed processes).
-  init_params.common_thread_pool_environment =
-      ThreadPoolInstance::InitParams::CommonThreadPoolEnvironment::COM_MTA;
+  if (thread_pool_com_environment_ == ThreadPoolCOMEnvironment::COM_MTA) {
+    init_params.common_thread_pool_environment =
+        ThreadPoolInstance::InitParams::CommonThreadPoolEnvironment::COM_MTA;
+  }
 #endif
 
   auto task_tracker = std::make_unique<TestTaskTracker>();
@@ -470,6 +470,8 @@ TaskEnvironment::~TaskEnvironment() {
   // If we've been moved then bail out.
   if (!owns_instance_)
     return;
+  for (auto& observer : GetDestructionObservers())
+    observer.WillDestroyCurrentTaskEnvironment();
   DestroyThreadPool();
   task_queue_ = nullptr;
   NotifyDestructionObserversAndReleaseSequenceManager();
@@ -716,10 +718,25 @@ void TaskEnvironment::DescribePendingMainThreadTasks() const {
   LOG(INFO) << sequence_manager_->DescribeAllPendingTasks();
 }
 
+// static
+void TaskEnvironment::AddDestructionObserver(DestructionObserver* observer) {
+  GetDestructionObservers().AddObserver(observer);
+}
+
+// static
+void TaskEnvironment::RemoveDestructionObserver(DestructionObserver* observer) {
+  GetDestructionObservers().RemoveObserver(observer);
+}
+
 TaskEnvironment::TestTaskTracker::TestTaskTracker()
     : internal::ThreadPoolImpl::TaskTrackerImpl(std::string()),
       can_run_tasks_cv_(&lock_),
-      task_completed_(&lock_) {}
+      task_completed_cv_(&lock_) {
+  // Consider threads blocked on these as idle (avoids instantiating
+  // ScopedBlockingCalls and confusing some //base internals tests).
+  can_run_tasks_cv_.declare_only_used_while_idle();
+  task_completed_cv_.declare_only_used_while_idle();
+}
 
 bool TaskEnvironment::TestTaskTracker::AllowRunTasks() {
   AutoLock auto_lock(lock_);
@@ -742,7 +759,7 @@ bool TaskEnvironment::TestTaskTracker::DisallowRunTasks() {
     // Attempt to wait a bit so that the caller doesn't busy-loop with the same
     // set of pending work. A short wait is required to avoid deadlock
     // scenarios. See DisallowRunTasks()'s declaration for more details.
-    task_completed_.TimedWait(TimeDelta::FromMilliseconds(1));
+    task_completed_cv_.TimedWait(TimeDelta::FromMilliseconds(1));
     return false;
   }
 
@@ -762,8 +779,23 @@ void TaskEnvironment::TestTaskTracker::RunTask(internal::Task task,
     ++num_tasks_running_;
   }
 
-  internal::ThreadPoolImpl::TaskTrackerImpl::RunTask(std::move(task), sequence,
-                                                     traits);
+  {
+    // Using TimeTicksNowIgnoringOverride() because in tests that mock time,
+    // Now() can advance very far very fast, and that's not a problem. This is
+    // watching for tests that have actually long running tasks which cause our
+    // test suites to run slowly.
+    base::TimeTicks before = base::subtle::TimeTicksNowIgnoringOverride();
+    internal::ThreadPoolImpl::TaskTrackerImpl::RunTask(std::move(task),
+                                                       sequence, traits);
+    base::TimeTicks after = base::subtle::TimeTicksNowIgnoringOverride();
+
+    if ((after - before) > TestTimeouts::action_max_timeout()) {
+      ADD_FAILURE() << "TaskEnvironment: RunTask took more than "
+                    << TestTimeouts::action_max_timeout().InSeconds()
+                    << " seconds. "
+                    << "Posted from " << task.posted_from.ToString();
+    }
+  }
 
   {
     AutoLock auto_lock(lock_);
@@ -773,7 +805,7 @@ void TaskEnvironment::TestTaskTracker::RunTask(internal::Task task,
 
     --num_tasks_running_;
 
-    task_completed_.Broadcast();
+    task_completed_cv_.Broadcast();
   }
 }
 

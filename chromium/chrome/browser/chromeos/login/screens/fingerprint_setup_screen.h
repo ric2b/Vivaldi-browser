@@ -9,6 +9,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "chrome/browser/chromeos/login/screen_manager.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
 
 namespace chromeos {
@@ -23,9 +24,17 @@ class FingerprintSetupScreen : public BaseScreen {
                          const base::RepeatingClosure& exit_callback);
   ~FingerprintSetupScreen() override;
 
+  static FingerprintSetupScreen* Get(ScreenManager* manager);
+
+  void set_exit_callback_for_testing(
+      const base::RepeatingClosure& exit_callback) {
+    exit_callback_ = exit_callback;
+  }
+
+ protected:
   // BaseScreen:
-  void Show() override;
-  void Hide() override;
+  void ShowImpl() override;
+  void HideImpl() override;
   void OnUserAction(const std::string& action_id) override;
 
  private:

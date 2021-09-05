@@ -15,6 +15,7 @@
 namespace blink {
 
 class BackgroundSyncOptions;
+class ExceptionState;
 class ScriptPromise;
 class ScriptPromiseResolver;
 class ScriptState;
@@ -24,24 +25,18 @@ class PeriodicSyncManager final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static PeriodicSyncManager* Create(
-      ServiceWorkerRegistration* registration,
-      scoped_refptr<base::SequencedTaskRunner> task_runner) {
-    return MakeGarbageCollected<PeriodicSyncManager>(registration,
-                                                     std::move(task_runner));
-  }
-
   PeriodicSyncManager(ServiceWorkerRegistration* registration,
                       scoped_refptr<base::SequencedTaskRunner> task_runner);
 
   // IDL exposed interface
   ScriptPromise registerPeriodicSync(ScriptState* script_state,
                                      const String& tag,
-                                     const BackgroundSyncOptions* options);
+                                     const BackgroundSyncOptions* options,
+                                     ExceptionState& exception_state);
   ScriptPromise getTags(ScriptState* script_state);
   ScriptPromise unregister(ScriptState* script_state, const String& tag);
 
-  void Trace(blink::Visitor* visitor) override;
+  void Trace(Visitor* visitor) override;
 
  private:
   // Returns an initialized

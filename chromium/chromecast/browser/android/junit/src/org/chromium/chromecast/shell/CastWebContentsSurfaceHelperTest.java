@@ -28,8 +28,8 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
+import org.chromium.base.Consumer;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.chromecast.base.Consumer;
 import org.chromium.chromecast.base.Observer;
 import org.chromium.chromecast.base.Scope;
 import org.chromium.chromecast.shell.CastWebContentsSurfaceHelper.MediaSessionGetter;
@@ -334,15 +334,5 @@ public class CastWebContentsSurfaceHelperTest {
         mSurfaceHelper.onNewStartParams(params);
         mSurfaceHelper.onDestroy();
         verify(scope).close();
-    }
-
-    @Test
-    public void testOnDestroyNotifiesComponent() {
-        StartParams params = new StartParamsBuilder().withId("2").build();
-        mSurfaceHelper.onNewStartParams(params);
-        BroadcastAsserter intentWasSent =
-                new BroadcastAsserter(CastWebContentsIntentUtils.onActivityStopped("2"));
-        mSurfaceHelper.onDestroy();
-        intentWasSent.verify();
     }
 }

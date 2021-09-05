@@ -30,6 +30,7 @@
 #include "cc/tiles/tile_draw_info.h"
 #include "cc/tiles/tile_manager_settings.h"
 #include "cc/tiles/tile_task_manager.h"
+#include "ui/gfx/display_color_spaces.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -80,15 +81,21 @@ class CC_EXPORT TileManagerClient {
   virtual void SetIsLikelyToRequireADraw(bool is_likely_to_require_a_draw) = 0;
 
   // Requests the color space into which tiles should be rasterized.
-  virtual const gfx::ColorSpace& GetRasterColorSpace() const = 0;
+  virtual gfx::ColorSpace GetRasterColorSpace(
+      gfx::ContentColorUsage content_color_usage) const = 0;
 
   // Requests that a pending tree be scheduled to invalidate content on the
   // pending on active tree. This is currently used when tiles that are
   // rasterized with missing images need to be invalidated.
   virtual void RequestImplSideInvalidationForCheckerImagedTiles() = 0;
 
+  // Returns the frame index to display for the given image on the given tree.
   virtual size_t GetFrameIndexForImage(const PaintImage& paint_image,
                                        WhichTree tree) const = 0;
+
+  // Returns the sample count to use if MSAA is enabled for a tile.
+  virtual int GetMSAASampleCountForRaster(
+      const scoped_refptr<DisplayItemList>& display_list) = 0;
 
  protected:
   virtual ~TileManagerClient() {}
@@ -201,8 +208,12 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
           resource_pool_->AcquireResource(
               tiles[i]->desired_texture_size(),
               raster_buffer_provider_->GetResourceFormat(),
-              client_->GetRasterColorSpace());
-      raster_buffer_provider_->AcquireBufferForRaster(resource, 0, 0);
+              client_->GetRasterColorSpace(gfx::ContentColorUsage::kSRGB));
+      raster_buffer_provider_->AcquireBufferForRaster(
+          resource, 0, 0,
+          /*depends_on_at_raster_decodes=*/false,
+          /*depends_on_hardware_accelerated_jpeg_candidates=*/false,
+          /*depends_on_hardware_accelerated_webp_candidates=*/false);
       // The raster here never really happened, cuz tests. So just add an
       // arbitrary sync token.
       if (resource.gpu_backing()) {
@@ -399,7 +410,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
   ScheduledTasksStateAsValue() const;
 
-  bool UsePartialRaster() const;
+  bool UsePartialRaster(int msaa_sample_count) const;
 
   void FlushAndIssueSignals();
   void CheckPendingGpuWorkAndIssueSignals();

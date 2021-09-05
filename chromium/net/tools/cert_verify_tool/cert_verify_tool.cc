@@ -21,7 +21,7 @@
 #include "net/cert/cert_verify_proc_builtin.h"
 #include "net/cert/crl_set.h"
 #include "net/cert/internal/system_trust_store.h"
-#include "net/cert_net/cert_net_fetcher_impl.h"
+#include "net/cert_net/cert_net_fetcher_url_request.h"
 #include "net/tools/cert_verify_tool/cert_verify_tool_util.h"
 #include "net/tools/cert_verify_tool/verify_using_cert_verify_proc.h"
 #include "net/tools/cert_verify_tool/verify_using_path_builder.h"
@@ -36,6 +36,7 @@
 
 #if defined(USE_NSS_CERTS)
 #include "net/cert_net/nss_ocsp.h"
+#include "net/cert_net/nss_ocsp_session_url_request.h"
 #endif
 
 namespace {
@@ -46,7 +47,7 @@ std::string GetUserAgent() {
 
 void SetUpOnNetworkThread(
     std::unique_ptr<net::URLRequestContext>* context,
-    scoped_refptr<net::CertNetFetcherImpl>* cert_net_fetcher,
+    scoped_refptr<net::CertNetFetcherURLRequest>* cert_net_fetcher,
     base::WaitableEvent* initialization_complete_event) {
   net::URLRequestContextBuilder url_request_context_builder;
   url_request_context_builder.set_user_agent(GetUserAgent());
@@ -66,14 +67,14 @@ void SetUpOnNetworkThread(
 #endif
   // TODO(mattm): add command line flag to configure using
   // CertNetFetcher
-  *cert_net_fetcher = base::MakeRefCounted<net::CertNetFetcherImpl>();
+  *cert_net_fetcher = base::MakeRefCounted<net::CertNetFetcherURLRequest>();
   (*cert_net_fetcher)->SetURLRequestContext(context->get());
   initialization_complete_event->Signal();
 }
 
 void ShutdownOnNetworkThread(
     std::unique_ptr<net::URLRequestContext>* context,
-    scoped_refptr<net::CertNetFetcherImpl>* cert_net_fetcher) {
+    scoped_refptr<net::CertNetFetcherURLRequest>* cert_net_fetcher) {
   (*cert_net_fetcher)->Shutdown();
   cert_net_fetcher->reset();
   context->reset();
@@ -300,6 +301,7 @@ void PrintUsage(const char* argv0) {
   // TODO(mattm): allow target to specify an HTTPS URL to check the cert of?
   // TODO(mattm): allow target to be a verify_certificate_chain_unittest .test
   // file?
+  // TODO(mattm): allow specifying ocsp_response and sct_list inputs as well.
 }
 
 }  // namespace
@@ -397,7 +399,7 @@ int main(int argc, char** argv) {
   // Owned by this thread, but initialized, used, and shutdown on the network
   // thread.
   std::unique_ptr<net::URLRequestContext> context;
-  scoped_refptr<net::CertNetFetcherImpl> cert_net_fetcher;
+  scoped_refptr<net::CertNetFetcherURLRequest> cert_net_fetcher;
   base::WaitableEvent initialization_complete_event(
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);

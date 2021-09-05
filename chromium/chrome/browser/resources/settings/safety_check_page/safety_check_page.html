@@ -1,0 +1,201 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/cr_elements/cr_button/cr_button.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_icon_button/cr_icon_button.html">
+<link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-announcer/iron-a11y-announcer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-collapse/iron-collapse.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
+<link rel="import" href="../autofill_page/password_manager_proxy.html">
+<link rel="import" href="../hats_browser_proxy.html">
+<link rel="import" href="../i18n_setup.html">
+<link rel="import" href="../lifetime_browser_proxy.html">
+<link rel="import" href="../metrics_browser_proxy.html">
+<link rel="import" href="../open_window_proxy.html">
+<link rel="import" href="../prefs/prefs_behavior.html">
+<link rel="import" href="../route.html">
+<link rel="import" href="../router.html">
+<link rel="import" href="../settings_shared_css.html">
+
+<link rel="import" href="safety_check_browser_proxy.html">
+
+<dom-module id="settings-safety-check-page">
+  <template>
+    <style include="settings-shared">
+      #safetyCheckCollapse .list-item.selected {
+         min-height: var(--settings-row-two-line-min-height);
+      }
+
+      iron-icon {
+        display: flex;
+        flex-shrink: 0;
+        padding-inline-end: var(--cr-icon-button-margin-start);
+        width: var(--cr-link-row-icon-width, var(--cr-icon-size));
+      }
+
+      .icon-blue {
+        fill: var(--google-blue-600);
+      }
+
+      .icon-red {
+        fill: var(--google-red-600);
+      }
+
+      /* dark mode */
+      @media (prefers-color-scheme: dark) {
+        .icon-blue {
+          fill: var(--google-blue-refresh-300);
+        }
+
+        .icon-red {
+          fill: var(--google-red-refresh-300);
+        }
+      }
+    </style>
+    <div id="safetyCheckParent" class="settings-box first two-line">
+      <iron-icon icon="settings20:safety-check" aria-hidden="true">
+      </iron-icon>
+      <div class="start settings-box-text" no-search>
+        [[parentDisplayString_]]
+      </div>
+      <template is="dom-if" if="[[shouldShowParentButton_(parentStatus_)]]"
+          restamp>
+        <div class="separator"></div>
+        <cr-button id="safetyCheckParentButton" class="action-button"
+            on-click="onRunSafetyCheckClick_" no-search
+            aria-label="$i18n{safetyCheckParentButtonAriaLabel}">
+          $i18n{safetyCheckParentButton}
+        </cr-button>
+      </template>
+      <template is="dom-if" if="[[shouldShowParentIconButton_(parentStatus_)]]"
+          restamp>
+        <div class="separator"></div>
+        <cr-icon-button id="safetyCheckParentIconButton"
+            iron-icon="settings:refresh"
+            on-click="onRunSafetyCheckClick_"
+            aria-label="$i18n{safetyCheckParentButtonAriaLabel}">
+        </cr-icon-button>
+      </template>
+    </div>
+    <iron-collapse id="safetyCheckCollapse"
+        opened="[[shouldShowChildren_(parentStatus_)]]">
+      <div class="settings-box two-line">
+        <iron-icon icon="[[getUpdatesIcon_(updatesStatus_)]]"
+            role="img"
+            aria-label="[[getUpdatesIconAriaLabel_(updatesStatus_)]]"
+            src="[[getUpdatesIconSrc_(updatesStatus_)]]"
+            class$="[[getUpdatesIconClass_(updatesStatus_)]]">
+        </iron-icon>
+        <div class="start settings-box-text">
+          <div>$i18n{safetyCheckUpdatesPrimaryLabel}</div>
+          <div class="secondary" no-search
+              inner-h-t-m-l="[[updatesDisplayString_]]">
+          </div>
+        </div>
+        <template is="dom-if"
+            if="[[shouldShowUpdatesButton_(updatesStatus_)]]" restamp>
+          <div class="separator"></div>
+          <cr-button id="safetyCheckUpdatesButton" class="action-button"
+              on-click="onSafetyCheckUpdatesButtonClick_" no-search
+            aria-label="$i18n{safetyCheckUpdatesButtonAriaLabel}">
+            $i18n{aboutRelaunch}
+          </cr-button>
+        </template>
+        <template is="dom-if"
+            if="[[shouldShowUpdatesManagedIcon_(updatesStatus_)]]" restamp>
+          <iron-icon id="safetyCheckUpdatesManagedIcon" icon="cr20:domain"
+              aria-hidden="true">
+          </iron-icon>
+        </template>
+      </div>
+      <div class="settings-box two-line">
+        <iron-icon icon="[[getPasswordsIcon_(passwordsStatus_)]]"
+            src="[[getPasswordsIconSrc_(passwordsStatus_)]]"
+            class$="[[getPasswordsIconClass_(passwordsStatus_)]]"
+            role="img"
+            aria-label="[[getPasswordsIconAriaLabel_(passwordsStatus_)]]">
+        </iron-icon>
+        <div class="start settings-box-text">
+          <div>$i18n{passwords}</div>
+          <div class="secondary" no-search
+              inner-h-t-m-l="[[passwordsDisplayString_]]">
+          </div>
+        </div>
+        <template is="dom-if"
+            if="[[shouldShowPasswordsButton_(passwordsStatus_)]]" restamp>
+          <div class="separator"></div>
+          <cr-button id="safetyCheckPasswordsButton" class="action-button"
+              on-click="onPasswordsButtonClick_" no-search
+              aria-label="$i18n{safetyCheckExtensionsButton}">
+            $i18n{safetyCheckExtensionsButton}
+          </cr-button>
+        </template>
+      </div>
+      <div class="settings-box two-line">
+        <iron-icon icon="[[getSafeBrowsingIcon_(safeBrowsingStatus_)]]"
+            src="[[getSafeBrowsingIconSrc_(safeBrowsingStatus_)]]"
+            class$="[[getSafeBrowsingIconClass_(safeBrowsingStatus_)]]"
+            role="img"
+            aria-label="[[getSafeBrowsingIconAriaLabel_(safeBrowsingStatus_)]]">
+        </iron-icon>
+        <div class="start settings-box-text">
+          <div>$i18n{safeBrowsingSectionLabel}</div>
+          <div class="secondary" no-search
+              inner-h-t-m-l="[[safeBrowsingDisplayString_]]">
+          </div>
+        </div>
+        <template is="dom-if"
+            if="[[shouldShowSafeBrowsingButton_(safeBrowsingStatus_)]]" restamp>
+          <div class="separator"></div>
+          <cr-button id="safetyCheckSafeBrowsingButton" class="action-button"
+              on-click="onSafeBrowsingButtonClick_" no-search
+              aria-label="$i18n{safetyCheckSafeBrowsingButtonAriaLabel}">
+            $i18n{safetyCheckSafeBrowsingButton}
+          </cr-button>
+        </template>
+        <template is="dom-if"
+            if="[[shouldShowSafeBrowsingManagedIcon_(safeBrowsingStatus_)]]"
+            restamp>
+          <iron-icon id="safetyCheckSafeBrowsingManagedIcon" aria-hidden="true"
+              icon="[[getSafeBrowsingManagedIcon_(safeBrowsingStatus_)]]">
+          </iron-icon>
+        </template>
+      </div>
+      <div class="settings-box two-line">
+        <iron-icon icon="[[getExtensionsIcon_(extensionsStatus_)]]"
+            src="[[getExtensionsIconSrc_(extensionsStatus_)]]"
+            class$="[[getExtensionsIconClass_(extensionsStatus_)]]"
+            role="img"
+            aria-label="[[getExtensionsIconAriaLabel_(extensionsStatus_)]]">
+        </iron-icon>
+        <div class="start settings-box-text">
+          <div>$i18n{safetyCheckExtensionsPrimaryLabel}</div>
+          <div class="secondary" no-search
+              inner-h-t-m-l="[[extensionsDisplayString_]]">
+          </div>
+        </div>
+        <template is="dom-if"
+            if="[[shouldShowExtensionsButton_(extensionsStatus_)]]" restamp>
+          <div class="separator"></div>
+          <cr-button id="safetyCheckExtensionsButton"
+              class$="[[getExtensionsButtonClass_(extensionsStatus_)]]"
+              on-click="onSafetyCheckExtensionsButtonClick_" no-search
+              aria-label="$i18n{safetyCheckExtensionsButtonAriaLabel}">
+            $i18n{safetyCheckExtensionsButton}
+          </cr-button>
+        </template>
+        <template is="dom-if"
+            if="[[shouldShowExtensionsManagedIcon_(extensionsStatus_)]]"
+            restamp>
+          <iron-icon id="safetyCheckExtensionsManagedIcon" icon="cr20:domain"
+              aria-hidden="true">
+          </iron-icon>
+        </template>
+      </div>
+    </iron-collapse>
+  </template>
+  <script src="safety_check_page.js"></script>
+</dom-module>

@@ -4,14 +4,13 @@
 
 package org.chromium.chrome.browser.suggestions;
 
-import static org.chromium.chrome.browser.ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS;
+import static org.chromium.chrome.browser.flags.ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS;
+
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.DiscardableReferencePool;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.favicon.FaviconHelper;
-import org.chromium.chrome.browser.favicon.LargeIconBridge;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.ntp.snippets.EmptySuggestionsSource;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
@@ -19,8 +18,10 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.mostvisited.MostVisitedSites;
 import org.chromium.chrome.browser.suggestions.mostvisited.MostVisitedSitesBridge;
-import org.chromium.chrome.browser.widget.ThumbnailProvider;
-import org.chromium.chrome.browser.widget.ThumbnailProviderImpl;
+import org.chromium.chrome.browser.thumbnail.generator.ThumbnailProvider;
+import org.chromium.chrome.browser.thumbnail.generator.ThumbnailProviderImpl;
+import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
+import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 
 /**
  * Provides an injection mechanisms for dependencies of the suggestions package.

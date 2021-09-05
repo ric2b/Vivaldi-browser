@@ -7,28 +7,32 @@
 
 #include <memory>
 
-#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/picture_layer.h"
+#include "cc/trees/property_tree.h"
+#include "third_party/blink/renderer/platform/graphics/compositing/layers_as_json.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.h"
+#include "third_party/blink/renderer/platform/graphics/compositing_reasons.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer_client.h"
+#include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
+#if DCHECK_IS_ON()
+#include "third_party/blink/renderer/platform/wtf/hash_set.h"
+#endif
+
 namespace cc {
-struct ElementId;
-class EffectTree;
-class Layer;
+class ScrollbarLayerBase;
 }
 
 namespace gfx {
 class Vector2dF;
-class ScrollOffset;
 }
 
 namespace blink {
@@ -36,8 +40,11 @@ namespace blink {
 class ContentLayerClientImpl;
 class JSONObject;
 class PaintArtifact;
+class PropertyTreeManager;
 class SynthesizedClip;
 struct PaintChunk;
+
+using CompositorScrollCallbacks = cc::ScrollCallbacks;
 
 class LayerListBuilder {
  public:
@@ -48,6 +55,9 @@ class LayerListBuilder {
   // The list becomes invalid once |Finalize| is called.
   bool list_valid_ = true;
   cc::LayerList list_;
+#if DCHECK_IS_ON()
+  HashSet<int> layer_ids_;
+#endif
 };
 
 // This class maintains unique stable cc effect IDs (and optionally a persistent
@@ -76,10 +86,10 @@ class SynthesizedClip : private cc::ContentLayerClient {
   }
 
   void UpdateLayer(bool needs_layer,
-                   const FloatRoundedRect& rrect,
-                   scoped_refptr<const RefCountedPath> path);
+                   const ClipPaintPropertyNode&,
+                   const TransformPaintPropertyNode&);
 
-  cc::Layer* Layer() { return layer_.get(); }
+  cc::PictureLayer* Layer() { return layer_.get(); }
   CompositorElementId GetMaskIsolationId() const { return mask_isolation_id_; }
   CompositorElementId GetMaskEffectId() const { return mask_effect_id_; }
 
@@ -94,8 +104,9 @@ class SynthesizedClip : private cc::ContentLayerClient {
 
  private:
   scoped_refptr<cc::PictureLayer> layer_;
-  gfx::Vector2dF layer_origin_;
-  SkRRect local_rrect_ = SkRRect::MakeEmpty();
+  GeometryMapper::Translation2DOrMatrix translation_2d_or_matrix_;
+  bool rrect_is_local_ = false;
+  SkRRect rrect_;
   scoped_refptr<const RefCountedPath> path_;
   CompositorElementId mask_isolation_id_;
   CompositorElementId mask_effect_id_;
@@ -114,8 +125,7 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
 
  public:
   PaintArtifactCompositor(
-      base::RepeatingCallback<void(const gfx::ScrollOffset&,
-                                   const cc::ElementId&)> scroll_callback);
+      base::WeakPtr<CompositorScrollCallbacks> scroll_callbacks);
   ~PaintArtifactCompositor();
 
   struct ViewportProperties {
@@ -143,24 +153,14 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   bool DirectlyUpdateTransform(const TransformPaintPropertyNode&);
   bool DirectlyUpdatePageScaleTransform(const TransformPaintPropertyNode&);
 
+  // Directly sets cc::ScrollTree::current_scroll_offset. This doesn't affect
+  // cc::TransformNode::scroll_offset (which will be synched with blink
+  // transform node in DirectlyUpdateScrollOffsetTransform() or Update()).
+  bool DirectlySetScrollOffset(CompositorElementId,
+                               const FloatPoint& scroll_offset);
+
   // The root layer of the tree managed by this object.
   cc::Layer* RootLayer() const { return root_layer_.get(); }
-
-  // Returns extra information recorded during unit tests.
-  // While not part of the normal output of this class, this provides a simple
-  // way of locating the layers of interest, since there are still a slew of
-  // placeholder layers required.
-  struct PLATFORM_EXPORT ExtraDataForTesting {
-    cc::Layer* ScrollHitTestWebLayerAt(unsigned index);
-
-    Vector<scoped_refptr<cc::Layer>> content_layers;
-    Vector<scoped_refptr<cc::Layer>> synthesized_clip_layers;
-    Vector<scoped_refptr<cc::Layer>> scroll_hit_test_layers;
-  };
-  void EnableExtraDataForTesting();
-  ExtraDataForTesting* GetExtraDataForTesting() const {
-    return extra_data_for_testing_.get();
-  }
 
   void SetTracksRasterInvalidations(bool);
 
@@ -168,7 +168,12 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   // going to be removed from its frame.
   void WillBeRemovedFromFrame();
 
-  std::unique_ptr<JSONObject> LayersAsJSON(LayerTreeFlags) const;
+  std::unique_ptr<JSONArray> GetPendingLayersAsJSON(
+      const PaintArtifact* = nullptr) const;
+
+  std::unique_ptr<JSONObject> GetLayersAsJSON(
+      LayerTreeFlags,
+      const PaintArtifact* = nullptr) const;
 
 #if DCHECK_IS_ON()
   void ShowDebugData();
@@ -192,7 +197,8 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
       cc::Layer*,
       const gfx::Vector2dF& layer_offset,
       const PropertyTreeState& layer_state,
-      const PaintChunkSubset& paint_chunks);
+      const PaintChunkSubset& paint_chunks,
+      PropertyTreeManager* = nullptr);
 
   void SetNeedsUpdate() { needs_update_ = true; }
   bool NeedsUpdate() const { return needs_update_; }
@@ -202,6 +208,17 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   // on any of the PropertyTrees constructed by |Update|.
   bool HasComposited(CompositorElementId element_id) const;
 
+  void SetLayerDebugInfoEnabled(bool);
+
+  // TODO(wangxianzhu): Make this private and refactor when removing
+  // pre-CompositeAfterPaint.
+  static void UpdateLayerDebugInfo(cc::Layer* layer,
+                                   const PaintChunk::Id&,
+                                   CompositingReasons,
+                                   RasterInvalidationTracking*);
+
+  Vector<cc::Layer*> SynthesizedClipLayersForTesting() const;
+
  private:
   // A pending layer is a collection of paint chunks that will end up in
   // the same cc::Layer.
@@ -209,15 +226,23 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
     PendingLayer(const PaintChunk& first_paint_chunk,
                  wtf_size_t first_chunk_index,
                  bool requires_own_layer);
-    // Merge another pending layer after this one, appending all its paint
-    // chunks after chunks in this layer, with appropriate space conversion
-    // applied. The merged layer must have a property tree state that's deeper
-    // than this layer, i.e. can "upcast" to this layer's state.
-    void Merge(const PendingLayer& guest);
+
+    // Merges |guest| into |this| if it can, by appending chunks of |guest|
+    // after chunks of |this|, with appropriate space conversion applied to
+    // both layers from their original property tree states to |merged_state|.
+    // Returns whether the merge is successful.
+    bool Merge(const PendingLayer& guest);
+
+    // Returns true if |guest| can be merged into |this|, and sets the output
+    // paramsters with the property tree state and bounds of the merged layer.
     // |guest_state| is for cases that we want to check if we can merge |guest|
-    // if it has |guest_state| (which may be different from its current state).
+    // if it has |guest_state| in the future (which may be different from its
+    // current state).
     bool CanMerge(const PendingLayer& guest,
-                  const PropertyTreeState& guest_state) const;
+                  const PropertyTreeState& guest_state,
+                  PropertyTreeState* merged_state = nullptr,
+                  FloatRect* merged_bounds = nullptr) const;
+
     // Mutate this layer's property tree state to a more general (shallower)
     // state, thus the name "upcast". The concrete effect of this is to
     // "decomposite" some of the properties, so that fewer properties will be
@@ -227,13 +252,27 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
 
     const PaintChunk& FirstPaintChunk(const PaintArtifact&) const;
 
+    // Returns the largest rect known to be opaque given two opaque rects.
+    static FloatRect UniteRectsKnownToBeOpaque(const FloatRect&,
+                                               const FloatRect&);
+    FloatRect MapRectKnownToBeOpaque(const PropertyTreeState&) const;
+
+    std::unique_ptr<JSONObject> ToJSON(const PaintArtifact* = nullptr) const;
+
+    FloatRect VisualRectForOverlapTesting() const;
+
     // The rects are in the space of property_tree_state.
     FloatRect bounds;
     FloatRect rect_known_to_be_opaque;
     Vector<wtf_size_t> paint_chunk_indices;
     PropertyTreeState property_tree_state;
     FloatPoint offset_of_decomposited_transforms;
-    bool requires_own_layer;
+
+    enum {
+      kRequiresOwnLayer,
+      kOverlap,
+      kOther,
+    } compositing_type;
   };
 
   void DecompositeTransforms(const PaintArtifact&);
@@ -265,9 +304,9 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
                      Vector<PaintChunk>::const_iterator& chunk_cursor);
   static bool MightOverlap(const PendingLayer&, const PendingLayer&);
   bool DecompositeEffect(const EffectPaintPropertyNode& unaliased_parent_effect,
-                         size_t first_layer_in_parent_group_index,
+                         wtf_size_t first_layer_in_parent_group_index,
                          const EffectPaintPropertyNode& unaliased_effect,
-                         size_t layer_index);
+                         wtf_size_t layer_index);
 
   // Builds a leaf layer that represents a single paint chunk.
   scoped_refptr<cc::Layer> CompositedLayerForPendingLayer(
@@ -279,18 +318,25 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
 
   bool PropertyTreeStateChanged(const PropertyTreeState&) const;
 
-  const TransformPaintPropertyNode& ScrollOffsetTranslationForLayer(
+  const TransformPaintPropertyNode& NearestScrollTranslationForLayer(
       const PaintArtifact&,
       const PendingLayer&);
 
-  // If the pending layer is a special scroll hit test layer, return the
-  // associated hit test information.
-  const HitTestData::ScrollHitTest* ScrollHitTestForLayer(const PaintArtifact&,
-                                                          const PendingLayer&);
+  // If the pending layer has scroll hit test data, return the associated
+  // scroll translation node.
+  const TransformPaintPropertyNode* ScrollTranslationForLayer(
+      const PaintArtifact&,
+      const PendingLayer&);
 
   // Finds an existing or creates a new scroll hit test layer for the pending
   // layer, returning nullptr if the layer is not a scroll hit test layer.
   scoped_refptr<cc::Layer> ScrollHitTestLayerForPendingLayer(
+      const PaintArtifact&,
+      const PendingLayer&);
+
+  // Finds an existing or creates a new scrollbar layer for the pending layer,
+  // returning nullptr if the layer is not a scrollbar layer.
+  scoped_refptr<cc::ScrollbarLayerBase> ScrollbarLayerForPendingLayer(
       const PaintArtifact&,
       const PendingLayer&);
 
@@ -305,6 +351,7 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   // However, |mask_isolation_id| is always set.
   SynthesizedClip& CreateOrReuseSynthesizedClipLayer(
       const ClipPaintPropertyNode&,
+      const TransformPaintPropertyNode&,
       bool needs_layer,
       CompositorElementId& mask_isolation_id,
       CompositorElementId& mask_effect_id) final;
@@ -314,14 +361,18 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
       const cc::LayerList&,
       const Vector<const EffectPaintPropertyNode*>&);
 
-  cc::PropertyTrees* GetPropertyTreesForDirectUpdate();
+  bool CanDirectlyUpdateProperties() const;
 
-  // Provides a callback for notifying blink of composited scrolling.
-  base::RepeatingCallback<void(const gfx::ScrollOffset&, const cc::ElementId&)>
-      scroll_callback_;
+  CompositingReasons GetCompositingReasons(const PendingLayer& layer,
+                                           const PendingLayer* previous_layer,
+                                           const PaintArtifact&) const;
 
-  bool tracks_raster_invalidations_;
-  bool needs_update_;
+  // For notifying blink of composited scrolling.
+  base::WeakPtr<CompositorScrollCallbacks> scroll_callbacks_;
+
+  bool tracks_raster_invalidations_ = false;
+  bool needs_update_ = true;
+  bool layer_debug_info_enabled_ = false;
 
   scoped_refptr<cc::Layer> root_layer_;
   Vector<std::unique_ptr<ContentLayerClientImpl>> content_layer_clients_;
@@ -335,9 +386,6 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   Vector<scoped_refptr<cc::Layer>> scroll_hit_test_layers_;
 
   Vector<PendingLayer, 0> pending_layers_;
-
-  bool extra_data_for_testing_enabled_ = false;
-  std::unique_ptr<ExtraDataForTesting> extra_data_for_testing_;
 
   friend class StubChromeClientForCAP;
   friend class PaintArtifactCompositorTest;

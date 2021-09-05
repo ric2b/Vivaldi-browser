@@ -19,6 +19,7 @@
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/common/surfaces/surface_range.h"
+#include "components/viz/service/frame_sinks/begin_frame_tracker.h"
 #include "components/viz/service/frame_sinks/surface_resource_holder.h"
 #include "components/viz/service/frame_sinks/surface_resource_holder_client.h"
 #include "components/viz/service/frame_sinks/video_capture/capturable_frame_sink.h"
@@ -72,8 +73,7 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   CompositorFrameSinkSupport(mojom::CompositorFrameSinkClient* client,
                              FrameSinkManagerImpl* frame_sink_manager,
                              const FrameSinkId& frame_sink_id,
-                             bool is_root,
-                             bool needs_sync_tokens);
+                             bool is_root);
   ~CompositorFrameSinkSupport() override;
 
   const FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
@@ -134,7 +134,6 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
                           base::TimeTicks draw_start_timestamp,
                           const gfx::SwapTimings& swap_timings,
                           const gfx::PresentationFeedback& feedback) override;
-  bool NeedsSyncTokens() const override;
 
   // mojom::CompositorFrameSink helpers.
   void SetNeedsBeginFrame(bool needs_begin_frame);
@@ -167,7 +166,7 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
       CompositorFrame frame,
       base::Optional<HitTestRegionList> hit_test_region_list,
       uint64_t submit_time,
-      mojom::CompositorFrameSink::SubmitCompositorFrameSyncCallback);
+      mojom::CompositorFrameSink::SubmitCompositorFrameSyncCallback callback);
 
   // CapturableFrameSink implementation.
   void AttachCaptureClient(CapturableFrameSink::Client* client) override;
@@ -202,13 +201,6 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   friend class DisplayTest;
   friend class FrameSinkManagerTest;
 
-  SubmitResult MaybeSubmitCompositorFrameInternal(
-      const LocalSurfaceId& local_surface_id,
-      CompositorFrame frame,
-      base::Optional<HitTestRegionList> hit_test_region_list,
-      uint64_t submit_time,
-      mojom::CompositorFrameSink::SubmitCompositorFrameSyncCallback);
-
   // Creates a surface reference from the top-level root to |surface_id|.
   SurfaceReference MakeTopLevelRootReference(const SurfaceId& surface_id);
 
@@ -219,7 +211,8 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
                                  const gfx::PresentationFeedback& feedback);
   void DidRejectCompositorFrame(
       uint32_t frame_token,
-      std::vector<TransferableResource> frame_resource_list);
+      std::vector<TransferableResource> frame_resource_list,
+      std::vector<ui::LatencyInfo> latency_info);
 
   // Update the display root reference with |surface|.
   void UpdateDisplayRootReference(const Surface* surface);
@@ -288,7 +281,6 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   bool wants_animate_only_begin_frames_ = false;
 
   const bool is_root_;
-  const bool needs_sync_tokens_;
 
   // By default, this is equivalent to |is_root_|, but may be overridden for
   // testing. Generally, for non-roots, there must not be any CopyOutputRequests
@@ -296,7 +288,7 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   // clients would be able to capture content for which they are not authorized.
   bool allow_copy_output_requests_;
 
-  // TODO(crbug.com/754872): Remove once tab capture has moved into VIZ.
+  // Used for tests only.
   AggregatedDamageCallback aggregated_damage_callback_;
 
   uint64_t last_frame_index_ = kFrameIndexStart - 1;
@@ -327,6 +319,8 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   bool callback_received_begin_frame_ = true;
   bool callback_received_receive_ack_ = true;
   uint32_t trace_sequence_ = 0;
+
+  BeginFrameTracker begin_frame_tracker_;
 
   // Maps |frame_token| to the timestamp when that frame was received. This
   // timestamp is combined with the information received in OnSurfacePresented()

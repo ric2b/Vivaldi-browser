@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/modules/peerconnection/adapters/p2p_quic_crypto_stream_factory_impl.h"
-#include "net/third_party/quiche/src/quic/core/quic_crypto_server_stream.h"
+#include "net/third_party/quiche/src/quic/core/quic_crypto_server_stream_base.h"
 
 namespace blink {
 
@@ -24,14 +24,14 @@ P2PQuicCryptoStreamFactoryImpl::CreateClientCryptoStream(
       proof_handler);
 }
 
-std::unique_ptr<quic::QuicCryptoServerStream>
+std::unique_ptr<quic::QuicCryptoServerStreamBase>
 P2PQuicCryptoStreamFactoryImpl::CreateServerCryptoStream(
     const quic::QuicCryptoServerConfig* crypto_config,
     quic::QuicCompressedCertsCache* compressed_certs_cache,
     quic::QuicSession* session,
-    quic::QuicCryptoServerStream::Helper* helper) {
-  return std::make_unique<quic::QuicCryptoServerStream>(
-      crypto_config, compressed_certs_cache, session, helper);
+    quic::QuicCryptoServerStreamBase::Helper* helper) {
+  return quic::CreateCryptoServerStream(crypto_config, compressed_certs_cache,
+                                        session, helper);
 }
 
 }  // namespace blink

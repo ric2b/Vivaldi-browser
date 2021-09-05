@@ -9,19 +9,19 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
-#include "base/memory/scoped_refptr.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/chromeos/wilco_dtc_supportd/mojo_utils.h"
 #include "chrome/browser/chromeos/wilco_dtc_supportd/testing_wilco_dtc_supportd_bridge_wrapper.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/testing_wilco_dtc_supportd_network_context.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_bridge.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_client.h"
 #include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_messaging.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_network_context.h"
 #include "chrome/services/wilco_dtc_supportd/public/mojom/wilco_dtc_supportd.mojom.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "extensions/browser/api/messaging/native_message_host.h"
 #include "mojo/public/cpp/system/handle.h"
-#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
-#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -54,7 +54,7 @@ std::string AssertGetStringFromMojoHandle(mojo::ScopedHandle handle) {
     return std::string();
   base::ReadOnlySharedMemoryMapping shared_memory;
   std::string contents =
-      GetStringPieceFromMojoHandle(std::move(handle), &shared_memory)
+      MojoUtils::GetStringPieceFromMojoHandle(std::move(handle), &shared_memory)
           .as_string();
   CHECK(!contents.empty());
   return contents;
@@ -65,7 +65,7 @@ mojo::ScopedHandle AssertCreateReadOnlySharedMemoryMojoHandle(
   if (content.empty())
     return mojo::ScopedHandle();
   mojo::ScopedHandle shared_memory_handle =
-      CreateReadOnlySharedMemoryMojoHandle(content);
+      MojoUtils::CreateReadOnlySharedMemoryMojoHandle(content);
   CHECK(shared_memory_handle);
   return shared_memory_handle;
 }
@@ -109,7 +109,7 @@ TEST(WilcoDtcSupportdMessagingOpenedByExtensionNoBridgeTest, Test) {
 
   // Create the message host.
   std::unique_ptr<extensions::NativeMessageHost> message_host =
-      CreateExtensionOwnedWilcoDtcSupportdMessageHost();
+      CreateExtensionOwnedWilcoDtcSupportdMessageHost(nullptr);
   StrictMock<MockNativeMessageHostClient> message_host_client;
 
   // The message host will close the channel during the OnMessage() call at the
@@ -126,12 +126,11 @@ namespace {
 class WilcoDtcSupportdMessagingOpenedByExtensionTest : public testing::Test {
  protected:
   WilcoDtcSupportdMessagingOpenedByExtensionTest() {
-    DBusThreadManager::Initialize();
+    WilcoDtcSupportdClient::InitializeFake();
     testing_wilco_dtc_supportd_bridge_wrapper_ =
         TestingWilcoDtcSupportdBridgeWrapper::Create(
             &mojo_wilco_dtc_supportd_service_,
-            base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
-                &test_url_loader_factory_),
+            std::make_unique<TestingWilcoDtcSupportdNetworkContext>(),
             &wilco_dtc_supportd_bridge_);
   }
 
@@ -140,7 +139,7 @@ class WilcoDtcSupportdMessagingOpenedByExtensionTest : public testing::Test {
     // DBusThreadManager is shut down, since the WilcoDtcSupportdBridge class
     // uses the latter.
     wilco_dtc_supportd_bridge_.reset();
-    DBusThreadManager::Shutdown();
+    WilcoDtcSupportdClient::Shutdown();
   }
 
   MockMojoWilcoDtcSupportdService* mojo_wilco_dtc_supportd_service() {
@@ -156,7 +155,6 @@ class WilcoDtcSupportdMessagingOpenedByExtensionTest : public testing::Test {
  private:
   base::test::TaskEnvironment task_environment_;
   StrictMock<MockMojoWilcoDtcSupportdService> mojo_wilco_dtc_supportd_service_;
-  network::TestURLLoaderFactory test_url_loader_factory_;
   std::unique_ptr<TestingWilcoDtcSupportdBridgeWrapper>
       testing_wilco_dtc_supportd_bridge_wrapper_;
   std::unique_ptr<WilcoDtcSupportdBridge> wilco_dtc_supportd_bridge_;
@@ -169,7 +167,7 @@ class WilcoDtcSupportdMessagingOpenedByExtensionTest : public testing::Test {
 TEST_F(WilcoDtcSupportdMessagingOpenedByExtensionTest, NoMojoConnection) {
   // Create the message host.
   std::unique_ptr<extensions::NativeMessageHost> message_host =
-      CreateExtensionOwnedWilcoDtcSupportdMessageHost();
+      CreateExtensionOwnedWilcoDtcSupportdMessageHost(nullptr);
   StrictMock<MockNativeMessageHostClient> message_host_client;
   message_host->Start(&message_host_client);
 
@@ -189,7 +187,7 @@ class WilcoDtcSupportdMessagingOpenedByExtensionSingleHostTest
  protected:
   WilcoDtcSupportdMessagingOpenedByExtensionSingleHostTest() {
     wilco_dtc_supportd_bridge_wrapper()->EstablishFakeMojoConnection();
-    message_host_ = CreateExtensionOwnedWilcoDtcSupportdMessageHost();
+    message_host_ = CreateExtensionOwnedWilcoDtcSupportdMessageHost(nullptr);
     message_host_->Start(&message_host_client_);
   }
 

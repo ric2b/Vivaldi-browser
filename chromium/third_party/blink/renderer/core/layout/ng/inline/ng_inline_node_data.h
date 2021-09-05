@@ -11,6 +11,9 @@
 
 namespace blink {
 
+template <typename OffsetMappingBuilder>
+class NGInlineItemsBuilderTemplate;
+
 // Data which is required for inline nodes.
 struct CORE_EXPORT NGInlineNodeData : NGInlineItemsData {
  public:
@@ -23,12 +26,13 @@ struct CORE_EXPORT NGInlineNodeData : NGInlineItemsData {
 
   bool IsBlockLevel() const { return is_block_level_; }
 
- private:
   const NGInlineItemsData& ItemsData(bool is_first_line) const {
     return !is_first_line || !first_line_items_
                ? (const NGInlineItemsData&)*this
                : *first_line_items_;
   }
+
+ private:
   void SetBaseDirection(TextDirection direction) {
     base_direction_ = static_cast<unsigned>(direction);
   }
@@ -38,6 +42,9 @@ struct CORE_EXPORT NGInlineNodeData : NGInlineItemsData {
   friend class NGInlineNodeLegacy;
   friend class NGInlineNodeForTest;
   friend class NGOffsetMappingTest;
+
+  template <typename OffsetMappingBuilder>
+  friend class NGInlineItemsBuilderTemplate;
 
   // Items to use for the first line, when the node has :first-line rules.
   //

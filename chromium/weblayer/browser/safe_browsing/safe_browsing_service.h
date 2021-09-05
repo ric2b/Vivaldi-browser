@@ -5,16 +5,18 @@
 #ifndef WEBLAYER_BROWSER_SAFE_BROWSING_SAFE_BROWSING_SERVICE_H_
 #define WEBLAYER_BROWSER_SAFE_BROWSING_SAFE_BROWSING_SERVICE_H_
 
-#include "components/safe_browsing/base_ui_manager.h"
+#include "components/safe_browsing/content/base_ui_manager.h"
 
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "weblayer/browser/safe_browsing/safe_browsing_ui_manager.h"
 
 namespace content {
+class NavigationHandle;
+class NavigationThrottle;
 class RenderProcessHost;
-class ResourceContext;
 }
 
 namespace blink {
@@ -45,9 +47,10 @@ class SafeBrowsingService {
   // Executed on UI thread
   void Initialize();
   std::unique_ptr<blink::URLLoaderThrottle> CreateURLLoaderThrottle(
-      content::ResourceContext* resource_context,
       const base::RepeatingCallback<content::WebContents*()>& wc_getter,
       int frame_tree_node_id);
+  std::unique_ptr<content::NavigationThrottle>
+  CreateSafeBrowsingNavigationThrottle(content::NavigationHandle* handle);
   void AddInterface(service_manager::BinderRegistry* registry,
                     content::RenderProcessHost* render_process_host);
 
@@ -78,8 +81,8 @@ class SafeBrowsingService {
   scoped_refptr<safe_browsing::RemoteSafeBrowsingDatabaseManager>
       safe_browsing_db_manager_;
 
-  // A SharedURLLoaderFactory and its interfaceptr used on the IO thread.
-  network::mojom::URLLoaderFactoryPtr url_loader_factory_on_io_;
+  // A SharedURLLoaderFactory and its remote used on the IO thread.
+  mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_on_io_;
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
       shared_url_loader_factory_on_io_;
 

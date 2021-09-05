@@ -88,14 +88,13 @@ TEST(ColorSpace, RasterAndBlend) {
   // A linear transfer function being used for HDR should be blended using an
   // sRGB-like transfer function.
   display_color_space = ColorSpace::CreateSCRGBLinear();
-  EXPECT_EQ(ColorSpace::CreateExtendedSRGB(),
-            display_color_space.GetBlendingColorSpace());
+  EXPECT_FALSE(display_color_space.IsSuitableForBlending());
   EXPECT_EQ(ColorSpace::CreateDisplayP3D65(),
             display_color_space.GetRasterColorSpace());
 
   // If not used for HDR, a linear transfer function should be left unchanged.
   display_color_space = ColorSpace::CreateXYZD50();
-  EXPECT_EQ(display_color_space, display_color_space.GetBlendingColorSpace());
+  EXPECT_TRUE(display_color_space.IsSuitableForBlending());
   EXPECT_EQ(display_color_space, display_color_space.GetRasterColorSpace());
 }
 
@@ -177,6 +176,16 @@ TEST(ColorSpace, MixedHDR10WithRec709) {
                                                   ColorSpace::RangeID::LIMITED);
   EXPECT_TRUE(expected_color_space.IsValid());
   EXPECT_EQ(color_space, expected_color_space);
+}
+
+TEST(ColorSpace, GetsPrimariesTransferMatrixAndRange) {
+  ColorSpace color_space(
+      ColorSpace::PrimaryID::BT709, ColorSpace::TransferID::BT709,
+      ColorSpace::MatrixID::BT709, ColorSpace::RangeID::LIMITED);
+  EXPECT_EQ(color_space.GetPrimaryID(), ColorSpace::PrimaryID::BT709);
+  EXPECT_EQ(color_space.GetTransferID(), ColorSpace::TransferID::BT709);
+  EXPECT_EQ(color_space.GetMatrixID(), ColorSpace::MatrixID::BT709);
+  EXPECT_EQ(color_space.GetRangeID(), ColorSpace::RangeID::LIMITED);
 }
 
 }  // namespace

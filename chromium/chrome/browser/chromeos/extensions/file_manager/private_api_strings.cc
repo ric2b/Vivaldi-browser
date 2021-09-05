@@ -42,14 +42,14 @@ ExtensionFunction::ResponseAction FileManagerPrivateGetStringsFunction::Run() {
   dict->SetBoolean("CROSTINI_ENABLED",
                    crostini::CrostiniFeatures::Get()->IsEnabled(
                        Profile::FromBrowserContext(browser_context())));
-  dict->SetBoolean("FEEDBACK_PANEL_ENABLED",
-                   base::FeatureList::IsEnabled(
-                       chromeos::features::kEnableFileManagerFeedbackPanel));
   dict->SetBoolean("PLUGIN_VM_ENABLED",
                    plugin_vm::IsPluginVmEnabled(
                        Profile::FromBrowserContext(browser_context())));
   dict->SetBoolean("FILES_NG_ENABLED",
                    base::FeatureList::IsEnabled(chromeos::features::kFilesNG));
+  dict->SetBoolean(
+      "UNIFIED_MEDIA_VIEW_ENABLED",
+      base::FeatureList::IsEnabled(chromeos::features::kUnifiedMediaView));
 
   dict->SetString("UI_LOCALE", extension_l10n_util::CurrentLocaleOrDefault());
 

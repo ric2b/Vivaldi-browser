@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "components/password_manager/core/browser/password_manager_util.h"
+#include "components/prefs/pref_service.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/driver/sync_service.h"
@@ -18,15 +20,29 @@ PasswordModelTypeController::PasswordModelTypeController(
         delegate_for_full_sync_mode,
     std::unique_ptr<syncer::ModelTypeControllerDelegate>
         delegate_for_transport_mode,
+    PrefService* pref_service,
+    signin::IdentityManager* identity_manager,
     syncer::SyncService* sync_service,
     const base::RepeatingClosure& state_changed_callback)
     : ModelTypeController(syncer::PASSWORDS,
                           std::move(delegate_for_full_sync_mode),
                           std::move(delegate_for_transport_mode)),
+      pref_service_(pref_service),
+      identity_manager_(identity_manager),
       sync_service_(sync_service),
-      state_changed_callback_(state_changed_callback) {}
+      state_changed_callback_(state_changed_callback),
+      account_storage_opt_in_watcher_(
+          identity_manager_,
+          pref_service_,
+          base::BindRepeating(
+              &PasswordModelTypeController::OnOptInStateMaybeChanged,
+              base::Unretained(this))) {
+  identity_manager_->AddObserver(this);
+}
 
-PasswordModelTypeController::~PasswordModelTypeController() = default;
+PasswordModelTypeController::~PasswordModelTypeController() {
+  identity_manager_->RemoveObserver(this);
+}
 
 void PasswordModelTypeController::LoadModels(
     const syncer::ConfigureContext& configure_context,
@@ -61,9 +77,31 @@ void PasswordModelTypeController::Stop(syncer::ShutdownReason shutdown_reason,
   state_changed_callback_.Run();
 }
 
+syncer::DataTypeController::PreconditionState
+PasswordModelTypeController::GetPreconditionState() const {
+  if (sync_mode_ == syncer::SyncMode::kFull)
+    return PreconditionState::kPreconditionsMet;
+  return password_manager_util::IsOptedInForAccountStorage(pref_service_,
+                                                           sync_service_)
+             ? PreconditionState::kPreconditionsMet
+             : PreconditionState::kMustStopAndClearData;
+}
+
 void PasswordModelTypeController::OnStateChanged(syncer::SyncService* sync) {
   DCHECK(CalledOnValidThread());
+  sync_service_->DataTypePreconditionChanged(syncer::PASSWORDS);
   state_changed_callback_.Run();
+}
+
+void PasswordModelTypeController::OnAccountsCookieDeletedByUserAction() {
+  password_manager_util::ClearAccountStorageSettingsForAllUsers(pref_service_);
+}
+
+void PasswordModelTypeController::OnOptInStateMaybeChanged() {
+  // Note: This method gets called in many other situations as well, not just
+  // when the opt-in state changes, but DataTypePreconditionChanged() is cheap
+  // if nothing actually changed, so some spurious calls don't hurt.
+  sync_service_->DataTypePreconditionChanged(syncer::PASSWORDS);
 }
 
 }  // namespace password_manager

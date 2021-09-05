@@ -4,6 +4,11 @@
 
 #include "android_webview/browser/network_service/android_stream_reader_url_loader.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "android_webview/browser/input_stream.h"
 #include "android_webview/browser/network_service/input_stream_reader.h"
 #include "android_webview/common/aw_features.h"
@@ -13,6 +18,7 @@
 #include "base/feature_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/browser_thread.h"
@@ -96,12 +102,11 @@ class InputStreamReaderWrapper
 
 AndroidStreamReaderURLLoader::AndroidStreamReaderURLLoader(
     const network::ResourceRequest& resource_request,
-    network::mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
     std::unique_ptr<ResponseDelegate> response_delegate)
     : resource_request_(resource_request),
-      resource_response_head_(
-          std::make_unique<network::ResourceResponseHead>()),
+      response_head_(network::mojom::URLResponseHead::New()),
       client_(std::move(client)),
       traffic_annotation_(traffic_annotation),
       response_delegate_(std::move(response_delegate)),
@@ -110,7 +115,7 @@ AndroidStreamReaderURLLoader::AndroidStreamReaderURLLoader(
                                base::SequencedTaskRunnerHandle::Get()) {
   DCHECK(response_delegate_);
   // If there is a client error, clean up the request.
-  client_.set_connection_error_handler(
+  client_.set_disconnect_handler(
       base::BindOnce(&AndroidStreamReaderURLLoader::RequestComplete,
                      weak_factory_.GetWeakPtr(), net::ERR_ABORTED));
 }
@@ -134,8 +139,8 @@ void AndroidStreamReaderURLLoader::Start() {
     return;
   }
 
-  base::PostTask(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock()},
       base::BindOnce(
           &OpenInputStreamOnWorkerThread, base::ThreadTaskRunnerHandle::Get(),
           // This is intentional - the loader could be deleted while the
@@ -186,8 +191,8 @@ void AndroidStreamReaderURLLoader::OnInputStreamOpened(
   input_stream_reader_wrapper_ = base::MakeRefCounted<InputStreamReaderWrapper>(
       std::move(input_stream), std::move(input_stream_reader));
 
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
       base::BindOnce(&InputStreamReaderWrapper::Seek,
                      input_stream_reader_wrapper_, byte_range_),
       base::BindOnce(&AndroidStreamReaderURLLoader::OnReaderSeekCompleted,
@@ -218,7 +223,7 @@ void AndroidStreamReaderURLLoader::HeadersComplete(
   // HttpResponseHeaders expects its input string to be terminated by two NULs.
   status.append("\0\0", 2);
 
-  network::ResourceResponseHead& head = *resource_response_head_;
+  network::mojom::URLResponseHead& head = *response_head_;
   head.request_start = base::TimeTicks::Now();
   head.response_start = base::TimeTicks::Now();
   head.headers = new net::HttpResponseHeaders(status);
@@ -286,7 +291,7 @@ void AndroidStreamReaderURLLoader::SendBody() {
   //    needs the ability to break the stream after getting the headers but
   //    before finishing the read.
   if (!base::FeatureList::IsEnabled(features::kWebViewSniffMimeType) ||
-      !resource_response_head_->mime_type.empty()) {
+      !response_head_->mime_type.empty()) {
     SendResponseToClient();
   }
   ReadMore();
@@ -295,8 +300,7 @@ void AndroidStreamReaderURLLoader::SendBody() {
 void AndroidStreamReaderURLLoader::SendResponseToClient() {
   DCHECK(consumer_handle_.is_valid());
   DCHECK(client_.is_bound());
-  client_->OnReceiveResponse(*resource_response_head_);
-  resource_response_head_ = nullptr;
+  client_->OnReceiveResponse(std::move(response_head_));
   client_->OnStartLoadingResponseBody(std::move(consumer_handle_));
 }
 
@@ -332,8 +336,8 @@ void AndroidStreamReaderURLLoader::ReadMore() {
   }
 
   // TODO(timvolodine): consider using a sequenced task runner.
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
       base::BindOnce(
           &InputStreamReaderWrapper::ReadRawData, input_stream_reader_wrapper_,
           base::RetainedRef(buffer.get()), base::checked_cast<int>(num_bytes)),
@@ -360,7 +364,7 @@ void AndroidStreamReaderURLLoader::DidRead(int result) {
     // We only hit this on for the first buffer read, which we expect to be
     // enough to determine the MIME type.
     DCHECK(base::FeatureList::IsEnabled(features::kWebViewSniffMimeType));
-    if (resource_response_head_->mime_type.empty()) {
+    if (response_head_->mime_type.empty()) {
       // Limit sniffing to the first net::kMaxBytesToSniff.
       size_t data_length = result;
       if (data_length > net::kMaxBytesToSniff)
@@ -373,8 +377,8 @@ void AndroidStreamReaderURLLoader::DidRead(int result) {
       // SniffMimeType() returns false if there is not enough data to
       // determine the mime type. However, even if it returns false, it
       // returns a new type that is probably better than the current one.
-      resource_response_head_->mime_type.assign(new_type);
-      resource_response_head_->did_mime_sniff = true;
+      response_head_->mime_type.assign(new_type);
+      response_head_->did_mime_sniff = true;
     }
 
     SendResponseToClient();

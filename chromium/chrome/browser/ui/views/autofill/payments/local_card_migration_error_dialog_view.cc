@@ -28,7 +28,6 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_client_view.h"
 
 namespace autofill {
 
@@ -36,6 +35,10 @@ LocalCardMigrationErrorDialogView::LocalCardMigrationErrorDialogView(
     LocalCardMigrationDialogController* controller,
     content::WebContents* web_contents)
     : controller_(controller), web_contents_(web_contents) {
+  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_CANCEL);
+  DialogDelegate::SetCancelCallback(
+      base::BindOnce(&LocalCardMigrationDialogController::OnDoneButtonClicked,
+                     base::Unretained(controller_)));
   set_close_on_deactivate(false);
   set_margins(gfx::Insets());
 }
@@ -72,25 +75,11 @@ bool LocalCardMigrationErrorDialogView::ShouldShowCloseButton() const {
   return false;
 }
 
-int LocalCardMigrationErrorDialogView::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_CANCEL;
-}
-
 void LocalCardMigrationErrorDialogView::WindowClosing() {
   if (controller_) {
     controller_->OnDialogClosed();
     controller_ = nullptr;
   }
-}
-
-bool LocalCardMigrationErrorDialogView::Cancel() {
-  controller_->OnDoneButtonClicked();
-  return true;
-}
-
-bool LocalCardMigrationErrorDialogView::Close() {
-  // Close the dialog if the user exits the browser when dialog is visible.
-  return true;
 }
 
 void LocalCardMigrationErrorDialogView::Init() {

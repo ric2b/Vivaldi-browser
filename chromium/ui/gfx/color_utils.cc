@@ -306,6 +306,10 @@ SkColor GetColorWithMaxContrast(SkColor color) {
   return IsDark(color) ? SK_ColorWHITE : g_darkest_color;
 }
 
+SkColor GetEndpointColorWithMinContrast(SkColor color) {
+  return IsDark(color) ? g_darkest_color : SK_ColorWHITE;
+}
+
 SkColor BlendTowardMaxContrast(SkColor color, SkAlpha alpha) {
   SkAlpha original_alpha = SkColorGetA(color);
   SkColor blended_color = AlphaBlend(GetColorWithMaxContrast(color),
@@ -373,13 +377,6 @@ SkColor GetSysSkColor(int which) {
   return SK_ColorLTGRAY;
 #endif
 }
-
-// OS_WIN implementation lives in sys_color_change_listener.cc
-#if !defined(OS_WIN)
-bool IsInvertedColorScheme() {
-  return false;
-}
-#endif  // !defined(OS_WIN)
 
 SkColor DeriveDefaultIconColor(SkColor text_color) {
   // Lighten dark colors and brighten light colors. The alpha value here (0x4c)

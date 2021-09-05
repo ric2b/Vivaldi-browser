@@ -231,11 +231,14 @@ void FakeDownloadItem::ValidateDangerousDownload() {
   NOTREACHED();
 }
 
-void FakeDownloadItem::StealDangerousDownload(
-    bool delete_file_afterward,
-    const AcquireFileCallback& callback) {
+void FakeDownloadItem::ValidateMixedContentDownload() {
   NOTREACHED();
-  callback.Run(base::FilePath());
+}
+
+void FakeDownloadItem::StealDangerousDownload(bool delete_file_afterward,
+                                              AcquireFileCallback callback) {
+  NOTREACHED();
+  std::move(callback).Run(base::FilePath());
 }
 
 void FakeDownloadItem::Pause() {
@@ -362,6 +365,10 @@ bool FakeDownloadItem::IsSavePackageDownload() const {
   return false;
 }
 
+download::DownloadSource FakeDownloadItem::GetDownloadSource() const {
+  return download::DownloadSource::UNKNOWN;
+}
+
 const base::FilePath& FakeDownloadItem::GetFullPath() const {
   return dummy_file_path;
 }
@@ -391,9 +398,8 @@ const std::string& FakeDownloadItem::GetHash() const {
   return hash_;
 }
 
-void FakeDownloadItem::DeleteFile(const base::Callback<void(bool)>& callback) {
+void FakeDownloadItem::DeleteFile(base::OnceCallback<void(bool)> callback) {
   NOTREACHED();
-  callback.Run(false);
 }
 
 download::DownloadFile* FakeDownloadItem::GetDownloadFile() {
@@ -405,9 +411,20 @@ bool FakeDownloadItem::IsDangerous() const {
   return false;
 }
 
+bool FakeDownloadItem::IsMixedContent() const {
+  NOTREACHED();
+  return false;
+}
+
 download::DownloadDangerType FakeDownloadItem::GetDangerType() const {
   NOTREACHED();
   return download::DownloadDangerType();
+}
+
+download::DownloadItem::MixedContentStatus
+FakeDownloadItem::GetMixedContentStatus() const {
+  NOTREACHED();
+  return download::DownloadItem::MixedContentStatus();
 }
 
 bool FakeDownloadItem::TimeRemaining(base::TimeDelta* remaining) const {

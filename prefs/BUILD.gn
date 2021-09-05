@@ -28,7 +28,8 @@ action("prefs_files_generator") {
     "--prefs-names-h=" + rebase_path(vivaldi_gen_prefs_h, root_build_dir),
     "--prefs-names-cc=" + rebase_path(vivaldi_gen_prefs_cc, root_build_dir),
     "--prefs-enums-h=" + rebase_path(vivaldi_gen_pref_enums_h, root_build_dir),
-    "--root="+rebase_path(root_gen_dir, root_build_dir)
+    "--root="+rebase_path(root_gen_dir, root_build_dir),
+    "--target-os="+target_os,
   ]
 
   all_dependent_configs = [":prefs_include_dirs"]
@@ -36,8 +37,11 @@ action("prefs_files_generator") {
 
 static_library("prefs_files_generated") {
   sources = get_target_outputs(":prefs_files_generator")
-  deps = [
+  public_deps = [
     ":prefs_files_generator",
+  ]
+  deps = [
+    "//base",
   ]
 }
 
@@ -48,11 +52,20 @@ static_library("prefs") {
     "vivaldi_browser_prefs_android.cc",
     "vivaldi_browser_prefs_linux.cc",
     "vivaldi_browser_prefs_mac.mm",
+    "vivaldi_browser_prefs_util.h",
+    "vivaldi_browser_prefs_util.cc",
     "vivaldi_browser_prefs_win.cc",
   ]
-  deps = [
-    "//skia",
+  public_deps = [
     ":prefs_files_generated",
+  ]
+  deps = [
+    "//base",
+    "//chrome/common:constants",
+    "//components/pref_registry",
+    "//components/prefs",
+    "//components/version_info",
+    "//skia",
     ":prefs_strings",
   ]
   if(!is_android) {
@@ -67,11 +80,10 @@ static_library("prefs_strings") {
   ]
 }
 
-jumbo_static_library("browser_prefs") {
+static_library("browser_prefs") {
   sources = [
     "native_settings_observer.cc",
     "native_settings_observer.h",
-    "native_settings_observer_delegate.h",
     "native_settings_observer_linux.cc",
     "native_settings_observer_linux.h",
     "native_settings_observer_mac.h",
@@ -81,8 +93,13 @@ jumbo_static_library("browser_prefs") {
     "vivaldi_tab_zoom_pref.cc",
     "vivaldi_tab_zoom_pref.h",
   ]
-  deps = [
+  public_deps = [
+    ":prefs_strings",
     ":prefs_files_generator",
+    "//chrome/common:buildflags",
+  ]
+  deps = [
+    "//components/prefs",
     "//content/public/browser",
     "//skia",
   ]

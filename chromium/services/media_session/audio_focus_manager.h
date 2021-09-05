@@ -12,7 +12,6 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -53,14 +52,14 @@ class AudioFocusManager : public mojom::AudioFocusManager,
   // mojom::AudioFocusManager.
   void RequestAudioFocus(
       mojo::PendingReceiver<mojom::AudioFocusRequestClient> receiver,
-      mojo::PendingRemote<mojom::MediaSession> media_session,
+      mojo::PendingRemote<mojom::MediaSession> session,
       mojom::MediaSessionInfoPtr session_info,
       mojom::AudioFocusType type,
       RequestAudioFocusCallback callback) override;
   void RequestGroupedAudioFocus(
       const base::UnguessableToken& request_id,
       mojo::PendingReceiver<mojom::AudioFocusRequestClient> receiver,
-      mojo::PendingRemote<mojom::MediaSession> media_session,
+      mojo::PendingRemote<mojom::MediaSession> session,
       mojom::MediaSessionInfoPtr session_info,
       mojom::AudioFocusType type,
       const base::UnguessableToken& group_id,
@@ -97,9 +96,9 @@ class AudioFocusManager : public mojom::AudioFocusManager,
   void BindToDebugInterface(
       mojo::PendingReceiver<mojom::AudioFocusManagerDebug> receiver);
 
-  // Bind to a mojom::MediaControllerManagerRequest.
+  // Bind to a receiver of mojom::MediaControllerManager.
   void BindToControllerManagerInterface(
-      mojom::MediaControllerManagerRequest request);
+      mojo::PendingReceiver<mojom::MediaControllerManager> receiver);
 
  private:
   friend class AudioFocusManagerTest;
@@ -112,9 +111,8 @@ class AudioFocusManager : public mojom::AudioFocusManager,
   // ReceiverContext stores associated metadata for mojo binding.
   struct ReceiverContext {
     // The source name is associated with a binding when a client calls
-    // |SetSourceName|. It is used to provide more granularity than a
-    // service_manager::Identity for metrics and for identifying where an audio
-    // focus request originated from.
+    // |SetSourceName|. It is used to provide extra granularity for metrics and
+    // for identifying where an audio focus request originated from.
     std::string source_name;
 
     // The identity associated with the binding when it was created.
@@ -166,8 +164,8 @@ class AudioFocusManager : public mojom::AudioFocusManager,
   // Holds mojo receivers for the Audio Focus Manager Debug API.
   mojo::ReceiverSet<mojom::AudioFocusManagerDebug> debug_receivers_;
 
-  // Holds mojo bindings for the Media Controller Manager API.
-  mojo::BindingSet<mojom::MediaControllerManager> controller_bindings_;
+  // Holds mojo receivers for the Media Controller Manager API.
+  mojo::ReceiverSet<mojom::MediaControllerManager> controller_receivers_;
 
   // Weak reference of managed observers. Observers are expected to remove
   // themselves before being destroyed.

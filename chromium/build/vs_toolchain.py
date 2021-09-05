@@ -35,6 +35,10 @@ MSVC_TOOLSET_VERSION = {
    '2017' : 'VC141',
 }
 
+def _HostIsWindows():
+  """Returns True if running on a Windows host (including under cygwin)."""
+  return sys.platform in ('win32', 'cygwin')
+
 def SetEnvironmentAndGetRuntimeDllDirs():
   """Sets up os.environ to use the depot_tools VS toolchain with gyp, and
   returns the location of the VC runtime DLLs so they can be copied into
@@ -49,7 +53,7 @@ def SetEnvironmentAndGetRuntimeDllDirs():
       bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1')))
   # When running on a non-Windows host, only do this if the SDK has explicitly
   # been downloaded before (in which case json_data_file will exist).
-  if ((sys.platform in ('win32', 'cygwin') or os.path.exists(json_data_file))
+  if ((_HostIsWindows() or os.path.exists(json_data_file))
       and depot_tools_win_toolchain):
     if ShouldUpdateToolchain():
       if len(sys.argv) > 1 and sys.argv[1] == 'update':
@@ -78,7 +82,6 @@ def SetEnvironmentAndGetRuntimeDllDirs():
       vs_runtime_dll_dirs.append('Arm64Unused')
 
     os.environ['GYP_MSVS_OVERRIDE_PATH'] = toolchain
-    os.environ['GYP_MSVS_VERSION'] = version
 
     os.environ['WINDOWSSDKDIR'] = win_sdk
     os.environ['WDK_DIR'] = wdk
@@ -88,8 +91,6 @@ def SetEnvironmentAndGetRuntimeDllDirs():
   elif sys.platform == 'win32' and not depot_tools_win_toolchain:
     if not 'GYP_MSVS_OVERRIDE_PATH' in os.environ:
       os.environ['GYP_MSVS_OVERRIDE_PATH'] = DetectVisualStudioPath()
-    if not 'GYP_MSVS_VERSION' in os.environ:
-      os.environ['GYP_MSVS_VERSION'] = GetVisualStudioVersion()
 
     # When using an installed toolchain these files aren't needed in the output
     # directory in order to run binaries locally, but they are needed in order
@@ -139,12 +140,7 @@ def _RegistryGetValue(key, value):
 def GetVisualStudioVersion():
   """Return best available version of Visual Studio.
   """
-
-  env_version = os.environ.get('GYP_MSVS_VERSION')
-  if env_version:
-    return env_version
-
-  supported_versions = MSVS_VERSIONS.keys()
+  supported_versions = list(MSVS_VERSIONS.keys())
 
   # VS installed in depot_tools for Googlers
   if bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1'))):
@@ -159,7 +155,8 @@ def GetVisualStudioVersion():
         os.environ.get('vs%s_install' % version),
         os.path.expandvars('%ProgramFiles(x86)%' +
                            '/Microsoft Visual Studio/%s' % version)):
-      if path and os.path.exists(path):
+      if path and any(os.path.exists(os.path.join(path, edition)) for edition in
+          ('Enterprise', 'Professional', 'Community', 'Preview', 'BuildTools')):
         available_versions.append(version)
         break
 
@@ -170,7 +167,7 @@ def GetVisualStudioVersion():
 
 
 def DetectVisualStudioPath():
-  """Return path to the GYP_MSVS_VERSION of Visual Studio.
+  """Return path to the installed Visual Studio.
   """
 
   # Note that this code is used from
@@ -193,13 +190,15 @@ def DetectVisualStudioPath():
                          '/Microsoft Visual Studio/%s/Community' %
                          version_as_year),
       os.path.expandvars('%ProgramFiles(x86)%' +
+                         '/Microsoft Visual Studio/%s/BuildTools' %
+                         version_as_year),
+      os.path.expandvars('%ProgramFiles(x86)%' +
                          '/Microsoft Visual Studio/%s/Preview' %
                          version_as_year)):
     if path and os.path.exists(path):
       return path
 
-  raise Exception('Visual Studio Version %s (from GYP_MSVS_VERSION)'
-                  ' not found.' % version_as_year)
+  raise Exception('Visual Studio Version %s not found.' % version_as_year)
 
 
 def _CopyRuntimeImpl(target, source, verbose=True):
@@ -429,8 +428,10 @@ def _GetDesiredVsToolchainHashes():
   """
   # VS 2019 Update 9 (16.3.29324.140) with 10.0.18362 SDK, 10.0.17763 version of
   # Debuggers, and 10.0.17134 version of d3dcompiler_47.dll, with ARM64
-  # libraries.
-  toolchain_hash = '8f58c55897a3282ed617055775a77ec3db771b88'
+  # libraries and UWP support.
+  # See go/chromium-msvc-toolchain for instructions about how to update the
+  # toolchain.
+  toolchain_hash = '9ff60e43ba91947baca460d0ca3b1b980c3a2c23'
   # Third parties that do not have access to the canonical toolchain can map
   # canonical toolchain version to their own toolchain versions.
   toolchain_hash_mapping_key = 'GYP_MSVS_HASH_%s' % toolchain_hash
@@ -465,8 +466,7 @@ def Update(force=False, no_download=False):
 
   depot_tools_win_toolchain = \
       bool(int(os.environ.get('DEPOT_TOOLS_WIN_TOOLCHAIN', '1')))
-  if ((sys.platform in ('win32', 'cygwin') or force) and
-        depot_tools_win_toolchain):
+  if (_HostIsWindows() or force) and depot_tools_win_toolchain:
     import find_depot_tools
     depot_tools_path = find_depot_tools.add_depot_tools_to_path()
 
@@ -494,9 +494,6 @@ def Update(force=False, no_download=False):
       subprocess.check_call([
           ciopfs, '-o', 'use_ino', toolchain_dir + '.ciopfs', toolchain_dir])
 
-    # Necessary so that get_toolchain_if_necessary.py will put the VS toolkit
-    # in the correct directory.
-    os.environ['GYP_MSVS_VERSION'] = GetVisualStudioVersion()
     get_toolchain_args = [
         sys.executable,
         os.path.join(depot_tools_path,

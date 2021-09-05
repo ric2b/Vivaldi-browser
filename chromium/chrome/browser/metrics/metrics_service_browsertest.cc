@@ -130,7 +130,7 @@ class MetricsServiceBrowserTest : public InProcessBrowserTest {
   void OpenThreeTabs() {
     const int kBrowserTestFlags =
         ui_test_utils::BROWSER_TEST_WAIT_FOR_TAB |
-        ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION;
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP;
 
     base::FilePath test_directory;
     ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_directory));
@@ -199,8 +199,17 @@ IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest, MAYBE_CrashRenderers) {
   histogram_tester.ExpectUniqueSample("Tabs.SadTab.CrashCreated", 1, 1);
 }
 
+// Test is disabled on Windows AMR64 because
+// TerminateWithHeapCorruption() isn't expected to work there.
+// See: https://crbug.com/1054423
 #if defined(OS_WIN)
-IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest, HeapCorruptionInRenderer) {
+#if defined(ARCH_CPU_ARM64)
+#define MAYBE_HeapCorruptionInRenderer DISABLED_HeapCorruptionInRenderer
+#else
+#define MAYBE_HeapCorruptionInRenderer HeapCorruptionInRenderer
+#endif
+IN_PROC_BROWSER_TEST_F(MetricsServiceBrowserTest,
+                       MAYBE_HeapCorruptionInRenderer) {
   base::HistogramTester histogram_tester;
 
   OpenTabsAndNavigateToCrashyUrl(content::kChromeUIHeapCorruptionCrashURL);

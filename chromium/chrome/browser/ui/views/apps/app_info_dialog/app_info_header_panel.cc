@@ -11,6 +11,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/views/apps/app_info_dialog/app_info_label.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -62,6 +63,10 @@ AppInfoHeaderPanel::AppInfoHeaderPanel(Profile* profile,
 AppInfoHeaderPanel::~AppInfoHeaderPanel() {
 }
 
+void AppInfoHeaderPanel::OnIconUpdated(extensions::ChromeAppIcon* icon) {
+  app_icon_view_->SetImage(icon->image_skia());
+}
+
 void AppInfoHeaderPanel::CreateControls() {
   auto app_icon_view = std::make_unique<views::ImageView>();
   app_icon_view->SetImageSize(gfx::Size(kAppIconSize, kAppIconSize));
@@ -81,33 +86,24 @@ void AppInfoHeaderPanel::CreateControls() {
   auto* vertical_info_container_ptr =
       AddChildView(std::move(vertical_info_container));
 
-  auto app_name_label = std::make_unique<views::Label>(
+  auto app_name_label = std::make_unique<AppInfoLabel>(
       base::UTF8ToUTF16(app_->name()), views::style::CONTEXT_DIALOG_TITLE);
-  app_name_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   auto* app_name_label_ptr =
       vertical_info_container_ptr->AddChildView(std::move(app_name_label));
 
   if (CanShowAppInWebStore()) {
-    auto view_in_store_link = std::make_unique<views::Link>(
-        l10n_util::GetStringUTF16(IDS_APPLICATION_INFO_WEB_STORE_LINK));
+    auto* view_in_store_link =
+        vertical_info_container_ptr->AddChildView(std::make_unique<views::Link>(
+            l10n_util::GetStringUTF16(IDS_APPLICATION_INFO_WEB_STORE_LINK)));
     view_in_store_link->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    view_in_store_link->set_listener(this);
-    view_in_store_link_ = vertical_info_container_ptr->AddChildView(
-        std::move(view_in_store_link));
+    view_in_store_link->set_callback(base::BindRepeating(
+        &AppInfoHeaderPanel::ShowAppInWebStore, base::Unretained(this)));
+    view_in_store_link->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   } else {
     // If there's no link, allow the app's name to take up multiple lines.
     // TODO(sashab): Limit the number of lines to 2.
     app_name_label_ptr->SetMultiLine(true);
   }
-}
-
-void AppInfoHeaderPanel::LinkClicked(views::Link* source, int event_flags) {
-  DCHECK_EQ(source, view_in_store_link_);
-  ShowAppInWebStore();
-}
-
-void AppInfoHeaderPanel::OnIconUpdated(extensions::ChromeAppIcon* icon) {
-  app_icon_view_->SetImage(icon->image_skia());
 }
 
 void AppInfoHeaderPanel::ShowAppInWebStore() {

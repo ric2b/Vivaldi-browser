@@ -8,6 +8,7 @@
 
 #include "ash/accessibility/default_accessibility_delegate.h"
 #include "ash/test_screenshot_delegate.h"
+#include "ash/wm/gestures/back_gesture/test_back_gesture_contextual_nudge_delegate.h"
 
 namespace ash {
 namespace shell {
@@ -28,6 +29,23 @@ ShellDelegateImpl::CreateScreenshotDelegate() {
 AccessibilityDelegate* ShellDelegateImpl::CreateAccessibilityDelegate() {
   return new DefaultAccessibilityDelegate;
 }
+
+std::unique_ptr<BackGestureContextualNudgeDelegate>
+ShellDelegateImpl::CreateBackGestureContextualNudgeDelegate(
+    BackGestureContextualNudgeController* controller) {
+  return std::make_unique<TestBackGestureContextualNudgeDelegate>(controller);
+}
+
+bool ShellDelegateImpl::CanGoBack(gfx::NativeWindow window) const {
+  return true;
+}
+
+void ShellDelegateImpl::BindNavigableContentsFactory(
+    mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver) {}
+
+void ShellDelegateImpl::BindMultiDeviceSetup(
+    mojo::PendingReceiver<chromeos::multidevice_setup::mojom::MultiDeviceSetup>
+        receiver) {}
 
 }  // namespace shell
 }  // namespace ash

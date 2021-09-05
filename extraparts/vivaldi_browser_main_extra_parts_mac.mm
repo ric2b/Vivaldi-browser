@@ -3,6 +3,7 @@
 #include "extraparts/vivaldi_browser_main_extra_parts_mac.h"
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
@@ -41,6 +42,15 @@ bool VivaldiBrowserMainExtraPartsMac::checkVersionPath(std::string location,
 // Overridden from ChromeBrowserMainExtraParts:
 void VivaldiBrowserMainExtraPartsMac::PostEarlyInitialization() {
   VivaldiBrowserMainExtraParts::PostEarlyInitialization();
+
+  // Set option to automatically install updates in the background to true.
+  NSString* key =
+    [NSString stringWithUTF8String:vivaldi::kSparkleAutoInstallSettingName];
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  bool keyDoesNotExist = [defaults objectForKey:key] == nil;
+  if (keyDoesNotExist) {
+    [defaults setBool:true forKey:key];
+  }
 
   if (vivaldi::IsVivaldiRunning())
     vivaldi::MaybeSetupVivaldiKeychain();

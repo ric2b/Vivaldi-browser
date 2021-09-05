@@ -21,7 +21,7 @@
       "fetch",
       "--tags",
       "https://gn.googlesource.com/gn",
-      "refs/heads/master"
+      ""
     ],
     "cwd": "[START_DIR]\\gn",
     "infra_step": true,
@@ -48,11 +48,11 @@
       "git",
       "fetch",
       "https://gn.googlesource.com/gn",
-      "refs/changes/00/1000/1"
+      "refs/changes/56/123456/7"
     ],
     "cwd": "[START_DIR]\\gn",
     "infra_step": true,
-    "name": "git.fetch 1000/1",
+    "name": "git.fetch 123456/7",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -65,7 +65,7 @@
     ],
     "cwd": "[START_DIR]\\gn",
     "infra_step": true,
-    "name": "git.cherry-pick 1000/1",
+    "name": "git.cherry-pick 123456/7",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
     ]
@@ -89,7 +89,7 @@
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
       "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-version:1.8.2---\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/ninja/${platform}\"@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/ninja/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
@@ -104,7 +104,7 @@
       "-root",
       "[CACHE]\\windows_sdk",
       "-ensure-file",
-      "chrome_internal/third_party/sdk/windows uploaded:2018-06-13",
+      "chrome_internal/third_party/sdk/windows uploaded:2019-09-06",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -115,7 +115,7 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-uploaded:2018-06\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-uploaded:2019-09\", @@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"chrome_internal/third_party/sdk/windows\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
@@ -158,26 +158,10 @@
   },
   {
     "cmd": [],
-    "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
-    },
-    "env_prefixes": {
-      "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
-      ]
-    },
     "name": "debug"
   },
   {
     "cmd": [],
-    "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
-    },
-    "env_prefixes": {
-      "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
-      ]
-    },
     "name": "debug.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
@@ -243,26 +227,10 @@
   },
   {
     "cmd": [],
-    "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
-    },
-    "env_prefixes": {
-      "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
-      ]
-    },
     "name": "release"
   },
   {
     "cmd": [],
-    "env": {
-      "VSINSTALLDIR": "[CACHE]\\windows_sdk"
-    },
-    "env_prefixes": {
-      "PATH": [
-        "[CACHE]\\windows_sdk\\win_sdk\\bin\\x64"
-      ]
-    },
     "name": "release.build",
     "~followup_annotations": [
       "@@@STEP_NEST_LEVEL@1@@@"
@@ -338,8 +306,7 @@
     "name": "taskkill mspdbsrv"
   },
   {
-    "name": "$result",
-    "recipe_result": null,
-    "status_code": 0
+    "jsonResult": null,
+    "name": "$result"
   }
 ]

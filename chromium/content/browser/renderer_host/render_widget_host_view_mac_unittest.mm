@@ -13,8 +13,8 @@
 #include "base/containers/queue.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
-#include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
@@ -26,8 +26,8 @@
 #include "components/viz/common/surfaces/child_local_surface_id_allocator.h"
 #import "content/app_shim_remote_cocoa/render_widget_host_view_cocoa.h"
 #include "content/browser/compositor/image_transport_factory.h"
-#include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/renderer_host/frame_token_message_queue.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/input_messages.h"
@@ -99,7 +99,7 @@ using testing::_;
 
 @interface MockRenderWidgetHostViewMacDelegate
     : NSObject<RenderWidgetHostViewMacDelegate> {
-  BOOL unhandledWheelEventReceived_;
+  BOOL _unhandledWheelEventReceived;
 }
 
 @property(nonatomic) BOOL unhandledWheelEventReceived;
@@ -108,19 +108,19 @@ using testing::_;
 
 @implementation MockRenderWidgetHostViewMacDelegate
 
-@synthesize unhandledWheelEventReceived = unhandledWheelEventReceived_;
+@synthesize unhandledWheelEventReceived = _unhandledWheelEventReceived;
 
 - (void)rendererHandledWheelEvent:(const blink::WebMouseWheelEvent&)event
                          consumed:(BOOL)consumed {
   if (!consumed)
-    unhandledWheelEventReceived_ = true;
+    _unhandledWheelEventReceived = true;
 }
 
 - (void)rendererHandledGestureScrollEvent:(const blink::WebGestureEvent&)event
                                  consumed:(BOOL)consumed {
   if (!consumed &&
       event.GetType() == blink::WebInputEvent::kGestureScrollUpdate)
-    unhandledWheelEventReceived_ = true;
+    _unhandledWheelEventReceived = true;
 }
 
 - (void)touchesBeganWithEvent:(NSEvent*)event {}
@@ -140,16 +140,16 @@ using testing::_;
 @end
 
 @implementation FakeTextCheckingResult {
-  base::scoped_nsobject<NSString> replacementString_;
+  base::scoped_nsobject<NSString> _replacementString;
 }
-@synthesize range = range_;
+@synthesize range = _range;
 
 + (FakeTextCheckingResult*)resultWithRange:(NSRange)range
                          replacementString:(NSString*)replacementString {
   FakeTextCheckingResult* result =
       [[[FakeTextCheckingResult alloc] init] autorelease];
-  result->range_ = range;
-  result->replacementString_.reset([replacementString retain]);
+  result->_range = range;
+  result->_replacementString.reset([replacementString retain]);
   return result;
 }
 
@@ -160,7 +160,7 @@ using testing::_;
 }
 
 - (NSString*)replacementString {
-  return replacementString_;
+  return _replacementString;
 }
 @end
 
@@ -171,9 +171,9 @@ using testing::_;
 @implementation FakeSpellChecker {
   base::mac::ScopedBlock<void (^)(NSInteger sequenceNumber,
                                   NSArray<NSTextCheckingResult*>* candidates)>
-      lastCompletionHandler_;
+      _lastCompletionHandler;
 }
-@synthesize sequenceNumber = sequenceNumber_;
+@synthesize sequenceNumber = _sequenceNumber;
 
 - (NSInteger)
 requestCandidatesForSelectedRange:(NSRange)selectedRange
@@ -188,15 +188,15 @@ requestCandidatesForSelectedRange:(NSRange)selectedRange
                                         NSArray<NSTextCheckingResult*>*
                                             candidates))completionHandler
     NS_AVAILABLE_MAC(10_12_2) {
-  sequenceNumber_ += 1;
-  lastCompletionHandler_.reset([completionHandler copy]);
-  return sequenceNumber_;
+  _sequenceNumber += 1;
+  _lastCompletionHandler.reset([completionHandler copy]);
+  return _sequenceNumber;
 }
 
 - (base::mac::ScopedBlock<void (^)(NSInteger sequenceNumber,
                                    NSArray<NSTextCheckingResult*>* candidates)>)
     takeCompletionHandler {
-  return std::move(lastCompletionHandler_);
+  return std::move(_lastCompletionHandler);
 }
 
 @end
@@ -368,7 +368,8 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
                              process,
                              routing_id,
                              std::move(widget),
-                             false),
+                             /*hidden=*/false,
+                             std::make_unique<FrameTokenMessageQueue>()),
         widget_impl_(std::move(widget_impl)) {
     set_renderer_initialized(true);
     lastWheelEventLatencyInfo = ui::LatencyInfo();
@@ -493,7 +494,7 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
     host_ = base::WrapUnique(MockRenderWidgetHostImpl::Create(
         &delegate_, process_host_.get(), process_host_->GetNextRoutingID()));
     host_->set_owner_delegate(&mock_owner_delegate_);
-    rwhv_mac_ = new RenderWidgetHostViewMac(host_.get(), false);
+    rwhv_mac_ = new RenderWidgetHostViewMac(host_.get());
     rwhv_cocoa_.reset([rwhv_mac_->GetInProcessNSView() retain]);
 
     window_.reset([[CocoaTestHelperWindow alloc] init]);
@@ -654,7 +655,7 @@ TEST_F(RenderWidgetHostViewMacTest, GetFirstRectForCharacterRangeCaretCase) {
   gfx::Range actual_range;
   rwhv_mac_->SelectionChanged(kDummyString, kDummyOffset, caret_range);
   params.anchor_rect = params.focus_rect = caret_rect;
-  params.anchor_dir = params.focus_dir = blink::kWebTextDirectionLeftToRight;
+  params.anchor_dir = params.focus_dir = base::i18n::LEFT_TO_RIGHT;
   rwhv_mac_->SelectionBoundsChanged(params);
   EXPECT_TRUE(rwhv_mac_->GetCachedFirstRectForCharacterRange(caret_range, &rect,
                                                              &actual_range));
@@ -1205,44 +1206,6 @@ TEST_F(RenderWidgetHostViewMacTest,
   rwhv_cocoa_.reset();
 }
 
-// Tests that when view initiated shutdown happens (i.e. RWHView is deleted
-// before RWH), we clean up properly and don't leak the RWHVGuest.
-TEST_F(RenderWidgetHostViewMacTest, GuestViewDoesNotLeak) {
-  int32_t routing_id = process_host_->GetNextRoutingID();
-
-  // Owned by its |GetInProcessNSView()|.
-  MockRenderWidgetHostImpl* rwh = MockRenderWidgetHostImpl::Create(
-      &delegate_, process_host_.get(), routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(rwh, true);
-
-  // Add a delegate to the view.
-  base::scoped_nsobject<MockRenderWidgetHostViewMacDelegate> view_delegate(
-      [[MockRenderWidgetHostViewMacDelegate alloc] init]);
-  view->SetDelegate(view_delegate.get());
-
-  base::WeakPtr<RenderWidgetHostViewBase> guest_rwhv_weak =
-      (RenderWidgetHostViewGuest::Create(rwh, nullptr, view->GetWeakPtr()))
-          ->GetWeakPtr();
-
-  // Remove the GetInProcessNSView() so |view| also goes away before |rwh|.
-  {
-    base::scoped_nsobject<RenderWidgetHostViewCocoa> rwhv_cocoa;
-    rwhv_cocoa.reset([view->GetInProcessNSView() retain]);
-  }
-  RecycleAndWait();
-
-  // Clean up.
-  rwh->ShutdownAndDestroyWidget(true);
-
-  // Let |guest_rwhv_weak| have a chance to delete itself.
-  base::RunLoop run_loop;
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 run_loop.QuitClosure());
-  run_loop.Run();
-
-  ASSERT_FALSE(guest_rwhv_weak.get());
-}
-
 // Tests setting background transparency. See also (disabled on Mac)
 // RenderWidgetHostTest.Background. This test has some additional checks for
 // Mac.
@@ -1334,7 +1297,7 @@ TEST_F(RenderWidgetHostViewMacTest,
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
       MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
   base::RunLoop().RunUntilIdle();
 
   // Send an initial wheel event for scrolling by 3 lines.
@@ -1394,7 +1357,7 @@ TEST_F(RenderWidgetHostViewMacTest,
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
       MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
   base::RunLoop().RunUntilIdle();
 
   // Send an initial wheel event for scrolling by 3 lines.
@@ -1450,7 +1413,7 @@ TEST_F(RenderWidgetHostViewMacTest,
   int32_t routing_id = process_host->GetNextRoutingID();
   MockRenderWidgetHostImpl* host =
       MockRenderWidgetHostImpl::Create(&delegate, process_host, routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
   base::RunLoop().RunUntilIdle();
 
   // Send an initial wheel event for scrolling by 3 lines.
@@ -2215,7 +2178,8 @@ TEST_F(RenderWidgetHostViewMacTest, ChildAllocationAcceptedInParent) {
   metadata.viewport_size_in_pixels = gfx::Size(75, 75);
   metadata.local_surface_id_allocation =
       child_allocator.GetCurrentLocalSurfaceIdAllocation();
-  host_->DidUpdateVisualProperties(metadata);
+  static_cast<RenderFrameMetadataProvider::Observer&>(*host_)
+      .OnLocalSurfaceIdChanged(metadata);
 
   viz::LocalSurfaceId local_surface_id3(
       rwhv_mac_->GetLocalSurfaceIdAllocation().local_surface_id());
@@ -2240,7 +2204,8 @@ TEST_F(RenderWidgetHostViewMacTest, ConflictingAllocationsResolve) {
   metadata.viewport_size_in_pixels = gfx::Size(75, 75);
   metadata.local_surface_id_allocation =
       child_allocator.GetCurrentLocalSurfaceIdAllocation();
-  host_->DidUpdateVisualProperties(metadata);
+  static_cast<RenderFrameMetadataProvider::Observer&>(*host_)
+      .OnLocalSurfaceIdChanged(metadata);
 
   // Cause a conflicting viz::LocalSurfaceId allocation
   BrowserCompositorMac* browser_compositor = rwhv_mac_->BrowserCompositor();
@@ -2276,8 +2241,7 @@ TEST_F(RenderWidgetHostViewMacTest, TransformToRootNoParentLayer) {
 TEST_F(RenderWidgetHostViewMacTest, TransformToRootWithParentLayer) {
   std::unique_ptr<ui::RecyclableCompositorMac> compositor =
       ui::RecyclableCompositorMacFactory::Get()->CreateCompositor(
-          ImageTransportFactory::GetInstance()->GetContextFactory(),
-          ImageTransportFactory::GetInstance()->GetContextFactoryPrivate());
+          ImageTransportFactory::GetInstance()->GetContextFactory());
   std::unique_ptr<ui::Layer> root_surface_layer =
       std::make_unique<ui::Layer>(ui::LAYER_SOLID_COLOR);
   std::unique_ptr<ui::Layer> parent_layer =

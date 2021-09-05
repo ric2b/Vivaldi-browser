@@ -13,7 +13,7 @@
 #import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/favicon/favicon_attributes.h"
+#import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/images/branded_image_provider.h"
 
@@ -58,6 +58,7 @@ const CGFloat kOmniboxIconSize = 16;
 
 - (void)setConsumer:(id<OmniboxConsumer>)consumer {
   _consumer = consumer;
+
   [self updateConsumerEmptyTextImage];
 }
 
@@ -100,24 +101,32 @@ const CGFloat kOmniboxIconSize = 16;
       matchType, /* is_starred */ false);
   [self.consumer updateAutocompleteIcon:image];
 
-  if (base::FeatureList::IsEnabled(kNewOmniboxPopupLayout)) {
-    __weak OmniboxMediator* weakSelf = self;
+  __weak OmniboxMediator* weakSelf = self;
 
-    if (AutocompleteMatch::IsSearchType(matchType)) {
-      if (base::FeatureList::IsEnabled(kOmniboxUseDefaultSearchEngineFavicon)) {
-        // Show Default Search Engine favicon.
-        [self loadDefaultSearchEngineFaviconWithCompletion:^(UIImage* image) {
-          [weakSelf.consumer updateAutocompleteIcon:image];
-        }];
-      }
-    } else {
-      // Show favicon.
-      [self loadFaviconByPageURL:faviconURL
-                      completion:^(UIImage* image) {
-                        [weakSelf.consumer updateAutocompleteIcon:image];
-                      }];
-    }
+  if (AutocompleteMatch::IsSearchType(matchType)) {
+    // Show Default Search Engine favicon.
+    [self loadDefaultSearchEngineFaviconWithCompletion:^(UIImage* image) {
+      [weakSelf.consumer updateAutocompleteIcon:image];
+    }];
+  } else {
+    // Show favicon.
+    [self loadFaviconByPageURL:faviconURL
+                    completion:^(UIImage* image) {
+                      [weakSelf.consumer updateAutocompleteIcon:image];
+                    }];
   }
+}
+
+- (void)setDefaultLeftImage {
+  UIImage* image = GetOmniboxSuggestionIconForAutocompleteMatchType(
+      AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED, /* is_starred */ false);
+  [self.consumer updateAutocompleteIcon:image];
+
+  __weak OmniboxMediator* weakSelf = self;
+  // Show Default Search Engine favicon.
+  [self loadDefaultSearchEngineFaviconWithCompletion:^(UIImage* image) {
+    [weakSelf.consumer updateAutocompleteIcon:image];
+  }];
 }
 
 // Loads a favicon for a given page URL.
@@ -186,7 +195,6 @@ const CGFloat kOmniboxIconSize = 16;
 
   // Can't load favicons without a favicon loader.
   DCHECK(self.faviconLoader);
-  DCHECK(base::FeatureList::IsEnabled(kOmniboxUseDefaultSearchEngineFavicon));
 
   const TemplateURL* defaultProvider =
       self.templateURLService->GetDefaultSearchProvider();
@@ -232,17 +240,14 @@ const CGFloat kOmniboxIconSize = 16;
   [_consumer
       updateSearchByImageSupported:self.searchEngineSupportsSearchByImage];
 
-  if (base::FeatureList::IsEnabled(kNewOmniboxPopupLayout) &&
-      base::FeatureList::IsEnabled(kOmniboxUseDefaultSearchEngineFavicon)) {
-    // Show Default Search Engine favicon.
-    // Remember what is the Default Search Engine provider that the icon is
-    // for, in case the user changes Default Search Engine while this is being
-    // loaded.
-    __weak __typeof(self) weakSelf = self;
-    [self loadDefaultSearchEngineFaviconWithCompletion:^(UIImage* image) {
-      [weakSelf.consumer setEmptyTextLeadingImage:image];
-    }];
-  }
+  // Show Default Search Engine favicon.
+  // Remember what is the Default Search Engine provider that the icon is
+  // for, in case the user changes Default Search Engine while this is being
+  // loaded.
+  __weak __typeof(self) weakSelf = self;
+  [self loadDefaultSearchEngineFaviconWithCompletion:^(UIImage* image) {
+    [weakSelf.consumer setEmptyTextLeadingImage:image];
+  }];
 }
 
 @end

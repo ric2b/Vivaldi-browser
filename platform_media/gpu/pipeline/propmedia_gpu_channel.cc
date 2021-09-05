@@ -8,6 +8,7 @@
 
 #include "platform_media/common/media_pipeline_messages.h"
 #include "platform_media/gpu/pipeline/ipc_media_pipeline.h"
+#include "platform_media/gpu/pipeline/platform_media_pipeline_factory.h"
 
 #include "base/command_line.h"
 #include "gpu/command_buffer/common/scheduling_priority.h"
@@ -51,15 +52,16 @@ bool ProprietaryMediaGpuChannel::OnPipelineMessageReceived(
   return false;
 }
 
-void ProprietaryMediaGpuChannel::OnNewMediaPipeline(
-    int32_t route_id,
-    int32_t command_buffer_route_id) {
-
-  std::unique_ptr<media::IPCMediaPipeline> ipc_media_pipeline(
-      new media::IPCMediaPipeline(this, route_id));
+void ProprietaryMediaGpuChannel::OnNewMediaPipeline(int32_t route_id) {
+  if (!pipeline_factory_) {
+    pipeline_factory_ = media::PlatformMediaPipelineFactory::Create();
+  }
+  auto ipc_media_pipeline = std::make_unique<media::IPCMediaPipeline>(
+      this, route_id, pipeline_factory_.get());
 
   if (channel_->scheduler()) {
-    SequenceId sequence_id = channel_->scheduler()->CreateSequence(SchedulingPriority::kNormal);
+    SequenceId sequence_id =
+        channel_->scheduler()->CreateSequence(SchedulingPriority::kNormal);
     channel_->AddRoute(route_id, sequence_id, ipc_media_pipeline.get());
   }
 

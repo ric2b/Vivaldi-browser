@@ -16,7 +16,6 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/submenu_view.h"
-#include "ui/views/test/platform_test_helper.h"
 #include "ui/views/widget/widget.h"
 
 namespace views {
@@ -34,9 +33,8 @@ class MenuControllerUITest : public InProcessBrowserTest {
     MenuItemView* menu_item = new MenuItemView(menu_delegate_.get());
     menu_runner_ = std::make_unique<MenuRunner>(
         +menu_item, views::MenuRunner::CONTEXT_MENU);
-    first_item_ =
-        menu_item->AppendMenuItemWithLabel(1, base::ASCIIToUTF16("One"));
-    menu_item->AppendMenuItemWithLabel(2, base::ASCIIToUTF16("Two"));
+    first_item_ = menu_item->AppendMenuItem(1, base::ASCIIToUTF16("One"));
+    menu_item->AppendMenuItem(2, base::ASCIIToUTF16("Two"));
     // Run the menu, so that the menu item size will be calculated.
     menu_runner_->RunMenuAt(widget, nullptr, gfx::Rect(),
                             views::MenuAnchorPosition::kTopLeft,
@@ -122,8 +120,8 @@ IN_PROC_BROWSER_TEST_F(MenuControllerUITest, FocusOnOrphanMenu) {
   std::unique_ptr<MenuRunner> menu_runner(
       std::make_unique<MenuRunner>(menu_item, views::MenuRunner::CONTEXT_MENU));
   MenuItemView* first_item =
-      menu_item->AppendMenuItemWithLabel(1, base::ASCIIToUTF16("One"));
-  menu_item->AppendMenuItemWithLabel(2, base::ASCIIToUTF16("Two"));
+      menu_item->AppendMenuItem(1, base::ASCIIToUTF16("One"));
+  menu_item->AppendMenuItem(2, base::ASCIIToUTF16("Two"));
   menu_runner->RunMenuAt(nullptr, nullptr, gfx::Rect(),
                          views::MenuAnchorPosition::kTopLeft,
                          ui::MENU_SOURCE_NONE);

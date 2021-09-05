@@ -80,6 +80,26 @@
     <output filename="vivaldi_native_strings_sc.pak" type="data_package" lang="sc" />
     <output filename="vivaldi_native_strings_sq.pak" type="data_package" lang="sq" />
     <output filename="vivaldi_native_strings_nn.pak" type="data_package" lang="nn" />
+    <if expr="is_android">
+      <output filename="vivaldi_native_strings_as.pak" type="data_package" lang="as" />
+      <output filename="vivaldi_native_strings_az.pak" type="data_package" lang="az" />
+      <output filename="vivaldi_native_strings_bs.pak" type="data_package" lang="bs" />
+      <output filename="vivaldi_native_strings_fr-CA.pak" type="data_package" lang="fr-CA" />
+      <output filename="vivaldi_native_strings_kk.pak" type="data_package" lang="kk" />
+      <output filename="vivaldi_native_strings_km.pak" type="data_package" lang="km" />
+      <output filename="vivaldi_native_strings_ky.pak" type="data_package" lang="ky" />
+      <output filename="vivaldi_native_strings_lo.pak" type="data_package" lang="lo" />
+      <output filename="vivaldi_native_strings_mn.pak" type="data_package" lang="mn" />
+      <output filename="vivaldi_native_strings_my.pak" type="data_package" lang="my" />
+      <output filename="vivaldi_native_strings_ne.pak" type="data_package" lang="ne" />
+      <output filename="vivaldi_native_strings_or.pak" type="data_package" lang="or" />
+      <output filename="vivaldi_native_strings_pa.pak" type="data_package" lang="pa" />
+      <output filename="vivaldi_native_strings_si.pak" type="data_package" lang="si" />
+      <output filename="vivaldi_native_strings_ur.pak" type="data_package" lang="ur" />
+      <output filename="vivaldi_native_strings_uz.pak" type="data_package" lang="uz" />
+      <output filename="vivaldi_native_strings_zh-HK.pak" type="data_package" lang="zh-HK" />
+      <output filename="vivaldi_native_strings_zu.pak" type="data_package" lang="zu" />
+    </if>
   </outputs>
   <translations>
     <file path="strings/vivaldi_native_strings_am.xtb" lang="am" />
@@ -154,6 +174,24 @@
     <file path="strings/vivaldi_native_strings_sc.xtb" lang="sc" />
     <file path="strings/vivaldi_native_strings_sq.xtb" lang="sq" />
     <file path="strings/vivaldi_native_strings_nn.xtb" lang="nn" />
+    <file path="strings/vivaldi_native_strings_as.xtb" lang="as" />
+    <file path="strings/vivaldi_native_strings_az.xtb" lang="az" />
+    <file path="strings/vivaldi_native_strings_bs.xtb" lang="bs" />
+    <file path="strings/vivaldi_native_strings_fr-CA.xtb" lang="fr-CA" />
+    <file path="strings/vivaldi_native_strings_kk.xtb" lang="kk" />
+    <file path="strings/vivaldi_native_strings_km.xtb" lang="km" />
+    <file path="strings/vivaldi_native_strings_ky.xtb" lang="ky" />
+    <file path="strings/vivaldi_native_strings_lo.xtb" lang="lo" />
+    <file path="strings/vivaldi_native_strings_mn.xtb" lang="mn" />
+    <file path="strings/vivaldi_native_strings_my.xtb" lang="my" />
+    <file path="strings/vivaldi_native_strings_ne.xtb" lang="ne" />
+    <file path="strings/vivaldi_native_strings_or.xtb" lang="or" />
+    <file path="strings/vivaldi_native_strings_pa.xtb" lang="pa" />
+    <file path="strings/vivaldi_native_strings_si.xtb" lang="si" />
+    <file path="strings/vivaldi_native_strings_ur.xtb" lang="ur" />
+    <file path="strings/vivaldi_native_strings_uz.xtb" lang="uz" />
+    <file path="strings/vivaldi_native_strings_zh-HK.xtb" lang="zh-HK" />
+    <file path="strings/vivaldi_native_strings_zu.xtb" lang="zu" />
   </translations>
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">
@@ -328,6 +366,9 @@
       </message>
       <message name="IDS_DEFAULT_CALENDAR_NAME" desc="The default calendar name given to a newly created profile.">
         My Calendar
+      </message>
+      <message name="IDS_DEFAULT_CALENDAR_ACCOUNT_NAME" desc="The default calendar account name given to a newly created profile.">
+        Local Account
       </message>
       <!-- Version UI -->
       <message name="IDS_VIVALDI_VERSION_UI_LICENSE" desc="The label below the copyright message, containing the URLs.">

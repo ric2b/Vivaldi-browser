@@ -127,7 +127,7 @@ class WorkerThread::RefCountedWaitableEvent
 // A class that is passed into V8 Interrupt and via a PostTask. Once both have
 // run this object will be destroyed in
 // PauseOrFreezeWithInterruptDataOnWorkerThread. The V8 API only takes a raw ptr
-// otherwise this could have been done with base::Bind and ref counted objects.
+// otherwise this could have been done with WTF::Bind and ref counted objects.
 class WorkerThread::InterruptData {
  public:
   InterruptData(WorkerThread* worker_thread, mojom::FrameLifecycleState state)
@@ -231,7 +231,8 @@ void WorkerThread::FetchAndRunModuleScript(
     std::unique_ptr<CrossThreadFetchClientSettingsObjectData>
         outside_settings_object_data,
     WorkerResourceTimingNotifier* outside_resource_timing_notifier,
-    network::mojom::CredentialsMode credentials_mode) {
+    network::mojom::CredentialsMode credentials_mode,
+    RejectCoepUnsafeNone reject_coep_unsafe_none) {
   DCHECK_CALLED_ON_VALID_THREAD(parent_thread_checker_);
   PostCrossThreadTask(
       *GetTaskRunner(TaskType::kDOMManipulation), FROM_HERE,
@@ -240,7 +241,7 @@ void WorkerThread::FetchAndRunModuleScript(
           CrossThreadUnretained(this), script_url,
           WTF::Passed(std::move(outside_settings_object_data)),
           WrapCrossThreadPersistent(outside_resource_timing_notifier),
-          credentials_mode));
+          credentials_mode, reject_coep_unsafe_none.value()));
 }
 
 void WorkerThread::Pause() {
@@ -307,7 +308,8 @@ void WorkerThread::TerminateAllWorkersForTesting() {
   TerminateThreadsInSet(WorkerThreads());
 }
 
-void WorkerThread::WillProcessTask(const base::PendingTask& pending_task) {
+void WorkerThread::WillProcessTask(const base::PendingTask& pending_task,
+                                   bool was_blocked_or_low_priority) {
   DCHECK(IsCurrentThread());
 
   // No tasks should get executed after we have closed.
@@ -337,7 +339,14 @@ void WorkerThread::DidProcessTask(const base::PendingTask& pending_task) {
     // This WorkerThread will eventually be requested to terminate.
     GetWorkerReportingProxy().DidCloseWorkerGlobalScope();
 
-    // Stop further worker tasks to run after this point.
+    // Stop further worker tasks to run after this point based on the spec:
+    // https://html.spec.whatwg.org/C/#close-a-worker
+    //
+    // "To close a worker, given a workerGlobal, run these steps:"
+    // Step 1: "Discard any tasks that have been added to workerGlobal's event
+    // loop's task queues."
+    // Step 2: "Set workerGlobal's closing flag to true. (This prevents any
+    // further tasks from being queued.)"
     PrepareForShutdownOnWorkerThread();
   } else if (IsForciblyTerminated()) {
     // The script has been terminated forcibly, which means we need to
@@ -649,7 +658,8 @@ void WorkerThread::FetchAndRunModuleScriptOnWorkerThread(
     std::unique_ptr<CrossThreadFetchClientSettingsObjectData>
         outside_settings_object,
     WorkerResourceTimingNotifier* outside_resource_timing_notifier,
-    network::mojom::CredentialsMode credentials_mode) {
+    network::mojom::CredentialsMode credentials_mode,
+    bool reject_coep_unsafe_none) {
   if (!outside_resource_timing_notifier) {
     outside_resource_timing_notifier =
         MakeGarbageCollected<NullWorkerResourceTimingNotifier>();
@@ -662,7 +672,8 @@ void WorkerThread::FetchAndRunModuleScriptOnWorkerThread(
           script_url,
           *MakeGarbageCollected<FetchClientSettingsObjectSnapshot>(
               std::move(outside_settings_object)),
-          *outside_resource_timing_notifier, credentials_mode);
+          *outside_resource_timing_notifier, credentials_mode,
+          RejectCoepUnsafeNone(reject_coep_unsafe_none));
 }
 
 void WorkerThread::PrepareForShutdownOnWorkerThread() {
@@ -802,6 +813,7 @@ void WorkerThread::PauseOrFreezeOnWorkerThread(
          state == mojom::FrameLifecycleState::kPaused);
   pause_or_freeze_count_++;
   GlobalScope()->SetLifecycleState(state);
+  GlobalScope()->SetDefersLoadingForResourceFetchers(true);
 
   // If already paused return early.
   if (pause_or_freeze_count_ > 1)
@@ -820,6 +832,7 @@ void WorkerThread::PauseOrFreezeOnWorkerThread(
         &nested_runner_, nested_runner.get());
     nested_runner->Run();
   }
+  GlobalScope()->SetDefersLoadingForResourceFetchers(false);
   GlobalScope()->SetLifecycleState(mojom::FrameLifecycleState::kRunning);
 }
 

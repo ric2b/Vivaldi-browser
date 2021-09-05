@@ -87,7 +87,7 @@ class PerfContextProvider
     capabilities_.sync_query = true;
 
     raster_context_ = std::make_unique<gpu::raster::RasterImplementationGLES>(
-        context_gl_.get());
+        context_gl_.get(), ContextSupport());
   }
 
   // viz::ContextProvider implementation.
@@ -202,7 +202,8 @@ class PerfRasterBufferProviderHelper {
   virtual std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
       const ResourcePool::InUsePoolResource& resource,
       uint64_t resource_content_id,
-      uint64_t previous_content_id) = 0;
+      uint64_t previous_content_id,
+      bool depends_on_at_raster_decodes) = 0;
 };
 
 class PerfRasterTaskImpl : public PerfTileTask {
@@ -277,7 +278,8 @@ class RasterBufferProviderPerfTestBase {
       // No tile ids are given to support partial updates.
       std::unique_ptr<RasterBuffer> raster_buffer;
       if (helper)
-        raster_buffer = helper->AcquireBufferForRaster(in_use_resource, 0, 0);
+        raster_buffer =
+            helper->AcquireBufferForRaster(in_use_resource, 0, 0, false);
       TileTask::Vector dependencies = image_decode_tasks;
       raster_tasks->push_back(new PerfRasterTaskImpl(
           resource_pool_.get(), std::move(in_use_resource),
@@ -371,7 +373,7 @@ class RasterBufferProviderPerfTest
         Create3dResourceProvider();
         raster_buffer_provider_ = std::make_unique<GpuRasterBufferProvider>(
             compositor_context_provider_.get(), worker_context_provider_.get(),
-            false, 0, viz::RGBA_8888, gfx::Size(), true, false);
+            false, viz::RGBA_8888, gfx::Size(), true, false);
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_BITMAP:
         CreateSoftwareResourceProvider();
@@ -398,9 +400,13 @@ class RasterBufferProviderPerfTest
   std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
       const ResourcePool::InUsePoolResource& resource,
       uint64_t resource_content_id,
-      uint64_t previous_content_id) override {
+      uint64_t previous_content_id,
+      bool depends_on_at_raster_decodes) override {
     return raster_buffer_provider_->AcquireBufferForRaster(
-        resource, resource_content_id, previous_content_id);
+        resource, resource_content_id, previous_content_id,
+        depends_on_at_raster_decodes,
+        false /* depends_on_hardware_accelerated_jpeg_candidates */,
+        false /* depends_on_hardware_accelerated_webp_candidates */);
   }
 
   void RunMessageLoopUntilAllTasksHaveCompleted() {
@@ -520,12 +526,12 @@ class RasterBufferProviderPerfTest
 
  private:
   void Create3dResourceProvider() {
-    resource_provider_ = std::make_unique<viz::ClientResourceProvider>(true);
+    resource_provider_ = std::make_unique<viz::ClientResourceProvider>();
   }
 
   void CreateSoftwareResourceProvider() {
     layer_tree_frame_sink_ = FakeLayerTreeFrameSink::CreateSoftware();
-    resource_provider_ = std::make_unique<viz::ClientResourceProvider>(true);
+    resource_provider_ = std::make_unique<viz::ClientResourceProvider>();
   }
 
   std::string TestModifierString() const {
@@ -589,7 +595,7 @@ class RasterBufferProviderCommonPerfTest
  public:
   // Overridden from testing::Test:
   void SetUp() override {
-    resource_provider_ = std::make_unique<viz::ClientResourceProvider>(true);
+    resource_provider_ = std::make_unique<viz::ClientResourceProvider>();
     resource_pool_ = std::make_unique<ResourcePool>(
         resource_provider_.get(), compositor_context_provider_.get(),
         task_runner_, ResourcePool::kDefaultExpirationDelay, false);

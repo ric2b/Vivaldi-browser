@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/accelerators/accelerator_commands.h"
+#include "ash/hud_display/hud_display.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/toast_data.h"
 #include "ash/public/cpp/window_properties.h"
@@ -24,7 +25,6 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/utf_string_conversions.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/platform/aura_window_properties.h"
 #include "ui/aura/client/aura_constants.h"
@@ -76,6 +76,9 @@ void PrintWindowHierarchy(const aura::Window* active_window,
   *out << indent_str;
   *out << name << " (" << window << ")"
        << " type=" << window->type();
+  int window_id = window->id();
+  if (window_id != aura::Window::kInitialId)
+    *out << " id=" << window_id;
   if (window->GetProperty(kWindowStateKey))
     *out << " " << WindowState::Get(window)->GetStateType();
   *out << ((window == active_window) ? " [active]" : "")
@@ -186,6 +189,10 @@ void HandleTriggerCrash() {
   LOG(FATAL) << "Intentional crash via debug accelerator.";
 }
 
+void HandleTriggerHUDDisplay() {
+  hud_display::HUDDisplayView::Toggle();
+}
+
 }  // namespace
 
 void PrintUIHierarchies() {
@@ -243,6 +250,9 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
       break;
     case DEBUG_TRIGGER_CRASH:
       HandleTriggerCrash();
+      break;
+    case DEBUG_TOGGLE_HUD_DISPLAY:
+      HandleTriggerHUDDisplay();
       break;
     default:
       break;

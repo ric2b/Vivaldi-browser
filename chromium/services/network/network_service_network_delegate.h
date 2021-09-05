@@ -7,6 +7,7 @@
 
 #include "base/component_export.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/completion_once_callback.h"
@@ -37,10 +38,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkServiceNetworkDelegate
   int OnBeforeURLRequest(net::URLRequest* request,
                          net::CompletionOnceCallback callback,
                          GURL* new_url) override;
-  void OnBeforeSendHeaders(net::URLRequest* request,
-                           const net::ProxyInfo& proxy_info,
-                           const net::ProxyRetryInfoMap& proxy_retry_info,
-                           net::HttpRequestHeaders* headers) override;
   int OnBeforeStartTransaction(net::URLRequest* request,
                                net::CompletionOnceCallback callback,
                                net::HttpRequestHeaders* headers) override;
@@ -50,7 +47,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkServiceNetworkDelegate
       const net::HttpResponseHeaders* original_response_headers,
       scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
       const net::IPEndPoint& endpoint,
-      GURL* allowed_unsafe_redirect_url) override;
+      base::Optional<GURL>* preserve_fragment_on_redirect_url) override;
   void OnBeforeRedirect(net::URLRequest* request,
                         const GURL& new_location) override;
   void OnResponseStarted(net::URLRequest* request, int net_error) override;
@@ -67,7 +64,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkServiceNetworkDelegate
                       bool allowed_from_caller) override;
   bool OnForcePrivacyMode(
       const GURL& url,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const base::Optional<url::Origin>& top_frame_origin) const override;
   bool OnCancelURLRequestWithPolicyViolatingReferrerHeader(
       const net::URLRequest& request,

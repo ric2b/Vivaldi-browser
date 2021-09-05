@@ -20,6 +20,34 @@
       "name": "Scrolling Contents Layer",
       "bounds": [1200, 10000],
       "transform": 1
+    },
+    {
+      "name": "LayoutNGBlockFlow (relative positioned) DIV id='foreground'",
+      "position": [0, 10000],
+      "contentsOpaque": true,
+      "drawsContent": false,
+      "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [1193, 0],
+      "bounds": [7, 1000],
+      "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Horizontal Scrollbar Layer",
+      "position": [0, 593],
+      "bounds": [793, 7]
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [793, 0],
+      "bounds": [7, 593]
+    },
+    {
+      "name": "Scroll Corner Layer",
+      "position": [793, 593],
+      "bounds": [7, 7]
     }
   ],
   "transforms": [

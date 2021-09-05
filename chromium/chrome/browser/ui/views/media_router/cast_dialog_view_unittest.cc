@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/media_router/cast_dialog_sink_button.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/test/base/testing_profile.h"
 #include "chrome/test/views/chrome_views_test_base.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -26,7 +27,6 @@
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_client_view.h"
 
 using testing::_;
 using testing::Invoke;
@@ -88,11 +88,7 @@ class CastDialogViewTest : public ChromeViewsTestBase {
     ChromeViewsTestBase::SetUp();
 
     // Create an anchor for the dialog.
-    views::Widget::InitParams params =
-        CreateParams(views::Widget::InitParams::TYPE_WINDOW);
-    params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-    anchor_widget_ = std::make_unique<views::Widget>();
-    anchor_widget_->Init(std::move(params));
+    anchor_widget_ = CreateTestWidget(views::Widget::InitParams::TYPE_WINDOW);
     anchor_widget_->Show();
   }
 
@@ -109,7 +105,8 @@ class CastDialogViewTest : public ChromeViewsTestBase {
             })));
     CastDialogView::ShowDialog(anchor_widget_->GetContentsView(),
                                views::BubbleBorder::TOP_RIGHT, &controller_,
-                               nullptr, base::Time::Now());
+                               &profile_, base::Time::Now(),
+                               MediaRouterDialogOpenOrigin::PAGE);
 
     dialog_->OnModelUpdated(model);
   }
@@ -144,6 +141,7 @@ class CastDialogViewTest : public ChromeViewsTestBase {
   std::unique_ptr<views::Widget> anchor_widget_;
   MockCastDialogController controller_;
   CastDialogView* dialog_ = nullptr;
+  TestingProfile profile_;
 };
 
 TEST_F(CastDialogViewTest, ShowAndHideDialog) {
@@ -153,7 +151,8 @@ TEST_F(CastDialogViewTest, ShowAndHideDialog) {
   EXPECT_CALL(controller_, AddObserver(_));
   CastDialogView::ShowDialog(anchor_widget_->GetContentsView(),
                              views::BubbleBorder::TOP_RIGHT, &controller_,
-                             nullptr, base::Time::Now());
+                             &profile_, base::Time::Now(),
+                             MediaRouterDialogOpenOrigin::PAGE);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(CastDialogView::IsShowing());
   EXPECT_NE(nullptr, CastDialogView::GetCurrentDialogWidget());

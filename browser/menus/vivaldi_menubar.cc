@@ -1,16 +1,25 @@
 //
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved.
 //
-#include "browser/menus/vivaldi_bookmark_context_menu.h"
 #include "browser/menus/vivaldi_menubar.h"
+
+#include "browser/menus/vivaldi_bookmark_context_menu.h"
+#include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.h"
+#include "components/bookmarks/browser/bookmark_model.h"
 #include "components/favicon/core/favicon_service.h"
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/vivaldi_context_menu.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
+#include "ui/views/controls/menu/menu_item_view.h"
+#include "ui/views/controls/menu/submenu_view.h"
 #include "ui/views/widget/widget.h"
 
 namespace vivaldi {
@@ -41,7 +50,15 @@ Menubar::Menubar(Browser* browser, MenubarMenuParams& params, int run_types)
   run_types_(run_types) {
 }
 
-Menubar::~Menubar() {}
+Menubar::~Menubar() {
+  // Ensure that all top level items (this is only important for menu bar mode
+  // with multiple top level items - vivaldi menu mode with one top level item
+  // is already handled in chrome code) have no delegate anymore (the delegate
+  // is the destroyed api instance).
+  std::map<int, views::MenuItemView*>::iterator it;
+  for (it = id_to_menu_map_.begin(); it != id_to_menu_map_.end(); ++it)
+    it->second->set_delegate(nullptr);
+}
 
 void Menubar::SetActiveMenu(int id) {
   active_menu_id_ = id;

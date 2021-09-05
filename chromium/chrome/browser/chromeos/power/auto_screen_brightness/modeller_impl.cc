@@ -11,6 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -18,6 +19,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
@@ -204,9 +206,8 @@ ModellerImpl::ModellerImpl(const Profile* profile,
                    model_config_loader,
                    user_activity_detector,
                    std::move(trainer),
-                   base::CreateSequencedTaskRunner(
-                       {base::ThreadPool(), base::TaskPriority::BEST_EFFORT,
-                        base::MayBlock(),
+                   base::ThreadPool::CreateSequencedTaskRunner(
+                       {base::TaskPriority::BEST_EFFORT, base::MayBlock(),
                         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN}),
                    base::DefaultTickClock::GetInstance()) {}
 
@@ -341,12 +342,9 @@ ModelConfig ModellerImpl::GetModelConfigForTesting() const {
   return model_config_;
 }
 
-ModellerImpl::ModelSavingSpec ModellerImpl::GetModelSavingSpecFromProfile(
-    const Profile* profile) {
-  DCHECK(profile);
-
+ModellerImpl::ModelSavingSpec ModellerImpl::GetModelSavingSpecFromProfilePath(
+    const base::FilePath& profile_path) {
   ModelSavingSpec model_saving_spec;
-  const base::FilePath profile_path = profile->GetPath();
   if (profile_path.empty()) {
     return model_saving_spec;
   }
@@ -403,23 +401,42 @@ ModellerImpl::ModellerImpl(
     return;
   }
 
-  model_saving_spec_ = GetModelSavingSpecFromProfile(profile);
-  if (model_saving_spec_.global_curve.empty()) {
-    is_modeller_enabled_ = false;
-    return;
-  }
-
   als_reader_observer_.Add(als_reader);
   brightness_monitor_observer_.Add(brightness_monitor);
   model_config_loader_observer_.Add(model_config_loader);
 
   user_activity_observer_.Add(user_activity_detector);
+
+  base::PostTaskAndReplyWithResult(
+      blocking_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&ModellerImpl::GetModelSavingSpecFromProfilePath,
+                     profile->GetPath()),
+      base::BindOnce(&ModellerImpl::OnModelSavingSpecReadFromProfile,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ModellerImpl::OnModelSavingSpecReadFromProfile(
+    const ModelSavingSpec& spec) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!model_saving_spec_.has_value());
+
+  model_saving_spec_ = spec;
+  HandleStatusUpdate();
 }
 
 void ModellerImpl::HandleStatusUpdate() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (is_modeller_enabled_.has_value())
     return;
+
+  if (!model_saving_spec_.has_value())
+    return;
+
+  if (model_saving_spec_->global_curve.empty()) {
+    is_modeller_enabled_ = false;
+    OnInitializationComplete();
+    return;
+  }
 
   if (!als_init_status_.has_value())
     return;
@@ -458,7 +475,7 @@ void ModellerImpl::HandleStatusUpdate() {
 
   base::PostTaskAndReplyWithResult(
       blocking_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&LoadModelFromDisk, model_saving_spec_, is_testing_),
+      base::BindOnce(&LoadModelFromDisk, *model_saving_spec_, is_testing_),
       base::BindOnce(&ModellerImpl::OnModelLoadedFromDisk,
                      weak_ptr_factory_.GetWeakPtr()));
 }
@@ -651,7 +668,7 @@ void ModellerImpl::OnTrainingFinished(const TrainingResult& result) {
 
   base::PostTaskAndReplyWithResult(
       blocking_task_runner_.get(), FROM_HERE,
-      base::BindOnce(&SaveModelToDisk, model_saving_spec_, model_,
+      base::BindOnce(&SaveModelToDisk, *model_saving_spec_, model_,
                      global_curve_reset_, export_personal_curve, is_testing_),
       base::BindOnce(&ModellerImpl::OnModelSavedToDisk,
                      weak_ptr_factory_.GetWeakPtr()));

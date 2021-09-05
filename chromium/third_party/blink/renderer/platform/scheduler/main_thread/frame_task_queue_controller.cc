@@ -107,10 +107,6 @@ void FrameTaskQueueController::CreateTaskQueue(
       queue_creation_params = queue_creation_params.SetFixedPriority(
         TaskQueue::QueuePriority::kVeryHighPriority);
       break;
-    case QueueTraits::PrioritisationType::kHigh:
-      queue_creation_params = queue_creation_params.SetFixedPriority(
-        TaskQueue::QueuePriority::kHighPriority);
-      break;
     case QueueTraits::PrioritisationType::kBestEffort:
       queue_creation_params = queue_creation_params.SetFixedPriority(
         TaskQueue::QueuePriority::kBestEffortPriority);
@@ -179,7 +175,7 @@ bool FrameTaskQueueController::RemoveResourceLoadingTaskQueue(
 void FrameTaskQueueController::AsValueInto(
     base::trace_event::TracedValue* state) const {
   state->BeginArray("task_queues");
-  for (const auto it : task_queues_) {
+  for (const auto& it : task_queues_) {
     state->AppendString(PointerToString(it.value.get()));
   }
   state->EndArray();

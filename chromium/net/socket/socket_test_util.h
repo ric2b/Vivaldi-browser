@@ -475,9 +475,16 @@ struct SSLSocketDataProvider {
 
   // Result for Connect().
   MockConnect connect;
+  // Callback to run when Connect() is called. This is called at most once per
+  // socket but is repeating because SSLSocketDataProvider is copyable.
+  base::RepeatingClosure connect_callback;
 
-  // Result for Confirm().
+  // Result for ConfirmHandshake().
   MockConfirm confirm;
+  // Callback to run when ConfirmHandshake() is called. This is called at most
+  // once per socket but is repeating because SSLSocketDataProvider is
+  // copyable.
+  base::RepeatingClosure confirm_callback;
 
   // Result for GetNegotiatedProtocol().
   NextProto next_proto;
@@ -496,6 +503,7 @@ struct SSLSocketDataProvider {
   scoped_refptr<X509Certificate> expected_client_cert;
   base::Optional<HostPortPair> expected_host_and_port;
   base::Optional<NetworkIsolationKey> expected_network_isolation_key;
+  base::Optional<bool> expected_disable_legacy_crypto;
 
   bool is_connect_data_consumed = false;
   bool is_confirm_data_consumed = false;

@@ -20,6 +20,7 @@
 #include "content/grit/content_resources.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/url_constants.h"
 #include "ui/base/template_expressions.h"
 #include "ui/base/webui/jstemplate_builder.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -67,11 +68,10 @@ class WebUIDataSourceImpl::InternalDataSource : public URLDataSource {
   std::string GetMimeType(const std::string& path) override {
     return parent_->GetMimeType(path);
   }
-  void StartDataRequest(
-      const std::string& path,
-      const WebContents::Getter& wc_getter,
-      const URLDataSource::GotDataCallback& callback) override {
-    return parent_->StartDataRequest(path, wc_getter, callback);
+  void StartDataRequest(const GURL& url,
+                        const WebContents::Getter& wc_getter,
+                        URLDataSource::GotDataCallback callback) override {
+    return parent_->StartDataRequest(url, wc_getter, std::move(callback));
   }
   bool ShouldReplaceExistingSource() override {
     return parent_->replace_existing_source_;
@@ -98,10 +98,22 @@ class WebUIDataSourceImpl::InternalDataSource : public URLDataSource {
       return parent_->worker_src_;
     return URLDataSource::GetContentSecurityPolicyWorkerSrc();
   }
+  std::string GetContentSecurityPolicyFrameAncestors() override {
+    std::string frame_ancestors = "";
+    if (parent_->frame_ancestors_.size() == 0)
+      frame_ancestors += " 'none'";
+    for (const GURL& frame_ancestor : parent_->frame_ancestors_) {
+      frame_ancestors += " " + frame_ancestor.spec();
+    }
+    return "frame-ancestors" + frame_ancestors + ";";
+  }
   bool ShouldDenyXFrameOptions() override {
     return parent_->deny_xframe_options_;
   }
   bool ShouldServeMimeTypeAsContentTypeHeader() override { return true; }
+  const ui::TemplateReplacements* GetReplacements() override {
+    return &parent_->replacements_;
+  }
   bool ShouldReplaceI18nInJS() override {
     return parent_->ShouldReplaceI18nInJS();
   }
@@ -175,6 +187,8 @@ void WebUIDataSourceImpl::SetDefaultResource(int resource_id) {
 void WebUIDataSourceImpl::SetRequestFilter(
     const ShouldHandleRequestCallback& should_handle_request_callback,
     const HandleRequestCallback& handle_request_callback) {
+  CHECK(!should_handle_request_callback_);
+  CHECK(!filter_callback_);
   should_handle_request_callback_ = should_handle_request_callback;
   filter_callback_ = handle_request_callback;
 }
@@ -215,16 +229,20 @@ void WebUIDataSourceImpl::OverrideContentSecurityPolicyWorkerSrc(
   worker_src_ = data;
 }
 
+void WebUIDataSourceImpl::AddFrameAncestor(const GURL& frame_ancestor) {
+  // Do not allow a wildcard to be a frame ancestor or it will allow any website
+  // to embed the WebUI.
+  CHECK(frame_ancestor.SchemeIs(kChromeUIScheme) ||
+        frame_ancestor.SchemeIs(kChromeUIUntrustedScheme));
+  frame_ancestors_.insert(frame_ancestor);
+}
+
 void WebUIDataSourceImpl::DisableDenyXFrameOptions() {
   deny_xframe_options_ = false;
 }
 
 void WebUIDataSourceImpl::EnableReplaceI18nInJS() {
   should_replace_i18n_in_js_ = true;
-}
-
-const ui::TemplateReplacements* WebUIDataSourceImpl::GetReplacements() const {
-  return &replacements_;
 }
 
 void WebUIDataSourceImpl::EnsureLoadTimeDataDefaultsAdded() {
@@ -267,16 +285,20 @@ std::string WebUIDataSourceImpl::GetMimeType(const std::string& path) const {
   if (base::EndsWith(file_path, ".png", base::CompareCase::INSENSITIVE_ASCII))
     return "image/png";
 
+  if (base::EndsWith(file_path, ".mp4", base::CompareCase::INSENSITIVE_ASCII))
+    return "video/mp4";
+
   return "text/html";
 }
 
 void WebUIDataSourceImpl::StartDataRequest(
-    const std::string& path,
+    const GURL& url,
     const WebContents::Getter& wc_getter,
-    const URLDataSource::GotDataCallback& callback) {
+    URLDataSource::GotDataCallback callback) {
+  const std::string path = URLDataSource::URLToRequestPath(url);
   if (!should_handle_request_callback_.is_null() &&
       should_handle_request_callback_.Run(path)) {
-    filter_callback_.Run(path, callback);
+    filter_callback_.Run(path, std::move(callback));
     return;
   }
 
@@ -285,24 +307,24 @@ void WebUIDataSourceImpl::StartDataRequest(
   if (use_strings_js_) {
     bool from_js_module = path == "strings.m.js";
     if (from_js_module || path == "strings.js") {
-      SendLocalizedStringsAsJSON(callback, from_js_module);
+      SendLocalizedStringsAsJSON(std::move(callback), from_js_module);
       return;
     }
   }
 
   int resource_id = PathToIdrOrDefault(CleanUpPath(path));
-  DCHECK_NE(resource_id, -1);
+  DCHECK_NE(resource_id, -1) << " for " << path;
   scoped_refptr<base::RefCountedMemory> response(
       GetContentClient()->GetDataResourceBytes(resource_id));
-  callback.Run(response.get());
+  std::move(callback).Run(response.get());
 }
 
 void WebUIDataSourceImpl::SendLocalizedStringsAsJSON(
-    const URLDataSource::GotDataCallback& callback,
+    URLDataSource::GotDataCallback callback,
     bool from_js_module) {
   std::string template_data;
   webui::AppendJsonJS(&localized_strings_, &template_data, from_js_module);
-  callback.Run(base::RefCountedString::TakeString(&template_data));
+  std::move(callback).Run(base::RefCountedString::TakeString(&template_data));
 }
 
 const base::DictionaryValue* WebUIDataSourceImpl::GetLocalizedStrings() const {

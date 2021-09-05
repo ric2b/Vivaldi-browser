@@ -23,7 +23,7 @@ import org.chromium.chrome.test.omaha.AttributeFinder;
 import org.chromium.chrome.test.omaha.MockRequestGenerator;
 import org.chromium.chrome.test.omaha.MockRequestGenerator.DeviceType;
 import org.chromium.chrome.test.omaha.MockRequestGenerator.SignedInStatus;
-import org.chromium.components.signin.AccountManagerFacade;
+import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.test.util.AccountHolder;
 import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
 
@@ -179,12 +179,13 @@ public class RequestGeneratorTest {
         for (Account account : accounts) {
             accountManager.addAccountHolderExplicitly(AccountHolder.builder(account).build());
         }
-        AccountManagerFacade.overrideAccountManagerFacadeForTests(accountManager);
+        AccountManagerFacadeProvider.overrideAccountManagerFacadeForTests(accountManager);
 
         String sessionId = "random_session_id";
         String requestId = "random_request_id";
         String version = "1.2.3.4";
         long installAge = 42;
+        int dateLastActive = 4088;
 
         MockRequestGenerator generator =
                 new MockRequestGenerator(context, deviceType, signInStatus);
@@ -192,7 +193,7 @@ public class RequestGeneratorTest {
         String xml = null;
         try {
             RequestData data = new RequestData(sendInstallEvent, 0, requestId, INSTALL_SOURCE);
-            xml = generator.generateXML(sessionId, version, installAge, data);
+            xml = generator.generateXML(sessionId, version, installAge, dateLastActive, data);
         } catch (RequestFailureException e) {
             Assert.fail("XML generation failed.");
         }
@@ -220,6 +221,8 @@ public class RequestGeneratorTest {
             Assert.assertFalse("Update check and install event are mutually exclusive",
                     checkForTag(xml, "event"));
             checkForAttributeAndValue(xml, "ping", "active", "1");
+            checkForAttributeAndValue(xml, "ping", "rd", String.valueOf(dateLastActive));
+            checkForAttributeAndValue(xml, "ping", "ad", String.valueOf(dateLastActive));
             Assert.assertTrue("Update check and install event are mutually exclusive",
                     checkForTag(xml, "updatecheck"));
         }

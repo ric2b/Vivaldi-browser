@@ -4,11 +4,11 @@
 
 module paint_preview.mojom;
 
-import "components/discardable_memory/public/mojom/discardable_shared_memory_manager.mojom";
 import "mojo/public/mojom/base/file.mojom";
-import "mojo/public/mojom/base/shared_memory.mojom";
+import "mojo/public/mojom/base/time.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
+import "url/mojom/url.mojom";
 
 // Status codes for the PaintPreviewRecorder.
 enum PaintPreviewStatus {
@@ -21,9 +21,19 @@ enum PaintPreviewStatus {
   // Capturing the SkPicture for the frame failed or the file provided was bad.
   kCaptureFailed,
 
-  // Serializing the proto to shared memory failed. Either the data was invalid,
-  // or the memory could not be allocated.
-  kProtoSerializationFailed,
+  // The GUID provided for the document collides with another in progress
+  // capture.
+  kGuidCollision,
+
+  // Failed to create the file for serialization of the SkPicture.
+  kFileCreationError,
+
+  // Indicates that the capture was at least partially complete but there was an
+  // error.
+  kPartialSuccess,
+
+  // Indicates that the capture failed entirely.
+  kFailed,
 };
 
 struct PaintPreviewCaptureParams {
@@ -42,6 +52,28 @@ struct PaintPreviewCaptureParams {
   mojo_base.mojom.File file;
 };
 
+struct LinkData {
+  // URL of the link.
+  url.mojom.Url url;
+
+  // Rect for the link.
+  gfx.mojom.Rect rect;
+};
+
+struct PaintPreviewCaptureResponse {
+  // Embedding token of the frame. Will be nullopt for the main frame.
+  mojo_base.mojom.UnguessableToken? embedding_token;
+
+  // Map between subframe content IDs and the RenderFrameProxy Routing ID.
+  map<uint32, mojo_base.mojom.UnguessableToken> content_id_to_embedding_token;
+
+  // A list of links within the frame.
+  array<LinkData> links;
+
+  // The time spent capturing in Blink.
+  mojo_base.mojom.TimeDelta blink_recording_time;
+};
+
 // Service for capturing a paint preview of a RenderFrame's contents. This
 // includes both the visual contents (as an SkPicture) and hyperlinks
 // for the frame.
@@ -53,9 +85,9 @@ interface PaintPreviewRecorder {
   // via the RenderFrameProxy. The browser handles dispatching these requests to
   // the correct RenderFrame and aggregating all the outputs.
   //
-  // Returns a status. If |status| == kOk then proto contains a serialized
-  // PaintPreviewFrameProto.
+  // Returns a status, and if |status| == kOK a valid instance of
+  // PaintPreviewCaptureResponse.
   CapturePaintPreview(PaintPreviewCaptureParams params) =>
     (PaintPreviewStatus status,
-     mojo_base.mojom.ReadOnlySharedMemoryRegion? proto);
+     PaintPreviewCaptureResponse response);
 };

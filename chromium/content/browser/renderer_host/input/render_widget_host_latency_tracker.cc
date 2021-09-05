@@ -5,12 +5,12 @@
 #include "content/browser/renderer_host/input/render_widget_host_latency_tracker.h"
 
 #include <stddef.h>
+#include <string>
 
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
-#include "components/rappor/public/rappor_utils.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -26,6 +26,58 @@ using blink::WebTouchEvent;
 using ui::LatencyInfo;
 
 namespace content {
+namespace {
+const char* GetTraceNameFromType(blink::WebInputEvent::Type type) {
+#define CASE_TYPE(t)        \
+  case WebInputEvent::k##t: \
+    return "InputLatency::" #t
+  switch (type) {
+    CASE_TYPE(Undefined);
+    CASE_TYPE(MouseDown);
+    CASE_TYPE(MouseUp);
+    CASE_TYPE(MouseMove);
+    CASE_TYPE(MouseEnter);
+    CASE_TYPE(MouseLeave);
+    CASE_TYPE(ContextMenu);
+    CASE_TYPE(MouseWheel);
+    CASE_TYPE(RawKeyDown);
+    CASE_TYPE(KeyDown);
+    CASE_TYPE(KeyUp);
+    CASE_TYPE(Char);
+    CASE_TYPE(GestureScrollBegin);
+    CASE_TYPE(GestureScrollEnd);
+    CASE_TYPE(GestureScrollUpdate);
+    CASE_TYPE(GestureFlingStart);
+    CASE_TYPE(GestureFlingCancel);
+    CASE_TYPE(GestureShowPress);
+    CASE_TYPE(GestureTap);
+    CASE_TYPE(GestureTapUnconfirmed);
+    CASE_TYPE(GestureTapDown);
+    CASE_TYPE(GestureTapCancel);
+    CASE_TYPE(GestureDoubleTap);
+    CASE_TYPE(GestureTwoFingerTap);
+    CASE_TYPE(GestureLongPress);
+    CASE_TYPE(GestureLongTap);
+    CASE_TYPE(GesturePinchBegin);
+    CASE_TYPE(GesturePinchEnd);
+    CASE_TYPE(GesturePinchUpdate);
+    CASE_TYPE(TouchStart);
+    CASE_TYPE(TouchMove);
+    CASE_TYPE(TouchEnd);
+    CASE_TYPE(TouchCancel);
+    CASE_TYPE(TouchScrollStarted);
+    CASE_TYPE(PointerDown);
+    CASE_TYPE(PointerUp);
+    CASE_TYPE(PointerMove);
+    CASE_TYPE(PointerRawUpdate);
+    CASE_TYPE(PointerCancel);
+    CASE_TYPE(PointerCausedUaAction);
+  }
+#undef CASE_TYPE
+  NOTREACHED();
+  return "";
+}
+}  // namespace
 
 RenderWidgetHostLatencyTracker::RenderWidgetHostLatencyTracker(
     RenderWidgetHostDelegate* delegate)
@@ -39,7 +91,9 @@ RenderWidgetHostLatencyTracker::~RenderWidgetHostLatencyTracker() {}
 void RenderWidgetHostLatencyTracker::ComputeInputLatencyHistograms(
     WebInputEvent::Type type,
     const LatencyInfo& latency,
-    InputEventAckState ack_result) {
+    InputEventAckState ack_result,
+    base::TimeTicks ack_timestamp) {
+  DCHECK(!ack_timestamp.is_null());
   // If this event was coalesced into another event, ignore it, as the event it
   // was coalesced into will reflect the full latency.
   if (latency.coalesced())
@@ -92,14 +146,10 @@ void RenderWidgetHostLatencyTracker::ComputeInputLatencyHistograms(
     }
   }
 
-  base::TimeTicks rwh_ack_timestamp;
-  if (latency.FindLatency(ui::INPUT_EVENT_LATENCY_ACK_RWH_COMPONENT,
-                          &rwh_ack_timestamp)) {
-    if (!multi_finger_touch_gesture && !main_thread_timestamp.is_null()) {
-      UMA_HISTOGRAM_INPUT_LATENCY_MILLISECONDS(
-          "Event.Latency.BlockingTime." + event_name + default_action_status,
-          main_thread_timestamp, rwh_ack_timestamp);
-    }
+  if (!multi_finger_touch_gesture && !main_thread_timestamp.is_null()) {
+    UMA_HISTOGRAM_INPUT_LATENCY_MILLISECONDS(
+        "Event.Latency.BlockingTime." + event_name + default_action_status,
+        main_thread_timestamp, ack_timestamp);
   }
 }
 
@@ -114,7 +164,7 @@ void RenderWidgetHostLatencyTracker::OnInputEvent(
   if (event.GetType() == WebInputEvent::kTouchStart) {
     const WebTouchEvent& touch_event =
         *static_cast<const WebTouchEvent*>(&event);
-    DCHECK(touch_event.touches_length >= 1);
+    DCHECK_GE(touch_event.touches_length, static_cast<unsigned>(1));
     active_multi_finger_gesture_ = touch_event.touches_length != 1;
   }
 
@@ -148,7 +198,7 @@ void RenderWidgetHostLatencyTracker::OnInputEvent(
 
   latency->AddLatencyNumberWithTraceName(
       ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
-      WebInputEvent::GetName(event.GetType()));
+      GetTraceNameFromType(event.GetType()));
 
   if (event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
     has_seen_first_gesture_scroll_update_ = false;
@@ -200,7 +250,6 @@ void RenderWidgetHostLatencyTracker::OnInputEventAck(
     }
   }
 
-  latency->AddLatencyNumber(ui::INPUT_EVENT_LATENCY_ACK_RWH_COMPONENT);
   // If this event couldn't have caused a gesture event, and it didn't trigger
   // rendering, we're done processing it. If the event got coalesced then
   // terminate it as well. We also exclude cases where we're against the scroll
@@ -211,7 +260,8 @@ void RenderWidgetHostLatencyTracker::OnInputEventAck(
     latency->Terminate();
   }
 
-  ComputeInputLatencyHistograms(event.GetType(), *latency, ack_result);
+  ComputeInputLatencyHistograms(event.GetType(), *latency, ack_result,
+                                base::TimeTicks::Now());
 }
 
 void RenderWidgetHostLatencyTracker::OnEventStart(ui::LatencyInfo* latency) {

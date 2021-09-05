@@ -254,10 +254,10 @@ bool ScrollAnimatorCompositorCoordinator::HasImplOnlyAnimationUpdate() const {
 CompositorElementId ScrollAnimatorCompositorCoordinator::GetScrollElementId()
     const {
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return GetScrollableArea()->GetCompositorElementId();
+    return GetScrollableArea()->GetScrollElementId();
 
-  GraphicsLayer* layer = GetScrollableArea()->LayerForScrolling();
-  return layer ? layer->CcLayer()->element_id() : CompositorElementId();
+  cc::Layer* layer = GetScrollableArea()->LayerForScrolling();
+  return layer ? layer->element_id() : CompositorElementId();
 }
 
 void ScrollAnimatorCompositorCoordinator::UpdateImplOnlyCompositorAnimations() {
@@ -288,14 +288,14 @@ void ScrollAnimatorCompositorCoordinator::UpdateCompositorAnimations() {
 
 void ScrollAnimatorCompositorCoordinator::ScrollOffsetChanged(
     const ScrollOffset& offset,
-    ScrollType scroll_type) {
+    mojom::blink::ScrollType scroll_type) {
   ScrollOffset clamped_offset = GetScrollableArea()->ClampScrollOffset(offset);
   GetScrollableArea()->ScrollOffsetChanged(clamped_offset, scroll_type);
 }
 
 void ScrollAnimatorCompositorCoordinator::AdjustAnimationAndSetScrollOffset(
     const ScrollOffset& offset,
-    ScrollType scroll_type) {
+    mojom::blink::ScrollType scroll_type) {
   // Subclasses should override this and adjust the animation as necessary.
   ScrollOffsetChanged(offset, scroll_type);
 }

@@ -26,18 +26,18 @@
 #include "chrome/browser/upgrade_detector/upgrade_observer.h"
 #include "components/prefs/pref_member.h"
 #include "ui/base/accelerators/accelerator.h"
-#include "ui/base/material_design/material_design_controller_observer.h"
+#include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/views/accessible_pane_view.h"
 #include "ui/views/animation/animation_delegate_views.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/menu_button.h"
-#include "ui/views/controls/button/menu_button_listener.h"
 #include "ui/views/view.h"
 #include "url/origin.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/arc/intent_helper/arc_intent_picker_app_fetcher.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
-#include "components/arc/mojom/intent_helper.mojom.h"  // nogncheck https://crbug.com/784179
+#include "components/arc/mojom/intent_helper.mojom-forward.h"  // nogncheck https://crbug.com/784179
 #endif  // defined(OS_CHROMEOS)
 
 class AppMenuButton;
@@ -66,7 +66,6 @@ class FlexLayout;
 
 // The Browser Window's toolbar.
 class ToolbarView : public views::AccessiblePaneView,
-                    public views::MenuButtonListener,
                     public ui::AcceleratorProvider,
                     public views::AnimationDelegateViews,
                     public LocationBarView::Delegate,
@@ -76,8 +75,7 @@ class ToolbarView : public views::AccessiblePaneView,
                     public AppMenuIconController::Delegate,
                     public UpgradeObserver,
                     public ToolbarButtonProvider,
-                    public BrowserRootView::DropTarget,
-                    public ui::MaterialDesignControllerObserver {
+                    public BrowserRootView::DropTarget {
  public:
   // Types of display mode this toolbar can have.
   enum class DisplayMode {
@@ -106,6 +104,10 @@ class ToolbarView : public views::AccessiblePaneView,
   // Updates the visibility of the custom tab bar, potentially animating the
   // transition.
   void UpdateCustomTabBarVisibility(bool visible, bool animate);
+
+  // We may or may not be using a WebUI tab strip. Make sure toolbar items are
+  // added or removed accordingly.
+  void UpdateForWebUITabStrip();
 
   // Clears the current state for |tab|.
   void ResetTabState(content::WebContents* tab);
@@ -153,11 +155,6 @@ class ToolbarView : public views::AccessiblePaneView,
     return &app_menu_icon_controller_;
   }
 
-  // views::MenuButtonListener:
-  void OnMenuButtonClicked(views::Button* source,
-                           const gfx::Point& point,
-                           const ui::Event* event) override;
-
   // LocationBarView::Delegate:
   content::WebContents* GetWebContents() override;
   LocationBarModel* GetLocationBarModel() override;
@@ -201,9 +198,6 @@ class ToolbarView : public views::AccessiblePaneView,
   // AccessiblePaneView:
   bool SetPaneFocusAndFocusDefault() override;
 
-  // ui::MaterialDesignControllerObserver:
-  void OnTouchUiChanged() override;
-
   // This controls Toolbar, LocationBar and CustomTabBar visibility.
   // If we don't set all three, tab navigation from the app menu breaks
   // on Chrome OS.
@@ -223,21 +217,24 @@ class ToolbarView : public views::AccessiblePaneView,
   // AppMenuIconController::Delegate:
   void UpdateTypeAndSeverity(
       AppMenuIconController::TypeAndSeverity type_and_severity) override;
-  const ui::ThemeProvider* GetViewThemeProvider() const override;
-  ui::NativeTheme* GetViewNativeTheme() override;
+  SkColor GetDefaultColorForSeverity(
+      AppMenuIconController::Severity severity) const override;
 
   // ToolbarButtonProvider:
   BrowserActionsContainer* GetBrowserActionsContainer() override;
-  ToolbarActionView* GetToolbarActionViewForId(const std::string& id) override;
+  ExtensionsToolbarContainer* GetExtensionsToolbarContainer() override;
+  gfx::Size GetToolbarButtonSize() const override;
   views::View* GetDefaultExtensionDialogAnchorView() override;
   PageActionIconView* GetPageActionIconView(PageActionIconType type) override;
   AppMenuButton* GetAppMenuButton() override;
-  gfx::Rect GetFindBarBoundingBox(int contents_height) const override;
+  gfx::Rect GetFindBarBoundingBox(int contents_bottom) override;
   void FocusToolbar() override;
   views::AccessiblePaneView* GetAsAccessiblePaneView() override;
   views::View* GetAnchorView(PageActionIconType type) override;
   void ZoomChangedForActiveTab(bool can_show_bubble) override;
   AvatarToolbarButton* GetAvatarToolbarButton() override;
+  ToolbarButton* GetBackButton() override;
+  ReloadButton* GetReloadButton() override;
 
   // BrowserRootView::DropTarget
   BrowserRootView::DropIndex GetDropIndex(
@@ -257,6 +254,8 @@ class ToolbarView : public views::AccessiblePaneView,
   void OnShowHomeButtonChanged();
   void UpdateHomeButtonVisibility();
 
+  void OnTouchUiChanged();
+
   gfx::SlideAnimation size_animation_{this};
 
   // Controls. Most of these can be null, e.g. in popup windows. Only
@@ -272,8 +271,6 @@ class ToolbarView : public views::AccessiblePaneView,
   ExtensionsToolbarContainer* extensions_container_ = nullptr;
   media_router::CastToolbarButton* cast_ = nullptr;
   ToolbarAccountIconContainerView* toolbar_account_icon_container_ = nullptr;
-  ToolbarButton* webui_new_tab_button_ = nullptr;
-  ToolbarButton* webui_toggle_button_ = nullptr;
   AvatarToolbarButton* avatar_ = nullptr;
   MediaToolbarButtonView* media_button_ = nullptr;
   BrowserAppMenuButton* app_menu_button_ = nullptr;
@@ -281,7 +278,7 @@ class ToolbarView : public views::AccessiblePaneView,
   Browser* const browser_;
   BrowserView* const browser_view_;
 
-  views::FlexLayout* layout_manager_;
+  views::FlexLayout* layout_manager_ = nullptr;
 
   AppMenuIconController app_menu_icon_controller_;
 
@@ -291,9 +288,10 @@ class ToolbarView : public views::AccessiblePaneView,
   // The display mode used when laying out the toolbar.
   const DisplayMode display_mode_;
 
-  ScopedObserver<ui::MaterialDesignController,
-                 ui::MaterialDesignControllerObserver>
-      md_observer_{this};
+  std::unique_ptr<ui::TouchUiController::Subscription> subscription_ =
+      ui::TouchUiController::Get()->RegisterCallback(
+          base::BindRepeating(&ToolbarView::OnTouchUiChanged,
+                              base::Unretained(this)));
 
   // Whether this toolbar has been initialized.
   bool initialized_ = false;

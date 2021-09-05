@@ -160,6 +160,9 @@ enum class AccessPoint : int {
   ACCESS_POINT_MANAGE_CARDS_BUBBLE = 25,
   ACCESS_POINT_MACHINE_LOGON = 26,
   ACCESS_POINT_GOOGLE_SERVICES_SETTINGS = 27,
+  ACCESS_POINT_SYNC_ERROR_CARD = 28,
+  ACCESS_POINT_FORCED_SIGNIN = 29,
+  ACCESS_POINT_ACCOUNT_RENAMED = 30,
   ACCESS_POINT_MAX,  // This must be last.
 };
 
@@ -171,8 +174,6 @@ enum class PromoAction : int {
   // On desktop, the user selected an account that is not the default. On
   // mobile, the user selected the generic "Use another account" button.
   PROMO_ACTION_NOT_DEFAULT,
-  // Non-personalized promo, pre-dice on desktop.
-  PROMO_ACTION_NEW_ACCOUNT_PRE_DICE,
   // Non personalized promo, when there is no account on the device.
   PROMO_ACTION_NEW_ACCOUNT_NO_EXISTING_ACCOUNT,
   // The user clicked on the "Add account" button, when there are already

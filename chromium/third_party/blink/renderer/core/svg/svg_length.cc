@@ -26,7 +26,7 @@
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_value.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
-#include "third_party/blink/renderer/core/svg/svg_animation_element.h"
+#include "third_party/blink/renderer/core/svg/svg_animate_element.h"
 #include "third_party/blink/renderer/core/svg_names.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
@@ -88,7 +88,7 @@ SVGLength::SVGLength(const CSSPrimitiveValue& value, SVGLengthMode mode)
 SVGLength::SVGLength(const SVGLength& o)
     : value_(o.value_), unit_mode_(o.unit_mode_) {}
 
-void SVGLength::Trace(blink::Visitor* visitor) {
+void SVGLength::Trace(Visitor* visitor) {
   visitor->Trace(value_);
   SVGPropertyBase::Trace(visitor);
 }
@@ -326,32 +326,32 @@ bool SVGLength::NegativeValuesForbiddenForAnimatedLengthAttribute(
 
 void SVGLength::Add(SVGPropertyBase* other, SVGElement* context_element) {
   SVGLengthContext length_context(context_element);
-  SetValue(Value(length_context) + ToSVGLength(other)->Value(length_context),
+  SetValue(Value(length_context) + To<SVGLength>(other)->Value(length_context),
            length_context);
 }
 
 void SVGLength::CalculateAnimatedValue(
-    SVGAnimationElement* animation_element,
+    const SVGAnimateElement& animation_element,
     float percentage,
     unsigned repeat_count,
     SVGPropertyBase* from_value,
     SVGPropertyBase* to_value,
     SVGPropertyBase* to_at_end_of_duration_value,
     SVGElement* context_element) {
-  SVGLength* from_length = ToSVGLength(from_value);
-  SVGLength* to_length = ToSVGLength(to_value);
-  SVGLength* to_at_end_of_duration_length =
-      ToSVGLength(to_at_end_of_duration_value);
+  auto* from_length = To<SVGLength>(from_value);
+  auto* to_length = To<SVGLength>(to_value);
+  auto* to_at_end_of_duration_length =
+      To<SVGLength>(to_at_end_of_duration_value);
 
   SVGLengthContext length_context(context_element);
   float animated_number = Value(length_context);
-  animation_element->AnimateAdditiveNumber(
+  animation_element.AnimateAdditiveNumber(
       percentage, repeat_count, from_length->Value(length_context),
       to_length->Value(length_context),
       to_at_end_of_duration_length->Value(length_context), animated_number);
 
   DCHECK_EQ(UnitMode(), LengthModeForAnimatedLengthAttribute(
-                            animation_element->AttributeName()));
+                            animation_element.AttributeName()));
 
   // TODO(shanmuga.m): Construct a calc() expression if the units fall in
   // different categories.
@@ -374,7 +374,7 @@ void SVGLength::CalculateAnimatedValue(
 float SVGLength::CalculateDistance(SVGPropertyBase* to_value,
                                    SVGElement* context_element) {
   SVGLengthContext length_context(context_element);
-  SVGLength* to_length = ToSVGLength(to_value);
+  auto* to_length = To<SVGLength>(to_value);
 
   return fabsf(to_length->Value(length_context) - Value(length_context));
 }

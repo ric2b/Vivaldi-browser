@@ -124,11 +124,13 @@ class COMPONENT_EXPORT(CHROMEOS_DISKS) DiskMountManager {
     // Called on format process events.
     virtual void OnFormatEvent(FormatEvent event,
                                FormatError error_code,
-                               const std::string& device_path) {}
+                               const std::string& device_path,
+                               const std::string& device_label) {}
     // Called on rename process events.
     virtual void OnRenameEvent(RenameEvent event,
                                RenameError error_code,
-                               const std::string& device_path) {}
+                               const std::string& device_path,
+                               const std::string& device_label) {}
 
    protected:
     ~Observer() override;
@@ -175,13 +177,11 @@ class COMPONENT_EXPORT(CHROMEOS_DISKS) DiskMountManager {
                          MountAccessMode access_mode) = 0;
 
   // Unmounts a mounted disk.
-  // |UnmountOptions| enum defined in chromeos/dbus/cros_disks_client.h.
   // When the method is complete, |callback| will be called and observers'
   // |OnMountEvent| will be raised.
   //
   // |callback| may be empty, in which case it gets ignored.
   virtual void UnmountPath(const std::string& mount_path,
-                           UnmountOptions options,
                            UnmountPathCallback callback) = 0;
 
   // Remounts mounted removable devices to change the read-only mount option.

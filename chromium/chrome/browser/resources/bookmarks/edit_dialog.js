@@ -2,8 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import './strings.m.js';
+
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {highlightUpdatedItems, trackUpdatedItems} from './api_listener.js';
+import {DialogFocusManager} from './dialog_focus_manager.js';
+import {BookmarkNode} from './types.js';
+
 Polymer({
   is: 'bookmarks-edit-dialog',
+
+  _template: html`{__html_template__}`,
 
   properties: {
     /** @private */
@@ -37,20 +53,20 @@ Polymer({
    * @param {boolean} isFolder
    * @param {string} parentId
    */
-  showAddDialog: function(isFolder, parentId) {
+  showAddDialog(isFolder, parentId) {
     this.reset_();
     this.isEdit_ = false;
     this.isFolder_ = isFolder;
     this.parentId_ = parentId;
 
-    bookmarks.DialogFocusManager.getInstance().showDialog(this.$.dialog);
+    DialogFocusManager.getInstance().showDialog(this.$.dialog);
   },
 
   /**
    * Show the edit dialog for |editItem|.
    * @param {BookmarkNode} editItem
    */
-  showEditDialog: function(editItem) {
+  showEditDialog(editItem) {
     this.reset_();
     this.isEdit_ = true;
     this.isFolder_ = !editItem.url;
@@ -61,14 +77,14 @@ Polymer({
       this.urlValue_ = assert(editItem.url);
     }
 
-    bookmarks.DialogFocusManager.getInstance().showDialog(this.$.dialog);
+    DialogFocusManager.getInstance().showDialog(this.$.dialog);
   },
 
   /**
    * Clear out existing values from the dialog, allowing it to be reused.
    * @private
    */
-  reset_: function() {
+  reset_() {
     this.editItem_ = null;
     this.parentId_ = null;
     this.$.url.invalid = false;
@@ -82,7 +98,7 @@ Polymer({
    * @return {string}
    * @private
    */
-  getDialogTitle_: function(isFolder, isEdit) {
+  getDialogTitle_(isFolder, isEdit) {
     let title;
     if (isEdit) {
       title = isFolder ? 'renameFolderTitle' : 'editBookmarkTitle';
@@ -99,7 +115,7 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  validateUrl_: function() {
+  validateUrl_() {
     const urlInput = /** @type {CrInputElement} */ (this.$.url);
     const originalValue = this.urlValue_;
 
@@ -118,7 +134,7 @@ Polymer({
   },
 
   /** @private */
-  onSaveButtonTap_: function() {
+  onSaveButtonTap_() {
     const edit = {'title': this.titleValue_};
     if (!this.isFolder_) {
       if (!this.validateUrl_()) {
@@ -132,15 +148,14 @@ Polymer({
       chrome.bookmarks.update(this.editItem_.id, edit);
     } else {
       edit['parentId'] = this.parentId_;
-      bookmarks.ApiListener.trackUpdatedItems();
-      chrome.bookmarks.create(
-          edit, bookmarks.ApiListener.highlightUpdatedItems);
+      trackUpdatedItems();
+      chrome.bookmarks.create(edit, highlightUpdatedItems);
     }
     this.$.dialog.close();
   },
 
   /** @private */
-  onCancelButtonTap_: function() {
+  onCancelButtonTap_() {
     this.$.dialog.cancel();
   },
 });

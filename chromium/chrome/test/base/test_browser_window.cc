@@ -61,6 +61,11 @@ TestBrowserWindow::TestBrowserWindow() {}
 
 TestBrowserWindow::~TestBrowserWindow() {}
 
+void TestBrowserWindow::Close() {
+  if (close_callback_)
+    std::move(close_callback_).Run();
+}
+
 bool TestBrowserWindow::IsActive() const {
   return false;
 }
@@ -70,7 +75,7 @@ ui::ZOrderLevel TestBrowserWindow::GetZOrderLevel() const {
 }
 
 gfx::NativeWindow TestBrowserWindow::GetNativeWindow() const {
-  return NULL;
+  return native_window_;
 }
 
 bool TestBrowserWindow::IsOnCurrentWorkspace() const {
@@ -143,16 +148,8 @@ LocationBar* TestBrowserWindow::GetLocationBar() const {
   return const_cast<TestLocationBar*>(&location_bar_);
 }
 
-bool TestBrowserWindow::UpdatePageActionIcon(PageActionIconType type) {
-  return false;
-}
-
 autofill::AutofillBubbleHandler* TestBrowserWindow::GetAutofillBubbleHandler() {
   return &autofill_bubble_handler_;
-}
-
-ToolbarActionsBar* TestBrowserWindow::GetToolbarActionsBar() {
-  return nullptr;
 }
 
 ExtensionsContainer* TestBrowserWindow::GetExtensionsContainer() {
@@ -253,6 +250,14 @@ std::string TestBrowserWindow::GetWorkspace() const {
 
 bool TestBrowserWindow::IsVisibleOnAllWorkspaces() const {
   return false;
+}
+
+void TestBrowserWindow::SetNativeWindow(gfx::NativeWindow window) {
+  native_window_ = window;
+}
+
+void TestBrowserWindow::SetCloseCallback(base::OnceClosure close_callback) {
+  close_callback_ = std::move(close_callback);
 }
 
 // TestBrowserWindowOwner -----------------------------------------------------

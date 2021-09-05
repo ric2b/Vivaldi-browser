@@ -22,6 +22,7 @@ function_registration("api_registration") {
   deps = [
     # Different APIs include headers from these targets.
     "//chrome/common:mojo_bindings",
+    "//components/zoom",
     "//content/public/browser",
     "//extensions/browser",
 
@@ -34,8 +35,5 @@ function_registration("api_registration") {
     "//third_party/metrics_proto",
     "//ui/accessibility:ax_enums_mojo",
   ]
-  if (is_chromeos) {
-    deps += [ "//components/drive:proto" ]
-  }
   deps += [ "//extensions/common/api" ]
 }

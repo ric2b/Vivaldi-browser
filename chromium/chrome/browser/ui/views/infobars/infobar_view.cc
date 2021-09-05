@@ -90,6 +90,11 @@ gfx::Insets GetCloseButtonSpacing() {
 InfoBarView::InfoBarView(std::unique_ptr<infobars::InfoBarDelegate> delegate)
     : infobars::InfoBar(std::move(delegate)),
       views::ExternalFocusTracker(this, nullptr) {
+  // Make Infobar animation aligned to the Compositor.
+  SetNotifier(std::make_unique<
+              gfx::AnimationDelegateNotifier<views::AnimationDelegateViews>>(
+      this, this));
+
   set_owned_by_client();  // InfoBar deletes itself at the appropriate time.
 
   // Clip child layers; without this, buttons won't look correct during
@@ -215,12 +220,13 @@ void InfoBarView::OnPaint(gfx::Canvas* canvas) {
     const SkColor color =
         GetColor(ThemeProperties::COLOR_TOOLBAR_CONTENT_AREA_SEPARATOR);
     const gfx::Rect local_bounds = GetLocalBounds();
-    canvas->DrawLine(gfx::Point(local_bounds.x(), local_bounds.y()),
-                     gfx::Point(local_bounds.right(), local_bounds.y()), color);
+    canvas->DrawSharpLine({local_bounds.x(), local_bounds.y()},
+                          {local_bounds.right(), local_bounds.y()}, color);
   }
 }
 
 void InfoBarView::OnThemeChanged() {
+  views::View::OnThemeChanged();
   const SkColor background_color = GetColor(kInfoBarLabelBackgroundColor);
   SetBackground(views::CreateSolidBackground(background_color));
 
@@ -273,11 +279,11 @@ views::Label* InfoBarView::CreateLabel(const base::string16& text) const {
   return label;
 }
 
-views::Link* InfoBarView::CreateLink(const base::string16& text,
-                                     views::LinkListener* listener) const {
+views::Link* InfoBarView::CreateLink(const base::string16& text) {
   views::Link* link = new views::Link(text, CONTEXT_BODY_TEXT_LARGE);
   SetLabelDetails(link);
-  link->set_listener(listener);
+  link->set_callback(
+      base::BindRepeating(&InfoBarView::LinkClicked, base::Unretained(this)));
   link->SetProperty(kLabelType, LabelType::kLink);
   return link;
 }
@@ -392,4 +398,11 @@ void InfoBarView::SetLabelDetails(views::Label* label) const {
                      gfx::Insets(ChromeLayoutProvider::Get()->GetDistanceMetric(
                                      DISTANCE_TOAST_LABEL_VERTICAL),
                                  0));
+}
+
+void InfoBarView::LinkClicked(views::Link* source, int event_flags) {
+  if (!owner())
+    return;  // We're closing; don't call anything, it might access the owner.
+  if (delegate()->LinkClicked(ui::DispositionFromEventFlags(event_flags)))
+    RemoveSelf();
 }

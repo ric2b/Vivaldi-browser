@@ -18,7 +18,7 @@ namespace {
 // Helpers ---------------------------------------------------------------------
 
 syncer::SyncService* GetSyncService(Profile* profile) {
-  return profile->IsSyncAllowed()
+  return ProfileSyncServiceFactory::IsSyncAllowed(profile)
              ? ProfileSyncServiceFactory::GetForProfile(profile)
              : nullptr;
 }
@@ -108,14 +108,20 @@ void ProactiveSuggestionsClientImpl::OnTabStripModelChanged(
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
   // When the currently active browser tab changes, that indicates there has
-  // been a change in the active contents.
+  // been a change in the active contents so we need to update active state.
   if (selection.active_tab_changed())
-    SetActiveContents(tab_strip_model->GetActiveWebContents());
+    UpdateActiveState();
 }
 
 void ProactiveSuggestionsClientImpl::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   SetActiveUrl(active_contents_->GetURL());
+}
+
+void ProactiveSuggestionsClientImpl::DidChangeVerticalScrollDirection(
+    viz::VerticalScrollDirection scroll_direction) {
+  if (delegate_)
+    delegate_->OnSourceVerticalScrollDirectionChanged(scroll_direction);
 }
 
 void ProactiveSuggestionsClientImpl::OnAssistantFeatureAllowedChanged(
@@ -155,6 +161,11 @@ void ProactiveSuggestionsClientImpl::SetActiveBrowser(Browser* browser) {
 
   active_browser_ = browser;
 
+  // We observe the tab strip associated with the active browser so as to detect
+  // changes to the currently active tab.
+  if (active_browser_)
+    active_browser_->tab_strip_model()->AddObserver(this);
+
   // We need to update active state to conditionally observe the active browser.
   UpdateActiveState();
 }
@@ -182,7 +193,8 @@ void ProactiveSuggestionsClientImpl::SetActiveUrl(const GURL& url) {
   // The previous set of proactive suggestions is no longer valid.
   SetActiveProactiveSuggestions(nullptr);
 
-  if (active_url_.is_empty()) {
+  // We only load proactive suggestions for http/https schemes.
+  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS()) {
     loader_.reset();
     return;
   }
@@ -213,8 +225,6 @@ void ProactiveSuggestionsClientImpl::UpdateActiveState() {
     return;
   }
 
-  auto* tab_strip_model = active_browser_->tab_strip_model();
-
   // We never observe browsers that are off the record and we never observe
   // browsers when the Assistant feature is not allowed. We also don't observe
   // the browser when the user has disabled either Assistant or screen context
@@ -225,15 +235,10 @@ void ProactiveSuggestionsClientImpl::UpdateActiveState() {
       !ash::AssistantState::Get()->settings_enabled().value_or(false) ||
       !ash::AssistantState::Get()->context_enabled().value_or(false) ||
       !IsHistorySyncEnabledWithoutPassphrase(profile_)) {
-    tab_strip_model->RemoveObserver(this);
     SetActiveContents(nullptr);
     return;
   }
 
-  // We observe the tab strip associated with the active browser so as to detect
-  // changes to the currently active tab.
-  tab_strip_model->AddObserver(this);
-
-  // Perform an initial sync of the active contents.
-  SetActiveContents(tab_strip_model->GetActiveWebContents());
+  // Perform a sync of the active contents.
+  SetActiveContents(active_browser_->tab_strip_model()->GetActiveWebContents());
 }

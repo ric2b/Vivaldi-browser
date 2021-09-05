@@ -5,6 +5,7 @@
 #include "components/content_settings/core/browser/content_settings_info.h"
 
 #include "base/stl_util.h"
+#include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/website_settings_info.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 
@@ -13,16 +14,22 @@ namespace content_settings {
 ContentSettingsInfo::ContentSettingsInfo(
     const WebsiteSettingsInfo* website_settings_info,
     const std::vector<std::string>& whitelisted_schemes,
+    const base::flat_set<url::Origin>& force_allowed_origins,
     const std::set<ContentSetting>& valid_settings,
     IncognitoBehavior incognito_behavior,
     StorageBehavior storage_behavior,
     OriginRestriction origin_restriction)
     : website_settings_info_(website_settings_info),
       whitelisted_schemes_(whitelisted_schemes),
+      force_allowed_origins_(force_allowed_origins),
       valid_settings_(valid_settings),
       incognito_behavior_(incognito_behavior),
       storage_behavior_(storage_behavior),
-      origin_restriction_(origin_restriction) {}
+      origin_restriction_(origin_restriction) {
+  // We only allow certain origins to be force allowed to have permissions.
+  for (const auto& origin : force_allowed_origins_)
+    CHECK(content_settings::OriginCanBeForceAllowed(origin));
+}
 
 ContentSettingsInfo::~ContentSettingsInfo() {}
 
@@ -43,15 +50,27 @@ bool ContentSettingsInfo::IsDefaultSettingValid(ContentSetting setting) const {
   ContentSettingsType type = website_settings_info_->type();
 #if defined(OS_CHROMEOS)
   // Don't support ALLOW for protected media default setting until migration.
-  if (type == CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER &&
+  if (type == ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER &&
       setting == CONTENT_SETTING_ALLOW) {
     return false;
   }
 #endif
 
   // Don't support ALLOW for the default media settings.
-  if ((type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA ||
-       type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC) &&
+  if ((type == ContentSettingsType::MEDIASTREAM_CAMERA ||
+       type == ContentSettingsType::MEDIASTREAM_MIC) &&
+      setting == CONTENT_SETTING_ALLOW) {
+    return false;
+  }
+
+  // Don't support ALLOW for the native file system write access.
+  if (type == ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD &&
+      setting == CONTENT_SETTING_ALLOW) {
+    return false;
+  }
+
+  // Don't support ALLOW for the native file system read access.
+  if (type == ContentSettingsType::NATIVE_FILE_SYSTEM_READ_GUARD &&
       setting == CONTENT_SETTING_ALLOW) {
     return false;
   }

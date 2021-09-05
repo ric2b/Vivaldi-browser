@@ -12,11 +12,10 @@
 #include "base/no_destructor.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "content/public/common/mime_handler_view_mode.h"
 #include "content/public/common/webplugininfo.h"
 #include "content/public/renderer/render_frame.h"
 #include "extensions/common/mojom/guest_view.mojom.h"
-#include "extensions/renderer/guest_view/mime_handler_view/mime_handler_view_container_base.h"
+#include "extensions/renderer/guest_view/mime_handler_view/mime_handler_view_container.h"
 #include "extensions/renderer/guest_view/mime_handler_view/mime_handler_view_frame_container.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_frame.h"
@@ -44,7 +43,6 @@ void MimeHandlerViewContainerManager::BindReceiver(
     int32_t routing_id,
     mojo::PendingAssociatedReceiver<mojom::MimeHandlerViewContainerManager>
         receiver) {
-  CHECK(content::MimeHandlerViewMode::UsesCrossProcessFrame());
   auto* render_frame = content::RenderFrame::FromRoutingID(routing_id);
   if (!render_frame)
     return;
@@ -118,7 +116,7 @@ void MimeHandlerViewContainerManager::
     // This is the one injected by HTML string. Return true so that the
     // HTMLPlugInElement creates a child frame to be used as the outer
     // WebContents frame.
-    MimeHandlerViewContainerBase::GuestView()->ReadyToCreateMimeHandlerView(
+    MimeHandlerViewContainer::GuestView()->ReadyToCreateMimeHandlerView(
         render_frame()->GetRoutingID(), false);
   }
 }
@@ -182,10 +180,24 @@ void MimeHandlerViewContainerManager::CreateBeforeUnloadControl(
       before_unload_control_receiver_.BindNewPipeAndPassRemote());
 }
 
+void MimeHandlerViewContainerManager::SelfDeleteIfNecessary() {
+  // |internal_id| is only populated when |render_frame()| is embedder of a
+  // MimeHandlerViewGuest. Full-page PDF is one such case. In these cases
+  // we don't want to self-delete.
+  if (!frame_containers_.empty() || !internal_id_.empty())
+    return;
+
+  // There are no frame containers left, and we're not serving a full-page
+  // MimeHandlerView, so we remove ourselves from the map.
+  GetRenderFrameMap()->erase(routing_id());
+}
+
 void MimeHandlerViewContainerManager::DestroyFrameContainer(
     int32_t element_instance_id) {
   if (auto* frame_container = GetFrameContainer(element_instance_id))
     RemoveFrameContainer(frame_container, false /* retain manager */);
+  else
+    SelfDeleteIfNecessary();
 }
 
 void MimeHandlerViewContainerManager::DidLoad(int32_t element_instance_id,
@@ -272,14 +284,9 @@ bool MimeHandlerViewContainerManager::RemoveFrameContainer(
     return false;
   frame_containers_.erase(it);
 
-  if (!frame_containers_.size() && internal_id_.empty() && !retain_manager) {
-    // There are no frame containers left, and we're not serving a full-page
-    // MimeHandlerView, so we remove ourselves from the map.
-    auto& map = *GetRenderFrameMap();
-    map.erase(std::remove_if(map.begin(), map.end(), [this](const auto& iter) {
-      return iter.second.get() == this;
-    }));
-  }
+  if (!retain_manager)
+    SelfDeleteIfNecessary();
+
   return true;
 }
 
@@ -306,7 +313,10 @@ blink::WebLocalFrame* MimeHandlerViewContainerManager::GetSourceFrame() {
 }
 
 blink::WebFrame* MimeHandlerViewContainerManager::GetTargetFrame() {
-  return GetSourceFrame()->FirstChild();
+  // Search for the frame using the 'name' attribute, since if an extension
+  // injects other frames into the embedder, there will be more than one frame.
+  return GetSourceFrame()->FindFrameByName(
+      blink::WebString::FromUTF8(internal_id_));
 }
 
 bool MimeHandlerViewContainerManager::IsEmbedded() const {
@@ -323,7 +333,7 @@ bool MimeHandlerViewContainerManager::IsManagedByContainerManager(
       base::ToUpperASCII(plugin_element.GetAttribute("internalid").Utf8()) ==
           internal_id_) {
     plugin_element_ = plugin_element;
-    MimeHandlerViewContainerBase::GuestView()->ReadyToCreateMimeHandlerView(
+    MimeHandlerViewContainer::GuestView()->ReadyToCreateMimeHandlerView(
         render_frame()->GetRoutingID(), true);
   }
   return plugin_element_ == plugin_element;

@@ -127,7 +127,7 @@ class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) InterfaceEndpointClient
   // The following methods send interface control messages.
   // They must only be called when the handle is not in pending association
   // state.
-  void QueryVersion(const base::Callback<void(uint32_t)>& callback);
+  void QueryVersion(base::OnceCallback<void(uint32_t)> callback);
   void RequireVersion(uint32_t version);
   void FlushForTesting();
   void FlushAsyncForTesting(base::OnceClosure callback);
@@ -163,6 +163,10 @@ class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) InterfaceEndpointClient
   void MaybeSendNotifyIdle();
 
   const char* interface_name() const { return interface_name_; }
+
+  void force_outgoing_messages_async(bool force) {
+    force_outgoing_messages_async_ = force;
+  }
 
 #if DCHECK_IS_ON()
   void SetNextCallLocation(const base::Location& location) {
@@ -274,6 +278,17 @@ class COMPONENT_EXPORT(MOJO_CPP_BINDINGS) InterfaceEndpointClient
   // is actually transmitted for it.
   base::Location next_call_location_;
 #endif
+
+  // If set to |true|, the endpoint ignores the sync flag when sending messages.
+  // This means that all messages are sent as if they were async, and all
+  // incoming replies are treated as if they replied to an async message. It is
+  // NOT appropriate to call generated sync method signatures (i.e. mojom
+  // interface methods with output arguments) on such endpoints.
+  //
+  // This exists only to facilitate APIs forwarding opaque sync messages through
+  // the endpoint from some other sequence which blocks on the reply, such as
+  // with sync calls on a SharedRemote.
+  bool force_outgoing_messages_async_ = false;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

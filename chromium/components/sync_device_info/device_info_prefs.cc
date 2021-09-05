@@ -60,7 +60,7 @@ void DeviceInfoPrefs::RegisterProfilePrefs(PrefRegistrySimple* registry) {
 // static
 void DeviceInfoPrefs::MigrateRecentLocalCacheGuidsPref(
     PrefService* pref_service) {
-  base::span<const base::Value> obsolete_cache_guids =
+  base::Value::ConstListView obsolete_cache_guids =
       pref_service->GetList(kObsoleteDeviceInfoRecentGUIDs)->GetList();
   DeviceInfoPrefs prefs(pref_service, base::DefaultClock::GetInstance());
 
@@ -86,7 +86,7 @@ DeviceInfoPrefs::~DeviceInfoPrefs() {}
 
 bool DeviceInfoPrefs::IsRecentLocalCacheGuid(
     const std::string& cache_guid) const {
-  base::span<const base::Value> recent_local_cache_guids =
+  base::Value::ConstListView recent_local_cache_guids =
       pref_service_->GetList(kDeviceInfoRecentGUIDsWithTimestamps)->GetList();
 
   for (const auto& v : recent_local_cache_guids) {
@@ -101,15 +101,13 @@ bool DeviceInfoPrefs::IsRecentLocalCacheGuid(
 void DeviceInfoPrefs::AddLocalCacheGuid(const std::string& cache_guid) {
   ListPrefUpdate update_cache_guids(pref_service_,
                                     kDeviceInfoRecentGUIDsWithTimestamps);
-  base::Value::ListStorage* recent_local_cache_guids =
-      &(update_cache_guids.Get()->GetList());
 
-  for (auto it = recent_local_cache_guids->begin();
-       it != recent_local_cache_guids->end(); it++) {
+  for (auto it = update_cache_guids->GetList().begin();
+       it != update_cache_guids->GetList().end(); it++) {
     if (MatchesGuidInDictionary(*it, cache_guid)) {
       // Remove it from the list, to be reinserted below, in the first
       // position.
-      recent_local_cache_guids->erase(it);
+      update_cache_guids->EraseListIter(it);
       break;
     }
   }
@@ -120,36 +118,36 @@ void DeviceInfoPrefs::AddLocalCacheGuid(const std::string& cache_guid) {
       kTimestampKey,
       base::Value(clock_->Now().ToDeltaSinceWindowsEpoch().InDays()));
 
-  recent_local_cache_guids->emplace(recent_local_cache_guids->begin(),
-                                    std::move(new_entry));
+  update_cache_guids->Insert(update_cache_guids->GetList().begin(),
+                             std::move(new_entry));
 
-  while (recent_local_cache_guids->size() > kMaxLocalCacheGuidsStored) {
-    recent_local_cache_guids->pop_back();
+  while (update_cache_guids->GetList().size() > kMaxLocalCacheGuidsStored) {
+    update_cache_guids->EraseListIter(update_cache_guids->GetList().end() - 1);
   }
 }
 
 void DeviceInfoPrefs::GarbageCollectExpiredCacheGuids() {
   ListPrefUpdate update_cache_guids(pref_service_,
                                     kDeviceInfoRecentGUIDsWithTimestamps);
-  base::Value::ListStorage* recent_local_cache_guids =
-      &(update_cache_guids.Get())->GetList();
-
-  for (auto it = recent_local_cache_guids->begin();
-       it != recent_local_cache_guids->end(); it++) {
-    base::Optional<int> days_since_epoch = it->FindIntKey(kTimestampKey);
-    const base::Time creation_time =
-        days_since_epoch ? base::Time::FromDeltaSinceWindowsEpoch(
-                               base::TimeDelta::FromDays(*days_since_epoch))
-                         : base::Time::Min();
-    if (creation_time < clock_->Now() - kMaxTimeDeltaLocalCacheGuidsStored) {
-      // Because the list of cache_guid prefs is maintained to be in reverse
-      // chronological order (from the newest cache guid to the oldest), it
-      // is safe to remove all of the entries after one that is found to be
-      // expired.
-      recent_local_cache_guids->erase(it, recent_local_cache_guids->end());
-      return;
+  update_cache_guids->EraseListValueIf([this](const auto& dict) {
+    // Avoid crashes if the preference contains corrupt entries that are not
+    // dictionaries, and meanwhile clean up these corrupt entries.
+    if (!dict.is_dict()) {
+      return true;
     }
-  }
+
+    base::Optional<int> days_since_epoch = dict.FindIntKey(kTimestampKey);
+
+    // Avoid crashes if the dictionary contains no timestamp and meanwhile clean
+    // up these corrupt entries.
+    if (!days_since_epoch.has_value()) {
+      return true;
+    }
+
+    const base::Time creation_time = base::Time::FromDeltaSinceWindowsEpoch(
+        base::TimeDelta::FromDays(*days_since_epoch));
+    return creation_time < clock_->Now() - kMaxTimeDeltaLocalCacheGuidsStored;
+  });
 }
 
 }  // namespace syncer

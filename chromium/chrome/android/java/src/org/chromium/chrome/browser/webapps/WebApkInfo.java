@@ -5,31 +5,24 @@
 package org.chromium.chrome.browser.webapps;
 
 import android.content.Intent;
-import android.net.Uri;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.browser.trusted.sharing.ShareData;
 
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.webapps.WebApkExtras.ShortcutItem;
 import org.chromium.webapk.lib.common.WebApkConstants;
 
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 /**
  * Stores info for WebAPK.
  */
 public class WebApkInfo extends WebappInfo {
-    /** A class that stores share information from share intent. */
-    public static class ShareData {
-        public String subject;
-        public String text;
-        public ArrayList<Uri> files;
-        public String shareActivityClassName;
-    }
-
     /**
      * Stores information about the WebAPK's share intent handlers.
      * TODO(crbug.com/912954): add share target V2 parameters once the server supports them.
@@ -38,7 +31,6 @@ public class WebApkInfo extends WebappInfo {
         private static final int ACTION_INDEX = 0;
         private static final int PARAM_TITLE_INDEX = 1;
         private static final int PARAM_TEXT_INDEX = 2;
-        private static final int PARAM_URL_INDEX = 3;
         private String[] mData;
         private boolean mIsShareMethodPost;
         private boolean mIsShareEncTypeMultipart;
@@ -46,17 +38,15 @@ public class WebApkInfo extends WebappInfo {
         private String[][] mFileAccepts;
 
         public ShareTarget() {
-            this(null, null, null, null, false, false, null, null);
+            this(null, null, null, false, false, null, null);
         }
 
-        public ShareTarget(String action, String paramTitle, String paramText, String paramUrl,
-                boolean isMethodPost, boolean isEncTypeMultipart, String[] fileNames,
-                String[][] fileAccepts) {
-            mData = new String[4];
+        public ShareTarget(String action, String paramTitle, String paramText, boolean isMethodPost,
+                boolean isEncTypeMultipart, String[] fileNames, String[][] fileAccepts) {
+            mData = new String[3];
             mData[ACTION_INDEX] = replaceNullWithEmpty(action);
             mData[PARAM_TITLE_INDEX] = replaceNullWithEmpty(paramTitle);
             mData[PARAM_TEXT_INDEX] = replaceNullWithEmpty(paramText);
-            mData[PARAM_URL_INDEX] = replaceNullWithEmpty(paramUrl);
             mIsShareMethodPost = isMethodPost;
             mIsShareEncTypeMultipart = isEncTypeMultipart;
 
@@ -87,10 +77,6 @@ public class WebApkInfo extends WebappInfo {
             return mData[PARAM_TEXT_INDEX];
         }
 
-        public String getParamUrl() {
-            return mData[PARAM_URL_INDEX];
-        }
-
         public boolean isShareMethodPost() {
             return mIsShareMethodPost;
         }
@@ -109,7 +95,7 @@ public class WebApkInfo extends WebappInfo {
     }
 
     public static WebApkInfo createEmpty() {
-        return create(WebApkIntentDataProvider.createEmpty());
+        return create(createEmptyIntentDataProvider());
     }
 
     /**
@@ -118,7 +104,7 @@ public class WebApkInfo extends WebappInfo {
      * @param intent Intent containing info about the app.
      */
     public static WebApkInfo create(Intent intent) {
-        return create(WebApkIntentDataProvider.create(intent));
+        return create(WebApkIntentDataProviderFactory.create(intent));
     }
 
     /**
@@ -138,9 +124,9 @@ public class WebApkInfo extends WebappInfo {
     public static WebApkInfo create(String webApkPackageName, String url, int source,
             boolean forceNavigation, boolean canUseSplashFromContentProvider, ShareData shareData,
             String shareDataActivityClassName) {
-        return create(
-                WebApkIntentDataProvider.create(webApkPackageName, url, source, forceNavigation,
-                        canUseSplashFromContentProvider, shareData, shareDataActivityClassName));
+        return create(WebApkIntentDataProviderFactory.create(webApkPackageName, url, source,
+                forceNavigation, canUseSplashFromContentProvider, shareData,
+                shareDataActivityClassName));
     }
 
     /**
@@ -148,7 +134,6 @@ public class WebApkInfo extends WebappInfo {
      * @param url                      URL that the WebAPK should navigate to when launched.
      * @param scope                    Scope for the WebAPK.
      * @param primaryIcon              Primary icon to show for the WebAPK.
-     * @param badgeIcon                Badge icon to use for notifications.
      * @param splashIcon               Splash icon to use for the splash screen.
      * @param name                     Name of the WebAPK.
      * @param shortName                The short name of the WebAPK.
@@ -179,20 +164,20 @@ public class WebApkInfo extends WebappInfo {
      * @param webApkVersionCode        WebAPK's version code.
      */
     public static WebApkInfo create(String url, String scope, WebappIcon primaryIcon,
-            WebappIcon badgeIcon, WebappIcon splashIcon, String name, String shortName,
-            @WebDisplayMode int displayMode, int orientation, int source, long themeColor,
-            long backgroundColor, int defaultBackgroundColor, boolean isPrimaryIconMaskable,
-            boolean isSplashIconMaskable, String webApkPackageName, int shellApkVersion,
-            String manifestUrl, String manifestStartUrl, @WebApkDistributor int distributor,
+            WebappIcon splashIcon, String name, String shortName, @WebDisplayMode int displayMode,
+            int orientation, int source, long themeColor, long backgroundColor,
+            int defaultBackgroundColor, boolean isPrimaryIconMaskable, boolean isSplashIconMaskable,
+            String webApkPackageName, int shellApkVersion, String manifestUrl,
+            String manifestStartUrl, @WebApkDistributor int distributor,
             Map<String, String> iconUrlToMurmur2HashMap, ShareTarget shareTarget,
             boolean forceNavigation, boolean isSplashProvidedByWebApk, ShareData shareData,
-            int webApkVersionCode) {
-        return create(WebApkIntentDataProvider.create(url, scope, primaryIcon, badgeIcon,
-                splashIcon, name, shortName, displayMode, orientation, source, themeColor,
-                backgroundColor, defaultBackgroundColor, isPrimaryIconMaskable,
-                isSplashIconMaskable, webApkPackageName, shellApkVersion, manifestUrl,
-                manifestStartUrl, distributor, iconUrlToMurmur2HashMap, shareTarget,
-                forceNavigation, isSplashProvidedByWebApk, shareData, webApkVersionCode));
+            List<ShortcutItem> shortcutItems, int webApkVersionCode) {
+        return create(WebApkIntentDataProviderFactory.create(url, scope, primaryIcon, splashIcon,
+                name, shortName, displayMode, orientation, source, themeColor, backgroundColor,
+                defaultBackgroundColor, isPrimaryIconMaskable, isSplashIconMaskable,
+                webApkPackageName, shellApkVersion, manifestUrl, manifestStartUrl, distributor,
+                iconUrlToMurmur2HashMap, shareTarget, forceNavigation, isSplashProvidedByWebApk,
+                shareData, shortcutItems, webApkVersionCode));
     }
 
     private static WebApkInfo create(@Nullable BrowserServicesIntentDataProvider provider) {
@@ -201,13 +186,6 @@ public class WebApkInfo extends WebappInfo {
 
     public WebApkInfo(@NonNull BrowserServicesIntentDataProvider provider) {
         super(provider);
-    }
-
-    /**
-     * Returns the badge icon in Bitmap form.
-     */
-    public WebappIcon badgeIcon() {
-        return getWebApkExtras().badgeIcon;
     }
 
     /**
@@ -269,7 +247,11 @@ public class WebApkInfo extends WebappInfo {
     }
 
     public ShareData shareData() {
-        return getWebApkExtras().shareData;
+        return mProvider.getShareData();
+    }
+
+    public List<ShortcutItem> shortcutItems() {
+        return getWebApkExtras().shortcutItems;
     }
 
     private WebApkExtras getWebApkExtras() {

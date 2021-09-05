@@ -1,16 +1,41 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="el">
+<translation id="1169602411434249000">Αποκλεισμός ιχνηλατών παρακολούθησης</translation>
+<translation id="1397811292916898096">Αναζήτηση με <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Εναλλαγή κανονικών/ ιδιωτικών καρτελών</translation>
+<translation id="1644574205037202324">Ιστορικό</translation>
+<translation id="17513872634828108">Ανοικτές καρτέλες</translation>
+<translation id="1829244130665387512">Εύρεση στη σελίδα</translation>
+<translation id="2038563949887743358">Ενεργοποίηση αιτήματος ιστότοπου για υπολογιστές</translation>
+<translation id="2433507940547922241">Εμφάνιση</translation>
+<translation id="2633278372998075009">Ιδιωτικές καρτέλες</translation>
 <translation id="3076631378407175873">Πνευματικά δικαιώματα <ph name="YEAR" /> Vivaldi Technologies AS. Με επιφύλαξη παντός δικαιώματος.</translation>
+<translation id="3234355010754616171">Νέα ιδιωτική καρτέλα</translation>
+<translation id="3518985090088779359">Αποδοχή και συνέχεια</translation>
 <translation id="3700829948786686853">Καλώς ήρθατε στο Vivaldi</translation>
 <translation id="4121750346708795461">Χρησιμοποιώντας αυτήν την εφαρμογή, αποδέχεστε τους <ph name="BEGIN_LINK1" />Όρους Παροχής Υπηρεσιών<ph name="END_LINK1" /> και τη <ph name="BEGIN_LINK2" />Σημείωση Απορρήτου<ph name="END_LINK2" /> του Vivaldi.</translation>
+<translation id="4243710787042215766">Άνοιγμα σε ιδιωτική καρτέλα</translation>
+<translation id="4526803704855831732">Ιδιωτικές Καρτέλες</translation>
+<translation id="4883379392681899581">Έξοδος από την ιδιωτική λειτουργία</translation>
+<translation id="4943872375798546930">Δεν υπάρχουν αποτελέσματα</translation>
 <translation id="5118676864324397542">Αποθηκευτικός χώρος Vivaldi <ph name="APP_NAME" /></translation>
+<translation id="5233638681132016545">Νέα καρτέλα</translation>
+<translation id="5495228542153126976">Έχετε εισέλθει σε ιδιωτική λειτουργία</translation>
+<translation id="572328651809341494">Πρόσφατες καρτέλες</translation>
 <translation id="5840488417521835756">Ενημερωθείτε σχετικά με τα θέματα των ιστοτόπων, χωρίς να αποχωρήσετε από τη σελίδα. Η λειτουργία "Πατήστε για αναζήτηση" είναι διαθέσιμη μόνο όταν η Google έχει οριστεί ως προεπιλεγμένη μηχανή αναζήτησης στο Vivaldi. Στέλνει μια λέξη και τα συμφραζόμενά της στην Αναζήτηση Google και εμφανίζει ορισμούς, εικόνες, αποτελέσματα αναζήτησης και άλλες λεπτομέρειες.
 
 Για να τροποποιήσετε τον όρο αναζήτησης, πατήστε παρατεταμένα για να τον επιλέξετε. Για να κάνετε την αναζήτησή σας πιο συγκεκριμένη, σύρετε το παράθυρο εντελώς προς τα επάνω και πατήστε το πλαίσιο αναζήτησης.</translation>
+<translation id="6336451774241870485">Νέα ιδιωτική καρτέλα</translation>
+<translation id="6593061639179217415">Για υπολογιστή</translation>
+<translation id="6610147964972079463">Κλείσιμο ιδιωτικών καρτελών</translation>
 <translation id="706339621163631076">Πολιτική Απορρήτου του Προγράμματος Περιήγησης</translation>
 <translation id="7427132068601343474">Σχετικά με το Vivaldi</translation>
+<translation id="7465104139234185284">Κλείσιμο όλων των ιδιωτικών καρτελών</translation>
 <translation id="7519434535192513364">Η λειτουργία "Πατήστε για αναζήτηση" είναι διαθέσιμη μόνο όταν η Google έχει οριστεί ως προεπιλεγμένη μηχανή αναζήτησης στο Vivaldi. Αποστέλλει την επιλεγμένη λέξη και την τρέχουσα σελίδα ως περιβάλλον στην Αναζήτηση Google. Μπορείτε να την απενεργοποιήσετε στις <ph name="BEGIN_LINK" />Ρυθμίσεις<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Βοήθεια</translation>
 <translation id="804786196054284061">Άδεια Χρήσης</translation>
+<translation id="8820817407110198400">Σελιδοδείκτες</translation>
+<translation id="9063523880881406963">Απενεργοποίηση αιτήματος ιστότοπου για υπολογιστές</translation>
+<translation id="9080642952018487277">Είσοδος σε ιδιωτική λειτουργία</translation>
 </translationbundle>

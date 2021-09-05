@@ -4,6 +4,9 @@
 
 #include "components/performance_manager/public/web_contents_proxy.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/run_loop.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
@@ -48,11 +51,10 @@ TEST_F(WebContentsProxyTest, EndToEnd) {
   // would happen with a policy message being posted from the graph.
   {
     base::RunLoop run_loop;
-    PerformanceManagerImpl::GetInstance()->CallOnGraphImpl(
+    PerformanceManagerImpl::CallOnGraphImpl(
         FROM_HERE,
         base::BindLambdaForTesting(
-            [&deref_proxy, page_node,
-             quit_loop = run_loop.QuitClosure()](GraphImpl* graph) {
+            [&deref_proxy, page_node, quit_loop = run_loop.QuitClosure()]() {
               base::PostTask(
                   FROM_HERE, {content::BrowserThread::UI},
                   base::BindOnce(deref_proxy, page_node->contents_proxy(),
@@ -67,11 +69,10 @@ TEST_F(WebContentsProxyTest, EndToEnd) {
   // dereferencing the proxy.
   {
     base::RunLoop run_loop;
-    PerformanceManagerImpl::GetInstance()->CallOnGraphImpl(
+    PerformanceManagerImpl::CallOnGraphImpl(
         FROM_HERE,
         base::BindLambdaForTesting([&contents, &deref_proxy, page_node,
-                                    quit_loop = run_loop.QuitClosure()](
-                                       GraphImpl* graph) {
+                                    quit_loop = run_loop.QuitClosure()]() {
           base::PostTask(
               FROM_HERE, {content::BrowserThread::UI},
               base::BindLambdaForTesting([&contents]() { contents.reset(); }));

@@ -17,6 +17,10 @@ namespace content {
 class BrowserContext;
 }
 
+namespace web_app {
+class AppIconManager;
+}
+
 namespace apps {
 
 // A bitwise-or of icon post-processing effects.
@@ -30,9 +34,11 @@ enum IconEffects : uint32_t {
   // resize-and-then-badge and never badge-and-then-resize, which can matter if
   // the badge has a fixed size.
   kResizeAndPad = 0x01,  // Resize and Pad per Material Design style.
-  kBadge = 0x02,         // Another (Android) app has the same name.
-  kGray = 0x04,          // Disabled apps are grayed out.
+  kChromeBadge = 0x02,   // Another (Android) app has the same name.
+  kBlocked = 0x04,       // Disabled apps are grayed out and badged.
   kRoundCorners = 0x08,  // Bookmark apps get round corners.
+  kPaused = 0x10,  // Paused apps are grayed out and badged to indicate they
+                   // cannot be launched.
 };
 
 // Modifies |image_skia| to apply icon post-processing effects like badging and
@@ -48,6 +54,14 @@ void LoadIconFromExtension(apps::mojom::IconCompression icon_compression,
                            const std::string& extension_id,
                            IconEffects icon_effects,
                            apps::mojom::Publisher::LoadIconCallback callback);
+
+// Loads an icon from a web app.
+void LoadIconFromWebApp(const web_app::AppIconManager& icon_manager,
+                        apps::mojom::IconCompression icon_compression,
+                        int size_hint_in_dip,
+                        const std::string& web_app_id,
+                        IconEffects icon_effects,
+                        apps::mojom::Publisher::LoadIconCallback callback);
 
 // Loads an icon from a FilePath. If that fails, it calls the fallback.
 //

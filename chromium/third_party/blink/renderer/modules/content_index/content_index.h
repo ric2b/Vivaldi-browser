@@ -16,6 +16,7 @@
 namespace blink {
 
 class ContentDescription;
+class ExceptionState;
 class ScriptPromiseResolver;
 class ScriptState;
 class ServiceWorkerRegistration;
@@ -30,11 +31,15 @@ class ContentIndex final : public ScriptWrappable {
 
   // Web-exposed function defined in the IDL file.
   ScriptPromise add(ScriptState* script_state,
-                    const ContentDescription* description);
-  ScriptPromise deleteDescription(ScriptState* script_state, const String& id);
-  ScriptPromise getDescriptions(ScriptState* script_state);
+                    const ContentDescription* description,
+                    ExceptionState& exception_state);
+  ScriptPromise deleteDescription(ScriptState* script_state,
+                                  const String& id,
+                                  ExceptionState& exception_state);
+  ScriptPromise getDescriptions(ScriptState* script_state,
+                                ExceptionState& exception_state);
 
-  void Trace(blink::Visitor* visitor) override;
+  void Trace(Visitor* visitor) override;
 
  private:
   mojom::blink::ContentIndexService* GetService();
@@ -42,7 +47,7 @@ class ContentIndex final : public ScriptWrappable {
   // Callbacks.
   void DidGetIconSizes(ScriptPromiseResolver* resolver,
                        mojom::blink::ContentDescriptionPtr description,
-                       const Vector<WebSize>& icon_sizes);
+                       const Vector<gfx::Size>& icon_sizes);
   void DidGetIcons(ScriptPromiseResolver* resolver,
                    mojom::blink::ContentDescriptionPtr description,
                    Vector<SkBitmap> icons);

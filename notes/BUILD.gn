@@ -5,7 +5,7 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-jumbo_static_library("notes") {
+static_library("notes") {
   sources = [
     "note_attachment.cpp",
     "note_attachment.h",
@@ -15,8 +15,8 @@ jumbo_static_library("notes") {
     "notes_model.h",
     "notes_storage.cpp",
     "notes_storage.h",
-    "notesnode.cpp",
-    "notesnode.h",
+    "note_node.cpp",
+    "note_node.h",
     "scoped_group_notes_actions.cpp",
     "scoped_group_notes_actions.h",
   ]
@@ -28,13 +28,12 @@ jumbo_static_library("notes") {
     ]
   }
   deps = [
-    "//base:base",
+    "//base",
     "//base:i18n",
     #"//chrome:strings",
     #"//chrome/common/importer:interfaces",
     "//components/keyed_service/core:core",
     "//components/keyed_service/content:content",
-    "//components/renderer_context_menu:renderer_context_menu",
     "//content/public/browser",
     "//skia",
     "//third_party/icu",
@@ -42,17 +41,21 @@ jumbo_static_library("notes") {
     "//url:url",
     "//vivaldi/app:vivaldi_native_resources",
     "//vivaldi/app:vivaldi_unscaled_native_resources",
+    "//vivaldi/importer:browser",
+    "//vivaldi/sync/notes:sync_notes",
   ]
   public_deps = [
     #"//chrome/browser",
     "//components/bookmarks/browser",
-    "//components/renderer_context_menu",
     "//components/sync/protocol",
     #"//vivaldi/sync",
   ]
+  allow_circular_includes_from = [
+    "//vivaldi/sync/notes:sync_notes",
+  ]
 }
 
-jumbo_static_library("browser") {
+static_library("browser") {
   sources = [
     "notes_factory.cpp",
     "notes_factory.h",
@@ -88,16 +91,28 @@ jumbo_static_library("browser") {
     "//base:base",
     "//base:i18n",
     "//chrome:strings",
-    "//components/keyed_service/core:core",
-    "//components/keyed_service/content:content",
-    "//components/renderer_context_menu:renderer_context_menu",
+    "//components/keyed_service/core",
+    "//components/keyed_service/content",
+    "//components/prefs",
+    "//components/renderer_context_menu",
     "//content/public/browser",
     "//skia",
+    "//vivaldi/app:vivaldi_native_strings",
     "//vivaldi/prefs:prefs_files_generator",
+    "//vivaldi/sync/notes:sync_notes",
   ]
   public_deps = [
     ":notes",
     "//components/bookmarks/browser",
+  ]
+  if (!is_android) {
+    deps += [
+      "//ui/views",
+    ]
+  }
+  allow_circular_includes_from = [
+    ":notes",
+    "//vivaldi/sync/notes:sync_notes",
   ]
 }
 
@@ -107,6 +122,7 @@ source_set("unit_tests") {
     "notes_codec_unittest.cpp"
   ]
   deps = [
+    "//base",
     "//skia",
     "//testing/gtest",
     "//third_party/boringssl",

@@ -42,6 +42,7 @@ namespace {
 
 constexpr int kBufferSize = 4096;
 constexpr char kCertIssuerWildCard[] = "*";
+constexpr char kJsonSafetyPrefix[] = ")]}'\n";
 
 // Returns a value from the issuer field for certificate selection, in order of
 // preference.  If the O or OU entries are populated with multiple values, we
@@ -126,12 +127,12 @@ TokenValidatorBase::~TokenValidatorBase() = default;
 // TokenValidator interface.
 void TokenValidatorBase::ValidateThirdPartyToken(
     const std::string& token,
-    const base::Callback<void(
-        const std::string& shared_secret)>& on_token_validated) {
+    base::OnceCallback<void(const std::string& shared_secret)>
+        on_token_validated) {
   DCHECK(!request_);
   DCHECK(!on_token_validated.is_null());
 
-  on_token_validated_ = on_token_validated;
+  on_token_validated_ = std::move(on_token_validated);
   token_ = token;
   StartValidateRequest(token);
 }
@@ -177,7 +178,7 @@ void TokenValidatorBase::OnReadCompleted(net::URLRequest* source,
   retrying_request_ = false;
   std::string shared_token = ProcessResponse(net_result);
   request_.reset();
-  on_token_validated_.Run(shared_token);
+  std::move(on_token_validated_).Run(shared_token);
 }
 
 void TokenValidatorBase::OnReceivedRedirect(
@@ -293,7 +294,14 @@ std::string TokenValidatorBase::ProcessResponse(int net_result) {
   }
 
   // Decode the JSON data from the response.
-  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(data_);
+  // Server can potentially pad the JSON response with a magic prefix. We need
+  // to strip that off if that exists.
+  std::string responseData =
+      base::StartsWith(data_, kJsonSafetyPrefix, base::CompareCase::SENSITIVE)
+          ? data_.substr(sizeof(kJsonSafetyPrefix) - 1)
+          : data_;
+
+  base::Optional<base::Value> value = base::JSONReader::Read(responseData);
   base::DictionaryValue* dict;
   if (!value || !value->GetAsDictionary(&dict)) {
     LOG(ERROR) << "Invalid token validation response: '" << data_ << "'";

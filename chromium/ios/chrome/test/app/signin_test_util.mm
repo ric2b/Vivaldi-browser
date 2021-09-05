@@ -27,6 +27,29 @@
 
 namespace chrome_test_util {
 
+namespace {
+
+// Starts forgetting all identities from the ChromeIdentity services.
+//
+// Note: Forgetting an identity is a asynchronous operation. This function does
+// not wait for the forget identity operation to finish.
+void StartForgetAllIdentities() {
+  ios::ChromeIdentityService* identity_service =
+      ios::GetChromeBrowserProvider()->GetChromeIdentityService();
+  NSArray* identities_to_remove =
+      [NSArray arrayWithArray:identity_service->GetAllIdentities()];
+  for (ChromeIdentity* identity in identities_to_remove) {
+    identity_service->ForgetIdentity(identity, ^(NSError* error) {
+      if (error) {
+        NSLog(@"ForgetIdentity failed: [identity = %@, error = %@]",
+              identity.userEmail, [error localizedDescription]);
+      }
+    });
+  }
+}
+
+}  // namespace
+
 void SetUpMockAuthentication() {
   ios::ChromeBrowserProvider* provider = ios::GetChromeBrowserProvider();
   std::unique_ptr<ios::FakeChromeIdentityService> service(
@@ -52,41 +75,42 @@ void TearDownMockAccountReconcilor() {
   GaiaAuthFetcherIOS::SetShouldUseGaiaAuthFetcherIOSForTesting(true);
 }
 
-bool SignOutAndClearAccounts() {
-  ios::ChromeBrowserState* browser_state = GetOriginalBrowserState();
-  DCHECK(browser_state);
+void SignOutAndClearIdentities() {
+  // EarlGrey monitors network requests by swizzling internal iOS network
+  // objects and expects them to be dealloced before the tear down. It is
+  // important to autorelease all objects that make network requests to avoid
+  // EarlGrey being confused about on-going network traffic..
+  @autoreleasepool {
+    ChromeBrowserState* browser_state = GetOriginalBrowserState();
+    DCHECK(browser_state);
 
-  // Sign out current user.
-  AuthenticationService* authentication_service =
-      AuthenticationServiceFactory::GetForBrowserState(browser_state);
-  if (authentication_service->IsAuthenticated()) {
-    authentication_service->SignOut(signin_metrics::SIGNOUT_TEST, nil);
+    // Sign out current user.
+    AuthenticationService* authentication_service =
+        AuthenticationServiceFactory::GetForBrowserState(browser_state);
+    if (authentication_service->IsAuthenticated()) {
+      authentication_service->SignOut(signin_metrics::SIGNOUT_TEST,
+                                      /*force_clear_browsing_data=*/false, nil);
+    }
+
+    // Clear last signed in user preference.
+    browser_state->GetPrefs()->ClearPref(prefs::kGoogleServicesLastAccountId);
+    browser_state->GetPrefs()->ClearPref(prefs::kGoogleServicesLastUsername);
+
+    // |SignOutAndClearIdentities()| is called during shutdown. Commit all pref
+    // changes to ensure that clearing the last signed in account is saved on
+    // disk in case Chrome crashes during shutdown.
+    browser_state->GetPrefs()->CommitPendingWrite();
+
+    // Once the browser was signed out, start clearing all identities from the
+    // ChromeIdentityService.
+    StartForgetAllIdentities();
   }
+}
 
-  // Clear last signed in user preference.
-  browser_state->GetPrefs()->ClearPref(prefs::kGoogleServicesLastAccountId);
-  browser_state->GetPrefs()->ClearPref(prefs::kGoogleServicesLastUsername);
-
-  // |SignOutAndClearAccounts()| is called during shutdown. Commit all pref
-  // changes to ensure that clearing the last signed in account is saved on disk
-  // in case Chrome crashes during shutdown.
-  browser_state->GetPrefs()->CommitPendingWrite();
-
-  // Clear known identities.
+bool HasIdentities() {
   ios::ChromeIdentityService* identity_service =
       ios::GetChromeBrowserProvider()->GetChromeIdentityService();
-  NSArray* identities([identity_service->GetAllIdentities() copy]);
-  for (ChromeIdentity* identity in identities) {
-    identity_service->ForgetIdentity(identity, nil);
-  }
-
-  NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:10.0];
-  while (identity_service->HasIdentities() &&
-         [[NSDate date] compare:deadline] != NSOrderedDescending) {
-    base::test::ios::SpinRunLoopWithMaxDelay(
-        base::TimeDelta::FromSecondsD(0.01));
-  }
-  return !identity_service->HasIdentities();
+  return identity_service->HasIdentities();
 }
 
 void ResetMockAuthentication() {
@@ -95,7 +119,7 @@ void ResetMockAuthentication() {
 }
 
 void ResetSigninPromoPreferences() {
-  ios::ChromeBrowserState* browser_state = GetOriginalBrowserState();
+  ChromeBrowserState* browser_state = GetOriginalBrowserState();
   PrefService* prefs = browser_state->GetPrefs();
   prefs->SetInteger(prefs::kIosBookmarkSigninPromoDisplayedCount, 0);
   prefs->SetBoolean(prefs::kIosBookmarkPromoAlreadySeen, false);

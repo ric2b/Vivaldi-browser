@@ -1,29 +1,46 @@
 <style>
   :host {
-    --tabstrip-tab-title-height: 40px;
     --tabstrip-tab-transition-duration: 250ms;
 
-    cursor: pointer;
+    display: block;
     height: var(--tabstrip-tab-height);
+    padding-inline-end: var(--tabstrip-tab-spacing);
     position: relative;
+    transform-origin: top left;
     width: var(--tabstrip-tab-width);
   }
 
-  #dragImage {
+  :host-context([dir='rtl']) {
+    transform-origin: top right;
+  }
+
+  #tab {
     background: var(--tabstrip-tab-background-color);
     border-radius: var(--tabstrip-tab-border-radius);
     box-shadow: 0 0 0 1px var(--tabstrip-tab-separator-color);
     color: var(--tabstrip-tab-text-color);
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: var(--tabstrip-tab-height);
     overflow: hidden;
-    width: 100%;
+    width: var(--tabstrip-tab-width);
   }
 
-  :host([active]) #dragImage {
-    box-shadow: 0 0 0 2px var(--tabstrip-tab-active-border-color);
+  #tab:focus {
     outline: none;
+  }
+
+  :host-context(.focus-outline-visible) #tab:focus {
+    box-shadow: 0 0 0 2px var(--tabstrip-focus-outline-color);
+  }
+
+  :host([active]) #tab {
+    box-shadow: 0 0 0 2px var(--tabstrip-tab-active-border-color);
+  }
+
+  :host-context(.focus-outline-visible):host([active]) #tab:focus {
+    box-shadow: 0 0 0 4px var(--tabstrip-focus-outline-color),
+                0 0 0 2px var(--tabstrip-tab-active-border-color);
   }
 
   #title {
@@ -66,7 +83,7 @@
                 opacity 0ms;
   }
 
-  :host([pinned_]) #faviconContainer {
+  :host([pinned]) #faviconContainer {
     margin: 0;
   }
 
@@ -168,6 +185,7 @@
   }
 
   #titleText {
+    flex: 1;
     font-size: 100%;
     font-weight: normal;
     overflow: hidden;
@@ -175,8 +193,13 @@
     white-space: nowrap;
   }
 
+  :host([has-alert-states_]) #titleText {
+    margin-inline-end: 4px;
+  }
+
   #close {
     -webkit-appearance: none;
+    -webkit-tap-highlight-color: transparent;
     align-items: center;
     background-color: transparent;
     border: 0;
@@ -186,7 +209,7 @@
     flex-shrink: 0;
     height: 100%;
     justify-content: center;
-    margin-inline-start: auto;
+    outline: none;
     padding: 0;
     position: relative;
     width: 36px;
@@ -194,7 +217,7 @@
 
   #closeIcon {
     -webkit-mask:
-        url(chrome://resources/images/icon_clear.svg)center/contain no-repeat;
+        url(chrome://resources/images/icon_clear.svg) center/contain no-repeat;
     background-color: currentColor;
     display: block;
     height: 18px;
@@ -202,19 +225,30 @@
     width: 18px;
   }
 
+  :host-context(.focus-outline-visible) #close:focus #closeIconFocus {
+    background: currentColor;
+    border-radius: 50%;
+    height: 24px;
+    opacity: 0.16;
+    position: absolute;
+    width: 24px;
+  }
+
   #thumbnail {
-    align-items: center;
+    align-items: flex-start;
     background: var(--tabstrip-tab-background-color);
     display: flex;
     flex: 1;
+    height: var(--tabstrip-tab-thumbnail-height);
     justify-content: center;
+    width: var(--tabstrip-tab-thumbnail-width);
   }
 
   #thumbnailImg {
-    height: calc(var(--tabstrip-tab-height) - var(--tabstrip-tab-title-height));
+    min-height: 100%;
     object-fit: cover;
     pointer-events: none;
-    width: var(--tabstrip-tab-width);
+    width: 100%;
   }
 
   #thumbnailImg:not([src]) {
@@ -224,19 +258,23 @@
   }
 
   /* Pinned tab styles */
-  :host([pinned_]) {
-    height: var(--tabstrip-pinned-tab-size);
-    width: var(--tabstrip-pinned-tab-size);
+  :host([pinned]) {
+    --tabstrip-tab-height: var(--tabstrip-pinned-tab-size);
+    --tabstrip-tab-width: var(--tabstrip-pinned-tab-size);
   }
 
-  :host([pinned_]) #title {
+  :host([pinned]) #title {
     border-block-end: 0;
     height: 100%;
   }
 
-  :host([pinned_]) #titleText,
-  :host([pinned_]) #close,
-  :host([pinned_]) #thumbnail {
+  :host([pinned]) #titleText,
+  :host([pinned]) #close,
+  :host([pinned]) #thumbnail {
+    display: none;
+  }
+
+  :host([pinned][has-alert-states_]) #faviconContainer {
     display: none;
   }
 
@@ -251,29 +289,57 @@
   /* When being dragged, the contents of the drag image needs to be off-screen
    * with nothing else on top or below obscuring it. */
   :host([dragging_]) #dragImage {
-    box-shadow: none;
+    /* Enough padding to not crop the box shadow set on #tab below. */
+    --drag-image-padding: 25px;
+    align-items: center;
+    display: flex;
+    height: 100%;
+    justify-content: center;
+    padding-block-end: var(--drag-image-padding);
+    padding-block-start: var(--drag-image-padding);
+    padding-inline-end: calc(
+        var(--tabstrip-tab-spacing) + var(--drag-image-padding));
+    padding-inline-start: var(--drag-image-padding);
     position: absolute;
-    top: -999px;
+    top: 100vh;
+    width: 100%;
+  }
+
+  :host([dragging_]) #tab {
+    box-shadow: var(--tabstrip-tab-dragging-shadow);
+    transform: scale(var(--tabstrip-tab-drag-image-scale));
   }
 </style>
 
 <div id="dragPlaceholder"></div>
 
+<!--
+  #dragImage is a wrapper that wraps the entire #tab contents so that #tab can
+  be styled with properties, such as box-shadow, that extend beyond #tab's
+  boundaries and #dragImage can add padding to itself to contain all of #tab's
+  styles. When the tab is not being dragged, the #dragImage parent has no use.
+-->
 <div id="dragImage">
-  <header id="title">
-    <div id="faviconContainer">
-      <div id="progressSpinner"></div>
-      <div id="favicon"></div>
-      <div id="crashedIcon"></div>
-      <div id="blocked"></div>
-    </div>
-    <h2 id="titleText"></h2>
-    <button id="close">
-      <span id="closeIcon"></span>
-    </button>
-  </header>
+  <div id="tab" role="tab" tabindex="0"
+      aria-labelledby="titleText alertIndicators">
+    <header id="title">
+      <div id="faviconContainer" aria-hidden="true">
+        <div id="progressSpinner"></div>
+        <div id="favicon"></div>
+        <div id="crashedIcon"></div>
+        <div id="blocked"></div>
+      </div>
+      <h2 id="titleText"></h2>
+      <tabstrip-alert-indicators id="alertIndicators">
+      </tabstrip-alert-indicators>
+      <button id="close" aria-describedby="titleText">
+        <span id="closeIconFocus"></span>
+        <span id="closeIcon"></span>
+      </button>
+    </header>
 
-  <div id="thumbnail">
-    <img id="thumbnailImg">
+    <div id="thumbnail">
+      <img id="thumbnailImg">
+    </div>
   </div>
 </div>

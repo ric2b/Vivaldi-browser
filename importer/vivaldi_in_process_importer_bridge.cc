@@ -2,6 +2,7 @@
 
 #include "chrome/browser/importer/in_process_importer_bridge.h"
 
+#include "chrome/browser/importer/external_process_importer_host.h"
 #include "importer/imported_notes_entry.h"
 #include "importer/imported_speeddial_entry.h"
 

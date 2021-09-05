@@ -15,13 +15,15 @@
 #include "base/timer/timer.h"
 #include "components/page_load_metrics/common/page_load_metrics_constants.h"
 #include "components/page_load_metrics/renderer/page_timing_sender.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace page_load_metrics {
 
 namespace {
 const int kInitialTimerDelayMillis = 50;
+const int64_t kInputDelayAdjustmentMillis = int64_t(50);
 const base::Feature kPageLoadMetricsTimerDelayFeature{
     "PageLoadMetricsTimerDelay", base::FEATURE_DISABLED_BY_DEFAULT};
 }  // namespace
@@ -30,16 +32,18 @@ PageTimingMetricsSender::PageTimingMetricsSender(
     std::unique_ptr<PageTimingSender> sender,
     std::unique_ptr<base::OneShotTimer> timer,
     mojom::PageLoadTimingPtr initial_timing,
+    const PageTimingMetadataRecorder::MonotonicTiming& initial_monotonic_timing,
     std::unique_ptr<PageResourceDataUse> initial_request)
     : sender_(std::move(sender)),
       timer_(std::move(timer)),
       last_timing_(std::move(initial_timing)),
       last_cpu_timing_(mojom::CpuTiming::New()),
-      metadata_(mojom::PageLoadMetadata::New()),
+      input_timing_delta_(mojom::InputTiming::New()),
+      metadata_(mojom::FrameMetadata::New()),
       new_features_(mojom::PageLoadFeatures::New()),
-      render_data_(),
       new_deferred_resource_data_(mojom::DeferredResourceCounts::New()),
-      buffer_timer_delay_ms_(kBufferTimerDelayMillis) {
+      buffer_timer_delay_ms_(kBufferTimerDelayMillis),
+      metadata_recorder_(initial_monotonic_timing) {
   page_resource_data_use_.emplace(
       std::piecewise_construct,
       std::forward_as_tuple(initial_request->resource_id()),
@@ -52,13 +56,11 @@ PageTimingMetricsSender::PageTimingMetricsSender(
   }
 }
 
-// On destruction, we want to send any data we have if we have a timer
-// currently running (and thus are talking to a browser process)
 PageTimingMetricsSender::~PageTimingMetricsSender() {
-  if (timer_->IsRunning()) {
-    timer_->Stop();
-    SendNow();
-  }
+  // Make sure we don't have any unsent data. If this assertion fails, then it
+  // means metrics are somehow coming in between MetricsRenderFrameObserver's
+  // ReadyToCommitNavigation and DidCommitProvisionalLoad.
+  DCHECK(!timer_->IsRunning());
 }
 
 void PageTimingMetricsSender::DidObserveLoadingBehavior(
@@ -127,8 +129,8 @@ void PageTimingMetricsSender::DidObserveLazyLoadBehavior(
 void PageTimingMetricsSender::DidStartResponse(
     const GURL& response_url,
     int resource_id,
-    const network::ResourceResponseHead& response_head,
-    content::ResourceType resource_type,
+    const network::mojom::URLResponseHead& response_head,
+    network::mojom::RequestDestination request_destination,
     content::PreviewsState previews_state) {
   DCHECK(!base::Contains(page_resource_data_use_, resource_id));
 
@@ -136,7 +138,8 @@ void PageTimingMetricsSender::DidStartResponse(
       std::piecewise_construct, std::forward_as_tuple(resource_id),
       std::forward_as_tuple(std::make_unique<PageResourceDataUse>()));
   resource_it.first->second->DidStartResponse(
-      response_url, resource_id, response_head, resource_type, previews_state);
+      response_url, resource_id, response_head, request_destination,
+      previews_state);
 }
 
 void PageTimingMetricsSender::DidReceiveTransferSizeUpdate(
@@ -205,6 +208,13 @@ void PageTimingMetricsSender::DidLoadResourceFromMemoryCache(
   modified_resources_.insert(resource_it.first->second.get());
 }
 
+void PageTimingMetricsSender::OnMainFrameDocumentIntersectionChanged(
+    const blink::WebRect& main_frame_document_intersection) {
+  metadata_->intersection_update = mojom::FrameIntersectionUpdate::New(
+      gfx::Rect(main_frame_document_intersection));
+  EnsureSendTimer();
+}
+
 void PageTimingMetricsSender::UpdateResourceMetadata(
     int resource_id,
     bool reported_as_ad_resource,
@@ -227,7 +237,9 @@ void PageTimingMetricsSender::UpdateResourceMetadata(
   it->second->SetIsMainFrameResource(is_main_frame_resource);
 }
 
-void PageTimingMetricsSender::Send(mojom::PageLoadTimingPtr timing) {
+void PageTimingMetricsSender::Update(
+    mojom::PageLoadTimingPtr timing,
+    const PageTimingMetadataRecorder::MonotonicTiming& monotonic_timing) {
   if (last_timing_->Equals(*timing)) {
     return;
   }
@@ -241,7 +253,16 @@ void PageTimingMetricsSender::Send(mojom::PageLoadTimingPtr timing) {
   }
 
   last_timing_ = std::move(timing);
+  metadata_recorder_.UpdateMetadata(monotonic_timing);
   EnsureSendTimer();
+}
+
+void PageTimingMetricsSender::SendLatest() {
+  if (!timer_->IsRunning())
+    return;
+
+  timer_->Stop();
+  SendNow();
 }
 
 void PageTimingMetricsSender::UpdateCpuTiming(base::TimeDelta task_time) {
@@ -250,15 +271,16 @@ void PageTimingMetricsSender::UpdateCpuTiming(base::TimeDelta task_time) {
 }
 
 void PageTimingMetricsSender::EnsureSendTimer() {
-  if (!timer_->IsRunning()) {
-    // Send the first IPC eagerly to make sure the receiving side knows we're
-    // sending metrics as soon as possible.
-    int delay_ms =
-        have_sent_ipc_ ? buffer_timer_delay_ms_ : kInitialTimerDelayMillis;
-    timer_->Start(
-        FROM_HERE, base::TimeDelta::FromMilliseconds(delay_ms),
-        base::Bind(&PageTimingMetricsSender::SendNow, base::Unretained(this)));
-  }
+  if (timer_->IsRunning())
+    return;
+
+  // Send the first IPC eagerly to make sure the receiving side knows we're
+  // sending metrics as soon as possible.
+  int delay_ms =
+      have_sent_ipc_ ? buffer_timer_delay_ms_ : kInitialTimerDelayMillis;
+  timer_->Start(FROM_HERE, base::TimeDelta::FromMilliseconds(delay_ms),
+                base::BindOnce(&PageTimingMetricsSender::SendNow,
+                               base::Unretained(this)));
 }
 
 void PageTimingMetricsSender::SendNow() {
@@ -270,15 +292,30 @@ void PageTimingMetricsSender::SendNow() {
       page_resource_data_use_.erase(resource->resource_id());
     }
   }
+
   sender_->SendTiming(last_timing_, metadata_, std::move(new_features_),
                       std::move(resources), render_data_, last_cpu_timing_,
-                      std::move(new_deferred_resource_data_));
+                      std::move(new_deferred_resource_data_),
+                      std::move(input_timing_delta_));
+  input_timing_delta_ = mojom::InputTiming::New();
   new_deferred_resource_data_ = mojom::DeferredResourceCounts::New();
   new_features_ = mojom::PageLoadFeatures::New();
+  metadata_->intersection_update.reset();
   last_cpu_timing_->task_time = base::TimeDelta();
   modified_resources_.clear();
   render_data_.layout_shift_delta = 0;
   render_data_.layout_shift_delta_before_input_or_scroll = 0;
+}
+
+void PageTimingMetricsSender::DidObserveInputDelay(
+    base::TimeDelta input_delay) {
+  input_timing_delta_->num_input_events++;
+  input_timing_delta_->total_input_delay += input_delay;
+  input_timing_delta_->total_adjusted_input_delay +=
+      base::TimeDelta::FromMilliseconds(
+          std::max(int64_t(0),
+                   input_delay.InMilliseconds() - kInputDelayAdjustmentMillis));
+  EnsureSendTimer();
 }
 
 }  // namespace page_load_metrics

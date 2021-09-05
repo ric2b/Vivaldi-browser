@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/web/modules/peerconnection/mock_peer_connection_dependency_factory.h"
+#include "third_party/blink/renderer/modules/peerconnection/mock_peer_connection_dependency_factory.h"
 
 #include <stddef.h>
 
 #include "base/single_thread_task_runner.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
-#include "third_party/blink/public/web/modules/peerconnection/mock_peer_connection_impl.h"
+#include "third_party/blink/renderer/modules/peerconnection/mock_peer_connection_impl.h"
 #include "third_party/webrtc/api/media_stream_interface.h"
 #include "third_party/webrtc/api/scoped_refptr.h"
 
@@ -192,8 +192,9 @@ MockWebRtcVideoTrack::MockWebRtcVideoTrack(
 MockWebRtcVideoTrack::~MockWebRtcVideoTrack() {}
 
 scoped_refptr<MockWebRtcVideoTrack> MockWebRtcVideoTrack::Create(
-    const std::string& id) {
-  return new rtc::RefCountedObject<MockWebRtcVideoTrack>(id, nullptr);
+    const std::string& id,
+    scoped_refptr<webrtc::VideoTrackSourceInterface> source) {
+  return new rtc::RefCountedObject<MockWebRtcVideoTrack>(id, source.get());
 }
 
 void MockWebRtcVideoTrack::AddOrUpdateSink(
@@ -250,6 +251,62 @@ void MockWebRtcVideoTrack::SetEnded() {
   for (auto* o : observers_)
     o->OnChanged();
 }
+
+scoped_refptr<MockWebRtcVideoTrackSource> MockWebRtcVideoTrackSource::Create(
+    bool supports_encoded_output) {
+  return new rtc::RefCountedObject<MockWebRtcVideoTrackSource>(
+      supports_encoded_output);
+}
+
+MockWebRtcVideoTrackSource::MockWebRtcVideoTrackSource(
+    bool supports_encoded_output)
+    : supports_encoded_output_(supports_encoded_output) {}
+
+bool MockWebRtcVideoTrackSource::is_screencast() const {
+  return false;
+}
+
+absl::optional<bool> MockWebRtcVideoTrackSource::needs_denoising() const {
+  return absl::nullopt;
+}
+
+bool MockWebRtcVideoTrackSource::GetStats(Stats* stats) {
+  return false;
+}
+
+bool MockWebRtcVideoTrackSource::SupportsEncodedOutput() const {
+  return supports_encoded_output_;
+}
+
+void MockWebRtcVideoTrackSource::GenerateKeyFrame() {}
+
+void MockWebRtcVideoTrackSource::AddEncodedSink(
+    rtc::VideoSinkInterface<webrtc::RecordableEncodedFrame>* sink) {}
+
+void MockWebRtcVideoTrackSource::RemoveEncodedSink(
+    rtc::VideoSinkInterface<webrtc::RecordableEncodedFrame>* sink) {}
+
+void MockWebRtcVideoTrackSource::RegisterObserver(
+    webrtc::ObserverInterface* observer) {}
+
+void MockWebRtcVideoTrackSource::UnregisterObserver(
+    webrtc::ObserverInterface* observer) {}
+
+webrtc::MediaSourceInterface::SourceState MockWebRtcVideoTrackSource::state()
+    const {
+  return webrtc::MediaSourceInterface::kLive;
+}
+
+bool MockWebRtcVideoTrackSource::remote() const {
+  return supports_encoded_output_;
+}
+
+void MockWebRtcVideoTrackSource::AddOrUpdateSink(
+    rtc::VideoSinkInterface<webrtc::VideoFrame>* sink,
+    const rtc::VideoSinkWants& wants) {}
+
+void MockWebRtcVideoTrackSource::RemoveSink(
+    rtc::VideoSinkInterface<webrtc::VideoFrame>* sink) {}
 
 class MockSessionDescription : public SessionDescriptionInterface {
  public:
@@ -347,35 +404,34 @@ MockPeerConnectionDependencyFactory::CreateVideoTrackSourceProxy(
 }
 scoped_refptr<webrtc::MediaStreamInterface>
 MockPeerConnectionDependencyFactory::CreateLocalMediaStream(
-    const std::string& label) {
-  return new rtc::RefCountedObject<MockMediaStream>(label);
+    const String& label) {
+  return new rtc::RefCountedObject<MockMediaStream>(label.Utf8());
 }
 
 scoped_refptr<webrtc::VideoTrackInterface>
 MockPeerConnectionDependencyFactory::CreateLocalVideoTrack(
-    const std::string& id,
+    const String& id,
     webrtc::VideoTrackSourceInterface* source) {
   scoped_refptr<webrtc::VideoTrackInterface> track(
-      new rtc::RefCountedObject<MockWebRtcVideoTrack>(id, source));
+      new rtc::RefCountedObject<MockWebRtcVideoTrack>(id.Utf8(), source));
   return track;
 }
 
 SessionDescriptionInterface*
 MockPeerConnectionDependencyFactory::CreateSessionDescription(
-    const std::string& type,
-    const std::string& sdp,
+    const String& type,
+    const String& sdp,
     webrtc::SdpParseError* error) {
   if (fail_to_create_session_description_)
     return nullptr;
-  return new MockSessionDescription(type, sdp);
+  return new MockSessionDescription(type.Utf8(), sdp.Utf8());
 }
 
 webrtc::IceCandidateInterface*
-MockPeerConnectionDependencyFactory::CreateIceCandidate(
-    const std::string& sdp_mid,
-    int sdp_mline_index,
-    const std::string& sdp) {
-  return new MockIceCandidate(sdp_mid, sdp_mline_index, sdp);
+MockPeerConnectionDependencyFactory::CreateIceCandidate(const String& sdp_mid,
+                                                        int sdp_mline_index,
+                                                        const String& sdp) {
+  return new MockIceCandidate(sdp_mid.Utf8(), sdp_mline_index, sdp.Utf8());
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>

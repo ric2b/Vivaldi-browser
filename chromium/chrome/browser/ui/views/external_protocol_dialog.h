@@ -6,11 +6,10 @@
 #define CHROME_BROWSER_UI_VIEWS_EXTERNAL_PROTOCOL_DIALOG_H_
 
 #include "base/macros.h"
-#include "base/time/time.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "ui/views/window/dialog_delegate.h"
 #include "url/gurl.h"
-
-class ProtocolDialogDelegate;
+#include "url/origin.h"
 
 namespace content {
 class WebContents;
@@ -24,20 +23,20 @@ namespace views {
 class MessageBoxView;
 }
 
-class ExternalProtocolDialog : public views::DialogDelegateView {
+class ExternalProtocolDialog : public views::DialogDelegateView,
+                               public content::WebContentsObserver {
  public:
   // Show by calling ExternalProtocolHandler::RunExternalProtocolDialog().
-  ExternalProtocolDialog(std::unique_ptr<const ProtocolDialogDelegate> delegate,
-                         content::WebContents* web_contents);
-
+  ExternalProtocolDialog(content::WebContents* web_contents,
+                         const GURL& url,
+                         const base::string16& program_name,
+                         const base::Optional<url::Origin>& initiating_origin);
   ~ExternalProtocolDialog() override;
 
   // views::DialogDelegateView:
   gfx::Size CalculatePreferredSize() const override;
   bool ShouldShowCloseButton() const override;
   base::string16 GetWindowTitle() const override;
-  bool Cancel() override;
-  bool Accept() override;
   views::View* GetContentsView() override;
   ui::ModalType GetModalType() const override;
   views::Widget* GetWidget() override;
@@ -48,14 +47,14 @@ class ExternalProtocolDialog : public views::DialogDelegateView {
 
   void ShowRememberSelectionCheckbox();
   void SetRememberSelectionCheckboxCheckedForTesting(bool checked);
+  void OnDialogAccepted();
 
-  const std::unique_ptr<const ProtocolDialogDelegate> delegate_;
+  const GURL url_;
+  const base::string16 program_name_;
+  const base::Optional<url::Origin> initiating_origin_;
 
   // The message box whose commands we handle.
   views::MessageBoxView* message_box_view_;
-
-  // The time at which this dialog was created.
-  base::TimeTicks creation_time_;
 
   DISALLOW_COPY_AND_ASSIGN(ExternalProtocolDialog);
 };

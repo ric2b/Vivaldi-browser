@@ -17,37 +17,22 @@ group("resources") {
   ]
 }
 
-# TODO(GYP) enable verify_resources. The bots are complaining about
-# gen/main.html not being found but this doesn't seems to reproduce locally.
-
 action("verify_resources") {
   script = "//remoting/tools/verify_resources.py"
 
   sources_to_verify = [
-    #    "$root_gen_dir/main.html",
     "../host/continue_window_mac.mm",
     "../host/disconnect_window_mac.mm",
     "../host/installer/mac/uninstaller/remoting_uninstaller-InfoPlist.strings.jinja2",
     "../host/win/core.rc.jinja2",
     "../host/win/host_messages.mc.jinja2",
     "../host/win/version.rc.jinja2",
-    "../webapp/crd/js/background.js",
-    "../webapp/base/js/error.js",
-    "../webapp/crd/js/host_list.js",
-    "../webapp/crd/js/host_setup_dialog.js",
-    "../webapp/crd/js/host_table_entry.js",
-    "../webapp/crd/manifest.json.jinja2",
-    "../webapp/crd/js/paired_client_manager.js",
-    "../webapp/crd/js/desktop_remoting.js",
-    "../webapp/crd/js/window_frame.js",
   ]
 
   inputs = [ "remoting_strings.grd" ] + sources_to_verify
 
   stampfile = "$root_out_dir/remoting_resources_verified_stamp"
-  outputs = [
-    stampfile,
-  ]
+  outputs = [ stampfile ]
 
   args = [
            "-t",
@@ -55,10 +40,6 @@ action("verify_resources") {
            "-r",
            rebase_path("remoting_strings.grd", root_build_dir),
          ] + rebase_path(sources_to_verify, root_build_dir)
-
-  deps = [
-    #    "//remoting/webapp:webapp",
-  ]  # Generates main.html.
 }
 
 if (is_android) {
@@ -77,9 +58,7 @@ grit("strings") {
   # generated file root.
   output_dir = root_gen_dir
 
-  outputs = [
-    "remoting/base/string_resources.h",
-  ]
+  outputs = [ "remoting/base/string_resources.h" ]
 
   # The grd produces a *.pak file and a messages.json file (this one uses
   # underscores instead of hyphens) for each locale.
@@ -87,7 +66,7 @@ grit("strings") {
       process_file_template(remoting_locales,
                             [ "remoting/resources/{{source_name_part}}.pak" ])
 
-  outputs += remoting_webapp_locale_files
+  outputs += remoting_resources_locale_files
 
   if (is_android) {
     outputs += android_string_outputs
@@ -103,9 +82,7 @@ if (is_android) {
     grit_output_dir = "$root_gen_dir/remoting/android/res"
     generated_files =
         rebase_path(android_string_outputs, "remoting/android/res", ".")
-    deps = [
-      ":strings",
-    ]
+    deps = [ ":strings" ]
   }
 }
 
@@ -142,7 +119,5 @@ action("copy_locales") {
            rebase_path(root_out_dir, root_build_dir),
          ] + remoting_locales
 
-  deps = [
-    ":strings",
-  ]
+  deps = [ ":strings" ]
 }

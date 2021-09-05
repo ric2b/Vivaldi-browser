@@ -75,29 +75,10 @@ ScriptCustomElementDefinition* ScriptCustomElementDefinition::ForConstructor(
   return static_cast<ScriptCustomElementDefinition*>(definition);
 }
 
-ScriptCustomElementDefinition* ScriptCustomElementDefinition::Create(
-    const ScriptCustomElementDefinitionData& data,
-    const CustomElementDescriptor& descriptor,
-    CustomElementDefinition::Id id) {
-  auto* definition =
-      MakeGarbageCollected<ScriptCustomElementDefinition>(data, descriptor);
-
-  // Tag the JavaScript constructor object with its ID.
-  ScriptState* script_state = data.script_state_;
-  v8::Local<v8::Value> id_value =
-      v8::Integer::NewFromUnsigned(script_state->GetIsolate(), id);
-  auto private_id =
-      script_state->PerContextData()->GetPrivateCustomElementDefinitionId();
-  CHECK(data.constructor_->CallbackObject()
-            ->SetPrivate(script_state->GetContext(), private_id, id_value)
-            .ToChecked());
-
-  return definition;
-}
-
 ScriptCustomElementDefinition::ScriptCustomElementDefinition(
     const ScriptCustomElementDefinitionData& data,
-    const CustomElementDescriptor& descriptor)
+    const CustomElementDescriptor& descriptor,
+    CustomElementDefinition::Id id)
     : CustomElementDefinition(descriptor,
                               std::move(data.observed_attributes_),
                               data.disabled_features_,
@@ -113,7 +94,17 @@ ScriptCustomElementDefinition::ScriptCustomElementDefinition(
       form_associated_callback_(data.form_associated_callback_),
       form_reset_callback_(data.form_reset_callback_),
       form_disabled_callback_(data.form_disabled_callback_),
-      form_state_restore_callback_(data.form_state_restore_callback_) {}
+      form_state_restore_callback_(data.form_state_restore_callback_) {
+  // Tag the JavaScript constructor object with its ID.
+  ScriptState* script_state = data.script_state_;
+  v8::Local<v8::Value> id_value =
+      v8::Integer::NewFromUnsigned(script_state->GetIsolate(), id);
+  auto private_id =
+      script_state->PerContextData()->GetPrivateCustomElementDefinitionId();
+  CHECK(data.constructor_->CallbackObject()
+            ->SetPrivate(script_state->GetContext(), private_id, id_value)
+            .ToChecked());
+}
 
 void ScriptCustomElementDefinition::Trace(Visitor* visitor) {
   visitor->Trace(script_state_);
@@ -146,6 +137,7 @@ HTMLElement* ScriptCustomElementDefinition::HandleCreateElementSyncException(
 HTMLElement* ScriptCustomElementDefinition::CreateAutonomousCustomElementSync(
     Document& document,
     const QualifiedName& tag_name) {
+  DCHECK(CustomElement::ShouldCreateCustomElement(tag_name)) << tag_name;
   if (!script_state_->ContextIsValid())
     return CustomElement::CreateFailedElement(document, tag_name);
   ScriptState::Scope scope(script_state_);
@@ -212,8 +204,7 @@ bool ScriptCustomElementDefinition::RunConstructor(Element& element) {
   v8::TryCatch try_catch(isolate);
   try_catch.SetVerbose(true);
 
-  if (RuntimeEnabledFeatures::ElementInternalsEnabled() && DisableShadow() &&
-      element.GetShadowRoot()) {
+  if (DisableShadow() && element.GetShadowRoot()) {
     v8::Local<v8::Value> exception = V8ThrowDOMException::CreateOrEmpty(
         script_state_->GetIsolate(), DOMExceptionCode::kNotSupportedError,
         "The element already has a ShadowRoot though it is disabled by "
@@ -229,15 +220,13 @@ bool ScriptCustomElementDefinition::RunConstructor(Element& element) {
   if (try_catch.HasCaught())
     return false;
 
-  // To report InvalidStateError Exception, when the constructor returns some
-  // different object
+  // Report a TypeError Exception if the constructor returns a different object.
   if (result != &element) {
     const String& message =
         "custom element constructors must call super() first and must "
         "not return a different object";
-    v8::Local<v8::Value> exception = V8ThrowDOMException::CreateOrEmpty(
-        script_state_->GetIsolate(), DOMExceptionCode::kInvalidStateError,
-        message);
+    v8::Local<v8::Value> exception =
+        V8ThrowException::CreateTypeError(script_state_->GetIsolate(), message);
     if (!exception.IsEmpty())
       V8ScriptRunner::ReportException(isolate, exception);
     return false;

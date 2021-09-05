@@ -30,7 +30,6 @@ proximity_auth::ScreenlockBridge::UserPodCustomIcon GetIconForState(
     case ScreenlockState::PHONE_NOT_AUTHENTICATED:
     case ScreenlockState::PHONE_LOCKED:
     case ScreenlockState::PHONE_NOT_LOCKABLE:
-    case ScreenlockState::PHONE_UNSUPPORTED:
       return proximity_auth::ScreenlockBridge::USER_POD_CUSTOM_ICON_LOCKED;
     case ScreenlockState::RSSI_TOO_LOW:
     case ScreenlockState::PHONE_LOCKED_AND_RSSI_TOO_LOW:
@@ -74,8 +73,6 @@ size_t GetTooltipResourceId(ScreenlockState state) {
       return IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_PHONE_LOCKED;
     case ScreenlockState::PHONE_NOT_LOCKABLE:
       return IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_PHONE_UNLOCKABLE;
-    case ScreenlockState::PHONE_UNSUPPORTED:
-      return IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_UNSUPPORTED_ANDROID_VERSION;
     case ScreenlockState::RSSI_TOO_LOW:
       return IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_RSSI_TOO_LOW;
     case ScreenlockState::PHONE_LOCKED_AND_RSSI_TOO_LOW:
@@ -96,7 +93,6 @@ bool TooltipContainsDeviceType(ScreenlockState state) {
   return (state == ScreenlockState::AUTHENTICATED ||
           state == ScreenlockState::PHONE_NOT_LOCKABLE ||
           state == ScreenlockState::NO_BLUETOOTH ||
-          state == ScreenlockState::PHONE_UNSUPPORTED ||
           state == ScreenlockState::RSSI_TOO_LOW ||
           state == ScreenlockState::PHONE_LOCKED_AND_RSSI_TOO_LOW);
 }
@@ -189,6 +185,13 @@ void EasyUnlockScreenlockStateHandler::ChangeState(ScreenlockState new_state) {
   if (state_ == ScreenlockState::BLUETOOTH_CONNECTING) {
     icon_options.SetAriaLabel(
         l10n_util::GetStringUTF16(IDS_SMART_LOCK_SPINNER_ACCESSIBILITY_LABEL));
+  }
+
+  // Accessibility users may not be able to see the green icon which indicates
+  // the phone is authenticated. Provide message to that effect.
+  if (state_ == ScreenlockState::AUTHENTICATED) {
+    icon_options.SetAriaLabel(l10n_util::GetStringUTF16(
+        IDS_SMART_LOCK_SCREENLOCK_AUTHENTICATED_LABEL));
   }
 
   screenlock_bridge_->lock_handler()->ShowUserPodCustomIcon(account_id_,

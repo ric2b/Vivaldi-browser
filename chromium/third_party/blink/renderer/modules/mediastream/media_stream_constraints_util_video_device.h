@@ -7,14 +7,14 @@
 
 #include "base/optional.h"
 #include "media/capture/video_capture_types.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_constraints_util.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
+class MediaConstraints;
 class WebString;
-class WebMediaConstraints;
 }  // namespace blink
 
 namespace blink {
@@ -124,7 +124,7 @@ struct MODULES_EXPORT VideoDeviceCaptureCapabilities {
 // documentation.
 VideoCaptureSettings MODULES_EXPORT SelectSettingsVideoDeviceCapture(
     const VideoDeviceCaptureCapabilities& capabilities,
-    const WebMediaConstraints& constraints,
+    const MediaConstraints& constraints,
     int default_width,
     int default_height,
     double default_frame_rate);

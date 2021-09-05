@@ -98,6 +98,14 @@ void URLDataManagerBackend::UpdateWebUIDataSource(
 
 URLDataSourceImpl* URLDataManagerBackend::GetDataSourceFromURL(
     const GURL& url) {
+  // chrome-untrusted:// sources keys are of the form "chrome-untrusted://host".
+  if (url.scheme() == kChromeUIUntrustedScheme) {
+    auto i = data_sources_.find(url.GetOrigin().spec());
+    if (i == data_sources_.end())
+      return nullptr;
+    return i->second.get();
+  }
+
   // The input usually looks like: chrome://source_name/extra_bits?foo
   // so do a lookup using the host of the URL.
   auto i = data_sources_.find(url.host());
@@ -138,6 +146,12 @@ scoped_refptr<net::HttpResponseHeaders> URLDataManagerBackend::GetHeaders(
     base.append(source->GetContentSecurityPolicyStyleSrc());
     base.append(source->GetContentSecurityPolicyImgSrc());
     base.append(source->GetContentSecurityPolicyWorkerSrc());
+    // TODO(crbug.com/1051745): Both CSP frame ancestors and XFO headers may be
+    // added to the response but frame ancestors would take precedence. In the
+    // future, XFO will be removed so when that happens remove the check and
+    // always add frame ancestors.
+    if (source->ShouldDenyXFrameOptions())
+      base.append(source->GetContentSecurityPolicyFrameAncestors());
     headers->AddHeader(base);
   }
 
@@ -170,6 +184,7 @@ scoped_refptr<net::HttpResponseHeaders> URLDataManagerBackend::GetHeaders(
 bool URLDataManagerBackend::CheckURLIsValid(const GURL& url) {
   std::vector<std::string> additional_schemes;
   DCHECK(url.SchemeIs(kChromeUIScheme) ||
+         url.SchemeIs(kChromeUIUntrustedScheme) ||
          (GetContentClient()->browser()->GetAdditionalWebUISchemes(
               &additional_schemes),
           SchemeIsInSchemes(url.scheme(), additional_schemes)));
@@ -180,17 +195,6 @@ bool URLDataManagerBackend::CheckURLIsValid(const GURL& url) {
   }
 
   return true;
-}
-
-void URLDataManagerBackend::URLToRequestPath(const GURL& url,
-                                             std::string* path) {
-  const std::string& spec = url.possibly_invalid_spec();
-  const url::Parsed& parsed = url.parsed_for_possibly_invalid_spec();
-  // + 1 to skip the slash at the beginning of the path.
-  int offset = parsed.CountCharactersBefore(url::Parsed::PATH, false) + 1;
-
-  if (offset < static_cast<int>(spec.size()))
-    path->assign(spec.substr(offset));
 }
 
 bool URLDataManagerBackend::IsValidNetworkErrorCode(int error_code) {
@@ -220,6 +224,7 @@ bool URLDataManagerBackend::IsValidNetworkErrorCode(int error_code) {
 std::vector<std::string> URLDataManagerBackend::GetWebUISchemes() {
   std::vector<std::string> schemes;
   schemes.push_back(kChromeUIScheme);
+  schemes.push_back(kChromeUIUntrustedScheme);
   GetContentClient()->browser()->GetAdditionalWebUISchemes(&schemes);
   return schemes;
 }

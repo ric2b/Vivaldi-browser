@@ -80,6 +80,9 @@ bool StructTraits<
   if (!data.ReadLabelSource(&out->label_source))
     return false;
 
+  if (!data.ReadBounds(&out->bounds))
+    return false;
+
   return true;
 }
 
@@ -169,14 +172,16 @@ bool StructTraits<autofill::mojom::FormDataPredictionsDataView,
 }
 
 // static
-bool StructTraits<autofill::mojom::PasswordAndRealmDataView,
-                  autofill::PasswordAndRealm>::
-    Read(autofill::mojom::PasswordAndRealmDataView data,
-         autofill::PasswordAndRealm* out) {
+bool StructTraits<autofill::mojom::PasswordAndMetadataDataView,
+                  autofill::PasswordAndMetadata>::
+    Read(autofill::mojom::PasswordAndMetadataDataView data,
+         autofill::PasswordAndMetadata* out) {
   if (!data.ReadPassword(&out->password))
     return false;
   if (!data.ReadRealm(&out->realm))
     return false;
+
+  out->uses_account_store = data.uses_account_store();
 
   return true;
 }
@@ -193,6 +198,7 @@ bool StructTraits<autofill::mojom::PasswordFormFillDataDataView,
       !data.ReadAdditionalLogins(&out->additional_logins))
     return false;
 
+  out->uses_account_store = data.uses_account_store();
   out->form_renderer_id = data.form_renderer_id();
   out->wait_for_username = data.wait_for_username();
   out->has_renderer_ids = data.has_renderer_ids();
@@ -228,7 +234,7 @@ bool StructTraits<autofill::mojom::PasswordGenerationUIDataDataView,
 
   if (!data.ReadGenerationElement(&out->generation_element) ||
       !data.ReadTextDirection(&out->text_direction) ||
-      !data.ReadPasswordForm(&out->password_form))
+      !data.ReadFormData(&out->form_data))
     return false;
 
   return true;
@@ -269,8 +275,6 @@ bool StructTraits<
   if (!data.ReadConfirmationPasswordElement(
           &out->confirmation_password_element))
     return false;
-
-  out->preferred = data.preferred();
 
   if (!data.ReadDateCreated(&out->date_created) ||
       !data.ReadDateSynced(&out->date_synced))

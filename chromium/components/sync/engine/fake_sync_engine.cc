@@ -12,7 +12,6 @@
 
 namespace syncer {
 
-constexpr char FakeSyncEngine::kTestCacheGuid[];
 constexpr char FakeSyncEngine::kTestBirthday[];
 constexpr char FakeSyncEngine::kTestKeystoreKey[];
 
@@ -24,7 +23,7 @@ void FakeSyncEngine::Initialize(InitParams params) {
   initialized_ = success;
   params.host->OnEngineInitialized(
       ModelTypeSet(), WeakHandle<JsBackend>(),
-      WeakHandle<DataTypeDebugInfoListener>(), kTestCacheGuid, kTestBirthday,
+      WeakHandle<DataTypeDebugInfoListener>(), kTestBirthday,
       /*bag_of_chips=*/"", kTestKeystoreKey, success);
 }
 
@@ -47,7 +46,7 @@ void FakeSyncEngine::SetEncryptionPassphrase(const std::string& passphrase) {}
 void FakeSyncEngine::SetDecryptionPassphrase(const std::string& passphrase) {}
 
 void FakeSyncEngine::AddTrustedVaultDecryptionKeys(
-    const std::vector<std::string>& keys,
+    const std::vector<std::vector<uint8_t>>& keys,
     base::OnceClosure done_cb) {
   std::move(done_cb).Run();
 }
@@ -81,8 +80,8 @@ UserShare* FakeSyncEngine::GetUserShare() const {
   return nullptr;
 }
 
-SyncStatus FakeSyncEngine::GetDetailedStatus() {
-  return SyncStatus();
+const SyncStatus& FakeSyncEngine::GetDetailedStatus() const {
+  return default_sync_status_;
 }
 
 void FakeSyncEngine::HasUnsyncedItemsForTest(
@@ -106,9 +105,9 @@ void FakeSyncEngine::set_fail_initial_download(bool should_fail) {
 
 void FakeSyncEngine::OnCookieJarChanged(bool account_mismatch,
                                         bool empty_jar,
-                                        const base::Closure& callback) {
+                                        base::OnceClosure callback) {
   if (!callback.is_null()) {
-    callback.Run();
+    std::move(callback).Run();
   }
 }
 

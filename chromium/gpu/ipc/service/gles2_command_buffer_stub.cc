@@ -13,7 +13,7 @@
 #include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
-#include "base/memory/shared_memory.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -31,6 +31,7 @@
 #include "gpu/command_buffer/service/logger.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
+#include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
@@ -260,7 +261,11 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
 
   scoped_refptr<gl::GLContext> context;
   if (use_virtualized_gl_context_ && share_group_) {
-    context = share_group_->GetSharedContext(surface_.get());
+    context = share_group_->shared_context();
+    if (context && (!context->MakeCurrent(surface_.get()) ||
+                    context->CheckStickyGraphicsResetStatus() != GL_NO_ERROR)) {
+      context = nullptr;
+    }
     if (!context) {
       context = gl::init::CreateGLContext(
           share_group_.get(), surface_.get(),
@@ -276,7 +281,7 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
       // Ensure that context creation did not lose track of the intended share
       // group.
       DCHECK(context->share_group() == share_group_.get());
-      share_group_->SetSharedContext(surface_.get(), context.get());
+      share_group_->SetSharedContext(context.get());
 
       // This needs to be called against the real shared context, not the
       // virtual context created below.
@@ -423,12 +428,17 @@ viz::GpuVSyncCallback GLES2CommandBufferStub::GetGpuVSyncCallback() {
   return viz::GpuVSyncCallback();
 }
 
+base::TimeDelta GLES2CommandBufferStub::GetGpuBlockedTimeSinceLastSwap() {
+  return channel_->scheduler()->TakeTotalBlockingTime();
+}
+
 MemoryTracker* GLES2CommandBufferStub::GetMemoryTracker() const {
   return context_group_->memory_tracker();
 }
 
-void GLES2CommandBufferStub::OnGpuSwitched() {
-  Send(new GpuCommandBufferMsg_GpuSwitched(route_id_));
+void GLES2CommandBufferStub::OnGpuSwitched(
+    gl::GpuPreference active_gpu_heuristic) {
+  Send(new GpuCommandBufferMsg_GpuSwitched(route_id_, active_gpu_heuristic));
 }
 
 bool GLES2CommandBufferStub::HandleMessage(const IPC::Message& message) {

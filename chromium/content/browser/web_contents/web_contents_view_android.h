@@ -11,7 +11,6 @@
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/public/browser/web_contents_view_delegate.h"
-#include "content/public/common/context_menu_params.h"
 #include "content/public/common/drop_data.h"
 #include "ui/android/overscroll_refresh.h"
 #include "ui/android/view_android.h"
@@ -70,12 +69,10 @@ class WebContentsViewAndroid : public WebContentsView,
   gfx::Rect GetViewBounds() const override;
   void CreateView(gfx::NativeView context) override;
   RenderWidgetHostViewBase* CreateViewForWidget(
-      RenderWidgetHost* render_widget_host,
-      bool is_guest_view_hack) override;
+      RenderWidgetHost* render_widget_host) override;
   RenderWidgetHostViewBase* CreateViewForChildWidget(
       RenderWidgetHost* render_widget_host) override;
   void SetPageTitle(const base::string16& title) override;
-  void RenderViewCreated(RenderViewHost* host) override;
   void RenderViewReady() override;
   void RenderViewHostChanged(RenderViewHost* old_host,
                              RenderViewHost* new_host) override;
@@ -105,7 +102,10 @@ class WebContentsViewAndroid : public WebContentsView,
   void LostFocus(RenderWidgetHostImpl* render_widget_host) override;
   void TakeFocus(bool reverse) override;
   int GetTopControlsHeight() const override;
+  int GetTopControlsMinHeight() const override;
   int GetBottomControlsHeight() const override;
+  int GetBottomControlsMinHeight() const override;
+  bool ShouldAnimateBrowserControlsHeightChanges() const override;
   bool DoBrowserControlsShrinkRendererSize() const override;
 
   // ui::EventHandlerAndroid implementation.
@@ -119,6 +119,7 @@ class WebContentsViewAndroid : public WebContentsView,
   bool ScrollTo(float x, float y) override;
   void OnSizeChanged() override;
   void OnPhysicalBackingSizeChanged() override;
+  void OnBrowserControlsHeightChanged() override;
 
   void SetFocus(bool focused);
   void set_device_orientation(int orientation) {

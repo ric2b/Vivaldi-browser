@@ -57,7 +57,7 @@ LongOrTestDictionary::LongOrTestDictionary(const LongOrTestDictionary&) = defaul
 LongOrTestDictionary::~LongOrTestDictionary() = default;
 LongOrTestDictionary& LongOrTestDictionary::operator=(const LongOrTestDictionary&) = default;
 
-void LongOrTestDictionary::Trace(blink::Visitor* visitor) {
+void LongOrTestDictionary::Trace(Visitor* visitor) {
   visitor->Trace(test_dictionary_);
 }
 
@@ -128,3 +128,4 @@ LongOrTestDictionary NativeValueTraits<LongOrTestDictionary>::NativeValue(
 }
 
 }  // namespace blink
+

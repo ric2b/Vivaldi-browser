@@ -11,9 +11,9 @@
 #include "media/base/renderer.h"
 #include "media/base/video_decoder.h"
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#if BUILDFLAG(ENABLE_CDM_PROXY)
 #include "media/cdm/cdm_proxy.h"
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
 
 namespace media {
 
@@ -21,7 +21,7 @@ MojoMediaClient::MojoMediaClient() = default;
 
 MojoMediaClient::~MojoMediaClient() = default;
 
-void MojoMediaClient::Initialize(service_manager::Connector* connector) {}
+void MojoMediaClient::Initialize() {}
 
 std::unique_ptr<AudioDecoder> MojoMediaClient::CreateAudioDecoder(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
@@ -66,11 +66,11 @@ std::unique_ptr<CdmFactory> MojoMediaClient::CreateCdmFactory(
   return nullptr;
 }
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#if BUILDFLAG(ENABLE_CDM_PROXY)
 std::unique_ptr<CdmProxy> MojoMediaClient::CreateCdmProxy(
     const base::Token& cdm_guid) {
   return nullptr;
 }
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
 
 }  // namespace media

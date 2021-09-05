@@ -33,10 +33,8 @@ namespace {
 using base::win::ScopedHandle;
 using testing::Bool;
 using testing::Values;
-using PromptAcceptance = ProtoChromePromptIPC::PromptAcceptance;
 
 constexpr char kIncludeUwSSwitch[] = "include-uws";
-constexpr char kIncludeRegistryKeysSwitch[] = "include-registry-keys";
 constexpr char kExpectedPromptResultSwitch[] = "expected-prompt-result";
 constexpr char kExpectedChromeDisconnectPointSwitch[] =
     "expected-parent-disconnected";
@@ -113,10 +111,6 @@ struct TestConfig {
       command_line->AppendSwitch(kIncludeUwSSwitch);
     }
 
-    if (with_registry_keys) {
-      command_line->AppendSwitch(kIncludeRegistryKeysSwitch);
-    }
-
     command_line->AppendSwitchASCII(
         kExpectedPromptResultSwitch,
         base::NumberToString(static_cast<int>(expected_prompt_acceptance)));
@@ -127,8 +121,8 @@ struct TestConfig {
   }
 
   bool uws_expected = false;
-  bool with_registry_keys = false;
-  PromptAcceptance expected_prompt_acceptance = PromptAcceptance::DENIED;
+  PromptUserResponse::PromptAcceptance expected_prompt_acceptance =
+      PromptUserResponse::DENIED;
   ChromeDisconnectPoint expected_disconnection_point =
       ChromeDisconnectPoint::kNone;
 };
@@ -378,31 +372,11 @@ class MockChrome {
   }
 
   // Send a response to the cleaner with the expected values.
-  bool SendResponse(PromptAcceptance prompt_acceptance) {
+  bool SendResponse(PromptUserResponse::PromptAcceptance prompt_acceptance) {
     DCHECK(response_write_handle_.IsValid());
 
-    chrome_cleaner::PromptUserResponse response;
-
-    switch (prompt_acceptance) {
-      case PromptAcceptance::DENIED:
-        response.set_prompt_acceptance(
-            chrome_cleaner::PromptUserResponse::DENIED);
-        break;
-      case PromptAcceptance::ACCEPTED_WITH_LOGS:
-        response.set_prompt_acceptance(
-            chrome_cleaner::PromptUserResponse::ACCEPTED_WITH_LOGS);
-        break;
-      case PromptAcceptance::ACCEPTED_WITHOUT_LOGS:
-        response.set_prompt_acceptance(
-            chrome_cleaner::PromptUserResponse::ACCEPTED_WITHOUT_LOGS);
-        break;
-      case PromptAcceptance::UNSPECIFIED:
-      default:
-        response.set_prompt_acceptance(
-            chrome_cleaner::PromptUserResponse::UNSPECIFIED);
-        break;
-    }
-
+    PromptUserResponse response;
+    response.set_prompt_acceptance(prompt_acceptance);
     return SendMessage(response);
   }
 
@@ -428,7 +402,8 @@ class ChildProcess {
         kExpectedChromeDisconnectPointSwitch);
 
     expected_prompt_acceptance_ =
-        GetEnumFromCommandLine<PromptAcceptance>(kExpectedPromptResultSwitch);
+        GetEnumFromCommandLine<PromptUserResponse::PromptAcceptance>(
+            kExpectedPromptResultSwitch);
   }
 
   base::win::ScopedHandle ExtractHandleFromCommandLine(
@@ -465,7 +440,7 @@ class ChildProcess {
   // Execute all steps of the prompt according to passed in test config.
   bool Run() {
     DCHECK_NE(expected_disconnect_point_, ChromeDisconnectPoint::kUnspecified);
-    DCHECK_NE(expected_prompt_acceptance_, PromptAcceptance::UNSPECIFIED);
+    DCHECK_NE(expected_prompt_acceptance_, PromptUserResponse::UNSPECIFIED);
 
     CloseConnectionIfDisconectionPointReached(
         ChromeDisconnectPoint::kOnStartup);
@@ -501,14 +476,11 @@ class ChildProcess {
     CloseConnectionIfDisconectionPointReached(
         ChromeDisconnectPoint::kWhileProcessingChildRequest);
 
-    int32_t expected_files_to_delete_size =
-        command_line_->HasSwitch(kIncludeUwSSwitch) ? 1 : 0;
-    if (request.prompt_user().files_to_delete_size() !=
-        expected_files_to_delete_size) {
-      LOG(ERROR) << "Wrong number of files to delete received.";
-      return false;
-    }
-    if (expected_files_to_delete_size == 1) {
+    if (command_line_->HasSwitch(kIncludeUwSSwitch)) {
+      if (request.prompt_user().files_to_delete_size() != 1) {
+        LOG(ERROR) << "Wrong number of files to delete received.";
+        return false;
+      }
       std::string file_path_utf8;
       base::UTF16ToUTF8(kBadFilePath.value().c_str(),
                         kBadFilePath.value().size(), &file_path_utf8);
@@ -516,19 +488,23 @@ class ChildProcess {
         LOG(ERROR) << "Wrong value for file to delete";
         return false;
       }
-    }
 
-    int32_t expecteed_registry_keys_size =
-        command_line_->HasSwitch(kIncludeRegistryKeysSwitch) ? 1 : 0;
-    if (request.prompt_user().registry_keys_size() !=
-        expecteed_registry_keys_size) {
-      LOG(ERROR) << "Wrong number of registry keys to delete";
-      return false;
-    }
-    if (expecteed_registry_keys_size == 1) {
+      if (request.prompt_user().registry_keys_size() != 1) {
+        LOG(ERROR) << "Wrong number of registry keys to delete";
+        return false;
+      }
       if (request.prompt_user().registry_keys(0) !=
           base::UTF16ToUTF8(kBadRegistryKey)) {
         LOG(ERROR) << "Wrong value for registry key";
+        return false;
+      }
+    } else {
+      if (request.prompt_user().files_to_delete_size() != 0) {
+        LOG(ERROR) << "Wrong number of files to delete received.";
+        return false;
+      }
+      if (request.prompt_user().registry_keys_size() != 0) {
+        LOG(ERROR) << "Wrong number of registry keys to delete";
         return false;
       }
     }
@@ -572,7 +548,8 @@ class ChildProcess {
   ChromeDisconnectPoint expected_disconnect_point_ =
       ChromeDisconnectPoint::kUnspecified;
 
-  PromptAcceptance expected_prompt_acceptance_ = PromptAcceptance::UNSPECIFIED;
+  PromptUserResponse::PromptAcceptance expected_prompt_acceptance_ =
+      PromptUserResponse::UNSPECIFIED;
   const base::CommandLine* command_line_ =
       base::CommandLine::ForCurrentProcess();
 };
@@ -591,7 +568,9 @@ MULTIPROCESS_TEST_MAIN(ProtoChromePromptIPCClientMain) {
 
 class ProtoChromePromptIPCTest
     : public ::testing::TestWithParam<
-          std::tuple<bool, bool, PromptAcceptance, ChromeDisconnectPoint>> {
+          std::tuple<bool,
+                     PromptUserResponse::PromptAcceptance,
+                     ChromeDisconnectPoint>> {
  private:
   base::test::TaskEnvironment task_environment;
 };
@@ -611,7 +590,8 @@ class ParentProcess {
                              &response_read_handle_, &response_write_handle_);
   }
 
-  void ValidateAcceptance(PromptAcceptance prompt_acceptance) {
+  void ValidateAcceptance(
+      PromptUserResponse::PromptAcceptance prompt_acceptance) {
     EXPECT_EQ(prompt_acceptance, test_config_.expected_prompt_acceptance);
     main_runloop_.Quit();
   }
@@ -657,12 +637,9 @@ class ParentProcess {
     chrome_prompt_ipc.Initialize(error_handler.get());
 
     std::vector<base::FilePath> files_to_delete;
+    std::vector<base::string16> registry_keys;
     if (test_config_.uws_expected) {
       files_to_delete.push_back(kBadFilePath);
-    }
-
-    std::vector<base::string16> registry_keys;
-    if (test_config_.with_registry_keys) {
       registry_keys.push_back(kBadRegistryKey);
     }
 
@@ -736,33 +713,32 @@ class ParentProcess {
 TEST_P(ProtoChromePromptIPCTest, Communication) {
   ParentProcess parent_process;
   TestConfig& test_config = parent_process.GetTestConfig();
-  std::tie(test_config.uws_expected, test_config.with_registry_keys,
-           test_config.expected_prompt_acceptance,
+  std::tie(test_config.uws_expected, test_config.expected_prompt_acceptance,
            test_config.expected_disconnection_point) = GetParam();
 
   ASSERT_TRUE(parent_process.Initialize());
   parent_process.Run();
 }
 
+// Tests disconnection handling for all possible disconnection points when no
+// UwS is present.
 INSTANTIATE_TEST_SUITE_P(NoUwSPresent,
                          ProtoChromePromptIPCTest,
                          testing::Combine(
-                             /*[>uws_expected=<]*/ Values(false),
-                             /*[>with_registry_keys=<]*/ Values(false),
-                             Values(PromptAcceptance::DENIED),
+                             /*uws_expected=*/Values(false),
+                             Values(PromptUserResponse::DENIED),
                              Values(ChromeDisconnectPoint::kNone,
                                     ChromeDisconnectPoint::kOnStartup)),
                          GetParamNameForTest());
 
+// Tests disconnection handling for all possible disconnection points when UwS
+// is present
 INSTANTIATE_TEST_SUITE_P(
     UwSPresent,
     ProtoChromePromptIPCTest,
     testing::Combine(
         /*uws_expected=*/Values(true),
-        /*with_registry_keys=*/Bool(),
-        Values(PromptAcceptance::ACCEPTED_WITH_LOGS,
-               PromptAcceptance::ACCEPTED_WITHOUT_LOGS,
-               PromptAcceptance::DENIED),
+        Values(PromptUserResponse::ACCEPTED_WITH_LOGS),
         Values(ChromeDisconnectPoint::kNone,
                ChromeDisconnectPoint::kOnStartup,
                ChromeDisconnectPoint::kAfterVersion,
@@ -770,6 +746,17 @@ INSTANTIATE_TEST_SUITE_P(
                ChromeDisconnectPoint::kAfterCloseMessageLength,
                ChromeDisconnectPoint::kWhileProcessingChildRequest)),
     GetParamNameForTest());
+
+// Tests that all possible PromptUserResponse values are passed correctly.
+INSTANTIATE_TEST_SUITE_P(PromptUserResponse,
+                         ProtoChromePromptIPCTest,
+                         testing::Combine(
+                             /*uws_expected=*/Values(true),
+                             Values(PromptUserResponse::ACCEPTED_WITH_LOGS,
+                                    PromptUserResponse::ACCEPTED_WITHOUT_LOGS,
+                                    PromptUserResponse::DENIED),
+                             Values(ChromeDisconnectPoint::kNone)),
+                         GetParamNameForTest());
 
 class ProtoChromePromptSameProcessTest : public ::testing::Test {
  public:
@@ -835,8 +822,9 @@ class ProtoChromePromptSameProcessTest : public ::testing::Test {
     EXPECT_TRUE(mock_chrome_->ReadRequest(request_length, &request));
   }
 
-  void ValidateAcceptance(PromptAcceptance expected_prompt_acceptance,
-                          PromptAcceptance prompt_acceptance) {
+  void ValidateAcceptance(
+      PromptUserResponse::PromptAcceptance expected_prompt_acceptance,
+      PromptUserResponse::PromptAcceptance prompt_acceptance) {
     EXPECT_EQ(prompt_acceptance, expected_prompt_acceptance);
     main_runloop_.Quit();
   }
@@ -859,8 +847,7 @@ TEST_F(ProtoChromePromptSameProcessTest, InvalidUTF16Path) {
   chrome_prompt_ipc_->PostPromptUserTask(
       {kInvalidFilePath}, {}, {},
       base::BindOnce(&ProtoChromePromptSameProcessTest::ValidateAcceptance,
-                     base::Unretained(this),
-                     chrome_cleaner::PromptAcceptance::DENIED));
+                     base::Unretained(this), PromptUserResponse::DENIED));
 
   // Providing an invalid file path will trigger an immediate denial from the
   // cleaner side. No communication will happen with Chrome so we do not call
@@ -876,8 +863,7 @@ TEST_F(ProtoChromePromptSameProcessTest, InvalidUTF16RegistryKey) {
   chrome_prompt_ipc_->PostPromptUserTask(
       {}, {kInvalidRegistryKey}, {},
       base::BindOnce(&ProtoChromePromptSameProcessTest::ValidateAcceptance,
-                     base::Unretained(this),
-                     chrome_cleaner::PromptAcceptance::DENIED));
+                     base::Unretained(this), PromptUserResponse::DENIED));
 
   // Providing an invalid registry key will trigger an immediate denial from the
   // cleaner side. No communication will happen with Chrome so we do not call
@@ -894,8 +880,7 @@ TEST_F(ProtoChromePromptSameProcessTest, InvalidUTF16ExtensionID) {
   chrome_prompt_ipc_->PostPromptUserTask(
       {}, {}, {kInvalidExtensionID},
       base::BindOnce(&ProtoChromePromptSameProcessTest::ValidateAcceptance,
-                     base::Unretained(this),
-                     chrome_cleaner::PromptAcceptance::DENIED));
+                     base::Unretained(this), PromptUserResponse::DENIED));
 
   // Providing an invalid extension id will trigger an immediate denial from the
   // cleaner side. No communication will happen with Chrome so we do not call
@@ -913,13 +898,14 @@ TEST_F(ProtoChromePromptSameProcessTest, ValidNonASCIIPath) {
       {kNonASCIIFilePath}, {}, {},
       base::BindOnce(&ProtoChromePromptSameProcessTest::ValidateAcceptance,
                      base::Unretained(this),
-                     chrome_cleaner::PromptAcceptance::ACCEPTED_WITH_LOGS));
+                     PromptUserResponse::ACCEPTED_WITH_LOGS));
 
   // Expect the prompt message.
   ExpectMessage();
 
   // Send back the response.
-  EXPECT_TRUE(mock_chrome_->SendResponse(PromptAcceptance::ACCEPTED_WITH_LOGS));
+  EXPECT_TRUE(
+      mock_chrome_->SendResponse(PromptUserResponse::ACCEPTED_WITH_LOGS));
 
   // Expect the close connection message.
   ExpectMessage();
@@ -936,7 +922,7 @@ TEST_F(ProtoChromePromptSameProcessTest, ReponseSizeOverMax) {
       {kNonASCIIFilePath}, {}, {},
       base::BindOnce(&ProtoChromePromptSameProcessTest::ValidateAcceptance,
                      base::Unretained(this),
-                     chrome_cleaner::PromptAcceptance::ACCEPTED_WITH_LOGS));
+                     PromptUserResponse::ACCEPTED_WITH_LOGS));
 
   // Expect the prompt message.
   ExpectMessage();
@@ -961,7 +947,7 @@ TEST_F(ProtoChromePromptSameProcessTest, ReponseSizeZero) {
       {kNonASCIIFilePath}, {}, {},
       base::BindOnce(&ProtoChromePromptSameProcessTest::ValidateAcceptance,
                      base::Unretained(this),
-                     chrome_cleaner::PromptAcceptance::ACCEPTED_WITH_LOGS));
+                     PromptUserResponse::ACCEPTED_WITH_LOGS));
 
   // Expect the prompt message.
   ExpectMessage();
@@ -986,14 +972,13 @@ TEST_F(ProtoChromePromptSameProcessTest, ReponseSizeSentTooSmall) {
       {kNonASCIIFilePath}, {}, {},
       base::BindOnce(&ProtoChromePromptSameProcessTest::ValidateAcceptance,
                      base::Unretained(this),
-                     chrome_cleaner::PromptAcceptance::ACCEPTED_WITH_LOGS));
+                     PromptUserResponse::ACCEPTED_WITH_LOGS));
 
   // Expect the prompt message.
   ExpectMessage();
 
-  chrome_cleaner::PromptUserResponse response;
-  response.set_prompt_acceptance(
-      chrome_cleaner::PromptUserResponse::ACCEPTED_WITH_LOGS);
+  PromptUserResponse response;
+  response.set_prompt_acceptance(PromptUserResponse::ACCEPTED_WITH_LOGS);
 
   std::string response_content;
   response.SerializeToString(&response_content);
@@ -1023,14 +1008,13 @@ TEST_F(ProtoChromePromptSameProcessTest, ReponseSizeSentTooBig) {
       {kNonASCIIFilePath}, {}, {},
       base::BindOnce(&ProtoChromePromptSameProcessTest::ValidateAcceptance,
                      base::Unretained(this),
-                     chrome_cleaner::PromptAcceptance::ACCEPTED_WITH_LOGS));
+                     PromptUserResponse::ACCEPTED_WITH_LOGS));
 
   // Expect the prompt message.
   ExpectMessage();
 
-  chrome_cleaner::PromptUserResponse response;
-  response.set_prompt_acceptance(
-      chrome_cleaner::PromptUserResponse::ACCEPTED_WITH_LOGS);
+  PromptUserResponse response;
+  response.set_prompt_acceptance(PromptUserResponse::ACCEPTED_WITH_LOGS);
 
   std::string response_content;
   response.SerializeToString(&response_content);
@@ -1058,8 +1042,7 @@ TEST_F(ProtoChromePromptSameProcessTest, OutOfRangeAcceptance) {
   chrome_prompt_ipc_->PostPromptUserTask(
       {kNonASCIIFilePath}, {}, {},
       base::BindOnce(&ProtoChromePromptSameProcessTest::ValidateAcceptance,
-                     base::Unretained(this),
-                     chrome_cleaner::PromptAcceptance::UNSPECIFIED));
+                     base::Unretained(this), PromptUserResponse::UNSPECIFIED));
 
   // Expect the prompt message.
   ExpectMessage();

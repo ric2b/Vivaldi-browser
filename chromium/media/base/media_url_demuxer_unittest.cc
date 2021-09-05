@@ -71,8 +71,8 @@ TEST_F(MediaUrlDemuxerTest, AcceptsEmptyStrings) {
 TEST_F(MediaUrlDemuxerTest, InitializeReturnsPipelineOk) {
   InitializeTest();
   demuxer_->Initialize(nullptr,
-                       base::Bind(&MediaUrlDemuxerTest::VerifyCallbackOk,
-                                  base::Unretained(this)));
+                       base::BindOnce(&MediaUrlDemuxerTest::VerifyCallbackOk,
+                                      base::Unretained(this)));
 
   base::RunLoop().RunUntilIdle();
 }
@@ -80,8 +80,8 @@ TEST_F(MediaUrlDemuxerTest, InitializeReturnsPipelineOk) {
 TEST_F(MediaUrlDemuxerTest, SeekReturnsPipelineOk) {
   InitializeTest();
   demuxer_->Seek(base::TimeDelta(),
-                 base::Bind(&MediaUrlDemuxerTest::VerifyCallbackOk,
-                            base::Unretained(this)));
+                 base::BindOnce(&MediaUrlDemuxerTest::VerifyCallbackOk,
+                                base::Unretained(this)));
 
   base::RunLoop().RunUntilIdle();
 }

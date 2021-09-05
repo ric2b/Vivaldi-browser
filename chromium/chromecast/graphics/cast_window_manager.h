@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "chromecast/ui/mojom/ui_service.mojom.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace ui {
@@ -66,8 +67,9 @@ class CastWindowManager {
   // causing it to initialize.
   virtual void AddWindow(gfx::NativeView window) = 0;
 
-  // Sets a window's ID.
-  virtual void SetWindowId(gfx::NativeView window, WindowId window_id) = 0;
+  // Sets the Z order for the window. This allows windows with the same parent
+  // to stack in a well-defined order.
+  virtual void SetZOrder(gfx::NativeView window, mojom::ZOrder z_order) = 0;
 
   // Return the root window that holds all top-level windows.
   virtual gfx::NativeView GetRootWindow() = 0;
@@ -101,6 +103,14 @@ class CastWindowManager {
   // disabled.
   virtual void RemoveTouchActivityObserver(
       CastTouchActivityObserver* observer) = 0;
+
+  // Let the window manager that the current app needs explicit rounded window
+  // decorations.
+  // TODO(rdaum): Rename to "SetNeedsRoundedCorners"
+  virtual void SetEnableRoundedCorners(bool enable) = 0;
+
+  // Called when color inversion is turned on or off.
+  virtual void NotifyColorInversionEnabled(bool enabled) = 0;
 };
 
 }  // namespace chromecast

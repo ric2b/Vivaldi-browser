@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/url_constants.h"
@@ -43,23 +44,14 @@ std::string TestDataSource::GetSource() {
 }
 
 void TestDataSource::StartDataRequest(
-    const std::string& path,
+    const GURL& url,
     const content::WebContents::Getter& wc_getter,
-    const content::URLDataSource::GotDataCallback& callback) {
-  if (path == "strings.m.js") {
-    std::string output = "import {loadTimeData} from ";
-    output.append("'chrome://resources/js/load_time_data.m.js';\n");
-    output.append("loadTimeData.data = {};");
-    scoped_refptr<base::RefCountedString> response =
-        base::RefCountedString::TakeString(&output);
-    callback.Run(response.get());
-    return;
-  }
-  base::PostTask(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+    content::URLDataSource::GotDataCallback callback) {
+  const std::string path = content::URLDataSource::URLToRequestPath(url);
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::BindOnce(&TestDataSource::ReadFile, base::Unretained(this), path,
-                     callback));
+                     std::move(callback)));
 }
 
 std::string TestDataSource::GetMimeType(const std::string& path) {
@@ -95,7 +87,7 @@ GURL TestDataSource::GetURLForPath(const std::string& path) {
 
 void TestDataSource::ReadFile(
     const std::string& path,
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
   std::string content;
 
   GURL url = GetURLForPath(path);
@@ -133,5 +125,5 @@ void TestDataSource::ReadFile(
 
   scoped_refptr<base::RefCountedString> response =
       base::RefCountedString::TakeString(&content);
-  callback.Run(response.get());
+  std::move(callback).Run(response.get());
 }

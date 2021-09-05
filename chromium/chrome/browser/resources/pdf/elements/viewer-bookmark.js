@@ -2,6 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/icons.m.js';
+import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/polymer/v3_0/paper-ripple/paper-ripple.js';
+import 'chrome://resources/polymer/v3_0/paper-styles/color.js';
+
+import {IronA11yKeysBehavior} from 'chrome://resources/polymer/v3_0/iron-a11y-keys-behavior/iron-a11y-keys-behavior.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 /**
  * The |title| is the text label displayed for the bookmark.
  *
@@ -24,14 +33,15 @@
  *   children: !Array<!Bookmark>
  * }}
  */
-let Bookmark;
+export let Bookmark;
 
-(function() {
 /** Amount that each level of bookmarks is indented by (px). */
 const BOOKMARK_INDENT = 20;
 
 Polymer({
   is: 'viewer-bookmark',
+
+  _template: html`{__html_template__}`,
 
   properties: {
     /** @type {Bookmark} */
@@ -55,34 +65,34 @@ Polymer({
       value: false,
     },
 
-    /** @type {?HTMLElement} The target for the key bindings below. */
+    /** @type {?EventTarget} The target for the key bindings below. */
     keyEventTarget: Object,
   },
 
-  behaviors: [Polymer.IronA11yKeysBehavior],
+  behaviors: [IronA11yKeysBehavior],
 
   keyBindings: {'enter': 'onEnter_', 'space': 'onSpace_'},
 
   /** @override */
-  attached: function() {
+  attached() {
     this.keyEventTarget = this.$.item;
   },
 
   /** @private */
-  bookmarkChanged_: function() {
+  bookmarkChanged_() {
     this.$.expand.style.visibility =
         this.bookmark.children.length > 0 ? 'visible' : 'hidden';
   },
 
   /** @private */
-  depthChanged_: function() {
+  depthChanged_() {
     this.childDepth_ = this.depth + 1;
     this.$.item.style.paddingInlineStart =
         (this.depth * BOOKMARK_INDENT) + 'px';
   },
 
   /** @private */
-  onClick_: function() {
+  onClick_() {
     if (this.bookmark.page != null) {
       if (this.bookmark.zoom != null) {
         this.fire('change-zoom', {zoom: this.bookmark.zoom});
@@ -108,10 +118,10 @@ Polymer({
    * @param {!KeyboardEvent} e
    * @private
    */
-  onEnter_: function(e) {
+  onEnter_(e) {
     // Don't allow events which have propagated up from the expand button to
     // trigger a click.
-    if (e.detail.keyboardEvent.target != this.$.expand) {
+    if (e.detail.keyboardEvent.target !== this.$.expand) {
       this.onClick_();
     }
   },
@@ -120,7 +130,7 @@ Polymer({
    * @param {!KeyboardEvent} e
    * @private
    */
-  onSpace_: function(e) {
+  onSpace_(e) {
     // cr-icon-button stops propagation of space events, so there's no need
     // to check the event source here.
     this.onClick_();
@@ -132,9 +142,8 @@ Polymer({
    * @param {!Event} e
    * @private
    */
-  toggleChildren_: function(e) {
+  toggleChildren_(e) {
     this.childrenShown_ = !this.childrenShown_;
     e.stopPropagation();  // Prevent the above onClick_ handler from firing.
   }
 });
-})();

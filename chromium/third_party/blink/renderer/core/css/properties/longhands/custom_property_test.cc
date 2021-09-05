@@ -16,7 +16,7 @@
 
 namespace blink {
 
-using namespace css_test_helpers;
+using css_test_helpers::RegisterProperty;
 using VariableMode = CSSParserLocalContext::VariableMode;
 
 namespace {
@@ -24,8 +24,8 @@ namespace {
 class CustomPropertyTest : public PageTestBase {
  public:
   void SetElementWithStyle(const String& value) {
-    GetDocument().body()->SetInnerHTMLFromString("<div id='target' style='" +
-                                                 value + "'></div>");
+    GetDocument().body()->setInnerHTML("<div id='target' style='" + value +
+                                       "'></div>");
     UpdateAllLifecyclePhasesForTest();
   }
 

@@ -18,6 +18,7 @@
 
 namespace blink {
 
+class ExceptionState;
 class BluetoothRemoteGATTCharacteristic;
 class ScriptPromise;
 class ScriptState;
@@ -33,21 +34,17 @@ class BluetoothRemoteGATTDescriptor final : public ScriptWrappable {
       mojom::blink::WebBluetoothRemoteGATTDescriptorPtr,
       BluetoothRemoteGATTCharacteristic*);
 
-  static BluetoothRemoteGATTDescriptor* Create(
-      mojom::blink::WebBluetoothRemoteGATTDescriptorPtr,
-      BluetoothRemoteGATTCharacteristic*);
-
   // IDL exposed interface:
   BluetoothRemoteGATTCharacteristic* characteristic() {
     return characteristic_;
   }
   String uuid() { return descriptor_->uuid; }
   DOMDataView* value() const { return value_; }
-  ScriptPromise readValue(ScriptState*);
-  ScriptPromise writeValue(ScriptState*, const DOMArrayPiece&);
+  ScriptPromise readValue(ScriptState*, ExceptionState&);
+  ScriptPromise writeValue(ScriptState*, const DOMArrayPiece&, ExceptionState&);
 
   // Interface required by garbage collection.
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   friend class DescriptorReadValueCallback;
@@ -65,7 +62,7 @@ class BluetoothRemoteGATTDescriptor final : public ScriptWrappable {
                           const Vector<uint8_t>&,
                           mojom::blink::WebBluetoothResult);
 
-  DOMException* CreateInvalidDescriptorError();
+  String CreateInvalidDescriptorErrorMessage();
 
   mojom::blink::WebBluetoothRemoteGATTDescriptorPtr descriptor_;
   Member<BluetoothRemoteGATTCharacteristic> characteristic_;

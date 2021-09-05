@@ -114,6 +114,15 @@ cr.define('settings_people_page_kerberos_accounts', function() {
     };
 
     setup(function() {
+      const routes = {
+        BASIC: new settings.Route('/'),
+      };
+      routes.PEOPLE = routes.BASIC.createSection('/people', 'people');
+      routes.KERBEROS_ACCOUNTS = routes.PEOPLE.createChild('/kerberosAccounts');
+
+      settings.Router.resetInstanceForTesting(new settings.Router(routes));
+      settings.routes = routes;
+
       browserProxy = new TestKerberosAccountsBrowserProxy();
       settings.KerberosAccountsBrowserProxyImpl.instance_ = browserProxy;
       PolymerTest.clearBody();
@@ -231,7 +240,8 @@ cr.define('settings_people_page_kerberos_accounts', function() {
       const principal_name = testAccounts[Account.FIRST].principalName;
       const params = new URLSearchParams;
       params.append('kerberos_reauth', principal_name);
-      settings.navigateTo(settings.routes.KERBEROS_ACCOUNTS, params);
+      settings.Router.getInstance().navigateTo(
+          settings.routes.KERBEROS_ACCOUNTS, params);
 
       // The flushTasks is necessary since the kerberos_reauth param would
       // otherwise be handled AFTER the callback below is executed.
@@ -621,7 +631,7 @@ cr.define('settings_people_page_kerberos_accounts', function() {
       advancedConfigButton.click();
       Polymer.dom.flush();
 
-      let advancedConfigDialog = dialog.$$('#advancedConfigDialog');
+      const advancedConfigDialog = dialog.$$('#advancedConfigDialog');
       assertTrue(!!advancedConfigDialog);
       assertTrue(advancedConfigDialog.open);
       assertTrue(addDialog.hidden);

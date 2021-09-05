@@ -8,7 +8,6 @@
  */
 
 (function() {
-'use strict';
 
 Polymer({
   is: 'password-edit-dialog',
@@ -16,12 +15,12 @@ Polymer({
   behaviors: [ShowPasswordBehavior],
 
   /** @override */
-  attached: function() {
+  attached() {
     this.$.dialog.showModal();
   },
 
   /** Closes the dialog. */
-  close: function() {
+  close() {
     this.$.dialog.close();
   },
 
@@ -29,12 +28,12 @@ Polymer({
    * Handler for tapping the 'done' button. Should just dismiss the dialog.
    * @private
    */
-  onActionButtonTap_: function() {
+  onActionButtonTap_() {
     this.close();
   },
 
   /** Manually de-select texts for readonly inputs. */
-  onInputBlur_: function() {
+  onInputBlur_() {
     this.shadowRoot.getSelection().removeAllRanges();
   },
 });

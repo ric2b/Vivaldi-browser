@@ -19,7 +19,7 @@ import org.chromium.content_public.browser.WebContents;
 public class TabFavicon extends TabWebContentsUserData {
     private static final Class<TabFavicon> USER_DATA_KEY = TabFavicon.class;
 
-    private final Tab mTab;
+    private final TabImpl mTab;
     private final long mNativeTabFavicon;
 
     /**
@@ -57,9 +57,9 @@ public class TabFavicon extends TabWebContentsUserData {
 
     private TabFavicon(Tab tab) {
         super(tab);
-        Resources resources = tab.getThemedApplicationContext().getResources();
+        mTab = (TabImpl) tab;
+        Resources resources = mTab.getThemedApplicationContext().getResources();
         mIdealFaviconSize = resources.getDimensionPixelSize(R.dimen.default_favicon_size);
-        mTab = tab;
         mNativeTabFavicon = TabFaviconJni.get().init(TabFavicon.this);
     }
 
@@ -87,7 +87,7 @@ public class TabFavicon extends TabWebContentsUserData {
         if (mTab.isNativePage() || mTab.getWebContents() == null) return null;
 
         // Use the cached favicon only if the page wasn't changed.
-        if (mFavicon != null && mFaviconUrl != null && mFaviconUrl.equals(mTab.getUrl())) {
+        if (mFavicon != null && mFaviconUrl != null && mFaviconUrl.equals(mTab.getUrlString())) {
             return mFavicon;
         }
 
@@ -121,7 +121,7 @@ public class TabFavicon extends TabWebContentsUserData {
     @CalledByNative
     private void onFaviconAvailable(Bitmap icon) {
         if (icon == null) return;
-        String url = mTab.getUrl();
+        String url = mTab.getUrlString();
         boolean pageUrlChanged = !url.equals(mFaviconUrl);
         // This method will be called multiple times if the page has more than one favicon.
         // We are trying to use the |mIdealFaviconSize|x|mIdealFaviconSize| DP icon here, or the

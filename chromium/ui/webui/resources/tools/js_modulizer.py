@@ -34,6 +34,7 @@
 #     polymer_modulizer.gni.
 
 import argparse
+import io
 import os
 import re
 import sys
@@ -67,8 +68,8 @@ def ProcessFile(filename, out_folder, namespace_rewrites):
   indices_to_remove = [];
   renames = {}
 
-  with open(filename) as f:
-    lines = f.readlines()
+  with io.open(filename, encoding='utf-8', mode='r') as f:
+    lines = f.readlines();
     ignore_remaining_lines = False
     cr_define_start_index = -1
     cr_define_end_index = -1
@@ -108,6 +109,8 @@ def ProcessFile(filename, out_folder, namespace_rewrites):
       line = _rewrite_namespaces(line, namespace_rewrites)
       lines[i] = line
 
+  if cr_define_start_index != -1:
+    assert cr_define_end_index != -1, 'No cr_define_end found'
 
   # Process line numbers in descending order, such that the array can be
   # modified in-place.
@@ -118,9 +121,11 @@ def ProcessFile(filename, out_folder, namespace_rewrites):
   out_filename = os.path.splitext(os.path.basename(filename))[0] + '.m.js'
 
   # Reconstruct file.
-  with open(os.path.join(out_folder, out_filename), 'w') as f:
+  # Specify the newline character so that the exact same file is generated
+  # across platforms.
+  with io.open(os.path.join(out_folder, out_filename), 'wb') as f:
     for l in lines:
-      f.write(l)
+      f.write(l.encode('utf-8'))
   return
 
 def main(argv):

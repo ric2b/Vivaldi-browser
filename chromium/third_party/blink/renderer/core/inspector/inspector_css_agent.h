@@ -89,7 +89,7 @@ class CORE_EXPORT InspectorCSSAgent final
     }
 
    private:
-    Member<ContentSecurityPolicy> content_security_policy_;
+    ContentSecurityPolicy* content_security_policy_;
   };
 
   static CSSStyleRule* AsCSSStyleRule(CSSRule*);
@@ -109,7 +109,7 @@ class CORE_EXPORT InspectorCSSAgent final
                     InspectorResourceContentLoader*,
                     InspectorResourceContainer*);
   ~InspectorCSSAgent() override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   void ForcePseudoState(Element*, CSSSelector::PseudoType, bool* result);
   void DidCommitLoadForLocalFrame(LocalFrame*) override;
@@ -202,8 +202,8 @@ class CORE_EXPORT InspectorCSSAgent final
 
   protocol::Response startRuleUsageTracking() override;
   protocol::Response takeCoverageDelta(
-      std::unique_ptr<protocol::Array<protocol::CSS::RuleUsage>>* result)
-      override;
+      std::unique_ptr<protocol::Array<protocol::CSS::RuleUsage>>* result,
+      double* out_timestamp) override;
   protocol::Response stopRuleUsageTracking(
       std::unique_ptr<protocol::Array<protocol::CSS::RuleUsage>>* result)
       override;

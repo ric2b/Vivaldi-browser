@@ -33,7 +33,7 @@ class PLATFORM_EXPORT ResourceLoadSchedulerClient
   // Called when the request is granted to run.
   virtual void Run() = 0;
 
-  void Trace(blink::Visitor* visitor) override {}
+  void Trace(Visitor* visitor) override {}
 };
 
 // ResourceLoadScheduler provides a unified per-frame infrastructure to schedule
@@ -157,7 +157,7 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
                         DetachableConsoleLogger& console_logger);
   ~ResourceLoadScheduler() override;
 
-  void Trace(blink::Visitor*);
+  void Trace(Visitor*);
 
   // Changes the policy from |kTight| to |kNormal|. This function can be called
   // multiple times, and does nothing when the scheduler is already working with
@@ -245,7 +245,7 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
           priority(priority),
           intra_priority(intra_priority) {}
 
-    void Trace(blink::Visitor* visitor) { visitor->Trace(client); }
+    void Trace(Visitor* visitor) { visitor->Trace(client); }
 
     Member<ResourceLoadSchedulerClient> client;
     ThrottleOption option;
@@ -261,10 +261,9 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
   // Gets the highest priority pending request that is allowed to be run.
   bool GetNextPendingRequest(ClientId* id);
 
-  // Returns whether we can throttle a request with the given client info based
+  // Returns whether we can throttle a request with the given option based
   // on life cycle state.
-  bool IsClientDelayable(const ClientIdWithPriority& info,
-                         ThrottleOption option) const;
+  bool IsClientDelayable(ThrottleOption option) const;
 
   // Generates the next ClientId.
   ClientId GenerateClientId();
@@ -275,7 +274,7 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
   // Grants a client to run,
   void Run(ClientId, ResourceLoadSchedulerClient*, bool throttleable);
 
-  size_t GetOutstandingLimit() const;
+  size_t GetOutstandingLimit(ResourceLoadPriority priority) const;
 
   void ShowConsoleMessageIfNeeded();
 
@@ -283,7 +282,6 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
       resource_fetcher_properties_;
 
   // A flag to indicate an internal running state.
-  // TODO(toyoshim): We may want to use enum once we start to have more states.
   bool is_shutdown_ = false;
 
   ThrottlingPolicy policy_ = ThrottlingPolicy::kNormal;

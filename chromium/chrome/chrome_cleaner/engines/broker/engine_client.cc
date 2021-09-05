@@ -209,12 +209,10 @@ EngineClient::~EngineClient() {
             // sandbox_cleaner_requests in order to avoid invalid references.
             metadata_observer.reset();
           },
-          base::Passed(&engine_commands_), base::Passed(&scan_results_impl_),
-          base::Passed(&cleanup_results_impl_),
-          base::Passed(&sandbox_file_requests_),
-          base::Passed(&sandbox_requests_),
-          base::Passed(&sandbox_cleaner_requests_),
-          base::Passed(&interface_metadata_observer_)));
+          std::move(engine_commands_), std::move(scan_results_impl_),
+          std::move(cleanup_results_impl_), std::move(sandbox_file_requests_),
+          std::move(sandbox_requests_), std::move(sandbox_cleaner_requests_),
+          std::move(interface_metadata_observer_)));
 }
 
 uint32_t EngineClient::ScanningWatchdogTimeoutInSeconds() const {
@@ -290,10 +288,10 @@ void EngineClient::InitializeAsync(InitializeCallback result_callback) {
   if (interface_metadata_observer_)
     interface_metadata_observer_->ObserveCall(CURRENT_FILE_AND_METHOD);
 
-  // Create a binding to the EngineFileRequests interface that will receive file
-  // reading requests from Initialize.
-  mojom::EngineFileRequestsAssociatedPtrInfo file_requests_info;
-  sandbox_file_requests_->Bind(&file_requests_info);
+  // Create a receiver to the EngineFileRequests interface that will receive
+  // file reading requests from Initialize.
+  mojo::PendingAssociatedRemote<mojom::EngineFileRequests> file_requests;
+  sandbox_file_requests_->Bind(&file_requests);
 
   // Expose the logging directory for writing debug logs.
   base::FilePath logging_path;
@@ -303,7 +301,7 @@ void EngineClient::InitializeAsync(InitializeCallback result_callback) {
 #endif
 
   (*engine_commands_)
-      ->Initialize(std::move(file_requests_info), logging_path,
+      ->Initialize(std::move(file_requests), logging_path,
                    CallbackWithErrorHandling(std::move(result_callback)));
 }
 
@@ -328,7 +326,7 @@ uint32_t EngineClient::StartScan(
       base::BindOnce(
           &EngineClient::StartScanAsync, base::Unretained(this), enabled_uws,
           enabled_locations, include_details, found_callback,
-          base::Passed(&done_callback),
+          std::move(done_callback),
           base::BindOnce(&SaveResultCallback, &result_code, &event)));
   event.Wait();
   MaybeLogResultCode(Operation::StartScan, result_code);
@@ -345,15 +343,14 @@ void EngineClient::StartScanAsync(
     EngineClient::FoundUwSCallback found_callback,
     EngineClient::DoneCallback done_callback,
     StartScanCallback result_callback) {
-  // Create bindings to receive the requests sent from the sandboxed
-  // code.
-  mojom::EngineFileRequestsAssociatedPtrInfo file_requests_info;
-  sandbox_file_requests_->Bind(&file_requests_info);
+  // Create receiver to receive the requests sent from the sandboxed code.
+  mojo::PendingAssociatedRemote<mojom::EngineFileRequests> file_requests;
+  sandbox_file_requests_->Bind(&file_requests);
 
-  mojom::EngineRequestsAssociatedPtrInfo engine_requests_info;
-  sandbox_requests_->Bind(&engine_requests_info);
+  mojo::PendingAssociatedRemote<mojom::EngineRequests> engine_requests;
+  sandbox_requests_->Bind(&engine_requests);
 
-  // Create a binding to the EngineScanResults interface that will receive
+  // Create a receiver to the EngineScanResults interface that will receive
   // results and pass them on to |found_callback| and |done_callback|.
   mojo::PendingAssociatedRemote<mojom::EngineScanResults> scan_results;
 
@@ -369,8 +366,8 @@ void EngineClient::StartScanAsync(
   // |done_callback|) with further results.
   (*engine_commands_)
       ->StartScan(enabled_uws, enabled_locations, include_details,
-                  std::move(file_requests_info),
-                  std::move(engine_requests_info), std::move(scan_results),
+                  std::move(file_requests), std::move(engine_requests),
+                  std::move(scan_results),
                   CallbackWithErrorHandling(std::move(result_callback)));
 }
 
@@ -394,7 +391,7 @@ uint32_t EngineClient::StartCleanup(const std::vector<UwSId>& enabled_uws,
       FROM_HERE,
       base::BindOnce(
           &EngineClient::StartCleanupAsync, base::Unretained(this), enabled_uws,
-          base::Passed(&done_callback),
+          std::move(done_callback),
           base::BindOnce(&SaveResultCallback, &result_code, &event)));
   event.Wait();
 
@@ -408,19 +405,19 @@ uint32_t EngineClient::StartCleanup(const std::vector<UwSId>& enabled_uws,
 void EngineClient::StartCleanupAsync(const std::vector<UwSId>& enabled_uws,
                                      EngineClient::DoneCallback done_callback,
                                      StartCleanupCallback result_callback) {
-  // Create bindings to receive the requests sent from the sandboxed
-  // code.
-  mojom::EngineFileRequestsAssociatedPtrInfo file_requests_info;
-  sandbox_file_requests_->Bind(&file_requests_info);
+  // Create receiver to receive the requests sent from the sandboxed code.
+  mojo::PendingAssociatedRemote<mojom::EngineFileRequests> file_requests;
+  sandbox_file_requests_->Bind(&file_requests);
 
-  mojom::EngineRequestsAssociatedPtrInfo engine_requests_info;
-  sandbox_requests_->Bind(&engine_requests_info);
+  mojo::PendingAssociatedRemote<mojom::EngineRequests> engine_requests;
+  sandbox_requests_->Bind(&engine_requests);
 
-  mojom::CleanerEngineRequestsAssociatedPtrInfo cleaner_engine_requests_info;
-  sandbox_cleaner_requests_->Bind(&cleaner_engine_requests_info);
+  mojo::PendingAssociatedRemote<mojom::CleanerEngineRequests>
+      cleaner_engine_requests;
+  sandbox_cleaner_requests_->Bind(&cleaner_engine_requests);
 
-  // Create a binding to the EngineCleanupResults interface that will
-  // receive results and pass them on to |done_callback|.
+  // Create a receiver to the EngineCleanupResults interface that will receive
+  // results and pass them on to |done_callback|.
   mojo::PendingAssociatedRemote<mojom::EngineCleanupResults> cleanup_results;
   cleanup_results_impl_->BindToCallbacks(&cleanup_results,
                                          std::move(done_callback));
@@ -429,11 +426,10 @@ void EngineClient::StartCleanupAsync(const std::vector<UwSId>& enabled_uws,
     interface_metadata_observer_->ObserveCall(CURRENT_FILE_AND_METHOD);
 
   (*engine_commands_)
-      ->StartCleanup(enabled_uws, std::move(file_requests_info),
-                     std::move(engine_requests_info),
-                     std::move(cleaner_engine_requests_info),
-                     std::move(cleanup_results),
-                     CallbackWithErrorHandling(std::move(result_callback)));
+      ->StartCleanup(
+          enabled_uws, std::move(file_requests), std::move(engine_requests),
+          std::move(cleaner_engine_requests), std::move(cleanup_results),
+          CallbackWithErrorHandling(std::move(result_callback)));
 }
 
 uint32_t EngineClient::Finalize() {

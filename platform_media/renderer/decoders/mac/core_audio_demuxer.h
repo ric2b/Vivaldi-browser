@@ -36,9 +36,8 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
   // Demuxer implementation.
   std::string GetDisplayName() const override;
   void Initialize(DemuxerHost* host,
-                  const PipelineStatusCB& status_cb) override;
-  void Seek(base::TimeDelta time,
-            const PipelineStatusCB& status_cb) override;
+                  PipelineStatusCallback status_cb) override;
+  void Seek(base::TimeDelta time, PipelineStatusCallback status_cb) override;
   void Stop() override;
   void AbortPendingReads() override;
   std::vector<DemuxerStream*> GetAllStreams() override;
@@ -65,7 +64,7 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
   // Creates and configures DemuxerStream with Audio stream if it is possible.
   CoreAudioDemuxerStream* CreateAudioDemuxerStream();
 
-  void OnReadAudioFormatInfoDone(const PipelineStatusCB& status_cb,
+  void OnReadAudioFormatInfoDone(PipelineStatusCallback status_cb,
                                  int read_size);
   void OnReadDataSourceDone(int read_size);
   void OnDataSourceError();
@@ -82,8 +81,8 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
       AudioStreamPacketDescription* packet_descriptions);
   void SetAudioDuration(int64_t duration);
 
-  void ReadDataSourceWithCallback(const DataSource::ReadCB& read_cb);
-  void ReadAudioFormatInfo(const PipelineStatusCB& status_cb);
+  void ReadDataSourceWithCallback(DataSource::ReadCB read_cb);
+  void ReadAudioFormatInfo(PipelineStatusCallback status_cb);
   int ReadDataSource();
 
   DemuxerHost* host_;         // Weak, owned by WebMediaPlayerImpl

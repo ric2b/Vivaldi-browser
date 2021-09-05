@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/css/css_test_helpers.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_property_definition.h"
 #include "third_party/blink/renderer/core/css/css_custom_ident_value.h"
 #include "third_party/blink/renderer/core/css/css_rule_list.h"
 #include "third_party/blink/renderer/core/css/css_style_sheet.h"
@@ -15,7 +16,6 @@
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
 #include "third_party/blink/renderer/core/css/properties/longhand.h"
-#include "third_party/blink/renderer/core/css/property_definition.h"
 #include "third_party/blink/renderer/core/css/property_registration.h"
 #include "third_party/blink/renderer/core/css/property_registry.h"
 #include "third_party/blink/renderer/core/css/rule_set.h"
@@ -73,8 +73,8 @@ void RegisterProperty(Document& document,
   property_definition->setSyntax(syntax);
   property_definition->setInitialValue(initial_value);
   property_definition->setInherits(is_inherited);
-  PropertyRegistration::registerProperty(&document, property_definition,
-                                         exception_state);
+  PropertyRegistration::registerProperty(document.GetExecutionContext(),
+                                         property_definition, exception_state);
   ASSERT_FALSE(exception_state.HadException());
 }
 
@@ -105,6 +105,14 @@ const CSSValue* ParseLonghand(Document& document,
   CSSParserTokenRange range(tokens);
 
   return longhand->ParseSingleValue(range, *context, local_context);
+}
+
+const CSSPropertyValueSet* ParseDeclarationBlock(const String& block_text,
+                                                 CSSParserMode mode) {
+  auto* set = MakeGarbageCollected<MutableCSSPropertyValueSet>(mode);
+  set->ParseDeclarationList(block_text, SecureContextMode::kSecureContext,
+                            nullptr);
+  return set;
 }
 
 }  // namespace css_test_helpers

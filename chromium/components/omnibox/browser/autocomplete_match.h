@@ -138,6 +138,7 @@ struct AutocompleteMatch {
     DRIVE_IMAGE,
     DRIVE_PDF,
     DRIVE_VIDEO,
+    DRIVE_FOLDER,
     DRIVE_OTHER,
     DOCUMENT_TYPE_SIZE
   };
@@ -239,6 +240,10 @@ struct AutocompleteMatch {
   // like entity, personalized, profile or postfix.
   static bool IsSpecializedSearchType(Type type);
 
+  // Convenience function to check if |type| is a search history type -
+  // usually this surfaces a clock icon to the user.
+  static bool IsSearchHistoryType(Type type);
+
   // If this match is a submatch, returns the parent's type, otherwise this
   // match's type.
   Type GetDemotionType() const;
@@ -299,21 +304,6 @@ struct AutocompleteMatch {
   // components are important (part of the match), and should not be trimmed.
   static url_formatter::FormatUrlTypes GetFormatTypes(bool preserve_scheme,
                                                       bool preserve_subdomain);
-
-  // Determines whether a particular match is allowed to be the default match
-  // by comparing |input.text| and |match.inline_autocompletion|. Therefore,
-  // |match.inline_autocompletion| should be set prior to invoking this method.
-  // Also considers trailing whitespace in the input, so the input should not be
-  // fixed up.
-  //
-  // Input "x" will allow default matches "x", "xy", and "x y".
-  // Input "x " will allow default matches "x" and "x y".
-  // Input "x  " will allow default match "x".
-  // Input "x y" will allow default match "x y".
-  // Input "x" with prevent_inline_autocomplete will allow default match "x".
-  static bool AllowedToBeDefault(const AutocompleteInput& input,
-                                 AutocompleteMatch& match);
-
   // Logs the search engine used to navigate to a search page or auto complete
   // suggestion. For direct URL navigations, nothing is logged.
   static void LogSearchEngineUsed(const AutocompleteMatch& match,
@@ -431,6 +421,19 @@ struct AutocompleteMatch {
   // |swap_contents_and_description| for conditions they are swapped.
   AutocompleteMatch GetMatchWithContentsAndDescriptionPossiblySwapped() const;
 
+  // Determines whether this match is allowed to be the default match by
+  // comparing |input.text| and |inline_autocompletion|. Therefore,
+  // |inline_autocompletion| should be set prior to invoking this method. Also
+  // Also considers trailing whitespace in the input, so the input should not be
+  // fixed up. May trim trailing whitespaces from |inline_autocompletion|.
+  //
+  // Input "x" will allow default matches "x", "xy", and "x y".
+  // Input "x " will allow default matches "x" and "x y".
+  // Input "x  " will allow default match "x".
+  // Input "x y" will allow default match "x y".
+  // Input "x" with prevent_inline_autocomplete will allow default match "x".
+  void SetAllowedToBeDefault(const AutocompleteInput& input);
+
   // If this match is a tail suggestion, prepends the passed |common_prefix|.
   // If not, but the prefix matches the beginning of the suggestion, dims that
   // portion in the classification.
@@ -530,7 +533,7 @@ struct AutocompleteMatch {
   // Optional image information. Used for entity suggestions. The dominant color
   // can be used to paint the image placeholder while fetching the image.
   std::string image_dominant_color;
-  std::string image_url;
+  GURL image_url;
 
   // Optional override to use for types that specify an icon sub-type.
   DocumentType document_type = DocumentType::NONE;
@@ -545,6 +548,17 @@ struct AutocompleteMatch {
   // Additional helper text for each entry, such as a title or description.
   base::string16 description;
   ACMatchClassifications description_class;
+  // In the case of the document provider, the description includes a last
+  // updated date that may become stale. To avoid showing stale descriptions,
+  // when |description_for_shortcut| is not empty, it will be stored instead of
+  // |description| in the shortcuts provider.
+  base::string16 description_for_shortcuts;
+  ACMatchClassifications description_class_for_shortcuts;
+
+  // The optional suggestion group Id based on the SuggestionGroupIds enum in
+  // suggestion_config.proto. Used to look up the header text this match must
+  // appear under from ACResult.
+  base::Optional<int> suggestion_group_id;
 
   // If true, UI-level code should swap the contents and description fields
   // before displaying.
@@ -643,12 +657,13 @@ struct AutocompleteMatch {
 #if DCHECK_IS_ON()
   // Does a data integrity check on this match.
   void Validate() const;
+#endif  // DCHECK_IS_ON()
 
   // Checks one text/classifications pair for valid values.
-  void ValidateClassifications(
+  static void ValidateClassifications(
       const base::string16& text,
-      const ACMatchClassifications& classifications) const;
-#endif  // DCHECK_IS_ON()
+      const ACMatchClassifications& classifications,
+      const std::string& provider_name = "");
 };
 
 typedef AutocompleteMatch::ACMatchClassification ACMatchClassification;

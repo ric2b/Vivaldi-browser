@@ -5,7 +5,7 @@
 
 #include <string>
 
-#include "base/memory/shared_memory_handle.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "ui/gfx/geometry/rect.h"

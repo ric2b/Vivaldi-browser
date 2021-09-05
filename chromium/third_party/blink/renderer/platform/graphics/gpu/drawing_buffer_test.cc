@@ -46,6 +46,7 @@
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer_test_helpers.h"
 #include "third_party/blink/renderer/platform/graphics/test/gpu_memory_buffer_test_platform.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
+#include "ui/gl/gpu_preference.h"
 #include "v8/include/v8.h"
 
 using testing::Test;
@@ -202,9 +203,8 @@ TEST_F(DrawingBufferTest, VerifyResizingProperlyAffectsResources) {
   drawing_buffer_->BeginDestruction();
 }
 
-TEST_F(DrawingBufferTest, VerifyDestructionCompleteAfterAllResourceReleased) {
-  bool live = true;
-  drawing_buffer_->live_ = &live;
+TEST_F(DrawingBufferTest, VerifySharedImagesReleasedAfterReleaseCallback) {
+  auto* sii = drawing_buffer_->SharedImageInterfaceForTests();
 
   viz::TransferableResource resource1;
   std::unique_ptr<viz::SingleReleaseCallback> release_callback1;
@@ -230,67 +230,20 @@ TEST_F(DrawingBufferTest, VerifyDestructionCompleteAfterAllResourceReleased) {
   EXPECT_TRUE(drawing_buffer_->PrepareTransferableResource(nullptr, &resource3,
                                                            &release_callback3));
 
-  EXPECT_TRUE(drawing_buffer_->MarkContentsChanged());
-  release_callback1->Run(gpu::SyncToken(), false /* lostResource */);
-
-  drawing_buffer_->BeginDestruction();
-  ASSERT_EQ(live, true);
-
-  DrawingBufferForTests* raw_pointer = drawing_buffer_.get();
-  drawing_buffer_ = nullptr;
-  ASSERT_EQ(live, true);
-
-  EXPECT_FALSE(raw_pointer->MarkContentsChanged());
-  release_callback2->Run(gpu::SyncToken(), false /* lostResource */);
-  ASSERT_EQ(live, true);
-
-  EXPECT_FALSE(raw_pointer->MarkContentsChanged());
-  release_callback3->Run(gpu::SyncToken(), false /* lostResource */);
-  ASSERT_EQ(live, false);
-}
-
-TEST_F(DrawingBufferTest, verifyDrawingBufferStaysAliveIfResourcesAreLost) {
-  bool live = true;
-  drawing_buffer_->live_ = &live;
-
-  viz::TransferableResource resource1;
-  std::unique_ptr<viz::SingleReleaseCallback> release_callback1;
-  viz::TransferableResource resource2;
-  std::unique_ptr<viz::SingleReleaseCallback> release_callback2;
-  viz::TransferableResource resource3;
-  std::unique_ptr<viz::SingleReleaseCallback> release_callback3;
-
-  EXPECT_FALSE(drawing_buffer_->MarkContentsChanged());
-  EXPECT_TRUE(drawing_buffer_->PrepareTransferableResource(nullptr, &resource1,
-                                                           &release_callback1));
-  VerifyStateWasRestored();
-  EXPECT_TRUE(drawing_buffer_->MarkContentsChanged());
-  EXPECT_TRUE(drawing_buffer_->PrepareTransferableResource(nullptr, &resource2,
-                                                           &release_callback2));
-  VerifyStateWasRestored();
-  EXPECT_TRUE(drawing_buffer_->MarkContentsChanged());
-  EXPECT_TRUE(drawing_buffer_->PrepareTransferableResource(nullptr, &resource3,
-                                                           &release_callback3));
-  VerifyStateWasRestored();
+  EXPECT_EQ(sii->shared_image_count(), 4u);
 
   EXPECT_TRUE(drawing_buffer_->MarkContentsChanged());
   release_callback1->Run(gpu::SyncToken(), true /* lostResource */);
-  EXPECT_EQ(live, true);
+  EXPECT_EQ(sii->shared_image_count(), 3u);
+
+  release_callback2->Run(gpu::SyncToken(), true /* lostResource */);
+  EXPECT_EQ(sii->shared_image_count(), 2u);
+
+  // The resource is not marked lost so it's recycled after the callback.
+  release_callback3->Run(gpu::SyncToken(), false /* lostResource */);
+  EXPECT_EQ(sii->shared_image_count(), 2u);
 
   drawing_buffer_->BeginDestruction();
-  EXPECT_EQ(live, true);
-
-  EXPECT_FALSE(drawing_buffer_->MarkContentsChanged());
-  release_callback2->Run(gpu::SyncToken(), false /* lostResource */);
-  EXPECT_EQ(live, true);
-
-  DrawingBufferForTests* raw_ptr = drawing_buffer_.get();
-  drawing_buffer_ = nullptr;
-  EXPECT_EQ(live, true);
-
-  EXPECT_FALSE(raw_ptr->MarkContentsChanged());
-  release_callback3->Run(gpu::SyncToken(), true /* lostResource */);
-  EXPECT_EQ(live, false);
 }
 
 TEST_F(DrawingBufferTest, VerifyOnlyOneRecycledResourceMustBeKept) {
@@ -726,7 +679,7 @@ TEST(DrawingBufferDepthStencilTest, packedDepthStencilSupported) {
         IntSize(10, 10), premultiplied_alpha, want_alpha_channel,
         want_depth_buffer, want_stencil_buffer, want_antialiasing, preserve,
         DrawingBuffer::kWebGL1, DrawingBuffer::kAllowChromiumImage,
-        CanvasColorParams());
+        CanvasColorParams(), gl::GpuPreference::kHighPerformance);
 
     // When we request a depth or a stencil buffer, we will get both.
     EXPECT_EQ(cases[i].request_depth || cases[i].request_stencil,
@@ -778,7 +731,7 @@ TEST_F(DrawingBufferTest, VerifySetIsHiddenProperlyAffectsMailboxes) {
 
   gpu::SyncToken wait_sync_token;
   gl_->GenSyncTokenCHROMIUM(wait_sync_token.GetData());
-  drawing_buffer_->SetIsHidden(true);
+  drawing_buffer_->SetIsInHiddenPage(true);
   // m_drawingBuffer deletes resource immediately when hidden.
   EXPECT_CALL(*gl_, WaitSyncTokenCHROMIUMMock(SyncTokenEq(wait_sync_token)))
       .Times(0);
@@ -796,7 +749,7 @@ TEST_F(DrawingBufferTest,
       nullptr, gpu_compositing, false /* using_swap_chain */, nullptr,
       too_big_size, false, false, false, false, false, DrawingBuffer::kDiscard,
       DrawingBuffer::kWebGL1, DrawingBuffer::kAllowChromiumImage,
-      CanvasColorParams());
+      CanvasColorParams(), gl::GpuPreference::kHighPerformance);
   EXPECT_EQ(too_big_drawing_buffer, nullptr);
   drawing_buffer_->BeginDestruction();
 }

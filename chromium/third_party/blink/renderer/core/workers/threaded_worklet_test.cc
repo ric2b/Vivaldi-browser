@@ -74,7 +74,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
   static void EnsureSharedBackingThread() {
     DCHECK(IsMainThread());
     WorkletThreadHolder<ThreadedWorkletThreadForTest>::EnsureInstance(
-        ThreadCreationParams(WebThreadType::kTestThread)
+        ThreadCreationParams(ThreadType::kTestThread)
             .SetThreadNameForTest("ThreadedWorkletThreadForTest"));
   }
 
@@ -124,7 +124,7 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
     ContentSecurityPolicy* csp = GlobalScope()->GetContentSecurityPolicy();
     EXPECT_EQ(1ul, csp->Headers().size());
     EXPECT_EQ("invalid-csp", csp->Headers().at(0).first);
-    EXPECT_EQ(kContentSecurityPolicyHeaderTypeEnforce,
+    EXPECT_EQ(network::mojom::ContentSecurityPolicyType::kEnforce,
               csp->Headers().at(0).second);
 
     PostCrossThreadTask(*GetParentTaskRunnerForTesting(), FROM_HERE,
@@ -174,8 +174,8 @@ class ThreadedWorkletThreadForTest : public WorkerThread {
 
   bool IsOwningBackingThread() const final { return false; }
 
-  WebThreadType GetThreadType() const override {
-    return WebThreadType::kUnspecifiedWorkerThread;
+  ThreadType GetThreadType() const override {
+    return ThreadType::kUnspecifiedWorkerThread;
   }
 };
 
@@ -192,21 +192,22 @@ class ThreadedWorkletMessagingProxyForTest
   ~ThreadedWorkletMessagingProxyForTest() override = default;
 
   void Start() {
-    Document* document = To<Document>(GetExecutionContext());
+    Document* document = Document::From(GetExecutionContext());
     std::unique_ptr<Vector<char>> cached_meta_data = nullptr;
     WorkerClients* worker_clients = nullptr;
     std::unique_ptr<WorkerSettings> worker_settings = nullptr;
     InitializeWorkerThread(
         std::make_unique<GlobalScopeCreationParams>(
-            document->Url(), mojom::ScriptType::kModule,
-            OffMainThreadWorkerScriptFetchOption::kEnabled, "threaded_worklet",
-            document->UserAgent(), nullptr /* web_worker_fetch_context */,
+            document->Url(), mojom::blink::ScriptType::kModule,
+            "threaded_worklet", document->UserAgent(),
+            document->GetFrame()->Loader().UserAgentMetadata(),
+            nullptr /* web_worker_fetch_context */,
             document->GetContentSecurityPolicy()->Headers(),
             document->GetReferrerPolicy(), document->GetSecurityOrigin(),
             document->IsSecureContext(), document->GetHttpsState(),
             worker_clients, nullptr /* content_settings_client */,
-            document->AddressSpace(),
-            OriginTrialContext::GetTokens(document).get(),
+            document->GetSecurityContext().AddressSpace(),
+            OriginTrialContext::GetTokens(document->ToExecutionContext()).get(),
             base::UnguessableToken::Create(), std::move(worker_settings),
             kV8CacheOptionsDefault,
             MakeGarbageCollected<WorkletModuleResponsesMap>()),
@@ -234,7 +235,7 @@ class ThreadedWorkletTest : public testing::Test {
 
     messaging_proxy_ =
         MakeGarbageCollected<ThreadedWorkletMessagingProxyForTest>(
-            &page_->GetDocument());
+            page_->GetDocument().ToExecutionContext());
     ThreadedWorkletThreadForTest::EnsureSharedBackingThread();
   }
 
@@ -277,8 +278,8 @@ TEST_F(ThreadedWorkletTest, ContentSecurityPolicy) {
   // ThreadedWorklet inherits the owner Document's CSP.
   auto* csp = MakeGarbageCollected<ContentSecurityPolicy>();
   csp->DidReceiveHeader("script-src 'self' https://allowed.example.com",
-                        kContentSecurityPolicyHeaderTypeEnforce,
-                        kContentSecurityPolicyHeaderSourceHTTP);
+                        network::mojom::ContentSecurityPolicyType::kEnforce,
+                        network::mojom::ContentSecurityPolicySource::kHTTP);
   GetDocument().InitContentSecurityPolicy(csp);
 
   MessagingProxy()->Start();
@@ -293,8 +294,9 @@ TEST_F(ThreadedWorkletTest, ContentSecurityPolicy) {
 
 TEST_F(ThreadedWorkletTest, InvalidContentSecurityPolicy) {
   auto* csp = MakeGarbageCollected<ContentSecurityPolicy>();
-  csp->DidReceiveHeader("invalid-csp", kContentSecurityPolicyHeaderTypeEnforce,
-                        kContentSecurityPolicyHeaderSourceHTTP);
+  csp->DidReceiveHeader("invalid-csp",
+                        network::mojom::ContentSecurityPolicyType::kEnforce,
+                        network::mojom::ContentSecurityPolicySource::kHTTP);
   GetDocument().InitContentSecurityPolicy(csp);
 
   MessagingProxy()->Start();

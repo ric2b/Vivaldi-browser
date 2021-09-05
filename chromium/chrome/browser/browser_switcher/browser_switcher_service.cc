@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/syslog_logging.h"
 #include "chrome/browser/browser_switcher/alternative_browser_driver.h"
 #include "chrome/browser/browser_switcher/browser_switcher_prefs.h"
@@ -139,7 +140,7 @@ void XmlDownloader::FetchXml() {
     auto request = std::make_unique<network::ResourceRequest>();
     request->url = source.url;
     request->load_flags = net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE;
-    request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+    request->credentials_mode = network::mojom::CredentialsMode::kInclude;
     source.url_loader = network::SimpleURLLoader::Create(std::move(request),
                                                          traffic_annotation);
     source.url_loader->SetRetryOptions(
@@ -220,14 +221,15 @@ BrowserSwitcherService::BrowserSwitcherService(Profile* profile)
       prefs_(profile),
       driver_(new AlternativeBrowserDriverImpl(&prefs_)),
       sitelist_(new BrowserSwitcherSitelistImpl(&prefs_)) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(&BrowserSwitcherService::Init,
-                                weak_ptr_factory_.GetWeakPtr()));
-
   prefs_subscription_ =
       prefs().RegisterPrefsChangedCallback(base::BindRepeating(
           &BrowserSwitcherService::OnBrowserSwitcherPrefsChanged,
           base::Unretained(this)));
+
+  if (prefs_.IsEnabled()) {
+    UMA_HISTOGRAM_ENUMERATION("BrowserSwitcher.AlternativeBrowser",
+                              driver_->GetBrowserType());
+  }
 }
 
 BrowserSwitcherService::~BrowserSwitcherService() = default;
@@ -328,6 +330,20 @@ BrowserSwitcherService::RegisterAllRulesetsParsedCallback(
 void BrowserSwitcherService::OnBrowserSwitcherPrefsChanged(
     BrowserSwitcherPrefs* prefs,
     const std::vector<std::string>& changed_prefs) {
+  // Record |BrowserSwitcher.AlternativeBrowser| when the
+  // |BrowserSwitcherEnabled| or |AlternativeBrowserPath| policies change.
+  bool should_record_metrics =
+      changed_prefs.end() !=
+      std::find_if(changed_prefs.begin(), changed_prefs.end(),
+                   [](const std::string& pref) {
+                     return pref == prefs::kEnabled ||
+                            pref == prefs::kAlternativeBrowserPath;
+                   });
+  if (should_record_metrics && prefs_.IsEnabled()) {
+    UMA_HISTOGRAM_ENUMERATION("BrowserSwitcher.AlternativeBrowser",
+                              driver_->GetBrowserType());
+  }
+
   auto sources = GetRulesetSources();
 
   // Re-download if one of the URLs changed. O(n^2), with n <= 3.

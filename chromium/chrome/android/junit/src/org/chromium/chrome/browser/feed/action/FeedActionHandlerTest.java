@@ -18,13 +18,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.support.test.filters.SmallTest;
-import android.util.ArrayMap;
 
-import com.google.android.libraries.feed.api.client.knowncontent.ContentMetadata;
-
-import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
@@ -35,12 +33,14 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.feed.FeedLoggingBridge;
 import org.chromium.chrome.browser.feed.FeedOfflineIndicator;
+import org.chromium.chrome.browser.feed.library.api.client.knowncontent.ContentMetadata;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.suggestions.SuggestionsNavigationDelegate;
-import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
@@ -48,16 +48,19 @@ import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 
 import java.util.Collections;
-import java.util.Map;
 
 /**
  * Unit tests for {@link FeedActionHandler}.
  */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
+@Features.EnableFeatures(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)
 public class FeedActionHandlerTest {
     private static final String TEST_URL = "http://www.one.com/";
     private static final Long OFFLINE_ID = 12345L;
+
+    @Rule
+    public TestRule mFeaturesProcessorRule = new Features.JUnitProcessor();
 
     @Mock
     private SuggestionsNavigationDelegate mDelegate;
@@ -70,7 +73,7 @@ public class FeedActionHandlerTest {
     @Mock
     private FeedLoggingBridge mLoggingBridge;
     @Mock
-    private Tab mTab;
+    private TabImpl mTab;
     @Mock
     private WebContents mWebContents;
     @Mock
@@ -112,7 +115,7 @@ public class FeedActionHandlerTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         mActionHandler = new FeedActionHandler(mDelegate, mSuggestionConsumedObserver,
-                mOfflineIndicator, mOfflinePageBridge, mLoggingBridge);
+                mOfflineIndicator, mOfflinePageBridge, mLoggingBridge, null, null);
 
         // Setup mocks such that when NavigationRecorder#record is called, it immediately invokes
         // the passed callback.
@@ -127,10 +130,6 @@ public class FeedActionHandlerTest {
         })
                 .when(mWebContents)
                 .addObserver(mWebContentsObserverCaptor.capture());
-
-        Map<String, Boolean> featureMap = new ArrayMap<>();
-        featureMap.put(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS, true);
-        ChromeFeatureList.setTestFeatures(featureMap);
     }
 
     private void answerWithGoodParams() {
@@ -149,11 +148,6 @@ public class FeedActionHandlerTest {
                 .when(mOfflinePageBridge)
                 .getLoadUrlParamsByOfflineId(mOfflineIdCapture.capture(), anyInt(),
                         mLoadUrlParamsCallbackCaptor.capture());
-    }
-
-    @After
-    public void tearDown() {
-        ChromeFeatureList.setTestFeatures(null);
     }
 
     @Test

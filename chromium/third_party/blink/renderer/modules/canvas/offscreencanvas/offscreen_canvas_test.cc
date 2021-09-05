@@ -84,7 +84,7 @@ void OffscreenCanvasTest::SetUp() {
 
   web_view_helper_.Initialize();
 
-  GetDocument().documentElement()->SetInnerHTMLFromString(
+  GetDocument().documentElement()->setInnerHTML(
       String::FromUTF8("<body><canvas id='c'></canvas></body>"));
 
   auto* canvas_element =
@@ -92,7 +92,7 @@ void OffscreenCanvasTest::SetUp() {
 
   DummyExceptionStateForTesting exception_state;
   offscreen_canvas_ = HTMLCanvasElementModule::transferControlToOffscreen(
-      &GetDocument(), *canvas_element, exception_state);
+      GetDocument().ToExecutionContext(), *canvas_element, exception_state);
   // |offscreen_canvas_| should inherit the FrameSinkId from |canvas_element|s
   // SurfaceLayerBridge, but in tests this id is zero; fill it up by hand.
   offscreen_canvas_->SetFrameSinkId(kClientId, kSinkId);
@@ -103,8 +103,8 @@ void OffscreenCanvasTest::SetUp() {
     attrs.desynchronized = GetParam().desynchronized;
   }
   context_ = static_cast<OffscreenCanvasRenderingContext2D*>(
-      offscreen_canvas_->GetCanvasRenderingContext(&GetDocument(), String("2d"),
-                                                   attrs));
+      offscreen_canvas_->GetCanvasRenderingContext(
+          GetDocument().ToExecutionContext(), String("2d"), attrs));
 }
 
 void OffscreenCanvasTest::TearDown() {
@@ -196,5 +196,5 @@ const TestParams kTestCases[] = {
     {true, false},
     {true, true}};
 
-INSTANTIATE_TEST_SUITE_P(, OffscreenCanvasTest, ValuesIn(kTestCases));
+INSTANTIATE_TEST_SUITE_P(All, OffscreenCanvasTest, ValuesIn(kTestCases));
 }  // namespace blink

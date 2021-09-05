@@ -12,7 +12,6 @@
 #include "base/files/file_path.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_base.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
-#include "components/drive/drive.pb.h"
 #include "components/drive/file_errors.h"
 
 namespace extensions {
@@ -33,12 +32,6 @@ class FileManagerPrivateAddMountFunction : public LoggedExtensionFunction {
   ResponseAction Run() override;
 
  private:
-  // Part of Run(). Called after EnsureReadableFilePermissionAsync or when the
-  // file is on an external drive.
-  void RunAfterEnsureReadableFilePermission(const base::FilePath& display_name,
-                                            drive::FileError error,
-                                            const base::FilePath& file_path);
-
   const ChromeExtensionFunctionDetails chrome_details_;
 };
 

@@ -12,9 +12,11 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/apps/intent_helper/page_transition_util.h"
 #include "chrome/browser/chromeos/apps/intent_helper/chromeos_apps_navigation_throttle.h"
+#include "chrome/browser/chromeos/apps/metrics/intent_handling_metrics.h"
 #include "chrome/browser/chromeos/arc/arc_web_contents_data.h"
 #include "chrome/browser/chromeos/arc/intent_helper/arc_intent_picker_app_fetcher.h"
 #include "chrome/browser/chromeos/external_protocol_dialog.h"
+#include "chrome/browser/sharing/click_to_call/click_to_call_metrics.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_ui_controller.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_utils.h"
 #include "chrome/browser/tab_contents/tab_util.h"
@@ -298,10 +300,7 @@ GetActionResult GetAction(
     GurlAndActivityInfo* out_url_and_activity_name,
     bool* in_out_safe_to_bypass_ui) {
   DCHECK(out_url_and_activity_name);
-  if (!handlers.size()) {
-    *in_out_safe_to_bypass_ui = false;
-    return GetActionResult::SHOW_CHROME_OS_DIALOG;  // no apps found.
-  }
+  DCHECK(!handlers.empty());
 
   if (selected_app_index == handlers.size()) {
     // The user hasn't made the selection yet.
@@ -415,10 +414,6 @@ bool HandleUrl(int render_process_host_id,
     *out_result = result;
 
   switch (result) {
-    case GetActionResult::SHOW_CHROME_OS_DIALOG:
-      ShowFallbackExternalProtocolDialog(render_process_host_id, routing_id,
-                                         url);
-      return true;
     case GetActionResult::OPEN_URL_IN_CHROME:
       OpenUrlInChrome(render_process_host_id, routing_id,
                       url_and_activity_name.first);
@@ -495,9 +490,9 @@ void OnIntentPickerClosed(
     DCHECK_EQ(apps::IntentPickerCloseReason::OPEN_APP, reason);
     DCHECK(!should_persist);
     HandleDeviceSelection(web_contents, devices, selected_app_package, url);
-    RecordUmaDialogAction(Scheme::TEL, entry_type, /*accepted=*/true,
-                          should_persist);
-    chromeos::ChromeOsAppsNavigationThrottle::RecordUma(
+    apps::IntentHandlingMetrics::RecordExternalProtocolMetrics(
+        Scheme::TEL, entry_type, /*accepted=*/true, should_persist);
+    apps::IntentHandlingMetrics::RecordIntentPickerUserInteractionMetrics(
         selected_app_package, entry_type, reason,
         apps::Source::kExternalProtocol, should_persist);
     return;
@@ -590,10 +585,10 @@ void OnIntentPickerClosed(
   auto scheme_it = string_to_scheme.find(scheme);
   if (scheme_it != string_to_scheme.end())
     url_scheme = scheme_it->second;
-  RecordUmaDialogAction(url_scheme, entry_type, protocol_accepted,
-                        should_persist);
+  apps::IntentHandlingMetrics::RecordExternalProtocolMetrics(
+      url_scheme, entry_type, protocol_accepted, should_persist);
 
-  chromeos::ChromeOsAppsNavigationThrottle::RecordUma(
+  apps::IntentHandlingMetrics::RecordIntentPickerUserInteractionMetrics(
       selected_app_package, entry_type, reason, apps::Source::kExternalProtocol,
       should_persist);
 }
@@ -688,7 +683,7 @@ void OnUrlHandlerList(int render_process_host_id,
   // We only reach here if Chrome doesn't think it can handle the URL. If ARC is
   // not running anymore, or Chrome is the only candidate returned, show the
   // usual Chrome OS dialog that says we cannot handle the URL.
-  if (!instance || !intent_helper_bridge ||
+  if (!instance || !intent_helper_bridge || handlers.empty() ||
       IsChromeOnlyAppCandidate(handlers)) {
     ShowExternalProtocolDialogWithoutApps(render_process_host_id, routing_id,
                                           url, initiating_origin);
@@ -700,7 +695,7 @@ void OnUrlHandlerList(int render_process_host_id,
   if (HandleUrl(render_process_host_id, routing_id, url, handlers,
                 handlers.size(), &result, safe_to_bypass_ui)) {
     if (result == GetActionResult::HANDLE_URL_IN_ARC) {
-      chromeos::ChromeOsAppsNavigationThrottle::RecordUma(
+      apps::IntentHandlingMetrics::RecordIntentPickerUserInteractionMetrics(
           std::string(), apps::PickerEntryType::kArc,
           apps::IntentPickerCloseReason::PREFERRED_APP_FOUND,
           apps::Source::kExternalProtocol,
@@ -824,21 +819,6 @@ void OnIntentPickerClosedForTesting(
                        safe_to_bypass_ui, std::move(handlers),
                        std::move(devices), selected_app_package, entry_type,
                        reason, should_persist);
-}
-
-void RecordUmaDialogAction(Scheme scheme,
-                           apps::PickerEntryType entry_type,
-                           bool accepted,
-                           bool persisted) {
-  ProtocolAction action =
-      GetProtocolAction(scheme, entry_type, accepted, persisted);
-  if (accepted) {
-    base::UmaHistogramEnumeration(
-        "ChromeOS.Apps.ExternalProtocolDialog.Accepted", action);
-  } else {
-    base::UmaHistogramEnumeration(
-        "ChromeOS.Apps.ExternalProtocolDialog.Rejected", action);
-  }
 }
 
 ProtocolAction GetProtocolAction(Scheme scheme,

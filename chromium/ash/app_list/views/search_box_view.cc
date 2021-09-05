@@ -80,6 +80,12 @@ float GetAssistantButtonOpacityForState(AppListState state) {
   return 1.f;
 }
 
+bool IsTrimmedQueryEmpty(const base::string16& query) {
+  base::string16 trimmed_query;
+  base::TrimWhitespace(query, base::TrimPositions::TRIM_ALL, &trimmed_query);
+  return trimmed_query.empty();
+}
+
 }  // namespace
 
 SearchBoxView::SearchBoxView(search_box::SearchBoxViewDelegate* delegate,
@@ -100,6 +106,7 @@ void SearchBoxView::Init(bool is_tablet_mode) {
   if (app_list_features::IsZeroStateSuggestionsEnabled())
     set_show_close_button_when_active(true);
   SearchBoxViewBase::Init();
+  current_query_ = search_box()->GetText();
 }
 
 void SearchBoxView::ResetForShow() {
@@ -115,6 +122,7 @@ void SearchBoxView::ResetForShow() {
 
 void SearchBoxView::ClearSearch() {
   search_box::SearchBoxViewBase::ClearSearch();
+  current_query_.clear();
   app_list_view_->SetStateFromSearchBoxView(
       true, false /*triggered_by_contents_change*/);
 }
@@ -173,8 +181,6 @@ void SearchBoxView::UpdateModel(bool initiated_by_user) {
   search_model_->search_box()->RemoveObserver(this);
   search_model_->search_box()->Update(search_box()->GetText(),
                                       initiated_by_user);
-  search_model_->search_box()->SetSelectionModel(
-      search_box()->GetSelectionModel());
   search_model_->search_box()->AddObserver(this);
 }
 
@@ -373,7 +379,7 @@ void SearchBoxView::UpdateOpacity() {
            ->ShouldShowSearchBox()) {
     return;
   }
-  const int shelf_height = view_delegate_->GetShelfHeight();
+  const int shelf_height = view_delegate_->GetShelfSize();
   float fraction =
       std::max<float>(
           0, contents_view_->app_list_view()->GetCurrentAppListHeight() -
@@ -496,6 +502,12 @@ void SearchBoxView::ClearAutocompleteText() {
 
 void SearchBoxView::ContentsChanged(views::Textfield* sender,
                                     const base::string16& new_contents) {
+  if (IsTrimmedQueryEmpty(current_query_) && !IsSearchBoxTrimmedQueryEmpty()) {
+    // User enters a new search query. Record the action.
+    base::RecordAction(base::UserMetricsAction("AppList_SearchQueryStarted"));
+  }
+  current_query_ = new_contents;
+
   // Update autocomplete text highlight range to track user typed text.
   if (ShouldProcessAutocomplete())
     ResetHighlightRange();
@@ -634,7 +646,8 @@ bool SearchBoxView::HandleKeyEvent(views::Textfield* sender,
         selection_controller->selected_result();
     if (selected_result && selected_result->result())
       selected_result->OnKeyEvent(&event);
-    selection_controller->ResetSelection(nullptr);
+    // Reset the selected result to the default result.
+    selection_controller->ResetSelection(nullptr, true /* default_selection */);
     search_box()->SetText(base::string16());
     return true;
   }
@@ -747,11 +760,6 @@ void SearchBoxView::HintTextChanged() {
   search_box()->SetPlaceholderText(search_box_model->hint_text());
   search_box()->SetAccessibleName(search_box_model->accessible_name());
   SchedulePaint();
-}
-
-void SearchBoxView::SelectionModelChanged() {
-  search_box()->SelectSelectionModel(
-      search_model_->search_box()->selection_model());
 }
 
 void SearchBoxView::Update() {

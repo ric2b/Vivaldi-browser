@@ -123,9 +123,8 @@ void CvcUnmaskViewController::OnUnmaskVerificationResult(
 }
 
 base::string16 CvcUnmaskViewController::GetSheetTitle() {
-  return l10n_util::GetStringFUTF16(
-      IDS_AUTOFILL_CARD_UNMASK_PROMPT_TITLE,
-      credit_card_.NetworkOrBankNameAndLastFourDigits());
+  return l10n_util::GetStringFUTF16(IDS_AUTOFILL_CARD_UNMASK_PROMPT_TITLE,
+                                    credit_card_.NetworkAndLastFourDigits());
 }
 
 void CvcUnmaskViewController::FillContentView(views::View* content_view) {
@@ -192,7 +191,7 @@ void CvcUnmaskViewController::FillContentView(views::View* content_view) {
     auto month = std::make_unique<views::Combobox>(&month_combobox_model_);
     month->set_listener(this);
     month->SetID(static_cast<int>(DialogViewID::CVC_MONTH));
-    month->SelectValue(credit_card_.ExpirationMonthAsString());
+    month->SelectValue(credit_card_.Expiration2DigitMonthAsString());
     month->SetInvalid(true);
     layout->AddView(std::move(month));
 

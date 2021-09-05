@@ -343,7 +343,8 @@ HtmlFieldType FieldTypeFromAutocompleteAttributeValue(
       autocomplete_attribute_value == "phone_ext")
     return HTML_TYPE_TEL_EXTENSION;
 
-  if (autocomplete_attribute_value == "email")
+  if (autocomplete_attribute_value == "email" ||
+      autocomplete_attribute_value == "username")
     return HTML_TYPE_EMAIL;
 
   if (autocomplete_attribute_value == "upi-vpa" ||
@@ -822,14 +823,6 @@ void FormStructure::ProcessQueryResponse(
       ServerFieldType heuristic_type = field->heuristic_type();
       if (heuristic_type != UNKNOWN_TYPE)
         heuristics_detected_fillable_field = true;
-
-      // Clears the server prediction for CVC-fields if the corresponding Finch
-      // feature is not enabled.
-      if (!base::FeatureList::IsEnabled(
-              autofill::features::kAutofillUseServerCVCPrediction) &&
-          field_type == ServerFieldType::CREDIT_CARD_VERIFICATION_CODE) {
-        field_type = ServerFieldType::NO_SERVER_DATA;
-      }
 
       field->set_server_type(field_type);
       std::vector<AutofillQueryResponseContents::Field::FieldPrediction>

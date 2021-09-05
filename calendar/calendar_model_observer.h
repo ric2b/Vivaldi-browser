@@ -52,6 +52,11 @@ class CalendarModelObserver : public base::CheckedObserver {
   virtual void OnEventTypeChanged(CalendarService* service,
                                   const EventTypeRow& row) {}
 
+  virtual void OnNotificationChanged(CalendarService* service,
+                                     const NotificationRow& row) {}
+
+  virtual void OnCalendarModified(CalendarService* service) {}
+
  protected:
   ~CalendarModelObserver() override {}
 };

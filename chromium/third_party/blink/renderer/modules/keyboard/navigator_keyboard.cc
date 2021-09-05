@@ -16,10 +16,12 @@ const char NavigatorKeyboard::kSupplementName[] = "NavigatorKeyboard";
 
 NavigatorKeyboard::NavigatorKeyboard(Navigator& navigator)
     : Supplement<Navigator>(navigator),
-      keyboard_(MakeGarbageCollected<Keyboard>(
-          GetSupplementable()->GetFrame()
-              ? GetSupplementable()->GetFrame()->GetDocument()
-              : nullptr)) {}
+      keyboard_(MakeGarbageCollected<Keyboard>(GetSupplementable()->GetFrame()
+                                                   ? GetSupplementable()
+                                                         ->GetFrame()
+                                                         ->GetDocument()
+                                                         ->ToExecutionContext()
+                                                   : nullptr)) {}
 
 // static
 Keyboard* NavigatorKeyboard::keyboard(Navigator& navigator) {
@@ -32,7 +34,7 @@ Keyboard* NavigatorKeyboard::keyboard(Navigator& navigator) {
   return supplement->keyboard_;
 }
 
-void NavigatorKeyboard::Trace(blink::Visitor* visitor) {
+void NavigatorKeyboard::Trace(Visitor* visitor) {
   visitor->Trace(keyboard_);
   Supplement<Navigator>::Trace(visitor);
 }

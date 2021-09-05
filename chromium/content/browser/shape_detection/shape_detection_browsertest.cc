@@ -49,9 +49,9 @@ class ShapeDetectionBrowserTest
       public ::testing::WithParamInterface<struct TestParameters> {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    // Flag to enable ShapeDetection API.
+    // Enable FaceDetector since it is still experimental.
     CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kEnableBlinkFeatures, "ShapeDetection");
+        switches::kEnableBlinkFeatures, "FaceDetector");
   }
 
  protected:
@@ -111,7 +111,7 @@ IN_PROC_BROWSER_TEST_P(ShapeDetectionBrowserTest, MAYBE_DetectShapesInImage) {
                          GetParam().expected_bounding_boxes);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          ShapeDetectionBrowserTest,
                          testing::ValuesIn(kTestParameters));
 

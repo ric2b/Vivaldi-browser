@@ -13,28 +13,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
+#include "device/fido/features.h"
 #include "device/fido/fido_authenticator.h"
 
 namespace {
-
-// CableV1Event enumerates several things that can occur during a caBLE v1
-// transaction. Do not change assigned values since they are used in histograms,
-// only append new values. Keep synced with enums.xml.
-enum class CableV1Event : int {
-  kFlowStart = 0,
-  kBLEHardwareFound = 1,
-  kBLEAlreadyPowered = 2,
-  kBLEAutoPower = 3,
-  kBLEManualPower = 4,
-  kTransmitting = 5,
-  kSuccess = 6,
-  kTimeout = 7,
-  kMaxValue = kTimeout,
-};
-
-void RecordCableV1Event(CableV1Event event) {
-  UMA_HISTOGRAM_ENUMERATION("WebAuthentication.CableV1Event", event);
-}
 
 bool ShouldShowBlePairingUI(
     bool previously_paired_with_bluetooth_authenticator,
@@ -138,20 +120,12 @@ void AuthenticatorRequestDialogModel::StartFlow(
     const base::ListValue* previously_paired_bluetooth_device_list) {
   DCHECK_EQ(current_step(), Step::kNotStarted);
 
-  if (cable_extension_provided_) {
-    RecordCableV1Event(CableV1Event::kFlowStart);
-  }
-
   transport_availability_ = std::move(transport_availability);
   last_used_transport_ = last_used_transport;
   for (const auto transport : transport_availability_.available_transports) {
-    if (transport == AuthenticatorTransport::kCloudAssistedBluetoothLowEnergy) {
-      if (cable_extension_provided_) {
-        RecordCableV1Event(CableV1Event::kBLEHardwareFound);
-      }
-      if (!cable_extension_provided_ && !have_paired_phones_) {
-        continue;
-      }
+    if (transport == AuthenticatorTransport::kCloudAssistedBluetoothLowEnergy &&
+        !cable_extension_provided_ && !have_paired_phones_) {
+      continue;
     }
     available_transports_.emplace_back(transport);
   }
@@ -164,10 +138,6 @@ void AuthenticatorRequestDialogModel::StartFlow(
 }
 
 void AuthenticatorRequestDialogModel::StartOver() {
-  if (!request_may_start_over_) {
-    NOTREACHED();
-    return;
-  }
   ephemeral_state_.Reset();
 
   for (auto& observer : observers_)
@@ -180,27 +150,30 @@ void AuthenticatorRequestDialogModel::
   DCHECK(current_step() == Step::kNotStarted);
 
   // If no authenticator other than the one for the native Windows API is
-  // available, don't show Chrome UI but proceed straight to the native
-  // Windows UI.
+  // available, or if the sole authenticator is caBLE, but there's no caBLE
+  // extension nor paired phone, then don't show Chrome UI but proceed straight
+  // to the native Windows UI.
   if (transport_availability_.has_win_native_api_authenticator &&
-      transport_availability_.available_transports.empty()) {
-    if (might_create_resident_credential_ &&
-        !transport_availability_
-             .win_native_ui_shows_resident_credential_notice) {
-      SetCurrentStep(Step::kResidentCredentialConfirmation);
-    } else {
-      HideDialogAndDispatchToNativeWindowsApi();
+      !win_native_api_already_tried_) {
+    const auto& transports = transport_availability_.available_transports;
+    if (transports.empty() ||
+        (transports.size() == 1 &&
+         base::Contains(
+             transports,
+             AuthenticatorTransport::kCloudAssistedBluetoothLowEnergy) &&
+         !cable_extension_provided_ && !have_paired_phones_)) {
+      StartWinNativeApi();
+      return;
     }
-    return;
   }
 
   auto most_likely_transport =
       SelectMostLikelyTransport(transport_availability_, last_used_transport_,
                                 cable_extension_provided_, have_paired_phones_);
-  if (most_likely_transport) {
+  if (most_likely_transport &&
+      !base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport)) {
     StartGuidedFlowForTransport(*most_likely_transport);
   } else if (!transport_availability_.available_transports.empty()) {
-    DCHECK_GE(transport_availability_.available_transports.size(), 2u);
     SetCurrentStep(Step::kTransportSelection);
   } else {
     SetCurrentStep(Step::kErrorNoAvailableTransports);
@@ -251,10 +224,9 @@ void AuthenticatorRequestDialogModel::
     return;
   }
 
-  // The StartOver() logic does not work in combination with the Windows API.
-  // Therefore do not show a retry button on any error sheet shown after the
-  // Windows API call returns.
-  request_may_start_over_ = false;
+  // The Windows-native UI already handles retrying so we do not offer a second
+  // level of retry in that case.
+  offer_try_again_in_ui_ = false;
 
   // There is no AuthenticatorReference for the Windows authenticator, hence
   // directly call DispatchRequestAsyncInternal here.
@@ -262,6 +234,17 @@ void AuthenticatorRequestDialogModel::
       transport_availability()->win_native_api_authenticator_id);
 
   HideDialog();
+}
+
+void AuthenticatorRequestDialogModel::StartWinNativeApi() {
+  DCHECK(transport_availability_.has_win_native_api_authenticator);
+
+  if (might_create_resident_credential_ &&
+      !transport_availability_.win_native_ui_shows_resident_credential_notice) {
+    SetCurrentStep(Step::kResidentCredentialConfirmation);
+  } else {
+    HideDialogAndDispatchToNativeWindowsApi();
+  }
 }
 
 void AuthenticatorRequestDialogModel::StartPhonePairing() {
@@ -277,22 +260,12 @@ void AuthenticatorRequestDialogModel::
          current_step() == Step::kCableActivate ||
          current_step() == Step::kNotStarted);
   if (ble_adapter_is_powered()) {
-    if (cable_extension_provided_) {
-      did_cable_broadcast_ = true;
-      RecordCableV1Event(CableV1Event::kBLEAlreadyPowered);
-    }
     SetCurrentStep(next_step);
   } else {
     next_step_once_ble_powered_ = next_step;
     if (transport_availability()->can_power_on_ble_adapter) {
-      if (cable_extension_provided_) {
-        RecordCableV1Event(CableV1Event::kBLEAutoPower);
-      }
       SetCurrentStep(Step::kBlePowerOnAutomatic);
     } else {
-      if (cable_extension_provided_) {
-        RecordCableV1Event(CableV1Event::kBLEManualPower);
-      }
       SetCurrentStep(Step::kBlePowerOnManual);
     }
   }
@@ -304,10 +277,6 @@ void AuthenticatorRequestDialogModel::ContinueWithFlowAfterBleAdapterPowered() {
   DCHECK(ble_adapter_is_powered());
   DCHECK(next_step_once_ble_powered_.has_value());
 
-  if (cable_extension_provided_) {
-    did_cable_broadcast_ = true;
-    RecordCableV1Event(CableV1Event::kTransmitting);
-  }
   SetCurrentStep(*next_step_once_ble_powered_);
 }
 
@@ -450,10 +419,6 @@ void AuthenticatorRequestDialogModel::Cancel() {
     observer.OnCancelRequest();
 }
 
-void AuthenticatorRequestDialogModel::Back() {
-  SetCurrentStep(Step::kTransportSelection);
-}
-
 void AuthenticatorRequestDialogModel::OnSheetModelDidChange() {
   for (auto& observer : observers_)
     observer.OnSheetModelChanged();
@@ -472,10 +437,6 @@ void AuthenticatorRequestDialogModel::OnRequestComplete() {
 }
 
 void AuthenticatorRequestDialogModel::OnRequestTimeout() {
-  if (did_cable_broadcast_) {
-    RecordCableV1Event(CableV1Event::kTimeout);
-  }
-
   // The request may time out while the UI shows a different error.
   if (!is_request_complete())
     SetCurrentStep(Step::kTimedOut);
@@ -517,6 +478,21 @@ void AuthenticatorRequestDialogModel::OnAuthenticatorStorageFull() {
 
 void AuthenticatorRequestDialogModel::OnUserConsentDenied() {
   SetCurrentStep(Step::kErrorInternalUnrecognized);
+}
+
+bool AuthenticatorRequestDialogModel::OnWinUserCancelled() {
+  // If caBLE v2 isn't enabled then this event isn't handled and will cause the
+  // request to fail with a NotAllowedError.
+  if (!base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport)) {
+    return false;
+  }
+
+  // Otherwise, if the user cancels out of the Windows-native UI, we show the
+  // transport selection dialog which allows them to pair a phone.
+  win_native_api_already_tried_ = true;
+
+  StartOver();
+  return true;
 }
 
 void AuthenticatorRequestDialogModel::OnBluetoothPoweredStateChanged(
@@ -579,6 +555,11 @@ void AuthenticatorRequestDialogModel::OnHavePIN(const std::string& pin) {
   }
   std::move(pin_callback_).Run(pin);
   ephemeral_state_.has_attempted_pin_entry_ = true;
+}
+
+void AuthenticatorRequestDialogModel::OnRetryUserVerification(int attempts) {
+  uv_attempts_ = attempts;
+  SetCurrentStep(Step::kRetryInternalUserVerification);
 }
 
 void AuthenticatorRequestDialogModel::OnResidentCredentialConfirmed() {
@@ -675,14 +656,6 @@ void AuthenticatorRequestDialogModel::OnAccountSelected(size_t index) {
   auto selected = std::move(ephemeral_state_.responses_[index]);
   ephemeral_state_.responses_.clear();
   std::move(selection_callback_).Run(std::move(selected));
-}
-
-void AuthenticatorRequestDialogModel::OnSuccess(
-    AuthenticatorTransport transport) {
-  if (transport == AuthenticatorTransport::kCloudAssistedBluetoothLowEnergy &&
-      cable_extension_provided_) {
-    RecordCableV1Event(CableV1Event::kSuccess);
-  }
 }
 
 void AuthenticatorRequestDialogModel::SetSelectedAuthenticatorForTesting(

@@ -23,9 +23,9 @@ class VivaldiWebSource : public content::URLDataSource {
   // content::URLDataSource implementation.
   std::string GetSource() override;
   void StartDataRequest(
-      const std::string& path,
+      const GURL& path,
       const content::WebContents::Getter& wc_getter,
-      const content::URLDataSource::GotDataCallback& callback) override;
+      content::URLDataSource::GotDataCallback callback) override;
   std::string GetMimeType(const std::string& path) override;
   bool AllowCaching() override;
   bool ShouldServiceRequest(const GURL& url,
@@ -33,7 +33,7 @@ class VivaldiWebSource : public content::URLDataSource {
                             int render_process_id) override;
 
  private:
-  void ExtractRequestTypeAndData(const std::string& path,
+  void ExtractRequestTypeAndData(const GURL& path,
                                  std::string& type,
                                  std::string& data);
 

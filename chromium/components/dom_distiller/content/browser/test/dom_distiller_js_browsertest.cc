@@ -17,7 +17,6 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "components/dom_distiller/content/browser/web_contents_main_frame_observer.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -35,16 +34,16 @@ namespace {
 class WebContentsMainFrameHelper : public content::WebContentsObserver {
  public:
   WebContentsMainFrameHelper(content::WebContents* web_contents,
-                             const base::Closure& callback)
-      : WebContentsObserver(web_contents), callback_(callback) {}
+                             base::OnceClosure callback)
+      : WebContentsObserver(web_contents), callback_(std::move(callback)) {}
 
   void DOMContentLoaded(content::RenderFrameHost* render_frame_host) override {
-    if (!render_frame_host->GetParent())
-      callback_.Run();
+    if (!render_frame_host->GetParent() && callback_)
+      std::move(callback_).Run();
   }
 
  private:
-  base::Closure callback_;
+  base::OnceClosure callback_;
 };
 
 }  // namespace
@@ -78,11 +77,11 @@ class DomDistillerJsTest : public content::ContentBrowserTest {
 
   void OnJsTestExecutionDone(base::Value value) {
     result_ = std::move(value);
-    js_test_execution_done_callback_.Run();
+    std::move(js_test_execution_done_callback_).Run();
   }
 
  protected:
-  base::Closure js_test_execution_done_callback_;
+  base::OnceClosure js_test_execution_done_callback_;
   base::Value result_;
 
  private:
@@ -135,8 +134,6 @@ IN_PROC_BROWSER_TEST_F(DomDistillerJsTest, MAYBE_RunJsTests) {
 
   // Load the test file in content shell and wait until it has fully loaded.
   content::WebContents* web_contents = shell()->web_contents();
-  dom_distiller::WebContentsMainFrameObserver::CreateForWebContents(
-      web_contents);
   base::RunLoop url_loaded_runner;
   WebContentsMainFrameHelper main_frame_loaded(web_contents,
                                                url_loaded_runner.QuitClosure());

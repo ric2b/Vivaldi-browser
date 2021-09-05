@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">अपलोड करें</translation>
 <translation id="1249250836236328755">शैली</translation>
 <translation id="1278813325885878377">हंगेरियाई QWERTY कीबोर्ड</translation>
+<translation id="1293556467332435079">फ़ाइल</translation>
 <translation id="1297922636971898492">Google डिस्क इस समय उपलब्ध नहीं है. Google डिस्क के वापस आ जाने पर अपलोडिंग अपने आप फिर से प्रारंभ हो जाएगी.</translation>
 <translation id="1307931752636661898">Linux फ़ाइलें नहीं दिखाई जा सकीं</translation>
 <translation id="1310751437842832374">लिप्यंतरण (mausam → ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">सेव कर लिया गया है</translation>
 <translation id="1864756863218646478">फ़ाइल नहीं मिल सकी.</translation>
 <translation id="1921986354447415460">तुर्की-F कीबोर्ड</translation>
+<translation id="1924372192547904021"><ph name="DRIVE_NAME" /> को फ़ॉर्मैट किया गया</translation>
 <translation id="1931134289871235022">स्लोवाक</translation>
 <translation id="1933345018156373194">नहीं ले जाया जा सका, अनचाही गड़बड़ी : <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">फ़िनिश</translation>
@@ -132,7 +134,7 @@
 <translation id="2542049655219295786">Google टेबल</translation>
 <translation id="2547921442987553570"><ph name="EXTENSION_NAME" /> में जोड़ें</translation>
 <translation id="255937426064304553">यूएस अंतर्राष्ट्रीय</translation>
-<translation id="2562685439590298522"> दस्तावेज़</translation>
+<translation id="2562685439590298522">Docs</translation>
 <translation id="2563185590376525700">मेढक</translation>
 <translation id="2614589611416690597"><ph name="VIDEO_TYPE" /> वीडियो</translation>
 <translation id="2620090360073999360">इस समय Google डिस्क तक नहीं पहुंचा जा सकता.</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">जर्मन नियो 2 कीबोर्ड</translation>
 <translation id="2943400156390503548">स्लाइड</translation>
 <translation id="2943503720238418293">थोड़े छोटे नाम का इस्तेमाल करें</translation>
+<translation id="2949781154072577687"><ph name="DRIVE_NAME" /> को फ़ॉर्मैट किया जा रहा है...</translation>
 <translation id="2951236788251446349">जेलीफ़िश</translation>
 <translation id="2963783323012015985">तुर्की कीबोर्ड</translation>
 <translation id="2966459079597787514">स्वीडिश कीबोर्ड</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">कॉपी बनाने का काम विफल रहा. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">खरबूजा</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">बाहरी लिंक</translation>
 <translation id="4425149324548788773">मेरी डिस्क</translation>
 <translation id="4465830120256509958">ब्राज़ीली कीबोर्ड</translation>
 <translation id="4470564870223067757">हंगुल 2 सेट</translation>
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">देवनागरी कीबोर्ड (फ़ोनेटिक)</translation>
 <translation id="6885780034956018177">घोंघा</translation>
 <translation id="6896758677409633944">कॉपी बनाएं</translation>
+<translation id="6898028766943174120">और सब-फ़़ोल्डर...</translation>
 <translation id="691516599546977041"><ph name="FOLDER_NAME" /> पर सेव नहीं किया जा सकता. बदलाव की गई इमेज डाउनलोड फ़ोल्डर में सेव की जाएंगी.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">यूएस वर्कमैन</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">मोबाइल डेटा पर सिंक करना चालू करें</translation>
 <translation id="6965382102122355670">ठीक है</translation>
 <translation id="6970230597523682626">बल्गारियाई</translation>
+<translation id="6973630695168034713">फ़ोल्डर</translation>
 <translation id="6978611942794658017">यह फ़ाइल कंप्यूटर के लिए Windows सॉफ़्टवेयर का उपयोग करके बनाई गई है. यह आपके Chrome OS चलाने वाले डिवाइस से संगत नहीं है. कृपया Chrome वेब स्‍टोर पर इसके बदले उचित ऐप्लिकेशन खोजें.</translation>
 <translation id="6979158407327259162">Google डिस्क</translation>
 <translation id="6990081529015358884">अब आपके पास और स्‍थान शेष नहीं है</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">बस एक सेकंड प्रतीक्षा करें</translation>
 <translation id="7603724359189955920">ग्रिड</translation>
 <translation id="7627790789328695202">ओह, <ph name="FILE_NAME" /> पहले से मौजूद है. उसका नाम बदलें और फिर से प्रयास करें.</translation>
+<translation id="7628656427739290098"><ph name="PERCENT" />% पूरा हाे गया.</translation>
 <translation id="7649070708921625228">सहायता</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> आइटम ले जाए रहे हैं...</translation>
 <translation id="7658239707568436148">अभी नहीं</translation>
+<translation id="7695430100978772476"><ph name="DRIVE_NAME" /> को फ़ॉर्मैट नहीं किया जा सका</translation>
 <translation id="770015031906360009">ग्रीक</translation>
 <translation id="7706319470528945664">पुर्तगाली कीबोर्ड</translation>
 <translation id="7711920809702896782">इमेज की जानकारी</translation>

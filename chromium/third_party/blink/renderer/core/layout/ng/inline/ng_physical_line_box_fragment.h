@@ -13,6 +13,7 @@
 
 namespace blink {
 
+class NGFragmentItem;
 class NGLineBoxFragmentBuilder;
 
 class CORE_EXPORT NGPhysicalLineBoxFragment final
@@ -30,6 +31,9 @@ class CORE_EXPORT NGPhysicalLineBoxFragment final
 
   static scoped_refptr<const NGPhysicalLineBoxFragment> Create(
       NGLineBoxFragmentBuilder* builder);
+
+  using PassKey = util::PassKey<NGPhysicalLineBoxFragment>;
+  NGPhysicalLineBoxFragment(PassKey, NGLineBoxFragmentBuilder* builder);
 
   ~NGPhysicalLineBoxFragment() {
     for (const NGLink& child : Children())
@@ -50,39 +54,31 @@ class CORE_EXPORT NGPhysicalLineBoxFragment final
   // This may be different from the direction of the container box when
   // first-line style is used, or when 'unicode-bidi: plaintext' is used.
   TextDirection BaseDirection() const {
-    return static_cast<TextDirection>(base_direction_);
+    return static_cast<TextDirection>(base_or_resolved_direction_);
   }
 
-  // Compute baseline for the specified baseline type.
-  NGLineHeightMetrics BaselineMetrics(FontBaseline) const;
+  // Compute the baseline metrics for this linebox.
+  NGLineHeightMetrics BaselineMetrics() const;
 
   // Scrollable overflow. including contents, in the local coordinate.
   // |ScrollableOverflow| is not precomputed/cached because it cannot be
   // computed when LineBox is generated because it needs container dimensions
   // to resolve relative position of its children.
-  PhysicalRect ScrollableOverflow(const LayoutObject* container,
-                                  const ComputedStyle* container_style,
-                                  PhysicalSize container_physical_size) const;
-
-  // Returns the first/last leaf fragment in the line in logical order. Returns
-  // nullptr if the line box is empty.
-  const NGPhysicalFragment* FirstLogicalLeaf() const;
-  const NGPhysicalFragment* LastLogicalLeaf() const;
-
-  const LayoutObject* ClosestLeafChildForPoint(const PhysicalOffset&,
-                                               bool only_editable_leaves) const;
-
-  // Returns a point at the visual start/end of the line.
-  // Encapsulates the handling of text direction and writing mode.
-  PhysicalOffset LineStartPoint() const;
-  PhysicalOffset LineEndPoint() const;
+  PhysicalRect ScrollableOverflow(const NGPhysicalBoxFragment& container,
+                                  const ComputedStyle& container_style) const;
+  PhysicalRect ScrollableOverflowForLine(const NGPhysicalBoxFragment& container,
+                                         const ComputedStyle& container_style,
+                                         const NGFragmentItem& line,
+                                         const NGInlineCursor& cursor) const;
 
   // Whether the content soft-wraps to the next line.
   bool HasSoftWrapToNextLine() const;
 
- private:
-  NGPhysicalLineBoxFragment(NGLineBoxFragmentBuilder* builder);
+  // Returns the |LayoutObject| of the container. |GetLayoutObject()| returns
+  // |nullptr| because line boxes do not have corresponding |LayoutObject|.
+  const LayoutObject* ContainerLayoutObject() const { return layout_object_; }
 
+ private:
   NGLineHeightMetrics metrics_;
   NGLink children_[];
 };

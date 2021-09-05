@@ -16,6 +16,11 @@
 
 namespace chromeos {
 
+bool Printer::PpdReference::IsFilled() const {
+  return autoconf || !user_supplied_ppd_url.empty() ||
+         !effective_make_and_model.empty();
+}
+
 // Returns true if the scheme is both valid and non-empty.
 bool IsSchemeValid(const url::Parsed& parsed) {
   return parsed.scheme.is_valid() && parsed.scheme.is_nonempty();
@@ -94,7 +99,7 @@ base::StringPiece HostAndPort(base::StringPiece uri) {
     hostname_end = uri.size();
   }
 
-  CHECK_GT(hostname_end, hostname_start);
+  CHECK_GE(hostname_end, hostname_start);
   return uri.substr(hostname_start, hostname_end - hostname_start);
 }
 
@@ -189,6 +194,19 @@ bool Printer::IsUsbProtocol() const {
   Printer::PrinterProtocol current_protocol = GetProtocol();
   switch (current_protocol) {
     case PrinterProtocol::kUsb:
+    case PrinterProtocol::kIppUsb:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool Printer::HasSecureProtocol() const {
+  Printer::PrinterProtocol current_protocol = GetProtocol();
+  switch (current_protocol) {
+    case PrinterProtocol::kUsb:
+    case PrinterProtocol::kIpps:
+    case PrinterProtocol::kHttps:
     case PrinterProtocol::kIppUsb:
       return true;
     default:

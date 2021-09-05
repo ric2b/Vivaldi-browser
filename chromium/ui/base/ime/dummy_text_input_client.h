@@ -25,7 +25,7 @@ class DummyTextInputClient : public TextInputClient {
 
   // Overriden from TextInputClient.
   void SetCompositionText(const CompositionText& composition) override;
-  void ConfirmCompositionText() override;
+  void ConfirmCompositionText(bool) override;
   void ClearCompositionText() override;
   void InsertText(const base::string16& text) override;
   void InsertChar(const KeyEvent& event) override;
@@ -63,6 +63,9 @@ class DummyTextInputClient : public TextInputClient {
 #endif
 
 #if defined(OS_WIN)
+  void GetActiveTextInputControlLayoutBounds(
+      base::Optional<gfx::Rect>* control_bounds,
+      base::Optional<gfx::Rect>* selection_bounds) override;
   void SetActiveCompositionForAccessibility(
       const gfx::Range& range,
       const base::string16& active_composition_text,

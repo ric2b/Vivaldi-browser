@@ -78,6 +78,7 @@ class U2FTabHelperTest : public PlatformTest {
   }
 
   web::TestWebState web_state_;
+  url::ScopedSchemeRegistryForTests scoped_registry_;
 };
 
 // Tests that IsU2FUrl returns true only if U2F url param is true.
@@ -147,8 +148,8 @@ TEST_F(U2FTabHelperTest, TestGetXCallbackUrlWithDuplicatedParams) {
   EXPECT_EQ(1u, [matches count]);
 }
 
-// Tests when request site is not whitelisted.
-TEST_F(U2FTabHelperTest, TestGetXCallbackUrlWithNonWhitelistedUrl) {
+// Tests when request site is not allow-listed.
+TEST_F(U2FTabHelperTest, TestGetXCallbackUrlWithNonAllowListedUrl) {
   GURL request_url("u2f://accounts.google.com?data=abc&def%26ghi");
   GURL evil_origin_url("https://evil.appspot.com");
   GURL tab_url("https://accounts.google.com");

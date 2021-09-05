@@ -15,9 +15,9 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "storage/browser/fileapi/file_system_backend.h"
-#include "storage/browser/fileapi/task_runner_bound_observer_list.h"
-#include "storage/common/fileapi/file_system_types.h"
+#include "storage/browser/file_system/file_system_backend.h"
+#include "storage/browser/file_system/task_runner_bound_observer_list.h"
+#include "storage/common/file_system/file_system_types.h"
 
 namespace storage {
 class CopyOrMoveFileValidatorFactory;
@@ -79,6 +79,7 @@ class FileSystemBackend : public storage::ExternalFileSystemBackend {
       std::unique_ptr<FileSystemBackendDelegate>
           arc_documents_provider_delegate,
       std::unique_ptr<FileSystemBackendDelegate> drivefs_delegate,
+      std::unique_ptr<FileSystemBackendDelegate> smbfs_delegate,
       scoped_refptr<storage::ExternalMountPoints> mount_points,
       storage::ExternalMountPoints* system_mount_points);
   ~FileSystemBackend() override;
@@ -138,9 +139,8 @@ class FileSystemBackend : public storage::ExternalFileSystemBackend {
   void RevokeAccessForExtension(const std::string& extension_id) override;
   bool GetVirtualPath(const base::FilePath& filesystem_path,
                       base::FilePath* virtual_path) const override;
-  void GetRedirectURLForContents(
-      const storage::FileSystemURL& url,
-      const storage::URLCallback& callback) const override;
+  void GetRedirectURLForContents(const storage::FileSystemURL& url,
+                                 storage::URLCallback callback) const override;
   storage::FileSystemURL CreateInternalURL(
       storage::FileSystemContext* context,
       const base::FilePath& entry_path) const override;
@@ -163,6 +163,9 @@ class FileSystemBackend : public storage::ExternalFileSystemBackend {
 
   // The delegate instance for the DriveFS file system related operations.
   std::unique_ptr<FileSystemBackendDelegate> drivefs_delegate_;
+
+  // The delegate instance for the SmbFs file system related operations.
+  std::unique_ptr<FileSystemBackendDelegate> smbfs_delegate_;
 
   // Mount points specific to the owning context (i.e. per-profile mount
   // points).

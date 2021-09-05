@@ -13,6 +13,7 @@
 #include "ash/public/cpp/session/session_activation_observer.h"
 #include "ash/public/cpp/session/session_controller_client.h"
 #include "ash/public/cpp/session/user_info.h"
+#include "ash/session/fullscreen_controller.h"
 #include "ash/session/multiprofiles_intro_dialog.h"
 #include "ash/session/session_aborted_dialog.h"
 #include "ash/session/session_observer.h"
@@ -22,9 +23,7 @@
 #include "ash/system/screen_security/screen_switch_check_controller.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/mru_window_tracker.h"
-#include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -39,7 +38,8 @@ using session_manager::SessionState;
 
 namespace ash {
 
-SessionControllerImpl::SessionControllerImpl() = default;
+SessionControllerImpl::SessionControllerImpl()
+    : fullscreen_controller_(std::make_unique<FullscreenController>(this)) {}
 
 SessionControllerImpl::~SessionControllerImpl() {
   // Abort pending start lock request.
@@ -352,33 +352,22 @@ void SessionControllerImpl::SetUserSessionOrder(
     // most-recently active user with a loaded PrefService.
     PrefService* user_pref_service =
         GetUserPrefServiceForUser(user_sessions_[0]->user_info.account_id);
-    if (user_pref_service)
+    if (user_pref_service && last_active_user_prefs_ != user_pref_service) {
       last_active_user_prefs_ = user_pref_service;
+      MaybeNotifyOnActiveUserPrefServiceChanged();
+    }
 
     for (auto& observer : observers_) {
       observer.OnActiveUserSessionChanged(
           user_sessions_[0]->user_info.account_id);
     }
 
-    if (user_pref_service)
-      MaybeNotifyOnActiveUserPrefServiceChanged();
-
     UpdateLoginStatus();
   }
 }
 
 void SessionControllerImpl::PrepareForLock(PrepareForLockCallback callback) {
-  // If the active window is fullscreen, exit fullscreen to avoid the web page
-  // or app mimicking the lock screen. Do not exit fullscreen if the shelf is
-  // visible while in fullscreen because the shelf makes it harder for a web
-  // page or app to mimick the lock screen.
-  WindowState* active_window_state = WindowState::ForActiveWindow();
-  if (active_window_state && active_window_state->IsFullscreen() &&
-      active_window_state->GetHideShelfWhenFullscreen()) {
-    const WMEvent event(WM_EVENT_TOGGLE_FULLSCREEN);
-    active_window_state->OnWMEvent(&event);
-  }
-
+  FullscreenController::MaybeExitFullscreen();
   std::move(callback).Run();
 }
 
@@ -423,9 +412,8 @@ void SessionControllerImpl::SetSessionLengthLimit(base::TimeDelta length_limit,
 
 void SessionControllerImpl::CanSwitchActiveUser(
     CanSwitchActiveUserCallback callback) {
-  ash::Shell::Get()
-      ->screen_switch_check_controller()
-      ->CanSwitchAwayFromActiveUser(std::move(callback));
+  Shell::Get()->screen_switch_check_controller()->CanSwitchAwayFromActiveUser(
+      std::move(callback));
 }
 
 void SessionControllerImpl::ShowMultiprofilesIntroDialog(
@@ -507,15 +495,17 @@ void SessionControllerImpl::SetSessionState(SessionState state) {
 }
 
 void SessionControllerImpl::AddUserSession(const UserSession& user_session) {
-  const AccountId account_id(user_session.user_info.account_id);
-
   if (primary_session_id_ == 0u)
     primary_session_id_ = user_session.session_id;
 
   user_sessions_.push_back(std::make_unique<UserSession>(user_session));
 
-  OnProfilePrefServiceInitialized(account_id,
-                                  GetUserPrefServiceForUser(account_id));
+  const AccountId account_id(user_session.user_info.account_id);
+  PrefService* user_prefs = GetUserPrefServiceForUser(account_id);
+  // |user_prefs| could be null in tests.
+  if (user_prefs)
+    OnProfilePrefServiceInitialized(account_id, user_prefs);
+
   UpdateLoginStatus();
   for (auto& observer : observers_)
     observer.OnUserSessionAdded(account_id);
@@ -566,10 +556,12 @@ LoginStatus SessionControllerImpl::CalculateLoginStatusForActiveSession()
     case user_manager::USER_TYPE_CHILD:
       return LoginStatus::SUPERVISED;
     case user_manager::USER_TYPE_ARC_KIOSK_APP:
-      return LoginStatus::ARC_KIOSK_APP;
+      return LoginStatus::KIOSK_APP;
     case user_manager::USER_TYPE_ACTIVE_DIRECTORY:
       // TODO: There is no LoginStatus for this.
       return LoginStatus::USER;
+    case user_manager::USER_TYPE_WEB_KIOSK_APP:
+      return LoginStatus::KIOSK_APP;
     case user_manager::NUM_USER_TYPES:
       // Avoid having a "default" case so the compiler catches new enum values.
       NOTREACHED();

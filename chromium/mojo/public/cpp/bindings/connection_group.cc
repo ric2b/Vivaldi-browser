@@ -54,19 +54,26 @@ bool ConnectionGroup::Ref::HasZeroRefs() const {
   return group_->num_refs_ == 0;
 }
 
+void ConnectionGroup::Ref::SetParentGroup(Ref parent_group) {
+  group_->notification_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&ConnectionGroup::SetParentGroup, group_,
+                                std::move(parent_group)));
+}
+
 ConnectionGroup::Ref::Ref(scoped_refptr<ConnectionGroup> group)
     : group_(std::move(group)) {}
 
 // static
 ConnectionGroup::Ref ConnectionGroup::Create(
     base::RepeatingClosure callback,
-    scoped_refptr<base::TaskRunner> task_runner) {
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
   return Ref(base::WrapRefCounted(
       new ConnectionGroup(std::move(callback), std::move(task_runner))));
 }
 
-ConnectionGroup::ConnectionGroup(base::RepeatingClosure callback,
-                                 scoped_refptr<base::TaskRunner> task_runner)
+ConnectionGroup::ConnectionGroup(
+    base::RepeatingClosure callback,
+    scoped_refptr<base::SequencedTaskRunner> task_runner)
     : notification_callback_(std::move(callback)),
       notification_task_runner_(std::move(task_runner)) {}
 
@@ -88,6 +95,12 @@ void ConnectionGroup::ReleaseGroupRef() {
     notification_task_runner_->PostTask(FROM_HERE,
                                         base::BindOnce(notification_callback_));
   }
+}
+
+void ConnectionGroup::SetParentGroup(Ref parent_group) {
+  DCHECK(notification_task_runner_->RunsTasksInCurrentSequence());
+  DCHECK(!parent_group_);
+  parent_group_ = std::move(parent_group);
 }
 
 }  // namespace mojo

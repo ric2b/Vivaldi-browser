@@ -8,7 +8,6 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/platform_shared_memory_region.h"
-#include "base/memory/shared_memory_handle.h"
 #include "base/memory/shared_memory_mapping.h"
 
 namespace base {
@@ -32,21 +31,8 @@ class BASE_EXPORT UnsafeSharedMemoryRegion {
   using MappingType = WritableSharedMemoryMapping;
   // Creates a new UnsafeSharedMemoryRegion instance of a given size that can be
   // used for mapping writable shared memory into the virtual address space.
-  //
-  // This call will fail if the process does not have sufficient permissions to
-  // create a shared memory region itself. See
-  // mojo::CreateUnsafeSharedMemoryRegion in
-  // mojo/public/cpp/base/shared_memory_utils.h for creating a shared memory
-  // region from a an unprivileged process where a broker must be used.
   static UnsafeSharedMemoryRegion Create(size_t size);
   using CreateFunction = decltype(Create);
-
-  // Creates a new UnsafeSharedMemoryRegion from a SharedMemoryHandle. This
-  // consumes the handle, which should not be used again.
-  // TODO(crbug.com/795291): this should only be used while transitioning from
-  // the old shared memory API, and should be removed when done.
-  static UnsafeSharedMemoryRegion CreateFromHandle(
-      const base::SharedMemoryHandle& handle);
 
   // Returns an UnsafeSharedMemoryRegion built from a platform-specific handle
   // that was taken from another UnsafeSharedMemoryRegion instance. Returns an

@@ -18,13 +18,15 @@ class ManageMigrationUiController;
 // bubble.
 class LocalCardMigrationIconView : public PageActionIconView {
  public:
-  LocalCardMigrationIconView(CommandUpdater* command_updater,
-                             PageActionIconView::Delegate* delegate);
+  LocalCardMigrationIconView(
+      CommandUpdater* command_updater,
+      IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+      PageActionIconView::Delegate* page_action_icon_delegate);
   ~LocalCardMigrationIconView() override;
 
   // PageActionIconView:
   views::BubbleDialogDelegateView* GetBubble() const override;
-  bool Update() override;
+  void UpdateImpl() override;
   base::string16 GetTextForTooltipAndAccessibleName() const override;
 
  protected:
@@ -32,6 +34,7 @@ class LocalCardMigrationIconView : public PageActionIconView {
   void OnExecuting(PageActionIconView::ExecuteSource execute_source) override;
   const gfx::VectorIcon& GetVectorIcon() const override;
   const gfx::VectorIcon& GetVectorIconBadge() const override;
+  const char* GetClassName() const override;
 
  private:
   ManageMigrationUiController* GetController() const;

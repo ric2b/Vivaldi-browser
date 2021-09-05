@@ -5,6 +5,10 @@
 #include "content/browser/native_file_system/native_file_system_file_writer_impl.h"
 
 #include <limits>
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/scoped_temp_dir.h"
@@ -25,7 +29,7 @@
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
-#include "storage/browser/fileapi/file_stream_reader.h"
+#include "storage/browser/file_system/file_stream_reader.h"
 #include "storage/browser/test/async_file_test_helper.h"
 #include "storage/browser/test/test_file_system_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -60,7 +64,7 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
 
   void SetUp() override {
     ASSERT_TRUE(dir_.CreateUniqueTempDir());
-    file_system_context_ = CreateFileSystemContextForTesting(
+    file_system_context_ = storage::CreateFileSystemContextForTesting(
         /*quota_manager_proxy=*/nullptr, dir_.GetPath());
 
     auto* isolated_context = IsolatedContext::GetInstance();
@@ -73,23 +77,24 @@ class NativeFileSystemFileWriterImplTest : public testing::Test {
         isolated_context->CreateVirtualRootPath(fs.id()).AppendASCII(base_name);
 
     test_file_url_ = file_system_context_->CreateCrackedFileSystemURL(
-        kTestOrigin.GetURL(), storage::kFileSystemTypeIsolated,
+        kTestOrigin, storage::kFileSystemTypeIsolated,
         root_path.AppendASCII("test"));
 
     test_swap_url_ = file_system_context_->CreateCrackedFileSystemURL(
-        kTestOrigin.GetURL(), storage::kFileSystemTypeIsolated,
+        kTestOrigin, storage::kFileSystemTypeIsolated,
         root_path.AppendASCII("test.crswap"));
 
     ASSERT_EQ(base::File::FILE_OK,
-              AsyncFileTestHelper::CreateFile(file_system_context_.get(),
-                                              test_file_url_));
+              storage::AsyncFileTestHelper::CreateFile(
+                  file_system_context_.get(), test_file_url_));
 
     ASSERT_EQ(base::File::FILE_OK,
-              AsyncFileTestHelper::CreateFile(file_system_context_.get(),
-                                              test_swap_url_));
+              storage::AsyncFileTestHelper::CreateFile(
+                  file_system_context_.get(), test_swap_url_));
 
     chrome_blob_context_ = base::MakeRefCounted<ChromeBlobStorageContext>();
-    chrome_blob_context_->InitializeOnIOThread(base::FilePath(), nullptr);
+    chrome_blob_context_->InitializeOnIOThread(base::FilePath(),
+                                               base::FilePath(), nullptr);
     blob_context_ = chrome_blob_context_->context();
 
     manager_ = base::MakeRefCounted<NativeFileSystemManagerImpl>(
@@ -335,10 +340,9 @@ TEST_F(NativeFileSystemFileWriterImplTest, HashEmptyOK) {
 }
 
 TEST_F(NativeFileSystemFileWriterImplTest, HashNonExistingFileFails) {
-  ASSERT_EQ(base::File::FILE_OK,
-            AsyncFileTestHelper::Remove(file_system_context_.get(),
-                                        handle_->swap_url(),
-                                        /*recursive=*/false));
+  ASSERT_EQ(base::File::FILE_OK, storage::AsyncFileTestHelper::Remove(
+                                     file_system_context_.get(),
+                                     handle_->swap_url(), /*recursive=*/false));
   base::RunLoop loop;
   handle_->ComputeHashForSwapFileForTesting(base::BindLambdaForTesting(
       [&](base::File::Error result, const std::string& hash_value,
@@ -522,11 +526,10 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, Allow) {
   EXPECT_EQ(result, NativeFileSystemStatus::kOk);
   EXPECT_EQ(bytes_written, 3u);
 
-  std::vector<uint8_t> raw_expected_hash;
-  ASSERT_TRUE(base::HexStringToBytes(
+  std::string expected_hash;
+  ASSERT_TRUE(base::HexStringToString(
       "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
-      &raw_expected_hash));
-  std::string expected_hash(raw_expected_hash.begin(), raw_expected_hash.end());
+      &expected_hash));
 
   EXPECT_CALL(
       permission_context_,
@@ -548,11 +551,11 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, Allow) {
   EXPECT_EQ(result, NativeFileSystemStatus::kOk);
 
   task_environment_.RunUntilIdle();
-  EXPECT_FALSE(AsyncFileTestHelper::FileExists(
+  EXPECT_FALSE(storage::AsyncFileTestHelper::FileExists(
       file_system_context_.get(), test_swap_url_,
-      AsyncFileTestHelper::kDontCheckSize));
-  EXPECT_TRUE(AsyncFileTestHelper::FileExists(file_system_context_.get(),
-                                              test_file_url_, 3));
+      storage::AsyncFileTestHelper::kDontCheckSize));
+  EXPECT_TRUE(storage::AsyncFileTestHelper::FileExists(
+      file_system_context_.get(), test_file_url_, 3));
 }
 
 TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, Block) {
@@ -570,11 +573,11 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, Block) {
   EXPECT_EQ(result, NativeFileSystemStatus::kOperationAborted);
 
   task_environment_.RunUntilIdle();
-  EXPECT_FALSE(AsyncFileTestHelper::FileExists(
+  EXPECT_FALSE(storage::AsyncFileTestHelper::FileExists(
       file_system_context_.get(), test_swap_url_,
-      AsyncFileTestHelper::kDontCheckSize));
-  EXPECT_TRUE(AsyncFileTestHelper::FileExists(file_system_context_.get(),
-                                              test_file_url_, 0));
+      storage::AsyncFileTestHelper::kDontCheckSize));
+  EXPECT_TRUE(storage::AsyncFileTestHelper::FileExists(
+      file_system_context_.get(), test_file_url_, 0));
 }
 
 TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, HandleCloseDuringCheck) {
@@ -602,20 +605,20 @@ TEST_F(NativeFileSystemFileWriterAfterWriteChecksTest, HandleCloseDuringCheck) {
   // Destructor should not have deleted swap file with an active safe browsing
   // check pending.
   task_environment_.RunUntilIdle();
-  EXPECT_TRUE(AsyncFileTestHelper::FileExists(
+  EXPECT_TRUE(storage::AsyncFileTestHelper::FileExists(
       file_system_context_.get(), test_swap_url_,
-      AsyncFileTestHelper::kDontCheckSize));
+      storage::AsyncFileTestHelper::kDontCheckSize));
 
   std::move(sb_callback)
       .Run(NativeFileSystemPermissionContext::AfterWriteCheckResult::kAllow);
 
   // Swap file should now be deleted, target file should be unmodified.
   task_environment_.RunUntilIdle();
-  EXPECT_FALSE(AsyncFileTestHelper::FileExists(
+  EXPECT_FALSE(storage::AsyncFileTestHelper::FileExists(
       file_system_context_.get(), test_swap_url_,
-      AsyncFileTestHelper::kDontCheckSize));
-  EXPECT_TRUE(AsyncFileTestHelper::FileExists(file_system_context_.get(),
-                                              test_file_url_, 0));
+      storage::AsyncFileTestHelper::kDontCheckSize));
+  EXPECT_TRUE(storage::AsyncFileTestHelper::FileExists(
+      file_system_context_.get(), test_file_url_, 0));
 }
 
 }  // namespace content

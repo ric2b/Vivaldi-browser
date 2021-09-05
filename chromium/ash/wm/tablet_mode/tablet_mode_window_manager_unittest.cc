@@ -37,12 +37,14 @@
 #include "ash/wm/window_state_observer.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
+#include "ash/wm/work_area_insets.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
@@ -120,17 +122,11 @@ class TabletModeWindowManagerTest
 
   // Creates a window which also has a widget.
   aura::Window* CreateWindowWithWidget(const gfx::Rect& bounds) {
-    // Note: The widget will get deleted with the window.
-    views::Widget* widget = new views::Widget();
-    views::Widget::InitParams params;
-    params.context = CurrentContext();
-    widget->Init(std::move(params));
+    views::Widget* widget =
+        views::Widget::CreateWindowWithContext(nullptr, GetContext(), bounds);
     widget->Show();
-    aura::Window* window = widget->GetNativeWindow();
-    window->SetBounds(bounds);
-    window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
-
-    return window;
+    // Note: The widget will get deleted with the window.
+    return widget->GetNativeWindow();
   }
 
   // Create the tablet mode window manager.
@@ -457,10 +453,20 @@ TEST_P(TabletModeWindowManagerTest,
   EXPECT_TRUE(WindowState::Get(window.get())->IsMaximized());
   EXPECT_NE(empty_rect.ToString(), window->bounds().ToString());
   gfx::Rect maximized_size = window->bounds();
+  const gfx::Insets tablet_insets =
+      WorkAreaInsets::ForWindow(window.get())->user_work_area_insets();
 
   // Destroy the tablet mode and check that the resulting size of the window
   // is remaining as it is (but not maximized).
   DestroyTabletModeWindowManager();
+
+  if (chromeos::switches::ShouldShowShelfHotseat()) {
+    // Account for work-area updates when leaving tablet mode.
+    const gfx::Insets clamshell_insets =
+        WorkAreaInsets::ForWindow(window.get())->user_work_area_insets();
+    const gfx::Insets offset_difference = clamshell_insets - tablet_insets;
+    maximized_size.Inset(offset_difference);
+  }
 
   EXPECT_FALSE(WindowState::Get(window.get())->IsMaximized());
   EXPECT_EQ(maximized_size.ToString(), window->bounds().ToString());
@@ -522,20 +528,17 @@ TEST_P(TabletModeWindowManagerTest, CreateNonMaximizableButResizableWindows) {
 // Create a string which consists of the bounds and the state for comparison.
 std::string GetPlacementString(const gfx::Rect& bounds,
                                ui::WindowShowState state) {
-  return bounds.ToString() + base::StringPrintf(" %d", state);
+  return bounds.ToString() + ' ' + base::NumberToString(state);
 }
 
 // Retrieves the window's restore state override - if any - and returns it as a
 // string.
 std::string GetPlacementOverride(aura::Window* window) {
   gfx::Rect* bounds = window->GetProperty(kRestoreBoundsOverrideKey);
-  if (bounds) {
-    gfx::Rect restore_bounds = *bounds;
-    ui::WindowShowState restore_state = ToWindowShowState(
-        window->GetProperty(kRestoreWindowStateTypeOverrideKey));
-    return GetPlacementString(restore_bounds, restore_state);
-  }
-  return std::string();
+  if (!bounds)
+    return std::string();
+  const auto type = window->GetProperty(kRestoreWindowStateTypeOverrideKey);
+  return GetPlacementString(*bounds, ToWindowShowState(type));
 }
 
 // Test that the restore state will be kept at its original value for
@@ -543,6 +546,7 @@ std::string GetPlacementOverride(aura::Window* window) {
 TEST_P(TabletModeWindowManagerTest, TestRestoreIntegrety) {
   gfx::Rect bounds(10, 10, 200, 50);
   std::unique_ptr<aura::Window> normal_window(CreateWindowWithWidget(bounds));
+
   std::unique_ptr<aura::Window> maximized_window(
       CreateWindowWithWidget(bounds));
   WindowState::Get(maximized_window.get())->Maximize();
@@ -555,7 +559,7 @@ TEST_P(TabletModeWindowManagerTest, TestRestoreIntegrety) {
 
   // With the maximization the override states should be returned in its
   // pre-maximized state.
-  EXPECT_EQ(GetPlacementString(bounds, ui::SHOW_STATE_NORMAL),
+  EXPECT_EQ(GetPlacementString(bounds, ui::SHOW_STATE_DEFAULT),
             GetPlacementOverride(normal_window.get()));
   EXPECT_EQ(GetPlacementString(bounds, ui::SHOW_STATE_MAXIMIZED),
             GetPlacementOverride(maximized_window.get()));
@@ -948,7 +952,7 @@ TEST_P(TabletModeWindowManagerTest, KeepFullScreenModeOn) {
 
   // Allow the shelf to hide and set the pref.
   SetShelfAutoHideBehaviorPref(GetPrimaryDisplay().id(),
-                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+                               ShelfAutoHideBehavior::kAlways);
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
 
   WMEvent event(WM_EVENT_TOGGLE_FULLSCREEN);
@@ -1132,7 +1136,7 @@ TEST_P(TabletModeWindowManagerTest, MinimizePreservedAfterLeavingFullscreen) {
   Shelf* shelf = GetPrimaryShelf();
 
   // Allow the shelf to hide and enter full screen.
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
   WMEvent event(WM_EVENT_TOGGLE_FULLSCREEN);
   window_state->OnWMEvent(&event);
   ASSERT_FALSE(window_state->IsMinimized());
@@ -1153,12 +1157,12 @@ TEST_P(TabletModeWindowManagerTest, MinimizePreservedAfterLeavingFullscreen) {
 TEST_P(TabletModeWindowManagerTest, DoNotDisableAutoHideBehaviorOnTabletMode) {
   Shelf* shelf = GetPrimaryShelf();
   SetShelfAutoHideBehaviorPref(GetPrimaryDisplay().id(),
-                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+                               ShelfAutoHideBehavior::kAlways);
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
   CreateTabletModeWindowManager();
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
   DestroyTabletModeWindowManager();
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
 }
 
 // Check that full screen mode can be turned on in tablet mode and remains
@@ -1173,7 +1177,7 @@ TEST_P(TabletModeWindowManagerTest, AllowFullScreenMode) {
 
   // Allow the shelf to hide and set the pref.
   SetShelfAutoHideBehaviorPref(GetPrimaryDisplay().id(),
-                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+                               ShelfAutoHideBehavior::kAlways);
 
   EXPECT_FALSE(window_state->IsFullscreen());
   EXPECT_FALSE(window_state->IsMaximized());
@@ -1816,8 +1820,8 @@ TEST_P(TabletModeWindowManagerTest, ClamshellTabletTransitionTest) {
   EXPECT_TRUE(manager);
   EXPECT_FALSE(overview_controller->InOverviewSession());
 
-  // 2. Tablet -> Clamshell. If overview is active, it should be ended after
-  // transition.
+  // 2. Tablet -> Clamshell. If overview is inactive, it should still be kept
+  // inactive after transition.
   DestroyTabletModeWindowManager();
   EXPECT_FALSE(overview_controller->InOverviewSession());
 
@@ -1901,7 +1905,7 @@ class TabletModeWindowManagerWithClamshellSplitViewTest
   // AshTestBase:
   void SetUp() override {
     scoped_feature_list_.InitAndEnableFeature(
-        ash::features::kDragToSnapInClamshellMode);
+        features::kDragToSnapInClamshellMode);
     TabletModeWindowManagerTest::SetUp();
     DCHECK(ShouldAllowSplitView());
   }
@@ -2093,8 +2097,8 @@ TEST_P(TabletModeWindowManagerWithClamshellSplitViewTest,
   EXPECT_TRUE(home_screen_window->TargetVisibility());
 }
 
-INSTANTIATE_TEST_SUITE_P(, TabletModeWindowManagerTest, testing::Bool());
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All, TabletModeWindowManagerTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All,
                          TabletModeWindowManagerWithClamshellSplitViewTest,
                          testing::Bool());
 

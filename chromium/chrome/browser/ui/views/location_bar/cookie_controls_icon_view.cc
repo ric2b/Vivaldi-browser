@@ -17,15 +17,18 @@
 #include "ui/gfx/paint_vector_icon.h"
 
 CookieControlsIconView::CookieControlsIconView(
-    PageActionIconView::Delegate* delegate)
-    : PageActionIconView(nullptr, 0, delegate) {
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate)
+    : PageActionIconView(nullptr,
+                         0,
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate) {
   SetVisible(false);
 }
 
 CookieControlsIconView::~CookieControlsIconView() = default;
 
-bool CookieControlsIconView::Update() {
-  bool was_visible = GetVisible();
+void CookieControlsIconView::UpdateImpl() {
   auto* web_contents = delegate()->GetWebContentsForPageActionIconView();
   if (web_contents) {
     if (!controller_) {
@@ -35,12 +38,11 @@ bool CookieControlsIconView::Update() {
     controller_->Update(web_contents);
   }
   SetVisible(ShouldBeVisible());
-
-  return GetVisible() != was_visible;
 }
 
 void CookieControlsIconView::OnStatusChanged(
-    CookieControlsController::Status status,
+    CookieControlsStatus status,
+    CookieControlsEnforcement enforcement,
     int blocked_cookies) {
   if (status_ != status) {
     status_ = status;
@@ -70,12 +72,12 @@ bool CookieControlsIconView::ShouldBeVisible() const {
     return false;
 
   switch (status_) {
-    case CookieControlsController::Status::kDisabledForSite:
+    case CookieControlsStatus::kDisabledForSite:
       return true;
-    case CookieControlsController::Status::kEnabled:
+    case CookieControlsStatus::kEnabled:
       return has_blocked_cookies_;
-    case CookieControlsController::Status::kDisabled:
-    case CookieControlsController::Status::kUninitialized:
+    case CookieControlsStatus::kDisabled:
+    case CookieControlsStatus::kUninitialized:
       return false;
   }
 }
@@ -103,9 +105,13 @@ views::BubbleDialogDelegateView* CookieControlsIconView::GetBubble() const {
 }
 
 const gfx::VectorIcon& CookieControlsIconView::GetVectorIcon() const {
-  if (status_ == CookieControlsController::Status::kDisabledForSite)
+  if (status_ == CookieControlsStatus::kDisabledForSite)
     return kEyeIcon;
   return kEyeCrossedIcon;
+}
+
+const char* CookieControlsIconView::GetClassName() const {
+  return "CookieControlsIconView";
 }
 
 base::string16 CookieControlsIconView::GetTextForTooltipAndAccessibleName()

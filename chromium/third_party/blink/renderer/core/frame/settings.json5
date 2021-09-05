@@ -229,6 +229,7 @@
       invalidate: "MediaControls",
     },
 
+    // Only affects main thread scrolling
     {
       name: "scrollAnimatorEnabled",
       initial: true,
@@ -450,14 +451,6 @@
       initial: false,
     },
 
-    // If true, scrollers will use overlay scrollbars.  These do not take up any
-    // layout width, are drawn using solid color quads by the compositor, and fade away
-    // after a timeout.
-    {
-      name: "useSolidColorScrollbars",
-      initial: false,
-    },
-
     // The rubber-band overscroll effect is implemented in Blink and is being moved
     // to the compositor thread. This will be set to true and eventually removed.
     // crbug.com/133097
@@ -557,6 +550,12 @@
     {
       name: "scriptEnabled",
       initial: false,
+    },
+
+    {
+      name: "parserScriptingFlagPolicy",
+      initial: "ParserScriptingFlagPolicy::kOnlyIfScriptIsEnabled",
+      type: "ParserScriptingFlagPolicy"
     },
 
     // Forces Android Overlay Scrollbar for mobile emulator.
@@ -884,62 +883,62 @@
     // Dark mode
     //
     {
-      name: "darkModeEnabled",
+      name: "forceDarkModeEnabled",
       initial: false,
-      invalidate: "Paint",
+      invalidate: "ForceDark",
     },
     {
-      name: "darkModeInversionAlgorithm",
+      name: "forceDarkModeInversionAlgorithm",
       initial: "DarkModeInversionAlgorithm::kInvertLightnessLAB",
       type: "DarkModeInversionAlgorithm",
-      invalidate: "Paint",
+      invalidate: "ForceDark",
     },
     {
-      name: "darkModeGrayscale",
+      name: "forceDarkModeGrayscale",
       initial: false,
-      invalidate: "Paint",
+      invalidate: "ForceDark",
     },
     {
-      name: "darkModeContrast",
+      name: "forceDarkModeContrast",
       initial: 0,
       type: "double",
-      invalidate: "Paint",
+      invalidate: "ForceDark",
     },
     {
-      name: "darkModeClassifierType",
+      name: "forceDarkModeClassifierType",
       initial: "DarkModeClassifierType::kGeneric",
       type: "DarkModeClassifierType",
-      invalidate: "Paint",
+      invalidate: "ForceDark",
     },
     {
-      name: "darkModeImagePolicy",
+      name: "forceDarkModeImagePolicy",
       initial: "DarkModeImagePolicy::kFilterNone",
       type: "DarkModeImagePolicy",
-      invalidate: "Paint",
+      invalidate: "ForceDark",
     },
     {
-      name: "darkModePagePolicy",
+      name: "forceDarkModePagePolicy",
       initial: "DarkModePagePolicy::kFilterByBackground",
       type: "DarkModePagePolicy",
-      invalidate: "Paint",
+      invalidate: "ForceDark",
     },
     {
-      name: "darkModeTextBrightnessThreshold",
+      name: "forceDarkModeTextBrightnessThreshold",
       initial: "150",
       type: "int",
-      invalidate: "Paint",
+      invalidate: "ForceDark",
     },
     {
-      name: "darkModeBackgroundBrightnessThreshold",
+      name: "forceDarkModeBackgroundBrightnessThreshold",
       initial: "205",
       type: "int",
-      invalidate: "Paint",
+      invalidate: "ForceDark",
     },
     {
-      name: "darkModeImageGrayscale",
+      name: "forceDarkModeImageGrayscale",
       initial: "0.0",
       type: "float",
-      invalidate: "Paint",
+      invalidate: "ForceDark",
     },
     {
       name: "navigatorPlatformOverride",

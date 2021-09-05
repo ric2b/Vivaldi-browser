@@ -4,6 +4,9 @@
 
 #include "ui/views/controls/image_view.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/i18n/rtl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -141,7 +144,7 @@ TEST_P(ImageViewTest, ImageOriginForCustomViewBounds) {
   EXPECT_EQ(image_view_bounds, image_view()->bounds());
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          ImageViewTest,
                          ::testing::Values(Axis::kHorizontal, Axis::kVertical));
 

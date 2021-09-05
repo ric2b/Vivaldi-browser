@@ -10,7 +10,6 @@ import("//build/config/ui.gni")
 import("//testing/test.gni")
 import("//ui/gl/features.gni")
 import("//ui/ozone/ozone.gni")
-
 declare_args() {
   enable_swiftshader = (is_win || is_linux || (is_mac && use_egl) ||
                         is_chromeos || is_fuchsia) &&
@@ -29,6 +28,12 @@ if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
 }
+
+# Reset sources_assignment_filter for the BUILD.gn file to prevent
+# regression during the migration of Chromium away from the feature.
+# See docs/no_sources_assignment_filter.md for more information.
+# TODO(crbug.com/1018739): remove this when migration is done.
+set_sources_assignment_filter([])
 
 buildflag_header("buildflags") {
   header = "buildflags.h"
@@ -56,20 +61,10 @@ jumbo_component("gl") {
   output_name = "gl_wrapper"  # Avoid colliding with OS X"s libGL.dylib.
 
   sources = [
-    "android/android_surface_control_compat.cc",
-    "android/android_surface_control_compat.h",
-    "android/scoped_java_surface.cc",
-    "android/scoped_java_surface.h",
-    "android/surface_texture.cc",
-    "android/surface_texture.h",
-    "android/surface_texture_listener.cc",
-    "android/surface_texture_listener.h",
     "buffer_format_utils.cc",
     "buffer_format_utils.h",
     "ca_renderer_layer_params.cc",
     "ca_renderer_layer_params.h",
-    "color_space_utils.cc",
-    "color_space_utils.h",
     "dc_renderer_layer_params.cc",
     "dc_renderer_layer_params.h",
     "dual_gpu_state.cc",
@@ -111,6 +106,7 @@ jumbo_component("gl") {
     "gl_image_stub.h",
     "gl_implementation.cc",
     "gl_implementation.h",
+    "gl_implementation_wrapper.h",
     "gl_share_group.cc",
     "gl_share_group.h",
     "gl_state_restorer.cc",
@@ -153,6 +149,19 @@ jumbo_component("gl") {
     "trace_util.cc",
     "trace_util.h",
   ]
+
+  if (is_android) {
+    sources += [
+      "android/android_surface_control_compat.cc",
+      "android/android_surface_control_compat.h",
+      "android/scoped_java_surface.cc",
+      "android/scoped_java_surface.h",
+      "android/surface_texture.cc",
+      "android/surface_texture.h",
+      "android/surface_texture_listener.cc",
+      "android/surface_texture_listener.h",
+    ]
+  }
 
   configs += [ "//build/config:precompiled_headers" ]
   defines = [ "GL_IMPLEMENTATION" ]
@@ -203,6 +212,8 @@ jumbo_component("gl") {
       "gl_image_egl.h",
       "gl_surface_egl.cc",
       "gl_surface_egl.h",
+      "shared_gl_fence_egl.cc",
+      "shared_gl_fence_egl.h",
     ]
 
     if (is_linux || use_ozone) {
@@ -244,13 +255,16 @@ jumbo_component("gl") {
 
   if (use_x11) {
     sources += [
-      "gl_surface_egl_x11.cc",
-      "gl_surface_egl_x11.h",
+      "gl_surface_egl_x11_gles2.cc",
+      "gl_surface_egl_x11_gles2.h",
       "gl_surface_glx_x11.cc",
       "gl_surface_glx_x11.h",
     ]
 
-    deps += [ "//ui/base/x" ]
+    deps += [
+      "//ui/base/x",
+      "//ui/events/platform/x11:x11",
+    ]
 
     assert(use_egl)
     data_deps += [
@@ -268,6 +282,8 @@ jumbo_component("gl") {
       "gl_glx_api_implementation.h",
       "gl_image_glx.cc",
       "gl_image_glx.h",
+      "gl_image_glx_native_pixmap.cc",
+      "gl_image_glx_native_pixmap.h",
       "gl_surface_glx.cc",
       "gl_surface_glx.h",
       "gl_visual_picker_glx.cc",
@@ -400,9 +416,7 @@ if (is_mac && use_egl) {
       "$root_out_dir/libEGL.dylib",
       "$root_out_dir/libGLESv2.dylib",
     ]
-    outputs = [
-      "$root_out_dir/egl_intermediates/{{source_file_part}}",
-    ]
+    outputs = [ "$root_out_dir/egl_intermediates/{{source_file_part}}" ]
     deps = [
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
@@ -410,17 +424,26 @@ if (is_mac && use_egl) {
   }
 
   if (enable_swiftshader) {
-    copy("swiftshader_library_copy") {
+    copy("swiftshader_egl_library_copy") {
       sources = [
         "$root_out_dir/libswiftshader_libEGL.dylib",
         "$root_out_dir/libswiftshader_libGLESv2.dylib",
       ]
-      outputs = [
-        "$root_out_dir/egl_intermediates/{{source_file_part}}",
-      ]
+      outputs = [ "$root_out_dir/egl_intermediates/{{source_file_part}}" ]
       deps = [
         "//third_party/swiftshader/src/OpenGL/libEGL:swiftshader_libEGL",
         "//third_party/swiftshader/src/OpenGL/libGLESv2:swiftshader_libGLESv2",
+      ]
+    }
+    copy("swiftshader_vk_library_copy") {
+      sources = [
+        "$root_out_dir/libvk_swiftshader.dylib",
+        "$root_out_dir/vk_swiftshader_icd.json",
+      ]
+      outputs = [ "$root_out_dir/vk_intermediates/{{source_file_part}}" ]
+      deps = [
+        "//third_party/swiftshader/src/Vulkan:icd_file",
+        "//third_party/swiftshader/src/Vulkan:swiftshader_libvulkan",
       ]
     }
   }
@@ -494,17 +517,11 @@ jumbo_static_library("test_support") {
 source_set("run_all_unittests") {
   testonly = true
 
-  sources = [
-    "test/run_all_unittests.cc",
-  ]
+  sources = [ "test/run_all_unittests.cc" ]
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 
-  public_deps = [
-    "//base/test:test_support",
-  ]
+  public_deps = [ "//base/test:test_support" ]
 
   if (use_ozone) {
     deps += [
@@ -581,9 +598,7 @@ test("gl_unittests") {
     "//ui/platform_window:platform_impls",
   ]
 
-  data_deps = [
-    "//third_party/mesa_headers",
-  ]
+  data_deps = [ "//third_party/mesa_headers" ]
 
   if (use_x11) {
     sources += [ "gl_context_glx_unittest.cc" ]
@@ -595,9 +610,7 @@ test("gl_unittests") {
 # We can't run this test on real Chrome OS hardware for Ozone, so new target.
 group("gl_unittests_ozone") {
   testonly = true
-  data_deps = [
-    ":gl_unittests",
-  ]
+  data_deps = [ ":gl_unittests" ]
 }
 
 if (is_android) {
@@ -611,8 +624,6 @@ if (is_android) {
       "../android/java/src/org/chromium/ui/gl/SurfaceTextureListener.java",
       "../android/java/src/org/chromium/ui/gl/SurfaceTexturePlatformWrapper.java",
     ]
-    public_deps = [
-      ":surface_jni_headers",
-    ]
+    public_deps = [ ":surface_jni_headers" ]
   }
 }

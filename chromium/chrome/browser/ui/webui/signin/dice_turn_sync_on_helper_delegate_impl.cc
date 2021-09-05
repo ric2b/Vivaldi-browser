@@ -135,7 +135,7 @@ void DiceTurnSyncOnHelperDelegateImpl::ShowSyncConfirmation(
   scoped_login_ui_service_observer_.Add(
       LoginUIServiceFactory::GetForProfile(profile_));
   browser_ = EnsureBrowser(browser_, profile_);
-  browser_->signin_view_controller()->ShowModalSyncConfirmationDialog(browser_);
+  browser_->signin_view_controller()->ShowModalSyncConfirmationDialog();
 }
 
 void DiceTurnSyncOnHelperDelegateImpl::ShowMergeSyncDataConfirmation(
@@ -143,13 +143,10 @@ void DiceTurnSyncOnHelperDelegateImpl::ShowMergeSyncDataConfirmation(
     const std::string& new_email,
     DiceTurnSyncOnHelper::SigninChoiceCallback callback) {
   DCHECK(callback);
-  content::WebContents* web_contents =
-      browser_->tab_strip_model()->GetActiveWebContents();
-  // TODO(droger): Replace Bind with BindOnce once the
-  // SigninEmailConfirmationDialog supports it.
-  SigninEmailConfirmationDialog::AskForConfirmation(
-      web_contents, profile_, previous_email, new_email,
-      base::Bind(&OnEmailConfirmation, base::Passed(std::move(callback))));
+  browser_ = EnsureBrowser(browser_, profile_);
+  browser_->signin_view_controller()->ShowModalSigninEmailConfirmationDialog(
+      previous_email, new_email,
+      base::BindOnce(&OnEmailConfirmation, std::move(callback)));
 }
 
 void DiceTurnSyncOnHelperDelegateImpl::ShowSyncSettings() {

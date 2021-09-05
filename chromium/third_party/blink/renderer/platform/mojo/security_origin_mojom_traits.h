@@ -5,9 +5,12 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_MOJO_SECURITY_ORIGIN_MOJOM_TRAITS_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_MOJO_SECURITY_ORIGIN_MOJOM_TRAITS_H_
 
+#include "mojo/public/cpp/base/unguessable_token_mojom_traits.h"
+#include "mojo/public/cpp/bindings/string_traits_wtf.h"
+#include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
-#include "url/mojom/origin.mojom-blink-forward.h"
+#include "url/mojom/origin.mojom-shared.h"
 #include "url/scheme_host_port.h"
 
 namespace mojo {
@@ -21,10 +24,14 @@ struct UrlOriginAdapter {
       const url::SchemeHostPort& tuple,
       const base::Optional<base::UnguessableToken>& nonce_if_opaque) {
     scoped_refptr<blink::SecurityOrigin> tuple_origin;
-    if (!tuple.IsInvalid()) {
+    if (tuple.IsValid()) {
+      // url::SchemeHostPort is percent encoded and SecurityOrigin is percent
+      // decoded.
+      String host = blink::DecodeURLEscapeSequences(
+          String::FromUTF8(tuple.host()),
+          url::DecodeURLMode::kUTF8OrIsomorphic);
       tuple_origin = blink::SecurityOrigin::Create(
-          String::FromUTF8(tuple.scheme()), String::FromUTF8(tuple.host()),
-          tuple.port());
+          String::FromUTF8(tuple.scheme()), host, tuple.port());
     }
 
     if (nonce_if_opaque) {
@@ -40,7 +47,7 @@ struct UrlOriginAdapter {
 };
 
 template <>
-struct StructTraits<url::mojom::blink::Origin::DataView,
+struct StructTraits<url::mojom::OriginDataView,
                     scoped_refptr<const ::blink::SecurityOrigin>> {
   static WTF::String scheme(
       const scoped_refptr<const ::blink::SecurityOrigin>& origin) {
@@ -60,7 +67,7 @@ struct StructTraits<url::mojom::blink::Origin::DataView,
       const scoped_refptr<const ::blink::SecurityOrigin>& origin) {
     return UrlOriginAdapter::nonce_if_opaque(origin);
   }
-  static bool Read(url::mojom::blink::Origin::DataView data,
+  static bool Read(url::mojom::OriginDataView data,
                    scoped_refptr<const ::blink::SecurityOrigin>* out) {
     // This implementation is very close to
     // SecurityOrigin::CreateFromUrlOrigin, so keep in sync if modifications
@@ -74,7 +81,7 @@ struct StructTraits<url::mojom::blink::Origin::DataView,
 
     const url::SchemeHostPort& tuple =
         url::SchemeHostPort(scheme, host, data.port());
-    if (tuple.IsInvalid()) {
+    if (!tuple.IsValid()) {
       // If the tuple is invalid, it is a valid case if and only if it is an
       // opaque origin and the scheme, host, and port are empty.
       if (!nonce_if_opaque)

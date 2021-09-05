@@ -29,56 +29,23 @@
 
 using signin::AccountConsistencyMethod;
 
-// TODO(droger): Verify if this feature flag is still required now that
-// DICE migration was enabled by default for all users.
-const base::Feature kAccountConsistencyFeature{
-    "AccountConsistency", base::FEATURE_DISABLED_BY_DEFAULT};
-const char kAccountConsistencyFeatureMethodParameter[] = "method";
-const char kAccountConsistencyFeatureMethodMirror[] = "mirror";
-const char kAccountConsistencyFeatureMethodDiceMigration[] = "dice_migration";
-// TODO(msalama): Remove this method.
-const char kAccountConsistencyFeatureMethodDice[] = "dice";
-
-const base::Feature kForceDiceMigration{"ForceDiceMigration",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
-
 namespace {
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-// Preference indicating that the Dice migration should happen at the next
-// Chrome startup.
-const char kDiceMigrationOnStartupPref[] =
-    "signin.AccountReconcilor.kDiceMigrationOnStartup2";
 // Preference indicating that the Dice migraton has happened.
 const char kDiceMigrationCompletePref[] = "signin.DiceMigrationComplete";
 
-const char kDiceMigrationStatusHistogram[] = "Signin.DiceMigrationStatus";
+const char kAllowBrowserSigninArgument[] = "allow-browser-signin";
 
-// Used for UMA histogram kDiceMigrationStatusHistogram.
-// Do not remove or re-order values.
-enum class DiceMigrationStatus {
-  kEnabled,
-  kDisabledReadyForMigration,
-  kDisabledNotReadyForMigration,
-  kDisabled,
-
-  // This is the last value. New values should be inserted above.
-  kDiceMigrationStatusCount
-};
-
-DiceMigrationStatus GetDiceMigrationStatus(
-    AccountConsistencyMethod account_consistency) {
-  switch (account_consistency) {
-    case AccountConsistencyMethod::kDice:
-      return DiceMigrationStatus::kEnabled;
-    case AccountConsistencyMethod::kDiceMigration:
-      return DiceMigrationStatus::kDisabledNotReadyForMigration;
-    case AccountConsistencyMethod::kDisabled:
-      return DiceMigrationStatus::kDisabled;
-    case AccountConsistencyMethod::kMirror:
-      NOTREACHED();
-      return DiceMigrationStatus::kDisabled;
+bool IsBrowserSigninAllowedByCommandLine() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(kAllowBrowserSigninArgument)) {
+    std::string allowBrowserSignin =
+        command_line->GetSwitchValueASCII(kAllowBrowserSigninArgument);
+    return base::ToLowerASCII(allowBrowserSignin) == "true";
   }
+  // If the commandline flag is not provided, the default is true.
+  return true;
 }
 #endif
 
@@ -104,9 +71,8 @@ AccountConsistencyModeManager::AccountConsistencyModeManager(Profile* profile)
   PrefService* prefs = profile->GetPrefs();
   // Propagate settings changes from the previous launch to the signin-allowed
   // pref.
-  bool signin_allowed =
-      prefs->GetBoolean(prefs::kSigninAllowedOnNextStartup) &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch("disallow-signin");
+  bool signin_allowed = prefs->GetBoolean(prefs::kSigninAllowedOnNextStartup) &&
+                        IsBrowserSigninAllowedByCommandLine();
   prefs->SetBoolean(prefs::kSigninAllowed, signin_allowed);
 
   UMA_HISTOGRAM_BOOLEAN("Signin.SigninAllowed", signin_allowed);
@@ -115,26 +81,10 @@ AccountConsistencyModeManager::AccountConsistencyModeManager(Profile* profile)
   account_consistency_ = ComputeAccountConsistencyMethod(profile_);
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  if (signin::DiceMethodGreaterOrEqual(
-          account_consistency_, AccountConsistencyMethod::kDiceMigration)) {
-    if (IsReadyForDiceMigration(profile_)) {
-      // Note: Even when |account_consistency_| is kDice, there may be cases
-      // when |kDiceMigrationCompletePref| preference is not set (e.g. browser
-      // tests that force set DICE state to kDice).
-      SetDiceMigrationCompleted();
-      account_consistency_ = AccountConsistencyMethod::kDice;
-    }
-
-    if (account_consistency_ == AccountConsistencyMethod::kDiceMigration) {
-      UMA_HISTOGRAM_BOOLEAN(
-          "Signin.TokenServiceDiceCompatible",
-          prefs->GetBoolean(prefs::kTokenServiceDiceCompatible));
-    }
-  }
-
-  UMA_HISTOGRAM_ENUMERATION(kDiceMigrationStatusHistogram,
-                            GetDiceMigrationStatus(account_consistency_),
-                            DiceMigrationStatus::kDiceMigrationStatusCount);
+  // New profiles don't need Dice migration. Old profiles may need it if they
+  // were created before Dice.
+  if (profile_->IsNewProfile())
+    SetDiceMigrationCompleted();
 #endif
 
   DCHECK_EQ(account_consistency_, ComputeAccountConsistencyMethod(profile_));
@@ -147,7 +97,6 @@ AccountConsistencyModeManager::~AccountConsistencyModeManager() {}
 void AccountConsistencyModeManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  registry->RegisterBooleanPref(kDiceMigrationOnStartupPref, false);
   registry->RegisterBooleanPref(kDiceMigrationCompletePref, false);
 #endif
 #if defined(OS_CHROMEOS)
@@ -176,25 +125,6 @@ bool AccountConsistencyModeManager::IsDiceEnabledForProfile(Profile* profile) {
 void AccountConsistencyModeManager::SetDiceMigrationCompleted() {
   VLOG(1) << "Dice migration completed.";
   profile_->GetPrefs()->SetBoolean(kDiceMigrationCompletePref, true);
-}
-
-void AccountConsistencyModeManager::SetReadyForDiceMigration(bool is_ready) {
-  SetDiceMigrationOnStartup(profile_->GetPrefs(), is_ready);
-}
-
-// static
-void AccountConsistencyModeManager::SetDiceMigrationOnStartup(
-    PrefService* prefs,
-    bool migrate) {
-  VLOG(1) << "Dice migration on next startup: " << migrate;
-  prefs->SetBoolean(kDiceMigrationOnStartupPref, migrate);
-}
-
-// static
-bool AccountConsistencyModeManager::IsReadyForDiceMigration(Profile* profile) {
-  return ShouldBuildServiceForProfile(profile) &&
-         (profile->IsNewProfile() ||
-          profile->GetPrefs()->GetBoolean(kDiceMigrationOnStartupPref));
 }
 
 // static
@@ -255,14 +185,8 @@ AccountConsistencyModeManager::ComputeAccountConsistencyMethod(
   return AccountConsistencyMethod::kMirror;
 #endif
 
-  std::string method_value = base::GetFieldTrialParamValueByFeature(
-      kAccountConsistencyFeature, kAccountConsistencyFeatureMethodParameter);
-
 #if defined(OS_CHROMEOS)
-  if (chromeos::IsAccountManagerAvailable(profile))
-    return AccountConsistencyMethod::kMirror;
-
-  return (method_value == kAccountConsistencyFeatureMethodMirror ||
+  return (chromeos::IsAccountManagerAvailable(profile) ||
           profile->GetPrefs()->GetBoolean(
               prefs::kAccountConsistencyMirrorRequired))
              ? AccountConsistencyMethod::kMirror
@@ -270,16 +194,6 @@ AccountConsistencyModeManager::ComputeAccountConsistencyMethod(
 #endif
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  AccountConsistencyMethod method = AccountConsistencyMethod::kDiceMigration;
-
-  if (method_value == kAccountConsistencyFeatureMethodDiceMigration)
-    method = AccountConsistencyMethod::kDiceMigration;
-  else if (method_value == kAccountConsistencyFeatureMethodDice)
-    method = AccountConsistencyMethod::kDice;
-
-  DCHECK(signin::DiceMethodGreaterOrEqual(
-      method, AccountConsistencyMethod::kDiceMigration));
-
   // Legacy supervised users cannot get Dice.
   // TODO(droger): remove this once legacy supervised users are no longer
   // supported.
@@ -300,15 +214,7 @@ AccountConsistencyModeManager::ComputeAccountConsistencyMethod(
     return AccountConsistencyMethod::kDisabled;
   }
 
-  if (method == AccountConsistencyMethod::kDiceMigration) {
-    if (IsDiceMigrationCompleted(profile))
-      return AccountConsistencyMethod::kDice;
-
-    if (base::FeatureList::IsEnabled(kForceDiceMigration))
-      return AccountConsistencyMethod::kDice;
-  }
-
-  return method;
+  return AccountConsistencyMethod::kDice;
 #endif
 
   NOTREACHED();

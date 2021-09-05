@@ -12,8 +12,8 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "third_party/blink/public/mojom/service_worker/embedded_worker.mojom.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker_installed_scripts_manager.mojom.h"
-#include "third_party/blink/public/mojom/worker/worker_content_settings_proxy.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_installed_scripts_manager.mojom-forward.h"
+#include "third_party/blink/public/mojom/worker/worker_content_settings_proxy.mojom-forward.h"
 #include "third_party/blink/public/web/web_embedded_worker_start_data.h"
 
 namespace content {
@@ -54,7 +54,8 @@ class CONTENT_EXPORT EmbeddedWorkerInstanceClientImpl
   // service_manager::BinderRegistry.
   static void CreateForRequest(
       scoped_refptr<base::SingleThreadTaskRunner> initiator_task_runner,
-      blink::mojom::EmbeddedWorkerInstanceClientRequest request);
+      mojo::PendingReceiver<blink::mojom::EmbeddedWorkerInstanceClient>
+          receiver);
 
   ~EmbeddedWorkerInstanceClientImpl() override;
 
@@ -75,7 +76,6 @@ class CONTENT_EXPORT EmbeddedWorkerInstanceClientImpl
 
   // blink::mojom::EmbeddedWorkerInstanceClient implementation
   void StartWorker(blink::mojom::EmbeddedWorkerStartParamsPtr params) override;
-  void ResumeAfterDownload() override;
 
   // Handler of connection error bound to |receiver_|.
   void OnError();

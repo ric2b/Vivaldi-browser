@@ -11,10 +11,10 @@
 #include "base/test/task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/display.h"
-#include "ui/display/screen.h"
+#include "ui/display/screen_base.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
 #include "ui/events/event.h"
-#include "ui/events/platform/x11/x11_event_source_default.h"
+#include "ui/events/platform/x11/x11_event_source.h"
 #include "ui/events/test/events_test_utils_x11.h"
 #include "ui/ozone/test/mock_platform_window_delegate.h"
 #include "ui/platform_window/platform_window_delegate.h"
@@ -43,41 +43,21 @@ ACTION_P(CloneEvent, event_ptr) {
 // ScreenOzone, but it is impossible.
 // We are not really interested in sending back real displays. Thus, default one
 // is more than enough.
-class TestScreen : public display::Screen {
+class TestScreen : public display::ScreenBase {
  public:
-  TestScreen() : displays_({}) {}
+  TestScreen() {
+    ProcessDisplayChanged({}, true);
+  }
   ~TestScreen() override = default;
+  TestScreen(const TestScreen& screen) = delete;
+  TestScreen& operator=(const TestScreen& screen) = delete;
 
-  // display::Screen interface.
-  gfx::Point GetCursorScreenPoint() override { return {}; }
-  bool IsWindowUnderCursor(gfx::NativeWindow window) override { return false; }
-  gfx::NativeWindow GetWindowAtScreenPoint(const gfx::Point& point) override {
-    return gfx::NativeWindow();
+  void SetScaleAndBoundsForPrimaryDisplay(float scale,
+                                          const gfx::Rect& bounds_in_pixels) {
+    auto display = GetPrimaryDisplay();
+    display.SetScaleAndBounds(scale, bounds_in_pixels);
+    ProcessDisplayChanged(display, true);
   }
-  int GetNumDisplays() const override { return GetAllDisplays().size(); }
-  const std::vector<display::Display>& GetAllDisplays() const override {
-    return displays_;
-  }
-  display::Display GetDisplayNearestWindow(
-      gfx::NativeWindow window) const override {
-    return {};
-  }
-  display::Display GetDisplayNearestPoint(
-      const gfx::Point& point) const override {
-    return {};
-  }
-  display::Display GetDisplayMatching(
-      const gfx::Rect& match_rect) const override {
-    return {};
-  }
-  display::Display GetPrimaryDisplay() const override { return {}; }
-  void AddObserver(display::DisplayObserver* observer) override {}
-  void RemoveObserver(display::DisplayObserver* observer) override {}
-
- private:
-  std::vector<display::Display> displays_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestScreen);
 };  // namespace
 
 }  // namespace
@@ -92,15 +72,16 @@ class X11WindowOzoneTest : public testing::Test {
 
   void SetUp() override {
     XDisplay* display = gfx::GetXDisplay();
-    event_source_ = std::make_unique<X11EventSourceDefault>(display);
+    event_source_ = std::make_unique<X11EventSource>(display);
 
-    display::Screen::SetScreenInstance(new TestScreen());
+    test_screen_ = new TestScreen();
+    display::Screen::SetScreenInstance(test_screen_);
 
     TouchFactory::GetInstance()->SetPointerDeviceForTest({kPointerDeviceId});
   }
 
  protected:
-  std::unique_ptr<PlatformWindowBase> CreatePlatformWindow(
+  std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       MockPlatformWindowDelegate* delegate,
       const gfx::Rect& bounds,
       gfx::AcceleratedWidget* widget) {
@@ -126,9 +107,11 @@ class X11WindowOzoneTest : public testing::Test {
     return window_manager;
   }
 
+  TestScreen* test_screen_ = nullptr;
+
  private:
   std::unique_ptr<base::test::TaskEnvironment> task_env_;
-  std::unique_ptr<X11EventSourceDefault> event_source_;
+  std::unique_ptr<X11EventSource> event_source_;
 
   DISALLOW_COPY_AND_ASSIGN(X11WindowOzoneTest);
 };
@@ -198,6 +181,7 @@ TEST_F(X11WindowOzoneTest, SendPlatformEventToCapturedWindow) {
   EXPECT_CALL(delegate_2, DispatchEvent(_)).WillOnce(CloneEvent(&event));
 
   DispatchXEvent(xi_event, widget);
+  EXPECT_TRUE(event.get());
   EXPECT_EQ(ET_MOUSE_PRESSED, event->type());
   EXPECT_EQ(gfx::Point(-277, 215), event->AsLocatedEvent()->location());
 }
@@ -248,11 +232,37 @@ TEST_F(X11WindowOzoneTest, MouseEnterAndDelete) {
   EXPECT_CALL(delegate_2, OnMouseEnter()).Times(1);
   window_manager()->MouseOnWindow(static_cast<X11WindowOzone*>(window_2.get()));
 
-  // Removing the window should reset the |window_mouse_currently_on_|.
   EXPECT_EQ(window_2.get(),
             window_manager()->window_mouse_currently_on_for_test());
-  window_2.reset();
+
+  // Dispatch Event on window 1 while event is captured on window 2.
+  ::testing::Mock::VerifyAndClearExpectations(&delegate_1);
+  EXPECT_CALL(delegate_1, OnMouseEnter()).Times(1);
+  window_2->SetCapture();
+  ScopedXI2Event xi_event;
+  xi_event.InitGenericButtonEvent(kPointerDeviceId, ET_MOUSE_PRESSED,
+                                  gfx::Point(0, 0), EF_NONE);
+  DispatchXEvent(xi_event, widget_1);
+  EXPECT_EQ(window_1.get(),
+            window_manager()->window_mouse_currently_on_for_test());
+
+  // Removing the window should reset the |window_mouse_currently_on_|.
+  window_1.reset();
   EXPECT_FALSE(window_manager()->window_mouse_currently_on_for_test());
+}
+
+// Verifies X11Window sets fullscreen bounds in pixels when going to fullscreen.
+TEST_F(X11WindowOzoneTest, ToggleFullscreen) {
+  constexpr gfx::Rect screen_bounds_in_px(640, 480, 1280, 720);
+  test_screen_->SetScaleAndBoundsForPrimaryDisplay(2, screen_bounds_in_px);
+
+  MockPlatformWindowDelegate delegate;
+  gfx::AcceleratedWidget widget;
+  constexpr gfx::Rect bounds(30, 80, 800, 600);
+  auto window = CreatePlatformWindow(&delegate, bounds, &widget);
+
+  EXPECT_CALL(delegate, OnBoundsChanged(screen_bounds_in_px));
+  window->ToggleFullscreen();
 }
 
 }  // namespace ui

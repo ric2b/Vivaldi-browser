@@ -38,6 +38,7 @@ class ChannelMojo;
 struct GpuDeferredMessage;
 
 namespace gpu {
+class ClientSharedImageInterface;
 struct SyncToken;
 class GpuChannelHost;
 class GpuMemoryBufferManager;
@@ -103,7 +104,7 @@ class GPU_EXPORT GpuChannelHost
   // Ensure that the all deferred messages prior upto |deferred_message_id| have
   // been flushed. Pass UINT32_MAX to force all pending deferred messages to be
   // flushed.
-  void EnsureFlush(uint32_t deferred_message_id);
+  virtual void EnsureFlush(uint32_t deferred_message_id);
 
   // Verify that the all deferred messages prior upto |deferred_message_id| have
   // reached the service. Pass UINT32_MAX to force all pending deferred messages
@@ -138,9 +139,8 @@ class GPU_EXPORT GpuChannelHost
   // otherwise ignored.
   void CrashGpuProcessForTesting();
 
-  SharedImageInterface* shared_image_interface() {
-    return &shared_image_interface_;
-  }
+  std::unique_ptr<ClientSharedImageInterface>
+  CreateClientSharedImageInterface();
 
   ImageDecodeAcceleratorProxy* image_decode_accelerator_proxy() {
     return &image_decode_accelerator_proxy_;

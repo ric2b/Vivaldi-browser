@@ -8,7 +8,6 @@ import android.net.Uri;
 import android.text.TextUtils;
 
 import org.chromium.base.Log;
-import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabPanel;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchContext;
 import org.chromium.chrome.browser.contextualsearch.ResolvedSearchTerm;
 import org.chromium.chrome.browser.contextualsearch.ResolvedSearchTerm.CardTag;
@@ -16,6 +15,7 @@ import org.chromium.chrome.browser.contextualsearch.SimpleSearchTermResolver;
 import org.chromium.chrome.browser.contextualsearch.SimpleSearchTermResolver.ResolveResponse;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.content_public.browser.WebContents;
 
 /**
@@ -66,8 +66,8 @@ public class TaskRecognizer extends EmptyTabObserver implements ResolveResponse 
      * @param tab The tab that might be about a product.  Must be the current front tab.
      */
     private void tryToShowProduct(Tab tab) {
-        boolean isCurrentSelectedTab = tab != null && tab.getActivity() != null
-                && tab.equals(tab.getActivity().getActivityTab());
+        boolean isCurrentSelectedTab = tab != null && ((TabImpl) tab).getActivity() != null
+                && tab.equals(((TabImpl) tab).getActivity().getActivityTab());
         if (mTabInUse != null || !isCurrentSelectedTab) {
             return;
         }
@@ -92,7 +92,7 @@ public class TaskRecognizer extends EmptyTabObserver implements ResolveResponse 
 
         mTabInUse = tab;
         String pageTitle = tab.getTitle();
-        String pageUrl = tab.getUrl();
+        String pageUrl = tab.getUrlString();
         WebContents webContents = tab.getWebContents();
         if (TextUtils.isEmpty(pageTitle) || TextUtils.isEmpty(pageUrl) || webContents == null) {
             Log.w(TAG, "not a good page. :-(");
@@ -125,28 +125,13 @@ public class TaskRecognizer extends EmptyTabObserver implements ResolveResponse 
                 && resolvedSearchTerm.caption().contains(UNICODE_STAR));
     }
 
-    /**
-     * Creates an {@code EphemeralTab} for the given searchUrl using details from the given
-     * {@code ResolvedSearchterm}.
-     */
-    private void createEphemeralTabFor(
-            Tab activeTab, ResolvedSearchTerm resolvedSearchTerm, Uri searchUrl) {
-        if (activeTab == null || activeTab.getActivity() == null) return;
-
-        EphemeralTabPanel displayPanel = activeTab.getActivity().getEphemeralTabPanel();
-        if (displayPanel != null) {
-            displayPanel.requestOpenPanel(searchUrl.toString(), resolvedSearchTerm.displayText(),
-                    activeTab.isIncognito());
-        }
-    }
-
     /** ResolveResponse overrides. */
     @Override
     public void onResolveResponse(ResolvedSearchTerm resolvedSearchTerm, Uri searchUri) {
         Tab activeTab = mTabInUse;
         mTabInUse = null;
         if (looksLikeAProduct(resolvedSearchTerm) && activeTab != null) {
-            createEphemeralTabFor(activeTab, resolvedSearchTerm, searchUri);
+            // Do something here to show the resolved search term.
         }
     }
 

@@ -26,12 +26,7 @@
 #include "ui/gfx/transform.h"
 #include "ui/gfx/transform_util.h"
 
-#if defined(USE_X11)
-#include "ui/events/devices/x11/touch_factory_x11.h"        // nogncheck
-#include "ui/events/keycodes/keyboard_code_conversion_x.h"  // nogncheck
-#include "ui/events/x/events_x_utils.h"                     // nogncheck
-#include "ui/gfx/x/x11.h"                                   // nogncheck
-#elif defined(USE_OZONE)
+#if defined(USE_OZONE)
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"  // nogncheck
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"  // nogncheck
 #endif
@@ -42,42 +37,6 @@
 
 namespace ui {
 namespace {
-
-#if defined(USE_X11)
-bool X11EventHasNonStandardState(const PlatformEvent& event) {
-  const unsigned int kAllStateMask =
-      Button1Mask | Button2Mask | Button3Mask | Button4Mask | Button5Mask |
-      Mod1Mask | Mod2Mask | Mod3Mask | Mod4Mask | Mod5Mask | ShiftMask |
-      LockMask | ControlMask | AnyModifier;
-
-  return event && (event->xkey.state & ~kAllStateMask) != 0;
-}
-
-Event::Properties GetEventPropertiesFromXEvent(EventType type,
-                                               const XEvent& xev) {
-  using Values = std::vector<uint8_t>;
-  Event::Properties properties;
-  if (type == ET_KEY_PRESSED || type == ET_KEY_RELEASED) {
-    // Keyboard group
-    uint8_t group = XkbGroupForCoreState(xev.xkey.state);
-    properties.emplace(kPropertyKeyboardGroup, Values{group});
-
-    // IBus-gtk specific flags
-    uint8_t ibus_flags = (xev.xkey.state >> kPropertyKeyboardIBusFlagOffset) &
-                         kPropertyKeyboardIBusFlagMask;
-    properties.emplace(kPropertyKeyboardIBusFlag, Values{ibus_flags});
-
-  } else if (type == ET_MOUSE_EXITED) {
-    // NotifyVirtual events are created for intermediate windows that the
-    // pointer crosses through. These occur when middle clicking.
-    // Change these into mouse move events.
-    bool crossing_intermediate_window = xev.xcrossing.detail == NotifyVirtual;
-    properties.emplace(kPropertyMouseCrossedIntermediateWindow,
-                       crossing_intermediate_window);
-  }
-  return properties;
-}
-#endif
 
 constexpr int kChangedButtonFlagMask =
     ui::EF_LEFT_MOUSE_BUTTON | ui::EF_MIDDLE_MOUSE_BUTTON |
@@ -368,13 +327,6 @@ Event::Event(const PlatformEvent& native_event, EventType type, int flags)
     latency()->set_source_event_type(EventTypeToLatencySourceEventType(type));
   ComputeEventLatencyOS(native_event);
 
-#if defined(USE_X11)
-  if (native_event->type == GenericEvent) {
-    XIDeviceEvent* xiev =
-        static_cast<XIDeviceEvent*>(native_event->xcookie.data);
-    source_device_id_ = xiev->sourceid;
-  }
-#endif
 #if defined(USE_OZONE)
   source_device_id_ = native_event->source_device_id();
   if (auto* properties = native_event->properties())
@@ -502,11 +454,7 @@ MouseEvent::MouseEvent(const PlatformEvent& native_event)
   latency()->AddLatencyNumberWithTimestamp(
       INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, time_stamp());
   latency()->AddLatencyNumber(INPUT_EVENT_LATENCY_UI_COMPONENT);
-  if (type() == ET_MOUSE_PRESSED || type() == ET_MOUSE_RELEASED)
-    SetClickCount(GetRepeatCount(*this));
-#if defined(USE_X11)
-  SetProperties(GetEventPropertiesFromXEvent(type(), *native_event));
-#endif
+  InitializeNative();
 }
 
 MouseEvent::MouseEvent(EventType type,
@@ -546,6 +494,12 @@ MouseEvent::MouseEvent(EventType type,
 MouseEvent::MouseEvent(const MouseEvent& other) = default;
 
 MouseEvent::~MouseEvent() = default;
+
+void MouseEvent::InitializeNative() {
+  if (type() == ET_MOUSE_PRESSED || type() == ET_MOUSE_RELEASED) {
+    SetClickCount(GetRepeatCount(*this));
+  }
+}
 
 // static
 bool MouseEvent::IsRepeatedClickEvent(const MouseEvent& event1,
@@ -778,15 +732,7 @@ TouchEvent::TouchEvent(const TouchEvent& copy)
   // the copy to attempt to remove the mapping from a null |native_event_|.
 }
 
-TouchEvent::~TouchEvent() {
-#if defined(USE_X11)
-  // In ctor TouchEvent(native_event) we call GetTouchId() which in X11
-  // platform setups the tracking_id to slot mapping. So in dtor here,
-  // if this touch event is a release event, we clear the mapping accordingly.
-  if (type() == ET_TOUCH_RELEASED || type() == ET_TOUCH_CANCELLED)
-    TouchFactory::GetInstance()->ReleaseSlot(pointer_details().id);
-#endif
-}
+TouchEvent::~TouchEvent() = default;
 
 void TouchEvent::UpdateForRootTransform(
     const gfx::Transform& inverted_root_transform,
@@ -840,36 +786,7 @@ KeyEvent::KeyEvent(const PlatformEvent& native_event, int event_flags)
       key_code_(KeyboardCodeFromNative(native_event)),
       code_(CodeFromNative(native_event)),
       is_char_(IsCharFromNative(native_event)) {
-  latency()->AddLatencyNumberWithTimestamp(
-      INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, time_stamp());
-  latency()->AddLatencyNumber(INPUT_EVENT_LATENCY_UI_COMPONENT);
-
-  KeyEvent** last_key_event = &last_key_event_;
-
-#if defined(USE_X11)
-  // Use a different static variable for key events that have non standard
-  // state masks as it may be reposted by an IME. IBUS-GTK uses this field
-  // to detect the re-posted event for example. crbug.com/385873.
-  if (X11EventHasNonStandardState(native_event))
-    last_key_event = &last_ibus_key_event_;
-
-  NormalizeFlags();
-  key_ = GetDomKeyFromXEvent(native_event);
-  SetProperties(GetEventPropertiesFromXEvent(type(), *native_event));
-#elif defined(OS_WIN)
-  // Only Windows has native character events.
-  if (is_char_) {
-    key_ = DomKey::FromCharacter(static_cast<int32_t>(native_event.wParam));
-    set_flags(PlatformKeyMap::ReplaceControlAndAltWithAltGraph(flags()));
-  } else {
-    int adjusted_flags = flags();
-    key_ = PlatformKeyMap::DomKeyFromKeyboardCode(key_code(), &adjusted_flags);
-    set_flags(adjusted_flags);
-  }
-#endif
-
-  if (IsRepeated(last_key_event))
-    set_flags(flags() | ui::EF_IS_REPEAT);
+  InitializeNative();
 }
 
 KeyEvent::KeyEvent(EventType type,
@@ -935,7 +852,39 @@ KeyEvent& KeyEvent::operator=(const KeyEvent& rhs) {
   return *this;
 }
 
-KeyEvent::~KeyEvent() {}
+KeyEvent::~KeyEvent() = default;
+
+void KeyEvent::InitializeNative() {
+  latency()->AddLatencyNumberWithTimestamp(
+      INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT, time_stamp());
+  latency()->AddLatencyNumber(INPUT_EVENT_LATENCY_UI_COMPONENT);
+
+  KeyEvent** last_key_event = &last_key_event_;
+
+#if defined(USE_X11)
+  // Use a different static variable for key events that have non standard
+  // state masks as it may be reposted by an IME. IBUS-GTK uses this field
+  // to detect the re-posted event for example. crbug.com/385873.
+  if (properties() && properties()->contains(kPropertyKeyboardIBusFlag)) {
+    last_key_event = &last_ibus_key_event_;
+  }
+
+  NormalizeFlags();
+#elif defined(OS_WIN)
+  // Only Windows has native character events.
+  if (is_char_) {
+    key_ = DomKey::FromCharacter(static_cast<int32_t>(native_event().wParam));
+    set_flags(PlatformKeyMap::ReplaceControlAndAltWithAltGraph(flags()));
+  } else {
+    int adjusted_flags = flags();
+    key_ = PlatformKeyMap::DomKeyFromKeyboardCode(key_code(), &adjusted_flags);
+    set_flags(adjusted_flags);
+  }
+#endif
+
+  if (IsRepeated(last_key_event))
+    set_flags(flags() | ui::EF_IS_REPEAT);
+}
 
 void KeyEvent::ApplyLayout() const {
   ui::DomCode code = code_;
@@ -1143,6 +1092,8 @@ ScrollEvent::ScrollEvent(const PlatformEvent& native_event)
       finger_count_(0),
       momentum_phase_(EventMomentumPhase::NONE),
       scroll_event_phase_(ScrollEventPhase::kNone) {
+  // TODO(bokan): This should be populating the |scroll_event_phase_| member but
+  // currently isn't.
   if (type() == ET_SCROLL) {
     GetScrollOffsets(native_event, &x_offset_, &y_offset_, &x_offset_ordinal_,
                      &y_offset_ordinal_, &finger_count_, &momentum_phase_);

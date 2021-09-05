@@ -5,11 +5,13 @@
 Polymer({
   is: 'update-required-card',
 
+  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior],
+
   properties: {
     /**
      * Is device connected to network?
      */
-    isConnected: {type: Boolean, value: false},
+    isNetworkConnected: {type: Boolean, value: false},
 
     updateProgressUnavailable: {type: Boolean, value: true},
 
@@ -19,41 +21,51 @@ Polymer({
 
     estimatedTimeLeftVisible: {type: Boolean, value: false},
 
+    enterpriseDomain: {type: String, value: ''},
+
+    deviceName: {type: String, value: ''},
+
     /**
-     * Message "3 minutes left".
+     * Estimated time left in seconds.
      */
     estimatedTimeLeft: {
-      type: String,
+      type: Number,
+      value: 0,
     },
 
     ui_state: {type: String},
   },
 
+  /** Called after resources are updated. */
+  updateLocalizedContent() {
+    this.i18nUpdateLocale();
+  },
+
   /**
    * @private
    */
-  onSelectNetworkClicked_: function() {
+  onSelectNetworkClicked_() {
     chrome.send('login.UpdateRequiredScreen.userActed', ['select-network']);
   },
 
   /**
    * @private
    */
-  onUpdateClicked_: function() {
+  onUpdateClicked_() {
     chrome.send('login.UpdateRequiredScreen.userActed', ['update']);
   },
 
   /**
    * @private
    */
-  onFinishClicked_: function() {
+  onFinishClicked_() {
     chrome.send('login.UpdateRequiredScreen.userActed', ['finish']);
   },
 
   /**
    * @private
    */
-  onCellularPermissionRejected_: function() {
+  onCellularPermissionRejected_() {
     chrome.send(
         'login.UpdateRequiredScreen.userActed', ['update-reject-cellular']);
   },
@@ -61,7 +73,7 @@ Polymer({
   /**
    * @private
    */
-  onCellularPermissionAccepted_: function() {
+  onCellularPermissionAccepted_() {
     chrome.send(
         'login.UpdateRequiredScreen.userActed', ['update-accept-cellular']);
   },
@@ -69,7 +81,7 @@ Polymer({
   /**
    * @private
    */
-  showOn_: function(ui_state) {
+  showOn_(ui_state) {
     // Negate the value as it used as |hidden| attribute's value.
     return !(Array.prototype.slice.call(arguments, 1).includes(ui_state));
   },

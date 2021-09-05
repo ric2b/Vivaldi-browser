@@ -30,7 +30,7 @@
 
 #include "third_party/blink/renderer/core/page/page_widget_delegate.h"
 
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -60,18 +60,16 @@ void PageWidgetDelegate::PostAnimate(Page& page) {
   page.Animator().PostAnimate();
 }
 
-void PageWidgetDelegate::UpdateLifecycle(
-    Page& page,
-    LocalFrame& root,
-    WebWidget::LifecycleUpdate requested_update,
-    WebWidget::LifecycleUpdateReason reason) {
-  if (requested_update == WebWidget::LifecycleUpdate::kLayout) {
-    page.Animator().UpdateLifecycleToLayoutClean(root);
-  } else if (requested_update == WebWidget::LifecycleUpdate::kPrePaint) {
-    page.Animator().UpdateAllLifecyclePhasesExceptPaint(root);
+void PageWidgetDelegate::UpdateLifecycle(Page& page,
+                                         LocalFrame& root,
+                                         WebLifecycleUpdate requested_update,
+                                         DocumentUpdateReason reason) {
+  if (requested_update == WebLifecycleUpdate::kLayout) {
+    page.Animator().UpdateLifecycleToLayoutClean(root, reason);
+  } else if (requested_update == WebLifecycleUpdate::kPrePaint) {
+    page.Animator().UpdateAllLifecyclePhasesExceptPaint(root, reason);
   } else {
-    page.Animator().UpdateAllLifecyclePhases(
-        root, static_cast<DocumentLifecycle::LifecycleUpdateReason>(reason));
+    page.Animator().UpdateAllLifecyclePhases(root, reason);
   }
 }
 

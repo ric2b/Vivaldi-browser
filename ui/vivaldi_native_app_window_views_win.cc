@@ -25,6 +25,7 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/common/extension.h"
+#include "ui/aura/window_tree_host.h"
 #include "ui/base/win/shell.h"
 #include "ui/views/vivaldi_pin_shortcut.h"
 #include "ui/views/vivaldi_system_menu_model_builder.h"
@@ -75,8 +76,8 @@ void VivaldiNativeAppWindowViewsWin::OnBeforeWidgetInit(
   init_params->native_widget =
       new VivaldiAppWindowDesktopNativeWidgetAuraWin(this);
 
-  is_translucent_ =
-      init_params->opacity == views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  is_translucent_ = init_params->opacity ==
+                    views::Widget::InitParams::WindowOpacity::kTranslucent;
 }
 
 void VivaldiNativeAppWindowViewsWin::InitializeDefaultWindow(

@@ -1,0 +1,4 @@
+rootWebArea
+++genericContainer
+++++portal
+++++++rootWebArea name='Text in iframe'

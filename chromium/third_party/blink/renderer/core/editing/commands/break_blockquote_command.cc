@@ -43,8 +43,6 @@
 
 namespace blink {
 
-using namespace html_names;
-
 namespace {
 
 bool IsFirstVisiblePositionInNode(const VisiblePosition& visible_position,
@@ -85,7 +83,7 @@ static HTMLQuoteElement* TopBlockquoteOf(const Position& start) {
   // |position| will be in the first node that we need to move (there are a few
   // exceptions to this, see |doApply|).
   const Position& position = MostForwardCaretPosition(start);
-  return ToHTMLQuoteElement(
+  return To<HTMLQuoteElement>(
       HighestEnclosingNodeOfType(position, IsMailHTMLBlockquoteElement));
 }
 
@@ -153,7 +151,7 @@ void BreakBlockquoteCommand::DoApply(EditingState* editing_state) {
   if (editing_state->IsAborted())
     return;
 
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   // If we're inserting the break at the end of the quoted content, we don't
   // need to break the quote.
@@ -174,7 +172,7 @@ void BreakBlockquoteCommand::DoApply(EditingState* editing_state) {
 
   // Adjust the position so we don't split at the beginning of a quote.
   while (IsFirstVisiblePositionInNode(CreateVisiblePosition(pos),
-                                      ToHTMLQuoteElement(EnclosingNodeOfType(
+                                      To<HTMLQuoteElement>(EnclosingNodeOfType(
                                           pos, IsMailHTMLBlockquoteElement)))) {
     pos = PreviousPositionOf(pos, PositionMoveType::kGraphemeCluster);
   }
@@ -238,7 +236,7 @@ void BreakBlockquoteCommand::DoApply(EditingState* editing_state) {
         list_child_node = list_child_node->nextSibling();
       if (IsListItem(list_child_node))
         SetNodeAttribute(
-            &cloned_child, kStartAttr,
+            &cloned_child, html_names::kStartAttr,
             AtomicString::Number(
                 ToLayoutListItem(list_child_node->GetLayoutObject())->Value()));
     }

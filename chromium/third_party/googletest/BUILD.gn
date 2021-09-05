@@ -66,6 +66,12 @@ source_set("gtest") {
     "custom/gtest/internal/custom/gtest.h",
     "custom/gtest/internal/custom/stack_trace_getter.cc",
     "custom/gtest/internal/custom/stack_trace_getter.h",
+
+    # TODO(crbug.com/1009553): Remove this wrapper and custom temp dir
+    # after plumbing a workable temporary path into googletest on Android.
+    "custom/gtest/internal/custom/chrome_custom_temp_dir.cc",
+    "custom/gtest/internal/custom/chrome_custom_temp_dir.h",
+    "custom/gtest/internal/custom/gtest_port_wrapper.cc",
     "src/googletest/include/gtest/gtest-death-test.h",
     "src/googletest/include/gtest/gtest-matchers.h",
     "src/googletest/include/gtest/gtest-message.h",
@@ -95,7 +101,11 @@ source_set("gtest") {
     "src/googletest/src/gtest-filepath.cc",
     "src/googletest/src/gtest-internal-inl.h",
     "src/googletest/src/gtest-matchers.cc",
-    "src/googletest/src/gtest-port.cc",
+
+    # gtest_port_wrapper.cc is used instead of gtest-port.cc.
+    # TODO(crbug.com/1009553): Re-enable this file after plumbing a workable
+    #                          temporary path into googletest on Android.
+    #"src/googletest/src/gtest-port.cc",
     "src/googletest/src/gtest-printers.cc",
     "src/googletest/src/gtest-test-part.cc",
     "src/googletest/src/gtest-typed-test.cc",
@@ -105,7 +115,10 @@ source_set("gtest") {
   # Some files include "src/gtest-internal-inl.h".
   include_dirs = [ "src/googletest" ]
 
-  all_dependent_configs = [ ":gtest_config" ]
+  public_configs = [ ":gtest_config" ]
+  if (!build_with_chromium && gtest_enable_absl_printers) {
+    public_configs += [ "//third_party/abseil-cpp:absl_include_config" ]
+  }
 
   configs -= [ "//build/config/compiler:chromium_code" ]
   configs += [ "//build/config/compiler:no_chromium_code" ]
@@ -135,8 +148,8 @@ source_set("gtest") {
 
   if (is_fuchsia) {
     deps += [
-      "//third_party/fuchsia-sdk/sdk:fdio",
-      "//third_party/fuchsia-sdk/sdk:zx",
+      "//third_party/fuchsia-sdk/sdk/pkg/fdio",
+      "//third_party/fuchsia-sdk/sdk/pkg/zx",
     ]
   }
 }
@@ -145,12 +158,8 @@ source_set("gtest") {
 # See README.chromium for details.
 source_set("gtest_main") {
   testonly = true
-  sources = [
-    "src/googletest/src/gtest_main.cc",
-  ]
-  deps = [
-    ":gtest",
-  ]
+  sources = [ "src/googletest/src/gtest_main.cc" ]
+  deps = [ ":gtest" ]
 }
 
 # Do NOT depend on this directly. Use //testing/gmock:gmock_main instead.
@@ -189,9 +198,7 @@ source_set("gmock") {
     "src/googlemock/src/gmock.cc",
   ]
 
-  public_deps = [
-    ":gtest",
-  ]
+  public_deps = [ ":gtest" ]
 
   public_configs = [ ":gmock_config" ]
 }
@@ -200,10 +207,6 @@ source_set("gmock") {
 # See README.chromium for details.
 static_library("gmock_main") {
   testonly = true
-  sources = [
-    "src/googlemock/src/gmock_main.cc",
-  ]
-  deps = [
-    ":gmock",
-  ]
+  sources = [ "src/googlemock/src/gmock_main.cc" ]
+  deps = [ ":gmock" ]
 }

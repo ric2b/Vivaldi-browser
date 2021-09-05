@@ -77,6 +77,34 @@ String GetFrameAttribute(HTMLFrameOwnerElement* frame_owner,
   return attr_value;
 }
 
+AtomicString GetFrameOwnerType(HTMLFrameOwnerElement* frame_owner) {
+  switch (frame_owner->OwnerType()) {
+    case FrameOwnerElementType::kNone:
+      return "window";
+    case FrameOwnerElementType::kIframe:
+      return "iframe";
+    case FrameOwnerElementType::kObject:
+      return "object";
+    case FrameOwnerElementType::kEmbed:
+      return "embed";
+    case FrameOwnerElementType::kFrame:
+      return "frame";
+    case FrameOwnerElementType::kPortal:
+      return "portal";
+  }
+  NOTREACHED();
+  return "";
+}
+
+String GetFrameSrc(HTMLFrameOwnerElement* frame_owner) {
+  switch (frame_owner->OwnerType()) {
+    case FrameOwnerElementType::kObject:
+      return GetFrameAttribute(frame_owner, html_names::kDataAttr, false);
+    default:
+      return GetFrameAttribute(frame_owner, html_names::kSrcAttr, false);
+  }
+}
+
 const AtomicString& SelfKeyword() {
   DEFINE_STATIC_LOCAL(const AtomicString, kSelfAttribution, ("self"));
   return kSelfAttribution;
@@ -112,12 +140,6 @@ AtomicString SameOriginAttribution(Frame* observer_frame,
   return SameOriginKeyword();
 }
 
-bool IsSameOrigin(const AtomicString& key) {
-  DCHECK(IsMainThread());
-  return key == SameOriginKeyword() || key == SameOriginDescendantKeyword() ||
-         key == SameOriginAncestorKeyword() || key == SelfKeyword();
-}
-
 }  // namespace
 
 static base::TimeTicks ToTimeOrigin(LocalDOMWindow* window) {
@@ -136,14 +158,19 @@ WindowPerformance::WindowPerformance(LocalDOMWindow* window)
     : Performance(
           ToTimeOrigin(window),
           window->document()->GetTaskRunner(TaskType::kPerformanceTimeline)),
-      DOMWindowClient(window) {}
+      DOMWindowClient(window) {
+  DCHECK(GetFrame());
+  DCHECK(GetFrame()->GetPerformanceMonitor());
+  GetFrame()->GetPerformanceMonitor()->Subscribe(
+      PerformanceMonitor::kLongTask, kLongTaskObserverThreshold, this);
+}
 
 WindowPerformance::~WindowPerformance() = default;
 
 ExecutionContext* WindowPerformance::GetExecutionContext() const {
   if (!GetFrame())
     return nullptr;
-  return GetFrame()->GetDocument();
+  return GetFrame()->GetDocument()->ToExecutionContext();
 }
 
 PerformanceTiming* WindowPerformance::timing() const {
@@ -182,36 +209,22 @@ WindowPerformance::CreateNavigationTimingInstance() {
   ResourceTimingInfo* info = document_loader->GetNavigationTimingInfo();
   if (!info)
     return nullptr;
-  WebVector<WebServerTimingInfo> server_timing =
+  HeapVector<Member<PerformanceServerTiming>> server_timing =
       PerformanceServerTiming::ParseServerTiming(*info);
-  if (!server_timing.empty())
+  if (!server_timing.IsEmpty())
     document_loader->CountUse(WebFeature::kPerformanceServerTiming);
 
   return MakeGarbageCollected<PerformanceNavigationTiming>(
-      GetFrame(), info, time_origin_, server_timing);
-}
-
-void WindowPerformance::UpdateLongTaskInstrumentation() {
-  if (!GetFrame() || !GetFrame()->GetDocument())
-    return;
-
-  if (HasObserverFor(PerformanceEntry::kLongTask)) {
-    UseCounter::Count(GetFrame()->GetDocument(), WebFeature::kLongTaskObserver);
-    GetFrame()->GetPerformanceMonitor()->Subscribe(
-        PerformanceMonitor::kLongTask, kLongTaskObserverThreshold, this);
-  } else {
-    GetFrame()->GetPerformanceMonitor()->UnsubscribeAll(this);
-  }
+      GetFrame(), info, time_origin_, std::move(server_timing));
 }
 
 void WindowPerformance::BuildJSONValue(V8ObjectBuilder& builder) const {
   Performance::BuildJSONValue(builder);
-  builder.Add("timing", timing()->toJSONForBinding(builder.GetScriptState()));
-  builder.Add("navigation",
-              navigation()->toJSONForBinding(builder.GetScriptState()));
+  builder.Add("timing", timing());
+  builder.Add("navigation", navigation());
 }
 
-void WindowPerformance::Trace(blink::Visitor* visitor) {
+void WindowPerformance::Trace(Visitor* visitor) {
   visitor->Trace(event_timings_);
   visitor->Trace(first_pointer_down_event_timing_);
   visitor->Trace(navigation_);
@@ -246,7 +259,7 @@ std::pair<AtomicString, DOMWindow*> WindowPerformance::SanitizedAttribution(
     return std::make_pair(kAmbiguousAttribution, nullptr);
   }
 
-  Document* document = DynamicTo<Document>(task_context);
+  Document* document = Document::DynamicFrom(task_context);
   if (!document || !document->GetFrame()) {
     // Unable to attribute as no script was involved.
     DEFINE_STATIC_LOCAL(const AtomicString, kUnknownAttribution, ("unknown"));
@@ -291,34 +304,28 @@ std::pair<AtomicString, DOMWindow*> WindowPerformance::SanitizedAttribution(
   return std::make_pair(kCrossOriginAttribution, nullptr);
 }
 
-void WindowPerformance::ReportLongTask(
-    base::TimeTicks start_time,
-    base::TimeTicks end_time,
-    ExecutionContext* task_context,
-    bool has_multiple_contexts,
-    const SubTaskAttribution::EntriesVector& sub_task_attributions) {
+void WindowPerformance::ReportLongTask(base::TimeTicks start_time,
+                                       base::TimeTicks end_time,
+                                       ExecutionContext* task_context,
+                                       bool has_multiple_contexts) {
   if (!GetFrame())
     return;
   std::pair<AtomicString, DOMWindow*> attribution =
       WindowPerformance::SanitizedAttribution(
           task_context, has_multiple_contexts, GetFrame());
   DOMWindow* culprit_dom_window = attribution.second;
-  SubTaskAttribution::EntriesVector empty_vector;
   if (!culprit_dom_window || !culprit_dom_window->GetFrame() ||
       !culprit_dom_window->GetFrame()->DeprecatedLocalOwner()) {
-    AddLongTaskTiming(
-        start_time, end_time, attribution.first, g_empty_string, g_empty_string,
-        g_empty_string,
-        IsSameOrigin(attribution.first) ? sub_task_attributions : empty_vector);
+    AddLongTaskTiming(start_time, end_time, attribution.first, "window",
+                      g_empty_string, g_empty_string, g_empty_string);
   } else {
     HTMLFrameOwnerElement* frame_owner =
         culprit_dom_window->GetFrame()->DeprecatedLocalOwner();
     AddLongTaskTiming(
-        start_time, end_time, attribution.first,
-        GetFrameAttribute(frame_owner, html_names::kSrcAttr, false),
+        start_time, end_time, attribution.first, GetFrameOwnerType(frame_owner),
+        GetFrameSrc(frame_owner),
         GetFrameAttribute(frame_owner, html_names::kIdAttr, false),
-        GetFrameAttribute(frame_owner, html_names::kNameAttr, true),
-        IsSameOrigin(attribution.first) ? sub_task_attributions : empty_vector);
+        GetFrameAttribute(frame_owner, html_names::kNameAttr, true));
   }
 }
 
@@ -351,7 +358,7 @@ void WindowPerformance::RegisterEventTiming(const AtomicString& event_type,
   }
 }
 
-void WindowPerformance::ReportEventTimings(WebWidgetClient::SwapResult result,
+void WindowPerformance::ReportEventTimings(WebSwapResult result,
                                            base::TimeTicks timestamp) {
   DOMHighResTimeStamp end_time = MonotonicTimeToDOMHighResTimeStamp(timestamp);
   bool event_timing_enabled =

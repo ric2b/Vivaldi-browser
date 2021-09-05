@@ -14,6 +14,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/dns_util.h"
+#include "chrome/browser/net/stub_resolver_config_reader.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
@@ -42,13 +43,14 @@
 namespace {
 
 void GetStubResolverConfig(
+    bool force_check_parental_controls_for_automatic_mode,
     bool* insecure_stub_resolver_enabled,
     net::DnsConfig::SecureDnsMode* secure_dns_mode,
-    base::Optional<std::vector<network::mojom::DnsOverHttpsServerPtr>>*
-        dns_over_https_servers) {
-  dns_over_https_servers->reset();
+    std::vector<net::DnsOverHttpsServerConfig>* dns_over_https_servers) {
+  dns_over_https_servers->clear();
 
-  SystemNetworkContextManager::GetStubResolverConfigForTesting(
+  SystemNetworkContextManager::GetStubResolverConfigReader()->GetConfiguration(
+      force_check_parental_controls_for_automatic_mode,
       insecure_stub_resolver_enabled, secure_dns_mode, dns_over_https_servers);
 }
 
@@ -64,13 +66,18 @@ void RunStubResolverConfigTests(bool async_dns_feature_enabled) {
   // Check initial state.
   bool insecure_stub_resolver_enabled = !async_dns_feature_enabled;
   net::DnsConfig::SecureDnsMode secure_dns_mode;
-  base::Optional<std::vector<network::mojom::DnsOverHttpsServerPtr>>
-      dns_over_https_servers;
-  GetStubResolverConfig(&insecure_stub_resolver_enabled, &secure_dns_mode,
-                        &dns_over_https_servers);
+  std::vector<net::DnsOverHttpsServerConfig> dns_over_https_servers;
+  GetStubResolverConfig(
+      false /* force_check_parental_controls_for_automatic_mode */,
+      &insecure_stub_resolver_enabled, &secure_dns_mode,
+      &dns_over_https_servers);
   EXPECT_EQ(async_dns_feature_enabled, insecure_stub_resolver_enabled);
-  EXPECT_EQ(net::DnsConfig::SecureDnsMode::OFF, secure_dns_mode);
-  EXPECT_FALSE(dns_over_https_servers.has_value());
+  if (base::FeatureList::IsEnabled(features::kDnsOverHttps)) {
+    EXPECT_EQ(net::DnsConfig::SecureDnsMode::AUTOMATIC, secure_dns_mode);
+  } else {
+    EXPECT_EQ(net::DnsConfig::SecureDnsMode::OFF, secure_dns_mode);
+  }
+  EXPECT_TRUE(dns_over_https_servers.empty());
 
   std::string good_post_template = "https://foo.test/";
   std::string good_get_template = "https://bar.test/dns-query{?dns}";
@@ -84,89 +91,103 @@ void RunStubResolverConfigTests(bool async_dns_feature_enabled) {
   local_state->SetString(prefs::kDnsOverHttpsMode,
                          chrome_browser_net::kDnsOverHttpsModeSecure);
   local_state->SetString(prefs::kDnsOverHttpsTemplates, bad_template);
-  GetStubResolverConfig(&insecure_stub_resolver_enabled, &secure_dns_mode,
-                        &dns_over_https_servers);
+  GetStubResolverConfig(
+      false /* force_check_parental_controls_for_automatic_mode */,
+      &insecure_stub_resolver_enabled, &secure_dns_mode,
+      &dns_over_https_servers);
   EXPECT_EQ(async_dns_feature_enabled, insecure_stub_resolver_enabled);
   EXPECT_EQ(net::DnsConfig::SecureDnsMode::SECURE, secure_dns_mode);
-  EXPECT_FALSE(dns_over_https_servers.has_value());
+  EXPECT_TRUE(dns_over_https_servers.empty());
 
   local_state->SetString(prefs::kDnsOverHttpsTemplates, good_post_template);
-  GetStubResolverConfig(&insecure_stub_resolver_enabled, &secure_dns_mode,
-                        &dns_over_https_servers);
+  GetStubResolverConfig(
+      false /* force_check_parental_controls_for_automatic_mode */,
+      &insecure_stub_resolver_enabled, &secure_dns_mode,
+      &dns_over_https_servers);
   EXPECT_EQ(async_dns_feature_enabled, insecure_stub_resolver_enabled);
   EXPECT_EQ(net::DnsConfig::SecureDnsMode::SECURE, secure_dns_mode);
-  ASSERT_TRUE(dns_over_https_servers.has_value());
-  ASSERT_EQ(1u, dns_over_https_servers->size());
-  EXPECT_EQ(good_post_template, dns_over_https_servers->at(0)->server_template);
-  EXPECT_EQ(true, dns_over_https_servers->at(0)->use_post);
+  ASSERT_EQ(1u, dns_over_https_servers.size());
+  EXPECT_EQ(good_post_template, dns_over_https_servers.at(0).server_template);
+  EXPECT_EQ(true, dns_over_https_servers.at(0).use_post);
 
   local_state->SetString(prefs::kDnsOverHttpsMode,
                          chrome_browser_net::kDnsOverHttpsModeAutomatic);
   local_state->SetString(prefs::kDnsOverHttpsTemplates, bad_template);
-  GetStubResolverConfig(&insecure_stub_resolver_enabled, &secure_dns_mode,
-                        &dns_over_https_servers);
+  GetStubResolverConfig(
+      false /* force_check_parental_controls_for_automatic_mode */,
+      &insecure_stub_resolver_enabled, &secure_dns_mode,
+      &dns_over_https_servers);
   EXPECT_EQ(async_dns_feature_enabled, insecure_stub_resolver_enabled);
   EXPECT_EQ(net::DnsConfig::SecureDnsMode::AUTOMATIC, secure_dns_mode);
-  EXPECT_FALSE(dns_over_https_servers.has_value());
+  EXPECT_TRUE(dns_over_https_servers.empty());
 
   local_state->SetString(prefs::kDnsOverHttpsTemplates, good_then_bad_template);
-  GetStubResolverConfig(&insecure_stub_resolver_enabled, &secure_dns_mode,
-                        &dns_over_https_servers);
+  GetStubResolverConfig(
+      false /* force_check_parental_controls_for_automatic_mode */,
+      &insecure_stub_resolver_enabled, &secure_dns_mode,
+      &dns_over_https_servers);
   EXPECT_EQ(async_dns_feature_enabled, insecure_stub_resolver_enabled);
   EXPECT_EQ(net::DnsConfig::SecureDnsMode::AUTOMATIC, secure_dns_mode);
-  ASSERT_TRUE(dns_over_https_servers.has_value());
-  ASSERT_EQ(1u, dns_over_https_servers->size());
-  EXPECT_EQ(good_get_template, dns_over_https_servers->at(0)->server_template);
-  EXPECT_FALSE(dns_over_https_servers->at(0)->use_post);
+  ASSERT_EQ(1u, dns_over_https_servers.size());
+  EXPECT_EQ(good_get_template, dns_over_https_servers.at(0).server_template);
+  EXPECT_FALSE(dns_over_https_servers.at(0).use_post);
 
   local_state->SetString(prefs::kDnsOverHttpsTemplates, bad_then_good_template);
-  GetStubResolverConfig(&insecure_stub_resolver_enabled, &secure_dns_mode,
-                        &dns_over_https_servers);
+  GetStubResolverConfig(
+      false /* force_check_parental_controls_for_automatic_mode */,
+      &insecure_stub_resolver_enabled, &secure_dns_mode,
+      &dns_over_https_servers);
   EXPECT_EQ(async_dns_feature_enabled, insecure_stub_resolver_enabled);
   EXPECT_EQ(net::DnsConfig::SecureDnsMode::AUTOMATIC, secure_dns_mode);
-  ASSERT_TRUE(dns_over_https_servers.has_value());
-  ASSERT_EQ(1u, dns_over_https_servers->size());
-  EXPECT_EQ(good_get_template, dns_over_https_servers->at(0)->server_template);
-  EXPECT_FALSE(dns_over_https_servers->at(0)->use_post);
+  ASSERT_EQ(1u, dns_over_https_servers.size());
+  EXPECT_EQ(good_get_template, dns_over_https_servers.at(0).server_template);
+  EXPECT_FALSE(dns_over_https_servers.at(0).use_post);
 
   local_state->SetString(prefs::kDnsOverHttpsTemplates,
                          multiple_good_templates);
-  GetStubResolverConfig(&insecure_stub_resolver_enabled, &secure_dns_mode,
-                        &dns_over_https_servers);
+  GetStubResolverConfig(
+      false /* force_check_parental_controls_for_automatic_mode */,
+      &insecure_stub_resolver_enabled, &secure_dns_mode,
+      &dns_over_https_servers);
   EXPECT_EQ(async_dns_feature_enabled, insecure_stub_resolver_enabled);
   EXPECT_EQ(net::DnsConfig::SecureDnsMode::AUTOMATIC, secure_dns_mode);
-  ASSERT_TRUE(dns_over_https_servers.has_value());
-  ASSERT_EQ(2u, dns_over_https_servers->size());
-  EXPECT_EQ(good_get_template, dns_over_https_servers->at(0)->server_template);
-  EXPECT_FALSE(dns_over_https_servers->at(0)->use_post);
-  EXPECT_EQ(good_post_template, dns_over_https_servers->at(1)->server_template);
-  EXPECT_TRUE(dns_over_https_servers->at(1)->use_post);
+  ASSERT_EQ(2u, dns_over_https_servers.size());
+  EXPECT_EQ(good_get_template, dns_over_https_servers.at(0).server_template);
+  EXPECT_FALSE(dns_over_https_servers.at(0).use_post);
+  EXPECT_EQ(good_post_template, dns_over_https_servers.at(1).server_template);
+  EXPECT_TRUE(dns_over_https_servers.at(1).use_post);
 
   local_state->SetString(prefs::kDnsOverHttpsMode,
                          chrome_browser_net::kDnsOverHttpsModeOff);
   local_state->SetString(prefs::kDnsOverHttpsTemplates, good_get_template);
-  GetStubResolverConfig(&insecure_stub_resolver_enabled, &secure_dns_mode,
-                        &dns_over_https_servers);
+  GetStubResolverConfig(
+      false /* force_check_parental_controls_for_automatic_mode */,
+      &insecure_stub_resolver_enabled, &secure_dns_mode,
+      &dns_over_https_servers);
   EXPECT_EQ(async_dns_feature_enabled, insecure_stub_resolver_enabled);
   EXPECT_EQ(net::DnsConfig::SecureDnsMode::OFF, secure_dns_mode);
-  EXPECT_FALSE(dns_over_https_servers.has_value());
+  EXPECT_TRUE(dns_over_https_servers.empty());
 
   local_state->SetString(prefs::kDnsOverHttpsMode, "no_match");
-  GetStubResolverConfig(&insecure_stub_resolver_enabled, &secure_dns_mode,
-                        &dns_over_https_servers);
+  GetStubResolverConfig(
+      false /* force_check_parental_controls_for_automatic_mode */,
+      &insecure_stub_resolver_enabled, &secure_dns_mode,
+      &dns_over_https_servers);
   EXPECT_EQ(async_dns_feature_enabled, insecure_stub_resolver_enabled);
   EXPECT_EQ(net::DnsConfig::SecureDnsMode::OFF, secure_dns_mode);
-  EXPECT_FALSE(dns_over_https_servers.has_value());
+  EXPECT_TRUE(dns_over_https_servers.empty());
 
   // Test case with policy BuiltInDnsClientEnabled enabled. The DoH fields
   // should be unaffected.
   local_state->Set(prefs::kBuiltInDnsClientEnabled,
                    base::Value(!async_dns_feature_enabled));
-  GetStubResolverConfig(&insecure_stub_resolver_enabled, &secure_dns_mode,
-                        &dns_over_https_servers);
+  GetStubResolverConfig(
+      false /* force_check_parental_controls_for_automatic_mode */,
+      &insecure_stub_resolver_enabled, &secure_dns_mode,
+      &dns_over_https_servers);
   EXPECT_EQ(!async_dns_feature_enabled, insecure_stub_resolver_enabled);
   EXPECT_EQ(net::DnsConfig::SecureDnsMode::OFF, secure_dns_mode);
-  EXPECT_FALSE(dns_over_https_servers.has_value());
+  EXPECT_TRUE(dns_over_https_servers.empty());
 }
 
 }  // namespace
@@ -297,7 +318,7 @@ IN_PROC_BROWSER_TEST_P(SystemNetworkContextManagerStubResolverBrowsertest,
   RunStubResolverConfigTests(GetParam());
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          SystemNetworkContextManagerStubResolverBrowsertest,
                          ::testing::Bool());
 
@@ -327,7 +348,7 @@ IN_PROC_BROWSER_TEST_P(SystemNetworkContextManagerReferrersFeatureBrowsertest,
   EXPECT_NE(local_state->GetBoolean(prefs::kEnableReferrers), GetParam());
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          SystemNetworkContextManagerReferrersFeatureBrowsertest,
                          ::testing::Bool());
 
@@ -369,7 +390,7 @@ IN_PROC_BROWSER_TEST_P(SystemNetworkContextManagerFreezeQUICUaBrowsertest,
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          SystemNetworkContextManagerFreezeQUICUaBrowsertest,
                          ::testing::Bool());
 
@@ -392,7 +413,7 @@ IN_PROC_BROWSER_TEST_P(SystemNetworkContextManagerWPADQuickCheckBrowsertest,
   EXPECT_EQ(GetParam(), network_context_params->pac_quick_check_enabled);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          SystemNetworkContextManagerWPADQuickCheckBrowsertest,
                          ::testing::Bool());
 
@@ -444,7 +465,7 @@ IN_PROC_BROWSER_TEST_P(
 #endif
 
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     SystemNetworkContextManagerCertificateTransparencyBrowsertest,
     ::testing::Values(base::nullopt, true, false));
 
@@ -469,9 +490,13 @@ IN_PROC_BROWSER_TEST_P(
     Test) {
   // If no BuiltinCertificateVerifierEnabled policy is set, the
   // use_builtin_cert_verifier param should be set from the feature flag.
-  EXPECT_EQ(GetParam(), g_browser_process->system_network_context_manager()
-                            ->CreateDefaultNetworkContextParams()
-                            ->use_builtin_cert_verifier);
+  EXPECT_EQ(
+      GetParam()
+          ? network::mojom::NetworkContextParams::CertVerifierImpl::kBuiltin
+          : network::mojom::NetworkContextParams::CertVerifierImpl::kSystem,
+      g_browser_process->system_network_context_manager()
+          ->CreateDefaultNetworkContextParams()
+          ->use_builtin_cert_verifier);
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED)
   // If the BuiltinCertificateVerifierEnabled policy is set it should override
   // the feature flag.
@@ -479,21 +504,23 @@ IN_PROC_BROWSER_TEST_P(
   SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
             std::make_unique<base::Value>(true));
   UpdateProviderPolicy(policies);
-  EXPECT_TRUE(g_browser_process->system_network_context_manager()
-                  ->CreateDefaultNetworkContextParams()
-                  ->use_builtin_cert_verifier);
+  EXPECT_EQ(network::mojom::NetworkContextParams::CertVerifierImpl::kBuiltin,
+            g_browser_process->system_network_context_manager()
+                ->CreateDefaultNetworkContextParams()
+                ->use_builtin_cert_verifier);
 
   SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
             std::make_unique<base::Value>(false));
   UpdateProviderPolicy(policies);
-  EXPECT_FALSE(g_browser_process->system_network_context_manager()
-                   ->CreateDefaultNetworkContextParams()
-                   ->use_builtin_cert_verifier);
+  EXPECT_EQ(network::mojom::NetworkContextParams::CertVerifierImpl::kSystem,
+            g_browser_process->system_network_context_manager()
+                ->CreateDefaultNetworkContextParams()
+                ->use_builtin_cert_verifier);
 #endif  // BUILDFLAG(BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED)
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     SystemNetworkContextServiceCertVerifierBuiltinFeaturePolicyTest,
     ::testing::Bool());
 #endif  // BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)

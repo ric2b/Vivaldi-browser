@@ -2,6 +2,7 @@
 
 #include "browser/ui/vivaldi_tab_helpers.h"
 
+#include "app/vivaldi_apptools.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
 #include "content/public/browser/web_contents.h"
 

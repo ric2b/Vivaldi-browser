@@ -5,8 +5,8 @@
 #import "ios/chrome/browser/ui/overlays/common/alerts/alert_overlay_mediator.h"
 
 #include "base/logging.h"
-#import "ios/chrome/browser/ui/alert_view_controller/alert_consumer.h"
-#import "ios/chrome/browser/ui/overlays/common/alerts/alert_overlay_mediator+subclassing.h"
+#import "ios/chrome/browser/ui/alert_view/alert_consumer.h"
+#import "ios/chrome/browser/ui/overlays/common/alerts/alert_overlay_mediator+alert_consumer_support.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -27,13 +27,14 @@
   [_consumer setTextFieldConfigurations:self.alertTextFieldConfigurations];
   NSArray<AlertAction*>* alertActions = self.alertActions;
   [_consumer setActions:alertActions];
+  [_consumer setAlertAccessibilityIdentifier:self.alertAccessibilityIdentifier];
   DCHECK_GT(alertTitle.length + alertMessage.length, 0U);
   DCHECK_GT(alertActions.count, 0U);
 }
 
 @end
 
-@implementation AlertOverlayMediator (Subclassing)
+@implementation AlertOverlayMediator (AlertConsumerSupport)
 
 - (NSString*)alertTitle {
   // Subclasses implement.
@@ -51,6 +52,11 @@
 }
 
 - (NSArray<AlertAction*>*)alertActions {
+  // Subclasses implement.
+  return nil;
+}
+
+- (NSString*)alertAccessibilityIdentifier {
   // Subclasses implement.
   return nil;
 }

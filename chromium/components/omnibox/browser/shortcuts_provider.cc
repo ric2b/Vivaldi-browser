@@ -157,7 +157,7 @@ void ShortcutsProvider::DeleteMatch(const AutocompleteMatch& match) {
   // second call to DeleteShortcutsWithURL(), which is harmless.
   history::HistoryService* const history_service = client_->GetHistoryService();
   DCHECK(history_service);
-  history_service->DeleteURL(url);
+  history_service->DeleteURLs({url});
 }
 
 ShortcutsProvider::~ShortcutsProvider() {
@@ -334,8 +334,7 @@ AutocompleteMatch ShortcutsProvider::ShortcutToACMatch(
       if (inline_autocomplete_offset != base::string16::npos) {
         match.inline_autocompletion =
             match.fill_into_edit.substr(inline_autocomplete_offset);
-        match.allowed_to_be_default_match =
-            AutocompleteMatch::AllowedToBeDefault(input, match);
+        match.SetAllowedToBeDefault(input);
       }
     }
   }

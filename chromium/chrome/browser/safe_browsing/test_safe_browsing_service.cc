@@ -7,15 +7,19 @@
 #include "base/strings/string_util.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/incident_reporting/incident_reporting_service.h"
+#include "chrome/browser/safe_browsing/services_delegate.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "components/safe_browsing/buildflags.h"
-#include "components/safe_browsing/db/database_manager.h"
-#include "components/safe_browsing/db/test_database_manager.h"
+#include "components/safe_browsing/core/db/database_manager.h"
+#include "components/safe_browsing/core/db/test_database_manager.h"
 
 namespace safe_browsing {
 
 // TestSafeBrowsingService functions:
-TestSafeBrowsingService::TestSafeBrowsingService() {
+TestSafeBrowsingService::TestSafeBrowsingService()
+    : test_shared_loader_factory_(
+          base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+              &test_url_loader_factory_)) {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   services_delegate_ = ServicesDelegate::CreateForTest(this, this);
 #endif  // BUILDFLAG(FULL_SAFE_BROWSING)
@@ -31,6 +35,17 @@ V4ProtocolConfig TestSafeBrowsingService::GetV4ProtocolConfig() const {
 
 void TestSafeBrowsingService::UseV4LocalDatabaseManager() {
   use_v4_local_db_manager_ = true;
+}
+
+void TestSafeBrowsingService::SetUseTestUrlLoaderFactory(
+    bool use_test_url_loader_factory) {
+  use_test_url_loader_factory_ = use_test_url_loader_factory;
+}
+
+network::TestURLLoaderFactory*
+TestSafeBrowsingService::GetTestUrlLoaderFactory() {
+  DCHECK(use_test_url_loader_factory_);
+  return &test_url_loader_factory_;
 }
 
 std::unique_ptr<SafeBrowsingService::StateSubscription>
@@ -87,9 +102,11 @@ void TestSafeBrowsingService::SetV4ProtocolConfig(
 bool TestSafeBrowsingService::CanCreateDatabaseManager() {
   return !use_v4_local_db_manager_;
 }
+#if BUILDFLAG(FULL_SAFE_BROWSING)
 bool TestSafeBrowsingService::CanCreateDownloadProtectionService() {
   return false;
 }
+#endif
 bool TestSafeBrowsingService::CanCreateIncidentReportingService() {
   return true;
 }
@@ -107,11 +124,13 @@ SafeBrowsingDatabaseManager* TestSafeBrowsingService::CreateDatabaseManager() {
 #endif  // BUILDFLAG(FULL_SAFE_BROWSING)
 }
 
+#if BUILDFLAG(FULL_SAFE_BROWSING)
 DownloadProtectionService*
 TestSafeBrowsingService::CreateDownloadProtectionService() {
   NOTIMPLEMENTED();
   return nullptr;
 }
+#endif
 IncidentReportingService*
 TestSafeBrowsingService::CreateIncidentReportingService() {
 #if BUILDFLAG(FULL_SAFE_BROWSING)
@@ -125,6 +144,13 @@ ResourceRequestDetector*
 TestSafeBrowsingService::CreateResourceRequestDetector() {
   NOTIMPLEMENTED();
   return nullptr;
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+TestSafeBrowsingService::GetURLLoaderFactory() {
+  if (use_test_url_loader_factory_)
+    return test_shared_loader_factory_;
+  return SafeBrowsingService::GetURLLoaderFactory();
 }
 
 // TestSafeBrowsingServiceFactory functions:

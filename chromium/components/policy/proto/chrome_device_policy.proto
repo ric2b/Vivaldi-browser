@@ -6,9 +6,12 @@ syntax = "proto2";
 
 option optimize_for = LITE_RUNTIME;
 
+import "policy_common_definitions.proto";
+
 package enterprise_management;
 
-import "policy_common_definitions.proto";
+// Everything below this comment will be synchronized between client and server
+// repos ( go/cros-proto-sync ).
 
 message DevicePolicyRefreshRateProto {
   // In milliseconds.
@@ -114,6 +117,12 @@ message DeviceReportingProto {
   optional bool report_power_status = 12 [default = false];
   optional bool report_storage_status = 13 [default = false];
   optional bool report_board_status = 14 [default = false];
+  optional bool report_cpu_info = 15 [default = false];
+  optional bool report_graphics_status = 16 [default = false];
+  optional bool report_crash_report_info = 17 [default = false];
+  optional bool report_timezone_info = 18 [default = false];
+  optional bool report_memory_info = 19 [default = false];
+  optional bool report_backlight_info = 20 [default = false];
 
   // Frequency to report device status, default to 3 hours.
   optional int64 device_status_frequency = 9 [default = 10800000];
@@ -386,6 +395,18 @@ message WebKioskAppInfoProto {
   // In case it is the only field provided, title and icon will be deduced
   // during first app launch.
   optional string url = 1;
+
+  // Title (optional).
+  // User-friendly app name that should be used in Chrome UI where kiosk app
+  // name is shown. Chrome side could override the string with an updated
+  // value that it will get during actual app launch.
+  optional string title = 2;
+
+  // Icon url (optional).
+  // Is not used in the current Implementation. Will be used instead of the
+  // placeholder icon that is displayed before the first successful app
+  // launch.
+  optional string icon_url = 3;
 }
 
 // Describes a single device-local account.
@@ -630,7 +651,7 @@ message AccessibilitySettingsProto {
   // Sets the state of the high contrast accessibility feature on the login
   // screen. If this policy is set to true, the high contrast will be enabled
   // when the login screen is shown. If this policy is set to false, the high
-  // contrast will be disabled when the high contrast is shown. If the
+  // contrast will be disabled when the login screen is shown. If the
   // PolicyOptions mode was being mandatory then the user won't be able to
   // change these settings. Only if PolicyOptions was being set as
   // recommended users can temporarily override this setting by enabling or
@@ -646,7 +667,7 @@ message AccessibilitySettingsProto {
   // Sets the state of the virtual keyboard accessibility feature on the login
   // screen. If this policy is set to true, the virtual keyboard will be enabled
   // when the login screen is shown. If this policy is set to false, the virtual
-  // keyboard will be disabled when the virtual keyboard is shown. If the
+  // keyboard will be disabled when the login screen is shown. If the
   // PolicyOptions mode was being mandatory then the user won't be able to
   // change these settings. Only if PolicyOptions was being set as
   // recommended users can temporarily override this setting by enabling or
@@ -662,7 +683,7 @@ message AccessibilitySettingsProto {
   // Sets the state of the dictation accessibility feature on the login screen.
   // If this policy is set to true, the dictation will be enabled when the login
   // screen is shown. If this policy is set to false, the dictation will
-  // be disabled when the dictation is shown. If the PolicyOptions mode was
+  // be disabled when the login screen is shown. If the PolicyOptions mode was
   // being mandatory then the user won't be able to change these settings. Only
   // if PolicyOptions was being set as recommended users can temporarily
   // override this setting by enabling or disabling the dictation. However, the
@@ -677,7 +698,7 @@ message AccessibilitySettingsProto {
   // Sets the state of the select to speak accessibility feature on the login
   // screen. If this policy is set to true, the select to speak will be enabled
   // when the login screen is shown. If this policy is set to false, the select
-  // to speak will be disabled when the select to speak is shown. If the
+  // to speak will be disabled when the login screen is shown. If the
   // PolicyOptions mode was being mandatory then the user won't be able to
   // change these settings. Only if PolicyOptions was being set as recommended
   // users can temporarily override this setting by enabling or disabling the
@@ -693,7 +714,7 @@ message AccessibilitySettingsProto {
   // Sets the state of the cursor highlight accessibility feature on the login
   // screen. If this policy is set to true, the cursor highlight will be enabled
   // when the login screen is shown. If this policy is set to false, the cursor
-  // highlight will be disabled when the cursor highlight is shown. If the
+  // highlight will be disabled when the login screen is shown. If the
   // PolicyOptions mode was being mandatory then the user won't be able to
   // change these settings. Only if PolicyOptions was being set as recommended
   // users can temporarily override this setting by enabling or disabling the
@@ -709,7 +730,7 @@ message AccessibilitySettingsProto {
   // Sets the state of the caret highlight accessibility feature on the login
   // screen. If this policy is set to true, the caret highlight will be enabled
   // when the login screen is shown. If this policy is set to false, the spoken
-  // feedback will be disabled when the caret highlight is shown. If the
+  // feedback will be disabled when the login screen is shown. If the
   // PolicyOptions mode was being mandatory then the user won't be able to
   // change these settings. Only if PolicyOptions was being set as recommended
   // users can temporarily override this setting by enabling or disabling the
@@ -725,7 +746,7 @@ message AccessibilitySettingsProto {
   // Sets the state of the mono audio accessibility feature on the login
   // screen. If this policy is set to true, the mono audio will be enabled
   // when the login screen is shown. If this policy is set to false, the mono
-  // audio will be disabled when the mono audio is shown. If the PolicyOptions
+  // audio will be disabled when the login screen is shown. If the PolicyOptions
   // mode was being mandatory then the user won't be able to change these
   // settings. Only if PolicyOptions was being set as recommended users can
   // temporarily override this setting by enabling or disabling the mono audio.
@@ -741,7 +762,7 @@ message AccessibilitySettingsProto {
   // Sets the state of the autoclick accessibility feature on the login
   // screen. If this policy is set to true, the autoclick will be enabled
   // when the login screen is shown. If this policy is set to false, the
-  // autoclick will be disabled when the autoclick is shown. If the
+  // autoclick will be disabled when the login screen is shown. If the
   // PolicyOptions mode was being mandatory then the user won't be able to
   // change these settings. Only if PolicyOptions was being set as recommended
   // users can temporarily override this setting by enabling or disabling the
@@ -757,7 +778,7 @@ message AccessibilitySettingsProto {
   // Sets the state of the sticky keys accessibility feature on the login
   // screen. If this policy is set to true, the sticky keys will be enabled
   // when the login screen is shown. If this policy is set to false, the
-  // sticky keys will be disabled when the sticky keys is shown. If the
+  // sticky keys will be disabled when the login screen is shown. If the
   // PolicyOptions mode was being mandatory then the user won't be able to
   // change these settings. Only if PolicyOptions was being set as recommended
   // users can temporarily override this setting by enabling or disabling the
@@ -773,17 +794,17 @@ message AccessibilitySettingsProto {
   // Sets the state of the keyboard focus highlight accessibility feature on the
   // login screen. If this policy is set to true, the keyboard focus highlight
   // will be enabled when the login screen is shown. If this policy is set to
-  // false, the keyboard focus highlight will be disabled when the keyboard
-  // focus highlight is shown. If the PolicyOptions mode was being mandatory
-  // then the user won't be able to change these settings. Only if PolicyOptions
-  // was being set as recommended users can temporarily override this setting by
-  // enabling or disabling the keyboard focus highlight. However, the user's
-  // choice is not persistent and the default is restored whenever the login
-  // screen is shown anew or the user remains idle on the login screen for a
-  // minute. If this policy is left unset, the keyboard focus highlight is
-  // disabled when the login screen is first shown. Users can enable or disable
-  // the keyboard focus highlight anytime and its status on the login screen is
-  // persisted between users.
+  // false, the keyboard focus highlight will be disabled when the login screen
+  // is shown. If the PolicyOptions mode was being mandatory then the user won't
+  // be able to change these settings. Only if PolicyOptions was being set as
+  // recommended users can temporarily override this setting by enabling or
+  // disabling the keyboard focus highlight. However, the user's choice is not
+  // persistent and the default is restored whenever the login screen is shown
+  // anew or the user remains idle on the login screen for a minute. If this
+  // policy is left unset, the keyboard focus highlight is disabled when the
+  // login screen is first shown. Users can enable or disable the keyboard focus
+  // highlight anytime and its status on the login screen is persisted between
+  // users.
   optional bool login_screen_keyboard_focus_highlight_enabled = 28;
   optional PolicyOptions login_screen_keyboard_focus_highlight_enabled_options =
       29;
@@ -792,8 +813,8 @@ message AccessibilitySettingsProto {
   // screen. If this policy is set to 1, the screen magnifier will be enabled
   // in full-screen magnifier mode, when the login screen is shown. If this
   // policy is set to 2, the screen magnifier will be enabled in docked
-  // magnifier mode, when the screen magnifier is shown. If this policy is set
-  // to 0, the screen magnifier will be disabled, when the screen magnifier is
+  // magnifier mode, when the login screen is shown. If this policy is set
+  // to 0, the screen magnifier will be disabled, when the login screen is
   // shown. If the PolicyOptions mode was being mandatory then the user won't be
   // able to change these settings. Only if PolicyOptions was being set as
   // recommended users can temporarily override this setting by changing the
@@ -805,11 +826,40 @@ message AccessibilitySettingsProto {
   // status on the login screen is persisted between users.
   optional int64 login_screen_screen_magnifier_type = 30;
   optional PolicyOptions login_screen_screen_magnifier_type_options = 31;
+
+  // Sets the state of the visibility of the accessibility options on quick
+  // settings accessibility feature on the login screen. If this policy is set
+  // to true, the accessibility options on quick settings will always be shown
+  // when the login screen is shown. If this policy is set to false, the
+  // accessibility options will never appear on system tray menu when the login
+  // screen is shown. If the PolicyOptions mode was being mandatory then the
+  // user won't be able to change these settings. Only if PolicyOptions was
+  // being set as recommended users can temporarily override this setting by
+  // enabling or disabling the accessibility options on system tray menu.
+  // However, the user's choice is not persistent and the default is restored
+  // whenever the login screen is shown anew or the user remains idle on the
+  // login screen for a minute. If this policy is left unset, accessibility
+  // options will not appear in the system tray menu, but the user can cause the
+  // accessibility options to appear via the Settings page.
+  // When accessiblity features are enabled by other means (e.g by a key
+  // combination), Accessibility options will always appear in system tray menu.
+  optional bool login_screen_show_options_in_system_tray_menu_enabled = 32;
+  optional PolicyOptions
+      login_screen_show_options_in_system_tray_menu_enabled_options = 33;
+
+  // Sets whether all the accessibility features shortcuts are being enabled or
+  // not on the login screen. If this policy is set to true, the accessibility
+  // shortcuts are going to be enabled when the login screen is shown. If this
+  // policy is set to false, the accessibility shortcuts are going to be
+  // disabled when the login screen is shown. If this policy is left unset, the
+  // accessibility shortcuts are going to be enabled on the login screen.
+  optional bool login_screen_shortcuts_enabled = 34;
+  optional PolicyOptions login_screen_shortcuts_enabled_options = 35;
 }
 
-message SupervisedUsersSettingsProto {
+message OBSOLETE_SupervisedUsersSettingsProto {
   // Defines whether supervised users can be created on the device.
-  optional bool supervised_users_enabled = 1;
+  optional bool OBSOLETE_supervised_users_enabled = 1 [deprecated = true];
 }
 
 message LoginScreenPowerManagementProto {
@@ -986,6 +1036,12 @@ message DisplayRotationDefaultProto {
     ROTATE_270 = 3;
   }
   optional Rotation display_rotation_default = 1;
+}
+
+// This setting is controlled by the device policy
+// DeviceLoginScreenPrivacyScreenEnabled.
+message DeviceLoginScreenPrivacyScreenEnabledProto {
+  optional bool enabled = 1 [default = false];
 }
 
 // This setting is configured by the device policy DeviceDisplayResolution.
@@ -1246,12 +1302,12 @@ message TPMFirmwareUpdateSettingsProto {
 }
 
 // Settings to control the minimum version that is allowed to sign in / stay
-// in session.
-message MinimumRequiredVersionProto {
+// in session. This is now deprecated from M82 onwards.
+message OBSOLETE_MinimumRequiredVersionProto {
   // Value is chrome_version string, e.g. 61.0.3163.120
   // The client will use prefix matching to compare its version against the
   // value of this field.
-  optional string chrome_version = 1;
+  optional string OBSOLETE_chrome_version = 1 [deprecated = true];
 }
 
 // Specifies a list of rules to automatically select certificates on SAML IdP
@@ -1388,6 +1444,9 @@ message DeviceRebootOnUserSignoutProto {
     ARC_SESSION = 2;
     // Always reboot on signout.
     ALWAYS = 3;
+    // Reboot on signout if an ARC session was active or a VM was started
+    // during the user session.
+    VM_STARTED_OR_ARC_SESSION = 4;
   }
 
   optional RebootOnSignoutMode reboot_on_signout_mode = 1 [default = NEVER];
@@ -1512,6 +1571,21 @@ message DeviceLoginScreenWebUsbAllowDevicesForUrlsProto {
   optional string device_login_screen_webusb_allow_devices_for_urls = 1;
 }
 
+// Settings that control the availability of System-proxy service and the web
+// proxy credentials for system services connecting through System-proxy.
+message SystemProxySettingsProto {
+  // This is a JSON string, for details see "SystemProxySettings" in
+  // policy_templates.json.
+  optional string system_proxy_settings = 1;
+}
+
+// Settings that control what certificates should be privisioned via DM server.
+message RequiredClientCertificateForDeviceProto {
+  // This is a JSON string, for details see
+  // "RequiredClientCertificateForDevice" in policy_templates.json.
+  optional string required_client_certificate_for_device = 1;
+}
+
 message ChromeDeviceSettingsProto {
   reserved 61, 90;
   optional DevicePolicyRefreshRateProto device_policy_refresh_rate = 1;
@@ -1544,7 +1618,8 @@ message ChromeDeviceSettingsProto {
   optional VariationsParameterProto variations_parameter = 25;
   optional AttestationSettingsProto attestation_settings = 26;
   optional AccessibilitySettingsProto accessibility_settings = 27;
-  optional SupervisedUsersSettingsProto supervised_users_settings = 28;
+  optional OBSOLETE_SupervisedUsersSettingsProto supervised_users_settings = 28
+      [deprecated = true];
   optional LoginScreenPowerManagementProto login_screen_power_management = 29;
   optional SystemUse24HourClockProto use_24hour_clock = 30;
   optional AutoCleanupSettigsProto auto_clean_up_settings = 31;
@@ -1571,7 +1646,7 @@ message ChromeDeviceSettingsProto {
   optional LoginScreenLocalesProto login_screen_locales = 49;
   optional LoginScreenInputMethodsProto login_screen_input_methods = 50;
   optional DeviceEcryptfsMigrationStrategyProto
-      device_ecryptfs_migration_strategy = 51;
+      device_ecryptfs_migration_strategy = 51 [deprecated = true];
   optional DeviceSecondFactorAuthenticationProto
       device_second_factor_authentication = 52;
   optional CastReceiverNameProto cast_receiver_name = 53;
@@ -1584,7 +1659,8 @@ message ChromeDeviceSettingsProto {
   optional DeviceNativePrintersWhitelistProto native_device_printers_whitelist =
       58;
   optional TPMFirmwareUpdateSettingsProto tpm_firmware_update_settings = 59;
-  optional MinimumRequiredVersionProto minimum_required_version = 60;
+  optional OBSOLETE_MinimumRequiredVersionProto minimum_required_version = 60
+      [deprecated = true];
   optional DeviceLoginScreenAutoSelectCertificateForUrls
       device_login_screen_auto_select_certificate_for_urls = 62;
   optional UnaffiliatedArcAllowedProto unaffiliated_arc_allowed = 63;
@@ -1627,4 +1703,14 @@ message ChromeDeviceSettingsProto {
   optional DeviceLoginScreenWebUsbAllowDevicesForUrlsProto
       device_login_screen_webusb_allow_devices_for_urls = 92;
   optional BooleanPolicyProto device_login_screen_system_info_enforced = 93;
+  optional StringListPolicyProto device_web_based_attestation_allowed_urls = 94;
+  optional BooleanPolicyProto device_show_numeric_keyboard_for_password = 95;
+  optional BooleanPolicyProto login_screen_primary_mouse_button_switch = 96;
+  optional StringPolicyProto minimum_chrome_version_enforced = 97;
+  optional SystemProxySettingsProto system_proxy_settings = 98;
+  optional IntegerPolicyProto device_chrome_variations_type = 99;
+  optional DeviceLoginScreenPrivacyScreenEnabledProto
+      device_login_screen_privacy_screen_enabled = 100;
+  optional RequiredClientCertificateForDeviceProto
+      required_client_certificate_for_device = 101;
 }

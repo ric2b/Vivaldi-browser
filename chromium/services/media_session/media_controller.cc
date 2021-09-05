@@ -63,11 +63,15 @@ class MediaController::ImageObserverHolder {
   }
 
   void ClearImage() {
+    if (!did_send_image_last_)
+      return;
+    did_send_image_last_ = false;
     observer_->MediaControllerImageChanged(type_, SkBitmap());
   }
 
  private:
   void OnImage(const SkBitmap& image) {
+    did_send_image_last_ = true;
     observer_->MediaControllerImageChanged(type_, image);
   }
 
@@ -82,6 +86,9 @@ class MediaController::ImageObserverHolder {
   int const desired_size_px_;
 
   mojo::Remote<mojom::MediaControllerImageObserver> observer_;
+
+  // Whether the last information sent to the observer was an image.
+  bool did_send_image_last_ = false;
 
   base::WeakPtrFactory<ImageObserverHolder> weak_ptr_factory_{this};
 
@@ -268,6 +275,20 @@ void MediaController::ScrubTo(base::TimeDelta seek_time) {
 
   if (session_)
     session_->ipc()->ScrubTo(seek_time);
+}
+
+void MediaController::EnterPictureInPicture() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (session_)
+    session_->ipc()->EnterPictureInPicture();
+}
+
+void MediaController::ExitPictureInPicture() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (session_)
+    session_->ipc()->ExitPictureInPicture();
 }
 
 void MediaController::SetMediaSession(AudioFocusRequest* session) {

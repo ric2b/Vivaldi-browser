@@ -29,8 +29,15 @@ struct AXNodeData;
 
 struct AX_EXPORT AXHypertext {
   AXHypertext();
-  AXHypertext(const AXHypertext& other);
   ~AXHypertext();
+  AXHypertext(const AXHypertext& other);
+  AXHypertext& operator=(const AXHypertext& other);
+
+  // A flag that should be set if the hypertext information in this struct is
+  // out-of-date and needs to be updated. This flag should always be set upon
+  // construction because constructing this struct doesn't compute the
+  // hypertext.
+  bool needs_update = true;
 
   // Maps an embedded character offset in |hypertext| to an index in
   // |hyperlinks|.
@@ -59,7 +66,10 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   int GetChildCount() const;
   gfx::NativeViewAccessible ChildAtIndex(int index);
 
-  // This needs to be implemented for each platform.
+  std::string GetName() const;
+  base::string16 GetNameAsString16() const;
+
+  // This returns 0 if there's no parent.
   virtual int GetIndexInParent();
 
   // AXPlatformNode.
@@ -187,9 +197,13 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // table.
   base::Optional<int> GetTableRowSpan() const;
 
+  // Returns the font size converted to points, if available.
+  base::Optional<float> GetFontSizeInPoints() const;
+
   // Returns true if either a descendant has selection (sel_focus_object_id) or
   // if this node is a simple text element and has text selection attributes.
-  bool HasCaret();
+  // Optionally accepts an unignored selection to avoid redundant computation.
+  bool HasCaret(const AXTree::Selection* unignored_selection = nullptr);
 
   // Returns true if an ancestor of this node (not including itself) is a
   // leaf node, meaning that this node is not actually exposed to the
@@ -202,7 +216,7 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // The definition of a leaf may vary depending on the platform,
   // but a leaf node should never have children that are focusable or
   // that might send notifications.
-  bool IsLeaf();
+  bool IsLeaf() const;
 
   bool IsInvisibleOrIgnored() const;
 
@@ -220,19 +234,31 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // InlineTextBox
   bool IsTextOnlyObject() const;
 
+  // A text field is any widget in which the user should be able to enter and
+  // edit text.
+  //
+  // Examples include <input type="text">, <input type="password">, <textarea>,
+  // <div contenteditable="true">, <div role="textbox">, <div role="searchbox">
+  // and <div role="combobox">. Note that when an ARIA role that indicates that
+  // the widget is editable is used, such as "role=textbox", the element doesn't
+  // need to be contenteditable for this method to return true, as in theory
+  // JavaScript could be used to implement editing functionality. In practice,
+  // this situation should be rare.
+  bool IsTextField() const;
+
   // Returns true if the node is an editable text field.
   bool IsPlainTextField() const;
 
   bool HasFocus();
 
-  // Returns the text of this node and represent the text of descendant nodes
-  // with a special character in place of every embedded object. This represents
-  // the concept of text in ATK and IA2 APIs.
-  virtual base::string16 GetHypertext() const;
+  // If this node is a leaf, returns the text of this node, otherwise represents
+  // each child node with a special "embedded object" character. This is how
+  // text is represented in ATK and IA2 APIs.
+  base::string16 GetHypertext() const;
 
   // Returns the text of this node and all descendant nodes; including text
   // found in embedded objects.
-  virtual base::string16 GetInnerText() const;
+  base::string16 GetInnerText() const;
 
   virtual base::string16 GetValue() const;
 
@@ -248,12 +274,16 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // Return the number of instances of AXPlatformNodeBase, for leak testing.
   static size_t GetInstanceCountForTesting();
 
+  static void SetOnNotifyEventCallbackForTesting(
+      ax::mojom::Event event_type,
+      base::RepeatingClosure callback);
+
   // This method finds text boundaries in the text used for platform text APIs.
   // Implementations may use side-channel data such as line or word indices to
   // produce appropriate results.
-  virtual int FindTextBoundary(AXTextBoundary boundary,
+  virtual int FindTextBoundary(ax::mojom::TextBoundary boundary,
                                int offset,
-                               AXTextBoundaryDirection direction,
+                               ax::mojom::MoveDirection direction,
                                ax::mojom::TextAffinity affinity) const;
 
   enum ScrollType {
@@ -267,10 +297,17 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   };
   bool ScrollToNode(ScrollType scroll_type);
 
+  // This will return the nearest leaf node to the point, the leaf node will not
+  // necessarily be directly under the point. This utilizes
+  // AXPlatformNodeDelegate::HitTestSync, which in the case of
+  // BrowserAccessibility, may not be accurate after a single call. See
+  // BrowserAccessibilityManager::CachingAsyncHitTest
+  AXPlatformNodeBase* NearestLeafToPoint(gfx::Point point) const;
+
   // Return the nearest text index to a point in screen coordinates for an
   // accessibility node. If the node is not a text only node, the implicit
   // nearest index is zero. Note this will only find the index of text on the
-  // input node. The node's subtree will not be searched.
+  // input node. Due to perf concerns, this should only be called on leaf nodes.
   int NearestTextIndexToPoint(gfx::Point point);
 
   ui::TextAttributeList ComputeTextAttributes() const;
@@ -360,15 +397,15 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // Compute the hypertext for this node to be exposed via IA2 and ATK This
   // method is responsible for properly embedding children using the special
   // embedded element character.
-  void UpdateComputedHypertext();
+  void UpdateComputedHypertext() const;
 
   // Selection helper functions.
   // The following functions retrieve the endpoints of the current selection.
   // First they check for a local selection found on the current control, e.g.
   // when querying the selection on a textarea.
   // If not found they retrieve the global selection found on the current frame.
-  int GetUnignoredSelectionAnchor();
-  int GetUnignoredSelectionFocus();
+  int GetSelectionAnchor(const AXTree::Selection* selection);
+  int GetSelectionFocus(const AXTree::Selection* selection);
 
   // Retrieves the selection offsets in the way required by the IA2 APIs.
   // selection_start and selection_end are -1 when there is no selection active
@@ -376,6 +413,12 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // The greatest of the two offsets is one past the last character of the
   // selection.)
   void GetSelectionOffsets(int* selection_start, int* selection_end);
+  void GetSelectionOffsets(const AXTree::Selection* selection,
+                           int* selection_start,
+                           int* selection_end);
+  void GetSelectionOffsetsFromTree(const AXTree::Selection* selection,
+                                   int* selection_start,
+                                   int* selection_end);
 
   // Returns the hyperlink at the given text position, or nullptr if no
   // hyperlink can be found.
@@ -411,13 +454,16 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 
   std::string GetInvalidValue() const;
 
-  AXHypertext hypertext_;
+  mutable AXHypertext hypertext_;
 
  private:
   // Return true if the index represents a text character.
   bool IsText(const base::string16& text,
               size_t index,
               bool is_indexed_from_end = false);
+
+  // Compute value for object attribute details-roles on aria-details nodes.
+  std::string ComputeDetailsRoles() const;
 
   DISALLOW_COPY_AND_ASSIGN(AXPlatformNodeBase);
 };

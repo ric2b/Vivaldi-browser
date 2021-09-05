@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="uk">
 <translation id="1017280919048282932">&amp;Додати до словника</translation>
+<translation id="1029317248976101138">Збільшити</translation>
 <translation id="1031362278801463162">Завантаження попереднього перегляду</translation>
 <translation id="1047431265488717055">Копіювати &amp;текст посилання</translation>
 <translation id="1049795001945932310">&amp;Налаштування мови</translation>
@@ -54,6 +55,7 @@
 <translation id="1886996562706621347">Дозволити сайтам запитувати, щоб стати обробниками протоколів за умовчанням (рекомендовано)</translation>
 <translation id="1901303067676059328">Вибрати &amp;все</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Введіть число, щоб зазначити кількість копій для друку (від 1 до <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Видалити все</translation>
 <translation id="1994173015038366702">URL сайту</translation>
 <translation id="2019718679933488176">&amp;Відкрити аудіо в новій вкладці</translation>
@@ -66,7 +68,6 @@
 <translation id="2150139952286079145">Пошук місць призначення</translation>
 <translation id="215753907730220065">Вийти з повноекранного режиму</translation>
 <translation id="2177950615300672361">Анонімна вкладка: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Використовуйте число, щоб вказати кількість копій для друку (від 1 до 999).</translation>
 <translation id="219008588003277019">Модуль Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Сховати кнопку</translation>
 <translation id="2218515861914035131">Вставити як звичайний текст</translation>
@@ -78,11 +79,9 @@
 <translation id="2282146716419988068">Процес GPU</translation>
 <translation id="2301382460326681002">Кореневий каталог розширення недійсний.</translation>
 <translation id="2318143611928805047">Розмір паперу</translation>
-<translation id="2318923050469484167">Поточний сеанс анонімного перегляду (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Верхні та нижні колонтитули</translation>
 <translation id="2326931316514688470">&amp;Перезавантажити додаток</translation>
 <translation id="2327492829706409234">Увімкнути програму</translation>
-<translation id="2344028582131185878">Автоматичні завантаження</translation>
 <translation id="2348176352564285430">Додаток: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Виберіть каталог розширення.</translation>
 <translation id="2379281330731083556">Друкувати за допомогою діалогового вікна системи... <ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +94,12 @@
 <translation id="2470702053775288986">Непідтримувані розширення вимкнено</translation>
 <translation id="2476578072172137802">Налаштування сайту</translation>
 <translation id="2482878487686419369">Сповіщення</translation>
+<translation id="2498539833203011245">Згорнути</translation>
 <translation id="2509495747794740764">Вкажіть значення від 10 до 200.</translation>
 <translation id="253557089021624350">Кількість з'єднань keepalive</translation>
 <translation id="2546283357679194313">Файли cookie та дані із сайтів</translation>
 <translation id="2550212893339833758">Пам'ять підкачки</translation>
 <translation id="2553440850688409052">Сховати цей плагін</translation>
-<translation id="2580924999637585241">Всього: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Заборонити всім сайтам обробляти протоколи</translation>
 <translation id="2662876636500006917">Веб-магазин Chrome</translation>
 <translation id="2678063897982469759">Знову ввімкнути</translation>
@@ -120,7 +119,6 @@
 <translation id="2932883381142163287">Повідомити про порушення</translation>
 <translation id="2941112035454246133">Низький</translation>
 <translation id="2972581237482394796">&amp;Повторити</translation>
-<translation id="299483336428448530">Установили батьки.</translation>
 <translation id="3003623123441819449">Кеш CSS</translation>
 <translation id="3008272652534848354">Скинути дозволи</translation>
 <translation id="3012631534724231212">(фрейм)</translation>
@@ -274,7 +272,6 @@
 <translation id="5425042808445046667">Продовжити завантаження</translation>
 <translation id="5427459444770871191">Повернути за &amp;годинниковою стрілкою</translation>
 <translation id="5431318178759467895">Кольоровий друк</translation>
-<translation id="5472133193607270166">Якщо цей параметр увімкнено, сайти не зможуть використовувати дані про ваші дії у браузері, щоб персоналізувати рекламу. Деякі сайти можуть працювати неналежним чином.</translation>
 <translation id="5483785310822538350">Скасувати доступ до файлу та пристрою</translation>
 <translation id="5485102783864353244">Установити додаток</translation>
 <translation id="5486561344817861625">Імітувати перезапуск браузера</translation>
@@ -302,7 +299,6 @@
 <translation id="5804241973901381774">Дозволи</translation>
 <translation id="5828633471261496623">Друк...</translation>
 <translation id="583281660410589416">Невідомий</translation>
-<translation id="5838456317242088717">Поточний сеанс анонімного перегляду</translation>
 <translation id="5860491529813859533">Увімкнути</translation>
 <translation id="5867841422488265304">Введіть пошуковий запит чи веб-адресу</translation>
 <translation id="5908769186679515905">Забороняти сайтам запускати Flash</translation>
@@ -322,7 +318,6 @@
 <translation id="6147020289383635445">Помилка попереднього перегляду для друку.</translation>
 <translation id="6156863943908443225">Кеш скрипта</translation>
 <translation id="6169666352732958425">Не вдається транслювати робочий стіл.</translation>
-<translation id="6196640612572343990">Блокувати сторонні cookie-файли</translation>
 <translation id="6196854373336333322">Розширення "<ph name="EXTENSION_NAME" />" керує налаштуваннями проксі-сервера, тобто може змінювати та переривати будь-які ваші дії онлайн, а також стежити за ними. Якщо ви не знаєте причини такої зміни, імовірно, вона небажана.</translation>
 <translation id="6206311232642889873">&amp;Копіювати зображення</translation>
 <translation id="6239558157302047471">Перезавантажити &amp;фрейм</translation>
@@ -335,6 +330,7 @@
 <translation id="6295158916970320988">Усі сайти</translation>
 <translation id="6295855836753816081">Збереження…</translation>
 <translation id="6308937455967653460">Зберегти &amp;посилання як...</translation>
+<translation id="6315493146179903667">Перемістити все на передній план</translation>
 <translation id="6326855256003666642">Кількість процесів keepalive</translation>
 <translation id="6374469231428023295">Повторити</translation>
 <translation id="6385543213911723544">Сайти можуть зберігати та переглядати дані файлів cookie</translation>
@@ -352,7 +348,7 @@
 <translation id="6639554308659482635">Пам'ять SQLite</translation>
 <translation id="6686817083349815241">Зберегти пароль</translation>
 <translation id="6691936601825168937">&amp;Переслати</translation>
-<translation id="6723354935081862304">Надсилайте файли для зберігання та друку до  Google Docs та інші хмарні місця призначення. <ph name="BEGIN_LINK" />Увійдіть<ph name="END_LINK" />, щоб використовувати службу Google Cloud Print.</translation>
+<translation id="6723354935081862304">Надсилайте файли для зберігання та друку до Google Docs та інші хмарні місця призначення. <ph name="BEGIN_LINK" />Увійдіть<ph name="END_LINK" />, щоб використовувати службу Google Cloud Print.</translation>
 <translation id="6798954102094737107">Плагін: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Зберегти зміни</translation>
 <translation id="6817174620439930047">Запитувати, коли сайт хоче використовувати виключні повідомлення системи, щоб отримувати доступ до пристроїв MIDI (рекомендується)</translation>
@@ -380,6 +376,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Показати &amp;елементи керування</translation>
 <translation id="7311079019872751559">Доступ плагіна з неізольованим програмним середовищем</translation>
+<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Під час друку виникла помилка. Перевірте свій принтер і спробуйте ще раз.</translation>
 <translation id="7412226954991670867">Пам'ять GPU</translation>
 <translation id="7421925624202799674">&amp;Переглянути джерело сторінки</translation>
@@ -425,7 +422,7 @@
 <translation id="7982789257301363584">Мережа</translation>
 <translation id="7997826902155442747">Пріоритет процесів</translation>
 <translation id="7999229196265990314">Створено такі файли:
-        
+
 Розширення: <ph name="EXTENSION_FILE" />
 Файл ключа: <ph name="KEY_FILE" />
 
@@ -437,7 +434,8 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />К</translation>
 <translation id="8137559199583651773">Керування розширеннями</translation>
 <translation id="8180239481735238521">сторінка</translation>
-<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Триває завантаження}one{Тривають завантаження}few{Тривають завантаження}many{Тривають завантаження}other{Тривають завантаження}}</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
+=1{Триває завантаження}one{Тривають завантаження}few{Тривають завантаження}many{Тривають завантаження}other{Тривають завантаження}}</translation>
 <translation id="8230134520748321204">Зберегти пароль для <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Це розширення встановлено не із сайту <ph name="IDS_EXTENSION_WEB_STORE_TITLE" />. Можливо, його було додано без вашого відома.</translation>
 <translation id="8270242299912238708">Документи PDF</translation>

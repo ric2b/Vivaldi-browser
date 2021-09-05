@@ -37,7 +37,10 @@ from blinkpy.common import exit_codes
 from blinkpy.common.host import Host
 from blinkpy.web_tests.controllers.manager import Manager
 from blinkpy.web_tests.models import test_run_results
-from blinkpy.web_tests.port.factory import configuration_options, platform_options, wpt_options
+from blinkpy.web_tests.port.factory import configuration_options
+from blinkpy.web_tests.port.factory import platform_options
+from blinkpy.web_tests.port.factory import wpt_options
+from blinkpy.web_tests.port.factory import python_server_options
 from blinkpy.web_tests.views import printing
 
 _log = logging.getLogger(__name__)
@@ -110,6 +113,8 @@ def parse_args(args):
     option_group_definitions.append(
         ('web-platform-tests (WPT) Options', wpt_options()))
 
+    option_group_definitions.append(('Python Server Options', python_server_options()))
+
     option_group_definitions.append(
         ('Android-specific Options', [
             optparse.make_option(
@@ -161,6 +166,13 @@ def parse_args(args):
                 help=('Additional command line flag to pass to the driver. Specify multiple '
                       'times to add multiple flags.')),
             optparse.make_option(
+                '--flag-specific',
+                dest='flag_specific',
+                action='store',
+                default=None,
+                help=('Name of a flag-specific configuration defined in FlagSpecificConfig, '
+                      ' as a shortcut of --additional-driver-flag options.')),
+            optparse.make_option(
                 '--additional-expectations',
                 action='append',
                 default=[],
@@ -170,6 +182,12 @@ def parse_args(args):
                 '--ignore-default-expectations',
                 action='store_true',
                 help=('Do not use the default set of TestExpectations files.')),
+            optparse.make_option(
+                '--no-expectations',
+                action='store_true',
+                help=('Do not use TestExpectations, only run the tests without '
+                      'reporting any results. Useful for generating code '
+                      'coverage reports.')),
             optparse.make_option(
                 '--additional-platform-directory',
                 action='append',
@@ -440,7 +458,7 @@ def parse_args(args):
                 '--test-list',
                 action='append',
                 metavar='FILE',
-                help='read list of tests to run from file'),
+                help='read list of tests to run from file, as if they were specified on the command line'),
             optparse.make_option(
                 '--isolated-script-test-filter',
                 action='append',
@@ -467,6 +485,11 @@ def parse_args(args):
                 '-f', '--fully-parallel',
                 action='store_true',
                 help='run all tests in parallel'),
+            optparse.make_option(
+                '--virtual-parallel',
+                action='store_true',
+                help='When running in parallel, include virtual tests. Useful for running a single '
+                     'virtual test suite, but will be slower in other cases.'),
             optparse.make_option(
                 '-i', '--ignore-tests',
                 action='append',
@@ -499,13 +522,11 @@ def parse_args(args):
     # FIXME: Move these into json_results_generator.py.
     option_group_definitions.append(
         ('Result JSON Options', [
-            optparse.make_option(
-                '--build-name',
-                default='DUMMY_BUILD_NAME',
-                help='The name of the builder used in its path, e.g. webkit-rel.'),
+            # TODO(qyearsley): --build-name is unused and should be removed.
+            optparse.make_option('--build-name', help=optparse.SUPPRESS_HELP),
             optparse.make_option(
                 '--step-name',
-                default='webkit_tests',
+                default='blink_web_tests',
                 help='The name of the step in a build running this script.'),
             optparse.make_option(
                 '--build-number',
@@ -514,15 +535,18 @@ def parse_args(args):
             optparse.make_option(
                 '--builder-name',
                 default='',
-                help=('The name of the builder shown on the waterfall running this script '
-                      'e.g. WebKit.')),
-            optparse.make_option(
-                '--master-name',
-                help='The name of the buildbot master.'),
+                help='The name of the builder shown on the waterfall running '
+                     'this script, e.g. "Mac10.13 Tests".'),
+            # TODO(qyearsley): This is not actually a Buildbot master since
+            # Buildbot is gone; all instances of the term "master" in this
+            # code-base should be removed after test-results.appspot.com is
+            # removed.
+            optparse.make_option('--master-name'),
             optparse.make_option(
                 '--test-results-server',
                 default='',
-                help='If specified, upload results json files to this appengine server.'),
+                help='If specified, upload results JSON files to this '
+                     'App Engine server.'),
         ]))
 
     option_parser = optparse.OptionParser(

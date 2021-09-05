@@ -9,26 +9,27 @@ import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
-import android.support.v7.content.res.AppCompatResources;
 import android.text.TextUtils;
+
+import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.download.DownloadOpenSource;
 import org.chromium.chrome.browser.download.DownloadUtils;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
-import org.chromium.chrome.browser.snackbar.Snackbar;
-import org.chromium.chrome.browser.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.ContentUrlConstants;
 
@@ -175,7 +176,7 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
         if (tab == null) return false;
         if (tab.isShowingErrorPage()) return false;
         if (OfflinePageUtils.isOfflinePage(tab)) return false;
-        if (TextUtils.equals(tab.getUrl(), ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL)) {
+        if (TextUtils.equals(tab.getUrlString(), ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL)) {
             return false;
         }
 
@@ -249,7 +250,7 @@ public class OfflineIndicatorController implements ConnectivityDetector.Observer
                         .setSingleLine(true)
                         .setProfileImage(icon)
                         .setBackgroundColor(Color.BLACK)
-                        .setTextAppearance(R.style.TextAppearance_WhiteBody)
+                        .setTextAppearance(R.style.TextAppearance_TextMedium_Primary_Light)
                         .setDuration(SNACKBAR_DURATION_MS)
                         .setAction(chromeActivity.getString(
                                            R.string.offline_indicator_view_offline_content),

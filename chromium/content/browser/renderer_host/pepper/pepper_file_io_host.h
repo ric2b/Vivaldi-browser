@@ -24,7 +24,7 @@
 #include "ppapi/host/host_message_context.h"
 #include "ppapi/host/resource_host.h"
 #include "ppapi/shared_impl/file_io_state_manager.h"
-#include "storage/browser/fileapi/file_system_context.h"
+#include "storage/browser/file_system/file_system_context.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -41,8 +41,6 @@ class PepperFileSystemBrowserHost;
 class PepperFileIOHost : public ppapi::host::ResourceHost,
                          public base::SupportsWeakPtr<PepperFileIOHost> {
  public:
-  typedef base::Callback<void(base::File::Error)> NotifyCloseFileCallback;
-
   PepperFileIOHost(BrowserPpapiHostImpl* host,
                    PP_Instance instance,
                    PP_Resource resource);

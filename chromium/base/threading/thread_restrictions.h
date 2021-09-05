@@ -7,6 +7,7 @@
 
 #include "base/base_export.h"
 #include "base/gtest_prod_util.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 
@@ -99,12 +100,12 @@ class HistogramSynchronizer;
 class KeyStorageLinux;
 class NativeBackendKWallet;
 class NativeDesktopMediaList;
-class StartupTimeBomb;
 
 namespace android_webview {
 class AwFormDatabaseService;
 class CookieManager;
 class ScopedAllowInitGLBindings;
+class VizCompositorThreadRunnerWebView;
 }
 namespace audio {
 class OutputDevice;
@@ -125,6 +126,7 @@ class TileTaskManagerImpl;
 }
 namespace chromeos {
 class BlockingMethodCaller;
+class MojoUtils;
 namespace system {
 class StatisticsProviderImpl;
 }
@@ -143,15 +145,14 @@ class BrowserShutdownProfileDumper;
 class BrowserTestBase;
 class CategorizedWorkerPool;
 class DesktopCaptureDevice;
-class GpuProcessTransportFactory;
 class InProcessUtilityThread;
 class NestedMessagePumpAndroid;
+class RenderProcessHostImpl;
 class RenderWidgetHostViewMac;
 class RTCVideoDecoder;
 class SandboxHostLinux;
 class ScopedAllowWaitForDebugURL;
 class ServiceWorkerContextClient;
-class SessionStorageDatabase;
 class SoftwareOutputDeviceMus;
 class SynchronousCompositor;
 class SynchronousCompositorHost;
@@ -217,21 +218,35 @@ class PrinterQuery;
 namespace rlz_lib {
 class FinancialPing;
 }
+namespace syncer {
+class GetLocalChangesRequest;
+class HttpBridge;
+class ModelSafeWorker;
+}
 namespace ui {
 class CommandBufferClientImpl;
 class CommandBufferLocal;
+class DrmThreadProxy;
 class GpuState;
-class MaterialDesignController;
+}
+namespace weblayer {
+class BrowserContextImpl;
+class BrowserProcess;
+class ProfileImpl;
+class WebLayerPathProvider;
 }
 namespace net {
 class MultiThreadedCertVerifierScopedAllowBaseSyncPrimitives;
 class MultiThreadedProxyResolverScopedAllowJoinOnIO;
 class NetworkChangeNotifierMac;
 class NetworkConfigWatcherMacThread;
-class ScopedAllowThreadJoinForProxyResolverV8Tracing;
 namespace internal {
 class AddressTrackerLinux;
 }
+}
+
+namespace proxy_resolver {
+class ScopedAllowThreadJoinForProxyResolverV8Tracing;
 }
 
 namespace remoting {
@@ -270,10 +285,6 @@ class WebMainLoop;
 class WebSubThread;
 }
 
-namespace weblayer {
-class ProfileImpl;
-}
-
 namespace webrtc {
 class DesktopConfigurationMonitor;
 }
@@ -297,12 +308,14 @@ class TaskTracker;
 
 class AdjustOOMScoreHelper;
 class FileDescriptorWatcher;
+class FilePath;
 class GetAppOutputScopedAllowBaseSyncPrimitives;
-class MessageLoopImpl;
 class ScopedAllowThreadRecallForStackSamplingProfiler;
 class SimpleThread;
 class StackSamplingProfiler;
 class Thread;
+
+bool PathProviderWin(int, FilePath*);
 
 #if DCHECK_IS_ON()
 #define INLINE_IF_DCHECK_IS_OFF BASE_EXPORT
@@ -353,9 +366,11 @@ class BASE_EXPORT ScopedAllowBlocking {
   // This can only be instantiated by friends. Use ScopedAllowBlockingForTesting
   // in unit tests to avoid the friend requirement.
   friend class AdjustOOMScoreHelper;
+  friend class StackSamplingProfiler;
   friend class android_webview::ScopedAllowInitGLBindings;
+  friend class chromeos::MojoUtils;  // http://crbug.com/1055467
   friend class content::BrowserProcessSubThread;
-  friend class content::GpuProcessTransportFactory;
+  friend class content::RenderProcessHostImpl;
   friend class content::RenderWidgetHostViewMac;  // http://crbug.com/121917
   friend class content::WebContentsViewMac;
   friend class cronet::CronetPrefsManager;
@@ -365,13 +380,16 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class mojo::CoreLibraryInitializer;
   friend class printing::PrintJobWorker;
   friend class resource_coordinator::TabManagerDelegate;  // crbug.com/778703
-  friend class ui::MaterialDesignController;
   friend class web::WebSubThread;
-  friend class StackSamplingProfiler;
+  friend class weblayer::BrowserContextImpl;
+  friend class weblayer::BrowserProcess;
   friend class weblayer::ProfileImpl;
+  friend class weblayer::WebLayerPathProvider;
 
-  ScopedAllowBlocking() EMPTY_BODY_IF_DCHECK_IS_OFF;
-  ~ScopedAllowBlocking() EMPTY_BODY_IF_DCHECK_IS_OFF;
+  friend bool PathProviderWin(int, FilePath*);
+
+  ScopedAllowBlocking(const Location& from_here = Location::Current());
+  ~ScopedAllowBlocking();
 
 #if DCHECK_IS_ON()
   const bool was_disallowed_;
@@ -418,7 +436,6 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   friend class content::BrowserMainLoop;
   friend class content::BrowserProcessSubThread;
   friend class content::ServiceWorkerContextClient;
-  friend class content::SessionStorageDatabase;
   friend class functions::ExecScriptScopedAllowBaseSyncPrimitives;
   friend class history_report::HistoryReportJniBridge;
   friend class internal::TaskTracker;
@@ -429,6 +446,9 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   friend class rlz_lib::FinancialPing;
   friend class shell_integration_linux::
       LaunchXdgUtilityScopedAllowBaseSyncPrimitives;
+  friend class syncer::HttpBridge;
+  friend class syncer::GetLocalChangesRequest;
+  friend class syncer::ModelSafeWorker;
   friend class webrtc::DesktopConfigurationMonitor;
 
   // Usage that should be fixed:
@@ -463,16 +483,15 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   friend class ::BrowserProcessImpl;  // http://crbug.com/125207
   friend class ::KeyStorageLinux;
   friend class ::NativeDesktopMediaList;
-  friend class ::StartupTimeBomb;
   friend class android::JavaHandlerThread;
   friend class android_webview::
       AwFormDatabaseService;  // http://crbug.com/904431
   friend class android_webview::CookieManager;
+  friend class android_webview::VizCompositorThreadRunnerWebView;
   friend class audio::OutputDevice;
   friend class base::sequence_manager::internal::TaskQueueImpl;
   friend class base::FileDescriptorWatcher;
   friend class base::internal::JobTaskSource;
-  friend class base::MessageLoopImpl;
   friend class base::ScopedAllowThreadRecallForStackSamplingProfiler;
   friend class base::StackSamplingProfiler;
   friend class blink::RTCVideoDecoderAdapter;
@@ -492,6 +511,7 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   friend class media::PaintCanvasVideoRenderer;
   friend class mojo::SyncCallRestrictions;
   friend class net::NetworkConfigWatcherMacThread;
+  friend class ui::DrmThreadProxy;
   friend class viz::HostGpuMemoryBufferManager;
   friend class vr::VrShell;
 
@@ -512,9 +532,9 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   friend class net::
       MultiThreadedProxyResolverScopedAllowJoinOnIO;  // http://crbug.com/69710
   friend class net::NetworkChangeNotifierMac;         // http://crbug.com/125097
-  friend class net::
-      ScopedAllowThreadJoinForProxyResolverV8Tracing;  // http://crbug.com/69710
   friend class printing::PrinterQuery;                 // http://crbug.com/66082
+  friend class proxy_resolver::
+      ScopedAllowThreadJoinForProxyResolverV8Tracing;  // http://crbug.com/69710
   friend class remoting::AutoThread;  // https://crbug.com/944316
   // Not used in production yet, https://crbug.com/844078.
   friend class service_manager::ServiceProcessLauncher;
@@ -528,10 +548,10 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   friend class media::IPCFactory;
 #endif // USE_SYSTEM_PROPRIETARY_CODECS
 
-  ScopedAllowBaseSyncPrimitivesOutsideBlockingScope()
-      EMPTY_BODY_IF_DCHECK_IS_OFF;
-  ~ScopedAllowBaseSyncPrimitivesOutsideBlockingScope()
-      EMPTY_BODY_IF_DCHECK_IS_OFF;
+  ScopedAllowBaseSyncPrimitivesOutsideBlockingScope(
+      const Location& from_here = Location::Current());
+
+  ~ScopedAllowBaseSyncPrimitivesOutsideBlockingScope();
 
 #if DCHECK_IS_ON()
   const bool was_disallowed_;
@@ -540,6 +560,11 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   DISALLOW_COPY_AND_ASSIGN(ScopedAllowBaseSyncPrimitivesOutsideBlockingScope);
 };
 
+// Allow base-sync-primitives in tests, doesn't require explicit friend'ing like
+// ScopedAllowBaseSyncPrimitives-types aimed at production do.
+// Note: For WaitableEvents in the test logic, base::TestWaitableEvent is
+// exposed as a convenience to avoid the need for
+// ScopedAllowBaseSyncPrimitivesForTesting.
 class BASE_EXPORT ScopedAllowBaseSyncPrimitivesForTesting {
  public:
   ScopedAllowBaseSyncPrimitivesForTesting() EMPTY_BODY_IF_DCHECK_IS_OFF;
@@ -598,8 +623,8 @@ class BASE_EXPORT ThreadRestrictions {
   // DEPRECATED. Use ScopedAllowBlocking(ForTesting).
   class BASE_EXPORT ScopedAllowIO {
    public:
-    ScopedAllowIO() EMPTY_BODY_IF_DCHECK_IS_OFF;
-    ~ScopedAllowIO() EMPTY_BODY_IF_DCHECK_IS_OFF;
+    ScopedAllowIO(const Location& from_here = Location::Current());
+    ~ScopedAllowIO();
 
    private:
 #if DCHECK_IS_ON()

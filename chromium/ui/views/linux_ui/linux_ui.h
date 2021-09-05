@@ -5,13 +5,17 @@
 #ifndef UI_VIEWS_LINUX_UI_LINUX_UI_H_
 #define UI_VIEWS_LINUX_UI_LINUX_UI_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "build/buildflag.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/cursor/cursor_theme_manager_linux.h"
 #include "ui/base/ime/linux/linux_input_method_context_factory.h"
 #include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
+#include "ui/gfx/animation/animation_settings_provider_linux.h"
 #include "ui/gfx/skia_font_delegate.h"
 #include "ui/shell_dialogs/shell_dialog_linux.h"
 #include "ui/views/buildflags.h"
@@ -20,8 +24,6 @@
 
 // The main entrypoint into Linux toolkit specific code. GTK code should only
 // be executed behind this interface.
-
-class PrefService;
 
 namespace aura {
 class Window;
@@ -39,28 +41,26 @@ namespace gfx {
 class Image;
 }
 
-namespace ui {
-class NativeTheme;
-}
-
 namespace views {
 class Border;
 class DeviceScaleFactorObserver;
 class LabelButton;
 class LabelButtonBorder;
-class WindowButtonOrderObserver;
-
-#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
 class NavButtonProvider;
-#endif
+class WindowButtonOrderObserver;
 
 // Adapter class with targets to render like different toolkits. Set by any
 // project that wants to do linux desktop native rendering.
 class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
                              public gfx::SkiaFontDelegate,
                              public ui::ShellDialogLinux,
-                             public ui::TextEditKeyBindingsDelegateAuraLinux {
+                             public ui::TextEditKeyBindingsDelegateAuraLinux,
+                             public ui::CursorThemeManagerLinux,
+                             public gfx::AnimationSettingsProviderLinux {
  public:
+  using UseSystemThemeCallback =
+      base::RepeatingCallback<bool(aura::Window* window)>;
+
   // Describes the window management actions that could be taken in response to
   // a middle click in the non client area.
   enum class WindowFrameAction {
@@ -78,10 +78,7 @@ class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
     kRightClick,
   };
 
-  using NativeThemeGetter =
-      base::RepeatingCallback<ui::NativeTheme*(aura::Window* window)>;
-
-  ~LinuxUI() override {}
+  ~LinuxUI() override;
 
   // Sets the dynamically loaded singleton that draws the desktop native UI.
   static void SetInstance(LinuxUI* instance);
@@ -97,10 +94,10 @@ class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
   virtual bool GetTint(int id, color_utils::HSL* tint) const = 0;
   virtual bool GetColor(int id,
                         SkColor* color,
-                        PrefService* pref_service) const = 0;
+                        bool use_custom_frame) const = 0;
   virtual bool GetDisplayProperty(int id, int* result) const = 0;
 
-  // Returns the preferences that we pass to WebKit.
+  // Returns the preferences that we pass to Blink.
   virtual SkColor GetFocusRingColor() const = 0;
   virtual SkColor GetActiveSelectionBgColor() const = 0;
   virtual SkColor GetActiveSelectionFgColor() const = 0;
@@ -112,8 +109,8 @@ class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
   // style widgets.
   virtual ui::NativeTheme* GetNativeTheme(aura::Window* window) const = 0;
 
-  // Used to set an override NativeTheme.
-  virtual void SetNativeThemeOverride(NativeThemeGetter callback) = 0;
+  // Sets a callback that determines whether to use the system theme.
+  virtual void SetUseSystemThemeCallback(UseSystemThemeCallback callback) = 0;
 
   // Returns whether we should be using the native theme provided by this
   // object by default.
@@ -122,8 +119,8 @@ class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
   // Returns the icon for a given content type from the icon theme.
   // TODO(davidben): Add an observer for the theme changing, so we can drop the
   // caches.
-  virtual gfx::Image GetIconForContentType(
-      const std::string& content_type, int size) const = 0;
+  virtual gfx::Image GetIconForContentType(const std::string& content_type,
+                                           int size) const = 0;
 
   // Builds a Border which paints the native button style.
   virtual std::unique_ptr<Border> CreateNativeBorder(
@@ -172,14 +169,18 @@ class VIEWS_EXPORT LinuxUI : public ui::LinuxInputMethodContextFactory,
   // preferred.
   virtual bool PreferDarkTheme() const = 0;
 
-#if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
   // Returns a new NavButtonProvider, or nullptr if the underlying
   // toolkit does not support drawing client-side navigation buttons.
   virtual std::unique_ptr<NavButtonProvider> CreateNavButtonProvider() = 0;
-#endif
 
   // Returns a map of KeyboardEvent code to KeyboardEvent key values.
   virtual base::flat_map<std::string, std::string> GetKeyboardLayoutMap() = 0;
+
+ protected:
+  LinuxUI();
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(LinuxUI);
 };
 
 }  // namespace views

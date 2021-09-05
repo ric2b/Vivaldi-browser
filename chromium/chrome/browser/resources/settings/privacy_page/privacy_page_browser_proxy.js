@@ -4,14 +4,52 @@
 
 /** @fileoverview Handles interprocess communication for the privacy page. */
 
-/** @typedef {{enabled: boolean, managed: boolean}} */
-let MetricsReporting;
+// clang-format off
+// #import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
+// clang-format on
 
 cr.define('settings', function() {
+  /** @typedef {{enabled: boolean, managed: boolean}} */
+  /* #export */ let MetricsReporting;
+
+  /** @typedef {{name: string, value: string, policy: string}} */
+  /* #export */ let ResolverOption;
+
+  /**
+   * Contains the possible string values for the secure DNS mode. This should be
+   * kept in sync with the modes in chrome/browser/net/dns_util.h.
+   * @enum {string}
+   */
+  /* #export */ const SecureDnsMode = {
+    OFF: 'off',
+    AUTOMATIC: 'automatic',
+    SECURE: 'secure',
+  };
+
+  /**
+   * Contains the possible management modes. This should be kept in sync with
+   * the management modes in chrome/browser/net/dns_util.h.
+   * @enum {number}
+   */
+  /* #export */ const SecureDnsUiManagementMode = {
+    NO_OVERRIDE: 0,
+    DISABLED_MANAGED: 1,
+    DISABLED_PARENTAL_CONTROLS: 2,
+  };
+
+  /**
+   * @typedef {{
+   *   mode: settings.SecureDnsMode,
+   *   templates: !Array<string>,
+   *   managementMode: settings.SecureDnsUiManagementMode
+   * }}
+   */
+  /* #export */ let SecureDnsSetting;
+
   /** @interface */
-  class PrivacyPageBrowserProxy {
+  /* #export */ class PrivacyPageBrowserProxy {
     // <if expr="_google_chrome and not chromeos">
-    /** @return {!Promise<!MetricsReporting>} */
+    /** @return {!Promise<!settings.MetricsReporting>} */
     getMetricsReporting() {}
 
     /** @param {boolean} enabled */
@@ -27,12 +65,39 @@ cr.define('settings', function() {
 
     /** @param {boolean} enabled */
     setBlockAutoplayEnabled(enabled) {}
+
+    /** @return {!Promise<!Array<!settings.ResolverOption>>} */
+    getSecureDnsResolverList() {}
+
+    /** @return {!Promise<!settings.SecureDnsSetting>} */
+    getSecureDnsSetting() {}
+
+    /**
+     * Returns the first valid URL template, if they are all valid.
+     * @param {string} entry
+     * @return {!Promise<string>}
+     */
+    validateCustomDnsEntry(entry) {}
+
+    /**
+     * Returns whether a test query to the secure DNS template succeeded.
+     * @param {string} template
+     * @return {!Promise<boolean>}
+     */
+    probeCustomDnsTemplate(template) {}
+
+    /**
+     * Records metrics on the user's interaction with the dropdown menu.
+     * @param {string} oldSelection value of previously selected dropdown option
+     * @param {string} newSelection value of newly selected dropdown option
+     */
+    recordUserDropdownInteraction(oldSelection, newSelection) {}
   }
 
   /**
    * @implements {settings.PrivacyPageBrowserProxy}
    */
-  class PrivacyPageBrowserProxyImpl {
+  /* #export */ class PrivacyPageBrowserProxyImpl {
     // <if expr="_google_chrome and not chromeos">
     /** @override */
     getMetricsReporting() {
@@ -57,12 +122,44 @@ cr.define('settings', function() {
       chrome.send('showManageSSLCertificates');
     }
     // </if>
+
+    /** @override */
+    getSecureDnsResolverList() {
+      return cr.sendWithPromise('getSecureDnsResolverList');
+    }
+
+    /** @override */
+    getSecureDnsSetting() {
+      return cr.sendWithPromise('getSecureDnsSetting');
+    }
+
+    /** @override */
+    validateCustomDnsEntry(entry) {
+      return cr.sendWithPromise('validateCustomDnsEntry', entry);
+    }
+
+    /** @override */
+    probeCustomDnsTemplate(template) {
+      return cr.sendWithPromise('probeCustomDnsTemplate', template);
+    }
+
+    /** override */
+    recordUserDropdownInteraction(oldSelection, newSelection) {
+      chrome.send(
+          'recordUserDropdownInteraction', [oldSelection, newSelection]);
+    }
   }
 
   cr.addSingletonGetter(PrivacyPageBrowserProxyImpl);
 
+  // #cr_define_end
   return {
-    PrivacyPageBrowserProxy: PrivacyPageBrowserProxy,
-    PrivacyPageBrowserProxyImpl: PrivacyPageBrowserProxyImpl,
+    MetricsReporting,
+    PrivacyPageBrowserProxy,
+    PrivacyPageBrowserProxyImpl,
+    ResolverOption,
+    SecureDnsMode,
+    SecureDnsUiManagementMode,
+    SecureDnsSetting,
   };
 });

@@ -4,15 +4,15 @@
 
 package org.chromium.chrome.browser.download.home.toolbar;
 
-import android.support.v4.view.ViewCompat;
 import android.view.View;
+
+import androidx.core.view.ViewCompat;
 
 import org.chromium.chrome.browser.download.DirectoryOption;
 import org.chromium.chrome.browser.download.DownloadDirectoryProvider;
-import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.ui.widget.highlight.ViewHighlighter;
-import org.chromium.chrome.browser.ui.widget.textbubble.TextBubble;
+import org.chromium.chrome.browser.util.AccessibilityUtil;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
+import org.chromium.components.browser_ui.widget.textbubble.TextBubble;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.widget.ViewRectProvider;
@@ -24,12 +24,11 @@ import java.util.ArrayList;
  */
 public class ToolbarUtils {
     /**
-     * Sets up feature engagement tracker for the download settings in-product-help text bubble.
+     * Sets up feature engagement tracker for the download settings in-product help text bubble.
+     * @param tracker The {@link Tracker} to use for the in-product help.
      * @param toolbar The toolbar that contains the settings menu.
-     * @param profile The profile used to get tracker.
      */
-    public static void setupTrackerForDownloadSettingsIPH(View toolbar, Profile profile) {
-        final Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
+    public static void setupTrackerForDownloadSettingsIPH(Tracker tracker, View toolbar) {
         tracker.addOnInitializedCallback(
                 success -> ToolbarUtils.maybeShowDownloadSettingsTextBubble(tracker, toolbar));
     }
@@ -71,7 +70,7 @@ public class ToolbarUtils {
         TextBubble textBubble = new TextBubble(rootView.getContext(), rootView,
                 org.chromium.chrome.download.R.string.iph_download_settings_text,
                 org.chromium.chrome.download.R.string.iph_download_settings_accessibility_text,
-                new ViewRectProvider(anchorView));
+                new ViewRectProvider(anchorView), AccessibilityUtil.isAccessibilityEnabled());
         textBubble.setDismissOnTouchInteraction(true);
         textBubble.addOnDismissListener(() -> {
             tracker.dismissed(FeatureConstants.DOWNLOAD_SETTINGS_FEATURE);

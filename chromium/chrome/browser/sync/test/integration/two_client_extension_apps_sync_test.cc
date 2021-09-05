@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_sync_data.h"
 #include "chrome/browser/extensions/extension_sync_service.h"
@@ -19,6 +20,8 @@
 #include "chrome/browser/sync/test/integration/sync_app_helper.h"
 #include "chrome/browser/sync/test/integration/sync_integration_test_util.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
+#include "chrome/browser/web_applications/test/web_app_test.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/extensions/manifest_handlers/app_theme_color_info.h"
 #include "chrome/common/web_application_info.h"
@@ -39,7 +42,7 @@ using apps_helper::FixNTPOrdinalCollisions;
 using apps_helper::GetAppLaunchOrdinalForApp;
 using apps_helper::IncognitoDisableApp;
 using apps_helper::IncognitoEnableApp;
-using apps_helper::InstallApp;
+using apps_helper::InstallHostedApp;
 using apps_helper::InstallPlatformApp;
 using apps_helper::SetAppLaunchOrdinalForApp;
 using apps_helper::SetPageOrdinalForApp;
@@ -53,35 +56,49 @@ extensions::ExtensionRegistry* GetExtensionRegistry(Profile* profile) {
 
 }  // namespace
 
-class TwoClientExtensionAppsSyncTest : public SyncTest {
+class TwoClientExtensionAppsSyncTest
+    : public SyncTest,
+      public ::testing::WithParamInterface<web_app::ProviderType> {
  public:
-  TwoClientExtensionAppsSyncTest() : SyncTest(TWO_CLIENT) { DisableVerifier(); }
+  TwoClientExtensionAppsSyncTest() : SyncTest(TWO_CLIENT) {
+    switch (GetParam()) {
+      case web_app::ProviderType::kWebApps:
+        scoped_feature_list_.InitAndEnableFeature(
+            features::kDesktopPWAsWithoutExtensions);
+        break;
+      case web_app::ProviderType::kBookmarkApps:
+        scoped_feature_list_.InitAndDisableFeature(
+            features::kDesktopPWAsWithoutExtensions);
+        break;
+    }
 
-  ~TwoClientExtensionAppsSyncTest() override {}
+    DisableVerifier();
+  }
 
-  // Needed for AwaitQuiescence().
-  bool TestUsesSelfNotifications() override { return true; }
+  ~TwoClientExtensionAppsSyncTest() override = default;
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(TwoClientExtensionAppsSyncTest);
 };
 
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
                        E2E_ENABLED(StartWithNoApps)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AppsMatchChecker().Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
                        E2E_ENABLED(StartWithSameApps)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupClients());
 
   const int kNumApps = 5;
   for (int i = 0; i < kNumApps; ++i) {
-    InstallApp(GetProfile(0), i);
-    InstallApp(GetProfile(1), i);
+    InstallHostedApp(GetProfile(0), i);
+    InstallHostedApp(GetProfile(1), i);
   }
 
   ASSERT_TRUE(SetupSync());
@@ -91,25 +108,25 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
 // Install some apps on both clients, some on only one client, some on only the
 // other, and sync.  Both clients should end up with all apps, and the app and
 // page ordinals should be identical.
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest, StartWithDifferentApps) {
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest, StartWithDifferentApps) {
   ASSERT_TRUE(SetupClients());
 
   int i = 0;
 
   const int kNumCommonApps = 5;
   for (int j = 0; j < kNumCommonApps; ++i, ++j) {
-    InstallApp(GetProfile(0), i);
-    InstallApp(GetProfile(1), i);
+    InstallHostedApp(GetProfile(0), i);
+    InstallHostedApp(GetProfile(1), i);
   }
 
   const int kNumProfile0Apps = 10;
   for (int j = 0; j < kNumProfile0Apps; ++i, ++j) {
-    InstallApp(GetProfile(0), i);
+    InstallHostedApp(GetProfile(0), i);
   }
 
   const int kNumProfile1Apps = 10;
   for (int j = 0; j < kNumProfile1Apps; ++i, ++j) {
-    InstallApp(GetProfile(1), i);
+    InstallHostedApp(GetProfile(1), i);
   }
 
   const int kNumPlatformApps = 5;
@@ -124,7 +141,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest, StartWithDifferentApps) {
 // Install some apps on both clients, then sync.  Then install some apps on only
 // one client, some on only the other, and then sync again.  Both clients should
 // end up with all apps, and the app and page ordinals should be identical.
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
                        E2E_ENABLED(InstallDifferentApps)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupClients());
@@ -133,41 +150,41 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
 
   const int kNumCommonApps = 5;
   for (int j = 0; j < kNumCommonApps; ++i, ++j) {
-    InstallApp(GetProfile(0), i);
-    InstallApp(GetProfile(1), i);
+    InstallHostedApp(GetProfile(0), i);
+    InstallHostedApp(GetProfile(1), i);
   }
 
   ASSERT_TRUE(SetupSync());
 
   const int kNumProfile0Apps = 10;
   for (int j = 0; j < kNumProfile0Apps; ++i, ++j) {
-    InstallApp(GetProfile(0), i);
+    InstallHostedApp(GetProfile(0), i);
   }
 
   const int kNumProfile1Apps = 10;
   for (int j = 0; j < kNumProfile1Apps; ++i, ++j) {
-    InstallApp(GetProfile(1), i);
+    InstallHostedApp(GetProfile(1), i);
   }
 
   ASSERT_TRUE(AppsMatchChecker().Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest, E2E_ENABLED(Add)) {
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest, E2E_ENABLED(Add)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
-  InstallApp(GetProfile(0), 0);
+  InstallHostedApp(GetProfile(0), 0);
 
   ASSERT_TRUE(AppsMatchChecker().Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest, E2E_ENABLED(Uninstall)) {
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest, E2E_ENABLED(Uninstall)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
-  InstallApp(GetProfile(0), 0);
+  InstallHostedApp(GetProfile(0), 0);
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
   UninstallApp(GetProfile(0), 0);
@@ -178,48 +195,48 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest, E2E_ENABLED(Uninstall)) {
 // client and sync again. Now install a new app on the first client and sync.
 // Both client should only have the second app, with identical app and page
 // ordinals.
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
                        E2E_ENABLED(UninstallThenInstall)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
-  InstallApp(GetProfile(0), 0);
+  InstallHostedApp(GetProfile(0), 0);
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
   UninstallApp(GetProfile(0), 0);
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
-  InstallApp(GetProfile(0), 1);
+  InstallHostedApp(GetProfile(0), 1);
   ASSERT_TRUE(AppsMatchChecker().Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest, E2E_ENABLED(Merge)) {
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest, E2E_ENABLED(Merge)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
-  InstallApp(GetProfile(0), 0);
+  InstallHostedApp(GetProfile(0), 0);
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
   UninstallApp(GetProfile(0), 0);
 
-  InstallApp(GetProfile(0), 1);
-  InstallApp(GetProfile(0), 2);
+  InstallHostedApp(GetProfile(0), 1);
+  InstallHostedApp(GetProfile(0), 2);
 
-  InstallApp(GetProfile(1), 2);
-  InstallApp(GetProfile(1), 3);
+  InstallHostedApp(GetProfile(1), 2);
+  InstallHostedApp(GetProfile(1), 3);
 
   ASSERT_TRUE(AppsMatchChecker().Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
                        E2E_ENABLED(UpdateEnableDisableApp)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
-  InstallApp(GetProfile(0), 0);
+  InstallHostedApp(GetProfile(0), 0);
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
   DisableApp(GetProfile(0), 0);
@@ -229,13 +246,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
   ASSERT_TRUE(AppsMatchChecker().Wait());
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
                        E2E_ENABLED(UpdateIncognitoEnableDisable)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
-  InstallApp(GetProfile(0), 0);
+  InstallHostedApp(GetProfile(0), 0);
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
   IncognitoEnableApp(GetProfile(0), 0);
@@ -248,7 +265,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
 // Install the same app on both clients, then sync. Change the page ordinal on
 // one client and sync. Both clients should have the updated page ordinal for
 // the app.
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
                        E2E_ENABLED(UpdatePageOrdinal)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync());
@@ -256,7 +273,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
 
   syncer::StringOrdinal initial_page =
       syncer::StringOrdinal::CreateInitialOrdinal();
-  InstallApp(GetProfile(0), 0);
+  InstallHostedApp(GetProfile(0), 0);
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
   syncer::StringOrdinal second_page = initial_page.CreateAfter();
@@ -267,13 +284,13 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
 // Install the same app on both clients, then sync. Change the app launch
 // ordinal on one client and sync. Both clients should have the updated app
 // launch ordinal for the app.
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
                        E2E_ENABLED(UpdateAppLaunchOrdinal)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
-  InstallApp(GetProfile(0), 0);
+  InstallHostedApp(GetProfile(0), 0);
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
   syncer::StringOrdinal initial_position =
@@ -287,7 +304,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
 // Adjust the CWS location within a page on the first client and sync. Adjust
 // which page the CWS appears on and sync. Both clients should have the same
 // page and app launch ordinal values for the CWS.
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
                        E2E_ENABLED(UpdateCWSOrdinals)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync());
@@ -318,12 +335,10 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
 
 // Adjust the launch type on the first client and sync. Both clients should
 // have the same launch type values for the CWS.
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest,
                        E2E_ENABLED(UpdateLaunchType)) {
   ResetSyncForPrimaryAccount();
   ASSERT_TRUE(SetupSync());
-  // Wait until sync settles before we override the apps below.
-  ASSERT_TRUE(AwaitQuiescence());
   ASSERT_TRUE(AppsMatchChecker().Wait());
 
   // Change the launch type to window.
@@ -346,7 +361,7 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest,
             extensions::LAUNCH_TYPE_REGULAR);
 }
 
-IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest, UnexpectedLaunchType) {
+IN_PROC_BROWSER_TEST_P(TwoClientExtensionAppsSyncTest, UnexpectedLaunchType) {
   ASSERT_TRUE(SetupSync());
   // Wait until sync settles before we override the apps below.
   ASSERT_TRUE(AwaitQuiescence());
@@ -374,7 +389,6 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest, UnexpectedLaunchType) {
   extensions::ExtensionSyncData invalid_launch_type_data(
       *extension, original_data.enabled(), original_data.disable_reasons(),
       original_data.incognito_enabled(), original_data.remote_install(),
-      original_data.installed_by_custodian(),
       original_data.app_launch_ordinal(), original_data.page_ordinal(),
       extensions::NUM_LAUNCH_TYPES);
   extension_sync_service->ApplySyncData(invalid_launch_type_data);
@@ -382,6 +396,12 @@ IN_PROC_BROWSER_TEST_F(TwoClientExtensionAppsSyncTest, UnexpectedLaunchType) {
   // The launch type should remain the same.
   ASSERT_TRUE(AppsMatchChecker().Wait());
 }
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         TwoClientExtensionAppsSyncTest,
+                         ::testing::Values(web_app::ProviderType::kBookmarkApps,
+                                           web_app::ProviderType::kWebApps),
+                         web_app::ProviderTypeParamToString);
 
 // TODO(akalin): Add tests exercising:
 //   - Offline installation/uninstallation behavior

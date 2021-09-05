@@ -14,6 +14,10 @@
 #include "device/bluetooth/test/fake_central.h"
 #include "device/bluetooth/test/fake_remote_gatt_service.h"
 
+namespace device {
+class BluetoothUUID;
+}
+
 namespace bluetooth {
 
 // Implements device::BluetoothDevice. Meant to be used by FakeCentral
@@ -89,8 +93,8 @@ class FakePeripheral : public device::BluetoothDevice {
                             const base::Closure& callback,
                             const ErrorCallback& error_callback) override;
   void Connect(PairingDelegate* pairing_delegate,
-               const base::Closure& callback,
-               const ConnectErrorCallback& error_callback) override;
+               base::OnceClosure callback,
+               ConnectErrorCallback error_callback) override;
   void SetPinCode(const std::string& pincode) override;
   void SetPasskey(uint32_t passkey) override;
   void ConfirmPairing() override;
@@ -109,8 +113,9 @@ class FakePeripheral : public device::BluetoothDevice {
       const ConnectToServiceCallback& callback,
       const ConnectToServiceErrorCallback& error_callback) override;
   void CreateGattConnection(
-      const GattConnectionCallback& callback,
-      const ConnectErrorCallback& error_callback) override;
+      GattConnectionCallback callback,
+      ConnectErrorCallback error_callback,
+      base::Optional<device::BluetoothUUID> service_uuid) override;
   bool IsGattServicesDiscoveryComplete() const override;
 #if defined(OS_CHROMEOS)
   void ExecuteWrite(const base::Closure& callback,
@@ -120,7 +125,7 @@ class FakePeripheral : public device::BluetoothDevice {
 #endif
 
  protected:
-  void CreateGattConnectionImpl() override;
+  void CreateGattConnectionImpl(base::Optional<device::BluetoothUUID>) override;
   void DisconnectGatt() override;
 
  private:

@@ -57,7 +57,7 @@ BooleanOrString::BooleanOrString(const BooleanOrString&) = default;
 BooleanOrString::~BooleanOrString() = default;
 BooleanOrString& BooleanOrString::operator=(const BooleanOrString&) = default;
 
-void BooleanOrString::Trace(blink::Visitor* visitor) {
+void BooleanOrString::Trace(Visitor* visitor) {
 }
 
 void V8BooleanOrString::ToImpl(
@@ -108,3 +108,4 @@ BooleanOrString NativeValueTraits<BooleanOrString>::NativeValue(
 }
 
 }  // namespace blink
+

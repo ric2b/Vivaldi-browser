@@ -8,28 +8,38 @@ Provides functions to process intermediate results, and the entry point to
 the standalone version of Results Processor.
 """
 
+from __future__ import print_function
+
+import datetime
+import gzip
 import json
 import logging
 import os
+import posixpath
 import random
 import re
+import shutil
+import time
 
 from py_utils import cloud_storage
 from core.results_processor import command_line
 from core.results_processor import compute_metrics
 from core.results_processor import formatters
 from core.results_processor import util
+from core.tbmv3 import trace_processor
 
 from tracing.trace_data import trace_data
-from tracing.value.diagnostics import date_range
+from tracing.value.diagnostics import all_diagnostics
 from tracing.value.diagnostics import generic_set
 from tracing.value.diagnostics import reserved_infos
 from tracing.value import histogram
 from tracing.value import histogram_set
 from tracing.value import legacy_unit_info
 
-TELEMETRY_RESULTS = '_telemetry_results.jsonl'
+TEST_RESULTS = '_test_results.jsonl'
+DIAGNOSTICS_NAME = 'diagnostics.json'
 MEASUREMENTS_NAME = 'measurements.json'
+CONVERTED_JSON_SUFFIX = '_converted.json'
 
 FORMATS_WITH_METRICS = ['csv', 'histograms', 'html']
 
@@ -48,100 +58,234 @@ def ProcessResults(options):
   if not getattr(options, 'output_formats', None):
     return 0
 
-  intermediate_results = _LoadIntermediateResults(
-      os.path.join(options.intermediate_dir, TELEMETRY_RESULTS))
+  test_results = _LoadTestResults(options.intermediate_dir)
+  if not test_results:
+    # TODO(crbug.com/981349): Make sure that no one is expecting Results
+    # Processor to output results in the case of empty input
+    # and make this an error.
+    logging.warning('No test results to process.')
 
-  AggregateTraces(intermediate_results)
+  test_suite_start = (test_results[0]['startTime']
+      if test_results and 'startTime' in test_results[0]
+      else datetime.datetime.utcnow().isoformat() + 'Z')
+  run_identifier = RunIdentifier(options.results_label, test_suite_start)
+  should_compute_metrics = any(
+      fmt in FORMATS_WITH_METRICS for fmt in options.output_formats)
 
-  UploadArtifacts(
-      intermediate_results, options.upload_bucket, options.results_label)
+  begin_time = time.time()
+  util.ApplyInParallel(
+      lambda result: ProcessTestResult(
+          test_result=result,
+          upload_bucket=options.upload_bucket,
+          results_label=options.results_label,
+          run_identifier=run_identifier,
+          test_suite_start=test_suite_start,
+          should_compute_metrics=should_compute_metrics,
+          max_num_values=options.max_values_per_test_case,
+          test_path_format=options.test_path_format,
+          trace_processor_path=options.trace_processor_path,
+          enable_tbmv3=options.experimental_tbmv3_metrics),
+      test_results,
+      on_failure=util.SetUnexpectedFailure,
+  )
+  processing_duration = time.time() - begin_time
+  _AmortizeProcessingDuration(processing_duration, test_results)
 
-  if any(fmt in FORMATS_WITH_METRICS for fmt in options.output_formats):
-    histogram_dicts = _ComputeMetrics(intermediate_results,
-                                      options.results_label)
+  if should_compute_metrics:
+    histogram_dicts = ExtractHistograms(test_results)
 
   for output_format in options.output_formats:
     logging.info('Processing format: %s', output_format)
     formatter = formatters.FORMATTERS[output_format]
     if output_format in FORMATS_WITH_METRICS:
-      formatter.ProcessHistogramDicts(histogram_dicts, options)
+      output_file = formatter.ProcessHistogramDicts(histogram_dicts, options)
     else:
-      formatter.ProcessIntermediateResults(intermediate_results, options)
+      output_file = formatter.ProcessIntermediateResults(test_results, options)
+    print('View results at file://', output_file, sep='')
 
-  return GenerateExitCode(intermediate_results)
+  return GenerateExitCode(test_results)
 
 
-def GenerateExitCode(intermediate_results):
+def _AmortizeProcessingDuration(processing_duration, test_results):
+  test_results_count = len(test_results)
+  if test_results_count:
+    per_story_cost = processing_duration / len(test_results)
+    logging.info(
+        'Amortizing processing cost to story runtimes: %.2fs per story.',
+        per_story_cost)
+    for result in test_results:
+      if 'runDuration' in result and result['runDuration']:
+        current_duration = float(result['runDuration'].rstrip('s'))
+        new_story_cost = current_duration + per_story_cost
+        result['runDuration'] = unicode(str(new_story_cost) + 's', 'utf-8')
+
+
+def ProcessTestResult(test_result, upload_bucket, results_label,
+                      run_identifier, test_suite_start, should_compute_metrics,
+                      max_num_values, test_path_format, trace_processor_path,
+                      enable_tbmv3):
+  ConvertProtoTraces(test_result, trace_processor_path)
+  AggregateTBMv2Traces(test_result)
+  if enable_tbmv3:
+    AggregateTBMv3Traces(test_result)
+  if upload_bucket is not None:
+    UploadArtifacts(test_result, upload_bucket, run_identifier)
+
+  if should_compute_metrics:
+    test_result['_histograms'] = histogram_set.HistogramSet()
+    compute_metrics.ComputeTBMv2Metrics(test_result)
+    if enable_tbmv3:
+      compute_metrics.ComputeTBMv3Metrics(test_result, trace_processor_path)
+    ExtractMeasurements(test_result)
+    num_values = len(test_result['_histograms'])
+    if max_num_values is not None and num_values > max_num_values:
+      logging.error('%s produced %d values, but only %d are allowed.',
+                    test_result['testPath'], num_values, max_num_values)
+      util.SetUnexpectedFailure(test_result)
+      del test_result['_histograms']
+    else:
+      AddDiagnosticsToHistograms(test_result, test_suite_start, results_label,
+                                 test_path_format)
+
+
+def ExtractHistograms(test_results):
+  histograms = histogram_set.HistogramSet()
+  for result in test_results:
+    if '_histograms' in result:
+      histograms.Merge(result['_histograms'])
+  histograms.DeduplicateDiagnostics()
+  return histograms.AsDicts()
+
+
+def GenerateExitCode(test_results):
   """Generate an exit code as expected by callers.
 
   Returns:
     1 if there were failed tests.
-    -1 if all tests were skipped.
+    111 if all tests were skipped. (See crbug.com/1019139#c8 for details).
     0 otherwise.
   """
-  if any(r['status'] == 'FAIL' for r in intermediate_results['testResults']):
+  if any(r['status'] == 'FAIL' for r in test_results):
     return 1
-  if all(r['status'] == 'SKIP' for r in intermediate_results['testResults']):
-    return -1
+  if all(r['status'] == 'SKIP' for r in test_results):
+    return 111
   return 0
 
 
-def _LoadIntermediateResults(intermediate_file):
-  """Load intermediate results from a file into a single dict."""
-  results = {'benchmarkRun': {}, 'testResults': []}
+def _LoadTestResults(intermediate_dir):
+  """Load intermediate results from a file into a list of test results."""
+  intermediate_file = os.path.join(intermediate_dir, TEST_RESULTS)
+  test_results = []
   with open(intermediate_file) as f:
     for line in f:
       record = json.loads(line)
-      if 'benchmarkRun' in record:
-        results['benchmarkRun'].update(record['benchmarkRun'])
       if 'testResult' in record:
-        test_result = record['testResult']
-        results['testResults'].append(test_result)
-  return results
+        test_results.append(record['testResult'])
+  return test_results
 
 
-def _AggregateTraceWorker(artifacts):
-  traces = [name for name in artifacts if name.startswith('trace/')]
-  trace_files = [artifacts.pop(name)['filePath'] for name in traces]
-  html_path = os.path.join(
-      os.path.dirname(os.path.commonprefix(trace_files)),
-      compute_metrics.HTML_TRACE_NAME)
-  trace_data.SerializeAsHtml(trace_files, html_path)
-  artifacts[compute_metrics.HTML_TRACE_NAME] = {
-    'filePath': html_path,
-    'contentType': 'text/html',
-  }
+def _IsProtoTrace(trace_name):
+  return (trace_name.startswith('trace/') and
+          (trace_name.endswith('.pb') or trace_name.endswith('.pb.gz')))
 
 
-def AggregateTraces(intermediate_results):
-  """Replace individual traces with an aggregate one for each test result.
+def _IsTBMv2Trace(trace_name):
+  return (trace_name.startswith('trace/') and
+          (trace_name.endswith('.json') or trace_name.endswith('.json.gz') or
+          trace_name.endswith('.txt') or trace_name.endswith('.txt.gz')))
 
-  For each test run with traces, generates an aggregate HTML trace. Removes
-  all entries for individual traces and adds one entry for aggregate one.
+
+def _BuildOutputPath(input_files, output_name):
+  """Build a path to a file in the same folder as input_files."""
+  return os.path.join(
+      os.path.dirname(os.path.commonprefix(input_files)),
+      output_name
+  )
+
+
+def ConvertProtoTraces(test_result, trace_processor_path):
+  """Convert proto traces to json.
+
+  For a test result with proto traces, converts them to json using
+  trace_processor and stores the json trace as a separate artifact.
   """
-  work_list = []
-  for result in intermediate_results['testResults']:
-    artifacts = result.get('outputArtifacts', {})
-    # TODO(crbug.com/981349): Stop checking for HTML_TRACE_NAME after
-    # Telemetry does not aggregate traces anymore.
-    if (any(name.startswith('trace/') for name in artifacts) and
-        compute_metrics.HTML_TRACE_NAME not in artifacts):
-      work_list.append(artifacts)
+  artifacts = test_result.get('outputArtifacts', {})
+  proto_traces = [name for name in artifacts if _IsProtoTrace(name)]
 
-  if work_list:
-    for _ in util.ApplyInParallel(_AggregateTraceWorker, work_list):
-      pass
+  # TODO(crbug.com/990304): After implementation of TBMv3-style clock sync,
+  # it will be possible to convert the aggregated proto trace, not
+  # individual ones.
+  for proto_trace_name in proto_traces:
+    proto_file_path = artifacts[proto_trace_name]['filePath']
+    json_file_path = (os.path.splitext(proto_file_path)[0] +
+                      CONVERTED_JSON_SUFFIX)
+    json_trace_name = (posixpath.splitext(proto_trace_name)[0] +
+                       CONVERTED_JSON_SUFFIX)
+    trace_processor.ConvertProtoTraceToJson(
+        trace_processor_path, proto_file_path, json_file_path)
+    artifacts[json_trace_name] = {
+        'filePath': json_file_path,
+        'contentType': 'application/json',
+    }
+    logging.info('%s: Proto trace converted. Source: %s. Destination: %s.',
+                 test_result['testPath'], proto_file_path, json_file_path)
 
-  # TODO(crbug.com/981349): This is to clean up traces that have been
-  # aggregated by Telemetry. Remove this after Telemetry no longer does this.
-  for result in intermediate_results['testResults']:
-    artifacts = result.get('outputArtifacts', {})
-    for name in artifacts.keys():
-      if name.startswith('trace/'):
-        del artifacts[name]
+
+def AggregateTBMv2Traces(test_result):
+  """Replace individual non-proto traces with an aggregate HTML trace.
+
+  For a test result with non-proto traces, generates an aggregate HTML trace.
+  Removes all entries for individual traces and adds one entry for
+  the aggregate one.
+  """
+  artifacts = test_result.get('outputArtifacts', {})
+  traces = [name for name in artifacts if _IsTBMv2Trace(name)]
+  if traces:
+    trace_files = [artifacts[name]['filePath'] for name in traces]
+    html_path = _BuildOutputPath(trace_files, compute_metrics.HTML_TRACE_NAME)
+    trace_data.SerializeAsHtml(trace_files, html_path)
+    artifacts[compute_metrics.HTML_TRACE_NAME] = {
+      'filePath': html_path,
+      'contentType': 'text/html',
+    }
+    logging.info('%s: TBMv2 traces aggregated. Sources: %s. Destination: %s.',
+                 test_result['testPath'], trace_files, html_path)
+  for name in traces:
+    del artifacts[name]
 
 
-def _RunIdentifier(results_label, start_time):
+def AggregateTBMv3Traces(test_result):
+  """Replace individual proto traces with an aggregate one.
+
+  For a test result with proto traces, concatenates them into one file.
+  Removes all entries for individual traces and adds one entry for
+  the aggregate one.
+  """
+  artifacts = test_result.get('outputArtifacts', {})
+  traces = [name for name in artifacts if _IsProtoTrace(name)]
+  if traces:
+    proto_files = [artifacts[name]['filePath'] for name in traces]
+    concatenated_path = _BuildOutputPath(
+        proto_files, compute_metrics.CONCATENATED_PROTO_NAME)
+    with open(concatenated_path, 'w') as concatenated_trace:
+      for trace_file in proto_files:
+        if trace_file.endswith('.pb.gz'):
+          with gzip.open(trace_file, 'rb') as f:
+            shutil.copyfileobj(f, concatenated_trace)
+        else:
+          with open(trace_file, 'rb') as f:
+            shutil.copyfileobj(f, concatenated_trace)
+    artifacts[compute_metrics.CONCATENATED_PROTO_NAME] = {
+      'filePath': concatenated_path,
+      'contentType': 'application/x-protobuf',
+    }
+    logging.info('%s: Proto traces aggregated. Sources: %s. Destination: %s.',
+                 test_result['testPath'], proto_files, concatenated_path)
+  for name in traces:
+    del artifacts[name]
+
+
+def RunIdentifier(results_label, test_suite_start):
   """Construct an identifier for the current script run"""
   if results_label:
     identifier_parts = [re.sub(r'\W+', '_', results_label)]
@@ -149,79 +293,91 @@ def _RunIdentifier(results_label, start_time):
     identifier_parts = []
   # Time is rounded to seconds and delimiters are removed.
   # The first 19 chars of the string match 'YYYY-MM-DDTHH:MM:SS'.
-  identifier_parts.append(re.sub(r'\W+', '', start_time[:19]))
+  identifier_parts.append(re.sub(r'\W+', '', test_suite_start[:19]))
   identifier_parts.append(str(random.randint(1, 1e5)))
   return '_'.join(identifier_parts)
 
 
-def UploadArtifacts(intermediate_results, upload_bucket, results_label):
+def UploadArtifacts(test_result, upload_bucket, run_identifier):
   """Upload all artifacts to cloud.
 
-  For each test run, uploads all its artifacts to cloud and sets remoteUrl
-  fields in intermediate_results.
+  For a test run, uploads all its artifacts to cloud and sets fetchUrl and
+  viewUrl fields in intermediate_results.
   """
-  if upload_bucket is None:
-    return
-
-  run_identifier = _RunIdentifier(
-      results_label, intermediate_results['benchmarkRun']['startTime'])
-  work_list = []
-
-  for result in intermediate_results['testResults']:
-    artifacts = result.get('outputArtifacts', {})
-    for name, artifact in artifacts.iteritems():
-      if 'remoteUrl' in artifact:
-        continue
-      # TODO(crbug.com/981349): Remove this check after Telemetry does not
-      # save histograms as an artifact anymore.
-      if name == compute_metrics.HISTOGRAM_DICTS_FILE:
-        continue
-      remote_name = '/'.join([run_identifier, result['testPath'], name])
-      work_list.append((artifact, remote_name))
-
-  def PoolUploader(work_item):
-    artifact, remote_name = work_item
-    artifact['remoteUrl'] = cloud_storage.Insert(
-        upload_bucket, remote_name, artifact['filePath'])
-
-  for _ in util.ApplyInParallel(PoolUploader, work_list):
-    pass
-
-  for result in intermediate_results['testResults']:
-    artifacts = result.get('outputArtifacts', {})
-    for name, artifact in artifacts.iteritems():
-      logging.info('Uploaded %s of %s to %s', name, result['testPath'],
-                   artifact['remoteUrl'])
+  artifacts = test_result.get('outputArtifacts', {})
+  for name, artifact in artifacts.iteritems():
+    # TODO(crbug.com/981349): Think of a more general way to
+    # specify which artifacts deserve uploading.
+    if name in [DIAGNOSTICS_NAME, MEASUREMENTS_NAME]:
+      continue
+    retry_identifier = 'retry_%s' % test_result.get('resultId', '0')
+    remote_name = '/'.join(
+        [run_identifier, test_result['testPath'], retry_identifier, name])
+    urlsafe_remote_name = re.sub(r'[^A-Za-z0-9/.-]+', '_', remote_name)
+    cloud_filepath = cloud_storage.Upload(
+        upload_bucket, urlsafe_remote_name, artifact['filePath'])
+    # Per crbug.com/1033755 some services require fetchUrl.
+    artifact['fetchUrl'] = cloud_filepath.fetch_url
+    artifact['viewUrl'] = cloud_filepath.view_url
+    logging.info('%s: Uploaded %s to %s', test_result['testPath'], name,
+                 artifact['viewUrl'])
 
 
-def _ComputeMetrics(intermediate_results, results_label):
-  histogram_dicts = compute_metrics.ComputeTBMv2Metrics(intermediate_results)
-  histogram_dicts += ExtractMeasurements(intermediate_results)
-  histogram_dicts = AddDiagnosticsToHistograms(
-      histogram_dicts, intermediate_results, results_label)
-  return histogram_dicts
+def GetTraceUrl(test_result):
+  artifacts = test_result.get('outputArtifacts', {})
+  trace_artifact = artifacts.get(compute_metrics.HTML_TRACE_NAME, {})
+  if 'viewUrl' in trace_artifact:
+    return trace_artifact['viewUrl']
+  elif 'filePath' in trace_artifact:
+    return 'file://' + trace_artifact['filePath']
+  else:
+    return None
 
 
-def AddDiagnosticsToHistograms(histogram_dicts, intermediate_results,
-                                results_label):
-  """Add diagnostics to histogram dicts"""
-  histograms = histogram_set.HistogramSet()
-  histograms.ImportDicts(histogram_dicts)
-  diagnostics = intermediate_results['benchmarkRun'].get('diagnostics', {})
-  for name, diag in diagnostics.items():
-    # For now, we only support GenericSet diagnostics that are serialized
-    # as lists of values.
-    assert isinstance(diag, list)
-    histograms.AddSharedDiagnosticToAllHistograms(
-        name, generic_set.GenericSet(diag))
+def AddDiagnosticsToHistograms(test_result, test_suite_start, results_label,
+                               test_path_format):
+  """Add diagnostics to all histograms of a test result.
 
-  if results_label is not None:
-    histograms.AddSharedDiagnosticToAllHistograms(
-        reserved_infos.LABELS.name,
-        generic_set.GenericSet([results_label]))
+  Reads diagnostics from the test artifact and adds them to all histograms.
+  Also sets additional diagnostics based on test result metadata.
+  This overwrites the corresponding diagnostics previously set by e.g.
+  run_metrics.
+  """
+  artifacts = test_result.get('outputArtifacts', {})
+  if DIAGNOSTICS_NAME in artifacts:
+    with open(artifacts[DIAGNOSTICS_NAME]['filePath']) as f:
+      diagnostics = json.load(f)['diagnostics']
+    for name, diag in diagnostics.items():
+      # For now, we only support GenericSet diagnostics that are serialized
+      # as lists of values.
+      assert isinstance(diag, list)
+      test_result['_histograms'].AddSharedDiagnosticToAllHistograms(
+          name, generic_set.GenericSet(diag))
+    del artifacts[DIAGNOSTICS_NAME]
 
-  histograms.DeduplicateDiagnostics()
-  return histograms.AsDicts()
+  test_suite, test_case = util.SplitTestPath(test_result, test_path_format)
+  if 'startTime' in test_result:
+    test_start_ms = util.IsoTimestampToEpoch(test_result['startTime']) * 1e3
+  else:
+    test_start_ms = None
+  test_suite_start_ms = util.IsoTimestampToEpoch(test_suite_start) * 1e3
+  story_tags = [tag['value'] for tag in test_result.get('tags', [])
+                if tag['key'] == 'story_tag']
+  result_id = int(test_result.get('resultId', 0))
+  trace_url = GetTraceUrl(test_result)
+
+  additional_diagnostics = [
+      (reserved_infos.BENCHMARKS, test_suite),
+      (reserved_infos.BENCHMARK_START, test_suite_start_ms),
+      (reserved_infos.LABELS, results_label),
+      (reserved_infos.STORIES, test_case),
+      (reserved_infos.STORYSET_REPEATS, result_id),
+      (reserved_infos.STORY_TAGS, story_tags),
+      (reserved_infos.TRACE_START, test_start_ms),
+      (reserved_infos.TRACE_URLS, trace_url),
+  ]
+  for name, value in _WrapDiagnostics(additional_diagnostics):
+    test_result['_histograms'].AddSharedDiagnosticToAllHistograms(name, value)
 
 
 def MeasurementToHistogram(name, measurement):
@@ -238,56 +394,41 @@ def MeasurementToHistogram(name, measurement):
                                     description=description)
 
 
-def _GlobalDiagnostics(benchmark_run):
-  """Extract diagnostics information about the whole benchmark run.
+def _WrapDiagnostics(info_value_pairs):
+  """Wrap diagnostic values in corresponding Diagnostics classes.
 
-  These diagnostics will be added to ad-hoc measurements recorded by
-  benchmarks.
+  Args:
+    info_value_pairs: any iterable of pairs (info, value), where info is one
+        of reserved infos defined in tracing.value.diagnostics.reserved_infos,
+        and value can be any json-serializable object.
+
+  Returns:
+    An iterator over pairs (diagnostic name, diagnostic value).
   """
-  timestamp_ms = util.IsoTimestampToEpoch(benchmark_run['startTime']) * 1e3
-  return {
-    reserved_infos.BENCHMARK_START.name: date_range.DateRange(timestamp_ms),
-  }
+  for info, value in info_value_pairs:
+    if value is None or value == []:
+      continue
+    if info.type == 'GenericSet' and not isinstance(value, list):
+      value = [value]
+    diag_class = all_diagnostics.GetDiagnosticClassForName(info.type)
+    yield info.name, diag_class(value)
 
 
-def _StoryDiagnostics(test_result):
-  """Extract diagnostics information about the specific story.
-
-  These diagnostics will be added to ad-hoc measurements recorded by
-  benchmarks.
-  """
-  benchmark_name, story_name = test_result['testPath'].split('/', 1)
-  story_tags = [tag['value'] for tag in test_result.get('tags', [])
-                if tag['key'] == 'story_tag']
-  return {
-      reserved_infos.BENCHMARKS.name: generic_set.GenericSet([benchmark_name]),
-      reserved_infos.STORIES.name: generic_set.GenericSet([story_name]),
-      reserved_infos.STORY_TAGS.name: generic_set.GenericSet(story_tags),
-  }
-
-
-def ExtractMeasurements(intermediate_results):
+def ExtractMeasurements(test_result):
   """Add ad-hoc measurements to histogram dicts"""
-  histograms = histogram_set.HistogramSet()
-  global_diagnostics = _GlobalDiagnostics(intermediate_results['benchmarkRun'])
-
-  for result in intermediate_results['testResults']:
-    artifacts = result.get('outputArtifacts', {})
-    if MEASUREMENTS_NAME in artifacts:
-      with open(artifacts[MEASUREMENTS_NAME]['filePath']) as f:
-        measurements = json.load(f)['measurements']
-      diagnostics = global_diagnostics.copy()
-      diagnostics.update(_StoryDiagnostics(result))
-      for name, measurement in measurements.iteritems():
-        histograms.AddHistogram(MeasurementToHistogram(name, measurement),
-                                diagnostics=diagnostics)
-
-  return histograms.AsDicts()
+  artifacts = test_result.get('outputArtifacts', {})
+  if MEASUREMENTS_NAME in artifacts:
+    with open(artifacts[MEASUREMENTS_NAME]['filePath']) as f:
+      measurements = json.load(f)['measurements']
+    for name, measurement in measurements.iteritems():
+      test_result['_histograms'].AddHistogram(
+          MeasurementToHistogram(name, measurement))
+    del artifacts[MEASUREMENTS_NAME]
 
 
 def main(args=None):
   """Entry point for the standalone version of the results_processor script."""
   parser = command_line.ArgumentParser(standalone=True)
   options = parser.parse_args(args)
-  command_line.ProcessOptions(options, standalone=True)
+  command_line.ProcessOptions(options)
   return ProcessResults(options)

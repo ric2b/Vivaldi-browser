@@ -13,6 +13,19 @@ Layer tree when the fixed elements are out-of-view (should have just a root laye
       "contentsOpaque": true,
       "backgroundColor": "#C0C0C0",
       "transform": 1
+    },
+    {
+      "name": "LayoutNGBlockFlow (positioned) DIV id='fixed2'",
+      "contentsOpaque": true,
+      "drawsContent": false,
+      "backgroundColor": "#C0C0C0",
+      "transform": 2
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [785, 0],
+      "bounds": [15, 600],
+      "contentsOpaque": true
     }
   ],
   "transforms": [
@@ -23,6 +36,15 @@ Layer tree when the fixed elements are out-of-view (should have just a root laye
         [0, 1, 0, 0],
         [0, 0, 1, 0],
         [100, -100, 0, 1]
+      ]
+    },
+    {
+      "id": 2,
+      "transform": [
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [100, 100, 0, 1]
       ]
     }
   ]
@@ -50,6 +72,12 @@ Layer tree when the fixed elements are in-view (both fixed elements should have 
       "contentsOpaque": true,
       "backgroundColor": "#C0C0C0",
       "transform": 2
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [785, 0],
+      "bounds": [15, 600],
+      "contentsOpaque": true
     }
   ],
   "transforms": [
@@ -89,6 +117,19 @@ Layer tree when the fixed elements are out-of-view again (should have just a roo
       "contentsOpaque": true,
       "backgroundColor": "#C0C0C0",
       "transform": 1
+    },
+    {
+      "name": "LayoutNGBlockFlow (positioned) DIV id='fixed2'",
+      "contentsOpaque": true,
+      "drawsContent": false,
+      "backgroundColor": "#C0C0C0",
+      "transform": 2
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [785, 0],
+      "bounds": [15, 600],
+      "contentsOpaque": true
     }
   ],
   "transforms": [
@@ -99,6 +140,15 @@ Layer tree when the fixed elements are out-of-view again (should have just a roo
         [0, 1, 0, 0],
         [0, 0, 1, 0],
         [100, -100, 0, 1]
+      ]
+    },
+    {
+      "id": 2,
+      "transform": [
+        [1, 0, 0, 0],
+        [0, 1, 0, 0],
+        [0, 0, 1, 0],
+        [100, 100, 0, 1]
       ]
     }
   ]

@@ -18,6 +18,7 @@
 #include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/containers/flat_set.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -25,6 +26,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/task/cancelable_task_tracker.h"
@@ -52,7 +54,7 @@ class TestingProfile;
 namespace base {
 class FilePath;
 class Thread;
-}
+}  // namespace base
 
 namespace favicon {
 class FaviconServiceImpl;
@@ -88,6 +90,8 @@ class WebHistoryService;
 // as information about downloads.
 class HistoryService : public KeyedService {
  public:
+  static const base::Feature kHistoryServiceUsesTaskScheduler;
+
   // Must call Init after construction. The empty constructor provided only for
   // unit tests. When using the full constructor, |history_client| may only be
   // null during testing, while |visit_delegate| may be null if the embedder use
@@ -317,10 +321,31 @@ class HistoryService : public KeyedService {
   void CountUniqueHostsVisitedLastMonth(GetHistoryCountCallback callback,
                                         base::CancelableTaskTracker* tracker);
 
-  // Database management operations --------------------------------------------
+  // For each of the continuous |number_of_days_to_report| midnights
+  // immediately preceding |report_time| (inclusive), report (a subset of) the
+  // last 1-day, 7-day and 28-day domain visit counts ending at that midnight.
+  // The subset of metric types to report is specified by |metric_type_bitmask|.
+  void GetDomainDiversity(base::Time report_time,
+                          int number_of_days_to_report,
+                          DomainMetricBitmaskType metric_type_bitmask,
+                          DomainDiversityCallback callback,
+                          base::CancelableTaskTracker* tracker);
 
-  // Delete all the information related to a single url.
-  void DeleteURL(const GURL& url);
+  using GetLastVisitToHostCallback =
+      base::OnceCallback<void(HistoryLastVisitToHostResult)>;
+
+  // Gets the last time any webpage on the given host was visited within the
+  // time range [|begin_time|, |end_time|). If the given host has not been
+  // visited in the given time age, the callback will be called with a null
+  // base::Time.
+  base::CancelableTaskTracker::TaskId GetLastVisitToHost(
+      const GURL& host,
+      base::Time begin_time,
+      base::Time end_time,
+      GetLastVisitToHostCallback callback,
+      base::CancelableTaskTracker* tracker);
+
+  // Database management operations --------------------------------------------
 
   // Delete all the information related to a list of urls.  (Deleting
   // URLs one by one is slow as it has to flush to disk each time.)
@@ -445,7 +470,7 @@ class HistoryService : public KeyedService {
 
   // Generic Stuff -------------------------------------------------------------
 
-  // Schedules a HistoryDBTask for running on the history backend thread. See
+  // Schedules a HistoryDBTask for running on the history backend. See
   // HistoryDBTask for details on what this does. Takes ownership of |task|.
   virtual base::CancelableTaskTracker::TaskId ScheduleDBTask(
       const base::Location& from_here,
@@ -470,27 +495,27 @@ class HistoryService : public KeyedService {
 
   // Testing -------------------------------------------------------------------
 
-  // Runs |flushed| after bouncing off the history thread.
-  void FlushForTest(const base::Closure& flushed);
+  // Runs |flushed| after the backend has processed all other pre-existing
+  // tasks.
+  void FlushForTest(base::OnceClosure flushed);
 
   // Designed for unit tests, this passes the given task on to the history
   // backend to be called once the history backend has terminated. This allows
-  // callers to know when the history thread is complete and the database files
-  // can be deleted and the next test run. Otherwise, the history thread may
-  // still be running, causing problems in subsequent tests.
-  //
+  // callers to know when the history backend has been safely deleted and the
+  // database files can be deleted and the next test run.
+
   // There can be only one closing task, so this will override any previously
   // set task. We will take ownership of the pointer and delete it when done.
   // The task will be run on the calling thread (this function is threadsafe).
-  void SetOnBackendDestroyTask(const base::Closure& task);
+  void SetOnBackendDestroyTask(base::OnceClosure task);
 
   // Used for unit testing and potentially importing to get known information
   // into the database. This assumes the URL doesn't exist in the database
   //
   // Calling this function many times may be slow because each call will
-  // dispatch to the history thread and will be a separate database
-  // transaction. If this functionality is needed for importing many URLs,
-  // callers should use AddPagesWithDetails() instead.
+  // post a separate database transaction in a task. If this functionality
+  // is needed for importing many URLs, callers should use AddPagesWithDetails()
+  // instead.
   //
   // Note that this routine (and AddPageWithDetails()) always adds a single
   // visit using the |last_visit| timestamp, and a PageTransition type of LINK,
@@ -540,14 +565,17 @@ class HistoryService : public KeyedService {
   // Computes the |num_hosts| most-visited hostnames. First version uses all
   // history.
   // Note: Virtual needed for mocking.
-  virtual void TopUrlsPerDay(
+  base::CancelableTaskTracker::TaskId TopUrlsPerDay(
       size_t num_hosts,
-      const UrlVisitCount::TopUrlsPerDayCallback& callback) const;
+      UrlVisitCount::TopUrlsPerDayCallback callback,
+      base::CancelableTaskTracker* tracker) const;
 
   // Searces visists
   // Note: Virtual needed for mocking.
-  virtual void VisitSearch(const QueryOptions& options,
-                           const Visit::VisitsCallback& callback) const;
+  base::CancelableTaskTracker::TaskId VisitSearch(
+      const QueryOptions& options,
+      Visit::VisitsCallback callback,
+      base::CancelableTaskTracker* tracker) const;
 
  protected:
   // These are not currently used, hopefully we can do something in the future
@@ -591,9 +619,9 @@ class HistoryService : public KeyedService {
   // that is only set by unittests which causes the backend to not init its DB.
   bool Init(bool no_db, const HistoryDatabaseParams& history_database_params);
 
-  // Called by the HistoryURLProvider class to schedule an autocomplete, it
-  // will be called back on the internal history thread with the history
-  // database so it can query. See history_url_provider.h for a diagram.
+  // Called by the HistoryURLProvider class to schedule an autocomplete, it will
+  // be called back with the history database so it can query. See
+  // history_url_provider.h for a diagram.
   void ScheduleAutocomplete(
       base::OnceCallback<void(HistoryBackend*, URLDatabase*)> callback);
 
@@ -831,8 +859,8 @@ class HistoryService : public KeyedService {
   void NotifyProfileError(sql::InitStatus init_status,
                           const std::string& diagnostics);
 
-  // Call to schedule a given task for running on the history thread with the
-  // specified priority. The task will have ownership taken.
+  // Call to post a given task for running on the history backend sequence with
+  // the specified priority. The task will have ownership taken.
   void ScheduleTask(SchedulePriority priority, base::OnceClosure task);
 
   // Called when the favicons for the given page URLs (e.g.
@@ -855,17 +883,16 @@ class HistoryService : public KeyedService {
   // Cleanup() is called.
   scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;
 
-  // This class has most of the implementation and runs on the 'thread_'.
-  // You MUST communicate with this class ONLY through the thread_'s
-  // task_runner().
+  // This class has most of the implementation. You MUST communicate with this
+  // class ONLY through |backend_task_runner_|.
   //
   // This pointer will be null once Cleanup() has been called, meaning no
-  // more calls should be made to the history thread.
+  // more tasks should be scheduled.
   scoped_refptr<HistoryBackend> history_backend_;
 
   // A cache of the user-typed URLs kept in memory that is used by the
   // autocomplete system. This will be null until the database has been created
-  // on the background thread.
+  // in the backend.
   // TODO(mrossetti): Consider changing ownership. See http://crbug.com/138321
   std::unique_ptr<InMemoryHistoryBackend> in_memory_backend_;
 

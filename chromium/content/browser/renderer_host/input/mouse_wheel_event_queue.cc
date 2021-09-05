@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/input/mouse_wheel_event_queue.h"
 
+#include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "content/common/input/input_event_dispatch_type.h"
@@ -78,12 +79,6 @@ bool MouseWheelEventQueue::CanGenerateGestureScroll(
     return false;
   }
 
-  if (event_sent_for_gesture_ack_->event.resending_plugin_id != -1) {
-    TRACE_EVENT_INSTANT0("input", "Wheel Event Resending Plugin Id Is Not -1",
-                         TRACE_EVENT_SCOPE_THREAD);
-    return false;
-  }
-
   if (scrolling_device_ != blink::WebGestureDevice::kUninitialized &&
       scrolling_device_ != blink::WebGestureDevice::kTouchpad) {
     TRACE_EVENT_INSTANT0("input",
@@ -105,20 +100,11 @@ bool MouseWheelEventQueue::CanGenerateGestureScroll(
 }
 
 void MouseWheelEventQueue::ProcessMouseWheelAck(
+    const MouseWheelEventWithLatencyInfo& ack_event,
     InputEventAckSource ack_source,
-    InputEventAckState ack_result,
-    const MouseWheelEventWithLatencyInfo& ack_event) {
+    InputEventAckState ack_result) {
   TRACE_EVENT0("input", "MouseWheelEventQueue::ProcessMouseWheelAck");
   if (!event_sent_for_gesture_ack_)
-    return;
-
-  // |ack_event.event| should be the same as
-  // |event_sent_for_gesture_ack_->event|. If they aren't, then don't continue
-  // processing the ack. The two events can potentially be different because
-  // TouchpadPinchEventQueue also dispatches wheel events, and any wheel event
-  // ack that is received is sent to both *EventQueue::ProcessMouseWheelAck
-  // methods.
-  if (ack_event.event != event_sent_for_gesture_ack_->event)
     return;
 
   event_sent_for_gesture_ack_->latency.AddNewLatencyFrom(ack_event.latency);
@@ -136,7 +122,6 @@ void MouseWheelEventQueue::ProcessMouseWheelAck(
         event_sent_for_gesture_ack_->event.PositionInWidget());
     scroll_update.SetPositionInScreen(
         event_sent_for_gesture_ack_->event.PositionInScreen());
-    scroll_update.resending_plugin_id = -1;
 
 #if !defined(OS_MACOSX)
     // Swap X & Y if Shift is down and when there is no horizontal movement.
@@ -168,16 +153,18 @@ void MouseWheelEventQueue::ProcessMouseWheelAck(
 
     // WebMouseWheelEvent only supports these units for the delta.
     DCHECK(event_sent_for_gesture_ack_->event.delta_units ==
-               ui::input_types::ScrollGranularity::kScrollByPage ||
+               ui::ScrollGranularity::kScrollByPage ||
            event_sent_for_gesture_ack_->event.delta_units ==
-               ui::input_types::ScrollGranularity::kScrollByPrecisePixel ||
+               ui::ScrollGranularity::kScrollByPrecisePixel ||
            event_sent_for_gesture_ack_->event.delta_units ==
-               ui::input_types::ScrollGranularity::kScrollByPixel);
+               ui::ScrollGranularity::kScrollByPixel ||
+           event_sent_for_gesture_ack_->event.delta_units ==
+               ui::ScrollGranularity::kScrollByPercentage);
     scroll_update.data.scroll_update.delta_units =
         event_sent_for_gesture_ack_->event.delta_units;
 
     if (event_sent_for_gesture_ack_->event.delta_units ==
-        ui::input_types::ScrollGranularity::kScrollByPage) {
+        ui::ScrollGranularity::kScrollByPage) {
       // Turn page scrolls into a *single* page scroll because
       // the magnitude the number of ticks is lost when coalescing.
       if (scroll_update.data.scroll_update.delta_x)
@@ -225,10 +212,14 @@ void MouseWheelEventQueue::ProcessMouseWheelAck(
       RecordLatchingUmaMetric(client_->IsWheelScrollInProgress());
 
     bool synthetic = event_sent_for_gesture_ack_->event.has_synthetic_phase;
-    if (event_sent_for_gesture_ack_->event.phase ==
-        blink::WebMouseWheelEvent::kPhaseBegan) {
-      // Wheel event with phaseBegan must have non-zero deltas.
-      DCHECK(needs_update);
+
+    // Generally, there should always be a non-zero delta with kPhaseBegan
+    // events. However, sometimes this is not the case and the delta in both
+    // directions is 0. When this occurs, don't call SendScrollBegin because
+    // scroll direction is necessary in order to determine the correct scroller
+    // to target and latch to.
+    if (needs_update && event_sent_for_gesture_ack_->event.phase ==
+                            blink::WebMouseWheelEvent::kPhaseBegan) {
       send_wheel_events_async_ = true;
 
       if (!client_->IsWheelScrollInProgress())
@@ -291,7 +282,10 @@ void MouseWheelEventQueue::TryForwardNextEventToRenderer() {
         WebInputEvent::kEventNonBlocking;
   }
 
-  client_->SendMouseWheelEventImmediately(*event_sent_for_gesture_ack_);
+  client_->SendMouseWheelEventImmediately(
+      *event_sent_for_gesture_ack_,
+      base::BindOnce(&MouseWheelEventQueue::ProcessMouseWheelAck,
+                     base::Unretained(this)));
 }
 
 void MouseWheelEventQueue::SendScrollEnd(WebGestureEvent update_event,
@@ -301,7 +295,6 @@ void MouseWheelEventQueue::SendScrollEnd(WebGestureEvent update_event,
   WebGestureEvent scroll_end(update_event);
   scroll_end.SetTimeStamp(ui::EventTimeForNow());
   scroll_end.SetType(WebInputEvent::kGestureScrollEnd);
-  scroll_end.resending_plugin_id = -1;
   scroll_end.data.scroll_end.synthetic = synthetic;
   scroll_end.data.scroll_end.inertial_phase =
       update_event.data.scroll_update.inertial_phase;

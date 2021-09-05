@@ -1,5 +1,5 @@
 include_rules = [
-    "+ui/gfx/favicon_size.h",
+    "+services/network/public/cpp/request_destination.h",
     "+skia/ext/image_operations.h",
     "+ui/gfx/geometry/size.h",
 ]

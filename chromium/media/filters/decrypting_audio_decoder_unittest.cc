@@ -24,6 +24,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 
 using ::base::test::RunCallback;
+using ::base::test::RunOnceCallback;
 using ::testing::_;
 using ::testing::AtMost;
 using ::testing::Return;
@@ -64,7 +65,7 @@ class DecryptingAudioDecoderTest : public testing::Test {
         num_decrypt_and_decode_calls_(0),
         num_frames_in_decryptor_(0),
         encrypted_buffer_(CreateFakeEncryptedBuffer()),
-        decoded_frame_(NULL),
+        decoded_frame_(nullptr),
         decoded_frame_list_() {}
 
   ~DecryptingAudioDecoderTest() override { Destroy(); }
@@ -82,7 +83,12 @@ class DecryptingAudioDecoderTest : public testing::Test {
         kNoTimestamp);
     decoded_frame_list_.push_back(decoded_frame_);
 
-    decoder_->Initialize(config, cdm_context_.get(), NewExpectedBoolCB(success),
+    decoder_->Initialize(config, cdm_context_.get(),
+                         base::BindOnce(
+                             [](bool success, Status status) {
+                               EXPECT_EQ(status.is_ok(), success);
+                             },
+                             success),
                          base::Bind(&DecryptingAudioDecoderTest::FrameReady,
                                     base::Unretained(this)),
                          base::Bind(&DecryptingAudioDecoderTest::OnWaiting,
@@ -102,13 +108,13 @@ class DecryptingAudioDecoderTest : public testing::Test {
     SetCdmType(CDM_WITH_DECRYPTOR);
     EXPECT_CALL(*decryptor_, InitializeAudioDecoder(_, _))
         .Times(AtMost(1))
-        .WillOnce(RunCallback<1>(true));
+        .WillOnce(RunOnceCallback<1>(true));
     EXPECT_CALL(*decryptor_, RegisterNewKeyCB(Decryptor::kAudio, _))
         .WillOnce(SaveArg<1>(&key_added_cb_));
 
     config_.Initialize(kCodecVorbis, kSampleFormatPlanarF32,
                        CHANNEL_LAYOUT_STEREO, kSampleRate, EmptyExtraData(),
-                       AesCtrEncryptionScheme(), base::TimeDelta(), 0);
+                       EncryptionScheme::kCenc, base::TimeDelta(), 0);
     InitializeAndExpectResult(config_, true);
   }
 
@@ -117,15 +123,16 @@ class DecryptingAudioDecoderTest : public testing::Test {
   void ReinitializeConfigChange(const AudioDecoderConfig& new_config) {
     EXPECT_CALL(*decryptor_, DeinitializeDecoder(Decryptor::kAudio));
     EXPECT_CALL(*decryptor_, InitializeAudioDecoder(_, _))
-        .WillOnce(RunCallback<1>(true));
+        .WillOnce(RunOnceCallback<1>(true));
     EXPECT_CALL(*decryptor_, RegisterNewKeyCB(Decryptor::kAudio, _))
         .WillOnce(SaveArg<1>(&key_added_cb_));
-    decoder_->Initialize(new_config, cdm_context_.get(),
-                         NewExpectedBoolCB(true),
-                         base::Bind(&DecryptingAudioDecoderTest::FrameReady,
-                                    base::Unretained(this)),
-                         base::Bind(&DecryptingAudioDecoderTest::OnWaiting,
-                                    base::Unretained(this)));
+    decoder_->Initialize(
+        new_config, cdm_context_.get(),
+        base::BindOnce([](Status status) { EXPECT_TRUE(status.is_ok()); }),
+        base::Bind(&DecryptingAudioDecoderTest::FrameReady,
+                   base::Unretained(this)),
+        base::Bind(&DecryptingAudioDecoderTest::OnWaiting,
+                   base::Unretained(this)));
   }
 
   // Decode |buffer| and expect DecodeDone to get called with |status|.
@@ -276,7 +283,7 @@ TEST_F(DecryptingAudioDecoderTest, Initialize_Normal) {
 TEST_F(DecryptingAudioDecoderTest, Initialize_InvalidAudioConfig) {
   AudioDecoderConfig config(kUnknownAudioCodec, kUnknownSampleFormat,
                             CHANNEL_LAYOUT_STEREO, 0, EmptyExtraData(),
-                            AesCtrEncryptionScheme());
+                            EncryptionScheme::kCenc);
 
   InitializeAndExpectResult(config, false);
 }
@@ -285,11 +292,11 @@ TEST_F(DecryptingAudioDecoderTest, Initialize_InvalidAudioConfig) {
 TEST_F(DecryptingAudioDecoderTest, Initialize_UnsupportedAudioConfig) {
   SetCdmType(CDM_WITH_DECRYPTOR);
   EXPECT_CALL(*decryptor_, InitializeAudioDecoder(_, _))
-      .WillOnce(RunCallback<1>(false));
+      .WillOnce(RunOnceCallback<1>(false));
 
   AudioDecoderConfig config(kCodecVorbis, kSampleFormatPlanarF32,
                             CHANNEL_LAYOUT_STEREO, kSampleRate,
-                            EmptyExtraData(), AesCtrEncryptionScheme());
+                            EmptyExtraData(), EncryptionScheme::kCenc);
   InitializeAndExpectResult(config, false);
 }
 
@@ -297,7 +304,7 @@ TEST_F(DecryptingAudioDecoderTest, Initialize_CdmWithoutDecryptor) {
   SetCdmType(CDM_WITHOUT_DECRYPTOR);
   AudioDecoderConfig config(kCodecVorbis, kSampleFormatPlanarF32,
                             CHANNEL_LAYOUT_STEREO, kSampleRate,
-                            EmptyExtraData(), AesCtrEncryptionScheme());
+                            EmptyExtraData(), EncryptionScheme::kCenc);
   InitializeAndExpectResult(config, false);
 }
 
@@ -356,13 +363,13 @@ TEST_F(DecryptingAudioDecoderTest, Reinitialize_EncryptedToEncrypted) {
 
   EXPECT_CALL(*decryptor_, InitializeAudioDecoder(_, _))
       .Times(AtMost(1))
-      .WillOnce(RunCallback<1>(true));
+      .WillOnce(RunOnceCallback<1>(true));
 
   // The new config is different from the initial config in bits-per-channel,
   // channel layout and samples_per_second.
   AudioDecoderConfig new_config(kCodecVorbis, kSampleFormatPlanarS16,
                                 CHANNEL_LAYOUT_5_1, 88200, EmptyExtraData(),
-                                AesCtrEncryptionScheme());
+                                EncryptionScheme::kCenc);
   EXPECT_NE(new_config.bits_per_channel(), config_.bits_per_channel());
   EXPECT_NE(new_config.channel_layout(), config_.channel_layout());
   EXPECT_NE(new_config.samples_per_second(), config_.samples_per_second());
@@ -378,13 +385,13 @@ TEST_F(DecryptingAudioDecoderTest, Reinitialize_EncryptedToClear) {
 
   EXPECT_CALL(*decryptor_, InitializeAudioDecoder(_, _))
       .Times(AtMost(1))
-      .WillOnce(RunCallback<1>(true));
+      .WillOnce(RunOnceCallback<1>(true));
 
   // The new config is different from the initial config in bits-per-channel,
   // channel layout and samples_per_second.
   AudioDecoderConfig new_config(kCodecVorbis, kSampleFormatPlanarS16,
                                 CHANNEL_LAYOUT_5_1, 88200, EmptyExtraData(),
-                                Unencrypted());
+                                EncryptionScheme::kUnencrypted);
   EXPECT_NE(new_config.bits_per_channel(), config_.bits_per_channel());
   EXPECT_NE(new_config.channel_layout(), config_.channel_layout());
   EXPECT_NE(new_config.samples_per_second(), config_.samples_per_second());

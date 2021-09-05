@@ -68,12 +68,10 @@ IN_PROC_BROWSER_TEST_F(WebAppIconManagerBrowserTest, SingleIcon) {
     web_application_info->open_as_window = true;
 
     {
-      WebApplicationIconInfo info;
-      info.width = icon_size::k32;
-      info.height = icon_size::k32;
-      info.data.allocN32Pixels(info.width, info.height, true);
-      info.data.eraseColor(SK_ColorBLUE);
-      web_application_info->icons.push_back(info);
+      SkBitmap bitmap;
+      bitmap.allocN32Pixels(icon_size::k32, icon_size::k32, true);
+      bitmap.eraseColor(SK_ColorBLUE);
+      web_application_info->icon_bitmaps[icon_size::k32] = std::move(bitmap);
     }
 
     InstallManager& install_manager =
@@ -87,7 +85,7 @@ IN_PROC_BROWSER_TEST_F(WebAppIconManagerBrowserTest, SingleIcon) {
         base::BindLambdaForTesting(
             [&app_id, &run_loop](const AppId& installed_app_id,
                                  InstallResultCode code) {
-              EXPECT_EQ(web_app::InstallResultCode::kSuccessNewInstall, code);
+              EXPECT_EQ(InstallResultCode::kSuccessNewInstall, code);
               app_id = installed_app_id;
               run_loop.Quit();
             }));

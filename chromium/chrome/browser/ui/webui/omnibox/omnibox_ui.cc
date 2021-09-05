@@ -7,15 +7,21 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/omnibox/omnibox_page_handler.h"
 #include "chrome/browser/ui/webui/version_handler.h"
 #include "chrome/browser/ui/webui/version_ui.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/omnibox_resources.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_data_source.h"
+
+#if !defined(OS_ANDROID)
+#include "chrome/browser/ui/webui/omnibox/omnibox_popup_handler.h"
+#endif
 
 OmniboxUI::OmniboxUI(content::WebUI* web_ui)
     : ui::MojoWebUIController(web_ui, /*enable_chrome_send=*/true) {
@@ -42,15 +48,24 @@ OmniboxUI::OmniboxUI(content::WebUI* web_ui)
       IDR_OMNIBOX_MOJO_JS);
   source->SetDefaultResource(IDR_OMNIBOX_HTML);
 
+#if !defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(omnibox::kWebUIOmniboxPopup)) {
+    source->AddResourcePath("omnibox_popup.js", IDR_OMNIBOX_POPUP_JS);
+    source->AddResourcePath("omnibox_popup.html", IDR_OMNIBOX_POPUP_HTML);
+
+    popup_handler_ = std::make_unique<OmniboxPopupHandler>();
+  }
+#endif
+
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
-  AddHandlerToRegistry(base::BindRepeating(&OmniboxUI::BindOmniboxPageHandler,
-                                           base::Unretained(this)));
   web_ui->AddMessageHandler(std::make_unique<VersionHandler>());
 }
 
+WEB_UI_CONTROLLER_TYPE_IMPL(OmniboxUI)
+
 OmniboxUI::~OmniboxUI() {}
 
-void OmniboxUI::BindOmniboxPageHandler(
+void OmniboxUI::BindInterface(
     mojo::PendingReceiver<mojom::OmniboxPageHandler> receiver) {
   omnibox_handler_ = std::make_unique<OmniboxPageHandler>(
       Profile::FromWebUI(web_ui()), std::move(receiver));

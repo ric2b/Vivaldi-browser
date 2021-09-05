@@ -33,6 +33,8 @@
 
 #include "base/logging.h"
 #include "base/optional.h"
+#include "net/dns/public/resolve_error_info.h"
+#include "services/network/public/cpp/blocked_by_response_reason.h"
 #include "services/network/public/cpp/cors/cors_error_status.h"
 #include "third_party/blink/public/platform/web_url.h"
 
@@ -56,20 +58,33 @@ struct WebURLError {
   // |reason| must not be 0.
   BLINK_PLATFORM_EXPORT WebURLError(int reason,
                                     int extended_reason,
+                                    net::ResolveErrorInfo resolve_error_info,
                                     HasCopyInCache,
                                     IsWebSecurityViolation,
                                     const WebURL&);
+  BLINK_PLATFORM_EXPORT WebURLError(
+      network::BlockedByResponseReason blocked_reason,
+      net::ResolveErrorInfo resolve_error_info,
+      HasCopyInCache,
+      const WebURL&);
   BLINK_PLATFORM_EXPORT WebURLError(const network::CorsErrorStatus&,
                                     HasCopyInCache,
                                     const WebURL&);
 
   int reason() const { return reason_; }
   int extended_reason() const { return extended_reason_; }
+  const net::ResolveErrorInfo& resolve_error_info() const {
+    return resolve_error_info_;
+  }
   bool has_copy_in_cache() const { return has_copy_in_cache_; }
   bool is_web_security_violation() const { return is_web_security_violation_; }
   const WebURL& url() const { return url_; }
   const base::Optional<network::CorsErrorStatus> cors_error_status() const {
     return cors_error_status_;
+  }
+  const base::Optional<network::BlockedByResponseReason>
+  blocked_by_response_reason() const {
+    return blocked_by_response_reason_;
   }
 
  private:
@@ -79,6 +94,9 @@ struct WebURLError {
 
   // Additional information based on the reason_.
   int extended_reason_ = 0;
+
+  // Detailed host resolution error information.
+  net::ResolveErrorInfo resolve_error_info_;
 
   // A flag showing whether or not we have a (possibly stale) copy of the
   // requested resource in the cache.
@@ -92,6 +110,10 @@ struct WebURLError {
 
   // Optional CORS error details.
   base::Optional<network::CorsErrorStatus> cors_error_status_;
+
+  // More detailed reason for failing the response with
+  // ERR_net::ERR_BLOCKED_BY_RESPONSE |error_code|.
+  base::Optional<network::BlockedByResponseReason> blocked_by_response_reason_;
 };
 
 }  // namespace blink

@@ -13,6 +13,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
+#include "components/policy/core/common/schema_registry.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_service.h"
@@ -28,6 +29,11 @@
 #include "ios/chrome/browser/chrome_paths_internal.h"
 #include "ios/chrome/browser/file_metadata_util.h"
 #include "ios/chrome/browser/net/ios_chrome_url_request_context_getter.h"
+#include "ios/chrome/browser/policy/browser_policy_connector_ios.h"
+#include "ios/chrome/browser/policy/browser_state_policy_connector.h"
+#include "ios/chrome/browser/policy/browser_state_policy_connector_factory.h"
+#include "ios/chrome/browser/policy/policy_features.h"
+#include "ios/chrome/browser/policy/schema_registry_factory.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/prefs/browser_prefs.h"
 #include "ios/chrome/browser/prefs/ios_chrome_pref_service_factory.h"
@@ -88,12 +94,25 @@ ChromeBrowserStateImpl::ChromeBrowserStateImpl(
       state_path_, otr_state_path_, base_cache_path);
   DCHECK(directories_created);
 
+  // Bring up the policy system before creating |prefs_|.
+  if (IsEnterprisePolicyEnabled()) {
+    BrowserPolicyConnectorIOS* connector =
+        GetApplicationContext()->GetBrowserPolicyConnector();
+    DCHECK(connector);
+    policy_schema_registry_ = BuildSchemaRegistryForBrowserState(
+        this, connector->GetChromeSchema(), connector->GetSchemaRegistry());
+    policy_connector_ = BuildBrowserStatePolicyConnector(
+        policy_schema_registry_.get(), connector);
+  }
+
   RegisterBrowserStatePrefs(pref_registry_.get());
   BrowserStateDependencyManager::GetInstance()
       ->RegisterBrowserStatePrefsForServices(pref_registry_.get());
 
-  prefs_ = CreateBrowserStatePrefs(state_path_, GetIOTaskRunner().get(),
-                                   pref_registry_);
+  prefs_ = CreateBrowserStatePrefs(
+      state_path_, GetIOTaskRunner().get(), pref_registry_,
+      policy_connector_ ? policy_connector_->GetPolicyService() : nullptr,
+      GetApplicationContext()->GetBrowserPolicyConnector());
   // Register on BrowserState.
   user_prefs::UserPrefs::Set(this, prefs_.get());
 
@@ -129,12 +148,11 @@ ChromeBrowserStateImpl::~ChromeBrowserStateImpl() {
   DestroyOffTheRecordChromeBrowserState();
 }
 
-ios::ChromeBrowserState*
-ChromeBrowserStateImpl::GetOriginalChromeBrowserState() {
+ChromeBrowserState* ChromeBrowserStateImpl::GetOriginalChromeBrowserState() {
   return this;
 }
 
-ios::ChromeBrowserState*
+ChromeBrowserState*
 ChromeBrowserStateImpl::GetOffTheRecordChromeBrowserState() {
   if (!otr_state_) {
     otr_state_.reset(new OffTheRecordChromeBrowserStateImpl(
@@ -154,6 +172,14 @@ void ChromeBrowserStateImpl::DestroyOffTheRecordChromeBrowserState() {
   otr_state_.reset();
 }
 
+BrowserStatePolicyConnector* ChromeBrowserStateImpl::GetPolicyConnector() {
+  if (policy_connector_.get()) {
+    DCHECK(IsEnterprisePolicyEnabled());
+    return policy_connector_.get();
+  }
+  return nullptr;
+}
+
 PrefService* ChromeBrowserStateImpl::GetPrefs() {
   DCHECK(prefs_);  // Should explicitly be initialized.
   return prefs_.get();
@@ -168,7 +194,7 @@ base::FilePath ChromeBrowserStateImpl::GetStatePath() const {
 }
 
 void ChromeBrowserStateImpl::SetOffTheRecordChromeBrowserState(
-    std::unique_ptr<ios::ChromeBrowserState> otr_state) {
+    std::unique_ptr<ChromeBrowserState> otr_state) {
   DCHECK(!otr_state_);
   otr_state_ = std::move(otr_state);
 }

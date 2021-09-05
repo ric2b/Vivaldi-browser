@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/tab_contents/chrome_web_contents_view_focus_helper.h"
 
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/sad_tab_helper.h"
 #include "chrome/browser/ui/views/sad_tab_view.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
@@ -56,14 +57,14 @@ bool ChromeWebContentsViewFocusHelper::TakeFocus(bool reverse) {
 }
 
 void ChromeWebContentsViewFocusHelper::StoreFocus() {
-  last_focused_view_tracker_.Clear();
+  last_focused_view_tracker_.SetView(nullptr);
   if (GetFocusManager())
     last_focused_view_tracker_.SetView(GetFocusManager()->GetFocusedView());
 }
 
 bool ChromeWebContentsViewFocusHelper::RestoreFocus() {
   views::View* view_to_focus = GetStoredFocus();
-  last_focused_view_tracker_.Clear();
+  last_focused_view_tracker_.SetView(nullptr);
   if (view_to_focus) {
     view_to_focus->RequestFocus();
     return true;
@@ -72,7 +73,7 @@ bool ChromeWebContentsViewFocusHelper::RestoreFocus() {
 }
 
 void ChromeWebContentsViewFocusHelper::ResetStoredFocus() {
-  last_focused_view_tracker_.Clear();
+  last_focused_view_tracker_.SetView(nullptr);
 }
 
 views::View* ChromeWebContentsViewFocusHelper::GetStoredFocus() {

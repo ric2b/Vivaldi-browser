@@ -70,7 +70,7 @@
 
       <div id="realbox-container">
         <div id="realbox-input-wrapper">
-          <div class="search-icon"></div>
+          <div id="realbox-icon" data-default-icon="search"></div>
           <input id="realbox" type="search" autocomplete="off"
               spellcheck="false" autofocus>
           <button id="realbox-microphone" class="microphone-icon" hidden>
@@ -254,6 +254,15 @@
         </div>
         <div id="backgrounds-image-menu" class="menu-panel" tabindex="0"
             role="tabpanel" aria-label="$i18n{backgroundsOption}"></div>
+        <div id="backgrounds-disabled-menu" class="menu-panel" tabindex="0"
+            role="tabpanel" aria-label="$i18n{backgroundsOption}">
+          <div id="backgrounds-disabled-wrapper">
+            <div id="backgrounds-disabled-icon"></div>
+            <div id="backgrounds-disabled-title">
+              $i18n{customBackgroundDisabled}
+            </div>
+          </div>
+        </div>
         <div id="shortcuts-menu" class="menu-panel" tabindex="0" role="tabpanel"
             aria-label="$i18n{shortcutsOption}">
           <div id="sh-options">

@@ -64,6 +64,8 @@ bool EventDatabase::CreateEventTable() {
       "sequence INTEGER DEFAULT 0 NOT NULL,"
       "ical LONGVARCHAR,"
       "rrule LONGVARCHAR,"
+      "organizer LONGVARCHAR,"
+      "timezone LONGVARCHAR,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -78,9 +80,10 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
       "(calendar_id, alarm_id, title, description, "
       "start, end, all_day, is_recurring, start_recurring, end_recurring, "
       "location, url, etag, href, uid, event_type_id, task, complete, trash, "
-      "trash_time, sequence, ical, rrule, created, last_modified) "
+      "trash_time, sequence, ical, rrule, organizer, timezone, created, "
+      "last_modified) "
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-      "?, ?, ?, ?)"));
+      "?, ?, ?, ?, ?, ?)"));
 
   statement.BindInt64(0, row.calendar_id());
   statement.BindInt64(1, row.alarm_id());
@@ -106,8 +109,10 @@ EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
   statement.BindInt64(20, row.sequence());
   statement.BindString16(21, row.ical());
   statement.BindString(22, row.rrule());
-  statement.BindInt64(23, base::Time().Now().ToInternalValue());
-  statement.BindInt64(24, base::Time().Now().ToInternalValue());
+  statement.BindString(23, row.organizer());
+  statement.BindString(24, row.timezone());
+  statement.BindInt64(25, base::Time().Now().ToInternalValue());
+  statement.BindInt64(26, base::Time().Now().ToInternalValue());
 
   if (!statement.Run()) {
     return 0;
@@ -151,7 +156,7 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
         all_day=?, is_recurring=?, start_recurring=?, end_recurring=?, \
         location=?, url=?, etag=?, href=?, uid=?, event_type_id=?, \
         task=?, complete=?, trash=?, trash_time=?, sequence=?, ical=?, \
-        rrule=? WHERE id=?"));
+        rrule=?, organizer=?, timezone=? WHERE id=?"));
   statement.BindInt64(0, event.calendar_id());
   statement.BindInt64(1, event.alarm_id());
   statement.BindString16(2, event.title());
@@ -176,7 +181,9 @@ bool EventDatabase::UpdateEventRow(const EventRow& event) {
   statement.BindInt(20, event.sequence());
   statement.BindString16(21, event.ical());
   statement.BindString(22, event.rrule());
-  statement.BindInt64(23, event.id());
+  statement.BindString(23, event.organizer());
+  statement.BindString(24, event.timezone());
+  statement.BindInt64(25, event.id());
 
   return statement.Run();
 }
@@ -208,6 +215,7 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   int sequence = s.ColumnInt(21);
   base::string16 ical = s.ColumnString16(22);
   std::string rrule = s.ColumnString(23);
+  std::string organizer = s.ColumnString(24);
 
   event->set_id(id);
   event->set_calendar_id(calendar_id);
@@ -233,6 +241,7 @@ void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
   event->set_sequence(sequence);
   event->set_ical(ical);
   event->set_rrule(rrule);
+  event->set_organizer(organizer);
 }
 
 bool EventDatabase::DeleteEvent(calendar::EventID event_id) {
@@ -300,6 +309,32 @@ bool EventDatabase::MigrateCalendarToVersion4() {
   if (!GetDB().DoesColumnExist("events", "rrule")) {
     if (!GetDB().Execute("ALTER TABLE events "
                          "ADD COLUMN rrule LONGVARCHAR"))
+      return false;
+  }
+  return true;
+}
+
+// Updates to version 6. Adds columns timezone to events and calendar table
+bool EventDatabase::MigrateCalendarToVersion6() {
+  if (!GetDB().DoesTableExist("events")) {
+    NOTREACHED() << "events table should exist before migration";
+    return false;
+  }
+
+  if (!GetDB().DoesColumnExist("events", "timezone")) {
+    if (!GetDB().Execute("ALTER TABLE events "
+                         "ADD COLUMN timezone LONGVARCHAR"))
+      return false;
+  }
+
+  if (!GetDB().DoesTableExist("calendar")) {
+    NOTREACHED() << "calendar table should exist before migration";
+    return false;
+  }
+
+  if (!GetDB().DoesColumnExist("calendar", "timezone")) {
+    if (!GetDB().Execute("ALTER TABLE calendar "
+                         "ADD COLUMN timezone LONGVARCHAR"))
       return false;
   }
   return true;

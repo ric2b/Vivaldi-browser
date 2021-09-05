@@ -20,7 +20,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "content/browser/bad_message.h"
 #include "content/common/frame_messages.h"
@@ -28,7 +27,7 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
-#include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
+#include "third_party/blink/public/mojom/choosers/file_chooser.mojom-forward.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -176,16 +175,18 @@ class UrlCommitObserver : WebContentsObserver {
 // BadMessageReason that caused a //content-triggerred kill.
 //
 // Example usage:
-//   RenderProcessHostKillWaiter kill_waiter(render_process_host);
+//   RenderProcessHostBadIpcMessageWaiter kill_waiter(render_process_host);
 //   ... test code that triggers a renderer kill ...
 //   EXPECT_EQ(bad_message::RFH_INVALID_ORIGIN_ON_COMMIT, kill_waiter.Wait());
 //
 // Tests that don't expect kills (e.g. tests where a renderer process exits
 // normally, like RenderFrameHostManagerTest.ProcessExitWithSwappedOutViews)
-// should use RenderProcessHostWatcher instead of RenderProcessHostKillWaiter.
-class RenderProcessHostKillWaiter {
+// should use RenderProcessHostWatcher instead of
+// RenderProcessHostBadIpcMessageWaiter.
+class RenderProcessHostBadIpcMessageWaiter {
  public:
-  explicit RenderProcessHostKillWaiter(RenderProcessHost* render_process_host);
+  explicit RenderProcessHostBadIpcMessageWaiter(
+      RenderProcessHost* render_process_host);
 
   // Waits until the renderer process exits.  Returns the bad message that made
   // //content kill the renderer.  |base::nullopt| is returned if the renderer
@@ -193,10 +194,9 @@ class RenderProcessHostKillWaiter {
   base::Optional<bad_message::BadMessageReason> Wait() WARN_UNUSED_RESULT;
 
  private:
-  RenderProcessHostWatcher exit_watcher_;
-  base::HistogramTester histogram_tester_;
+  RenderProcessHostKillWaiter internal_waiter_;
 
-  DISALLOW_COPY_AND_ASSIGN(RenderProcessHostKillWaiter);
+  DISALLOW_COPY_AND_ASSIGN(RenderProcessHostBadIpcMessageWaiter);
 };
 
 class ShowWidgetMessageFilter : public content::BrowserMessageFilter {

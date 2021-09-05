@@ -102,6 +102,8 @@ class VIZ_SERVICE_EXPORT DirectContextProvider
   GLuint GenClientTextureId();
   void DeleteClientTextureId(GLuint client_id);
   void MarkContextLost();
+  // Call a glFinish() to complete any pending queries.
+  void FinishQueries();
 
   // ContextProvider implementation.
   void AddRef() const override;
@@ -172,9 +174,12 @@ class VIZ_SERVICE_EXPORT DirectContextProvider
   std::unique_ptr<gpu::gles2::GLES2Decoder> decoder_;
   std::unique_ptr<gpu::TransferBuffer> transfer_buffer_;
   scoped_refptr<gl::GLContext> gl_context_;
+  scoped_refptr<gl::GLSurface> gl_surface_;
   std::unique_ptr<gpu::gles2::GLES2Implementation> gles2_implementation_;
 
   GLuint framebuffer_id_ = 0;
+
+  THREAD_CHECKER(thread_checker_);
 
   base::ObserverList<ContextLostObserver>::Unchecked observers_;
 };

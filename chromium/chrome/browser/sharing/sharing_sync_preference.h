@@ -16,8 +16,11 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/sync/protocol/device_info_specifics.pb.h"
 #include "components/sync_device_info/device_info.h"
+
+namespace chrome_browser_sharing {
+class FCMChannelConfiguration;
+}  // namespace chrome_browser_sharing
 
 namespace syncer {
 class DeviceInfoSyncService;
@@ -27,9 +30,11 @@ class LocalDeviceInfoProvider;
 
 namespace user_prefs {
 class PrefRegistrySyncable;
-}
+}  // namespace user_prefs
 
 class PrefService;
+
+enum class SharingDevicePlatform;
 
 // SharingSyncPreference manages all preferences related to Sharing using Sync,
 // such as storing list of user devices synced via Chrome and VapidKey used
@@ -38,13 +43,14 @@ class SharingSyncPreference {
  public:
   // FCM registration status of current device. Not synced across devices.
   struct FCMRegistration {
-    FCMRegistration(std::string authorized_entity, base::Time timestamp);
+    FCMRegistration(base::Optional<std::string> authorized_entity,
+                    base::Time timestamp);
     FCMRegistration(FCMRegistration&& other);
     FCMRegistration& operator=(FCMRegistration&& other);
     ~FCMRegistration();
 
     // Authorized entity registered with FCM.
-    std::string authorized_entity;
+    base::Optional<std::string> authorized_entity;
 
     // Timestamp of latest registration.
     base::Time timestamp;
@@ -82,13 +88,20 @@ class SharingSyncPreference {
 
   void ClearFCMRegistration();
 
-  // Returns the SharingInfo from sync with specified |guid|.
-  base::Optional<syncer::DeviceInfo::SharingInfo> GetSharingInfo(
+  // Returns eanbled feaures of device with specified |device_info|.
+  // |device_info| must not be nullptr.
+  std::set<sync_pb::SharingSpecificFields::EnabledFeatures> GetEnabledFeatures(
+      const syncer::DeviceInfo* device_info) const;
+
+  // Returns the FCMChannelConfiguration of device with specified |guid|.
+  base::Optional<chrome_browser_sharing::FCMChannelConfiguration> GetFCMChannel(
       const std::string& guid) const;
 
-  // Returns the SharingInfo from sync with specified |device_info|.
-  base::Optional<syncer::DeviceInfo::SharingInfo> GetSharingInfo(
-      const syncer::DeviceInfo* device_info) const;
+  // Returns the FCMChannelConfiguration of device with specified |device_info|.
+  base::Optional<chrome_browser_sharing::FCMChannelConfiguration> GetFCMChannel(
+      const syncer::DeviceInfo& device_info) const;
+
+  SharingDevicePlatform GetDevicePlatform(const std::string& guid) const;
 
   base::Optional<syncer::DeviceInfo::SharingInfo> GetLocalSharingInfo() const;
 
@@ -99,20 +112,15 @@ class SharingSyncPreference {
 
   void ClearLocalSharingInfo();
 
+  // Replaces DeviceInfoTracker for testing.
+  void SetDeviceInfoTrackerForTesting(syncer::DeviceInfoTracker* tracker);
+
  private:
   friend class SharingSyncPreferenceTest;
 
   // Returns local SharingInfo stored in preferences.
   static base::Optional<syncer::DeviceInfo::SharingInfo> GetLocalSharingInfo(
       PrefService* prefs);
-
-  // Convert SharingInfo to value readable by legacy devices.
-  static base::Value SharingInfoToValue(
-      const syncer::DeviceInfo::SharingInfo& device);
-
-  // Read SharingInfo from value created by legacy devices.
-  static base::Optional<syncer::DeviceInfo::SharingInfo> ValueToSharingInfo(
-      const base::Value& value);
 
   PrefService* prefs_;
   syncer::DeviceInfoSyncService* device_info_sync_service_;

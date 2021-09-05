@@ -13,6 +13,14 @@ namespace web {
 // Used to control the state of the WebPageTextAccessibility feature.
 extern const base::Feature kWebPageTextAccessibility;
 
+// Feature flag to keep the mobile version for Google SRP. Should be used when
+// the desktop version is requested by default.
+extern const base::Feature kMobileGoogleSRP;
+
+// Feature flag to reload the page instead of showing the SadTab when the
+// renderer crashes.
+extern const base::Feature kReloadSadTab;
+
 }  // namespace web
 
 #endif  // IOS_CHROME_BROWSER_WEB_FEATURES_H_

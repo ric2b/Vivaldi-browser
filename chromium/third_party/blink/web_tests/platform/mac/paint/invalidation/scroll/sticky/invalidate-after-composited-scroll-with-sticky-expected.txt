@@ -5,18 +5,20 @@
       "bounds": [785, 656],
       "contentsOpaque": true,
       "backgroundColor": "#FFFFFF",
-      "paintInvalidations": [
-        {
-          "object": "VerticalScrollbar",
-          "rect": [353, 8, 15, 640],
-          "reason": "scroll control"
-        }
+      "invalidations": [
+        [353, 8, 15, 640]
       ]
     },
     {
       "name": "LayoutNGBlockFlow (sticky positioned) DIV id='sticky'",
       "bounds": [345, 18],
       "transform": 4
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [785, 0],
+      "bounds": [15, 600],
+      "contentsOpaque": true
     }
   ],
   "transforms": [

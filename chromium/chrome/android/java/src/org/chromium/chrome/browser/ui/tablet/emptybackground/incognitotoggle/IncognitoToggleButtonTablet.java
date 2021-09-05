@@ -10,8 +10,9 @@ import android.view.View;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -55,6 +56,8 @@ public class IncognitoToggleButtonTablet extends IncognitoToggleButton {
     protected void setImage(boolean isIncognitoSelected) {
         setImageResource(isIncognitoSelected ? R.drawable.location_bar_incognito_badge
                                              : R.drawable.btn_tabstrip_switch_normal);
+        // Note(david@vivaldi.com): We should call the base method here.
+        super.setImage(isIncognitoSelected);
     }
 
     /**
@@ -70,7 +73,8 @@ public class IncognitoToggleButtonTablet extends IncognitoToggleButton {
 
             mTabModelObserver = new EmptyTabModelObserver() {
                 @Override
-                public void didAddTab(Tab tab, @TabLaunchType int type) {
+                public void didAddTab(
+                        Tab tab, @TabLaunchType int type, @TabCreationState int creationState) {
                     updateButtonVisibility();
                 }
 

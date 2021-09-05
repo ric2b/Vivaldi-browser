@@ -19,6 +19,7 @@
 #include "components/user_manager/user_manager.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/content_switches.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 
 namespace {
 
@@ -33,7 +34,8 @@ constexpr int kTimesToShowSuggestionChip = 1;
 namespace chromeos {
 
 void ReleaseNotesStorage::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterIntegerPref(prefs::kReleaseNotesLastShownMilestone, 0);
+  registry->RegisterIntegerPref(prefs::kReleaseNotesLastShownMilestone,
+                                GetMilestone());
   registry->RegisterIntegerPref(
       prefs::kReleaseNotesSuggestionChipTimesLeftToShow, 0);
 }
@@ -48,20 +50,8 @@ bool ReleaseNotesStorage::ShouldNotify() {
           chromeos::features::kReleaseNotesNotification))
     return false;
 
-  // TODO: remove after fixing http://crbug.com/991767.
-  const base::CommandLine* current_command_line =
-      base::CommandLine::ForCurrentProcess();
-  const bool is_running_test =
-      current_command_line->HasSwitch(::switches::kTestName) ||
-      current_command_line->HasSwitch(::switches::kTestType);
-  if (is_running_test) {
-    DLOG(WARNING) << "Ignoring Release Notes Notification for test.";
-    return false;
-  }
-
   std::string user_email = profile_->GetProfileUserName();
-  if (base::EndsWith(user_email, "@google.com",
-                     base::CompareCase::INSENSITIVE_ASCII) ||
+  if (gaia::IsGoogleInternalAccountEmail(user_email) ||
       (ProfileHelper::Get()->GetUserByProfile(profile_)->HasGaiaAccount() &&
        !profile_->GetProfilePolicyConnector()->IsManaged())) {
     const int last_milestone = profile_->GetPrefs()->GetInteger(

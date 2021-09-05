@@ -24,9 +24,9 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_css_style_sheet_init.h"
 #include "third_party/blink/renderer/core/css/css_import_rule.h"
 #include "third_party/blink/renderer/core/css/css_rule_list.h"
-#include "third_party/blink/renderer/core/css/css_style_sheet_init.h"
 #include "third_party/blink/renderer/core/css/media_list.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
@@ -51,13 +51,11 @@
 
 namespace blink {
 
-using namespace html_names;
-
 class StyleSheetCSSRuleList final : public CSSRuleList {
  public:
   StyleSheetCSSRuleList(CSSStyleSheet* sheet) : style_sheet_(sheet) {}
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(style_sheet_);
     CSSRuleList::Trace(visitor);
   }
@@ -78,8 +76,9 @@ static bool IsAcceptableCSSStyleSheetParent(const Node& parent_node) {
   // Only these nodes can be parents of StyleSheets, and they need to call
   // clearOwnerNode() when moved out of document. Note that destructor of
   // the nodes don't call clearOwnerNode() with Oilpan.
-  return parent_node.IsDocumentNode() || IsHTMLLinkElement(parent_node) ||
-         IsHTMLStyleElement(parent_node) || IsSVGStyleElement(parent_node) ||
+  return parent_node.IsDocumentNode() || IsA<HTMLLinkElement>(parent_node) ||
+         IsA<HTMLStyleElement>(parent_node) ||
+         IsA<SVGStyleElement>(parent_node) ||
          parent_node.getNodeType() == Node::kProcessingInstructionNode;
 }
 #endif
@@ -107,10 +106,12 @@ CSSStyleSheet* CSSStyleSheet::Create(Document& document,
   sheet->ClearOwnerRule();
   contents->RegisterClient(sheet);
   scoped_refptr<MediaQuerySet> media_query_set;
-  if (options->media().IsString())
-    media_query_set = MediaQuerySet::Create(options->media().GetAsString());
-  else
+  if (options->media().IsString()) {
+    media_query_set = MediaQuerySet::Create(options->media().GetAsString(),
+                                            document.GetExecutionContext());
+  } else {
     media_query_set = options->media().GetAsMediaList()->Queries()->Copy();
+  }
   auto* media_list = MakeGarbageCollected<MediaList>(
       media_query_set, const_cast<CSSStyleSheet*>(sheet));
   sheet->SetMedia(media_list);
@@ -451,17 +452,21 @@ int CSSStyleSheet::addRule(const String& selector,
 }
 
 ScriptPromise CSSStyleSheet::replace(ScriptState* script_state,
-                                     const String& text,
-                                     ExceptionState& exception_state) {
+                                     const String& text) {
   if (!is_constructed_) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kNotAllowedError,
-        "Can't call replace on non-constructed CSSStyleSheets.");
+    return ScriptPromise::RejectWithDOMException(
+        script_state,
+        MakeGarbageCollected<DOMException>(
+            DOMExceptionCode::kNotAllowedError,
+            "Can't call replace on non-constructed CSSStyleSheets."));
   }
   // Parses the text synchronously, loads import rules asynchronously.
-  SetText(text, true /* allow_import_rules */, exception_state);
+  SetText(text, true /* allow_import_rules */, nullptr);
   if (!IsLoading())
     return ScriptPromise::Cast(script_state, ToV8(this, script_state));
+  // We're loading a stylesheet that contains @import rules. This is deprecated.
+  Deprecation::CountDeprecation(OwnerDocument(),
+                                WebFeature::kCssStyleSheetReplaceWithImport);
   resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   return resolver_->Promise();
 }
@@ -469,11 +474,11 @@ ScriptPromise CSSStyleSheet::replace(ScriptState* script_state,
 void CSSStyleSheet::replaceSync(const String& text,
                                 ExceptionState& exception_state) {
   if (!is_constructed_) {
-    exception_state.ThrowDOMException(
+    return exception_state.ThrowDOMException(
         DOMExceptionCode::kNotAllowedError,
         "Can't call replaceSync on non-constructed CSSStyleSheets.");
   }
-  SetText(text, false /* allow_import_rules */, exception_state);
+  SetText(text, false /* allow_import_rules */, &exception_state);
 }
 
 void CSSStyleSheet::ResolveReplacePromiseIfNeeded(bool load_error_occured) {
@@ -566,16 +571,17 @@ void CSSStyleSheet::SetLoadCompleted(bool completed) {
 
 void CSSStyleSheet::SetText(const String& text,
                             bool allow_import_rules,
-                            ExceptionState& exception_state) {
+                            ExceptionState* exception_state) {
   child_rule_cssom_wrappers_.clear();
 
   CSSStyleSheet::RuleMutationScope mutation_scope(this);
   contents_->ClearRules();
   if (contents_->ParseString(text, allow_import_rules) ==
       ParseSheetResult::kHasUnallowedImportRule) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
-                                      "@import rules are not allowed when "
-                                      "creating stylesheet synchronously.");
+    DCHECK(exception_state);
+    exception_state->ThrowDOMException(DOMExceptionCode::kNotAllowedError,
+                                       "@import rules are not allowed when "
+                                       "creating stylesheet synchronously.");
   }
 }
 
@@ -588,7 +594,8 @@ bool CSSStyleSheet::IsAlternate() const {
   if (owner_node_) {
     auto* owner_element = DynamicTo<Element>(owner_node_.Get());
     return owner_element &&
-           owner_element->getAttribute(kRelAttr).Contains("alternate");
+           owner_element->FastGetAttribute(html_names::kRelAttr)
+               .Contains("alternate");
   }
   return alternate_from_constructor_;
 }
@@ -599,17 +606,18 @@ bool CSSStyleSheet::CanBeActivated(
     return false;
 
   if (owner_node_ && owner_node_->IsInShadowTree()) {
-    if (IsHTMLStyleElement(owner_node_) || IsSVGStyleElement(owner_node_))
+    if (IsA<HTMLStyleElement>(owner_node_.Get()) ||
+        IsA<SVGStyleElement>(owner_node_.Get()))
       return true;
-    if (IsHTMLLinkElement(owner_node_) &&
-        ToHTMLLinkElement(owner_node_.Get())->IsImport())
+    auto* html_link_element = DynamicTo<HTMLLinkElement>(owner_node_.Get());
+    if (html_link_element && html_link_element->IsImport())
       return !IsAlternate();
   }
 
+  auto* html_link_element = DynamicTo<HTMLLinkElement>(owner_node_.Get());
   if (!owner_node_ ||
       owner_node_->getNodeType() == Node::kProcessingInstructionNode ||
-      !IsHTMLLinkElement(owner_node_) ||
-      !ToHTMLLinkElement(owner_node_.Get())->IsEnabledViaScript()) {
+      !html_link_element || !html_link_element->IsEnabledViaScript()) {
     if (!title_.IsEmpty() && title_ != current_preferrable_name)
       return false;
   }
@@ -620,7 +628,7 @@ bool CSSStyleSheet::CanBeActivated(
   return true;
 }
 
-void CSSStyleSheet::Trace(blink::Visitor* visitor) {
+void CSSStyleSheet::Trace(Visitor* visitor) {
   visitor->Trace(contents_);
   visitor->Trace(owner_node_);
   visitor->Trace(owner_rule_);

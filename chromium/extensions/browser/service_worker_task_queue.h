@@ -13,7 +13,10 @@
 #include "base/memory/weak_ptr.h"
 #include "base/version.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "extensions/browser/lazy_context_id.h"
 #include "extensions/browser/lazy_context_task_queue.h"
+#include "extensions/browser/service_worker/worker_id.h"
+#include "extensions/common/activation_sequence.h"
 #include "extensions/common/extension_id.h"
 #include "url/gurl.h"
 
@@ -24,13 +27,49 @@ class ServiceWorkerContext;
 
 namespace extensions {
 class Extension;
-class LazyContextId;
 
+// A service worker based background specific LazyContextTaskQueue.
+//
+// This class queues up and runs tasks added through AddPendingTask, after
+// registering and starting extension's background Service Worker script if
+// necessary.
+//
+// There are two sets of concepts/events that are important to this class:
+//
+// C1) Registering and starting a background worker:
+//   Upon extension activation, this class registers the extension's
+//   background worker if necessary. After that, if it has queued up tasks
+//   in |pending_tasks_|, then it moves on to starting the worker. Registration
+//   and start are initiated from this class. Once started, the worker is
+//   considered browser process ready. These workers are stored in
+//   |worker_state_map_| with |browser_ready| = false until we run tasks.
+//
+// C2) Listening for worker's state update from the renderer:
+//   - Init (DidInitializeServiceWorkerContext) when the worker is initialized,
+//       JavaScript starts running after this.
+//   - Start (DidStartServiceWorkerContext) when the worker has reached
+//       loadstop. The worker is considered ready to run tasks from this task
+//       queue. The worker's entry in |worker_state_map_| will carry
+//       |renderer_ready| = true.
+//   - Stop (DidStopServiceWorkerContext) when the worker is destroyed, we clear
+//       its |renderer_ready| status from |worker_state_map_|.
+//
+// Once a worker reaches readiness in both browser process
+// (DidStartWorkerForScope) and worker process (DidStartServiceWorkerContext),
+// we consider the worker to be ready to run tasks from |pending_tasks_|.
+// Note that events from #C1 and #C2 are somewhat independent, e.g. it is
+// possible to see an Init state update from #C2 before #C1 has seen a start
+// worker completion.
+//
+// Sequences of extension activation:
+//   This class also assigns a unique sequence id to an extension activation so
+//   that it can differentiate between two activations of a particular extension
+//   (e.g. reloading an extension can cause two activations). |pending_tasks_|,
+//   worker registration and start (#C1) have sequence ids attached to them.
+//   The sequence is expired upon extension deactivation, and tasks are dropped
+//   from |pending_tasks_|.
+//
 // TODO(lazyboy): Clean up queue when extension is unloaded/uninstalled.
-// TODO(lazyboy): Describe the flow of a task in this queue: i.e. when
-// a worker receives DidRegisterServiceWorker, DidStartWorkerForScope and
-// DidStartServiceWorkerContext events and how queued tasks react to these
-// events.
 class ServiceWorkerTaskQueue : public KeyedService,
                                public LazyContextTaskQueue {
  public:
@@ -64,15 +103,23 @@ class ServiceWorkerTaskQueue : public KeyedService,
   // has completed executing.
   void DidStartServiceWorkerContext(int render_process_id,
                                     const ExtensionId& extension_id,
+                                    ActivationSequence activation_sequence,
                                     const GURL& service_worker_scope,
                                     int64_t service_worker_version_id,
                                     int thread_id);
   // Called once an extension Service Worker was destroyed.
   void DidStopServiceWorkerContext(int render_process_id,
                                    const ExtensionId& extension_id,
+                                   ActivationSequence activation_sequence,
                                    const GURL& service_worker_scope,
                                    int64_t service_worker_version_id,
                                    int thread_id);
+
+  // Returns the current ActivationSequence for an extension, if the extension
+  // is currently activated. Returns base::nullopt if the extension isn't
+  // activated.
+  base::Optional<ActivationSequence> GetCurrentSequence(
+      const ExtensionId& extension_id) const;
 
   class TestObserver {
    public:
@@ -83,7 +130,9 @@ class ServiceWorkerTaskQueue : public KeyedService,
     // |will_register_service_worker| is true if a Service Worker will be
     // registered.
     virtual void OnActivateExtension(const ExtensionId& extension_id,
-                                     bool will_register_service_worker) = 0;
+                                     bool will_register_service_worker) {}
+    virtual void DidStartWorkerFail(const ExtensionId& extension_id,
+                                    size_t num_pending_tasks) {}
 
    private:
     DISALLOW_COPY_AND_ASSIGN(TestObserver);
@@ -91,28 +140,39 @@ class ServiceWorkerTaskQueue : public KeyedService,
 
   static void SetObserverForTest(TestObserver* observer);
 
+  size_t GetNumPendingTasksForTest(const LazyContextId& lazy_context_id);
+
  private:
+  using SequencedContextId = std::pair<LazyContextId, ActivationSequence>;
+
+  class WorkerState;
+
   static void DidStartWorkerForScopeOnCoreThread(
-      const LazyContextId& context_id,
+      const SequencedContextId& context_id,
       base::WeakPtr<ServiceWorkerTaskQueue> task_queue,
       int64_t version_id,
       int process_id,
       int thread_id);
+  static void DidStartWorkerFailOnCoreThread(
+      const SequencedContextId& context_id,
+      base::WeakPtr<ServiceWorkerTaskQueue> task_queue);
   static void StartServiceWorkerOnCoreThreadToRunTasks(
       base::WeakPtr<ServiceWorkerTaskQueue> task_queue_weak,
-      const LazyContextId& context_id,
+      const SequencedContextId& context_id,
       content::ServiceWorkerContext* service_worker_context);
 
-  void RunTasksAfterStartWorker(const LazyContextId& context_id);
+  void RunTasksAfterStartWorker(const SequencedContextId& context_id);
 
-  void DidRegisterServiceWorker(const ExtensionId& extension_id, bool success);
+  void DidRegisterServiceWorker(const SequencedContextId& context_id,
+                                bool success);
   void DidUnregisterServiceWorker(const ExtensionId& extension_id,
                                   bool success);
 
-  void DidStartWorkerForScope(const LazyContextId& context_id,
+  void DidStartWorkerForScope(const SequencedContextId& context_id,
                               int64_t version_id,
                               int process_id,
                               int thread_id);
+  void DidStartWorkerFail(const SequencedContextId& context_id);
 
   // The following three methods retrieve, store, and remove information
   // about Service Worker registration of SW based background pages:
@@ -132,23 +192,19 @@ class ServiceWorkerTaskQueue : public KeyedService,
   // If the worker with |context_id| has seen worker start
   // (DidStartWorkerForScope) and load (DidStartServiceWorkerContext) then runs
   // all pending tasks for that worker.
-  void RunPendingTasksIfWorkerReady(const LazyContextId& context_id,
-                                    int64_t version_id,
-                                    int process_id,
-                                    int thread_id);
+  void RunPendingTasksIfWorkerReady(const SequencedContextId& context_id);
 
-  // Set of extension ids that hasn't completed Service Worker registration.
-  std::set<ExtensionId> pending_registrations_;
+  // Returns true if |sequence| is the current activation sequence for
+  // |extension_id|.
+  bool IsCurrentSequence(const ExtensionId& extension_id,
+                         ActivationSequence sequence) const;
 
-  // Set of workers that has seen DidStartWorkerForScope.
-  std::set<LazyContextId> started_workers_;
+  WorkerState* GetWorkerState(const SequencedContextId& context_id);
 
-  // Set of workers that has seen DidStartServiceWorkerContext.
-  std::set<LazyContextId> loaded_workers_;
+  int next_activation_sequence_ = 0;
 
-  // Pending tasks for a |LazyContextId|.
-  // These tasks will be run once the corresponding worker becomes ready.
-  std::map<LazyContextId, std::vector<PendingTask>> pending_tasks_;
+  // The state of worker of each activated extension.
+  std::map<SequencedContextId, WorkerState> worker_state_map_;
 
   content::BrowserContext* const browser_context_ = nullptr;
 
@@ -158,6 +214,9 @@ class ServiceWorkerTaskQueue : public KeyedService,
   // TODO(crbug.com/939664): Make this better by passing in something that
   // will manage storing and retrieving this data.
   std::unordered_map<ExtensionId, base::Version> off_the_record_registrations_;
+
+  // Current ActivationSequence for each activated extensions.
+  std::map<ExtensionId, ActivationSequence> activation_sequences_;
 
   base::WeakPtrFactory<ServiceWorkerTaskQueue> weak_factory_{this};
 

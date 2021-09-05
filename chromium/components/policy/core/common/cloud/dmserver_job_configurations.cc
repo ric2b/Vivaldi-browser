@@ -61,11 +61,6 @@ const char* JobTypeToRequestType(
     case DeviceManagementService::JobConfiguration::
         TYPE_ACTIVE_DIRECTORY_PLAY_ACTIVITY:
       return dm_protocol::kValueRequestActiveDirectoryPlayActivity;
-    case DeviceManagementService::JobConfiguration::TYPE_REQUEST_LICENSE_TYPES:
-      return dm_protocol::kValueRequestCheckDeviceLicense;
-    case DeviceManagementService::JobConfiguration::
-        TYPE_UPLOAD_APP_INSTALL_REPORT:
-      return dm_protocol::kValueRequestAppInstallReport;
     case DeviceManagementService::JobConfiguration::TYPE_TOKEN_ENROLLMENT:
       return dm_protocol::kValueRequestTokenEnrollment;
     case DeviceManagementService::JobConfiguration::TYPE_CHROME_DESKTOP_REPORT:
@@ -81,6 +76,12 @@ const char* JobTypeToRequestType(
     case DeviceManagementService::JobConfiguration::
         TYPE_UPLOAD_REAL_TIME_REPORT:
       NOTREACHED() << "Not a DMServer request type" << type;
+      break;
+    case DeviceManagementService::JobConfiguration::TYPE_CHROME_OS_USER_REPORT:
+      return dm_protocol::kValueRequestChromeOsUserReport;
+    case DeviceManagementService::JobConfiguration::
+        TYPE_CERT_PROVISIONING_REQUEST:
+      return dm_protocol::kValueRequestCertProvisioningRequest;
   }
   NOTREACHED() << "Invalid job type " << type;
   return "";
@@ -272,7 +273,9 @@ RegistrationJobConfiguration::RegistrationJobConfiguration(
                                oauth_token,
                                std::move(callback)) {}
 
-void RegistrationJobConfiguration::OnBeforeRetry() {
+void RegistrationJobConfiguration::OnBeforeRetry(
+    int response_code,
+    const std::string& response_body) {
   // If the initial request managed to get to the server but the response
   // didn't arrive at the client then retrying with the same client ID will
   // fail. Set the re-registration flag so that the server accepts it.

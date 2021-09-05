@@ -16,13 +16,18 @@
 #include "components/viz/common/display/update_vsync_parameters_callback.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/gpu/gpu_vsync_callback.h"
+#include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/service/display/software_output_device.h"
 #include "components/viz/service/viz_service_export.h"
+#include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
 #include "gpu/ipc/common/surface_handle.h"
+#include "gpu/ipc/gpu_task_scheduler_helper.h"
+#include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/overlay_transform.h"
+#include "ui/gfx/surface_origin.h"
 #include "ui/latency/latency_info.h"
 
 namespace gfx {
@@ -42,6 +47,11 @@ class SkiaOutputSurface;
 // can provide platform-specific behaviour.
 class VIZ_SERVICE_EXPORT OutputSurface {
  public:
+  enum Type {
+    kSoftware = 0,
+    kOpenGL = 1,
+    kVulkan = 2,
+  };
   struct Capabilities {
     Capabilities();
     Capabilities(const Capabilities& capabilities);
@@ -50,14 +60,16 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     // Whether this output surface renders to the default OpenGL zero
     // framebuffer or to an offscreen framebuffer.
     bool uses_default_gl_framebuffer = true;
-    // Whether this OutputSurface is flipped or not.
-    bool flipped_output_surface = false;
+    // Where (0,0) is on this OutputSurface.
+    gfx::SurfaceOrigin output_surface_origin = gfx::SurfaceOrigin::kBottomLeft;
     // Whether this OutputSurface supports stencil operations or not.
     // Note: HasExternalStencilTest() must return false when an output surface
     // has been configured for stencil usage.
     bool supports_stencil = false;
     // Whether this OutputSurface supports post sub buffer or not.
     bool supports_post_sub_buffer = false;
+    // Whether this OutputSurface supports commit overlay planes.
+    bool supports_commit_overlay_planes = false;
     // Whether this OutputSurface supports gpu vsync callbacks.
     bool supports_gpu_vsync = false;
     // Whether this OutputSurface supports pre transform. If it is supported,
@@ -68,8 +80,6 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     bool supports_pre_transform = false;
     // Whether this OutputSurface supports direct composition layers.
     bool supports_dc_layers = false;
-    // Whether this OutputSurface supports direct composition video overlays.
-    bool supports_dc_video_overlays = false;
     // Whether this OutputSurface should skip DrawAndSwap(). This is true for
     // the unified display on Chrome OS. All drawing is handled by the physical
     // displays so the unified display should skip that work.
@@ -84,10 +94,19 @@ class VIZ_SERVICE_EXPORT OutputSurface {
     // This is copied over from gpu feature info since there is no easy way to
     // share that out of skia output surface.
     bool android_surface_control_feature_enabled = false;
+    // True if the buffer content will be preserved after presenting.
+    bool preserve_buffer_content = false;
+    // The SkColorType and GrBackendFormat for non-HDR and HDR.
+    // TODO(penghuang): remove SkColorType and GrBackendFormat when
+    // OutputSurface uses the |format| passed to Reshape().
+    SkColorType sk_color_type = kUnknown_SkColorType;
+    GrBackendFormat gr_backend_format;
+    SkColorType sk_color_type_for_hdr = kUnknown_SkColorType;
+    GrBackendFormat gr_backend_format_for_hdr;
   };
 
   // Constructor for skia-based compositing.
-  OutputSurface();
+  explicit OutputSurface(Type type);
   // Constructor for GL-based compositing.
   explicit OutputSurface(scoped_refptr<ContextProvider> context_provider);
   // Constructor for software compositing.
@@ -96,6 +115,7 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   virtual ~OutputSurface();
 
   const Capabilities& capabilities() const { return capabilities_; }
+  Type type() const { return type_; }
 
   // Obtain the 3d context or the software device associated with this output
   // surface. Either of these may return a null pointer, but not both.
@@ -136,13 +156,13 @@ class VIZ_SERVICE_EXPORT OutputSurface {
   // Get the texture for the main image's overlay.
   virtual unsigned GetOverlayTextureId() const = 0;
 
-  // Get the format for the main image's overlay.
-  virtual gfx::BufferFormat GetOverlayBufferFormat() const = 0;
+  // Returns the |mailbox| corresponding to the main image's overlay.
+  virtual gpu::Mailbox GetOverlayMailbox() const;
 
   virtual void Reshape(const gfx::Size& size,
                        float device_scale_factor,
                        const gfx::ColorSpace& color_space,
-                       bool has_alpha,
+                       gfx::BufferFormat format,
                        bool use_stencil) = 0;
 
   virtual bool HasExternalStencilTest() const = 0;
@@ -207,10 +227,6 @@ class VIZ_SERVICE_EXPORT OutputSurface {
 
   virtual base::ScopedClosureRunner GetCacheBackBufferCb();
 
-  // Only used for pre-OOP-D code path of BrowserCompositorOutputSurface.
-  // TODO(weiliangc): Remove it when reflector code is removed.
-  virtual bool IsSoftwareMirrorMode() const;
-
   // If set to true, the OutputSurface must deliver
   // OutputSurfaceclient::DidSwapWithSize notifications to its client.
   // OutputSurfaces which support delivering swap size notifications should
@@ -223,12 +239,21 @@ class VIZ_SERVICE_EXPORT OutputSurface {
       const gfx::SwapResponse& response,
       std::vector<ui::LatencyInfo>* latency_info);
 
+  // This is used to share the same method to schedule task on the gpu thread
+  // between the output surface and the overlay processor.
+  // TODO(weiliangc): Consider making this outside of output surface and pass in
+  // instead of passing it out here.
+  virtual scoped_refptr<gpu::GpuTaskSchedulerHelper>
+  GetGpuTaskSchedulerHelper() = 0;
+  virtual gpu::MemoryTracker* GetMemoryTracker() = 0;
+
  protected:
   struct OutputSurface::Capabilities capabilities_;
   scoped_refptr<ContextProvider> context_provider_;
   std::unique_ptr<SoftwareOutputDevice> software_device_;
 
  private:
+  const Type type_;
   SkMatrix44 color_matrix_;
 
   DISALLOW_COPY_AND_ASSIGN(OutputSurface);

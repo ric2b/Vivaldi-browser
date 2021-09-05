@@ -5,11 +5,15 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_GFX_PARENT_OUTPUT_SURFACE_H_
 #define ANDROID_WEBVIEW_BROWSER_GFX_PARENT_OUTPUT_SURFACE_H_
 
+#include <vector>
+
 #include "android_webview/browser/gfx/aw_gl_surface.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "components/viz/service/display/output_surface.h"
+#include "ui/latency/latency_info.h"
+#include "ui/latency/latency_tracker.h"
 
 namespace gfx {
 struct PresentationFeedback;
@@ -34,7 +38,7 @@ class ParentOutputSurface : public viz::OutputSurface {
   void Reshape(const gfx::Size& size,
                float scale_factor,
                const gfx::ColorSpace& color_space,
-               bool has_alpha,
+               gfx::BufferFormat format,
                bool use_stencil) override;
   void SwapBuffers(viz::OutputSurfaceFrame frame) override;
   bool HasExternalStencilTest() const override;
@@ -42,20 +46,25 @@ class ParentOutputSurface : public viz::OutputSurface {
   uint32_t GetFramebufferCopyTextureFormat() override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
-  gfx::BufferFormat GetOverlayBufferFormat() const override;
   unsigned UpdateGpuFence() override;
   void SetUpdateVSyncParametersCallback(
       viz::UpdateVSyncParametersCallback callback) override;
   void SetDisplayTransformHint(gfx::OverlayTransform transform) override {}
   gfx::OverlayTransform GetDisplayTransform() override;
+  scoped_refptr<gpu::GpuTaskSchedulerHelper> GetGpuTaskSchedulerHelper()
+      override;
+  gpu::MemoryTracker* GetMemoryTracker() override;
 
  private:
-  void OnPresentation(const gfx::PresentationFeedback& feedback);
+  void OnPresentation(base::TimeTicks swap_start,
+                      std::vector<ui::LatencyInfo> latency_info,
+                      const gfx::PresentationFeedback& feedback);
 
   viz::OutputSurfaceClient* client_ = nullptr;
   // This is really a layering violation but needed for hooking up presentation
   // feedbacks properly.
   scoped_refptr<AwGLSurface> gl_surface_;
+  ui::LatencyTracker latency_tracker_;
   base::WeakPtrFactory<ParentOutputSurface> weak_ptr_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(ParentOutputSurface);
 };

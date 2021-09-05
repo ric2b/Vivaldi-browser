@@ -8,9 +8,8 @@
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/mojom/presentation/presentation.mojom-blink.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -32,7 +31,7 @@ class PresentationAvailabilityState;
 class MODULES_EXPORT PresentationController
     : public GarbageCollected<PresentationController>,
       public Supplement<LocalFrame>,
-      public ContextLifecycleObserver,
+      public ExecutionContextLifecycleObserver,
       public mojom::blink::PresentationController {
   USING_GARBAGE_COLLECTED_MIXIN(PresentationController);
 
@@ -49,7 +48,7 @@ class MODULES_EXPORT PresentationController
   static PresentationController* FromContext(ExecutionContext*);
 
   // Implementation of Supplement.
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   // Called by the Presentation object to advertize itself to the controller.
   // The Presentation object is kept as a WeakMember in order to avoid keeping
@@ -80,8 +79,8 @@ class MODULES_EXPORT PresentationController
   virtual void RemoveAvailabilityObserver(PresentationAvailabilityObserver*);
 
  private:
-  // Implementation of ContextLifecycleObserver.
-  void ContextDestroyed(ExecutionContext*) override;
+  // Implementation of ExecutionContextLifecycleObserver.
+  void ContextDestroyed() override;
 
   // mojom::blink::PresentationController implementation.
   void OnScreenAvailabilityUpdated(const KURL&,

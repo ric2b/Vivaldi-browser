@@ -36,12 +36,6 @@ class CreditCard;
 // A given maximum is enforced to minimize the number of buckets generated.
 extern const int kMaxBucketsCount;
 
-// Reduce FormSignature space (in UKM) to a small range for privacy reasons.
-int64_t HashFormSignature(autofill::FormSignature form_signature);
-
-// Reduce FieldSignature space (in UKM) to a small range for privacy reasons.
-int64_t HashFieldSignature(autofill::FieldSignature field_signature);
-
 class AutofillMetrics {
  public:
   enum AutofillProfileAction {
@@ -989,10 +983,6 @@ class AutofillMetrics {
   static void LogSubmittedServerCardExpirationStatusMetric(
       SubmittedServerCardExpirationStatusMetric metric);
 
-  // When a masked card is compared with another card, logs whether the cards'
-  // networks match.
-  static void LogMaskedCardComparisonNetworksMatch(bool matches);
-
   // When credit card save is not offered (either at all on mobile or by simply
   // not showing the bubble on desktop), logs the occurrence.
   static void LogCreditCardSaveNotOfferedDueToMaxStrikesMetric(
@@ -1157,6 +1147,21 @@ class AutofillMetrics {
   static void LogUserPerceivedLatencyOnCardSelection(PreflightCallEvent event,
                                                      bool fido_auth_enabled);
 
+  // Logs the duration of any user-perceived latency between selecting a Google
+  // Payments server card and seeing a card unmask prompt (CVC or FIDO).
+  static void LogUserPerceivedLatencyOnCardSelectionDuration(
+      const base::TimeDelta duration);
+
+  // Logs whether or not the verifying pending dialog timed out between
+  // selecting a Google Payments server card and seeing a card unmask prompt.
+  static void LogUserPerceivedLatencyOnCardSelectionTimedOut(bool did_time_out);
+
+  // Logs the duration of WebAuthn's
+  // IsUserVerifiablePlatformAuthenticatorAvailable() call. It is supposedly an
+  // extremely quick IPC.
+  static void LogUserVerifiabilityCheckDuration(
+      const base::TimeDelta& duration);
+
   // Logs the result of a WebAuthn prompt.
   static void LogWebauthnResult(WebauthnFlowEvent event,
                                 WebauthnResultMetric metric);
@@ -1223,8 +1228,24 @@ class AutofillMetrics {
       bool enabled,
       AutofillSyncSigninState sync_state);
 
+  // This should be called each time a page containing forms is loaded.
+  static void LogIsAutofillProfileEnabledAtPageLoad(
+      bool enabled,
+      AutofillSyncSigninState sync_state);
+
+  // This should be called each time a page containing forms is loaded.
+  static void LogIsAutofillCreditCardEnabledAtPageLoad(
+      bool enabled,
+      AutofillSyncSigninState sync_state);
+
   // This should be called each time a new chrome profile is launched.
   static void LogIsAutofillEnabledAtStartup(bool enabled);
+
+  // This should be called each time a new chrome profile is launched.
+  static void LogIsAutofillProfileEnabledAtStartup(bool enabled);
+
+  // This should be called each time a new chrome profile is launched.
+  static void LogIsAutofillCreditCardEnabledAtStartup(bool enabled);
 
   // Records the number of stored address profiles. This is be called each time
   // a new chrome profile is launched.

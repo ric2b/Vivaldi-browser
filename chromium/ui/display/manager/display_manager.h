@@ -197,10 +197,10 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
                           Display::Rotation rotation,
                           Display::RotationSource source);
 
-  // Sets the external display's configuration, including resolution change,
-  // ui-scale change, and device scale factor change. Returns true if it changes
-  // the display resolution so that the caller needs to show a notification in
-  // case the new resolution actually doesn't work.
+  // Sets the external display's configuration, including resolution change and
+  // device scale factor change. Returns true if it changes the display
+  // resolution so that the caller needs to show a notification in case the new
+  // resolution actually doesn't work.
   bool SetDisplayMode(int64_t display_id,
                       const ManagedDisplayMode& display_mode);
 
@@ -208,11 +208,8 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // |overscan_insets| is null if the display has no custom overscan insets.
   // |touch_calibration_data| is null if the display has no touch calibration
   // associated data.
-  // |ui_scale| will be negative if this is not the first boot with display zoom
-  // mode enabled.
   void RegisterDisplayProperty(int64_t display_id,
                                Display::Rotation rotation,
-                               float ui_scale,
                                const gfx::Insets* overscan_insets,
                                const gfx::Size& resolution_in_pixels,
                                float device_scale_factor,
@@ -278,6 +275,16 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   const Display& GetDisplayAt(size_t index) const;
 
   const Display& GetPrimaryDisplayCandidate() const;
+
+  // This is called by ScreenAsh when the primary display is requested, but
+  // there is no valid display. It provides a display that
+  // - has a non-empty screen rect
+  // - has a valid gfx::BufferFormat
+  // This exists to enable buggy observers assume that the primary display
+  // will always have non-zero size and a valid gfx::BufferFormat. The right
+  // solution to this problem is to fix those observers.
+  // https://crbug.com/866714, https://crbug.com/1057501
+  static const Display& GetFakePrimaryDisplay();
 
   // Returns the logical number of displays. This returns 1 when displays are
   // mirrored.
@@ -404,14 +411,11 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Returns the human-readable name for the display |id|.
   std::string GetDisplayNameForId(int64_t id) const;
 
-  // Returns the display id that is capable of UI scaling. On device, this
-  // returns internal display's ID if its device scale factor is 2, or invalid
-  // ID if such internal display doesn't exist. On linux desktop, this returns
-  // the first display ID.
-  int64_t GetDisplayIdForUIScaling() const;
-
   // Returns true if mirror mode should be set on for the specified displays.
-  bool ShouldSetMirrorModeOn(const DisplayIdList& id_list);
+  // If |should_check_hardware_mirroring| is true, the state of
+  // IsInHardwareMirroringMode() will also be taken into account.
+  bool ShouldSetMirrorModeOn(const DisplayIdList& id_list,
+                             bool should_check_hardware_mirroring);
 
   // Change the mirror mode. |mixed_params| will be ignored if mirror mode is
   // off or normal. When mirror mode is off, display mode will be set to default
@@ -492,12 +496,6 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Delegated from the Screen implementation.
   void AddObserver(DisplayObserver* observer);
   void RemoveObserver(DisplayObserver* observer);
-
-  // Returns a Display object for a secondary display if it exists or returns
-  // invalid display if there is no secondary display.  TODO(rjkroege): Display
-  // swapping is an obsolete feature pre-dating multi-display support so remove
-  // it.
-  const Display& GetSecondaryDisplay() const;
 
  private:
   friend class test::DisplayManagerTestApi;
@@ -673,7 +671,9 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // this is a counter to enable multiple active sessions at once.
   int screen_capture_active_counter_ = 0;
 
-  base::Closure created_mirror_window_;
+  // Holds a callback to help RunPendingTasksForTest() to exit at the correct
+  // time.
+  base::OnceClosure created_mirror_window_;
 
   base::ObserverList<DisplayObserver> observers_;
 

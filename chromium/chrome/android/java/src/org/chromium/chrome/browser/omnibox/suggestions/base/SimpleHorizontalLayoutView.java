@@ -53,23 +53,29 @@ class SimpleHorizontalLayoutView extends ViewGroup {
         // Note: We layout children in the following order:
         // - first-to-last in LTR orientation and
         // - last-to-first in RTL orientation.
-        boolean isRtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        final boolean isRtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        final int increment = isRtl ? -1 : 1;
+        final int height = getMeasuredHeight();
         int index = isRtl ? getChildCount() - 1 : 0;
-        int increment = isRtl ? -1 : 1;
 
-        left = 0;
+        left = getPaddingLeft();
 
         for (; index >= 0 && index < getChildCount(); index += increment) {
             View v = getChildAt(index);
             if (v.getVisibility() == GONE) continue;
-            v.layout(left, 0, left + v.getMeasuredWidth(), bottom - top);
+
+            int verticalMargin = (height - v.getMeasuredHeight()) / 2;
+            if (verticalMargin < 0) verticalMargin = 0;
+
+            v.layout(left, verticalMargin, left + v.getMeasuredWidth(), height - verticalMargin);
             left += v.getMeasuredWidth();
         }
     }
 
     @Override
     protected void onMeasure(int widthSpec, int heightSpec) {
-        int contentViewWidth = MeasureSpec.getSize(widthSpec);
+        final int widthPx = MeasureSpec.getSize(widthSpec);
+        int contentViewWidth = widthPx - getPaddingLeft() - getPaddingRight();
         View dynamicView = null;
 
         // Compute and apply space we can offer to content view.
@@ -106,9 +112,11 @@ class SimpleHorizontalLayoutView extends ViewGroup {
             if (v == dynamicView) continue;
 
             v.measure(MeasureSpec.makeMeasureSpec(v.getLayoutParams().width, MeasureSpec.EXACTLY),
-                    heightSpec);
+                    getChildMeasureSpec(heightSpec, 0, v.getLayoutParams().height));
         }
 
-        setMeasuredDimension(MeasureSpec.getSize(widthSpec), MeasureSpec.getSize(heightSpec));
+        setMeasuredDimension(widthPx,
+                MeasureSpec.makeMeasureSpec(
+                        heightPx + getPaddingTop() + getPaddingBottom(), MeasureSpec.EXACTLY));
     }
 }

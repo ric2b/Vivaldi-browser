@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "components/autofill_assistant/browser/client_status.h"
 #include "components/autofill_assistant/browser/details.h"
 #include "components/autofill_assistant/browser/info_box.h"
 #include "components/autofill_assistant/browser/state.h"
@@ -30,10 +31,11 @@ namespace autofill_assistant {
 
 class Service;
 class WebController;
-class ClientMemory;
 struct ClientSettings;
 class TriggerContext;
 class WebsiteLoginFetcher;
+class EventHandler;
+class UserModel;
 
 class ScriptExecutorDelegate {
  public:
@@ -49,13 +51,15 @@ class ScriptExecutorDelegate {
   virtual const GURL& GetDeeplinkURL() = 0;
   virtual Service* GetService() = 0;
   virtual WebController* GetWebController() = 0;
-  virtual ClientMemory* GetClientMemory() = 0;
   virtual const TriggerContext* GetTriggerContext() = 0;
   virtual autofill::PersonalDataManager* GetPersonalDataManager() = 0;
   virtual WebsiteLoginFetcher* GetWebsiteLoginFetcher() = 0;
   virtual content::WebContents* GetWebContents() = 0;
   virtual std::string GetAccountEmailAddress() = 0;
-  virtual void EnterState(AutofillAssistantState state) = 0;
+  virtual std::string GetLocale() = 0;
+
+  // Enters the given state. Returns true if the state was changed.
+  virtual bool EnterState(AutofillAssistantState state) = 0;
 
   // Make the area of the screen that correspond to the given elements
   // touchable.
@@ -68,8 +72,10 @@ class ScriptExecutorDelegate {
   virtual void SetInfoBox(const InfoBox& info_box) = 0;
   virtual void ClearInfoBox() = 0;
   virtual void SetCollectUserDataOptions(
-      std::unique_ptr<CollectUserDataOptions> collect_user_data_options,
-      std::unique_ptr<UserData> user_data) = 0;
+      CollectUserDataOptions* collect_user_data_options) = 0;
+  virtual void WriteUserData(
+      base::OnceCallback<void(UserData*, UserData::FieldChange*)>
+          write_callback) = 0;
   virtual void SetProgress(int progress) = 0;
   virtual void SetProgressVisible(bool visible) = 0;
   virtual void SetUserActions(
@@ -78,9 +84,14 @@ class ScriptExecutorDelegate {
   virtual void SetViewportMode(ViewportMode mode) = 0;
   virtual void SetPeekMode(ConfigureBottomSheetProto::PeekMode peek_mode) = 0;
   virtual ConfigureBottomSheetProto::PeekMode GetPeekMode() = 0;
+  virtual void ExpandBottomSheet() = 0;
+  virtual void CollapseBottomSheet() = 0;
   virtual bool SetForm(
       std::unique_ptr<FormProto> form,
-      base::RepeatingCallback<void(const FormProto::Result*)> callback) = 0;
+      base::RepeatingCallback<void(const FormProto::Result*)> changed_callback,
+      base::OnceCallback<void(const ClientStatus&)> cancel_callback) = 0;
+  virtual UserModel* GetUserModel() = 0;
+  virtual EventHandler* GetEventHandler() = 0;
 
   // Makes no area of the screen touchable.
   void ClearTouchableElementArea() {
@@ -122,6 +133,22 @@ class ScriptExecutorDelegate {
   // Removes a previously registered listener. Does nothing if no such listeners
   // exists.
   virtual void RemoveListener(Listener* listener) = 0;
+
+  // Set how the sheet should behave when entering a prompt state.
+  virtual void SetExpandSheetForPromptAction(bool expand) = 0;
+
+  // Set the domains whitelist for browse mode.
+  virtual void SetBrowseDomainsWhitelist(std::vector<std::string> domains) = 0;
+
+  // Sets the generic UI to show to the user.
+  virtual void SetGenericUi(
+      std::unique_ptr<GenericUserInterfaceProto> generic_ui,
+      base::OnceCallback<void(bool,
+                              ProcessedActionStatusProto,
+                              const UserModel*)> end_action_callback) = 0;
+
+  // Clears the generic UI.
+  virtual void ClearGenericUi() = 0;
 
  protected:
   virtual ~ScriptExecutorDelegate() {}

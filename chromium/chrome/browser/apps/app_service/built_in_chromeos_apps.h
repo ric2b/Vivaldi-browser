@@ -46,21 +46,36 @@ class BuiltInChromeOsApps : public apps::mojom::Publisher {
               int32_t event_flags,
               apps::mojom::LaunchSource launch_source,
               int64_t display_id) override;
+  void LaunchAppWithFiles(const std::string& app_id,
+                          apps::mojom::LaunchContainer container,
+                          int32_t event_flags,
+                          apps::mojom::LaunchSource launch_source,
+                          apps::mojom::FilePathsPtr file_paths) override;
   void LaunchAppWithIntent(const std::string& app_id,
                            apps::mojom::IntentPtr intent,
                            apps::mojom::LaunchSource launch_source,
                            int64_t display_id) override;
   void SetPermission(const std::string& app_id,
                      apps::mojom::PermissionPtr permission) override;
-  void PromptUninstall(const std::string& app_id) override;
   void Uninstall(const std::string& app_id,
                  bool clear_site_data,
                  bool report_abuse) override;
+  void PauseApp(const std::string& app_id) override;
+  void UnpauseApps(const std::string& app_id) override;
+  void GetMenuModel(const std::string& app_id,
+                    apps::mojom::MenuType menu_type,
+                    int64_t display_id,
+                    GetMenuModelCallback callback) override;
   void OpenNativeSettings(const std::string& app_id) override;
+  void OnPreferredAppSet(
+      const std::string& app_id,
+      apps::mojom::IntentFilterPtr intent_filter,
+      apps::mojom::IntentPtr intent,
+      apps::mojom::ReplacedAppPreferencesPtr replaced_app_preferences) override;
 
   mojo::Receiver<apps::mojom::Publisher> receiver_{this};
 
-  Profile* profile_;
+  Profile* const profile_;
 
   // Hack to hide the settings app from the app list search box. This is only
   // intended to be used in tests.

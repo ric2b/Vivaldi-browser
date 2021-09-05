@@ -99,8 +99,13 @@ def main(request, response):
       file.close()
       return video
 
-    ## Return a valid style content and Content-Type ##
-    if key.startswith("style") or key.startswith("embed") or key.startswith("object"):
+    ## Return valid style content and Content-Type ##
+    if key.startswith("style"):
+      response.headers.set("Content-Type", "text/css")
+      return "div { }"
+
+    ## Return a valid embed/object content and Content-Type ##
+    if key.startswith("embed") or key.startswith("object"):
       response.headers.set("Content-Type", "text/html")
       return "<html>EMBED!</html>"
 
@@ -117,6 +122,20 @@ def main(request, response):
       response.headers.set("Content-Type", "application/javascript")
       return "self.postMessage('loaded');"
 
+    ## Return an appcache manifest
+    if key.startswith("appcache-manifest"):
+      response.headers.set("Content-Type", "text/cache-manifest")
+      return """CACHE MANIFEST
+/fetch/metadata/resources/record-header.py?file=appcache-resource%s
+
+NETWORK:
+*""" % key[17:]
+
+    ## Return an appcache resource
+    if key.startswith("appcache-resource"):
+      response.headers.set("Content-Type", "text/html")
+      return "<html>Appcache!</html>"
+
     ## Return a valid XSLT
     if key.startswith("xslt"):
       response.headers.set("Content-Type", "text/xsl")
@@ -128,4 +147,3 @@ def main(request, response):
     </xsl:copy>
   </xsl:template>
 </xsl:stylesheet>"""
-

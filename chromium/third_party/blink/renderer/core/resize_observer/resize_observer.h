@@ -7,7 +7,8 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/resize_observer/resize_observer_box_options.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 
@@ -19,13 +20,14 @@ class ResizeObserverController;
 class ResizeObserverEntry;
 class ResizeObservation;
 class V8ResizeObserverCallback;
+class ResizeObserverOptions;
 
 // ResizeObserver represents ResizeObserver javascript api:
 // https://github.com/WICG/ResizeObserver/
 class CORE_EXPORT ResizeObserver final
     : public ScriptWrappable,
       public ActiveScriptWrappable<ResizeObserver>,
-      public ContextClient {
+      public ExecutionContextClient {
   USING_GARBAGE_COLLECTED_MIXIN(ResizeObserver);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -36,7 +38,7 @@ class CORE_EXPORT ResizeObserver final
     virtual ~Delegate() = default;
     virtual void OnResize(
         const HeapVector<Member<ResizeObserverEntry>>& entries) = 0;
-    virtual void Trace(blink::Visitor* visitor) {}
+    virtual void Trace(Visitor* visitor) {}
   };
 
   static ResizeObserver* Create(Document&, V8ResizeObserverCallback*);
@@ -47,6 +49,7 @@ class CORE_EXPORT ResizeObserver final
   ~ResizeObserver() override = default;
 
   // API methods
+  void observe(Element*, const ResizeObserverOptions* options);
   void observe(Element*);
   void unobserve(Element*);
   void disconnect();
@@ -56,15 +59,17 @@ class CORE_EXPORT ResizeObserver final
   bool SkippedObservations() { return skipped_observations_; }
   void DeliverObservations();
   void ClearObservations();
-  void ElementSizeChanged();
-  bool HasElementSizeChanged() { return element_size_changed_; }
+
+  ResizeObserverBoxOptions ParseBoxOptions(const String& box_options);
 
   // ScriptWrappable override:
   bool HasPendingActivity() const override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
+  void observeInternal(Element* target, ResizeObserverBoxOptions box_option);
+
   using ObservationList = HeapLinkedHashSet<WeakMember<ResizeObservation>>;
 
   // Either of |callback_| and |delegate_| should be non-null.
@@ -79,8 +84,7 @@ class CORE_EXPORT ResizeObserver final
   HeapVector<Member<ResizeObservation>> active_observations_;
   // True if observations were skipped gatherObservations
   bool skipped_observations_;
-  // True if any ResizeObservation reported size change
-  bool element_size_changed_;
+
   WeakMember<ResizeObserverController> controller_;
 };
 

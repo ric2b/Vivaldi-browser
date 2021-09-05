@@ -11,6 +11,8 @@ source_set("test_support") {
     "mock_display_agent.h",
     "mock_notification_background_task_scheduler.cc",
     "mock_notification_background_task_scheduler.h",
+    "mock_notification_schedule_service.cc",
+    "mock_notification_schedule_service.h",
     "mock_notification_scheduler_client.cc",
     "mock_notification_scheduler_client.h",
   ]
@@ -27,8 +29,10 @@ source_set("test_support") {
 # Test library that is used internally and can't be exposed to the embedder.
 source_set("test_lib") {
   testonly = true
-  visibility =
-      [ "//chrome/browser/notifications/scheduler/internal:unit_tests" ]
+  visibility = [
+    "//chrome/browser/notifications/scheduler/internal:unit_tests",
+    "//chrome/browser/notifications/scheduler/public:unit_tests",
+  ]
 
   sources = [
     "fake_clock.cc",

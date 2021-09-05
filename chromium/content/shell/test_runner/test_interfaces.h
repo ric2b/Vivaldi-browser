@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "content/shell/test_runner/test_runner_export.h"
 
 namespace blink {
 class WebLocalFrame;
@@ -18,13 +19,12 @@ class WebView;
 }
 
 namespace test_runner {
-
 class GamepadController;
 class TestRunner;
 class WebTestDelegate;
 class WebViewTestProxy;
 
-class TestInterfaces {
+class TEST_RUNNER_EXPORT TestInterfaces {
  public:
   TestInterfaces();
   ~TestInterfaces();
@@ -47,12 +47,19 @@ class TestInterfaces {
   const std::vector<WebViewTestProxy*>& GetWindowList();
 
  private:
+  // Called when a WebTestDelegate is destroyed, if it is the currently used
+  // delegate, switch to another delegate in window_list_ as there might be
+  // WebFrameTestClients that require it.
+  // If window_list_ is empty set delegate_ to nullptr, a new one will be
+  // assigned the next time a WebViewTestProxy is built.
+  void DelegateDestroyed(WebTestDelegate* delegate);
+
   std::unique_ptr<GamepadController> gamepad_controller_;
   std::unique_ptr<TestRunner> test_runner_;
-  WebTestDelegate* delegate_;
+  WebTestDelegate* delegate_ = nullptr;
 
   std::vector<WebViewTestProxy*> window_list_;
-  blink::WebView* main_view_;
+  blink::WebView* main_view_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(TestInterfaces);
 };

@@ -11,7 +11,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_id.h"
 #include "extensions/browser/install/crx_install_error.h"
 #include "extensions/common/constants.h"
 
@@ -35,19 +35,27 @@ class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
   void FinalizeInstall(const WebApplicationInfo& web_app_info,
                        const FinalizeOptions& options,
                        InstallFinalizedCallback callback) override;
+  void FinalizeFallbackInstallAfterSync(
+      const web_app::AppId& app_id,
+      InstallFinalizedCallback callback) override;
+  void FinalizeUninstallAfterSync(const web_app::AppId& app_id,
+                                  UninstallWebAppCallback callback) override;
   void FinalizeUpdate(const WebApplicationInfo& web_app_info,
                       InstallFinalizedCallback callback) override;
-  void UninstallExternalWebApp(const GURL& app_url,
-                               UninstallWebAppCallback callback) override;
-  void UninstallWebApp(const web_app::AppId& app_id,
-                       UninstallWebAppCallback) override;
-  bool CanCreateOsShortcuts() const override;
-  void CreateOsShortcuts(const web_app::AppId& app_id,
-                         bool add_to_desktop,
-                         CreateOsShortcutsCallback callback) override;
+  void UninstallExternalWebApp(
+      const web_app::AppId& app_id,
+      web_app::ExternalInstallSource external_install_source,
+      UninstallWebAppCallback callback) override;
+  bool CanUserUninstallFromSync(const web_app::AppId& app_id) const override;
+  void UninstallWebAppFromSyncByUser(const web_app::AppId& app_id,
+                                     UninstallWebAppCallback callback) override;
+  bool CanUserUninstallExternalApp(const web_app::AppId& app_id) const override;
+  void UninstallExternalAppByUser(const web_app::AppId& app_id,
+                                  UninstallWebAppCallback callback) override;
+  bool WasExternalAppUninstalledByUser(
+      const web_app::AppId& app_id) const override;
   bool CanRevealAppShim() const override;
   void RevealAppShim(const web_app::AppId& app_id) override;
-  bool CanUserUninstallFromSync(const web_app::AppId& app_id) const override;
 
   using CrxInstallerFactory =
       base::RepeatingCallback<scoped_refptr<CrxInstaller>(Profile*)>;
@@ -58,9 +66,13 @@ class BookmarkAppInstallFinalizer : public web_app::InstallFinalizer {
   // May return nullptr if app_id is not found or extension is disabled.
   const Extension* GetEnabledExtension(const web_app::AppId& app_id) const;
 
+  void UninstallExtension(const web_app::AppId& app_id,
+                          UninstallWebAppCallback);
+
   void OnExtensionInstalled(const GURL& app_url,
                             LaunchType launch_type,
                             bool is_locally_installed,
+                            bool is_system_app,
                             InstallFinalizedCallback callback,
                             scoped_refptr<CrxInstaller> crx_installer,
                             const base::Optional<CrxInstallError>& error);

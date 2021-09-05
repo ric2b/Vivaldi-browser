@@ -15,6 +15,7 @@ import org.chromium.weblayer_private.interfaces.APICallException;
 import org.chromium.weblayer_private.interfaces.ICrashReporterController;
 import org.chromium.weblayer_private.interfaces.ICrashReporterControllerClient;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
+import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
 /**
  * Provides an API to allow WebLayer embedders to control the handling of crash reports.
@@ -35,7 +36,7 @@ import org.chromium.weblayer_private.interfaces.ObjectWrapper;
  * user preference. Knowing that a crash is available can be used as a signal to schedule upload
  * work for a later point in time (or favourable power/network conditions).
  */
-public final class CrashReporterController {
+public class CrashReporterController {
     private ICrashReporterController mImpl;
     private final ObserverList<CrashReporterCallback> mCallbacks;
 
@@ -43,7 +44,8 @@ public final class CrashReporterController {
         static CrashReporterController sInstance = new CrashReporterController();
     }
 
-    private CrashReporterController() {
+    // Protected so it's available for test mocking.
+    protected CrashReporterController() {
         mCallbacks = new ObserverList<CrashReporterCallback>();
     }
 
@@ -89,7 +91,7 @@ public final class CrashReporterController {
      *
      * @param localId a crash identifier.
      */
-    public void deleteCrash(String localId) {
+    public void deleteCrash(@NonNull String localId) {
         try {
             mImpl.deleteCrash(localId);
         } catch (RemoteException e) {
@@ -108,7 +110,7 @@ public final class CrashReporterController {
      *
      * @param localId a crash identifier.
      */
-    public void uploadCrash(String localId) {
+    public void uploadCrash(@NonNull String localId) {
         try {
             mImpl.uploadCrash(localId);
         } catch (RemoteException e) {
@@ -133,10 +135,17 @@ public final class CrashReporterController {
             return this;
         }
         try {
-            mImpl = WebLayer.getIWebLayer(appContext)
-                            .getCrashReporterController(ObjectWrapper.wrap(appContext));
+            if (WebLayer.getSupportedMajorVersion(appContext) < 81) {
+                mImpl = WebLayer.getIWebLayer(appContext)
+                                .getCrashReporterControllerV80(ObjectWrapper.wrap(appContext));
+            } else {
+                mImpl = WebLayer.getIWebLayer(appContext)
+                                .getCrashReporterController(ObjectWrapper.wrap(appContext),
+                                        ObjectWrapper.wrap(
+                                                WebLayer.getOrCreateRemoteContext(appContext)));
+            }
             mImpl.setClient(new CrashReporterControllerClientImpl());
-        } catch (RemoteException e) {
+        } catch (Exception e) {
             throw new APICallException(e);
         }
         return this;
@@ -146,6 +155,7 @@ public final class CrashReporterController {
             extends ICrashReporterControllerClient.Stub {
         @Override
         public void onPendingCrashReports(String[] localIds) {
+            StrictModeWorkaround.apply();
             for (CrashReporterCallback callback : mCallbacks) {
                 callback.onPendingCrashReports(localIds);
             }
@@ -153,6 +163,7 @@ public final class CrashReporterController {
 
         @Override
         public void onCrashDeleted(String localId) {
+            StrictModeWorkaround.apply();
             for (CrashReporterCallback callback : mCallbacks) {
                 callback.onCrashDeleted(localId);
             }
@@ -160,6 +171,7 @@ public final class CrashReporterController {
 
         @Override
         public void onCrashUploadSucceeded(String localId, String reportId) {
+            StrictModeWorkaround.apply();
             for (CrashReporterCallback callback : mCallbacks) {
                 callback.onCrashUploadSucceeded(localId, reportId);
             }
@@ -167,6 +179,7 @@ public final class CrashReporterController {
 
         @Override
         public void onCrashUploadFailed(String localId, String failureReason) {
+            StrictModeWorkaround.apply();
             for (CrashReporterCallback callback : mCallbacks) {
                 callback.onCrashUploadFailed(localId, failureReason);
             }

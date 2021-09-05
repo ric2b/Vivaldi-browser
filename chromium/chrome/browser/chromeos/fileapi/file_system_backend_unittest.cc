@@ -13,10 +13,9 @@
 #include "chrome/browser/chromeos/fileapi/file_system_backend_delegate.h"
 #include "chromeos/dbus/cros_disks_client.h"
 #include "extensions/common/constants.h"
-#include "storage/browser/fileapi/external_mount_points.h"
-#include "storage/browser/fileapi/file_system_url.h"
+#include "storage/browser/file_system/external_mount_points.h"
+#include "storage/browser/file_system/file_system_url.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "url/url_util.h"
 
 #define FPL(x) FILE_PATH_LITERAL(x)
 
@@ -46,6 +45,7 @@ TEST(ChromeOSFileSystemBackendTest, DefaultMountPoints) {
       nullptr,  // arc_content_delegate
       nullptr,  // arc_documents_provider_delegate
       nullptr,  // drivefs_delegate
+      nullptr,  // smbfs_delegate
       mount_points.get(), storage::ExternalMountPoints::GetSystemInstance());
   backend.AddSystemMountPoints();
   std::vector<base::FilePath> root_dirs = backend.GetRootDirectories();
@@ -74,6 +74,7 @@ TEST(ChromeOSFileSystemBackendTest, GetRootDirectories) {
       nullptr,  // arc_content_delegate
       nullptr,  // arc_documents_provider_delegate
       nullptr,  // drivefs_delegate
+      nullptr,  // smbfs_delegate
       mount_points.get(), system_mount_points.get());
 
   const size_t initial_root_dirs_size = backend.GetRootDirectories().size();
@@ -108,8 +109,6 @@ TEST(ChromeOSFileSystemBackendTest, GetRootDirectories) {
 }
 
 TEST(ChromeOSFileSystemBackendTest, AccessPermissions) {
-  url::AddStandardScheme(extensions::kExtensionScheme, url::SCHEME_WITH_HOST);
-
   scoped_refptr<storage::ExternalMountPoints> mount_points(
       storage::ExternalMountPoints::CreateRefCounted());
   scoped_refptr<storage::ExternalMountPoints> system_mount_points(
@@ -120,6 +119,7 @@ TEST(ChromeOSFileSystemBackendTest, AccessPermissions) {
       nullptr,  // arc_content_delegate
       nullptr,  // arc_documents_provider_delegate
       nullptr,  // drivefs_delegate
+      nullptr,  // smbfs_delegate
       mount_points.get(), system_mount_points.get());
 
   std::string extension("ddammdhioacbehjngdmkjcjbnfginlla");
@@ -190,6 +190,7 @@ TEST(ChromeOSFileSystemBackendTest, GetVirtualPathConflictWithSystemPoints) {
       nullptr,  // arc_content_delegate
       nullptr,  // arc_documents_provider_delegate
       nullptr,  // drivefs_delegate
+      nullptr,  // smbfs_delegate
       mount_points.get(), system_mount_points.get());
 
   const storage::FileSystemType type = storage::kFileSystemTypeNativeLocal;

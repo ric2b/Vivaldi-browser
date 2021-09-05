@@ -9,12 +9,12 @@
 #include "base/logging.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/surface_layer.h"
-#include "components/viz/common/features.h"
+#include "cc/trees/layer_tree_host.h"
+#include "cc/trees/swap_promise.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "components/viz/host/host_frame_sink_manager.h"
-#include "components/viz/service/surfaces/surface.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 #include "ui/android/window_android_compositor.h"
@@ -25,6 +25,28 @@
 namespace ui {
 
 namespace {
+
+class TopControlsSwapPromise : public cc::SwapPromise {
+ public:
+  explicit TopControlsSwapPromise(float height) : height_(height) {}
+  ~TopControlsSwapPromise() override = default;
+
+  // cc::SwapPromise:
+  void DidActivate() override {}
+  void WillSwap(viz::CompositorFrameMetadata* metadata) override {
+    DCHECK_GT(metadata->frame_token, 0u);
+    metadata->top_controls_visible_height.emplace(height_);
+  }
+  void DidSwap() override {}
+  cc::SwapPromise::DidNotSwapAction DidNotSwap(
+      DidNotSwapReason reason) override {
+    return DidNotSwapAction::KEEP_ACTIVE;
+  }
+  int64_t TraceId() const override { return 0; }
+
+ private:
+  const float height_;
+};
 
 scoped_refptr<cc::SurfaceLayer> CreateSurfaceLayer(
     const viz::SurfaceId& primary_surface_id,
@@ -58,7 +80,6 @@ DelegatedFrameHostAndroid::DelegatedFrameHostAndroid(
       frame_evictor_(std::make_unique<viz::FrameEvictor>(this)) {
   DCHECK(view_);
   DCHECK(client_);
-  DCHECK(features::IsVizDisplayCompositorEnabled());
 
   constexpr bool is_transparent = false;
   content_layer_ = CreateSurfaceLayer(
@@ -302,6 +323,16 @@ void DelegatedFrameHostAndroid::TakeFallbackContentFrom(
 
 void DelegatedFrameHostAndroid::DidNavigate() {
   first_local_surface_id_after_navigation_ = local_surface_id_;
+}
+
+void DelegatedFrameHostAndroid::SetTopControlsVisibleHeight(float height) {
+  if (top_controls_visible_height_ == height)
+    return;
+  if (!content_layer_ || !content_layer_->layer_tree_host())
+    return;
+  top_controls_visible_height_ = height;
+  auto swap_promise = std::make_unique<TopControlsSwapPromise>(height);
+  content_layer_->layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
 }
 
 }  // namespace ui

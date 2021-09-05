@@ -22,7 +22,6 @@ class SharedURLLoaderFactory;
 namespace content {
 
 class AppCacheHost;
-class AppCacheJob;
 class AppCacheRequestHandler;
 class AppCacheServiceImpl;
 
@@ -35,20 +34,22 @@ class CONTENT_EXPORT AppCacheSubresourceURLFactory
   // Factory function to create an instance of the factory.
   // The |host| parameter contains the appcache host instance. This is used
   // to create the AppCacheRequestHandler instances for handling subresource
-  // requests.
-  static void CreateURLLoaderFactory(
+  // requests. Returns true if the factory was successfully created.
+  static bool CreateURLLoaderFactory(
       base::WeakPtr<AppCacheHost> host,
-      mojo::PendingRemote<network::mojom::URLLoaderFactory>* loader_factory);
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory>
+          loader_factory_receiver);
 
   // network::mojom::URLLoaderFactory implementation.
-  void CreateLoaderAndStart(network::mojom::URLLoaderRequest url_loader_request,
-                            int32_t routing_id,
-                            int32_t request_id,
-                            uint32_t options,
-                            const network::ResourceRequest& request,
-                            network::mojom::URLLoaderClientPtr client,
-                            const net::MutableNetworkTrafficAnnotationTag&
-                                traffic_annotation) override;
+  void CreateLoaderAndStart(
+      mojo::PendingReceiver<network::mojom::URLLoader> url_loader_receiver,
+      int32_t routing_id,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& request,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
+      override;
   void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
       override;
 

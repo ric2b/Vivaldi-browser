@@ -32,12 +32,12 @@ class VolumeManagerImpl extends cr.EventTarget {
     // TODO(hidehiko): Remove them after the migration.
     /**
      * Connection state of the Drive.
-     * @type {VolumeManagerCommon.DriveConnectionState}
+     * @type {chrome.fileManagerPrivate.DriveConnectionState}
      * @private
      */
     this.driveConnectionState_ = {
-      type: VolumeManagerCommon.DriveConnectionType.OFFLINE,
-      reason: VolumeManagerCommon.DriveConnectionReason.NO_SERVICE,
+      type: chrome.fileManagerPrivate.DriveConnectionStateType.OFFLINE,
+      reason: chrome.fileManagerPrivate.DriveOfflineReason.NO_SERVICE,
       hasCellularNetworkAccess: false
     };
 
@@ -55,9 +55,7 @@ class VolumeManagerImpl extends cr.EventTarget {
    */
   onDriveConnectionStatusChanged_() {
     chrome.fileManagerPrivate.getDriveConnectionState(state => {
-      // TODO(crbug.com/931971): Convert private API to use enum.
-      this.driveConnectionState_ =
-          /** @type {VolumeManagerCommon.DriveConnectionState} */ (state);
+      this.driveConnectionState_ = state;
       cr.dispatchSimpleEvent(this, 'drive-connection-changed');
     });
   }
@@ -125,7 +123,7 @@ class VolumeManagerImpl extends cr.EventTarget {
     chrome.fileManagerPrivate.onMountCompleted.addListener(
         this.onMountCompleted_.bind(this));
 
-    console.debug('Getting volumes');
+    console.warn('Getting volumes');
     const volumeMetadataList = await new Promise(
         resolve => chrome.fileManagerPrivate.getVolumeMetadataList(resolve));
     if (!volumeMetadataList) {
@@ -143,11 +141,17 @@ class VolumeManagerImpl extends cr.EventTarget {
       // Create VolumeInfo for each volume.
       await Promise.all(volumeMetadataList.map(async (volumeMetadata) => {
         console.debug(`Initializing volume '${volumeMetadata.volumeId}'`);
-        const volumeInfo = await this.addVolumeMetadata_(volumeMetadata);
-        console.debug(`Initialized volume '${volumeInfo.volumeId}'`);
+        try {
+          // Handle error here otherwise every promise in Promise.all() fails.
+          const volumeInfo = await this.addVolumeMetadata_(volumeMetadata);
+          console.debug(`Initialized volume '${volumeInfo.volumeId}'`);
+        } catch (error) {
+          console.warn(`Error initiliazing ${volumeMetadata.volumeId}`);
+          console.error(error);
+        }
       }));
 
-      console.debug(`Initialized all ${volumeMetadataList.length} volumes`);
+      console.warn(`Initialized all ${volumeMetadataList.length} volumes`);
     } finally {
       unlock();
     }
@@ -289,7 +293,7 @@ class VolumeManagerImpl extends cr.EventTarget {
         return volumeInfo;
       }
       // Additionally, check fake entries.
-      for (let key in volumeInfo.fakeEntries) {
+      for (const key in volumeInfo.fakeEntries) {
         const fakeEntry = volumeInfo.fakeEntries[key];
         if (util.isSameEntry(fakeEntry, entry)) {
           return volumeInfo;
@@ -396,6 +400,15 @@ class VolumeManagerImpl extends cr.EventTarget {
         // read-write.
         isReadOnly = entry.fullPath.split('/').length < 4;
         isRootEntry = entry.fullPath === '/.files-by-id';
+      } else if (
+          entry.fullPath === '/.shortcut-targets-by-id' ||
+          entry.fullPath.indexOf('/.shortcut-targets-by-id/') === 0) {
+        rootType = VolumeManagerCommon.RootType.DRIVE_OTHER;
+
+        // /.shortcut-targets-by-id/<id> is read-only, but
+        // /.shortcut-targets-by-id/<id>/foo is read-write.
+        isReadOnly = entry.fullPath.split('/').length < 4;
+        isRootEntry = entry.fullPath === '/.shortcut-targets-by-id';
       } else {
         // Accessing Drive files outside of /drive/root and /drive/other is not
         // allowed, but can happen. Therefore returning null.

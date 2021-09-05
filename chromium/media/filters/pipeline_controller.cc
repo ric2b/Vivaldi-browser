@@ -9,23 +9,19 @@
 
 namespace media {
 
-PipelineController::PipelineController(
-    std::unique_ptr<Pipeline> pipeline,
-    const RendererFactoryCB& renderer_factory_cb,
-    const SeekedCB& seeked_cb,
-    const SuspendedCB& suspended_cb,
-    const BeforeResumeCB& before_resume_cb,
-    const ResumedCB& resumed_cb,
-    const PipelineStatusCB& error_cb)
+PipelineController::PipelineController(std::unique_ptr<Pipeline> pipeline,
+                                       SeekedCB seeked_cb,
+                                       SuspendedCB suspended_cb,
+                                       BeforeResumeCB before_resume_cb,
+                                       ResumedCB resumed_cb,
+                                       PipelineStatusCB error_cb)
     : pipeline_(std::move(pipeline)),
-      renderer_factory_cb_(renderer_factory_cb),
-      seeked_cb_(seeked_cb),
-      suspended_cb_(suspended_cb),
-      before_resume_cb_(before_resume_cb),
-      resumed_cb_(resumed_cb),
-      error_cb_(error_cb) {
+      seeked_cb_(std::move(seeked_cb)),
+      suspended_cb_(std::move(suspended_cb)),
+      before_resume_cb_(std::move(before_resume_cb)),
+      resumed_cb_(std::move(resumed_cb)),
+      error_cb_(std::move(error_cb)) {
   DCHECK(pipeline_);
-  DCHECK(renderer_factory_cb_);
   DCHECK(seeked_cb_);
   DCHECK(suspended_cb_);
   DCHECK(before_resume_cb_);
@@ -55,12 +51,12 @@ void PipelineController::Start(Pipeline::StartType start_type,
   demuxer_ = demuxer;
   is_streaming_ = is_streaming;
   is_static_ = is_static;
-  pipeline_->Start(start_type, demuxer, renderer_factory_cb_.Run(), client,
-                   base::Bind(&PipelineController::OnPipelineStatus,
-                              weak_factory_.GetWeakPtr(),
-                              start_type == Pipeline::StartType::kNormal
-                                  ? State::PLAYING
-                                  : State::PLAYING_OR_SUSPENDED));
+  pipeline_->Start(start_type, demuxer, client,
+                   base::BindOnce(&PipelineController::OnPipelineStatus,
+                                  weak_factory_.GetWeakPtr(),
+                                  start_type == Pipeline::StartType::kNormal
+                                      ? State::PLAYING
+                                      : State::PLAYING_OR_SUSPENDED));
 }
 
 void PipelineController::Seek(base::TimeDelta time, bool time_updated) {
@@ -220,9 +216,9 @@ void PipelineController::Dispatch() {
   if (pending_suspend_ && state_ == State::PLAYING) {
     pending_suspend_ = false;
     state_ = State::SUSPENDING;
-    pipeline_->Suspend(base::Bind(&PipelineController::OnPipelineStatus,
-                                  weak_factory_.GetWeakPtr(),
-                                  State::SUSPENDED));
+    pipeline_->Suspend(base::BindOnce(&PipelineController::OnPipelineStatus,
+                                      weak_factory_.GetWeakPtr(),
+                                      State::SUSPENDED));
     return;
   }
 
@@ -257,9 +253,9 @@ void PipelineController::Dispatch() {
     pending_resume_ = false;
     state_ = State::RESUMING;
     before_resume_cb_.Run();
-    pipeline_->Resume(renderer_factory_cb_.Run(), seek_time_,
-                      base::Bind(&PipelineController::OnPipelineStatus,
-                                 weak_factory_.GetWeakPtr(), State::PLAYING));
+    pipeline_->Resume(
+        seek_time_, base::BindOnce(&PipelineController::OnPipelineStatus,
+                                   weak_factory_.GetWeakPtr(), State::PLAYING));
     return;
   }
 
@@ -320,8 +316,8 @@ void PipelineController::Dispatch() {
     pending_seek_ = false;
     state_ = State::SEEKING;
     pipeline_->Seek(seek_time_,
-                    base::Bind(&PipelineController::OnPipelineStatus,
-                               weak_factory_.GetWeakPtr(), State::PLAYING));
+                    base::BindOnce(&PipelineController::OnPipelineStatus,
+                                   weak_factory_.GetWeakPtr(), State::PLAYING));
     return;
   }
 
@@ -383,6 +379,12 @@ void PipelineController::SetVolume(float volume) {
   pipeline_->SetVolume(volume);
 }
 
+void PipelineController::SetLatencyHint(
+    base::Optional<base::TimeDelta> latency_hint) {
+  DCHECK(!latency_hint || (*latency_hint >= base::TimeDelta()));
+  pipeline_->SetLatencyHint(latency_hint);
+}
+
 base::TimeDelta PipelineController::GetMediaTime() const {
   return pipeline_->GetMediaTime();
 }
@@ -404,8 +406,8 @@ PipelineStatistics PipelineController::GetStatistics() const {
 }
 
 void PipelineController::SetCdm(CdmContext* cdm_context,
-                                const CdmAttachedCB& cdm_attached_cb) {
-  pipeline_->SetCdm(cdm_context, cdm_attached_cb);
+                                CdmAttachedCB cdm_attached_cb) {
+  pipeline_->SetCdm(cdm_context, std::move(cdm_attached_cb));
 }
 
 void PipelineController::OnEnabledAudioTracksChanged(

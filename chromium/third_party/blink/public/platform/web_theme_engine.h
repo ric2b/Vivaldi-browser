@@ -116,6 +116,7 @@ class WebThemeEngine {
     bool indeterminate;  // Whether the button state is indeterminate.
     bool has_border;
     SkColor background_color;
+    float zoom;
   };
 
   // Extra parameters for PartTextField
@@ -123,6 +124,8 @@ class WebThemeEngine {
     bool is_text_area;
     bool is_listbox;
     SkColor background_color;
+    bool has_border;
+    bool auto_complete_active;
   };
 
   // Extra parameters for PartMenuList
@@ -143,6 +146,7 @@ class WebThemeEngine {
     bool in_drag;
     int thumb_x;
     int thumb_y;
+    float zoom;
   };
 
   // Extra parameters for PartInnerSpinButton
@@ -226,7 +230,7 @@ class WebThemeEngine {
     return base::nullopt;
   }
 
-  virtual ForcedColors ForcedColors() const { return ForcedColors::kNone; }
+  virtual ForcedColors GetForcedColors() const { return ForcedColors::kNone; }
   virtual void SetForcedColors(const blink::ForcedColors forced_colors) {}
 };
 

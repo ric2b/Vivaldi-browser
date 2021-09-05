@@ -9,12 +9,15 @@
 #include "base/bind.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
+#include "chrome/browser/badging/badge_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/cache_stats_recorder.h"
 #include "chrome/browser/chrome_browser_interface_binders.h"
 #include "chrome/browser/chrome_content_browser_client_parts.h"
+#include "chrome/browser/content_settings/content_settings_manager_impl.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
+#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/net_benchmarking.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
@@ -24,27 +27,27 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/metrics/call_stack_profile_collector.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
-#include "components/rappor/public/rappor_utils.h"
-#include "components/rappor/rappor_recorder_impl.h"
-#include "components/rappor/rappor_service_impl.h"
-#include "components/safe_browsing/browser/mojo_safe_browsing_impl.h"
 #include "components/safe_browsing/buildflags.h"
+#include "components/safe_browsing/content/browser/mojo_safe_browsing_impl.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
-#include "components/startup_metric_utils/browser/startup_metric_host_impl.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/resource_context.h"
 #include "media/mojo/buildflags.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/widevine/cdm/buildflags.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/download/android/available_offline_content_provider.h"
-#elif defined(OS_CHROMEOS)
-#include "chrome/browser/ash_service_registry.h"
-#include "services/service_manager/public/cpp/service.h"
 #elif defined(OS_WIN)
 #include "chrome/browser/win/conflicts/module_database.h"
 #include "chrome/browser/win/conflicts/module_event_sink_impl.h"
+#endif
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
+#include "chrome/browser/extensions/chrome_extensions_browser_client.h"
+#include "extensions/browser/extensions_browser_client.h"
 #endif
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -66,22 +69,33 @@
 
 namespace {
 
-void AddDataReductionProxyReceiver(
-    int render_process_id,
-    mojo::PendingReceiver<data_reduction_proxy::mojom::DataReductionProxy>
-        receiver) {
+// Helper method for ExposeInterfacesToRenderer() that checks the latest
+// SafeBrowsing pref value on the UI thread before hopping over to the IO
+// thread.
+void MaybeCreateSafeBrowsingForRenderer(
+    int process_id,
+    content::ResourceContext* resource_context,
+    base::RepeatingCallback<scoped_refptr<safe_browsing::UrlCheckerDelegate>(
+        bool safe_browsing_enabled)> get_checker_delegate,
+    mojo::PendingReceiver<safe_browsing::mojom::SafeBrowsing> receiver) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  auto* rph = content::RenderProcessHost::FromID(render_process_id);
-  if (!rph)
+
+  content::RenderProcessHost* render_process_host =
+      content::RenderProcessHost::FromID(process_id);
+  if (!render_process_host)
     return;
 
-  auto* drp_settings =
-      DataReductionProxyChromeSettingsFactory::GetForBrowserContext(
-          rph->GetBrowserContext());
-  if (!drp_settings)
-    return;
-
-  drp_settings->data_reduction_proxy_service()->Clone(std::move(receiver));
+  bool safe_browsing_enabled = safe_browsing::IsSafeBrowsingEnabled(
+      *Profile::FromBrowserContext(render_process_host->GetBrowserContext())
+           ->GetPrefs());
+  base::CreateSingleThreadTaskRunner({content::BrowserThread::IO})
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &safe_browsing::MojoSafeBrowsingImpl::MaybeCreate, process_id,
+              resource_context,
+              base::BindRepeating(get_checker_delegate, safe_browsing_enabled),
+              std::move(receiver)));
 }
 
 }  // namespace
@@ -100,9 +114,6 @@ void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
 
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner =
       base::CreateSingleThreadTaskRunner({content::BrowserThread::UI});
-  registry->AddInterface(base::Bind(&rappor::RapporRecorderImpl::Create,
-                                    g_browser_process->rappor_service()),
-                         ui_task_runner);
   registry->AddInterface(
       base::BindRepeating(&metrics::CallStackProfileCollector::Create));
 
@@ -124,21 +135,15 @@ void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
     content::ResourceContext* resource_context =
         render_process_host->GetBrowserContext()->GetResourceContext();
     registry->AddInterface(
-        base::Bind(
-            &safe_browsing::MojoSafeBrowsingImpl::MaybeCreate,
-            render_process_host->GetID(), resource_context,
-            base::Bind(
+        base::BindRepeating(
+            &MaybeCreateSafeBrowsingForRenderer, render_process_host->GetID(),
+            resource_context,
+            base::BindRepeating(
                 &ChromeContentBrowserClient::GetSafeBrowsingUrlCheckerDelegate,
-                base::Unretained(this), resource_context)),
-        base::CreateSingleThreadTaskRunner({content::BrowserThread::IO}));
+                base::Unretained(this))),
+        ui_task_runner);
   }
 #endif
-
-  if (data_reduction_proxy::params::IsEnabledWithNetworkService()) {
-    registry->AddInterface(base::BindRepeating(&AddDataReductionProxyReceiver,
-                                               render_process_host->GetID()),
-                           ui_task_runner);
-  }
 
 #if defined(OS_WIN)
   // Add the ModuleEventSink interface. This is the interface used by renderer
@@ -192,16 +197,39 @@ void ChromeContentBrowserClient::ExposeInterfacesToMediaService(
 }
 
 void ChromeContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
+    content::RenderFrameHost* render_frame_host,
     service_manager::BinderMapWithContext<content::RenderFrameHost*>* map) {
   chrome::internal::PopulateChromeFrameBinders(map);
+  chrome::internal::PopulateChromeWebUIFrameBinders(map);
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(render_frame_host);
+  if (!web_contents)
+    return;
+
+  const GURL& site = render_frame_host->GetSiteInstance()->GetSiteURL();
+  if (!site.SchemeIs(extensions::kExtensionScheme))
+    return;
+
+  content::BrowserContext* browser_context =
+      render_frame_host->GetProcess()->GetBrowserContext();
+  auto* extension = extensions::ExtensionRegistry::Get(browser_context)
+                        ->enabled_extensions()
+                        .GetByID(site.host());
+  if (!extension)
+    return;
+  extensions::ExtensionsBrowserClient::Get()
+      ->RegisterBrowserInterfaceBindersForFrame(map, render_frame_host,
+                                                extension);
+#endif
 }
 
 void ChromeContentBrowserClient::BindInterfaceRequestFromFrame(
     content::RenderFrameHost* render_frame_host,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  if (!frame_interfaces_ && !frame_interfaces_parameterized_ &&
-      !worker_interfaces_parameterized_) {
+  if (!frame_interfaces_ && !frame_interfaces_parameterized_) {
     InitWebContextInterfaces();
   }
 
@@ -240,18 +268,14 @@ bool ChromeContentBrowserClient::BindAssociatedReceiverFromFrame(
   return false;
 }
 
-void ChromeContentBrowserClient::BindInterfaceRequestFromWorker(
-    content::RenderProcessHost* render_process_host,
-    const url::Origin& origin,
-    const std::string& interface_name,
-    mojo::ScopedMessagePipeHandle interface_pipe) {
-  if (!frame_interfaces_ && !frame_interfaces_parameterized_ &&
-      !worker_interfaces_parameterized_) {
-    InitWebContextInterfaces();
-  }
-
-  worker_interfaces_parameterized_->BindInterface(
-      interface_name, std::move(interface_pipe), render_process_host, origin);
+void ChromeContentBrowserClient::BindBadgeServiceReceiverFromServiceWorker(
+    content::RenderProcessHost* service_worker_process_host,
+    const GURL& service_worker_scope,
+    mojo::PendingReceiver<blink::mojom::BadgeService> receiver) {
+#if !defined(OS_ANDROID)
+  badging::BadgeManager::BindServiceWorkerReceiver(
+      service_worker_process_host, service_worker_scope, std::move(receiver));
+#endif
 }
 
 void ChromeContentBrowserClient::BindGpuHostReceiver(
@@ -263,6 +287,13 @@ void ChromeContentBrowserClient::BindGpuHostReceiver(
 void ChromeContentBrowserClient::BindHostReceiverForRenderer(
     content::RenderProcessHost* render_process_host,
     mojo::GenericPendingReceiver receiver) {
+  if (auto host_receiver =
+          receiver.As<chrome::mojom::ContentSettingsManager>()) {
+    chrome::ContentSettingsManagerImpl::Create(render_process_host,
+                                               std::move(host_receiver));
+    return;
+  }
+
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   if (auto host_receiver = receiver.As<spellcheck::mojom::SpellCheckHost>()) {
     SpellCheckHostChromeImpl::Create(render_process_host->GetID(),
@@ -271,44 +302,19 @@ void ChromeContentBrowserClient::BindHostReceiverForRenderer(
   }
 
 #if BUILDFLAG(HAS_SPELLCHECK_PANEL)
-  if (auto panel_host_receiver =
+  if (auto host_receiver =
           receiver.As<spellcheck::mojom::SpellCheckPanelHost>()) {
     SpellCheckPanelHostImpl::Create(render_process_host->GetID(),
-                                    std::move(panel_host_receiver));
+                                    std::move(host_receiver));
     return;
   }
 #endif  // BUILDFLAG(HAS_SPELLCHECK_PANEL)
 #endif  // BUILDFLAG(ENABLE_SPELLCHECK)
-}
 
-void ChromeContentBrowserClient::BindHostReceiverForRendererOnIOThread(
-    int render_process_id,
-    mojo::GenericPendingReceiver* receiver) {
-  if (auto host_receiver =
-          receiver->As<startup_metric_utils::mojom::StartupMetricHost>()) {
-    startup_metric_utils::StartupMetricHostImpl::Create(
+#if BUILDFLAG(ENABLE_PLUGINS)
+  if (auto host_receiver = receiver.As<chrome::mojom::MetricsService>()) {
+    ChromeMetricsServiceAccessor::BindMetricsServiceReceiver(
         std::move(host_receiver));
-    return;
   }
-}
-
-void ChromeContentBrowserClient::RunServiceInstance(
-    const service_manager::Identity& identity,
-    mojo::PendingReceiver<service_manager::mojom::Service>* receiver) {
-  const std::string& service_name = identity.name();
-  ALLOW_UNUSED_LOCAL(service_name);
-#if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  if (service_name == media::mojom::kMediaServiceName) {
-    service_manager::Service::RunAsyncUntilTermination(
-        media::CreateMediaService(std::move(*receiver)));
-    return;
-  }
-#endif
-
-#if defined(OS_CHROMEOS)
-  auto service = ash_service_registry::HandleServiceRequest(
-      service_name, std::move(*receiver));
-  if (service)
-    service_manager::Service::RunAsyncUntilTermination(std::move(service));
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(ENABLE_PLUGINS)
 }

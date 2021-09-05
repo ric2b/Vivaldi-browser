@@ -19,15 +19,13 @@ class XRBoundedReferenceSpace final : public XRReferenceSpace {
   XRBoundedReferenceSpace(XRSession*, XRRigidTransform*);
   ~XRBoundedReferenceSpace() override;
 
-  std::unique_ptr<TransformationMatrix> DefaultViewerPose() override;
-  std::unique_ptr<TransformationMatrix> SpaceFromMojo(
-      const TransformationMatrix& mojo_from_viewer) override;
+  std::unique_ptr<TransformationMatrix> NativeFromMojo() override;
 
   HeapVector<Member<DOMPointReadOnly>> boundsGeometry();
 
   base::Optional<XRNativeOriginInformation> NativeOrigin() const override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   void OnReset() override;
 
@@ -37,8 +35,8 @@ class XRBoundedReferenceSpace final : public XRReferenceSpace {
 
   void EnsureUpdated();
 
-  HeapVector<Member<DOMPointReadOnly>> bounds_geometry_;
-  std::unique_ptr<TransformationMatrix> bounded_space_from_mojo_;
+  HeapVector<Member<DOMPointReadOnly>> offset_bounds_geometry_;
+  std::unique_ptr<TransformationMatrix> bounded_native_from_mojo_;
   unsigned int stage_parameters_id_ = 0;
 };
 

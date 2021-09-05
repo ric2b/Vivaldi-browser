@@ -80,7 +80,7 @@ class LockActionHandlerLayoutManagerTest : public AshTestBase {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         keyboard::switches::kEnableVirtualKeyboard);
 
-    action_background_controller_factory_ = base::Bind(
+    action_background_controller_factory_ = base::BindRepeating(
         &LockActionHandlerLayoutManagerTest::CreateActionBackgroundController,
         base::Unretained(this));
     LockScreenActionBackgroundController::SetFactoryCallbackForTesting(
@@ -219,7 +219,7 @@ TEST_F(LockActionHandlerLayoutManagerTest, PreserveNormalWindowBounds) {
 
 TEST_F(LockActionHandlerLayoutManagerTest, MaximizedWindowBounds) {
   // Cange the shelf alignment before locking the session.
-  GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_RIGHT);
+  GetPrimaryShelf()->SetAlignment(ShelfAlignment::kRight);
 
   // This should change the shelf alignment to bottom (temporarily for locked
   // state).
@@ -243,7 +243,7 @@ TEST_F(LockActionHandlerLayoutManagerTest, MaximizedWindowBounds) {
 
 TEST_F(LockActionHandlerLayoutManagerTest, FullscreenWindowBounds) {
   // Cange the shelf alignment before locking the session.
-  GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_RIGHT);
+  GetPrimaryShelf()->SetAlignment(ShelfAlignment::kRight);
 
   // This should change the shelf alignment to bottom (temporarily for locked
   // state).
@@ -316,7 +316,7 @@ TEST_F(LockActionHandlerLayoutManagerTest, KeyboardBounds) {
 
   // Verify that window bounds get updated when Chromevox bounds are shown (so
   // the Chromevox panel does not overlay with the action handler window).
-  ash::ShelfLayoutManager* shelf_layout_manager =
+  ShelfLayoutManager* shelf_layout_manager =
       GetPrimaryShelf()->shelf_layout_manager();
   ASSERT_TRUE(shelf_layout_manager);
 

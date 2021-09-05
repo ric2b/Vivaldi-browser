@@ -2,38 +2,28 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import json
 import logging
 import os
 import time
 
 from core.results_processor import util
+from core.tbmv3 import trace_processor
 
 from tracing.metrics import metric_runner
 
 
-# Aggregated trace is saved under this name.
+# Aggregated TBMv2 trace is saved under this name.
 HTML_TRACE_NAME = 'trace.html'
 
-# Results of metric computation are stored under this key in test_results.
-HISTOGRAM_DICTS_KEY = 'histogram_dicts'
-
-# This file is written by telemetry, it contains output of metric computation.
-# This is a temporary hack to keep things working while we gradually move
-# code from Telemetry to Results Processor.
-HISTOGRAM_DICTS_FILE = 'histogram_dicts.json'
+# Concatenated proto trace is saved under this name.
+CONCATENATED_PROTO_NAME = 'trace.pb'
 
 
-def _PoolWorker(test_result):
-  metrics = [tag['value'] for tag in test_result['tags']
-             if tag['key'] == 'tbmv2']
+def _RunMetric(test_result, metrics):
   html_trace = test_result['outputArtifacts'][HTML_TRACE_NAME]
   html_local_path = html_trace['filePath']
-  html_remote_url = html_trace.get('remoteUrl')
+  html_remote_url = html_trace.get('viewUrl')
 
-  logging.info('%s: Starting to compute metrics on trace.',
-               test_result['testPath'])
-  start = time.time()
   # The timeout needs to be coordinated with the Swarming IO timeout for the
   # task that runs this code. If this timeout is longer or close in length
   # to the swarming IO timeout then we risk being forcibly killed for not
@@ -44,11 +34,9 @@ def _PoolWorker(test_result):
       html_local_path, metrics, canonical_url=html_remote_url,
       timeout=TEN_MINUTES,
       extra_import_options={'trackDetailedModelStats': True})
-  logging.info('%s: Computing metrics took %.3f seconds.' % (
-      test_result['testPath'], time.time() - start))
 
   if mre_result.failures:
-    test_result['status'] = 'FAIL'
+    util.SetUnexpectedFailure(test_result)
     for f in mre_result.failures:
       logging.error('Failure recorded for test %s: %s',
                     test_result['testPath'], f)
@@ -56,48 +44,72 @@ def _PoolWorker(test_result):
   return mre_result.pairs.get('histograms', [])
 
 
-def ComputeTBMv2Metrics(intermediate_results):
+def ComputeTBMv2Metrics(test_result):
   """Compute metrics on aggregated traces in parallel.
 
   For each test run that has an aggregate trace and some TBMv2 metrics listed
   in its tags, compute the metrics and return the list of all resulting
-  histograms. Note: the order of histograms in the results may be different
-  from the order of tests in intermediate_results.
+  histograms.
   """
-  histogram_dicts = []
-  work_list = []
-  for test_result in intermediate_results['testResults']:
-    artifacts = test_result.get('outputArtifacts', {})
-    # TODO(crbug.com/981349): If metrics have already been computed in
-    # Telemetry, we read it from the file. Remove this branch after Telemetry
-    # does not compute metrics anymore.
-    if HISTOGRAM_DICTS_FILE in artifacts:
-      with open(artifacts[HISTOGRAM_DICTS_FILE]['filePath']) as f:
-        histogram_dicts += json.load(f)
-      del artifacts[HISTOGRAM_DICTS_FILE]
-      continue
+  artifacts = test_result.get('outputArtifacts', {})
 
-    if test_result['status'] == 'SKIP':
-      continue
+  if test_result['status'] == 'SKIP':
+    return
 
-    if (HTML_TRACE_NAME not in artifacts or
-        not any(tag['key'] == 'tbmv2' for tag in test_result.get('tags', []))):
-      continue
+  metrics = [tag['value'] for tag in test_result.get('tags', [])
+             if tag['key'] == 'tbmv2']
+  if not metrics:
+    logging.debug('%s: No TBMv2 metrics specified.', test_result['testPath'])
+    return
 
-    trace_size_in_mib = (os.path.getsize(artifacts[HTML_TRACE_NAME]['filePath'])
-                         / (2 ** 20))
-    # Bails out on traces that are too big. See crbug.com/812631 for more
-    # details.
-    # TODO(crbug.com/1010041): Return a non-zero exit code in this case.
-    if trace_size_in_mib > 400:
-      test_result['status'] = 'FAIL'
-      logging.error('%s: Trace size is too big: %s MiB',
-                    test_result['testPath'], trace_size_in_mib)
-      continue
+  if HTML_TRACE_NAME not in artifacts:
+    util.SetUnexpectedFailure(test_result)
+    logging.error('%s: No traces to compute metrics on.',
+                  test_result['testPath'])
+    return
 
-    work_list.append(test_result)
+  trace_size_in_mib = (os.path.getsize(artifacts[HTML_TRACE_NAME]['filePath'])
+                       / (2 ** 20))
+  # Bails out on traces that are too big. See crbug.com/812631 for more
+  # details.
+  if trace_size_in_mib > 400:
+    util.SetUnexpectedFailure(test_result)
+    logging.error('%s: Trace size is too big: %s MiB',
+                  test_result['testPath'], trace_size_in_mib)
+    return
 
-  for dicts in util.ApplyInParallel(_PoolWorker, work_list):
-    histogram_dicts += dicts
+  start = time.time()
+  test_result['_histograms'].ImportDicts(_RunMetric(test_result, metrics))
+  logging.info('%s: Computing TBMv2 metrics took %.3f seconds.' % (
+      test_result['testPath'], time.time() - start))
 
-  return histogram_dicts
+
+def ComputeTBMv3Metrics(test_result, trace_processor_path):
+  artifacts = test_result.get('outputArtifacts', {})
+
+  if test_result['status'] == 'SKIP':
+    return
+
+  metrics = [tag['value'] for tag in test_result.get('tags', [])
+             if tag['key'] == 'tbmv3']
+  if not metrics:
+    logging.debug('%s: No TBMv3 metrics specified.', test_result['testPath'])
+    return
+
+  if CONCATENATED_PROTO_NAME not in artifacts:
+    # TODO(crbug.com/990304): This is only a warning now, because proto trace
+    # generation is enabled only on selected bots. Make this an error
+    # when Telemetry is switched over to proto trace generation everywhere.
+    # Also don't forget to call util.SetUnexpectedFailure(test_result).
+    logging.warning('%s: No proto traces to compute metrics on.',
+                    test_result['testPath'])
+    return
+
+  start = time.time()
+  for metric in metrics:
+    histograms = trace_processor.RunMetric(
+        trace_processor_path, artifacts[CONCATENATED_PROTO_NAME]['filePath'],
+        metric)
+    test_result['_histograms'].Merge(histograms)
+  logging.info('%s: Computing TBMv3 metrics took %.3f seconds.' % (
+      test_result['testPath'], time.time() - start))

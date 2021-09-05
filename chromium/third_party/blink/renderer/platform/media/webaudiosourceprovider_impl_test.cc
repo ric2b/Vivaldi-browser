@@ -14,8 +14,8 @@
 #include "media/base/mock_audio_renderer_sink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_audio_source_provider_client.h"
 #include "third_party/blink/public/platform/webaudiosourceprovider_impl.h"
+#include "third_party/blink/renderer/platform/media/web_audio_source_provider_client.h"
 
 using ::testing::_;
 
@@ -253,7 +253,7 @@ TEST_F(WebAudioSourceProviderImplTest, ProvideInput) {
 TEST_F(WebAudioSourceProviderImplTest, CopyAudioCB) {
   testing::InSequence s;
   wasp_impl_->Initialize(params_, &fake_callback_);
-  wasp_impl_->SetCopyAudioCallback(base::Bind(
+  wasp_impl_->SetCopyAudioCallback(WTF::BindRepeating(
       &WebAudioSourceProviderImplTest::OnAudioBus, base::Unretained(this)));
 
   const auto bus1 = media::AudioBus::Create(params_);

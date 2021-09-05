@@ -31,6 +31,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/nacl/browser/nacl_browser.h"
@@ -54,6 +55,7 @@
 #include "content/public/common/process_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "ipc/ipc_channel.h"
+#include "mojo/public/cpp/system/invitation.h"
 #include "net/socket/socket_descriptor.h"
 #include "ppapi/host/host_factory.h"
 #include "ppapi/host/ppapi_host.h"
@@ -189,7 +191,7 @@ class NaClSandboxedProcessLauncherDelegate
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
   service_manager::SandboxType GetSandboxType() override {
-    return service_manager::SANDBOX_TYPE_PPAPI;
+    return service_manager::SandboxType::kPpapi;
   }
 };
 
@@ -232,9 +234,10 @@ NaClProcessHost::NaClProcessHost(
       process_type_(process_type),
       profile_directory_(profile_directory),
       render_view_id_(render_view_id) {
-  process_.reset(content::BrowserChildProcessHost::Create(
+  process_ = content::BrowserChildProcessHost::Create(
       static_cast<content::ProcessType>(PROCESS_TYPE_NACL_LOADER), this,
-      kNaClLoaderServiceName));
+      content::ChildProcessHost::IpcMode::kLegacy);
+  process_->SetMetricsName("NaCl Loader");
 
   // Set the display name so the user knows what plugin the process is running.
   // We aren't on the UI thread so getting the pref locale for language
@@ -274,17 +277,15 @@ NaClProcessHost::~NaClProcessHost() {
     // handles.
     base::File file(IPC::PlatformFileForTransitToFile(
         prefetched_resource_files_[i].file));
-    base::PostTask(
-        FROM_HERE,
-        {base::ThreadPool(), base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
         base::BindOnce(&CloseFile, std::move(file)));
   }
 #endif
   // Open files need to be closed on the blocking pool.
   if (nexe_file_.IsValid()) {
-    base::PostTask(
-        FROM_HERE,
-        {base::ThreadPool(), base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
         base::BindOnce(&CloseFile, std::move(nexe_file_)));
   }
 
@@ -545,7 +546,7 @@ bool NaClProcessHost::LaunchSelLdr() {
   if (RunningOnWOW64()) {
     if (!NaClBrokerService::GetInstance()->LaunchLoader(
             weak_factory_.GetWeakPtr(),
-            process_->TakeInProcessServiceRequest())) {
+            process_->GetHost()->GetMojoInvitation()->ExtractMessagePipe(0))) {
       SendErrorToRenderer("broker service did not launch process");
       return false;
     }
@@ -652,7 +653,7 @@ void NaClProcessHost::SendMessageToRenderer(
 
   NaClHostMsg_LaunchNaCl::WriteReplyParams(reply_msg_, result, error_message);
   nacl_host_message_filter_->Send(reply_msg_);
-  nacl_host_message_filter_ = NULL;
+  nacl_host_message_filter_.reset();
   reply_msg_ = NULL;
 }
 
@@ -807,12 +808,11 @@ bool NaClProcessHost::StartNaClExecution() {
       // We have to reopen the file in the browser process; we don't want a
       // compromised renderer to pass an arbitrary fd that could get loaded
       // into the plugin process.
-      base::PostTaskAndReplyWithResult(
+      base::ThreadPool::PostTaskAndReplyWithResult(
           FROM_HERE,
           // USER_BLOCKING because it is on the critical path of displaying the
           // official virtual keyboard on Chrome OS. https://crbug.com/976542
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskPriority::USER_BLOCKING},
+          {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
           base::BindOnce(OpenNaClReadExecImpl, file_path,
                          true /* is_executable */),
           base::BindOnce(&NaClProcessHost::StartNaClFileResolved,
@@ -833,9 +833,8 @@ void NaClProcessHost::StartNaClFileResolved(
   if (checked_nexe_file.IsValid()) {
     // Release the file received from the renderer. This has to be done on a
     // thread where IO is permitted, though.
-    base::PostTask(
-        FROM_HERE,
-        {base::ThreadPool(), base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
         base::BindOnce(&CloseFile, std::move(nexe_file_)));
     params.nexe_file_path_metadata = file_path;
     params.nexe_file =
@@ -1045,14 +1044,14 @@ void NaClProcessHost::OnResolveFileToken(uint64_t file_token_lo,
   }
 
   // Open the file.
-  base::PostTaskAndReplyWithResult(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
       // USER_BLOCKING because it is on the critical path of displaying the
       // official virtual keyboard on Chrome OS. https://crbug.com/976542
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-      base::Bind(OpenNaClReadExecImpl, file_path, true /* is_executable */),
-      base::Bind(&NaClProcessHost::FileResolved, weak_factory_.GetWeakPtr(),
-                 file_token_lo, file_token_hi, file_path));
+      {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+      base::BindOnce(OpenNaClReadExecImpl, file_path, true /* is_executable */),
+      base::BindOnce(&NaClProcessHost::FileResolved, weak_factory_.GetWeakPtr(),
+                     file_token_lo, file_token_hi, file_path));
 }
 
 void NaClProcessHost::FileResolved(

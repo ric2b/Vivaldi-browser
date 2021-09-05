@@ -20,8 +20,8 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/cpp/resource_request.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "services/network/public/mojom/websocket.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -51,7 +51,7 @@ class WebRequestProxyingWebSocket
       int process_id,
       int render_frame_id,
       content::BrowserContext* browser_context,
-      scoped_refptr<WebRequestAPI::RequestIDGenerator> request_id_generator,
+      WebRequestAPI::RequestIDGenerator* request_id_generator,
       WebRequestAPI::ProxySet* proxies);
   ~WebRequestProxyingWebSocket() override;
 
@@ -63,10 +63,9 @@ class WebRequestProxyingWebSocket
   void OnConnectionEstablished(
       mojo::PendingRemote<network::mojom::WebSocket> websocket,
       mojo::PendingReceiver<network::mojom::WebSocketClient> client_receiver,
-      const std::string& selected_protocol,
-      const std::string& extensions,
       network::mojom::WebSocketHandshakeResponsePtr response,
-      mojo::ScopedDataPipeConsumerHandle readable) override;
+      mojo::ScopedDataPipeConsumerHandle readable,
+      mojo::ScopedDataPipeProducerHandle writable) override;
 
   // network::mojom::AuthenticationHandler method:
   void OnAuthRequired(const net::AuthChallengeInfo& auth_info,
@@ -91,7 +90,7 @@ class WebRequestProxyingWebSocket
       bool has_extra_headers,
       int process_id,
       int render_frame_id,
-      scoped_refptr<WebRequestAPI::RequestIDGenerator> request_id_generator,
+      WebRequestAPI::RequestIDGenerator* request_id_generator,
       const url::Origin& origin,
       content::BrowserContext* browser_context,
       WebRequestAPI::ProxySet* proxies);
@@ -113,8 +112,13 @@ class WebRequestProxyingWebSocket
   void PauseIncomingMethodCallProcessing();
   void ResumeIncomingMethodCallProcessing();
   void OnError(int result);
-  void OnMojoConnectionError(uint32_t custom_reason,
-                             const std::string& description);
+  // This is used for detecting errors on mojo connection with the network
+  // service.
+  void OnMojoConnectionErrorWithCustomReason(uint32_t custom_reason,
+                                             const std::string& description);
+  // This is used for detecting errors on mojo connection with original client
+  // (i.e., renderer).
+  void OnMojoConnectionError();
 
   WebSocketFactory factory_;
   content::BrowserContext* const browser_context_;
@@ -128,7 +132,7 @@ class WebRequestProxyingWebSocket
       receiver_as_header_client_{this};
 
   net::HttpRequestHeaders request_headers_;
-  network::ResourceResponseHead response_;
+  network::mojom::URLResponseHeadPtr response_;
   net::AuthCredentials auth_credentials_;
   OnAuthRequiredCallback auth_required_callback_;
   scoped_refptr<net::HttpResponseHeaders> override_headers_;
@@ -142,10 +146,9 @@ class WebRequestProxyingWebSocket
   bool has_extra_headers_;
   mojo::PendingRemote<network::mojom::WebSocket> websocket_;
   mojo::PendingReceiver<network::mojom::WebSocketClient> client_receiver_;
-  std::string selected_protocol_;
-  std::string extensions_;
   network::mojom::WebSocketHandshakeResponsePtr handshake_response_ = nullptr;
   mojo::ScopedDataPipeConsumerHandle readable_;
+  mojo::ScopedDataPipeProducerHandle writable_;
 
   WebRequestInfo info_;
 

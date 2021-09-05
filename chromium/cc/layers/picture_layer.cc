@@ -17,8 +17,6 @@
 #include "cc/trees/transform_node.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
-static constexpr int kMaxNumberOfSlowPathsBeforeReporting = 5;
-
 namespace cc {
 
 PictureLayer::PictureLayerInputs::PictureLayerInputs() = default;
@@ -64,6 +62,8 @@ void PictureLayer::PushPropertiesTo(LayerImpl* base_layer) {
   layer_impl->set_gpu_raster_max_texture_size(
       layer_tree_host()->device_viewport_rect().size());
   layer_impl->SetIsBackdropFilterMask(is_backdrop_filter_mask());
+  layer_impl->SetDirectlyCompositedImageSize(
+      picture_layer_inputs_.directly_composited_image_size);
 
   // TODO(enne): http://crbug.com/918126 debugging
   CHECK(this);
@@ -130,12 +130,10 @@ bool PictureLayer::Update() {
   // for them.
   DCHECK(picture_layer_inputs_.client);
 
-  picture_layer_inputs_.recorded_viewport =
-      picture_layer_inputs_.client->PaintableRegion();
+  auto recorded_viewport = picture_layer_inputs_.client->PaintableRegion();
 
   updated |= recording_source_->UpdateAndExpandInvalidation(
-      &last_updated_invalidation_, layer_size,
-      picture_layer_inputs_.recorded_viewport);
+      &last_updated_invalidation_, layer_size, recorded_viewport);
 
   if (updated) {
     picture_layer_inputs_.display_list =
@@ -187,22 +185,6 @@ sk_sp<SkPicture> PictureLayer::GetPicture() const {
   scoped_refptr<RasterSource> raster_source =
       recording_source.CreateRasterSource();
   return raster_source->GetFlattenedPicture();
-}
-
-bool PictureLayer::HasSlowPaths() const {
-  // The display list needs to be created (see: UpdateAndExpandInvalidation)
-  // before checking for slow paths. There are cases where an update will not
-  // create a display list (e.g., if the size is empty). We return false in
-  // these cases because the slow paths bit sticks true.
-  return picture_layer_inputs_.display_list &&
-         picture_layer_inputs_.display_list->NumSlowPaths() >
-             kMaxNumberOfSlowPathsBeforeReporting;
-}
-
-bool PictureLayer::HasNonAAPaint() const {
-  // We return false by default, as this bit sticks true.
-  return picture_layer_inputs_.display_list &&
-         picture_layer_inputs_.display_list->HasNonAAPaint();
 }
 
 void PictureLayer::ClearClient() {
@@ -287,7 +269,6 @@ void PictureLayer::DropRecordingSourceContentIfInvalid() {
     // for example), even though it has resized making the recording source no
     // longer valid. In this case just destroy the recording source.
     recording_source_->SetEmptyBounds();
-    picture_layer_inputs_.recorded_viewport = gfx::Rect();
     picture_layer_inputs_.display_list = nullptr;
     picture_layer_inputs_.painter_reported_memory_usage = 0;
   }

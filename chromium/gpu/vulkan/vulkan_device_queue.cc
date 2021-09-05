@@ -8,10 +8,10 @@
 #include <utility>
 #include <vector>
 
+#include "gpu/config/vulkan_info.h"
 #include "gpu/vulkan/vulkan_command_pool.h"
 #include "gpu/vulkan/vulkan_fence_helper.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
-#include "gpu/vulkan/vulkan_info.h"
 
 namespace gpu {
 
@@ -30,6 +30,7 @@ bool VulkanDeviceQueue::Initialize(
     uint32_t options,
     const VulkanInfo& info,
     const std::vector<const char*>& required_extensions,
+    const std::vector<const char*>& optional_extensions,
     bool allow_protected_memory,
     const GetPresentationSupportCallback& get_presentation_support) {
   DCHECK_EQ(static_cast<VkPhysicalDevice>(VK_NULL_HANDLE), vk_physical_device_);
@@ -72,8 +73,10 @@ bool VulkanDeviceQueue::Initialize(
     }
   }
 
-  if (queue_index == -1)
+  if (queue_index == -1) {
+    DLOG(ERROR) << "Cannot find capable device queue.";
     return false;
+  }
 
   const auto& physical_device_info = info.physical_devices[device_index];
   vk_physical_device_ = physical_device_info.device;
@@ -89,22 +92,41 @@ bool VulkanDeviceQueue::Initialize(
   queue_create_info.flags =
       allow_protected_memory ? VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT : 0;
 
-  std::vector<const char*> enabled_layer_names;
-#if DCHECK_IS_ON()
-  std::unordered_set<std::string> desired_layers({
-      "VK_LAYER_KHRONOS_validation",
-  });
-
-  for (const auto& layer : physical_device_info.layers) {
-    if (desired_layers.find(layer.layerName) != desired_layers.end())
-      enabled_layer_names.push_back(layer.layerName);
-  }
-#endif  // DCHECK_IS_ON()
-
   std::vector<const char*> enabled_extensions;
-  enabled_extensions.insert(std::end(enabled_extensions),
-                            std::begin(required_extensions),
-                            std::end(required_extensions));
+  for (const char* extension : required_extensions) {
+    const auto it =
+        std::find_if(physical_device_info.extensions.begin(),
+                     physical_device_info.extensions.end(),
+                     [extension](const VkExtensionProperties& p) {
+                       return std::strcmp(extension, p.extensionName) == 0;
+                     });
+    if (it == physical_device_info.extensions.end()) {
+      // On Fuchsia, some device extensions are provided by layers.
+      // TODO(penghuang): checking extensions against layer device extensions
+      // too.
+#if !defined(OS_FUCHSIA)
+      DLOG(ERROR) << "Required Vulkan extension " << extension
+                  << " is not supported.";
+      return false;
+#endif
+    }
+    enabled_extensions.push_back(extension);
+  }
+
+  for (const char* extension : optional_extensions) {
+    const auto it =
+        std::find_if(physical_device_info.extensions.begin(),
+                     physical_device_info.extensions.end(),
+                     [extension](const VkExtensionProperties& p) {
+                       return std::strcmp(extension, p.extensionName) == 0;
+                     });
+    if (it == physical_device_info.extensions.end()) {
+      DLOG(ERROR) << "Optional Vulkan extension " << extension
+                  << " is not supported.";
+    } else {
+      enabled_extensions.push_back(extension);
+    }
+  }
 
   uint32_t device_api_version = std::min(
       info.used_api_version, vk_physical_device_properties_.apiVersion);
@@ -148,16 +170,16 @@ bool VulkanDeviceQueue::Initialize(
   device_create_info.pNext = enabled_device_features_2_.pNext;
   device_create_info.queueCreateInfoCount = 1;
   device_create_info.pQueueCreateInfos = &queue_create_info;
-  device_create_info.enabledLayerCount = enabled_layer_names.size();
-  device_create_info.ppEnabledLayerNames = enabled_layer_names.data();
   device_create_info.enabledExtensionCount = enabled_extensions.size();
   device_create_info.ppEnabledExtensionNames = enabled_extensions.data();
   device_create_info.pEnabledFeatures = &enabled_device_features_2_.features;
 
   result = vkCreateDevice(vk_physical_device_, &device_create_info, nullptr,
                           &owned_vk_device_);
-  if (VK_SUCCESS != result)
+  if (VK_SUCCESS != result) {
+    DLOG(ERROR) << "vkCreateDevice failed. result:" << result;
     return false;
+  }
 
   enabled_extensions_ = gfx::ExtensionSet(std::begin(enabled_extensions),
                                           std::end(enabled_extensions));
@@ -185,7 +207,6 @@ bool VulkanDeviceQueue::Initialize(
   cleanup_helper_ = std::make_unique<VulkanFenceHelper>(this);
 
   allow_protected_memory_ = allow_protected_memory;
-
   return true;
 }
 

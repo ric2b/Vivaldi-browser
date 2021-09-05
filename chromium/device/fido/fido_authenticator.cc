@@ -9,7 +9,6 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "device/fido/fido_constants.h"
-#include "device/fido/pin.h"
 
 namespace device {
 
@@ -20,32 +19,34 @@ void FidoAuthenticator::GetNextAssertion(
 
 void FidoAuthenticator::GetTouch(base::OnceCallback<void()> callback) {}
 
-void FidoAuthenticator::GetRetries(
+void FidoAuthenticator::GetPinRetries(
     FidoAuthenticator::GetRetriesCallback callback) {
-  NOTREACHED();
-}
-
-void FidoAuthenticator::GetEphemeralKey(
-    FidoAuthenticator::GetEphemeralKeyCallback callback) {
   NOTREACHED();
 }
 
 void FidoAuthenticator::GetPINToken(
     std::string pin,
-    const pin::KeyAgreementResponse& peer_key,
-    FidoAuthenticator::GetPINTokenCallback callback) {
+    FidoAuthenticator::GetTokenCallback callback) {
+  NOTREACHED();
+}
+
+void FidoAuthenticator::GetUvRetries(
+    FidoAuthenticator::GetRetriesCallback callback) {
+  NOTREACHED();
+}
+
+void FidoAuthenticator::GetUvToken(
+    FidoAuthenticator::GetTokenCallback callback) {
   NOTREACHED();
 }
 
 void FidoAuthenticator::SetPIN(const std::string& pin,
-                               const pin::KeyAgreementResponse& peer_key,
                                FidoAuthenticator::SetPINCallback callback) {
   NOTREACHED();
 }
 
 void FidoAuthenticator::ChangePIN(const std::string& old_pin,
                                   const std::string& new_pin,
-                                  pin::KeyAgreementResponse& peer_key,
                                   SetPINCallback callback) {
   NOTREACHED();
 }

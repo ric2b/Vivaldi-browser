@@ -2,6 +2,22 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+source_set("public") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "translate_constants.h",
+    "translate_constants.mm",
+    "translate_infobar_delegate_observer_bridge.h",
+    "translate_infobar_delegate_observer_bridge.mm",
+    "translate_infobar_metrics_recorder.h",
+    "translate_infobar_metrics_recorder.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/translate/core/browser",
+  ]
+}
+
 source_set("translate") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
@@ -15,8 +31,6 @@ source_set("translate") {
     "translate_accept_languages_factory.h",
     "translate_infobar_controller.h",
     "translate_infobar_controller.mm",
-    "translate_infobar_delegate_observer_bridge.h",
-    "translate_infobar_delegate_observer_bridge.mm",
     "translate_infobar_tags.h",
     "translate_option_selection_delegate.h",
     "translate_option_selection_handler.h",
@@ -28,6 +42,7 @@ source_set("translate") {
     "translate_service_ios.mm",
   ]
   deps = [
+    ":public",
     "//base",
     "//components/infobars/core",
     "//components/keyed_service/core",
@@ -47,9 +62,12 @@ source_set("translate") {
     "//ios/chrome/browser/infobars",
     "//ios/chrome/browser/infobars:public",
     "//ios/chrome/browser/language",
+    "//ios/chrome/browser/ui/infobars:feature_flags",
     "//ios/chrome/browser/ui/infobars:infobars_ui",
+    "//ios/chrome/browser/ui/infobars/coordinators:translate",
     "//ios/chrome/browser/ui/translate:translate_ui",
     "//ios/chrome/browser/ui/util",
+    "//ios/components/webui:url_constants",
     "//ios/web/public/deprecated",
     "//third_party/metrics_proto",
     "//ui/base",
@@ -69,6 +87,7 @@ source_set("unit_tests") {
     "translate_service_ios_unittest.cc",
   ]
   deps = [
+    ":public",
     ":translate",
     "//base",
     "//base/test:test_support",
@@ -90,12 +109,12 @@ source_set("unit_tests") {
 }
 
 source_set("eg_tests") {
+  defines = [ "CHROME_EARL_GREY_1" ]
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
-  sources = [
-    "translate_egtest.mm",
-  ]
+  sources = [ "translate_egtest.mm" ]
   deps = [
+    ":test_support",
     ":translate",
     "//base",
     "//base/test:test_support",
@@ -105,15 +124,17 @@ source_set("eg_tests") {
     "//components/translate/core/common",
     "//components/translate/ios/browser",
     "//ios/chrome/app/strings:ios_strings_grit",
-    "//ios/chrome/browser",
+    "//ios/chrome/browser:chrome_url_constants",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/ui/popup_menu:constants",
-    "//ios/chrome/browser/ui/translate",
-    "//ios/chrome/browser/ui/translate:translate_ui",
+    "//ios/chrome/browser/ui/translate:legacy_translate_constants",
+    "//ios/chrome/browser/ui/translate:translate_ui_constants",
     "//ios/chrome/browser/ui/util:util",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/chrome/test/fakes",
+    "//ios/components/webui:url_constants",
+    "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey:earl_grey+link",
     "//ios/web:earl_grey_test_support",
     "//ios/web/public/test",
@@ -122,4 +143,96 @@ source_set("eg_tests") {
     "//ui/base",
   ]
   libs = [ "XCTest.framework" ]
+}
+
+source_set("eg2_tests") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+  sources = [ "translate_egtest.mm" ]
+  deps = [
+    ":eg_test_support+eg2",
+    "//base/test:test_support",
+    "//components/strings:components_strings_grit",
+    "//components/translate/core/browser:browser",
+    "//components/translate/core/common:common",
+    "//ios/chrome/app/strings:ios_strings_grit",
+    "//ios/chrome/browser:chrome_url_constants",
+    "//ios/chrome/browser/ui/popup_menu:constants",
+    "//ios/chrome/browser/ui/translate:legacy_translate_constants",
+    "//ios/chrome/browser/ui/translate:translate_ui_constants",
+    "//ios/chrome/test/earl_grey:eg_test_support+eg2",
+    "//ios/components/webui:url_constants",
+    "//ios/testing/earl_grey:eg_test_support+eg2",
+    "//ios/third_party/earl_grey2:test_lib",
+    "//ios/web/public:public",
+    "//ios/web/public/test/http_server:http_server",
+    "//ui/base:base",
+    "//url:url",
+  ]
+  libs = [ "UIKit.framework" ]
+}
+
+source_set("test_support") {
+  defines = [ "CHROME_EARL_GREY_1" ]
+  testonly = true
+  sources = [
+    "translate_app_interface.h",
+    "translate_app_interface.mm",
+  ]
+  deps = [
+    "//components/translate/core/browser:browser",
+    "//components/translate/core/common:common",
+    "//components/translate/ios/browser:browser",
+    "//ios/chrome/browser/browser_state:browser_state",
+    "//ios/chrome/browser/translate",
+    "//ios/chrome/test/app:test_support",
+    "//ios/chrome/test/fakes:fakes",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("eg_app_support+eg2") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+  sources = [
+    "translate_app_interface.h",
+    "translate_app_interface.mm",
+  ]
+  deps = [
+    "//base:base",
+    "//components/translate/core/browser:browser",
+    "//components/translate/core/common:common",
+    "//components/translate/ios/browser:browser",
+    "//ios/chrome/browser/browser_state:browser_state",
+    "//ios/chrome/browser/translate:translate",
+    "//ios/chrome/test/app:test_support",
+    "//ios/chrome/test/fakes:fakes",
+    "//net:net",
+  ]
+}
+
+source_set("eg_test_support+eg2") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+  sources = [
+    "translate_app_interface.h",
+    "translate_app_interface_stub.mm",
+  ]
+  deps = [
+    "//ios/chrome/test/earl_grey:eg_test_support+eg2",
+    "//ios/testing/earl_grey:eg_test_support+eg2",
+    "//ios/third_party/earl_grey2:test_lib",
+  ]
 }

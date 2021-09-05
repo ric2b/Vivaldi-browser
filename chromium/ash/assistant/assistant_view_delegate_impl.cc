@@ -9,6 +9,14 @@
 #include "ash/assistant/assistant_interaction_controller.h"
 #include "ash/assistant/assistant_notification_controller.h"
 #include "ash/assistant/assistant_suggestions_controller.h"
+#include "ash/assistant/model/assistant_interaction_model.h"
+#include "ash/assistant/model/assistant_interaction_model_observer.h"
+#include "ash/assistant/model/assistant_notification_model.h"
+#include "ash/assistant/model/assistant_notification_model_observer.h"
+#include "ash/assistant/model/assistant_suggestions_model.h"
+#include "ash/assistant/model/assistant_suggestions_model_observer.h"
+#include "ash/assistant/model/assistant_ui_model.h"
+#include "ash/assistant/model/assistant_ui_model_observer.h"
 #include "ash/public/cpp/assistant/assistant_state_base.h"
 #include "ash/shell.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -20,6 +28,11 @@ AssistantViewDelegateImpl::AssistantViewDelegateImpl(
     : assistant_controller_(assistant_controller) {}
 
 AssistantViewDelegateImpl::~AssistantViewDelegateImpl() = default;
+
+const AssistantAlarmTimerModel* AssistantViewDelegateImpl::GetAlarmTimerModel()
+    const {
+  return assistant_controller_->alarm_timer_controller()->model();
+}
 
 const AssistantInteractionModel*
 AssistantViewDelegateImpl::GetInteractionModel() const {
@@ -48,6 +61,17 @@ void AssistantViewDelegateImpl::AddObserver(
 void AssistantViewDelegateImpl::RemoveObserver(
     AssistantViewDelegateObserver* observer) {
   view_delegate_observers_.RemoveObserver(observer);
+}
+
+void AssistantViewDelegateImpl::AddAlarmTimerModelObserver(
+    AssistantAlarmTimerModelObserver* observer) {
+  assistant_controller_->alarm_timer_controller()->AddModelObserver(observer);
+}
+
+void AssistantViewDelegateImpl::RemoveAlarmTimerModelObserver(
+    AssistantAlarmTimerModelObserver* observer) {
+  assistant_controller_->alarm_timer_controller()->RemoveModelObserver(
+      observer);
 }
 
 void AssistantViewDelegateImpl::AddInteractionModelObserver(
@@ -93,10 +117,6 @@ void AssistantViewDelegateImpl::RemoveUiModelObserver(
   assistant_controller_->ui_controller()->RemoveModelObserver(observer);
 }
 
-CaptionBarDelegate* AssistantViewDelegateImpl::GetCaptionBarDelegate() {
-  return assistant_controller_->ui_controller();
-}
-
 void AssistantViewDelegateImpl::DownloadImage(
     const GURL& url,
     AssistantImageDownloader::DownloadCallback callback) {
@@ -107,9 +127,9 @@ void AssistantViewDelegateImpl::DownloadImage(
   return Shell::Get()->cursor_manager();
 }
 
-void AssistantViewDelegateImpl::GetNavigableContentsFactoryForView(
-    mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver) {
-  assistant_controller_->GetNavigableContentsFactory(std::move(receiver));
+aura::Window* AssistantViewDelegateImpl::GetRootWindowForDisplayId(
+    int64_t display_id) {
+  return Shell::Get()->GetRootWindowForDisplayId(display_id);
 }
 
 aura::Window* AssistantViewDelegateImpl::GetRootWindowForNewWindows() {
@@ -132,9 +152,9 @@ void AssistantViewDelegateImpl::OnDialogPlateContentsCommitted(
     observer.OnDialogPlateContentsCommitted(text);
 }
 
-void AssistantViewDelegateImpl::OnMiniViewPressed() {
-  for (auto& observer : view_delegate_observers_)
-    observer.OnMiniViewPressed();
+void AssistantViewDelegateImpl::OnHostViewVisibilityChanged(bool visible) {
+  for (AssistantViewDelegateObserver& observer : view_delegate_observers_)
+    observer.OnHostViewVisibilityChanged(visible);
 }
 
 void AssistantViewDelegateImpl::OnNotificationButtonPressed(
@@ -173,13 +193,6 @@ void AssistantViewDelegateImpl::OnSuggestionChipPressed(
 
 void AssistantViewDelegateImpl::OpenUrlFromView(const GURL& url) {
   assistant_controller_->OpenUrl(url);
-}
-
-void AssistantViewDelegateImpl::NotifyDeepLinkReceived(
-    assistant::util::DeepLinkType type,
-    const std::map<std::string, std::string>& params) {
-  for (AssistantViewDelegateObserver& observer : view_delegate_observers_)
-    observer.OnDeepLinkReceived(type, params);
 }
 
 }  // namespace ash

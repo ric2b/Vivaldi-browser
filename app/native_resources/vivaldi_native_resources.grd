@@ -11,5 +11,11 @@
     <output filename="vivaldi_native_resources_200_percent.pak" type="data_package" context="default_200_percent" />
   </outputs>
   <release seq="1" allow_pseudo="false">
+    <includes>
+      <include name="VIVALDI_PIP_MANIFEST" file="../../components/picture-in-picture/manifest.json" type="BINDATA" />
+      <include name="VIVALDI_PIP_JS_MAIN" file="../../components/picture-in-picture/picture-in-picture.js" type="BINDATA" />
+      <include name="VIVALDI_PIP_JS_CSS" file="../../components/picture-in-picture/picture-in-picture.css" type="BINDATA" />
+      <include name="VIVALDI_PIP_JS_CONFIG" file="../../components/picture-in-picture/config.json" type="BINDATA" />
+    </includes>
   </release>
 </grit>

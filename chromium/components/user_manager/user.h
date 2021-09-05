@@ -117,6 +117,9 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   // True if the user is a device local account user.
   virtual bool IsDeviceLocalAccount() const;
 
+  // True if the user is a kiosk.
+  bool IsKioskType() const;
+
   // The displayed user name.
   base::string16 display_name() const { return display_name_; }
 
@@ -186,6 +189,11 @@ class USER_MANAGER_EXPORT User : public UserInfo {
     return CreatePublicAccountUser(account_id);
   }
 
+  static User* CreatePublicAccountUserForTestingWithSAML(
+      const AccountId& account_id) {
+    return CreatePublicAccountUser(account_id, /* is_using_saml */ true);
+  }
+
   static User* CreateRegularUserForTesting(const AccountId& account_id) {
     User* user = CreateRegularUser(account_id, USER_TYPE_REGULAR);
     user->SetImage(std::unique_ptr<UserImage>(new UserImage), 0);
@@ -216,6 +224,7 @@ class USER_MANAGER_EXPORT User : public UserInfo {
   static User* CreateGuestUser(const AccountId& guest_account_id);
   static User* CreateKioskAppUser(const AccountId& kiosk_app_account_id);
   static User* CreateArcKioskAppUser(const AccountId& arc_kiosk_account_id);
+  static User* CreateWebKioskAppUser(const AccountId& web_kiosk_account_id);
   static User* CreateSupervisedUser(const AccountId& account_id);
   static User* CreatePublicAccountUser(const AccountId& account_id,
                                        bool is_using_saml = false);

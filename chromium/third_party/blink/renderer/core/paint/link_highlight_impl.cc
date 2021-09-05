@@ -33,7 +33,6 @@
 #include "cc/layers/picture_layer.h"
 #include "cc/paint/display_item_list.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_float_point.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/web/blink.h"
@@ -47,6 +46,8 @@
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_item.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
@@ -112,6 +113,8 @@ LinkHighlightImpl::LinkHighlightImpl(Node* node)
       EffectPaintPropertyNode::Root(),
       LinkHighlightEffectNodeState(kStartOpacity, element_id_));
 
+  DCHECK(GetLayoutObject());
+  GetLayoutObject()->SetNeedsPaintPropertyUpdate();
   SetPaintArtifactCompositorNeedsUpdate();
 
 #if DCHECK_IS_ON()
@@ -132,7 +135,7 @@ void LinkHighlightImpl::ReleaseResources() {
   if (!node_)
     return;
 
-  if (auto* layout_object = node_->GetLayoutObject())
+  if (auto* layout_object = GetLayoutObject())
     layout_object->SetNeedsPaintPropertyUpdate();
 
   SetPaintArtifactCompositorNeedsUpdate();
@@ -142,7 +145,6 @@ void LinkHighlightImpl::ReleaseResources() {
 
 LinkHighlightImpl::LinkHighlightFragment::LinkHighlightFragment() {
   layer_ = cc::PictureLayer::Create(this);
-  layer_->SetTransformOrigin(FloatPoint3D());
   layer_->SetIsDrawable(true);
   layer_->SetOpacity(kStartOpacity);
 }
@@ -232,10 +234,27 @@ void LinkHighlightImpl::NotifyAnimationFinished(double, int) {
   UpdateOpacity(kStartOpacity);
 }
 
-void LinkHighlightImpl::UpdatePrePaint() {
-  if (!node_ || !node_->GetLayoutObject() ||
-      node_->GetLayoutObject()->GetFrameView()->ShouldThrottleRendering())
+void LinkHighlightImpl::UpdateBeforePrePaint() {
+  auto* object = GetLayoutObject();
+  if (!object || object->GetFrameView()->ShouldThrottleRendering())
     ReleaseResources();
+}
+
+void LinkHighlightImpl::UpdateAfterPrePaint() {
+  auto* object = GetLayoutObject();
+  if (!object)
+    return;
+  DCHECK(!object->GetFrameView()->ShouldThrottleRendering());
+
+  size_t fragment_count = 0;
+  for (const auto* fragment = &object->FirstFragment(); fragment;
+       fragment = fragment->NextFragment())
+    ++fragment_count;
+
+  if (fragment_count != fragments_.size()) {
+    fragments_.resize(fragment_count);
+    SetPaintArtifactCompositorNeedsUpdate();
+  }
 }
 
 CompositorAnimation* LinkHighlightImpl::GetCompositorAnimation() const {
@@ -243,11 +262,11 @@ CompositorAnimation* LinkHighlightImpl::GetCompositorAnimation() const {
 }
 
 void LinkHighlightImpl::Paint(GraphicsContext& context) {
-  if (!node_)
+  auto* object = GetLayoutObject();
+  if (!object)
     return;
 
-  const auto* object = node_->GetLayoutObject();
-  DCHECK(object);
+  DCHECK(object->GetFrameView());
   DCHECK(!object->GetFrameView()->ShouldThrottleRendering());
 
   static const FloatSize rect_rounding_radii(3, 3);
@@ -270,6 +289,20 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
     if (rects.size() > 1)
       use_rounded_rects = false;
 
+    // TODO(yosin): We should remove following if-statement once we release
+    // NGFragmentItem to renderer rounded rect even if nested inline, e.g.
+    // <a>ABC<b>DEF</b>GHI</a>.
+    // See gesture-tapHighlight-simple-nested.html
+    if (RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled() &&
+        use_rounded_rects && object->IsLayoutInline()) {
+      NGInlineCursor cursor;
+      cursor.MoveTo(*object);
+      // When |LayoutInline| has more than one children, we render square
+      // rectangle as |NGPaintFragment|.
+      if (cursor && cursor.CurrentItem()->DescendantsCount() > 2)
+        use_rounded_rects = false;
+    }
+
     Path new_path;
     for (auto& rect : rects) {
       FloatRect snapped_rect(PixelSnappedIntRect(rect));
@@ -279,9 +312,7 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
         new_path.AddRect(snapped_rect);
     }
 
-    if (index == fragments_.size())
-      fragments_.emplace_back();
-
+    DCHECK_LT(index, fragments_.size());
     auto& link_highlight_fragment = fragments_[index];
     link_highlight_fragment.SetColor(color);
 
@@ -289,24 +320,24 @@ void LinkHighlightImpl::Paint(GraphicsContext& context) {
     new_path.Translate(-ToFloatSize(bounding_rect.Location()));
 
     auto* layer = link_highlight_fragment.Layer();
+    DCHECK(layer);
     if (link_highlight_fragment.GetPath() != new_path) {
       link_highlight_fragment.SetPath(new_path);
       layer->SetBounds(gfx::Size(EnclosingIntRect(bounding_rect).Size()));
       layer->SetNeedsDisplay();
     }
 
+    DEFINE_STATIC_LOCAL(LiteralDebugNameClient, debug_name_client,
+                        ("LinkHighlight"));
+
     auto property_tree_state = fragment->LocalBorderBoxProperties();
     property_tree_state.SetEffect(Effect());
-    RecordForeignLayer(context, DisplayItem::kForeignLayerLinkHighlight, layer,
-                       bounding_rect.Location(), property_tree_state);
+    RecordForeignLayer(context, debug_name_client,
+                       DisplayItem::kForeignLayerLinkHighlight, layer,
+                       bounding_rect.Location(), &property_tree_state);
   }
 
-  if (index < fragments_.size()) {
-    fragments_.Shrink(index);
-    // PaintArtifactCompositor needs update for the cc::PictureLayers we just
-    // removed for the extra fragments.
-    SetPaintArtifactCompositorNeedsUpdate();
-  }
+  DCHECK_EQ(index, fragments_.size());
 }
 
 void LinkHighlightImpl::SetPaintArtifactCompositorNeedsUpdate() {

@@ -46,7 +46,9 @@
 #include "chromeos/network/network_state_handler.h"
 #include "components/drive/chromeos/search_metadata.h"
 #include "components/drive/event_logger.h"
+#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
@@ -55,8 +57,8 @@
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "services/network/public/cpp/network_connection_tracker.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
-#include "storage/common/fileapi/file_system_info.h"
-#include "storage/common/fileapi/file_system_util.h"
+#include "storage/common/file_system/file_system_info.h"
+#include "storage/common/file_system/file_system_util.h"
 #include "url/gurl.h"
 
 using content::BrowserThread;
@@ -76,18 +78,6 @@ using google_apis::DriveApiUrlGenerator;
 
 namespace extensions {
 namespace {
-
-// List of connection types of drive.
-// Keep this in sync with the DriveConnectionType in common/js/util.js.
-const char kDriveConnectionTypeOffline[] = "offline";
-const char kDriveConnectionTypeMetered[] = "metered";
-const char kDriveConnectionTypeOnline[] = "online";
-
-// List of reasons of kDriveConnectionType*.
-// Keep this in sync with the DriveConnectionReason in common/js/util.js.
-const char kDriveConnectionReasonNotReady[] = "not_ready";
-const char kDriveConnectionReasonNoNetwork[] = "no_network";
-const char kDriveConnectionReasonNoService[] = "no_service";
 
 constexpr char kAvailableOfflinePropertyName[] = "availableOffline";
 
@@ -235,7 +225,7 @@ class SingleEntryPropertiesGetterForFileSystemProvider {
     DCHECK(!callback_.is_null());
 
     std::move(callback_).Run(std::move(properties_), result);
-    BrowserThread::DeleteSoon(BrowserThread::UI, FROM_HERE, this);
+    base::DeleteSoon(FROM_HERE, {BrowserThread::UI}, this);
   }
 
   // Given parameters.
@@ -411,7 +401,7 @@ class SingleEntryPropertiesGetterForDriveFs {
 
     std::move(callback_).Run(std::move(properties_),
                              drive::FileErrorToBaseFileError(error));
-    BrowserThread::DeleteSoon(BrowserThread::UI, FROM_HERE, this);
+    base::DeleteSoon(FROM_HERE, {BrowserThread::UI}, this);
   }
 
   // Given parameters.
@@ -500,7 +490,7 @@ class SingleEntryPropertiesGetterForDocumentsProvider {
     DCHECK(callback_);
 
     std::move(callback_).Run(std::move(properties_), error);
-    BrowserThread::DeleteSoon(BrowserThread::UI, FROM_HERE, this);
+    base::DeleteSoon(FROM_HERE, {BrowserThread::UI}, this);
   }
 
   // Given parameters.
@@ -554,7 +544,6 @@ void OnSearchDriveFs(
   const base::FilePath root("/");
 
   auto result = std::make_unique<base::ListValue>();
-  result->GetList().reserve(items->size());
   for (const auto& item : *items) {
     base::FilePath path;
     if (!root.AppendRelativePath(item->path, &path))
@@ -942,7 +931,6 @@ void FileManagerPrivateSearchDriveMetadataFunction::OnSearchDriveFs(
   }
 
   auto results_list = std::make_unique<base::ListValue>();
-  results_list->GetList().reserve(results->GetList().size());
   for (auto& entry : *results) {
     base::DictionaryValue dict;
     std::string highlight;
@@ -975,25 +963,29 @@ FileManagerPrivateGetDriveConnectionStateFunction::Run() {
   switch (drive::util::GetDriveConnectionStatus(
       Profile::FromBrowserContext(browser_context()))) {
     case drive::util::DRIVE_DISCONNECTED_NOSERVICE:
-      result.type = kDriveConnectionTypeOffline;
+      result.type =
+          api::file_manager_private::DRIVE_CONNECTION_STATE_TYPE_OFFLINE;
       result.reason =
-          std::make_unique<std::string>(kDriveConnectionReasonNoService);
+          api::file_manager_private::DRIVE_OFFLINE_REASON_NO_SERVICE;
       break;
     case drive::util::DRIVE_DISCONNECTED_NONETWORK:
-      result.type = kDriveConnectionTypeOffline;
+      result.type =
+          api::file_manager_private::DRIVE_CONNECTION_STATE_TYPE_OFFLINE;
       result.reason =
-          std::make_unique<std::string>(kDriveConnectionReasonNoNetwork);
+          api::file_manager_private::DRIVE_OFFLINE_REASON_NO_NETWORK;
       break;
     case drive::util::DRIVE_DISCONNECTED_NOTREADY:
-      result.type = kDriveConnectionTypeOffline;
-      result.reason =
-          std::make_unique<std::string>(kDriveConnectionReasonNotReady);
+      result.type =
+          api::file_manager_private::DRIVE_CONNECTION_STATE_TYPE_OFFLINE;
+      result.reason = api::file_manager_private::DRIVE_OFFLINE_REASON_NOT_READY;
       break;
     case drive::util::DRIVE_CONNECTED_METERED:
-      result.type = kDriveConnectionTypeMetered;
+      result.type =
+          api::file_manager_private::DRIVE_CONNECTION_STATE_TYPE_METERED;
       break;
     case drive::util::DRIVE_CONNECTED:
-      result.type = kDriveConnectionTypeOnline;
+      result.type =
+          api::file_manager_private::DRIVE_CONNECTION_STATE_TYPE_ONLINE;
       break;
   }
 
@@ -1031,8 +1023,6 @@ FileManagerPrivateInternalGetDownloadUrlFunction::Run() {
       file_system_context->CrackURL(url);
 
   switch (file_system_url.type()) {
-    case storage::kFileSystemTypeDrive:
-      return RespondNow(Error("Legacy drive client is not supported"));
     case storage::kFileSystemTypeDriveFs:
       return RunAsyncForDriveFs(file_system_url);
     default:
@@ -1051,7 +1041,9 @@ void FileManagerPrivateInternalGetDownloadUrlFunction::OnGotDownloadUrl(
   const ChromeExtensionFunctionDetails chrome_details(this);
   signin::IdentityManager* identity_manager =
       IdentityManagerFactory::GetForProfile(chrome_details.GetProfile());
-  const std::string& account_id = identity_manager->GetPrimaryAccountId();
+  // This class doesn't care about browser sync consent.
+  const CoreAccountId& account_id =
+      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kNotRequired);
   std::vector<std::string> scopes;
   scopes.emplace_back("https://www.googleapis.com/auth/drive.readonly");
 
@@ -1061,7 +1053,7 @@ void FileManagerPrivateInternalGetDownloadUrlFunction::OnGotDownloadUrl(
           ->GetURLLoaderFactoryForBrowserProcess();
   auth_service_ = std::make_unique<google_apis::AuthService>(
       identity_manager, account_id, url_loader_factory, scopes);
-  auth_service_->StartAuthentication(base::Bind(
+  auth_service_->StartAuthentication(base::BindOnce(
       &FileManagerPrivateInternalGetDownloadUrlFunction::OnTokenFetched, this));
 }
 

@@ -20,9 +20,9 @@
 #include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
+#include "base/test/task_environment.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -75,22 +75,22 @@ class ConfigBuilder {
 };
 
 void ExpectOpenAndThen(mojom::UsbOpenDeviceError expected,
-                       const base::Closure& continuation,
+                       base::OnceClosure continuation,
                        mojom::UsbOpenDeviceError error) {
   EXPECT_EQ(expected, error);
-  continuation.Run();
+  std::move(continuation).Run();
 }
 
 void ExpectResultAndThen(bool expected_result,
-                         const base::Closure& continuation,
+                         base::OnceClosure continuation,
                          bool actual_result) {
   EXPECT_EQ(expected_result, actual_result);
-  continuation.Run();
+  std::move(continuation).Run();
 }
 
 void ExpectTransferInAndThen(mojom::UsbTransferStatus expected_status,
                              const std::vector<uint8_t>& expected_bytes,
-                             const base::Closure& continuation,
+                             base::OnceClosure continuation,
                              mojom::UsbTransferStatus actual_status,
                              const std::vector<uint8_t>& actual_bytes) {
   EXPECT_EQ(expected_status, actual_status);
@@ -99,12 +99,12 @@ void ExpectTransferInAndThen(mojom::UsbTransferStatus expected_status,
     EXPECT_EQ(expected_bytes[i], actual_bytes[i])
         << "Contents differ at index: " << i;
   }
-  continuation.Run();
+  std::move(continuation).Run();
 }
 
 void ExpectPacketsOutAndThen(
     const std::vector<uint32_t>& expected_packets,
-    const base::Closure& continuation,
+    base::OnceClosure continuation,
     std::vector<UsbIsochronousPacketPtr> actual_packets) {
   ASSERT_EQ(expected_packets.size(), actual_packets.size());
   for (size_t i = 0; i < expected_packets.size(); ++i) {
@@ -113,13 +113,13 @@ void ExpectPacketsOutAndThen(
     EXPECT_EQ(mojom::UsbTransferStatus::COMPLETED, actual_packets[i]->status)
         << "Packet at index " << i << " not completed.";
   }
-  continuation.Run();
+  std::move(continuation).Run();
 }
 
 void ExpectPacketsInAndThen(
     const std::vector<uint8_t>& expected_bytes,
     const std::vector<uint32_t>& expected_packets,
-    const base::Closure& continuation,
+    base::OnceClosure continuation,
     const std::vector<uint8_t>& actual_bytes,
     std::vector<UsbIsochronousPacketPtr> actual_packets) {
   ASSERT_EQ(expected_packets.size(), actual_packets.size());
@@ -134,14 +134,14 @@ void ExpectPacketsInAndThen(
     EXPECT_EQ(expected_bytes[i], actual_bytes[i])
         << "Contents differ at index: " << i;
   }
-  continuation.Run();
+  std::move(continuation).Run();
 }
 
 void ExpectTransferStatusAndThen(mojom::UsbTransferStatus expected_status,
-                                 const base::Closure& continuation,
+                                 base::OnceClosure continuation,
                                  mojom::UsbTransferStatus actual_status) {
   EXPECT_EQ(expected_status, actual_status);
-  continuation.Run();
+  std::move(continuation).Run();
 }
 
 class MockUsbDeviceClient : public mojom::UsbDeviceClient {
@@ -153,6 +153,8 @@ class MockUsbDeviceClient : public mojom::UsbDeviceClient {
     return receiver_.BindNewPipeAndPassRemote();
   }
 
+  void FlushForTesting() { receiver_.FlushForTesting(); }
+
   MOCK_METHOD0(OnDeviceOpened, void());
   MOCK_METHOD0(OnDeviceClosed, void());
 
@@ -162,10 +164,7 @@ class MockUsbDeviceClient : public mojom::UsbDeviceClient {
 
 class USBDeviceImplTest : public testing::Test {
  public:
-  USBDeviceImplTest()
-      : message_loop_(new base::MessageLoop),
-        is_device_open_(false),
-        allow_reset_(false) {}
+  USBDeviceImplTest() : is_device_open_(false), allow_reset_(false) {}
 
   ~USBDeviceImplTest() override = default;
 
@@ -430,7 +429,7 @@ class USBDeviceImplTest : public testing::Test {
     std::move(callback).Run(buffer, std::move(packets));
   }
 
-  std::unique_ptr<base::MessageLoop> message_loop_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
   scoped_refptr<MockUsbDevice> mock_device_;
   scoped_refptr<MockUsbDeviceHandle> mock_handle_;
   bool is_device_open_;
@@ -451,12 +450,31 @@ class USBDeviceImplTest : public testing::Test {
 }  // namespace
 
 TEST_F(USBDeviceImplTest, Disconnect) {
-  mojo::Remote<mojom::UsbDevice> device = GetMockDeviceProxy();
+  MockUsbDeviceClient device_client;
+  mojo::Remote<mojom::UsbDevice> device =
+      GetMockDeviceProxy(device_client.CreateInterfacePtrAndBind());
+
+  EXPECT_FALSE(is_device_open());
+
+  EXPECT_CALL(mock_device(), OpenInternal(_));
+  EXPECT_CALL(device_client, OnDeviceOpened());
+
+  {
+    base::RunLoop loop;
+    device->Open(base::BindOnce(
+        &ExpectOpenAndThen, mojom::UsbOpenDeviceError::OK, loop.QuitClosure()));
+    loop.Run();
+  }
+
+  EXPECT_CALL(mock_handle(), Close());
+  EXPECT_CALL(device_client, OnDeviceClosed());
 
   base::RunLoop loop;
   device.set_disconnect_handler(loop.QuitClosure());
   mock_device().NotifyDeviceRemoved();
   loop.Run();
+
+  device_client.FlushForTesting();
 }
 
 TEST_F(USBDeviceImplTest, Open) {
@@ -532,11 +550,14 @@ TEST_F(USBDeviceImplTest, OpenDelayedFailure) {
 }
 
 TEST_F(USBDeviceImplTest, Close) {
-  mojo::Remote<mojom::UsbDevice> device = GetMockDeviceProxy();
+  MockUsbDeviceClient device_client;
+  mojo::Remote<mojom::UsbDevice> device =
+      GetMockDeviceProxy(device_client.CreateInterfacePtrAndBind());
 
   EXPECT_FALSE(is_device_open());
 
   EXPECT_CALL(mock_device(), OpenInternal(_));
+  EXPECT_CALL(device_client, OnDeviceOpened());
 
   {
     base::RunLoop loop;
@@ -546,6 +567,7 @@ TEST_F(USBDeviceImplTest, Close) {
   }
 
   EXPECT_CALL(mock_handle(), Close());
+  EXPECT_CALL(device_client, OnDeviceClosed());
 
   {
     base::RunLoop loop;

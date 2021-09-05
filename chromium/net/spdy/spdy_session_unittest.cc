@@ -243,8 +243,8 @@ class SpdySessionTest : public PlatformTest, public WithTaskEnvironment {
   }
 
   void RunResumeAfterUnstallTest(
-      const base::Callback<void(SpdyStream*)>& stall_function,
-      const base::Callback<void(SpdyStream*, int32_t)>& unstall_function);
+      base::OnceCallback<void(SpdyStream*)> stall_function,
+      base::OnceCallback<void(SpdyStream*, int32_t)> unstall_function);
 
   // SpdySession private methods.
 
@@ -363,7 +363,7 @@ class SpdySessionTest : public PlatformTest, public WithTaskEnvironment {
                url, session_.get()) != kNoPushedStreamFound;
   }
 
-  BoundTestNetLog log_;
+  RecordingBoundTestNetLog log_;
 
   // Original socket limits.  Some tests set these.  Safest to always restore
   // them once each test has been run.
@@ -1121,7 +1121,7 @@ TEST_F(SpdySessionTestWithMockTime, ClientPing) {
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
                                 MEDIUM, NetLogWithSource());
   ASSERT_TRUE(spdy_stream1);
-  test::StreamDelegateSendImmediate delegate(spdy_stream1, nullptr);
+  test::StreamDelegateSendImmediate delegate(spdy_stream1, "");
   spdy_stream1->SetDelegate(&delegate);
 
   base::TimeTicks before_ping_time = base::TimeTicks::Now();
@@ -1190,7 +1190,7 @@ TEST_F(SpdySessionTest, ServerPing) {
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
                                 MEDIUM, NetLogWithSource());
   ASSERT_TRUE(spdy_stream1);
-  test::StreamDelegateSendImmediate delegate(spdy_stream1, nullptr);
+  test::StreamDelegateSendImmediate delegate(spdy_stream1, "");
   spdy_stream1->SetDelegate(&delegate);
 
   // Flush the read completion task.
@@ -1351,8 +1351,8 @@ TEST_F(SpdySessionTest, StreamIdSpaceExhausted) {
 
   // Session is going away. Created and stalled streams were aborted.
   EXPECT_TRUE(session_->IsGoingAway());
-  EXPECT_THAT(delegate3.WaitForClose(), IsError(ERR_ABORTED));
-  EXPECT_THAT(callback4.WaitForResult(), IsError(ERR_ABORTED));
+  EXPECT_THAT(delegate3.WaitForClose(), IsError(ERR_HTTP2_PROTOCOL_ERROR));
+  EXPECT_THAT(callback4.WaitForResult(), IsError(ERR_HTTP2_PROTOCOL_ERROR));
   EXPECT_EQ(0u, num_created_streams());
   EXPECT_EQ(0u, pending_create_stream_queue_size(MEDIUM));
 
@@ -1867,7 +1867,7 @@ TEST_F(SpdySessionTestWithMockTime, FailedPing) {
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
                                 MEDIUM, NetLogWithSource());
   ASSERT_TRUE(spdy_stream1);
-  test::StreamDelegateSendImmediate delegate(spdy_stream1, nullptr);
+  test::StreamDelegateSendImmediate delegate(spdy_stream1, "");
   spdy_stream1->SetDelegate(&delegate);
 
   // Negative value means a preface ping will always be sent.
@@ -1927,7 +1927,7 @@ TEST_F(SpdySessionTestWithMockTime, NoPingSentWhenCheckPingPending) {
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
                                 MEDIUM, NetLogWithSource());
   ASSERT_TRUE(spdy_stream1);
-  test::StreamDelegateSendImmediate delegate(spdy_stream1, nullptr);
+  test::StreamDelegateSendImmediate delegate(spdy_stream1, "");
   spdy_stream1->SetDelegate(&delegate);
 
   EXPECT_FALSE(ping_in_flight());
@@ -4525,8 +4525,8 @@ TEST_F(SpdySessionTest, SessionFlowControlEndToEnd) {
 // Given a stall function and an unstall function, runs a test to make
 // sure that a stream resumes after unstall.
 void SpdySessionTest::RunResumeAfterUnstallTest(
-    const base::Callback<void(SpdyStream*)>& stall_function,
-    const base::Callback<void(SpdyStream*, int32_t)>& unstall_function) {
+    base::OnceCallback<void(SpdyStream*)> stall_function,
+    base::OnceCallback<void(SpdyStream*, int32_t)> unstall_function) {
   spdy::SpdySerializedFrame req(spdy_util_.ConstructSpdyPost(
       kDefaultUrl, 1, kBodyDataSize, LOWEST, nullptr, 0));
   spdy::SpdySerializedFrame body(
@@ -4567,13 +4567,13 @@ void SpdySessionTest::RunResumeAfterUnstallTest(
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
   EXPECT_EQ(kDefaultUrl, stream->url().spec());
 
-  stall_function.Run(stream.get());
+  std::move(stall_function).Run(stream.get());
 
   base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(stream->send_stalled_by_flow_control());
 
-  unstall_function.Run(stream.get(), kBodyDataSize);
+  std::move(unstall_function).Run(stream.get(), kBodyDataSize);
 
   EXPECT_FALSE(stream->send_stalled_by_flow_control());
 
@@ -4594,53 +4594,51 @@ void SpdySessionTest::RunResumeAfterUnstallTest(
 // unstall sequences.
 
 TEST_F(SpdySessionTest, ResumeAfterUnstallSession) {
-  RunResumeAfterUnstallTest(
-      base::Bind(&SpdySessionTest::StallSessionOnly,
-                 base::Unretained(this)),
-      base::Bind(&SpdySessionTest::UnstallSessionOnly,
-                 base::Unretained(this)));
+  RunResumeAfterUnstallTest(base::BindOnce(&SpdySessionTest::StallSessionOnly,
+                                           base::Unretained(this)),
+                            base::BindOnce(&SpdySessionTest::UnstallSessionOnly,
+                                           base::Unretained(this)));
 }
 
 // Equivalent to
 // SpdyStreamTest.ResumeAfterSendWindowSizeIncrease.
 TEST_F(SpdySessionTest, ResumeAfterUnstallStream) {
   RunResumeAfterUnstallTest(
-      base::Bind(&SpdySessionTest::StallStreamOnly,
-                 base::Unretained(this)),
-      base::Bind(&SpdySessionTest::UnstallStreamOnly,
-                 base::Unretained(this)));
+      base::BindOnce(&SpdySessionTest::StallStreamOnly, base::Unretained(this)),
+      base::BindOnce(&SpdySessionTest::UnstallStreamOnly,
+                     base::Unretained(this)));
 }
 
 TEST_F(SpdySessionTest, StallSessionStreamResumeAfterUnstallSessionStream) {
   RunResumeAfterUnstallTest(
-      base::Bind(&SpdySessionTest::StallSessionStream,
-                 base::Unretained(this)),
-      base::Bind(&SpdySessionTest::UnstallSessionStream,
-                 base::Unretained(this)));
+      base::BindOnce(&SpdySessionTest::StallSessionStream,
+                     base::Unretained(this)),
+      base::BindOnce(&SpdySessionTest::UnstallSessionStream,
+                     base::Unretained(this)));
 }
 
 TEST_F(SpdySessionTest, StallStreamSessionResumeAfterUnstallSessionStream) {
   RunResumeAfterUnstallTest(
-      base::Bind(&SpdySessionTest::StallStreamSession,
-                 base::Unretained(this)),
-      base::Bind(&SpdySessionTest::UnstallSessionStream,
-                 base::Unretained(this)));
+      base::BindOnce(&SpdySessionTest::StallStreamSession,
+                     base::Unretained(this)),
+      base::BindOnce(&SpdySessionTest::UnstallSessionStream,
+                     base::Unretained(this)));
 }
 
 TEST_F(SpdySessionTest, StallStreamSessionResumeAfterUnstallStreamSession) {
   RunResumeAfterUnstallTest(
-      base::Bind(&SpdySessionTest::StallStreamSession,
-                 base::Unretained(this)),
-      base::Bind(&SpdySessionTest::UnstallStreamSession,
-                 base::Unretained(this)));
+      base::BindOnce(&SpdySessionTest::StallStreamSession,
+                     base::Unretained(this)),
+      base::BindOnce(&SpdySessionTest::UnstallStreamSession,
+                     base::Unretained(this)));
 }
 
 TEST_F(SpdySessionTest, StallSessionStreamResumeAfterUnstallStreamSession) {
   RunResumeAfterUnstallTest(
-      base::Bind(&SpdySessionTest::StallSessionStream,
-                 base::Unretained(this)),
-      base::Bind(&SpdySessionTest::UnstallStreamSession,
-                 base::Unretained(this)));
+      base::BindOnce(&SpdySessionTest::StallSessionStream,
+                     base::Unretained(this)),
+      base::BindOnce(&SpdySessionTest::UnstallStreamSession,
+                     base::Unretained(this)));
 }
 
 // Cause a stall by reducing the flow control send window to 0. The
@@ -6004,7 +6002,7 @@ TEST_F(SpdySessionTest, EnableWebSocketThenDisableIsProtocolError) {
   EXPECT_FALSE(session_);
 }
 
-TEST_F(SpdySessionTest, GreaseFrameType) {
+TEST_F(SpdySessionTest, GreaseFrameTypeAfterSettings) {
   const uint8_t type = 0x0b;
   const uint8_t flags = 0xcc;
   const std::string payload("foo");
@@ -6023,6 +6021,8 @@ TEST_F(SpdySessionTest, GreaseFrameType) {
   expected_settings[spdy::SETTINGS_HEADER_TABLE_SIZE] = kSpdyMaxHeaderTableSize;
   expected_settings[spdy::SETTINGS_MAX_CONCURRENT_STREAMS] =
       kSpdyMaxConcurrentPushedStreams;
+  expected_settings[spdy::SETTINGS_MAX_HEADER_LIST_SIZE] =
+      kSpdyMaxHeaderListSize;
   spdy::SpdySerializedFrame settings_frame(
       spdy_util_.ConstructSpdySettings(expected_settings));
 
@@ -6030,64 +6030,31 @@ TEST_F(SpdySessionTest, GreaseFrameType) {
       CombineFrames({&preface, &settings_frame});
 
   // Greased frame sent on stream 0 after initial SETTINGS frame.
-  const char kRawFrameData0[] = {
+  const char kRawFrameData[] = {
       0x00, 0x00, 0x03,        // length
       0x0b,                    // type
       0xcc,                    // flags
       0x00, 0x00, 0x00, 0x00,  // stream ID
       'f',  'o',  'o'          // payload
   };
-  spdy::SpdySerializedFrame grease0(const_cast<char*>(kRawFrameData0),
-                                    base::size(kRawFrameData0),
-                                    /* owns_buffer = */ false);
-  spdy::SpdySerializedFrame req(
-      spdy_util_.ConstructSpdyGet(nullptr, 0, 1, DEFAULT_PRIORITY));
-
-  // Greased frame sent on stream 1 after request.
-  const char kRawFrameData1[] = {
-      0x00, 0x00, 0x03,        // length
-      0x0b,                    // type
-      0xcc,                    // flags
-      0x00, 0x00, 0x00, 0x01,  // stream ID
-      'f',  'o',  'o'          // payload
-  };
-  spdy::SpdySerializedFrame grease1(const_cast<char*>(kRawFrameData1),
-                                    base::size(kRawFrameData1),
-                                    /* owns_buffer = */ false);
+  spdy::SpdySerializedFrame grease(const_cast<char*>(kRawFrameData),
+                                   base::size(kRawFrameData),
+                                   /* owns_buffer = */ false);
 
   MockWrite writes[] = {CreateMockWrite(combined_frame, 0),
-                        CreateMockWrite(grease0, 1), CreateMockWrite(req, 2),
-                        CreateMockWrite(grease1, 3)};
+                        CreateMockWrite(grease, 1)};
 
-  spdy::SpdySerializedFrame resp(
-      spdy_util_.ConstructSpdyGetReply(nullptr, 0, 1));
-  spdy::SpdySerializedFrame body(spdy_util_.ConstructSpdyDataFrame(1, true));
-
-  MockRead reads[] = {CreateMockRead(resp, 4), CreateMockRead(body, 5),
-                      MockRead(ASYNC, 0, 6)};
+  MockRead reads[] = {MockRead(ASYNC, 0, 2)};
 
   SequencedSocketData data(reads, writes);
   session_deps_.socket_factory->AddSocketDataProvider(&data);
   AddSSLSocketData();
-
   CreateNetworkSession();
 
   SpdySessionPoolPeer pool_peer(spdy_session_pool_);
   pool_peer.SetEnableSendingInitialData(true);
 
   CreateSpdySession();
-
-  base::WeakPtr<SpdyStream> stream = CreateStreamSynchronously(
-      SPDY_REQUEST_RESPONSE_STREAM, session_, test_url_, DEFAULT_PRIORITY,
-      NetLogWithSource());
-  test::StreamDelegateDoNothing delegate(stream);
-  stream->SetDelegate(&delegate);
-
-  stream->SendRequestHeaders(spdy_util_.ConstructGetHeaderBlock(kDefaultUrl),
-                             NO_MORE_DATA_TO_SEND);
-
-  EXPECT_THAT(delegate.WaitForClose(), IsOk());
-
   base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(data.AllWriteDataConsumed());
@@ -6113,7 +6080,7 @@ class SpdySessionReadIfReadyTest
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          SpdySessionReadIfReadyTest,
                          testing::Values(READ_IF_READY_SUPPORTED,
                                          READ_IF_READY_NOT_SUPPORTED));
@@ -6201,6 +6168,8 @@ TEST_F(SendInitialSettingsOnNewSpdySessionTest, Empty) {
   expected_settings[spdy::SETTINGS_HEADER_TABLE_SIZE] = kSpdyMaxHeaderTableSize;
   expected_settings[spdy::SETTINGS_MAX_CONCURRENT_STREAMS] =
       kSpdyMaxConcurrentPushedStreams;
+  expected_settings[spdy::SETTINGS_MAX_HEADER_LIST_SIZE] =
+      kSpdyMaxHeaderListSize;
   RunInitialSettingsTest(expected_settings);
 }
 
@@ -6216,6 +6185,8 @@ TEST_F(SendInitialSettingsOnNewSpdySessionTest, ProtocolDefault) {
   spdy::SettingsMap expected_settings;
   expected_settings[spdy::SETTINGS_MAX_CONCURRENT_STREAMS] =
       kSpdyMaxConcurrentPushedStreams;
+  expected_settings[spdy::SETTINGS_MAX_HEADER_LIST_SIZE] =
+      kSpdyMaxHeaderListSize;
   RunInitialSettingsTest(expected_settings);
 }
 
@@ -6247,6 +6218,8 @@ TEST_F(SendInitialSettingsOnNewSpdySessionTest, UnknownSettings) {
   expected_settings[spdy::SETTINGS_HEADER_TABLE_SIZE] = kSpdyMaxHeaderTableSize;
   expected_settings[spdy::SETTINGS_MAX_CONCURRENT_STREAMS] =
       kSpdyMaxConcurrentPushedStreams;
+  expected_settings[spdy::SETTINGS_MAX_HEADER_LIST_SIZE] =
+      kSpdyMaxHeaderListSize;
   expected_settings[7] = 1234;
   expected_settings[25] = 5678;
   RunInitialSettingsTest(expected_settings);
@@ -6756,6 +6729,11 @@ class TestSSLConfigService : public SSLConfigService {
         return true;
       }
     }
+    return false;
+  }
+
+  bool ShouldSuppressLegacyTLSWarning(
+      const std::string& hostname) const override {
     return false;
   }
 

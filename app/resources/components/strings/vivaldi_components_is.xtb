@@ -1,4 +1,36 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="is">
+<translation id="3830627370375585318">Leyfa Vivaldi að nota netið í eldveggs- eða vírusvarna-
+           stillingunum þínum.</translation>
+<translation id="4200102020577305737">Veldu
+          Vivaldi valmyndina &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          LAN stillingar
+          og afhakaðu "Use a proxy server for your LAN".</translation>
+<translation id="4932161901409251843">Veldu
+          Vivaldi valmyndina &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          og vertu viss um að stillt er á "engin vefsel" (e. "no proxy") eða "beintengt" (e. "direct").</translation>
+<translation id="5248344925342018662">Þú ert að skoða örugga Vivaldi síðu</translation>
+<translation id="7023871570427738255">Veldu
+          Vivaldi valmyndina &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          og afhakaðu"<ph name="NO_PREFETCH_DESCRIPTION" />."
+          Ef þetta leysir ekki vandmálið þá mælum við með því að setja hak aftur í
+          þessa stillingu til þess að bæta frammistöðu.</translation>
+<translation id="8187289872471304532">Fara í
+          Applications &gt; System Preferences &gt; Network &gt; Advanced &gt; Proxies
+          og fjarlægðu hök þar sem vefsel (e. proxy) hefur verið valið.</translation>
 </translationbundle>

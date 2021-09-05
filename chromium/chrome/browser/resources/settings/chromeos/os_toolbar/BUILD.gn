@@ -5,14 +5,12 @@
 import("//third_party/closure_compiler/compile_js.gni")
 
 js_type_check("closure_compile") {
-  deps = [
-    ":os_toolbar",
-  ]
+  deps = [ ":os_toolbar" ]
 }
 
 js_library("os_toolbar") {
   deps = [
+    "../os_settings_search_box",
     "//ui/webui/resources/cr_elements/cr_toolbar:cr_toolbar_search_field",
   ]
-  externs_list = [ "$externs_path/web_animations.js" ]
 }

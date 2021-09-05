@@ -99,10 +99,10 @@ bool ParseHostsFromJSON(Extension* extension,
   }
 
   // Add all permissions parsed from the manifest to |hosts|.
-  base::span<const base::Value> list_storage = permissions->GetList();
-  for (size_t i = 0; i < list_storage.size(); ++i) {
-    if (list_storage[i].is_string()) {
-      hosts->push_back(list_storage[i].GetString());
+  base::Value::ConstListView list_view = permissions->GetList();
+  for (size_t i = 0; i < list_view.size(); ++i) {
+    if (list_view[i].is_string()) {
+      hosts->push_back(list_view[i].GetString());
     } else {
       *error = ErrorUtils::FormatErrorMessageUTF16(
           errors::kInvalidHostPermission, base::NumberToString(i));
@@ -289,6 +289,35 @@ bool ParseHelper(Extension* extension,
   return true;
 }
 
+void RemoveNonAllowedOptionalPermissions(
+    Extension* extension,
+    APIPermissionSet* optional_api_permissions) {
+  std::vector<InstallWarning> install_warnings;
+  std::set<APIPermission::ID> ids_to_erase;
+
+  for (const auto* api_permission : *optional_api_permissions) {
+    if (api_permission->info()->supports_optional())
+      continue;
+    // A permission that doesn't support being optional was listed in optional
+    // permissions. Add a warning, and slate it for removal from the set.
+    install_warnings.emplace_back(
+        ErrorUtils::FormatErrorMessage(
+            manifest_errors::kPermissionCannotBeOptional,
+            api_permission->name()),
+        keys::kOptionalPermissions, api_permission->name());
+    ids_to_erase.insert(api_permission->id());
+  }
+
+  DCHECK_EQ(install_warnings.size(), ids_to_erase.size());
+  if (!install_warnings.empty()) {
+    extension->AddInstallWarnings(std::move(install_warnings));
+    for (auto id : ids_to_erase) {
+      size_t erased = optional_api_permissions->erase(id);
+      DCHECK_EQ(1u, erased);
+    }
+  }
+}
+
 void RemoveOverlappingAPIPermissions(
     Extension* extension,
     const APIPermissionSet& required_api_permissions,
@@ -394,6 +423,11 @@ bool PermissionsParser::Parse(Extension* extension, base::string16* error) {
                    error)) {
     return false;
   }
+
+  // Remove and add install warnings for specified optional API permissions
+  // which don't support being optional.
+  RemoveNonAllowedOptionalPermissions(
+      extension, &initial_optional_permissions_->api_permissions);
 
   // If permissions are specified as both required and optional
   // add an install warning for each permission and remove them from the

@@ -5,6 +5,7 @@
 #include "third_party/blink/public/common/loader/mime_sniffing_url_loader.h"
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/mime_sniffer.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
@@ -23,7 +24,7 @@ MimeSniffingURLLoader::CreateLoader(
     base::WeakPtr<MimeSniffingThrottle> throttle,
     const GURL& response_url,
     network::mojom::URLResponseHeadPtr response_head,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
   mojo::PendingRemote<network::mojom::URLLoader> url_loader;
   mojo::PendingRemote<network::mojom::URLLoaderClient> url_loader_client;
   mojo::PendingReceiver<network::mojom::URLLoaderClient>
@@ -46,7 +47,7 @@ MimeSniffingURLLoader::MimeSniffingURLLoader(
     network::mojom::URLResponseHeadPtr response_head,
     mojo::PendingRemote<network::mojom::URLLoaderClient>
         destination_url_loader_client,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    scoped_refptr<base::SequencedTaskRunner> task_runner)
     : throttle_(throttle),
       destination_url_loader_client_(std::move(destination_url_loader_client)),
       response_url_(response_url),
@@ -300,7 +301,7 @@ void MimeSniffingURLLoader::SendReceivedBodyToClient() {
       break;
     case MOJO_RESULT_FAILED_PRECONDITION:
       // The pipe is closed unexpectedly. |this| should be deleted once
-      // URLLoaderPtr on the destination is released.
+      // URLLoader on the destination is released.
       Abort();
       return;
     case MOJO_RESULT_SHOULD_WAIT:
@@ -343,7 +344,7 @@ void MimeSniffingURLLoader::ForwardBodyToClient() {
       break;
     case MOJO_RESULT_FAILED_PRECONDITION:
       // The pipe is closed unexpectedly. |this| should be deleted once
-      // URLLoaderPtr on the destination is released.
+      // URLLoader on the destination is released.
       Abort();
       return;
     case MOJO_RESULT_SHOULD_WAIT:

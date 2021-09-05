@@ -97,23 +97,23 @@ BluetoothAdapter::RetrieveGattConnectedDevicesWithDiscoveryFilter(
   return std::unordered_map<BluetoothDevice*, BluetoothDevice::UUIDSet>();
 }
 
-void BluetoothAdapter::StartDiscoverySession(
-    const DiscoverySessionCallback& callback,
-    const ErrorCallback& error_callback) {
-  StartDiscoverySessionWithFilter(nullptr, callback, error_callback);
+void BluetoothAdapter::StartDiscoverySession(DiscoverySessionCallback callback,
+                                             ErrorOnceCallback error_callback) {
+  StartDiscoverySessionWithFilter(nullptr, std::move(callback),
+                                  std::move(error_callback));
 }
 
 void BluetoothAdapter::StartDiscoverySessionWithFilter(
     std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter,
-    const DiscoverySessionCallback& callback,
-    const ErrorCallback& error_callback) {
+    DiscoverySessionCallback callback,
+    ErrorOnceCallback error_callback) {
   std::unique_ptr<BluetoothDiscoverySession> new_session(
       new BluetoothDiscoverySession(this, std::move(discovery_filter)));
   discovery_sessions_.insert(new_session.get());
 
-  auto new_session_callbacks =
-      base::WrapUnique(new StartOrStopDiscoveryCallback(
-          base::BindOnce(callback, std::move(new_session)), error_callback));
+  auto new_session_callbacks = std::make_unique<StartOrStopDiscoveryCallback>(
+      base::BindOnce(std::move(callback), std::move(new_session)),
+      std::move(error_callback));
 
   // Queue up the callbacks to be handled when we process the discovery queue.
   discovery_callback_queue_.push(std::move(new_session_callbacks));
@@ -142,13 +142,13 @@ void BluetoothAdapter::MaybeUpdateFilter(
 
 void BluetoothAdapter::RemoveDiscoverySession(
     BluetoothDiscoverySession* discovery_session,
-    const base::Closure& callback,
+    base::OnceClosure callback,
     DiscoverySessionErrorCallback error_callback) {
   size_t erased = discovery_sessions_.erase(discovery_session);
   DCHECK_EQ(1u, erased);
 
-  std::unique_ptr<StartOrStopDiscoveryCallback> removal_callbacks(
-      new StartOrStopDiscoveryCallback(callback, std::move(error_callback)));
+  auto removal_callbacks = std::make_unique<StartOrStopDiscoveryCallback>(
+      std::move(callback), std::move(error_callback));
 
   // Queue up the callbacks to be handled when we process the discovery queue.
   discovery_callback_queue_.push(std::move(removal_callbacks));
@@ -189,12 +189,12 @@ BluetoothAdapter::GetMergedDiscoveryFilter() const {
 
 BluetoothAdapter::DeviceList BluetoothAdapter::GetDevices() {
   ConstDeviceList const_devices =
-    const_cast<const BluetoothAdapter *>(this)->GetDevices();
+      const_cast<const BluetoothAdapter*>(this)->GetDevices();
 
   DeviceList devices;
   for (ConstDeviceList::const_iterator i = const_devices.begin();
        i != const_devices.end(); ++i)
-    devices.push_back(const_cast<BluetoothDevice *>(*i));
+    devices.push_back(const_cast<BluetoothDevice*>(*i));
 
   return devices;
 }
@@ -208,8 +208,8 @@ BluetoothAdapter::ConstDeviceList BluetoothAdapter::GetDevices() const {
 }
 
 BluetoothDevice* BluetoothAdapter::GetDevice(const std::string& address) {
-  return const_cast<BluetoothDevice *>(
-      const_cast<const BluetoothAdapter *>(this)->GetDevice(address));
+  return const_cast<BluetoothDevice*>(
+      const_cast<const BluetoothAdapter*>(this)->GetDevice(address));
 }
 
 const BluetoothDevice* BluetoothAdapter::GetDevice(
@@ -283,6 +283,11 @@ void BluetoothAdapter::NotifyDeviceChanged(BluetoothDevice* device) {
     observer.DeviceChanged(this, device);
 }
 
+void BluetoothAdapter::NotifyAdapterDiscoveryChangeCompletedForTesting() {
+  for (auto& observer : observers_)
+    observer.DiscoveryChangeCompletedForTesting();
+}
+
 #if defined(OS_CHROMEOS) || defined(OS_LINUX)
 void BluetoothAdapter::NotifyDevicePairedChanged(BluetoothDevice* device,
                                                  bool new_paired_status) {
@@ -326,6 +331,18 @@ void BluetoothAdapter::NotifyGattServiceChanged(
 
 int BluetoothAdapter::NumDiscoverySessions() const {
   return discovery_sessions_.size();
+}
+
+int BluetoothAdapter::NumScanningDiscoverySessions() const {
+  int count = 0;
+  for (auto* session : discovery_sessions_) {
+    if (session->status() ==
+        BluetoothDiscoverySession::SessionStatus::SCANNING) {
+      ++count;
+    }
+  }
+
+  return count;
 }
 
 void BluetoothAdapter::NotifyGattServicesDiscovered(BluetoothDevice* device) {
@@ -409,14 +426,14 @@ BluetoothAdapter::SetPoweredCallbacks::~SetPoweredCallbacks() = default;
 
 BluetoothAdapter::StartOrStopDiscoveryCallback::StartOrStopDiscoveryCallback(
     base::OnceClosure start_callback,
-    ErrorCallback start_error_callback) {
+    ErrorOnceCallback start_error_callback) {
   this->start_callback = std::move(start_callback);
-  this->start_error_callback = start_error_callback;
+  this->start_error_callback = std::move(start_error_callback);
 }
 BluetoothAdapter::StartOrStopDiscoveryCallback::StartOrStopDiscoveryCallback(
-    base::Closure stop_callback,
+    base::OnceClosure stop_callback,
     DiscoverySessionErrorCallback stop_error_callback) {
-  this->stop_callback = stop_callback;
+  this->stop_callback = std::move(stop_callback);
   this->stop_error_callback = std::move(stop_error_callback);
 }
 BluetoothAdapter::StartOrStopDiscoveryCallback::
@@ -456,9 +473,16 @@ void BluetoothAdapter::OnDiscoveryChangeComplete(
       return;
 
     discovery_request_pending_ = false;
+    NotifyAdapterDiscoveryChangeCompletedForTesting();
     ProcessDiscoveryQueue();
+
     return;
   }
+
+  // Inform BluetoothDiscoverySession that updates being processed have
+  // completed.
+  for (auto* session : discovery_sessions_)
+    session->StartingSessionsScanning();
 
   current_discovery_filter_.CopyFrom(filter_being_set_);
 
@@ -477,6 +501,7 @@ void BluetoothAdapter::OnDiscoveryChangeComplete(
     return;
 
   discovery_request_pending_ = false;
+  NotifyAdapterDiscoveryChangeCompletedForTesting();
   ProcessDiscoveryQueue();
 }
 
@@ -517,6 +542,11 @@ void BluetoothAdapter::ProcessDiscoveryQueue() {
     return;
   }
 
+  // Inform BluetoothDiscoverySession that any updates they have made are being
+  // processed.
+  for (auto* session : discovery_sessions_)
+    session->PendingSessionsStarting();
+
   auto result_callback = base::BindOnce(
       &BluetoothAdapter::OnDiscoveryChangeComplete, GetWeakPtr());
   auto new_desired_filter = GetMergedDiscoveryFilter();
@@ -538,7 +568,7 @@ void BluetoothAdapter::NotifyDiscoveryError(CallbackQueue callback_queue) {
         std::move(callback_queue.front());
     callback_queue.pop();
     if (callbacks->start_error_callback)
-      callbacks->start_error_callback.Run();
+      std::move(callbacks->start_error_callback).Run();
     // We never return error when stopping. If the physical adapter is messing
     // up and not stopping we are still just going to continue like it did stop.
     if (callbacks->stop_callback)
@@ -578,16 +608,16 @@ void BluetoothAdapter::RemoveTimedOutDevices() {
 
     bool device_expired =
         (base::Time::NowFromSystemTime() - last_update_time) > timeoutSec;
-    VLOG(3) << "device: " << device->GetAddress()
-            << ", last_update: " << last_update_time
-            << ", exp: " << device_expired;
+    DVLOG(3) << "device: " << device->GetAddress()
+             << ", last_update: " << last_update_time
+             << ", exp: " << device_expired;
 
     if (!device_expired) {
       ++it;
       continue;
     }
 
-    VLOG(1) << "Removing device: " << device->GetAddress();
+    DVLOG(1) << "Removing device: " << device->GetAddress();
     auto next = it;
     next++;
     std::unique_ptr<BluetoothDevice> removed_device = std::move(it->second);

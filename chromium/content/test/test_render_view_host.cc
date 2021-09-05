@@ -28,8 +28,10 @@
 #include "content/public/common/page_state.h"
 #include "content/public/common/web_preferences.h"
 #include "content/test/test_render_frame_host.h"
+#include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "media/base/video_frame.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "ui/aura/env.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer_type.h"
@@ -60,10 +62,7 @@ void InitNavigateParams(FrameHostMsg_DidCommitProvisionalLoad_Params* params,
 }
 
 TestRenderWidgetHostView::TestRenderWidgetHostView(RenderWidgetHost* rwh)
-    : RenderWidgetHostViewBase(rwh),
-      is_showing_(false),
-      is_occluded_(false),
-      did_swap_compositor_frame_(false) {
+    : RenderWidgetHostViewBase(rwh), is_showing_(false), is_occluded_(false) {
 #if defined(OS_ANDROID)
   frame_sink_id_ = AllocateFrameSinkId();
   GetHostFrameSinkManager()->RegisterFrameSinkId(
@@ -168,20 +167,6 @@ gfx::Rect TestRenderWidgetHostView::GetBoundsInRootWindow() {
   return gfx::Rect();
 }
 
-void TestRenderWidgetHostView::DidCreateNewRendererCompositorFrameSink(
-    viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
-  did_change_compositor_frame_sink_ = true;
-}
-
-void TestRenderWidgetHostView::SubmitCompositorFrame(
-    const viz::LocalSurfaceId& local_surface_id,
-    viz::CompositorFrame frame,
-    base::Optional<viz::HitTestRegionList> hit_test_region_list) {
-  did_swap_compositor_frame_ = true;
-  if (frame.metadata.send_frame_token_to_embedder)
-    OnFrameTokenChanged(frame.metadata.frame_token);
-}
-
 void TestRenderWidgetHostView::TakeFallbackContentFrom(
     RenderWidgetHostView* view) {
   base::Optional<SkColor> color = view->GetBackgroundColor();
@@ -189,8 +174,13 @@ void TestRenderWidgetHostView::TakeFallbackContentFrom(
     SetBackgroundColor(*color);
 }
 
-bool TestRenderWidgetHostView::LockMouse(bool) {
-  return false;
+blink::mojom::PointerLockResult TestRenderWidgetHostView::LockMouse(bool) {
+  return blink::mojom::PointerLockResult::kUnknownError;
+}
+
+blink::mojom::PointerLockResult TestRenderWidgetHostView::ChangeMouseLock(
+    bool) {
+  return blink::mojom::PointerLockResult::kUnknownError;
 }
 
 void TestRenderWidgetHostView::UnlockMouse() {
@@ -280,11 +270,20 @@ bool TestRenderViewHost::CreateRenderView(
   RenderFrameHostImpl* main_frame =
       static_cast<RenderFrameHostImpl*>(GetMainFrame());
   if (main_frame && is_active()) {
-    service_manager::mojom::InterfaceProviderPtr
-        stub_interface_provider_request;
-    main_frame->BindInterfaceProviderRequest(
-        mojo::MakeRequest(&stub_interface_provider_request));
+    mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+        stub_interface_provider_remote;
+    main_frame->BindInterfaceProviderReceiver(
+        stub_interface_provider_remote.InitWithNewPipeAndPassReceiver());
     main_frame->SetRenderFrameCreated(true);
+
+    mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
+    auto frame_widget_host_receiver =
+        frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting();
+    mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
+    auto frame_widget_receiver =
+        frame_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
+    GetWidget()->BindFrameWidgetInterfaces(
+        std::move(frame_widget_host_receiver), frame_widget.Unbind());
   }
 
   return true;
@@ -331,7 +330,9 @@ void TestRenderViewHost::TestOnUpdateStateWithFile(
   static_cast<RenderFrameHostImpl*>(GetMainFrame())->OnUpdateState(state);
 }
 
-RenderViewHostImplTestHarness::RenderViewHostImplTestHarness() {
+RenderViewHostImplTestHarness::RenderViewHostImplTestHarness()
+    : RenderViewHostTestHarness(
+          base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
   std::vector<ui::ScaleFactor> scale_factors;
   scale_factors.push_back(ui::SCALE_FACTOR_100P);
   scoped_set_supported_scale_factors_.reset(

@@ -9,7 +9,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -31,7 +31,7 @@ class ScriptState;
 // implementation.
 class CORE_EXPORT Body : public ScriptWrappable,
                          public ActiveScriptWrappable<Body>,
-                         public ContextClient {
+                         public ExecutionContextClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(Body);
 
@@ -67,9 +67,9 @@ class CORE_EXPORT Body : public ScriptWrappable,
   // ScriptWrappable override.
   bool HasPendingActivity() const override;
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     ScriptWrappable::Trace(visitor);
-    ContextClient::Trace(visitor);
+    ExecutionContextClient::Trace(visitor);
   }
 
  protected:

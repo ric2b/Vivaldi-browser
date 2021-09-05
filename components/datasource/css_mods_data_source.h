@@ -16,13 +16,13 @@ class CSSModsDataClassHandler : public VivaldiDataClassHandler {
 
   bool GetData(
       const std::string& data_id,
-      const content::URLDataSource::GotDataCallback& callback) override;
+      content::URLDataSource::GotDataCallback callback) override;
 
  private:
   static scoped_refptr<base::RefCountedMemory> GetDataForIdOnBlockingThread(
       base::FilePath dir_path, std::string data_id);
   static void PostResultsOnThread(
-      const content::URLDataSource::GotDataCallback& callback,
+      content::URLDataSource::GotDataCallback callback,
       scoped_refptr<base::RefCountedMemory> data);
 
   Profile* const profile_;

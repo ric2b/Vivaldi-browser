@@ -285,12 +285,14 @@ void V8TestInterfaceOriginTrialEnabled::StaticConditionalReadOnlyLongAttributeAt
 }
 
 void V8TestInterfaceOriginTrialEnabled::VoidMethodDoubleArgFloatArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterfaceOriginTrialEnabled.voidMethodDoubleArgFloatArg");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceOriginTrialEnabled_voidMethodDoubleArgFloatArg");
 
   test_interface_origin_trial_enabled_v8_internal::VoidMethodDoubleArgFloatArgMethod(info);
 }
 
 void V8TestInterfaceOriginTrialEnabled::VoidMethodPartialOverloadMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterfaceOriginTrialEnabled.voidMethodPartialOverload");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceOriginTrialEnabled_voidMethodPartialOverload");
 
   test_interface_origin_trial_enabled_v8_internal::VoidMethodPartialOverloadMethod(info);
@@ -395,16 +397,6 @@ v8::Local<v8::Object> V8TestInterfaceOriginTrialEnabled::FindInstanceInPrototype
 TestInterfaceOriginTrialEnabled* V8TestInterfaceOriginTrialEnabled::ToImplWithTypeCheck(
     v8::Isolate* isolate, v8::Local<v8::Value> value) {
   return HasInstance(value, isolate) ? ToImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
-}
-
-TestInterfaceOriginTrialEnabled* NativeValueTraits<TestInterfaceOriginTrialEnabled>::NativeValue(
-    v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exception_state) {
-  TestInterfaceOriginTrialEnabled* native_value = V8TestInterfaceOriginTrialEnabled::ToImplWithTypeCheck(isolate, value);
-  if (!native_value) {
-    exception_state.ThrowTypeError(ExceptionMessages::FailedToConvertJSValue(
-        "TestInterfaceOriginTrialEnabled"));
-  }
-  return native_value;
 }
 
 }  // namespace blink

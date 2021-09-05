@@ -12,6 +12,7 @@
 #include "chrome/common/navigation_corrector.mojom.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
+#include "components/embedder_support/pref_names.h"
 #include "components/google/core/common/google_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -24,6 +25,15 @@
 using content::RenderFrameHost;
 using content::WebContents;
 
+namespace {
+
+// Disabled due to a server-side issue with returned results.
+// TODO(https://crbug.com/1030281): Either find an owner to fix this, or remove
+// the feature.
+bool g_allow_enable_corrections_for_testing = false;
+
+}  // namespace
+
 NavigationCorrectionTabObserver::NavigationCorrectionTabObserver(
     WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
@@ -32,7 +42,7 @@ NavigationCorrectionTabObserver::NavigationCorrectionTabObserver(
   if (prefs) {
     pref_change_registrar_.Init(prefs);
     pref_change_registrar_.Add(
-        prefs::kAlternateErrorPagesEnabled,
+        embedder_support::kAlternateErrorPagesEnabled,
         base::Bind(&NavigationCorrectionTabObserver::OnEnabledChanged,
                    base::Unretained(this)));
   }
@@ -40,10 +50,16 @@ NavigationCorrectionTabObserver::NavigationCorrectionTabObserver(
 
 NavigationCorrectionTabObserver::~NavigationCorrectionTabObserver() {}
 
+void NavigationCorrectionTabObserver::SetAllowEnableCorrectionsForTesting(
+    bool allow_enable_corrections_for_testing) {
+  g_allow_enable_corrections_for_testing = allow_enable_corrections_for_testing;
+}
+
 // static
 void NavigationCorrectionTabObserver::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* prefs) {
-  prefs->RegisterBooleanPref(prefs::kAlternateErrorPagesEnabled, true,
+  prefs->RegisterBooleanPref(embedder_support::kAlternateErrorPagesEnabled,
+                             true,
                              user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 
@@ -65,8 +81,9 @@ void NavigationCorrectionTabObserver::RenderFrameCreated(
 GURL NavigationCorrectionTabObserver::GetNavigationCorrectionURL() const {
   // Disable navigation corrections when the preference is disabled or when in
   // Incognito mode.
-  if (!profile_->GetPrefs()->GetBoolean(prefs::kAlternateErrorPagesEnabled) ||
-      profile_->IsOffTheRecord()) {
+  if (!profile_->GetPrefs()->GetBoolean(
+          embedder_support::kAlternateErrorPagesEnabled) ||
+      profile_->IsOffTheRecord() || !g_allow_enable_corrections_for_testing) {
     return GURL();
   }
 

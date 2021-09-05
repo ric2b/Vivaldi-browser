@@ -8,10 +8,10 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "components/scheduling_metrics/task_duration_metric_reporter.h"
-#include "third_party/blink/public/platform/web_thread_type.h"
 #include "third_party/blink/renderer/platform/scheduler/common/idle_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_status.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_type.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/non_main_thread_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/worker_metrics_helper.h"
 
@@ -41,7 +41,7 @@ class PLATFORM_EXPORT WorkerThreadScheduler : public NonMainThreadSchedulerImpl,
   // |sequence_manager| and |proxy| must remain valid for the entire lifetime of
   // this object.
   WorkerThreadScheduler(
-      WebThreadType thread_type,
+      ThreadType thread_type,
       base::sequence_manager::SequenceManager* sequence_manager,
       WorkerSchedulerProxy* proxy);
   ~WorkerThreadScheduler() override;
@@ -50,6 +50,7 @@ class PLATFORM_EXPORT WorkerThreadScheduler : public NonMainThreadSchedulerImpl,
   scoped_refptr<base::SingleThreadTaskRunner> V8TaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> IPCTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> NonWakingTaskRunner() override;
   bool ShouldYieldForHighPriorityWork() override;
   bool CanExceedIdleDeadlineIfRequired() const override;
   void AddTaskObserver(base::TaskObserver* task_observer) override;
@@ -130,7 +131,7 @@ class PLATFORM_EXPORT WorkerThreadScheduler : public NonMainThreadSchedulerImpl,
       const base::sequence_manager::Task& task,
       const base::sequence_manager::TaskQueue::TaskTiming& task_timing);
 
-  const WebThreadType thread_type_;
+  const ThreadType thread_type_;
   IdleHelper idle_helper_;
   bool initialized_;
   scoped_refptr<NonMainThreadTaskQueue> control_task_queue_;

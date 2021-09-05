@@ -24,7 +24,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "base/clang_coverage_buildflags.h"
+#include "base/clang_profiling_buildflags.h"
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "base/posix/eintr_wrapper.h"
@@ -38,6 +38,7 @@
 #include "sandbox/linux/services/thread_helpers.h"
 #include "sandbox/linux/system_headers/linux_futex.h"
 #include "sandbox/linux/system_headers/linux_syscalls.h"
+#include "sandbox/linux/system_headers/linux_time.h"
 #include "sandbox/linux/tests/test_utils.h"
 #include "sandbox/linux/tests/unit_tests.h"
 
@@ -344,7 +345,7 @@ BPF_TEST_C(BaselinePolicy, PrctlDumpable, BaselinePolicy) {
 #define PR_CAPBSET_READ 23
 #endif
 
-#if !BUILDFLAG(CLANG_COVERAGE)
+#if !BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
 BPF_DEATH_TEST_C(BaselinePolicy,
                  PrctlSigsys,
                  DEATH_SEGV_MESSAGE(GetPrctlErrorMessageContentForTests()),
@@ -394,7 +395,18 @@ BPF_DEATH_TEST_C(BaselinePolicy,
                  DEATH_SEGV_MESSAGE(GetErrorMessageContentForTests()),
                  BaselinePolicy) {
   struct timespec ts;
-  syscall(SYS_clock_gettime, CLOCK_MONOTONIC_RAW, &ts);
+  syscall(SYS_clock_gettime, (~0) | CLOCKFD, &ts);
+}
+
+BPF_DEATH_TEST_C(BaselinePolicy,
+                 ClockNanosleepWithDisallowedClockCrashes,
+                 DEATH_SEGV_MESSAGE(GetErrorMessageContentForTests()),
+                 BaselinePolicy) {
+  struct timespec ts;
+  struct timespec out_ts;
+  ts.tv_sec = 0;
+  ts.tv_nsec = 0;
+  syscall(SYS_clock_nanosleep, (~0) | CLOCKFD, 0, &ts, &out_ts);
 }
 
 #if !defined(GRND_RANDOM)

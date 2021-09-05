@@ -32,6 +32,7 @@ class NigoriLocalData;
 namespace syncer {
 
 class Encryptor;
+class KeyDerivationParams;
 class NigoriStorage;
 class PendingLocalNigoriCommit;
 
@@ -53,7 +54,8 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
       std::unique_ptr<NigoriStorage> storage,
       const Encryptor* encryptor,
       const base::RepeatingCallback<std::string()>& random_salt_generator,
-      const std::string& packed_explicit_passphrase_key);
+      const std::string& packed_explicit_passphrase_key,
+      const std::string& packed_keystore_keys);
   ~NigoriSyncBridgeImpl() override;
 
   // SyncEncryptionHandler implementation.
@@ -63,7 +65,7 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
   void SetEncryptionPassphrase(const std::string& passphrase) override;
   void SetDecryptionPassphrase(const std::string& passphrase) override;
   void AddTrustedVaultDecryptionKeys(
-      const std::vector<std::string>& keys) override;
+      const std::vector<std::vector<uint8_t>>& keys) override;
   void EnableEncryptEverything() override;
   bool IsEncryptEverythingEnabled() const override;
   base::Time GetKeystoreMigrationTime() const override;
@@ -72,7 +74,7 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
 
   // KeystoreKeysHandler implementation.
   bool NeedKeystoreKey() const override;
-  bool SetKeystoreKeys(const std::vector<std::string>& keys) override;
+  bool SetKeystoreKeys(const std::vector<std::vector<uint8_t>>& keys) override;
 
   // NigoriSyncBridge implementation.
   base::Optional<ModelError> MergeSyncData(
@@ -85,10 +87,11 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
   // TODO(crbug.com/922900): investigate whether we need this getter outside of
   // tests and decide whether this method should be a part of
   // SyncEncryptionHandler interface.
-  const Cryptographer& GetCryptographerForTesting() const;
+  const CryptographerImpl& GetCryptographerForTesting() const;
   sync_pb::NigoriSpecifics::PassphraseType GetPassphraseTypeForTesting() const;
   ModelTypeSet GetEncryptedTypesForTesting() const;
   bool HasPendingKeysForTesting() const;
+  KeyDerivationParams GetCustomPassphraseKeyDerivationParamsForTesting() const;
 
   static std::string PackExplicitPassphraseKeyForTesting(
       const Encryptor& encryptor,
@@ -98,18 +101,36 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
   base::Optional<ModelError> UpdateLocalState(
       const sync_pb::NigoriSpecifics& specifics);
 
-  base::Optional<ModelError> UpdateCryptographerFromKeystoreNigori(
+  base::Optional<ModelError> UpdateCryptographer(
       const sync_pb::EncryptedData& encryption_keybag,
+      const NigoriKeyBag& decryption_key_bag);
+
+  base::Optional<sync_pb::NigoriKey> TryDecryptPendingKeystoreDecryptorToken(
       const sync_pb::EncryptedData& keystore_decryptor_token);
 
-  void UpdateCryptographerFromNonKeystoreNigori(
-      const sync_pb::EncryptedData& keybag);
+  // Builds NigoriKeyBag, which contains keys acceptable for decryption of
+  // |encryption_keybag| from remote NigoriSpecifics. Its content depends on
+  // current passphrase type and available keys: for KEYSTORE_PASSPHRASE it
+  // contains only |keystore_decryptor_key|, for all other passphrase types
+  // it contains deserialized |explicit_passphrase_key_| and current default
+  // encryption key.
+  NigoriKeyBag BuildDecryptionKeyBagForRemoteKeybag(
+      const base::Optional<sync_pb::NigoriKey>& keystore_decryptor_key) const;
 
-  // Uses the cryptographer to try to decrypt pending keys. If success, the
-  // newly decrypted keys are put in the cryptographer's keybag, pending keys
-  // are cleared and the function returns true. Otherwise, it returns false and
-  // the state remains unchanged. It does not change the default key.
-  bool TryDecryptPendingKeys();
+  // Uses |key_bag| to try to decrypt pending keys as represented in
+  // |state_.pending_keys| (which must be set).
+  //
+  // If decryption is possible, the newly decrypted keys are put in the
+  // |state_.cryptographer|'s keybag and the default key is updated. In that
+  // case pending keys are cleared.
+  //
+  // If |key_bag| is not capable of decrypting pending keys,
+  // |state_.pending_keys| stays set. Such outcome is not itself considered
+  // and error and returns base::nullopt.
+  //
+  // Errors may be returned, in rare cases, for fatal protocol violations.
+  base::Optional<ModelError> TryDecryptPendingKeysWith(
+      const NigoriKeyBag& key_bag);
 
   base::Time GetExplicitPassphraseTime() const;
 
@@ -129,6 +150,16 @@ class NigoriSyncBridgeImpl : public KeystoreKeysHandler,
 
   // Queues keystore rotation if current state assume it should happen.
   void MaybeTriggerKeystoreKeyRotation();
+
+  // Prior to USS keystore keys were stored in preferences. To avoid redundant
+  // requests to the server and make USS implementation more robust against
+  // failing such requests, the value restored from preferences should be
+  // populated to current |state_|. Performs unpacking of
+  // |packed_keystore_keys| and populates them to
+  // |keystore_keys_cryptographer|. Has no effect if |packed_keystore_keys| is
+  // empty, errors occur during deserealization or
+  // |keystore_keys_cryptographer| already has keys.
+  void MaybeMigrateKeystoreKeys(const std::string& packed_keystore_keys);
 
   // Serializes state of the bridge and sync metadata into the proto.
   sync_pb::NigoriLocalData SerializeAsNigoriLocalData() const;

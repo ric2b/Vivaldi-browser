@@ -65,7 +65,10 @@ AtomicString ConsumeStringOrURI(CSSParserTokenStream& stream) {
 
 CSSParserImpl::CSSParserImpl(const CSSParserContext* context,
                              StyleSheetContents* style_sheet)
-    : context_(context), style_sheet_(style_sheet), observer_(nullptr) {}
+    : context_(context),
+      style_sheet_(style_sheet),
+      observer_(nullptr),
+      lazy_state_(nullptr) {}
 
 MutableCSSPropertyValueSet::SetResult CSSParserImpl::ParseValue(
     MutableCSSPropertyValueSet* declaration,
@@ -73,7 +76,7 @@ MutableCSSPropertyValueSet::SetResult CSSParserImpl::ParseValue(
     const String& string,
     bool important,
     const CSSParserContext* context) {
-  CSSParserImpl parser(context);
+  STACK_UNINITIALIZED CSSParserImpl parser(context);
   StyleRule::RuleType rule_type = StyleRule::kStyle;
   if (declaration->CssParserMode() == kCSSViewportRuleMode)
     rule_type = StyleRule::kViewport;
@@ -99,7 +102,7 @@ MutableCSSPropertyValueSet::SetResult CSSParserImpl::ParseVariableValue(
     bool important,
     const CSSParserContext* context,
     bool is_animation_tainted) {
-  CSSParserImpl parser(context);
+  STACK_UNINITIALIZED CSSParserImpl parser(context);
   CSSTokenizer tokenizer(value);
   // TODO(crbug.com/661854): Use streams instead of ranges
   const auto tokens = tokenizer.TokenizeToEOF();
@@ -265,12 +268,15 @@ ParseSheetResult CSSParserImpl::ParseStyleSheet(
   ParseSheetResult result = ParseSheetResult::kSucceeded;
   bool first_rule_valid = parser.ConsumeRuleList(
       stream, kTopLevelRuleList,
-      [&style_sheet, &result, allow_import_rules](StyleRuleBase* rule) {
+      [&style_sheet, &result, allow_import_rules,
+       context](StyleRuleBase* rule) {
         if (rule->IsCharsetRule())
           return;
-        if (rule->IsImportRule() && !allow_import_rules) {
-          result = ParseSheetResult::kHasUnallowedImportRule;
-          return;
+        if (rule->IsImportRule()) {
+          if (!allow_import_rules || context->IsForMarkupSanitization()) {
+            result = ParseSheetResult::kHasUnallowedImportRule;
+            return;
+          }
         }
         style_sheet->ParserAppendRule(rule);
       });
@@ -632,7 +638,9 @@ StyleRuleImport* CSSParserImpl::ConsumeImportRule(
   }
 
   return MakeGarbageCollected<StyleRuleImport>(
-      uri, MediaQueryParser::ParseMediaQuerySet(prelude),
+      uri,
+      MediaQueryParser::ParseMediaQuerySet(prelude,
+                                           context_->GetExecutionContext()),
       context_->IsOriginClean() ? OriginClean::kTrue : OriginClean::kFalse);
 }
 
@@ -665,7 +673,8 @@ StyleRuleMedia* CSSParserImpl::ConsumeMediaRule(
   if (style_sheet_)
     style_sheet_->SetHasMediaQueries();
 
-  const auto media = MediaQueryParser::ParseMediaQuerySet(prelude);
+  const auto media = MediaQueryParser::ParseMediaQuerySet(
+      prelude, context_->GetExecutionContext());
 
   ConsumeRuleList(block, kRegularRuleList,
                   [&rules](StyleRuleBase* rule) { rules.push_back(rule); });
@@ -680,10 +689,9 @@ StyleRuleSupports* CSSParserImpl::ConsumeSupportsRule(
     const CSSParserTokenRange prelude,
     const RangeOffset& prelude_offset,
     CSSParserTokenStream& block) {
-  CSSSupportsParser::SupportsResult supported =
-      CSSSupportsParser::SupportsCondition(prelude, *this,
-                                           CSSSupportsParser::kForAtRule);
-  if (supported == CSSSupportsParser::kInvalid)
+  CSSSupportsParser::Result supported = CSSSupportsParser::SupportsCondition(
+      prelude, *this, CSSSupportsParser::Mode::kForAtRule);
+  if (supported == CSSSupportsParser::Result::kParseFailure)
     return nullptr;  // Parse error, invalid @supports condition
 
   if (observer_) {
@@ -701,8 +709,9 @@ StyleRuleSupports* CSSParserImpl::ConsumeSupportsRule(
   if (observer_)
     observer_->EndRuleBody(block.Offset());
 
-  return MakeGarbageCollected<StyleRuleSupports>(prelude_serialized, supported,
-                                                 rules);
+  return MakeGarbageCollected<StyleRuleSupports>(
+      prelude_serialized, supported == CSSSupportsParser::Result::kSupported,
+      rules);
 }
 
 StyleRuleViewport* CSSParserImpl::ConsumeViewportRule(
@@ -833,7 +842,7 @@ StyleRuleProperty* CSSParserImpl::ConsumePropertyRule(
   }
 
   ConsumeDeclarationList(block, StyleRule::kProperty);
-  return StyleRuleProperty::Create(
+  return MakeGarbageCollected<StyleRuleProperty>(
       name, CreateCSSPropertyValueSet(parsed_properties_, context_->Mode()));
 }
 
@@ -1000,7 +1009,8 @@ void CSSParserImpl::ConsumeDeclaration(CSSParserTokenRange range,
     AtRuleDescriptorParser::ParseAtRule(atrule_id, range, *context_,
                                         parsed_properties_);
   } else {
-    unresolved_property = lhs.ParseAsUnresolvedCSSPropertyID(context_->Mode());
+    unresolved_property = lhs.ParseAsUnresolvedCSSPropertyID(
+        context_->GetExecutionContext(), context_->Mode());
   }
 
   // @rules other than FontFace still handled with legacy code.

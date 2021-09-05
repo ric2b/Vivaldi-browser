@@ -4,9 +4,10 @@
 
 package org.chromium.chrome.browser.webapps;
 
-import org.chromium.chrome.browser.webapps.WebApkInfo.ShareData;
 import org.chromium.chrome.browser.webapps.WebApkInfo.ShareTarget;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -17,11 +18,6 @@ public class WebApkExtras {
      * The package of the WebAPK.
      */
     public final String webApkPackageName;
-
-    /**
-     * Badge icon to use for notifications.
-     */
-    public final WebappIcon badgeIcon;
 
     /**
      * Icon to use for the splash screen.
@@ -72,33 +68,49 @@ public class WebApkExtras {
     public final boolean isSplashProvidedByWebApk;
 
     /**
-     * Shared information from the share intent.
-     * TODO(pkotwicz): Remove this property in favor of
-     * {@link BrowserServicesIntentDataProvider#shareData()}
+     * The list of the WebAPK's shortcuts.
      */
-    public final ShareData shareData;
+    public final List<ShortcutItem> shortcutItems;
 
     /**
      * WebAPK's version code.
      */
     public final int webApkVersionCode;
 
+    /** A class that stores information from shortcut items. */
+    public static class ShortcutItem {
+        public String name;
+        public String shortName;
+        public String launchUrl;
+        public String iconUrl;
+        public String iconHash;
+
+        public ShortcutItem(
+                String name, String shortName, String launchUrl, String iconUrl, String iconHash) {
+            this.name = name;
+            this.shortName = shortName;
+            this.launchUrl = launchUrl;
+            this.iconUrl = iconUrl;
+            this.iconHash = iconHash;
+        }
+    }
+
     public static WebApkExtras createEmpty() {
-        return new WebApkExtras(null /* webApkPackageName */, new WebappIcon(), new WebappIcon(),
+        return new WebApkExtras(null /* webApkPackageName */, new WebappIcon(),
                 false /* isSplashIconMaskable */, 0 /* shellApkVersion */, null /* manifestUrl */,
                 null /* manifestStartUrl */, WebApkDistributor.OTHER,
                 null /* iconUrlToMurmur2HashMap */, new ShareTarget(),
-                false /* isSplashProvidedByWebApk */, null /* shareData */,
+                false /* isSplashProvidedByWebApk */, new ArrayList<>() /* shortcutItems */,
                 0 /* webApkVersionCode */);
     }
 
-    public WebApkExtras(String webApkPackageName, WebappIcon badgeIcon, WebappIcon splashIcon,
+    public WebApkExtras(String webApkPackageName, WebappIcon splashIcon,
             boolean isSplashIconMaskable, int shellApkVersion, String manifestUrl,
             String manifestStartUrl, @WebApkDistributor int distributor,
             Map<String, String> iconUrlToMurmur2HashMap, ShareTarget shareTarget,
-            boolean isSplashProvidedByWebApk, ShareData shareData, int webApkVersionCode) {
+            boolean isSplashProvidedByWebApk, List<ShortcutItem> shortcutItems,
+            int webApkVersionCode) {
         this.webApkPackageName = webApkPackageName;
-        this.badgeIcon = badgeIcon;
         this.splashIcon = splashIcon;
         this.isSplashIconMaskable = isSplashIconMaskable;
         this.shellApkVersion = shellApkVersion;
@@ -108,7 +120,7 @@ public class WebApkExtras {
         this.iconUrlToMurmur2HashMap = iconUrlToMurmur2HashMap;
         this.shareTarget = shareTarget;
         this.isSplashProvidedByWebApk = isSplashProvidedByWebApk;
-        this.shareData = shareData;
+        this.shortcutItems = shortcutItems;
         this.webApkVersionCode = webApkVersionCode;
     }
 }

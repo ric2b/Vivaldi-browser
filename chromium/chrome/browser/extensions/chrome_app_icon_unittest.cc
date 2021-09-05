@@ -21,18 +21,16 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/test/base/testing_profile.h"
 #include "extensions/common/constants.h"
+#include "ui/gfx/color_utils.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_unittest_util.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/extensions/gfx_utils.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
-#include "chrome/browser/ui/app_list/chrome_app_list_item.h"
-#include "chrome/browser/ui/app_list/extension_app_model_builder.h"
-#include "chrome/browser/ui/app_list/md_icon_normalizer.h"
-#include "chrome/browser/ui/app_list/search/extension_app_result.h"
-#include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
-#include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 #include "components/arc/test/fake_app_instance.h"
+#include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
 #endif  // defined(OS_CHROMEOS)
 
 namespace extensions {
@@ -164,31 +162,25 @@ bool AreEqual(const gfx::ImageSkia& image1, const gfx::ImageSkia& image2) {
 }
 
 #if defined(OS_CHROMEOS)
+// Returns true if |res| image is the |src| image with badge identified by
+// |badge_type| resource. If |grayscale| is true applies HSL shift for the
+// comparison.
+bool IsBadgeApplied(const gfx::ImageSkia& src,
+                    const gfx::ImageSkia& res,
+                    ChromeAppIcon::Badge badge_type,
+                    bool grayscale) {
+  src.EnsureRepsForSupportedScales();
+  gfx::ImageSkia reference_src = src.DeepCopy();
 
-bool AreAllImageRepresentationsDifferent(const gfx::ImageSkia& image1,
-                                         const gfx::ImageSkia& image2) {
-  const std::vector<gfx::ImageSkiaRep> image1_reps = image1.image_reps();
-  const std::vector<gfx::ImageSkiaRep> image2_reps = image2.image_reps();
-  DCHECK_EQ(image1_reps.size(), image2_reps.size());
-  for (size_t i = 0; i < image1_reps.size(); ++i) {
-    const float scale = image1_reps[i].scale();
-    const gfx::ImageSkiaRep& image_rep2 = image2.GetRepresentation(scale);
-    if (gfx::test::AreBitmapsClose(image1_reps[i].GetBitmap(),
-                                   image_rep2.GetBitmap(), 0)) {
-      return false;
-    }
+  util::ApplyBadge(&reference_src, badge_type);
+  if (grayscale) {
+    constexpr color_utils::HSL shift = {-1, 0, 0.6};
+    reference_src =
+        gfx::ImageSkiaOperations::CreateHSLShiftedImage(reference_src, shift);
   }
-  return true;
+  return AreEqual(reference_src, res);
 }
-
-void WaitForIconUpdates(const gfx::ImageSkia& icon) {
-  icon.EnsureRepsForSupportedScales();
-  gfx::ImageSkia reference_image = icon.DeepCopy();
-  while (!AreAllImageRepresentationsDifferent(reference_image, icon))
-    base::RunLoop().RunUntilIdle();
-}
-
-#endif  // defined(OS_CHROMEOS)
+#endif
 
 }  // namespace
 
@@ -244,6 +236,11 @@ TEST_F(ChromeAppIconTest, IconLifeCycle) {
   EXPECT_NE(2U, update_count_after_disable);
   EXPECT_FALSE(IsBlankImage(reference_icon.image_skia()));
   EXPECT_TRUE(IsGrayscaleImage(reference_icon.image_skia()));
+#if defined(OS_CHROMEOS)
+  EXPECT_TRUE(IsBadgeApplied(image_before_disable, reference_icon.image_skia(),
+                             ChromeAppIcon::Badge::kBlocked,
+                             true /* grayscale */));
+#endif
 
   // Reenable extension. It should match previous enabled image
   service()->EnableExtension(kTestAppId);
@@ -270,107 +267,6 @@ TEST_F(ChromeAppIconTest, IconRelease) {
 
 #if defined(OS_CHROMEOS)
 
-class ChromeAppIconWithModelTest : public ChromeAppIconTest {
- public:
-  ChromeAppIconWithModelTest() = default;
-  ~ChromeAppIconWithModelTest() override = default;
-
- protected:
-  void CreateBuilder() {
-    model_updater_ = std::make_unique<FakeAppListModelUpdater>();
-    controller_ = std::make_unique<test::TestAppListControllerDelegate>();
-    builder_ = std::make_unique<ExtensionAppModelBuilder>(controller_.get());
-    builder_->Initialize(nullptr, profile(), model_updater_.get());
-  }
-
-  void ResetBuilder() {
-    builder_.reset();
-    controller_.reset();
-    model_updater_.reset();
-  }
-
-  ChromeAppListItem* FindAppListItem(const std::string& app_id) {
-    return model_updater_->FindItem(app_id);
-  }
-
-  test::TestAppListControllerDelegate* app_list_controller() {
-    return controller_.get();
-  }
-
- private:
-  std::unique_ptr<FakeAppListModelUpdater> model_updater_;
-  std::unique_ptr<test::TestAppListControllerDelegate> controller_;
-  std::unique_ptr<ExtensionAppModelBuilder> builder_;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeAppIconWithModelTest);
-};
-
-// Validates icons sizes for various consumers.
-TEST_F(ChromeAppIconWithModelTest, IconsTheSame) {
-  CreateBuilder();
-
-  // App list item is already created. Wait until all image representations are
-  // updated and take image snapshot.
-  ChromeAppListItem* app_list_item = FindAppListItem(kTestAppId);
-  ASSERT_TRUE(app_list_item);
-  WaitForIconUpdates(app_list_item->icon());
-  gfx::ImageSkia app_list_item_image = app_list_item->icon().DeepCopy();
-
-  const ChromeAppIconService::ResizeFunction resize_function =
-      base::BindRepeating(&app_list::MaybeResizeAndPadIconForMd);
-
-  // Load reference icon sized for the app list.
-  TestAppIcon reference_icon_app_list(
-      profile(), kTestAppId,
-      ash::AppListConfig::instance().grid_icon_dimension(), resize_function);
-
-  // Wait until reference data is loaded.
-  reference_icon_app_list.image_skia().EnsureRepsForSupportedScales();
-  reference_icon_app_list.WaitForIconUpdates();
-  EXPECT_FALSE(IsBlankImage(reference_icon_app_list.image_skia()));
-
-  // Now compare with app list icon snapshot.
-  EXPECT_TRUE(
-      AreEqual(reference_icon_app_list.image_skia(), app_list_item_image));
-
-  // Load reference icon sized for the search result.
-  TestAppIcon reference_icon_search(
-      profile(), kTestAppId,
-      ash::AppListConfig::instance().suggestion_chip_icon_dimension(),
-      resize_function);
-
-  // Wait until reference data is loaded.
-  reference_icon_search.image_skia().EnsureRepsForSupportedScales();
-  reference_icon_search.WaitForIconUpdates();
-  EXPECT_FALSE(IsBlankImage(reference_icon_search.image_skia()));
-
-  app_list::ExtensionAppResult search(profile(), kTestAppId,
-                                      app_list_controller(),
-                                      /* is_recommendation */ true);
-  WaitForIconUpdates(search.chip_icon());
-  EXPECT_TRUE(AreEqual(reference_icon_search.image_skia(), search.chip_icon()));
-
-  // Load reference icon sized for the shelf.
-  TestAppIcon reference_icon_shelf(profile(), kTestAppId,
-                                   extension_misc::EXTENSION_ICON_MEDIUM,
-                                   resize_function);
-
-  // Wait until reference data is loaded.
-  reference_icon_shelf.image_skia().EnsureRepsForSupportedScales();
-  reference_icon_shelf.WaitForIconUpdates();
-  EXPECT_FALSE(IsBlankImage(reference_icon_shelf.image_skia()));
-
-  TestAppIconLoader loader_delegate;
-  ChromeAppIconLoader loader(profile(), extension_misc::EXTENSION_ICON_MEDIUM,
-                             resize_function, &loader_delegate);
-  loader.FetchImage(kTestAppId);
-  WaitForIconUpdates(loader_delegate.icon());
-  EXPECT_TRUE(
-      AreEqual(reference_icon_shelf.image_skia(), loader_delegate.icon()));
-
-  ResetBuilder();
-}
-
 TEST_F(ChromeAppIconTest, ChromeBadging) {
   ArcAppTest arc_test;
   arc_test.SetUp(profile());
@@ -396,6 +292,9 @@ TEST_F(ChromeAppIconTest, ChromeBadging) {
   // by ArcAppListPrefs, and one called by LaunchExtensionAppUpdate.
   EXPECT_EQ(2U, reference_icon.icon_update_count());
   EXPECT_FALSE(AreEqual(reference_icon.image_skia(), image_before_badging));
+  EXPECT_TRUE(IsBadgeApplied(image_before_badging, reference_icon.image_skia(),
+                             ChromeAppIcon::Badge::kChrome,
+                             false /* grayscale */));
 
   // Opts out the Play Store. Badge should be gone and icon image is the same
   // as it was before badging.

@@ -15,21 +15,25 @@ import android.view.ViewTreeObserver;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.VisibleForTesting;
-import org.chromium.base.metrics.CachedMetrics;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.browserservices.trustedwebactivityui.TwaFinishHandler;
 import org.chromium.chrome.browser.compositor.CompositorView;
+import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar;
+import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar.CustomTabTabObserver;
+import org.chromium.chrome.browser.dependency_injection.ActivityScope;
+import org.chromium.chrome.browser.flags.CachedFeatureFlags;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
-import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabObserverRegistrar;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -38,7 +42,9 @@ import java.lang.reflect.Method;
 import javax.inject.Inject;
 
 /** Shows and hides splash screen for Webapps, WebAPKs and TWAs. */
-public class SplashController extends EmptyTabObserver implements InflationObserver, Destroyable {
+@ActivityScope
+public class SplashController
+        extends CustomTabTabObserver implements InflationObserver, Destroyable {
     private static class SingleShotOnDrawListener implements ViewTreeObserver.OnDrawListener {
         private final View mView;
         private final Runnable mAction;
@@ -87,9 +93,10 @@ public class SplashController extends EmptyTabObserver implements InflationObser
 
     private static final String TAG = "SplashController";
 
-    private final Activity mActivity;
+    private final ChromeActivity<?> mActivity;
     private final ActivityLifecycleDispatcher mLifecycleDispatcher;
     private final TabObserverRegistrar mTabObserverRegistrar;
+    private final TwaFinishHandler mFinishHandler;
 
     private SplashDelegate mDelegate;
 
@@ -122,16 +129,18 @@ public class SplashController extends EmptyTabObserver implements InflationObser
     private ObserverList<SplashscreenObserver> mObservers;
 
     @Inject
-    public SplashController(Activity activity, ActivityLifecycleDispatcher lifecycleDispatcher,
-            TabObserverRegistrar tabObserverRegistrar) {
+    public SplashController(ChromeActivity<?> activity,
+            ActivityLifecycleDispatcher lifecycleDispatcher,
+            TabObserverRegistrar tabObserverRegistrar, TwaFinishHandler finishHandler) {
         mActivity = activity;
         mLifecycleDispatcher = lifecycleDispatcher;
         mTabObserverRegistrar = tabObserverRegistrar;
         mObservers = new ObserverList<>();
         mTranslucencyRemovalStrategy = TranslucencyRemoval.NONE;
+        mFinishHandler = finishHandler;
 
         mLifecycleDispatcher.register(this);
-        mTabObserverRegistrar.registerTabObserver(this);
+        mTabObserverRegistrar.registerActivityTabObserver(this);
     }
 
     public void setConfig(SplashDelegate delegate, boolean isWindowInitiallyTranslucent,
@@ -227,7 +236,7 @@ public class SplashController extends EmptyTabObserver implements InflationObser
             mSplashView = mDelegate.buildSplashView();
         }
         if (mSplashView == null) {
-            mTabObserverRegistrar.unregisterTabObserver(this);
+            mTabObserverRegistrar.unregisterActivityTabObserver(this);
             mLifecycleDispatcher.unregister(this);
             if (mTranslucencyRemovalStrategy != TranslucencyRemoval.NONE) {
                 removeTranslucency();
@@ -245,6 +254,11 @@ public class SplashController extends EmptyTabObserver implements InflationObser
             // SurfaceView is attached.
             removeTranslucency();
         }
+
+        // If the client's activity is opaque, finishing the activities one after another may lead
+        // to bottom activity showing itself in a short flash. The problem can be solved by bottom
+        // activity killing the whole task.
+        mFinishHandler.setShouldAttemptFinishingTask(true);
     }
 
     private static @TranslucencyRemoval int computeTranslucencyRemovalStrategy(
@@ -257,13 +271,14 @@ public class SplashController extends EmptyTabObserver implements InflationObser
         // acceleration is disabled, swapping the pixel format causes the surface to get recreated.
         // A bug fix in Android N preserves the old surface till the new one is drawn.
         //
-        // Removing tranlucency is important for performance, otherwise the windows under Chrome
+        // Removing translucency is important for performance, otherwise the windows under Chrome
         // will continue being drawn (e.g. launcher with wallpaper). Without removing translucency,
         // we also see visual glitches in the following cases:
         // - closing activity (example: https://crbug.com/856544#c41)
         // - send activity to the background (example: https://crbug.com/856544#c30)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
-                && FeatureUtilities.isSwapPixelFormatToFixConvertFromTranslucentEnabled()) {
+                && CachedFeatureFlags.isEnabled(
+                        ChromeFeatureList.SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT)) {
             return TranslucencyRemoval.ON_SPLASH_HIDDEN;
         }
         return TranslucencyRemoval.ON_SPLASH_SHOWN;
@@ -297,8 +312,7 @@ public class SplashController extends EmptyTabObserver implements InflationObser
         // Delay hiding the splash screen till the compositor has finished drawing the next frame.
         // Without this callback we were seeing a short flash of white between the splash screen and
         // the web content (crbug.com/734500).
-        CompositorView compositorView =
-                tab.getActivity().getCompositorViewHolder().getCompositorView();
+        CompositorView compositorView = mActivity.getCompositorViewHolder().getCompositorView();
         compositorView.surfaceRedrawNeededAsync(() -> { animateHideSplash(tab, reason); });
     }
 
@@ -312,10 +326,7 @@ public class SplashController extends EmptyTabObserver implements InflationObser
             method.invoke(mActivity);
         } catch (ReflectiveOperationException e) {
             // Method not found or threw an exception.
-            CachedMetrics.BooleanHistogramSample histogram =
-                    new CachedMetrics.BooleanHistogramSample(
-                            "Mobile.Splash.TranslucencyRemovalFailed");
-            histogram.record(true);
+            RecordHistogram.recordBooleanHistogram("Mobile.Splash.TranslucencyRemovalFailed", true);
             assert false : "Failed to remove activity translucency reflectively";
             Log.e(TAG, "Failed to remove activity translucency reflectively");
         }
@@ -327,8 +338,7 @@ public class SplashController extends EmptyTabObserver implements InflationObser
         if (mWasSplashHideAnimationStarted) return;
 
         mWasSplashHideAnimationStarted = true;
-        mTabObserverRegistrar.unregisterTabObserver(this);
-        tab.removeObserver(this);
+        mTabObserverRegistrar.unregisterActivityTabObserver(this);
 
         recordTraceEventsStartedHidingSplash();
 
@@ -354,6 +364,8 @@ public class SplashController extends EmptyTabObserver implements InflationObser
         assert mSplashShownTimestamp != 0;
         mDelegate.onSplashHidden(tab, reason, mSplashShownTimestamp, splashHiddenTimestamp);
         notifySplashscreenHidden(mSplashShownTimestamp, splashHiddenTimestamp);
+
+        mFinishHandler.setShouldAttemptFinishingTask(false);
 
         mLifecycleDispatcher.unregister(this);
 

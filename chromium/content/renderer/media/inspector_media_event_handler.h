@@ -20,11 +20,13 @@ class CONTENT_EXPORT InspectorMediaEventHandler
  public:
   explicit InspectorMediaEventHandler(blink::MediaInspectorContext*);
   ~InspectorMediaEventHandler() override = default;
-  void SendQueuedMediaEvents(std::vector<media::MediaLogEvent>) override;
+  void SendQueuedMediaEvents(std::vector<media::MediaLogRecord>) override;
+  void OnWebMediaPlayerDestroyed() override;
 
  private:
   blink::MediaInspectorContext* inspector_context_;
   blink::WebString player_id_;
+  bool video_player_destroyed_ = false;
 };
 
 }  // namespace content

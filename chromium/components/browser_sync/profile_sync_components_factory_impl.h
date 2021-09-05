@@ -34,6 +34,10 @@ namespace sync_bookmarks {
 class BookmarkSyncService;
 }
 
+namespace sync_notes {
+class NoteSyncService;
+}
+
 namespace browser_sync {
 
 class BrowserSyncClient;
@@ -55,7 +59,8 @@ class ProfileSyncComponentsFactoryImpl
           profile_password_store,
       const scoped_refptr<password_manager::PasswordStore>&
           account_password_store,
-      sync_bookmarks::BookmarkSyncService* bookmark_sync_service);
+      sync_bookmarks::BookmarkSyncService* bookmark_sync_service,
+      sync_notes::NoteSyncService* note_sync_service);
   ~ProfileSyncComponentsFactoryImpl() override;
 
   // Creates and returns enabled datatypes and their controllers.
@@ -78,9 +83,6 @@ class ProfileSyncComponentsFactoryImpl
       const std::string& name,
       invalidation::InvalidationService* invalidator,
       const base::WeakPtr<syncer::SyncPrefs>& sync_prefs) override;
-  syncer::SyncApiComponentFactory::SyncComponents CreateBookmarkSyncComponents(
-      std::unique_ptr<syncer::DataTypeErrorHandler> error_handler,
-      syncer::UserShare* user_share) override;
 
  private:
   // Factory function for ModelTypeController instances for models living on
@@ -125,6 +127,7 @@ class ProfileSyncComponentsFactoryImpl
   const scoped_refptr<password_manager::PasswordStore> profile_password_store_;
   const scoped_refptr<password_manager::PasswordStore> account_password_store_;
   sync_bookmarks::BookmarkSyncService* const bookmark_sync_service_;
+  sync_notes::NoteSyncService* const note_sync_service_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileSyncComponentsFactoryImpl);
 };

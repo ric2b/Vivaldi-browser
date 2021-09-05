@@ -18,7 +18,7 @@
 #include "base/values.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_paths.h"
+#include "chrome/common/chrome_paths.h" // nogncheck
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -329,8 +329,8 @@ void AdverseAdFilterListService::LoadAndInitializeFromString(
   base::Optional<base::Value> loaded_json_list =
       base::JSONReader::Read(*json_string);
 
-  DCHECK(loaded_json_list);
-  DCHECK(loaded_json_list->is_list());
+  DLOG_IF(WARNING, loaded_json_list);
+  DLOG_IF(WARNING, loaded_json_list->is_list());
 
   if (!loaded_json_list || !loaded_json_list->is_list()) {
     PostCallback(std::move(callback));

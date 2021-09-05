@@ -8,9 +8,11 @@ import static android.support.test.espresso.Espresso.onView;
 import static android.support.test.espresso.Espresso.pressBack;
 import static android.support.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static android.support.test.espresso.assertion.ViewAssertions.matches;
+import static android.support.test.espresso.matcher.RootMatchers.isDialog;
 import static android.support.test.espresso.matcher.ViewMatchers.hasSibling;
 import static android.support.test.espresso.matcher.ViewMatchers.isDescendantOfA;
 import static android.support.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static android.support.test.espresso.matcher.ViewMatchers.isEnabled;
 import static android.support.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static android.support.test.espresso.matcher.ViewMatchers.withId;
 import static android.support.test.espresso.matcher.ViewMatchers.withText;
@@ -19,39 +21,53 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalToIgnoringCase;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.core.AllOf.allOf;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 
+import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.test.espresso.action.ViewActions;
 import android.support.test.filters.MediumTest;
 
 import org.hamcrest.Matcher;
-import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import org.chromium.base.Callback;
+import org.chromium.base.DiscardableReferencePool;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.JniMocker;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.download.home.filter.FilterCoordinator;
-import org.chromium.chrome.browser.download.home.list.UiUtils;
+import org.chromium.chrome.browser.download.home.rename.RenameUtils;
 import org.chromium.chrome.browser.download.home.toolbar.DownloadHomeToolbar;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
 import org.chromium.chrome.browser.download.ui.StubbedProvider;
-import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.util.UrlConstants;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.download.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.ui.DummyUiActivityTestCase;
+import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
+import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OfflineItemFilter;
 import org.chromium.components.offline_items_collection.OfflineItemState;
+import org.chromium.components.offline_items_collection.RenameResult;
+import org.chromium.components.url_formatter.SchemeDisplay;
+import org.chromium.components.url_formatter.UrlFormatter;
+import org.chromium.components.url_formatter.UrlFormatterJni;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.modaldialog.ModalDialogManager;
+import org.chromium.ui.test.util.DummyUiActivityTestCase;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.HashMap;
@@ -62,12 +78,14 @@ import java.util.Map;
 @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
 public class DownloadActivityV2Test extends DummyUiActivityTestCase {
     @Mock
-    private Profile mProfile;
-    @Mock
     private Tracker mTracker;
     @Mock
     private SnackbarManager mSnackbarManager;
+    @Rule
+    public JniMocker mJniMocker = new JniMocker();
     @Mock
+    private UrlFormatter.Natives mUrlFormatterJniMock;
+
     private ModalDialogManager.Presenter mAppModalPresenter;
 
     private ModalDialogManager mModalDialogManager;
@@ -76,25 +94,33 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
 
     private StubbedOfflineContentProvider mStubbedOfflineContentProvider;
 
-    @BeforeClass
-    public static void setUpBeforeActivityLaunched() {
-        UiUtils.setDisableUrlFormattingForTests(true);
-    }
+    private DiscardableReferencePool mDiscardableReferencePool;
 
     @Override
     public void setUpTest() throws Exception {
         super.setUpTest();
         MockitoAnnotations.initMocks(this);
+        mJniMocker.mock(UrlFormatterJni.TEST_HOOKS, mUrlFormatterJniMock);
+        when(mUrlFormatterJniMock.formatStringUrlForSecurityDisplay(
+                     anyString(), eq(SchemeDisplay.OMIT_HTTP_AND_HTTPS)))
+                .then(inv -> inv.getArgument(0));
 
         Map<String, Boolean> features = new HashMap<>();
         features.put(ChromeFeatureList.DOWNLOADS_LOCATION_CHANGE, true);
         features.put(ChromeFeatureList.OFFLINE_PAGES_PREFETCHING, true);
         features.put(ChromeFeatureList.OVERSCROLL_HISTORY_NAVIGATION, false);
         features.put(ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER, false);
-        features.put(ChromeFeatureList.DOWNLOAD_RENAME, true);
+        features.put(ChromeFeatureList.CONTENT_INDEXING_DOWNLOAD_HOME, false);
         ChromeFeatureList.setTestFeatures(features);
 
-        mStubbedOfflineContentProvider = new StubbedOfflineContentProvider();
+        mStubbedOfflineContentProvider = new StubbedOfflineContentProvider() {
+            @Override
+            public void renameItem(ContentId id, String name, Callback<Integer> callback) {
+                new Handler(Looper.getMainLooper())
+                        .post(() -> callback.onResult(handleRename(name)));
+            }
+        };
+
         OfflineContentAggregatorFactory.setOfflineContentProviderForTests(
                 mStubbedOfflineContentProvider);
 
@@ -112,23 +138,31 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
         mStubbedOfflineContentProvider.addItem(item2);
         mStubbedOfflineContentProvider.addItem(item3);
 
-        TrackerFactory.setTrackerForTests(mTracker);
+        mDiscardableReferencePool = new DiscardableReferencePool();
     }
 
     private void setUpUi() {
-        FilterCoordinator.setPrefetchUserSettingValueForTesting(true);
-        DownloadManagerUiConfig config = new DownloadManagerUiConfig.Builder()
+        DownloadManagerUiConfig config = DownloadManagerUiConfigHelper.fromFlags()
                                                  .setIsOffTheRecord(false)
                                                  .setIsSeparateActivity(true)
                                                  .setUseNewDownloadPath(true)
                                                  .setUseNewDownloadPathThumbnails(true)
                                                  .build();
 
+        mAppModalPresenter = new AppModalPresenter(getActivity());
+
         mModalDialogManager =
                 new ModalDialogManager(mAppModalPresenter, ModalDialogManager.ModalDialogType.APP);
 
-        mDownloadCoordinator = new DownloadManagerCoordinatorImpl(
-                mProfile, getActivity(), config, mSnackbarManager, mModalDialogManager);
+        FaviconProvider faviconProvider = (url, faviconSizePx, callback) -> {};
+        Callback<Context> settingsLauncher = context -> {};
+        ObservableSupplierImpl<Boolean> isPrefetchEnabledSupplier = new ObservableSupplierImpl<>();
+        isPrefetchEnabledSupplier.set(true);
+
+        mDownloadCoordinator = new DownloadManagerCoordinatorImpl(getActivity(), config,
+                isPrefetchEnabledSupplier, settingsLauncher, mSnackbarManager, mModalDialogManager,
+                mTracker, faviconProvider, OfflineContentAggregatorFactory.get(),
+                /* LegacyDownloadProvider */ null, mDiscardableReferencePool);
         getActivity().setContentView(mDownloadCoordinator.getView());
 
         mDownloadCoordinator.updateForUrl(UrlConstants.DOWNLOADS_URL);
@@ -136,6 +170,7 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/1039491")
     public void testLaunchingActivity() {
         TestThreadUtils.runOnUiThreadBlocking(() -> { setUpUi(); });
 
@@ -157,12 +192,12 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
 
         Matcher filesTabMatcher = allOf(
                 withText(equalToIgnoringCase("My Files")), isDescendantOfA(withId(R.id.tabs)));
-        Matcher prefetchTabMatcher = allOf(withText(equalToIgnoringCase("Articles for you")),
+        Matcher prefetchTabMatcher = allOf(withText(equalToIgnoringCase("Explore Offline")),
                 isDescendantOfA(withId(R.id.tabs)));
         onView(filesTabMatcher).check(matches(isDisplayed()));
         onView(prefetchTabMatcher).check(matches(isDisplayed()));
 
-        // Select Articles for you tab, and verify the contents.
+        // Select Explore Offline tab, and verify the contents.
         onView(prefetchTabMatcher).perform(ViewActions.click());
         checkItemsDisplayed(false, false, false, false);
 
@@ -211,7 +246,7 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
         onView(withId(R.id.empty)).check(matches(not(isDisplayed())));
 
         // Go to Prefetch tab. It should be empty.
-        onView(withText(equalToIgnoringCase("Articles for you")))
+        onView(withText(equalToIgnoringCase("Explore Offline")))
                 .check(matches(isDisplayed()))
                 .perform(ViewActions.click());
         onView(withText(containsString("Articles appear here"))).check(matches(isDisplayed()));
@@ -344,6 +379,36 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
 
     @Test
     @MediumTest
+    public void testRenameItem() throws Exception {
+        TestThreadUtils.runOnUiThreadBlocking(() -> { setUpUi(); });
+
+        RenameUtils.disableNativeForTesting();
+
+        // Rename a non-offline-page item using three dot menu.
+        // Open menu for a list item, it should have the rename option.
+        onView(allOf(withId(R.id.more), hasSibling(withText("page 4"))))
+                .perform(ViewActions.click());
+        // Rename an item. The rename dialog should popup.
+        onView(withText("Rename")).check(matches(isDisplayed())).perform(ViewActions.click());
+
+        // Test rename dialog with error message.
+        renameFileAndVerifyErrorMessage("name_conflict", R.string.rename_failure_name_conflict);
+        renameFileAndVerifyErrorMessage("name_too_long", R.string.rename_failure_name_too_long);
+        renameFileAndVerifyErrorMessage("name_invalid", R.string.rename_failure_name_invalid);
+        renameFileAndVerifyErrorMessage("rename_unavailable", R.string.rename_failure_unavailable);
+
+        // Test empty input.
+        onView(withId(R.id.file_name)).inRoot(isDialog()).perform(ViewActions.clearText());
+        onView(withText("OK")).inRoot(isDialog()).check(matches(not(isEnabled())));
+
+        // Test successful commit.
+        renameFileAndVerifyErrorMessage("rename_file_successful", -1);
+
+        // TODO(hesen): Test rename extension dialog.
+    }
+
+    @Test
+    @MediumTest
     public void testShareItem() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> { setUpUi(); });
 
@@ -389,5 +454,44 @@ public class DownloadActivityV2Test extends DummyUiActivityTestCase {
         onView(withText("page 2")).check(item1 ? matches(isDisplayed()) : doesNotExist());
         onView(withText("page 3")).check(item2 ? matches(isDisplayed()) : doesNotExist());
         onView(withText("page 4")).check(item3 ? matches(isDisplayed()) : doesNotExist());
+    }
+
+    private void renameFileAndVerifyErrorMessage(String name, int expectErrorMsgId) {
+        onView(withId(R.id.file_name))
+                .inRoot(isDialog())
+                .perform(ViewActions.clearText())
+                .perform(ViewActions.typeText(name));
+
+        onView(withText("OK"))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()))
+                .perform(ViewActions.click());
+
+        if (expectErrorMsgId != -1) {
+            onView(withText(getActivity().getResources().getString(expectErrorMsgId)))
+                    .inRoot(isDialog())
+                    .check(matches(isDisplayed()));
+        }
+    }
+
+    private int /*@RenameResult*/ handleRename(String name) {
+        int result = RenameResult.SUCCESS;
+        switch (name) {
+            case "name_conflict":
+                result = RenameResult.FAILURE_NAME_CONFLICT;
+                break;
+            case "name_too_long":
+                result = RenameResult.FAILURE_NAME_TOO_LONG;
+                break;
+            case "name_invalid":
+                result = RenameResult.FAILURE_NAME_INVALID;
+                break;
+            case "rename_unavailable":
+                result = RenameResult.FAILURE_UNAVAILABLE;
+                break;
+            default:
+                break;
+        }
+        return result;
     }
 }

@@ -26,7 +26,6 @@
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
-#include "third_party/blink/public/platform/web_point.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/web/web_associated_url_loader_client.h"
@@ -44,7 +43,6 @@ using ppapi::V8ObjectVar;
 using blink::WebPlugin;
 using blink::WebPluginContainer;
 using blink::WebPluginParams;
-using blink::WebPoint;
 using blink::WebPrintParams;
 using blink::WebRect;
 using blink::WebSize;
@@ -207,7 +205,7 @@ void PepperWebPluginImpl::UpdateGeometry(
 }
 
 void PepperWebPluginImpl::UpdateFocus(bool focused,
-                                      blink::WebFocusType focus_type) {
+                                      blink::mojom::FocusType focus_type) {
   // Re-entrancy may cause JS to try to execute script on the plugin before it
   // is fully initialized. See: crbug.com/715747.
   if (instance_)
@@ -218,12 +216,12 @@ void PepperWebPluginImpl::UpdateVisibility(bool visible) {}
 
 blink::WebInputEventResult PepperWebPluginImpl::HandleInputEvent(
     const blink::WebCoalescedInputEvent& coalesced_event,
-    blink::WebCursorInfo& cursor_info) {
+    ui::Cursor* cursor) {
   // Re-entrancy may cause JS to try to execute script on the plugin before it
   // is fully initialized. See: crbug.com/715747.
   if (!instance_ || instance_->FlashIsFullscreenOrPending())
     return blink::WebInputEventResult::kNotHandled;
-  return instance_->HandleCoalescedInputEvent(coalesced_event, &cursor_info)
+  return instance_->HandleCoalescedInputEvent(coalesced_event, cursor)
              ? blink::WebInputEventResult::kHandledApplication
              : blink::WebInputEventResult::kNotHandled;
 }
@@ -308,6 +306,8 @@ bool PepperWebPluginImpl::CanRedo() const {
 }
 
 bool PepperWebPluginImpl::ExecuteEditCommand(const blink::WebString& name) {
+  DCHECK(name != "Paste");
+  DCHECK(name != "PasteAndMatchStyle");
   return ExecuteEditCommand(name, WebString());
 }
 
@@ -320,42 +320,15 @@ bool PepperWebPluginImpl::ExecuteEditCommand(const blink::WebString& name,
     if (!HasSelection() || !CanEditText())
       return false;
 
-    if (!clipboard_) {
-      blink::Platform::Current()
-          ->GetBrowserInterfaceBrokerProxy()
-          ->GetInterface(clipboard_.BindNewPipeAndPassReceiver());
-    }
-    base::string16 markup;
-    base::string16 text;
-    if (instance_) {
-      markup = instance_->GetSelectedText(true);
-      text = instance_->GetSelectedText(false);
-    }
-    clipboard_->WriteHtml(markup, GURL());
-    clipboard_->WriteText(text);
-    clipboard_->CommitWrite();
-
     instance_->ReplaceSelection("");
     return true;
   }
 
-  // If the clipboard contains something other than text (e.g. an image),
-  // ClipboardHost::ReadText() returns an empty string. The empty string is
-  // then pasted, replacing any selected text. This behavior is consistent with
-  // that of HTML text form fields.
   if (name == "Paste" || name == "PasteAndMatchStyle") {
     if (!CanEditText())
       return false;
 
-    if (!clipboard_) {
-      blink::Platform::Current()
-          ->GetBrowserInterfaceBrokerProxy()
-          ->GetInterface(clipboard_.BindNewPipeAndPassReceiver());
-    }
-    base::string16 text;
-    clipboard_->ReadText(ui::ClipboardBuffer::kCopyPaste, &text);
-
-    instance_->ReplaceSelection(base::UTF16ToUTF8(text));
+    instance_->ReplaceSelection(value.Utf8());
     return true;
   }
 
@@ -386,7 +359,7 @@ bool PepperWebPluginImpl::ExecuteEditCommand(const blink::WebString& name,
   return false;
 }
 
-WebURL PepperWebPluginImpl::LinkAtPosition(const WebPoint& position) const {
+WebURL PepperWebPluginImpl::LinkAtPosition(const gfx::Point& position) const {
   // Re-entrancy may cause JS to try to execute script on the plugin before it
   // is fully initialized. See: crbug.com/715747.
   if (!instance_)

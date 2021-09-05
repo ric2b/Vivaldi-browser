@@ -14,12 +14,14 @@ namespace blink {
 class XRGripSpace : public XRSpace {
  public:
   XRGripSpace(XRSession* session, XRInputSource* input_source);
-  XRPose* getPose(XRSpace* other_space,
-                  const TransformationMatrix* base_pose_matrix) override;
+
+  std::unique_ptr<TransformationMatrix> MojoFromNative() override;
+  std::unique_ptr<TransformationMatrix> NativeFromMojo() override;
+  bool EmulatedPosition() const override;
 
   base::Optional<XRNativeOriginInformation> NativeOrigin() const override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   Member<XRInputSource> input_source_;

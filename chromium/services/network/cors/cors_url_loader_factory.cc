@@ -9,26 +9,96 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "mojo/public/cpp/bindings/message.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/load_flags.h"
 #include "services/network/cors/cors_url_loader.h"
 #include "services/network/cors/preflight_controller.h"
+#include "services/network/crash_keys.h"
 #include "services/network/cross_origin_read_blocking.h"
-#include "services/network/initiator_lock_compatibility.h"
-#include "services/network/loader_util.h"
 #include "services/network/network_context.h"
+#include "services/network/network_service.h"
 #include "services/network/public/cpp/cors/cors.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/header_util.h"
+#include "services/network/public/cpp/initiator_lock_compatibility.h"
 #include "services/network/public/cpp/request_mode.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
+#include "services/network/url_loader.h"
 #include "services/network/url_loader_factory.h"
+#include "url/origin.h"
 
 namespace network {
 
 namespace cors {
+
+class CorsURLLoaderFactory::FactoryOverride final {
+ public:
+  class ExposedNetworkLoaderFactory final : public mojom::URLLoaderFactory {
+   public:
+    ExposedNetworkLoaderFactory(
+        std::unique_ptr<URLLoaderFactory> network_loader_factory,
+        mojo::PendingReceiver<mojom::URLLoaderFactory> receiver)
+        : network_loader_factory_(std::move(network_loader_factory)) {
+      if (receiver) {
+        receivers_.Add(this, std::move(receiver));
+      }
+    }
+    ~ExposedNetworkLoaderFactory() override = default;
+
+    ExposedNetworkLoaderFactory(const ExposedNetworkLoaderFactory&) = delete;
+    ExposedNetworkLoaderFactory& operator=(const ExposedNetworkLoaderFactory&) =
+        delete;
+
+    // mojom::URLLoaderFactory implementation
+    void CreateLoaderAndStart(
+        mojo::PendingReceiver<mojom::URLLoader> receiver,
+        int32_t routing_id,
+        int32_t request_id,
+        uint32_t options,
+        const ResourceRequest& request,
+        mojo::PendingRemote<mojom::URLLoaderClient> client,
+        const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
+        override {
+      return network_loader_factory_->CreateLoaderAndStart(
+          std::move(receiver), routing_id, request_id, options, request,
+          std::move(client), traffic_annotation);
+    }
+    void Clone(
+        mojo::PendingReceiver<mojom::URLLoaderFactory> receiver) override {
+      receivers_.Add(this, std::move(receiver));
+    }
+
+   private:
+    std::unique_ptr<URLLoaderFactory> network_loader_factory_;
+    mojo::ReceiverSet<mojom::URLLoaderFactory> receivers_;
+  };
+
+  FactoryOverride(mojom::URLLoaderFactoryOverridePtr params,
+                  std::unique_ptr<URLLoaderFactory> network_loader_factory)
+      : network_loader_factory_(std::move(network_loader_factory),
+                                std::move(params->overridden_factory_receiver)),
+        overriding_factory_(std::move(params->overriding_factory)),
+        skip_cors_enabled_scheme_check_(
+            params->skip_cors_enabled_scheme_check) {}
+
+  FactoryOverride(const FactoryOverride&) = delete;
+  FactoryOverride& operator=(const FactoryOverride&) = delete;
+
+  mojom::URLLoaderFactory* get() { return overriding_factory_.get(); }
+
+  bool ShouldSkipCorsEnabledSchemeCheck() {
+    return skip_cors_enabled_scheme_check_;
+  }
+
+ private:
+  ExposedNetworkLoaderFactory network_loader_factory_;
+  mojo::Remote<mojom::URLLoaderFactory> overriding_factory_;
+  bool skip_cors_enabled_scheme_check_;
+};
 
 bool CorsURLLoaderFactory::allow_external_preflights_for_testing_ = false;
 
@@ -37,30 +107,38 @@ CorsURLLoaderFactory::CorsURLLoaderFactory(
     mojom::URLLoaderFactoryParamsPtr params,
     scoped_refptr<ResourceSchedulerClient> resource_scheduler_client,
     mojo::PendingReceiver<mojom::URLLoaderFactory> receiver,
-    const OriginAccessList* origin_access_list,
-    std::unique_ptr<mojom::URLLoaderFactory> network_loader_factory_for_testing)
+    const OriginAccessList* origin_access_list)
     : context_(context),
       is_trusted_(params->is_trusted),
       disable_web_security_(params->disable_web_security),
       process_id_(params->process_id),
       request_initiator_site_lock_(params->request_initiator_site_lock),
+      ignore_isolated_world_origin_(params->ignore_isolated_world_origin),
       origin_access_list_(origin_access_list) {
   DCHECK(context_);
   DCHECK(origin_access_list_);
   DCHECK_NE(mojom::kInvalidProcessId, process_id_);
   factory_bound_origin_access_list_ = std::make_unique<OriginAccessList>();
-  if (params->factory_bound_allow_patterns.size()) {
-    DCHECK(params->request_initiator_site_lock);
+  if (params->factory_bound_access_patterns) {
     factory_bound_origin_access_list_->SetAllowListForOrigin(
-        *params->request_initiator_site_lock,
-        params->factory_bound_allow_patterns);
+        params->factory_bound_access_patterns->source_origin,
+        params->factory_bound_access_patterns->allow_patterns);
+    factory_bound_origin_access_list_->SetBlockListForOrigin(
+        params->factory_bound_access_patterns->source_origin,
+        params->factory_bound_access_patterns->block_patterns);
   }
-  network_loader_factory_ =
-      network_loader_factory_for_testing
-          ? std::move(network_loader_factory_for_testing)
-          : std::make_unique<network::URLLoaderFactory>(
-                context, std::move(params),
-                std::move(resource_scheduler_client), this);
+
+  auto factory_override = std::move(params->factory_override);
+  auto network_loader_factory = std::make_unique<network::URLLoaderFactory>(
+      context, std::move(params), std::move(resource_scheduler_client), this);
+
+  if (factory_override) {
+    DCHECK(factory_override->overriding_factory);
+    factory_override_ = std::make_unique<FactoryOverride>(
+        std::move(factory_override), std::move(network_loader_factory));
+  } else {
+    network_loader_factory_ = std::move(network_loader_factory);
+  }
 
   receivers_.Add(this, std::move(receiver));
   receivers_.set_disconnect_handler(base::BindRepeating(
@@ -87,33 +165,42 @@ void CorsURLLoaderFactory::DestroyURLLoader(mojom::URLLoader* loader) {
 }
 
 void CorsURLLoaderFactory::CreateLoaderAndStart(
-    mojom::URLLoaderRequest request,
+    mojo::PendingReceiver<mojom::URLLoader> receiver,
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
     const ResourceRequest& resource_request,
-    mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
+  debug::ScopedRequestCrashKeys request_crash_keys(resource_request);
+
   if (!IsSane(context_, resource_request, options)) {
-    client->OnComplete(URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
+    mojo::Remote<mojom::URLLoaderClient>(std::move(client))
+        ->OnComplete(URLLoaderCompletionStatus(net::ERR_INVALID_ARGUMENT));
     return;
   }
 
+  mojom::URLLoaderFactory* const inner_url_loader_factory =
+      factory_override_ ? factory_override_->get()
+                        : network_loader_factory_.get();
+  DCHECK(inner_url_loader_factory);
   if (context_->IsCorsEnabled() && !disable_web_security_) {
     auto loader = std::make_unique<CorsURLLoader>(
-        std::move(request), routing_id, request_id, options,
+        std::move(receiver), process_id_, routing_id, request_id, options,
         base::BindOnce(&CorsURLLoaderFactory::DestroyURLLoader,
                        base::Unretained(this)),
-        resource_request, std::move(client), traffic_annotation,
-        network_loader_factory_.get(), origin_access_list_,
-        factory_bound_origin_access_list_.get(),
+        resource_request, ignore_isolated_world_origin_,
+        factory_override_ &&
+            factory_override_->ShouldSkipCorsEnabledSchemeCheck(),
+        std::move(client), traffic_annotation, inner_url_loader_factory,
+        origin_access_list_, factory_bound_origin_access_list_.get(),
         context_->cors_preflight_controller());
     auto* raw_loader = loader.get();
     OnLoaderCreated(std::move(loader));
     raw_loader->Start();
   } else {
-    network_loader_factory_->CreateLoaderAndStart(
-        std::move(request), routing_id, request_id, options, resource_request,
+    inner_url_loader_factory->CreateLoaderAndStart(
+        std::move(receiver), routing_id, request_id, options, resource_request,
         std::move(client), traffic_annotation);
   }
 }
@@ -126,6 +213,7 @@ void CorsURLLoaderFactory::Clone(
 
 void CorsURLLoaderFactory::ClearBindings() {
   receivers_.Clear();
+  DeleteIfNeeded();
 }
 
 void CorsURLLoaderFactory::DeleteIfNeeded() {
@@ -140,7 +228,8 @@ bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
                                   uint32_t options) {
   // CORS needs a proper origin (including a unique opaque origin). If the
   // request doesn't have one, CORS cannot work.
-  if (!request.request_initiator && !IsNavigationRequestMode(request.mode) &&
+  if (!request.request_initiator &&
+      request.mode != network::mojom::RequestMode::kNavigate &&
       request.mode != mojom::RequestMode::kNoCors) {
     LOG(WARNING) << "|mode| is " << request.mode
                  << ", but |request_initiator| is not set.";
@@ -175,8 +264,6 @@ bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
   if (process_id_ != mojom::kBrowserProcessId) {
     switch (request.mode) {
       case mojom::RequestMode::kNavigate:
-      case mojom::RequestMode::kNavigateNestedFrame:
-      case mojom::RequestMode::kNavigateNestedObject:
         // Only the browser process can initiate navigations.  This helps ensure
         // that a malicious/compromised renderer cannot bypass CORB by issuing
         // kNavigate, rather than kNoCors requests.  (CORB should apply only to
@@ -200,15 +287,16 @@ bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
 
   // Compare |request_initiator| and |request_initiator_site_lock_|.
   InitiatorLockCompatibility initiator_lock_compatibility =
-      VerifyRequestInitiatorLock(process_id_, request_initiator_site_lock_,
-                                 request.request_initiator);
+      VerifyRequestInitiatorLockWithPluginCheck(
+          process_id_, request_initiator_site_lock_, request.request_initiator);
   UMA_HISTOGRAM_ENUMERATION(
       "NetworkService.URLLoader.RequestInitiatorOriginLockCompatibility",
       initiator_lock_compatibility);
   switch (initiator_lock_compatibility) {
     case InitiatorLockCompatibility::kCompatibleLock:
     case InitiatorLockCompatibility::kBrowserProcess:
-    case InitiatorLockCompatibility::kExcludedUniversalAccessPlugin:
+    case InitiatorLockCompatibility::kExcludedCorbForPlugin:
+    case InitiatorLockCompatibility::kAllowedRequestInitiatorForPlugin:
       break;
 
     case InitiatorLockCompatibility::kNoLock:
@@ -216,25 +304,21 @@ bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
       // specify the request_initiator_site_lock in URLLoaderFactories given to
       // a renderer process.  Once https://crbug.com/891872 is fixed, the case
       // below should return |false| (i.e. = bad message).
-      DCHECK_NE(process_id_, mojom::kBrowserProcessId);
       break;
 
     case InitiatorLockCompatibility::kNoInitiator:
       // Requests from the renderer need to always specify an initiator.
-      DCHECK_NE(process_id_, mojom::kBrowserProcessId);
+      NOTREACHED();
       mojo::ReportBadMessage(
           "CorsURLLoaderFactory: no initiator in a renderer request");
       return false;
 
     case InitiatorLockCompatibility::kIncorrectLock:
       // Requests from the renderer need to always specify a correct initiator.
-      DCHECK_NE(process_id_, mojom::kBrowserProcessId);
-      // TODO(lukasza): Report this as a bad message (or use the lock instead
-      // of the renderer-reported value).  Before we can do this, we need to
-      // ensure via UMA that this rarely happens or has low impact.  One known
-      // case are probably non-universal-access plugins (like PNaCl) which
-      // wouldn't be covered by the kExcludedUniversalAccessPlugin exception
-      // above.
+      //
+      // TODO(lukasza): https://crbug.com/920634: Report bad message and return
+      // false below.
+      NOTREACHED();
       break;
   }
 
@@ -258,8 +342,8 @@ bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
     return false;
   }
 
-  LogConcerningRequestHeaders(request.headers,
-                              false /* added_during_redirect */);
+  URLLoader::LogConcerningRequestHeaders(request.headers,
+                                         false /* added_during_redirect */);
 
   // Specifying CredentialsMode::kSameOrigin without an initiator origin doesn't
   // make sense.
@@ -274,7 +358,7 @@ bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
   // We only support |kInclude| credentials mode with navigations. See also:
   // a note at https://fetch.spec.whatwg.org/#concept-request-credentials-mode.
   if (request.credentials_mode != mojom::CredentialsMode::kInclude &&
-      IsNavigationRequestMode(request.mode)) {
+      request.mode == network::mojom::RequestMode::kNavigate) {
     LOG(WARNING) << "unsupported credentials mode on a navigation request";
     mojo::ReportBadMessage(
         "CorsURLLoaderFactory: unsupported credentials mode on navigation");
@@ -294,6 +378,32 @@ bool CorsURLLoaderFactory::IsSane(const NetworkContext* context,
   // TODO(yhirano): If the request mode is "no-cors", the redirect mode should
   // be "follow".
   return true;
+}
+
+InitiatorLockCompatibility
+CorsURLLoaderFactory::VerifyRequestInitiatorLockWithPluginCheck(
+    uint32_t process_id,
+    const base::Optional<url::Origin>& request_initiator_site_lock,
+    const base::Optional<url::Origin>& request_initiator) {
+  if (process_id == mojom::kBrowserProcessId)
+    return InitiatorLockCompatibility::kBrowserProcess;
+
+  InitiatorLockCompatibility result = VerifyRequestInitiatorLock(
+      request_initiator_site_lock, request_initiator);
+
+  if (result == InitiatorLockCompatibility::kIncorrectLock &&
+      CrossOriginReadBlocking::ShouldAllowForPlugin(process_id)) {
+    result = InitiatorLockCompatibility::kExcludedCorbForPlugin;
+  }
+
+  if (result == InitiatorLockCompatibility::kIncorrectLock &&
+      request_initiator.has_value() &&
+      context_->network_service()->IsInitiatorAllowedForPlugin(
+          process_id, request_initiator.value())) {
+    result = InitiatorLockCompatibility::kAllowedRequestInitiatorForPlugin;
+  }
+
+  return result;
 }
 
 }  // namespace cors

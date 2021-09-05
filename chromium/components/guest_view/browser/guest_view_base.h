@@ -22,10 +22,6 @@
 
 #include "extensions/buildflags/buildflags.h"
 
-namespace extensions {
-class DevtoolsConnectorItem;
-}
-
 namespace guest_view {
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -252,6 +248,8 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
       const content::NativeWebKeyboardEvent& event) override;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
+  content::WebContents* GetResponsibleWebContents(
+      content::WebContents* web_contents) override;
 
   // WebContentsObserver implementation.
   void DidFinishNavigation(
@@ -355,9 +353,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
     StopTrackingEmbedderZoomLevel();
   }
 
-  // NOTE(david@vivaldi.com): |connector_item_| is a proxy delegate which is
-  // required by Vivaldi.
-  scoped_refptr<extensions::DevtoolsConnectorItem> connector_item_;
+  virtual WebContentsDelegate* GetDevToolsConnector();
 
  private:
   class OwnerContentsObserver;

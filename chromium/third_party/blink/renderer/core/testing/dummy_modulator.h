@@ -27,7 +27,7 @@ class DummyModulator : public Modulator {
  public:
   DummyModulator();
   ~DummyModulator() override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   ModuleRecordResolver* GetModuleRecordResolver() override;
   base::SingleThreadTaskRunner* TaskRunner() override;
@@ -36,13 +36,11 @@ class DummyModulator : public Modulator {
   bool IsScriptingDisabled() const override;
 
   bool ImportMapsEnabled() const override;
-  bool BuiltInModuleInfraEnabled() const override;
-  bool BuiltInModuleEnabled(blink::layered_api::Module) const override;
-  void BuiltInModuleUseCount(blink::layered_api::Module) const override;
 
   void FetchTree(const KURL&,
                  ResourceFetcher*,
-                 mojom::RequestContextType destination,
+                 mojom::RequestContextType context_type,
+                 network::mojom::RequestDestination destination,
                  const ScriptFetchOptions&,
                  ModuleScriptCustomFetchType,
                  ModuleTreeClient*) override;
@@ -51,10 +49,12 @@ class DummyModulator : public Modulator {
                    ModuleGraphLevel,
                    ModuleScriptCustomFetchType,
                    SingleModuleClient*) override;
-  void FetchDescendantsForInlineScript(ModuleScript*,
-                                       ResourceFetcher*,
-                                       mojom::RequestContextType destination,
-                                       ModuleTreeClient*) override;
+  void FetchDescendantsForInlineScript(
+      ModuleScript*,
+      ResourceFetcher*,
+      mojom::RequestContextType context_type,
+      network::mojom::RequestDestination destination,
+      ModuleTreeClient*) override;
   ModuleScript* GetFetchedModuleScript(const KURL&) override;
   KURL ResolveModuleSpecifier(const String&, const KURL&, String*) override;
   bool HasValidContext() override;
@@ -76,7 +76,8 @@ class DummyModulator : public Modulator {
       v8::Local<v8::Module>) override;
   ScriptValue ExecuteModule(ModuleScript*, CaptureEvalErrorFlag) override;
   ModuleScriptFetcher* CreateModuleScriptFetcher(
-      ModuleScriptCustomFetchType) override;
+      ModuleScriptCustomFetchType,
+      util::PassKey<ModuleScriptLoader>) override;
 
   Member<ModuleRecordResolver> resolver_;
 };

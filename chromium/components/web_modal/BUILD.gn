@@ -4,7 +4,7 @@
 
 assert(!is_android && !is_ios)
 
-static_library("web_modal") {
+component("web_modal") {
   sources = [
     "modal_dialog_host.cc",
     "modal_dialog_host.h",
@@ -15,7 +15,10 @@ static_library("web_modal") {
     "web_contents_modal_dialog_manager.h",
     "web_contents_modal_dialog_manager_delegate.cc",
     "web_contents_modal_dialog_manager_delegate.h",
+    "web_modal_export.h",
   ]
+
+  defines = [ "WEB_MODAL_IMPLEMENTATION" ]
 
   public_deps = [
     "//base",
@@ -39,9 +42,7 @@ static_library("test_support") {
     "test_web_contents_modal_dialog_manager_delegate.h",
   ]
 
-  public_deps = [
-    ":web_modal",
-  ]
+  public_deps = [ ":web_modal" ]
   deps = [
     "//base",
     "//ui/gfx",
@@ -52,9 +53,7 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
 
-  sources = [
-    "web_contents_modal_dialog_manager_unittest.cc",
-  ]
+  sources = [ "web_contents_modal_dialog_manager_unittest.cc" ]
 
   deps = [
     ":test_support",

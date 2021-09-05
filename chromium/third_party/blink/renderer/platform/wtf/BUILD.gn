@@ -4,6 +4,7 @@
 
 assert(!is_ios)
 
+import("//build/config/compiler/compiler.gni")
 import("//build/config/jumbo.gni")
 import("//testing/test.gni")
 import("//third_party/blink/renderer/config.gni")
@@ -42,6 +43,7 @@ jumbo_component("wtf") {
     "allocator/partitions.h",
     "assertions.cc",
     "assertions.h",
+    "bit_field.h",
     "bloom_filter.h",
     "casting.h",
     "conditional_destructor.h",
@@ -74,6 +76,7 @@ jumbo_component("wtf") {
     "leak_annotations.h",
     "linked_hash_set.h",
     "list_hash_set.h",
+    "lru_cache.h",
     "math_extras.h",
     "pod_arena.h",
     "pod_free_list_arena.h",
@@ -171,30 +174,10 @@ jumbo_component("wtf") {
     "threading_win.cc",
     "tree_node.h",
     "type_traits.h",
-    "typed_arrays/array_buffer.cc",
-    "typed_arrays/array_buffer.h",
-    "typed_arrays/array_buffer_contents.cc",
-    "typed_arrays/array_buffer_contents.h",
-    "typed_arrays/array_buffer_view.cc",
-    "typed_arrays/array_buffer_view.h",
-    "typed_arrays/array_piece.cc",
-    "typed_arrays/array_piece.h",
-    "typed_arrays/bigint64_array.h",
-    "typed_arrays/biguint64_array.h",
-    "typed_arrays/float32_array.h",
-    "typed_arrays/float64_array.h",
-    "typed_arrays/int16_array.h",
-    "typed_arrays/int32_array.h",
-    "typed_arrays/int8_array.h",
-    "typed_arrays/integral_typed_array_base.h",
-    "typed_arrays/typed_array_base.h",
-    "typed_arrays/uint16_array.h",
-    "typed_arrays/uint32_array.h",
-    "typed_arrays/uint8_array.h",
-    "typed_arrays/uint8_clamped_array.h",
     "uuid.cc",
     "uuid.h",
     "vector.h",
+    "vector_backed_linked_list.h",
     "vector_traits.h",
     "wtf.cc",
     "wtf.h",
@@ -256,14 +239,17 @@ jumbo_component("wtf") {
     sources -= [ "text/atomic_string_cf.cc" ]
   }
 
+  if (!is_debug && !optimize_for_size) {
+    configs -= [ "//build/config/compiler:default_optimization" ]
+    configs += [ "//build/config/compiler:optimize_max" ]
+  }
+
   configs -= [ "//build/config/compiler:default_symbols" ]
   configs += blink_symbols_config
 }
 
 test("wtf_unittests") {
-  deps = [
-    ":wtf_unittests_sources",
-  ]
+  deps = [ ":wtf_unittests_sources" ]
 }
 
 jumbo_source_set("wtf_unittests_sources") {
@@ -272,9 +258,11 @@ jumbo_source_set("wtf_unittests_sources") {
   testonly = true
 
   sources = [
+    "allocator/atomic_operations_test.cc",
     "allocator/partitions_test.cc",
     "ascii_ctype_test.cc",
     "assertions_test.cc",
+    "bit_field_test.cc",
     "cross_thread_functional_test.cc",
     "decimal_test.cc",
     "deque_test.cc",
@@ -283,7 +271,9 @@ jumbo_source_set("wtf_unittests_sources") {
     "functional_test.cc",
     "hash_map_test.cc",
     "hash_set_test.cc",
+    "linked_hash_set_test.cc",
     "list_hash_set_test.cc",
+    "lru_cache_test.cc",
     "math_extras_test.cc",
     "pod_arena_test.cc",
     "pod_arena_test_helpers.h",
@@ -315,6 +305,7 @@ jumbo_source_set("wtf_unittests_sources") {
     "tree_node_test.cc",
     "type_traits_test.cc",
     "uuid_test.cc",
+    "vector_backed_linked_list_test.cc",
     "vector_test.cc",
   ]
 

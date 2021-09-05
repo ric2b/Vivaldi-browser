@@ -1,5 +1,5 @@
 This is a testharness.js-based test.
-Found 690 tests; 657 PASS, 33 FAIL, 0 TIMEOUT, 0 NOTRUN.
+Found 686 tests; 658 PASS, 28 FAIL, 0 TIMEOUT, 0 NOTRUN.
 PASS Setup
 PASS align-content (type: discrete) has testInterpolation function
 PASS align-content uses discrete animation when animating between "flex-start" and "flex-end" with linear easing
@@ -212,10 +212,6 @@ PASS column-width (type: discrete) has testInterpolation function
 PASS column-width uses discrete animation when animating between "auto" and "1px" with linear easing
 PASS column-width uses discrete animation when animating between "auto" and "1px" with effect easing
 PASS column-width uses discrete animation when animating between "auto" and "1px" with keyframe easing
-PASS content (type: discrete) has testInterpolation function
-PASS content uses discrete animation when animating between ""a"" and ""b"" with linear easing
-PASS content uses discrete animation when animating between ""a"" and ""b"" with effect easing
-PASS content uses discrete animation when animating between ""a"" and ""b"" with keyframe easing
 PASS counter-increment (type: discrete) has testInterpolation function
 PASS counter-increment uses discrete animation when animating between "ident-1 1" and "ident-2 2" with linear easing
 PASS counter-increment uses discrete animation when animating between "ident-1 1" and "ident-2 2" with effect easing
@@ -328,8 +324,8 @@ PASS font-variant-numeric uses discrete animation when animating between "lining
 PASS font-variant-numeric uses discrete animation when animating between "lining-nums" and "oldstyle-nums" with keyframe easing
 PASS font-variation-settings (type: fontVariationSettings) has testInterpolation function
 PASS font-variation-settings supports animation as float
-FAIL font-variation-settings supports animation as float with multiple tags assert_array_equals: The computed values should be "wdth" 2,"wght" 1.2 at 250ms property 0, expected "\"wdth\" 2" but got "\"wdth\" 1"
-FAIL font-variation-settings supports animation as float with multiple duplicate tags assert_array_equals: The computed values should be "wdth" 2,"wght" 1.2 at 250ms property 0, expected "\"wdth\" 2" but got "\"wdth\" 1"
+FAIL font-variation-settings supports animation as float with multiple tags assert_array_equals: The computed values should be "wdth" 2,"wght" 1.2 at 250ms expected property 0 to be "\"wdth\" 2" but got "\"wdth\" 1" (expected array ["\"wdth\" 2", "\"wght\" 1.2"] got ["\"wdth\" 1", "\"wght\" 1.1"])
+FAIL font-variation-settings supports animation as float with multiple duplicate tags assert_array_equals: The computed values should be "wdth" 2,"wght" 1.2 at 250ms expected property 0 to be "\"wdth\" 2" but got "\"wdth\" 1" (expected array ["\"wdth\" 2", "\"wght\" 1.2"] got ["\"wdth\" 1", "\"wght\" 1.1"])
 PASS font-variation-settings (type: discrete) has testInterpolation function
 PASS font-variation-settings uses discrete animation when animating between ""wght" 1.1, "wdth" 1" and ""wdth" 5" with linear easing
 PASS font-variation-settings uses discrete animation when animating between ""wght" 1.1, "wdth" 1" and ""wdth" 5" with effect easing
@@ -374,9 +370,9 @@ PASS hyphens uses discrete animation when animating between "manual" and "none" 
 PASS hyphens uses discrete animation when animating between "manual" and "none" with effect easing
 PASS hyphens uses discrete animation when animating between "manual" and "none" with keyframe easing
 PASS image-orientation (type: discrete) has testInterpolation function
-FAIL image-orientation uses discrete animation when animating between "none" and "from-image" with linear easing assert_equals: The value should be none at 0ms expected "none" but got "0deg"
-FAIL image-orientation uses discrete animation when animating between "none" and "from-image" with effect easing assert_equals: The value should be none at 0ms expected "none" but got "0deg"
-FAIL image-orientation uses discrete animation when animating between "none" and "from-image" with keyframe easing assert_equals: The value should be none at 0ms expected "none" but got "0deg"
+PASS image-orientation uses discrete animation when animating between "none" and "from-image" with linear easing
+PASS image-orientation uses discrete animation when animating between "none" and "from-image" with effect easing
+PASS image-orientation uses discrete animation when animating between "none" and "from-image" with keyframe easing
 PASS isolation (type: discrete) has testInterpolation function
 PASS isolation uses discrete animation when animating between "auto" and "isolate" with linear easing
 PASS isolation uses discrete animation when animating between "auto" and "isolate" with effect easing
@@ -462,8 +458,8 @@ PASS outline-color supports animating as color of #RGBa
 PASS outline-color supports animating as color of rgba()
 PASS outline-color supports animating as color of hsla()
 PASS outline-offset (type: length) has testInterpolation function
-FAIL outline-offset supports animating as a length assert_equals: The value should be 30px at 500ms expected "30px" but got "0px"
-FAIL outline-offset supports animating as a length of rem assert_equals: The value should be 30px at 500ms expected "30px" but got "0px"
+PASS outline-offset supports animating as a length
+PASS outline-offset supports animating as a length of rem
 PASS outline-style (type: discrete) has testInterpolation function
 PASS outline-style uses discrete animation when animating between "none" and "dotted" with linear easing
 PASS outline-style uses discrete animation when animating between "none" and "dotted" with effect easing

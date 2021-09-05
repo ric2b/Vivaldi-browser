@@ -17,6 +17,8 @@
 #include "net/base/auth.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_isolation_key.h"
+#include "net/dns/public/resolve_error_info.h"
 #include "net/http/http_response_info.h"
 #include "services/network/public/cpp/resource_request_body.h"
 #include "ui/base/page_transition_types.h"
@@ -284,6 +286,15 @@ class CONTENT_EXPORT NavigationHandle {
   virtual const base::Optional<net::AuthChallengeInfo>&
   GetAuthChallengeInfo() = 0;
 
+  // Returns host resolution error info associated with the request.
+  virtual net::ResolveErrorInfo GetResolveErrorInfo() = 0;
+
+  // Gets the NetworkIsolationKey associated with the navigation. Updated as
+  // redirects are followed. When one of the origins used to construct the
+  // NetworkIsolationKey is opaque, the returned NetworkIsolationKey will not be
+  // consistent between calls.
+  virtual net::NetworkIsolationKey GetNetworkIsolationKey() = 0;
+
   // Returns the ID of the URLRequest associated with this navigation. Can only
   // be called from NavigationThrottle::WillProcessResponse and
   // WebContentsObserver::ReadyToCommitNavigation.
@@ -346,6 +357,12 @@ class CONTENT_EXPORT NavigationHandle {
   virtual void RegisterSubresourceOverride(
       mojom::TransferrableURLLoaderPtr transferrable_loader) = 0;
 
+  // Force enables the given origin trials for this navigation. This needs to
+  // be called from WebContents::ReadyToCommitNavigation or earlier to have an
+  // effect.
+  virtual void ForceEnableOriginTrials(
+      const std::vector<std::string>& trials) = 0;
+
   // Testing methods ----------------------------------------------------------
   //
   // The following methods should be used exclusively for writing unit tests.
@@ -362,10 +379,6 @@ class CONTENT_EXPORT NavigationHandle {
 
   // Returns whether this navigation is currently deferred.
   virtual bool IsDeferredForTesting() = 0;
-
-  // Whether this navigation was triggered by a x-origin redirect following a
-  // prior (most likely <a download>) download attempt.
-  virtual bool FromDownloadCrossOriginRedirect() = 0;
 };
 
 }  // namespace content

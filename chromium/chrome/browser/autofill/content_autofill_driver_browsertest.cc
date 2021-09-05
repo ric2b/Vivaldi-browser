@@ -37,8 +37,8 @@ namespace {
 
 class MockAutofillClient : public TestAutofillClient {
  public:
-  MockAutofillClient() {}
-  ~MockAutofillClient() override {}
+  MockAutofillClient() = default;
+  ~MockAutofillClient() override = default;
 
   PrefService* GetPrefs() override { return &prefs_; }
 
@@ -54,7 +54,7 @@ class MockAutofillClient : public TestAutofillClient {
                     PopupType popup_type,
                     base::WeakPtr<AutofillPopupDelegate> delegate));
 
-  MOCK_METHOD0(HideAutofillPopup, void());
+  MOCK_METHOD1(HideAutofillPopup, void(PopupHidingReason));
 
  private:
   sync_preferences::TestingPrefServiceSyncable prefs_;
@@ -116,8 +116,8 @@ class ContentAutofillDriverBrowserTest : public InProcessBrowserTest,
 
   void OnVisibilityChanged(content::Visibility visibility) override {
     if (visibility == content::Visibility::HIDDEN &&
-        !web_contents_hidden_callback_.is_null()) {
-      web_contents_hidden_callback_.Run();
+        web_contents_hidden_callback_) {
+      std::move(web_contents_hidden_callback_).Run();
     }
   }
 
@@ -126,17 +126,16 @@ class ContentAutofillDriverBrowserTest : public InProcessBrowserTest,
     if (!navigation_handle->HasCommitted())
       return;
 
-    if (!nav_entry_committed_callback_.is_null())
-      nav_entry_committed_callback_.Run();
+    if (nav_entry_committed_callback_)
+      std::move(nav_entry_committed_callback_).Run();
 
     if (navigation_handle->IsSameDocument() &&
-        !same_document_navigation_callback_.is_null()) {
-      same_document_navigation_callback_.Run();
+        same_document_navigation_callback_) {
+      std::move(same_document_navigation_callback_).Run();
     }
 
-    if (!navigation_handle->IsInMainFrame() &&
-        !subframe_navigation_callback_.is_null()) {
-      subframe_navigation_callback_.Run();
+    if (!navigation_handle->IsInMainFrame() && subframe_navigation_callback_) {
+      std::move(subframe_navigation_callback_).Run();
     }
   }
 
@@ -174,17 +173,18 @@ class ContentAutofillDriverBrowserTest : public InProcessBrowserTest,
   }
 
  protected:
-  base::Closure web_contents_hidden_callback_;
-  base::Closure nav_entry_committed_callback_;
-  base::Closure same_document_navigation_callback_;
-  base::Closure subframe_navigation_callback_;
+  base::OnceClosure web_contents_hidden_callback_;
+  base::OnceClosure nav_entry_committed_callback_;
+  base::OnceClosure same_document_navigation_callback_;
+  base::OnceClosure subframe_navigation_callback_;
 
   std::unique_ptr<testing::NiceMock<MockAutofillClient>> autofill_client_;
 };
 
 IN_PROC_BROWSER_TEST_F(ContentAutofillDriverBrowserTest,
                        SwitchTabAndHideAutofillPopup) {
-  EXPECT_CALL(autofill_client(), HideAutofillPopup()).Times(1);
+  EXPECT_CALL(autofill_client(),
+              HideAutofillPopup(PopupHidingReason::kTabGone));
 
   scoped_refptr<content::MessageLoopRunner> runner =
       new content::MessageLoopRunner;
@@ -193,7 +193,6 @@ IN_PROC_BROWSER_TEST_F(ContentAutofillDriverBrowserTest,
                                 GURL(url::kAboutBlankURL),
                                 ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   runner->Run();
-  web_contents_hidden_callback_.Reset();
 }
 
 IN_PROC_BROWSER_TEST_F(ContentAutofillDriverBrowserTest,
@@ -205,7 +204,8 @@ IN_PROC_BROWSER_TEST_F(ContentAutofillDriverBrowserTest,
   // The Autofill popup should be hidden for same document navigations. It may
   // called twice because the zoom changed event may also fire for same-page
   // navigations.
-  EXPECT_CALL(autofill_client(), HideAutofillPopup())
+  EXPECT_CALL(autofill_client(),
+              HideAutofillPopup(PopupHidingReason::kNavigation))
       .Times(testing::AtLeast(1));
 
   scoped_refptr<content::MessageLoopRunner> runner =
@@ -216,7 +216,6 @@ IN_PROC_BROWSER_TEST_F(ContentAutofillDriverBrowserTest,
       embedded_test_server()->GetURL("/autofill/autofill_test_form.html#foo"));
   // This will block until a same document navigation is observed.
   runner->Run();
-  same_document_navigation_callback_.Reset();
 }
 
 IN_PROC_BROWSER_TEST_F(ContentAutofillDriverBrowserTest,
@@ -227,7 +226,7 @@ IN_PROC_BROWSER_TEST_F(ContentAutofillDriverBrowserTest,
   ui_test_utils::NavigateToURL(browser(), url);
 
   // The Autofill popup should NOT be hidden for subframe navigations.
-  EXPECT_CALL(autofill_client(), HideAutofillPopup()).Times(0);
+  EXPECT_CALL(autofill_client(), HideAutofillPopup).Times(0);
 
   scoped_refptr<content::MessageLoopRunner> runner =
       new content::MessageLoopRunner;
@@ -239,13 +238,14 @@ IN_PROC_BROWSER_TEST_F(ContentAutofillDriverBrowserTest,
       iframe_url));
   // This will block until a subframe navigation is observed.
   runner->Run();
-  subframe_navigation_callback_.Reset();
 }
 
 IN_PROC_BROWSER_TEST_F(ContentAutofillDriverBrowserTest,
                        TestPageNavigationHidingAutofillPopup) {
   // HideAutofillPopup is called once for each navigation.
-  EXPECT_CALL(autofill_client(), HideAutofillPopup()).Times(2);
+  EXPECT_CALL(autofill_client(),
+              HideAutofillPopup(PopupHidingReason::kNavigation))
+      .Times(2);
 
   scoped_refptr<content::MessageLoopRunner> runner =
       new content::MessageLoopRunner;
@@ -257,7 +257,6 @@ IN_PROC_BROWSER_TEST_F(ContentAutofillDriverBrowserTest,
       GURL(chrome::kChromeUIAboutURL), content::Referrer(),
       WindowOpenDisposition::CURRENT_TAB, ui::PAGE_TRANSITION_TYPED, false));
   runner->Run();
-  nav_entry_committed_callback_.Reset();
 }
 
 IN_PROC_BROWSER_TEST_F(ContentAutofillDriverBrowserTest,

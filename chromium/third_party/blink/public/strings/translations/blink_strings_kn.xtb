@@ -4,6 +4,7 @@
 <translation id="1018939186200882850">ಮೆನು ಐಟಂ</translation>
 <translation id="10623998915015855">ಟಾಗಲ್ ಬಟನ್</translation>
 <translation id="1088086359088493902">ಸೆಕೆಂಡುಗಳು</translation>
+<translation id="1142001580032786438">ವಾರದ ಪಿಕರ್ ಅನ್ನು ತೋರಿಸಿ</translation>
 <translation id="1171774979989969504">ದಯವಿಟ್ಟು ಇಮೇಲ್ ವಿಳಾಸವನ್ನು ನಮೂದಿಸಿ.</translation>
 <translation id="1178581264944972037">ವಿರಾಮ</translation>
 <translation id="1188858454923323853">ಪೂರಕವಾಗಿ</translation>
@@ -11,6 +12,7 @@
 <translation id="1206693055195146388">ಸ್ಲೈಡರ್</translation>
 <translation id="1211441953136645838">ಮುಕ್ತಾಯ ಟಿಪ್ಪಣಿ</translation>
 <translation id="1281252709823657822">ಸಂವಾದ</translation>
+<translation id="1306460908038601864">ಆಫ್</translation>
 <translation id="1335095011850992622">ಕ್ರೆಡಿಟ್‌ಗಳು</translation>
 <translation id="1342835525016946179">ಲೇಖನ</translation>
 <translation id="1359897965706325498">ಬ್ಯಾನರ್</translation>
@@ -21,6 +23,7 @@
 <translation id="1727886345390570319">ಮುಚ್ಚಿದ ಶೀರ್ಷಿಕೆಗಳ ಮೆನುವನ್ನು ಮರೆಮಾಡಿ</translation>
 <translation id="1729654308190250600">ಖಾಲಿ-ಅಲ್ಲದ ಇಮೇಲ್ ವಿಳಾಸವನ್ನು ನಮೂದಿಸಿ.</translation>
 <translation id="1758486001363313524">ಇತರೆ...</translation>
+<translation id="1787192514241997742">ಒಟ್ಟು ಸಮಯ: <ph name="REMAINING_TIME" /></translation>
 <translation id="1806710327868736751">alert_dialog</translation>
 <translation id="1821985195704844674">ಟ್ರೀ ಗ್ರಿಡ್</translation>
 <translation id="1822429046913737220">AM/PM</translation>
@@ -54,7 +57,6 @@
 <translation id="2674318244760992338">ಅಡಿಟಿಪ್ಪಣಿ</translation>
 <translation id="2709516037105925701">ಸ್ವಯಂತುಂಬುವಿಕೆ</translation>
 <translation id="2723001399770238859">ಆಡಿಯೋ</translation>
-<translation id="2725963129578236554">ಕಾಮೆಂಟ್‌ಗಳು</translation>
 <translation id="2746543609216772311">ಮೌಲ್ಯವು <ph name="MINIMUM_DATE_OR_TIME" /> ಅಥವಾ ನಂತರದ್ದಾಗಿರಬೇಕು.</translation>
 <translation id="2759744352195237655">ಪಾಪ್ ಅಪ್ ಬಟನ್</translation>
 <translation id="2761667185364618470">ನೀವು ಮುಂದುವರೆಯಬೇಕಾದರೆ ದಯವಿಟ್ಟು ಈ ಬಾಕ್ಸ್ ಅನ್ನು ಪರೀಕ್ಷಿಸಿ.</translation>
@@ -83,7 +85,6 @@
 <translation id="3822383571486410024">ಈ ಪಠ್ಯವನ್ನು <ph name="MIN_CHARACTERS" /> ಅಕ್ಷರಗಳಿಗೆ ಅಥವಾ ಅದಕ್ಕಿಂತಲೂ ಹೆಚ್ಚಿಗೆ ಸೀಮಿತಗೊಳಿಸಿ (ನೀವು ಪ್ರಸ್ತುತವಾಗಿ <ph name="CURRENT_LENGTH" /> ಅಕ್ಷರಗಳನ್ನು ಬಳಸುತ್ತಿರುವಿರಿ).</translation>
 <translation id="383465348367842624">'<ph name="ATSIGN" />' ನಂತರದ ಭಾಗವು '<ph name="INVALIDCHARACTER" />' ಚಿಹ್ನೆಯನ್ನು ಒಳಗೊಂಡಿರಬಾರದು.</translation>
 <translation id="3846214748874656680">ಪೂರ್ಣಪರದೆಯಿಂದ ನಿರ್ಗಮಿಸಿ</translation>
-<translation id="3889183436948184105">ಪರಿಷ್ಕರಣೆ</translation>
 <translation id="3920932319529768807">ತೀರ್ಮಾನ</translation>
 <translation id="3924558731517983934">ಅಪ್ಲಿಕೇಶನ್</translation>
 <translation id="3944740393230681990">ಪೀಠಿಕೆ</translation>
@@ -101,11 +102,11 @@
 <translation id="4444765639179266822">ಹೀಗೆ ಹೇಳುತ್ತಿರಬಹುದು: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">ಪದಕೋಶ ಉಲ್ಲೇಖ</translation>
 <translation id="4522570452068850558">ವಿವರಗಳು</translation>
-<translation id="4542388879936266156">ಬಾಕಿ ಉಳಿದಿರುವ ಸಮಯ: <ph name="REMAINING_TIME" /></translation>
 <translation id="4597532268155981612">ಫಾರ್ಮ್</translation>
 <translation id="4661075872484491155">ಮರ</translation>
 <translation id="4664250907885839816">'<ph name="ATSIGN" />' ನಂತರದ ಭಾಗವು '<ph name="INVALIDCHARACTER" />' ಚಿಹ್ನೆಯನ್ನು ಒಳಗೊಂಡಿರಬಾರದು.</translation>
 <translation id="4668956016107839909">ಅನುಬಂಧ</translation>
+<translation id="4698212723196775569">ಕೋಡ್</translation>
 <translation id="4718048029184481307">ಚಿತ್ರದಲ್ಲಿ ಚಿತ್ರ ಮೋಡ್‌ನಲ್ಲಿ ಪ್ಲೇ ಮಾಡಲಾಗುತ್ತಿದೆ</translation>
 <translation id="4742539557769756338">ಕವರ್</translation>
 <translation id="4748357248530471599">ಡಿಸ್‌ಪ್ಲೇ ಕಟ್‌ಔಟ್ ಪೂರ್ಣ ಸ್ಕ್ರೀನ್ ಟಾಗಲ್ ಮಾಡಿ</translation>
@@ -114,9 +115,14 @@
 <translation id="479989351350248267">ಹುಡುಕಾಡಿ</translation>
 <translation id="4812940957355064477">ದಯವಿಟ್ಟು ಸಂಖ್ಯೆಯನ್ನು ನಮೂದಿಸಿ.</translation>
 <translation id="4912536737030637138">ಗ್ರಂಥಸೂಚಿ ನಮೂದು</translation>
+<translation id="4915360478455618802">ಸಮಯದ ಪಿಕರ್ ಅನ್ನು ತೋರಿಸಿ</translation>
+<translation id="492244087561876220">ಕಾಮೆಂಟ್</translation>
+<translation id="4950364064308314478">ಸ್ಥಳೀಯ ದಿನಾಂಕ ಮತ್ತು ಸಮಯದ ಪಿಕರ್ ಅನ್ನು ತೋರಿಸಿ</translation>
+<translation id="4971739861736909480"><ph name="ACCNAME" /> ಅನ್ನು ಆಯ್ಕೆಮಾಡಲಾಗಿದೆ</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> ಆಯ್ಕೆ ಮಾಡಲಾಗಿದೆ</translation>
 <translation id="4992066212339426712">ಅನ್‌ಮ್ಯೂಟ್</translation>
 <translation id="49969490063480558">'<ph name="ATSIGN" />' ನಂತರದ ಒಂದು ಭಾಗವನ್ನು ನಮೂದಿಸಿ. '<ph name="INVALIDADDRESS" />' ಅಪೂರ್ಣವಾಗಿದೆ.</translation>
+<translation id="5022314756875057021">ಸಾಲಿನ ಗುಂಪು</translation>
 <translation id="5034860022980953847">ಪ್ರಗತಿ ಸೂಚಕ</translation>
 <translation id="5090250355906949916">ವೀಡಿಯೊ ಸಮಯದ ಸ್ಕ್ರಬ್ಬರ್</translation>
 <translation id="5093189678851173835">ಶಿಲಾಶಾಸನ</translation>
@@ -127,6 +133,7 @@
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">'<ph name="ATSIGN" />' ನಂತರದ ಭಾಗವನ್ನು ನಮೂದಿಸಿ. '<ph name="INVALIDADDRESS" />' ಅಪೂರ್ಣವಾಗಿದೆ.</translation>
 <translation id="5334352251556557839">ಮೀಡಿಯಾ ಪ್ಲೇ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.</translation>
+<translation id="537648784377940524">ಕನಿಷ್ಠ ದಿನಾಂಕವು (<ph name="MIN_DATE_OR_TIME" />) ಗರಿಷ್ಠ ದಿನಾಂಕ (<ph name="MAX_DATE_OR_TIME" />) ಕ್ಕಿಂತ ಮೊದಲು ಬರಬೇಕು.</translation>
 <translation id="5406322316791861025">ಆಕೃತಿ</translation>
 <translation id="5453733299334684579">ಟ್ರೀ ಐಟಂ</translation>
 <translation id="5466621249238537318">ದಯವಿಟ್ಟು ಒಂದು ಅಥವಾ ಹೆಚ್ಚು ಫೈಲ್‌ಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ.</translation>
@@ -142,7 +149,6 @@
 <translation id="5677946354068040947">ಇನ್ನಷ್ಟು ಆಯ್ಕೆಗಳು</translation>
 <translation id="576709008726043716">ಪರಿಚಯ</translation>
 <translation id="57838592816432529">ಮ್ಯೂಟ್</translation>
-<translation id="5860033963881614850">ಆಫ್</translation>
 <translation id="588258955323874662">ಪೂರ್ಣಪರದೆ</translation>
 <translation id="5888666972993069672">ಈಗ <ph name="DEVICE_FRIENDLY_NAME" /> ಗೆ ಬಿತ್ತರಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="591047860372322273">ಹುಡುಕಾಟ ಬಾಕ್ಸ್</translation>
@@ -163,7 +169,6 @@
 <translation id="6404546809543547843">ಆಡಿಯೊ ಸಮಯ ಸ್ಕ್ರಬ್ಬರ್</translation>
 <translation id="6443871981718447451">ಮುಚ್ಚಿದ ಶೀರ್ಷಿಕೆಗಳ ಮೆನುವನ್ನು ತೋರಿಸಿ</translation>
 <translation id="6453774872122745852">ಅಂಗೀಕಾರಗಳು</translation>
-<translation id="6475115390776617481">ಪ್ರಸ್ತುತವಾಗಿ ಈ ವಿಷಯವನ್ನು ಪರಿಶೀಲಿಸುತ್ತಿರುವವರು ಅಥವಾ ಎಡಿಟ್ ಮಾಡುತ್ತಿರುವವರು</translation>
 <translation id="648732519525291180">ಸಮಯ ಪಿಕರ್</translation>
 <translation id="6550675742724504774">ಆಯ್ಕೆಗಳು</translation>
 <translation id="6572309429103589720">ಅಮಾನ್ಯ ವ್ಯಾಕರಣ</translation>
@@ -191,6 +196,7 @@
 <translation id="7118469954320184356">ಯಾವುದೇ ವಿವರಣೆ ಲಭ್ಯವಿಲ್ಲ.</translation>
 <translation id="7139483182332611405">ಮುನ್ನುಡಿ</translation>
 <translation id="7214187073215825913">ವಿಷಯದ ಮಾಹಿತಿ</translation>
+<translation id="7238347055216017155">ಎಂಫಸಿಸ್</translation>
 <translation id="7263440858009898357">ಪಟ್ಟಿಯಲ್ಲಿನ ಐಟಂ ಅನ್ನು ದಯವಿಟ್ಟು ಆಯ್ಕೆ ಮಾಡಿ.</translation>
 <translation id="727747134524199931">ಕಾಲಮ್ ಶಿರೋನಾಮೆ</translation>
 <translation id="7320576522385648310">ಬಫರ್ ಆಗುತ್ತಿದೆ</translation>
@@ -217,6 +223,8 @@
 <translation id="7888071071722539607">ಇಮೇಲ್ ವಿಳಾಸದಲ್ಲಿ ಒಂದು '<ph name="ATSIGN" />' ಅನ್ನು ಸೇರಿಸಿ. '<ph name="ATSIGN" />' ನಲ್ಲಿ '<ph name="INVALIDADDRESS" />' ಕಾಣೆಯಾಗಿದೆ.</translation>
 <translation id="7891486169920085145">ಛೇದಕ</translation>
 <translation id="795667975304826397">ಯಾವುದೇ ಫೈಲ್ ಆಯ್ಕೆ ಮಾಡಿಲ್ಲ</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" /> ಅನ್ನು ಆಯ್ಕೆ ಮಾಡಲಾಗಿಲ್ಲ</translation>
+<translation id="8034303206267677282">ಪ್ರಬಲ</translation>
 <translation id="8053789581856978548">ಪಠ್ಯ ಹುಡುಕಾಟದ ಫೀಲ್ಡ್</translation>
 <translation id="8057695513531652401">ಸೂಚನೆ</translation>
 <translation id="8105797009065549151">ಸೂಚನೆ ಉಲ್ಲೇಖ</translation>
@@ -228,6 +236,7 @@
 <translation id="8284326494547611709">ಶೀರ್ಷಿಕೆಗಳು</translation>
 <translation id="8346634859695247203">ವಿಭಾಗ</translation>
 <translation id="835897206747267392">ಅಮಾನ್ಯ ಮೌಲ್ಯ.</translation>
+<translation id="839593075537728968">ಮೌಲ್ಯವು, <ph name="MINIMUM_TIME" /> ಮತ್ತು <ph name="MAXIMUM_TIME" /> ನಡುವೆ ಇರಬೇಕು.</translation>
 <translation id="8403857369060869934">ಕಳೆದುಹೋದ ಸಮಯ: <ph name="ELAPSED_TIME" /></translation>
 <translation id="8415319359811155763">ಭಾಗ</translation>
 <translation id="8433900881053900389">ಟೂಲ್‌ಬಾರ್</translation>
@@ -244,10 +253,10 @@
 <translation id="860475260694818407">ಪರಿವಿಡಿ</translation>
 <translation id="8613126697340063924">ರಿಮೋಟ್ ಪ್ಲೇಬ್ಯಾಕ್ ನಿಯಂತ್ರಿಸಿ</translation>
 <translation id="862370744433916922">ಉಪಶೀರ್ಷಿಕೆ</translation>
+<translation id="8634971699417195529">ತಿಂಗಳಿನ ಪಿಕರ್ ಅನ್ನು ತೋರಿಸಿ</translation>
 <translation id="8711688047404765493">ಔಟ್‌ಪುಟ್</translation>
 <translation id="8750798805984357768">ದಯವಿಟ್ಟು ಈ ಕೆಳಗಿನ ಆಯ್ಕೆಗಳಲ್ಲಿ ಒಂದನ್ನು ಆರಿಸಿ.</translation>
 <translation id="8808573423886751634">ಅಧ್ಯಾಯ</translation>
-<translation id="8822203815165896261">ಲೇಖಕರ ಮಾಹಿತಿ</translation>
 <translation id="8845239796550121995">ಈಗ ನಿಮ್ಮ ಟಿವಿಯನ್ನು ಬಿತ್ತರಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="8851136666856101339">ಮುಖ್ಯ</translation>
 <translation id="8875657656876809964">ವೀಡಿಯೊ ಪ್ಲೇಬ್ಯಾಕ್ ದೋಷ</translation>

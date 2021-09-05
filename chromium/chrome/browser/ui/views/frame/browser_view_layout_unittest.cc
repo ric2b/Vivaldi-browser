@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/browser_view_layout.h"
 
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/browser_view_layout_delegate.h"
@@ -14,13 +15,14 @@
 #include "chrome/browser/ui/views/tabs/fake_base_tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
-#include "chrome/test/base/browser_with_test_window_test.h"
+#include "chrome/test/views/chrome_views_test_base.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/controls/separator.h"
 
 namespace {
 
-static const int kToolbarHeight = 30 - views::Separator::kThickness;
+// Save space for the separator.
+constexpr int kToolbarHeight = 30 - views::Separator::kThickness;
 
 class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
  public:
@@ -74,6 +76,22 @@ class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
   float GetTopControlsSlideBehaviorShownRatio() const override {
     return top_controls_shown_ratio_;
   }
+  bool SupportsWindowFeature(
+      const Browser::WindowFeature feature) const override {
+    static const base::NoDestructor<base::flat_set<Browser::WindowFeature>>
+        supported_features({
+            Browser::FEATURE_TABSTRIP,
+            Browser::FEATURE_TOOLBAR,
+            Browser::FEATURE_LOCATIONBAR,
+            Browser::FEATURE_BOOKMARKBAR,
+            Browser::FEATURE_DOWNLOADSHELF,
+        });
+    return base::Contains(*supported_features, feature);
+  }
+  gfx::NativeView GetHostView() const override { return nullptr; }
+  bool BrowserIsTypeNormal() const override { return true; }
+  bool HasFindBarController() const override { return false; }
+  void MoveWindowForFindBarIfNecessary() const override {}
 
  private:
   bool tab_strip_visible_ = true;
@@ -124,7 +142,7 @@ class MockImmersiveModeController : public ImmersiveModeController {
 
 ///////////////////////////////////////////////////////////////////////////////
 // Tests of BrowserViewLayout. Runs tests without constructing a BrowserView.
-class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
+class BrowserViewLayoutTest : public ChromeViewsTestBase {
  public:
   BrowserViewLayoutTest()
       : delegate_(nullptr),
@@ -142,14 +160,14 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
   views::View* root_view() { return root_view_.get(); }
   views::View* top_container() { return top_container_; }
   TabStrip* tab_strip() { return tab_strip_; }
+  views::View* webui_tab_strip() { return webui_tab_strip_; }
   views::View* toolbar() { return toolbar_; }
   views::View* separator() { return separator_; }
   InfoBarContainerView* infobar_container() { return infobar_container_; }
   views::View* contents_container() { return contents_container_; }
 
-  // BrowserWithTestWindowTest overrides:
   void SetUp() override {
-    BrowserWithTestWindowTest::SetUp();
+    ChromeViewsTestBase::SetUp();
 
     root_view_.reset(CreateFixedSizeView(gfx::Size(800, 600)));
 
@@ -161,8 +179,10 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
     tab_strip_ = new TabStrip(std::make_unique<FakeBaseTabStripController>());
     top_container_->AddChildView(tab_strip_region_view);
     tab_strip_region_view->AddChildView(tab_strip_);
+    webui_tab_strip_ = CreateFixedSizeView(gfx::Size(800, 200));
+    webui_tab_strip_->SetVisible(false);
+    top_container_->AddChildView(webui_tab_strip_);
     toolbar_ = CreateFixedSizeView(gfx::Size(800, kToolbarHeight));
-    top_container_->AddChildView(toolbar_);
     top_container_->AddChildView(toolbar_);
     separator_ =
         top_container_->AddChildView(std::make_unique<views::Separator>());
@@ -187,11 +207,13 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
     // TODO(jamescook): Attach |layout_| to |root_view_|?
     delegate_ = new MockBrowserViewLayoutDelegate();
     layout_ = std::make_unique<BrowserViewLayout>(
-        std::unique_ptr<BrowserViewLayoutDelegate>(delegate_), browser(),
+        std::unique_ptr<BrowserViewLayoutDelegate>(delegate_),
+        nullptr,  // NativeView.
         nullptr,  // BrowserView.
-        top_container_, tab_strip_region_view, tab_strip_, nullptr, toolbar_,
+        top_container_, tab_strip_region_view, tab_strip_, toolbar_,
         infobar_container_, contents_container_,
         immersive_mode_controller_.get(), nullptr, separator_);
+    layout_->set_webui_tab_strip(webui_tab_strip());
   }
 
  private:
@@ -202,6 +224,7 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
   // Views owned by |root_view_|.
   views::View* top_container_;
   TabStrip* tab_strip_;
+  views::View* webui_tab_strip_;
   views::View* toolbar_;
   views::Separator* separator_;
   InfoBarContainerView* infobar_container_;
@@ -216,7 +239,6 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
 
 // Test basic construction and initialization.
 TEST_F(BrowserViewLayoutTest, BrowserViewLayout) {
-  EXPECT_TRUE(layout()->browser());
   EXPECT_TRUE(layout()->GetWebContentsModalDialogHost());
   EXPECT_FALSE(layout()->IsInfobarVisible());
 }
@@ -311,4 +333,20 @@ TEST_F(BrowserViewLayoutTest, LayoutContentsWithTopControlsSlideBehavior) {
   EXPECT_EQ(gfx::Rect(0, kToolbarHeight, 800, views::Separator::kThickness),
             separator()->bounds());
   EXPECT_EQ(gfx::Rect(0, 0, 800, 600), contents_container()->bounds());
+}
+
+TEST_F(BrowserViewLayoutTest, WebUITabStripPushesDownContents) {
+  delegate()->set_tab_strip_visible(false);
+  delegate()->set_toolbar_visible(true);
+  webui_tab_strip()->SetVisible(false);
+  layout()->Layout(root_view());
+  const gfx::Rect original_contents_bounds = contents_container()->bounds();
+  EXPECT_EQ(gfx::Size(), webui_tab_strip()->size());
+
+  webui_tab_strip()->SetVisible(true);
+  layout()->Layout(root_view());
+  EXPECT_LT(0, webui_tab_strip()->size().height());
+  EXPECT_EQ(original_contents_bounds.size(), contents_container()->size());
+  EXPECT_EQ(webui_tab_strip()->size().height(),
+            contents_container()->bounds().y() - original_contents_bounds.y());
 }

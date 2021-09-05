@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -20,11 +21,8 @@
 
 using blink::mojom::QuotaStatusCode;
 using blink::mojom::StorageType;
-using storage::QuotaClient;
-using storage::SpecialStoragePolicy;
-using storage::UsageTracker;
 
-namespace content {
+namespace storage {
 
 namespace {
 
@@ -50,7 +48,6 @@ void DidGetUsage(bool* done, int64_t* usage_out, int64_t usage) {
 class MockQuotaClient : public QuotaClient {
  public:
   MockQuotaClient() = default;
-  ~MockQuotaClient() override = default;
 
   ID id() const override { return kFileSystem; }
 
@@ -97,6 +94,11 @@ class MockQuotaClient : public QuotaClient {
         FROM_HERE, base::BindOnce(std::move(callback), QuotaStatusCode::kOk));
   }
 
+  void PerformStorageCleanup(blink::mojom::StorageType type,
+                             base::OnceClosure callback) override {
+    std::move(callback).Run();
+  }
+
   bool DoesSupport(StorageType type) const override {
     return type == StorageType::kTemporary;
   }
@@ -117,6 +119,8 @@ class MockQuotaClient : public QuotaClient {
   }
 
  private:
+  ~MockQuotaClient() override = default;
+
   std::map<url::Origin, int64_t> origin_usage_map_;
 
   DISALLOW_COPY_AND_ASSIGN(MockQuotaClient);
@@ -126,6 +130,7 @@ class UsageTrackerTest : public testing::Test {
  public:
   UsageTrackerTest()
       : storage_policy_(new MockSpecialStoragePolicy()),
+        quota_client_(base::MakeRefCounted<MockQuotaClient>()),
         usage_tracker_(GetUsageTrackerList(),
                        StorageType::kTemporary,
                        storage_policy_.get()) {}
@@ -149,14 +154,14 @@ class UsageTrackerTest : public testing::Test {
   }
 
   void UpdateUsage(const url::Origin& origin, int64_t delta) {
-    quota_client_.UpdateUsage(origin, delta);
-    usage_tracker_.UpdateUsageCache(quota_client_.id(), origin, delta);
+    quota_client_->UpdateUsage(origin, delta);
+    usage_tracker_.UpdateUsageCache(quota_client_->id(), origin, delta);
     base::RunLoop().RunUntilIdle();
   }
 
   void UpdateUsageWithoutNotification(const url::Origin& origin,
                                       int64_t delta) {
-    quota_client_.UpdateUsage(origin, delta);
+    quota_client_->UpdateUsage(origin, delta);
   }
 
   void GetGlobalLimitedUsage(int64_t* limited_usage) {
@@ -203,7 +208,7 @@ class UsageTrackerTest : public testing::Test {
   void GrantUnlimitedStoragePolicy(const url::Origin& origin) {
     if (!storage_policy_->IsStorageUnlimited(origin.GetURL())) {
       storage_policy_->AddUnlimited(origin.GetURL());
-      storage_policy_->NotifyGranted(origin.GetURL(),
+      storage_policy_->NotifyGranted(origin,
                                      SpecialStoragePolicy::STORAGE_UNLIMITED);
     }
   }
@@ -211,27 +216,26 @@ class UsageTrackerTest : public testing::Test {
   void RevokeUnlimitedStoragePolicy(const url::Origin& origin) {
     if (storage_policy_->IsStorageUnlimited(origin.GetURL())) {
       storage_policy_->RemoveUnlimited(origin.GetURL());
-      storage_policy_->NotifyRevoked(origin.GetURL(),
+      storage_policy_->NotifyRevoked(origin,
                                      SpecialStoragePolicy::STORAGE_UNLIMITED);
     }
   }
 
   void SetUsageCacheEnabled(const url::Origin& origin, bool enabled) {
-    usage_tracker_.SetUsageCacheEnabled(
-        quota_client_.id(), origin, enabled);
+    usage_tracker_.SetUsageCacheEnabled(quota_client_->id(), origin, enabled);
   }
 
  private:
-  std::vector<QuotaClient*> GetUsageTrackerList() {
-    std::vector<QuotaClient*> client_list;
-    client_list.push_back(&quota_client_);
+  std::vector<scoped_refptr<QuotaClient>> GetUsageTrackerList() {
+    std::vector<scoped_refptr<QuotaClient>> client_list;
+    client_list.push_back(quota_client_);
     return client_list;
   }
 
   base::test::TaskEnvironment task_environment_;
 
   scoped_refptr<MockSpecialStoragePolicy> storage_policy_;
-  MockQuotaClient quota_client_;
+  scoped_refptr<MockQuotaClient> quota_client_;
   UsageTracker usage_tracker_;
 
   DISALLOW_COPY_AND_ASSIGN(UsageTrackerTest);
@@ -385,5 +389,4 @@ TEST_F(UsageTrackerTest, LimitedGlobalUsageTest) {
   EXPECT_EQ(2 + 32, unlimited_usage);
 }
 
-
-}  // namespace content
+}  // namespace storage

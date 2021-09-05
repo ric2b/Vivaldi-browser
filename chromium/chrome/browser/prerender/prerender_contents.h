@@ -20,15 +20,13 @@
 #include "base/values.h"
 #include "chrome/browser/prerender/prerender_final_status.h"
 #include "chrome/browser/prerender/prerender_origin.h"
-#include "chrome/common/prerender.mojom.h"
+#include "chrome/common/prerender_canceler.mojom.h"
 #include "chrome/common/prerender_types.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/referrer.h"
-#include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/receiver.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "ui/gfx/geometry/rect.h"
 #include "url/origin.h"
 
@@ -42,7 +40,7 @@ namespace content {
 class RenderViewHost;
 class SessionStorageNamespace;
 class WebContents;
-}
+}  // namespace content
 
 namespace history {
 struct HistoryAddPageArgs;
@@ -184,10 +182,6 @@ class PrerenderContents : public content::NotificationObserver,
       content::NavigationHandle* navigation_handle) override;
 
   void RenderProcessGone(base::TerminationStatus status) override;
-  void OnInterfaceRequestFromFrame(
-      content::RenderFrameHost* render_frame_host,
-      const std::string& interface_name,
-      mojo::ScopedMessagePipeHandle* interface_pipe) override;
 
   // content::NotificationObserver
   void Observe(int type,
@@ -237,6 +231,9 @@ class PrerenderContents : public content::NotificationObserver,
 
   // Running byte count. Increased when each resource completes loading.
   int64_t network_bytes() { return network_bytes_; }
+
+  void AddPrerenderCancelerReceiver(
+      mojo::PendingReceiver<chrome::mojom::PrerenderCanceler> receiver);
 
  protected:
   PrerenderContents(PrerenderManager* prerender_manager,
@@ -294,16 +291,10 @@ class PrerenderContents : public content::NotificationObserver,
       std::unique_ptr<memory_instrumentation::GlobalMemoryDump> dump);
 
   // chrome::mojom::PrerenderCanceler:
-  void CancelPrerenderForPrinting() override;
-  void CancelPrerenderForUnsupportedMethod() override;
   void CancelPrerenderForUnsupportedScheme(const GURL& url) override;
-  void CancelPrerenderForSyncDeferredRedirect() override;
 
-  void OnPrerenderCancelerReceiver(
-      mojo::PendingReceiver<chrome::mojom::PrerenderCanceler> receiver);
-
-  mojo::Receiver<chrome::mojom::PrerenderCanceler> prerender_canceler_receiver_{
-      this};
+  mojo::ReceiverSet<chrome::mojom::PrerenderCanceler>
+      prerender_canceler_receiver_set_;
 
   base::ObserverList<Observer>::Unchecked observer_list_;
 
@@ -363,8 +354,6 @@ class PrerenderContents : public content::NotificationObserver,
   // A running tally of the number of bytes this prerender has caused to be
   // transferred over the network for resources.  Updated with AddNetworkBytes.
   int64_t network_bytes_;
-
-  service_manager::BinderRegistry registry_;
 
   base::WeakPtrFactory<PrerenderContents> weak_factory_{this};
 

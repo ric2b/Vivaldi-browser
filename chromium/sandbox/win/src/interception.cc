@@ -11,10 +11,10 @@
 
 #include <memory>
 #include <set>
+#include <string>
 
 #include "base/logging.h"
 #include "base/scoped_native_library.h"
-#include "base/strings/string16.h"
 #include "base/win/pe_image.h"
 #include "base/win/windows_version.h"
 #include "sandbox/win/src/interception_internal.h"
@@ -159,7 +159,7 @@ ResultCode InterceptionManager::InitializeInterceptions() {
 }
 
 size_t InterceptionManager::GetBufferSize() const {
-  std::set<base::string16> dlls;
+  std::set<std::wstring> dlls;
   size_t buffer_bytes = 0;
 
   for (const auto& interception : interceptions_) {
@@ -221,7 +221,7 @@ bool InterceptionManager::SetupConfigBuffer(void* buffer, size_t buffer_bytes) {
       continue;
     }
 
-    const base::string16 dll = it->dll;
+    const std::wstring dll = it->dll;
     if (!SetupDllInfo(*it, &buffer, &buffer_bytes))
       return false;
 
@@ -343,7 +343,7 @@ bool InterceptionManager::IsInterceptionPerformedByChild(
   if (data.type >= INTERCEPTION_LAST)
     return false;
 
-  base::string16 ntdll(kNtdllName);
+  std::wstring ntdll(kNtdllName);
   if (ntdll == data.dll)
     return false;  // ntdll has to be intercepted from the parent
 
@@ -449,14 +449,15 @@ ResultCode InterceptionManager::PatchClientFunctions(
   thunk.reset(new ServiceResolverThunk(child_->Process(), relaxed_));
 #else
   base::win::OSInfo* os_info = base::win::OSInfo::GetInstance();
+  base::win::Version real_os_version = os_info->Kernel32Version();
   if (os_info->wow64_status() == base::win::OSInfo::WOW64_ENABLED) {
-    if (os_info->version() >= base::win::Version::WIN10)
+    if (real_os_version >= base::win::Version::WIN10)
       thunk.reset(new Wow64W10ResolverThunk(child_->Process(), relaxed_));
-    else if (os_info->version() >= base::win::Version::WIN8)
+    else if (real_os_version >= base::win::Version::WIN8)
       thunk.reset(new Wow64W8ResolverThunk(child_->Process(), relaxed_));
     else
       thunk.reset(new Wow64ResolverThunk(child_->Process(), relaxed_));
-  } else if (os_info->version() >= base::win::Version::WIN8) {
+  } else if (real_os_version >= base::win::Version::WIN8) {
     thunk.reset(new Win8ResolverThunk(child_->Process(), relaxed_));
   } else {
     thunk.reset(new ServiceResolverThunk(child_->Process(), relaxed_));
@@ -464,7 +465,7 @@ ResultCode InterceptionManager::PatchClientFunctions(
 #endif
 
   for (auto interception : interceptions_) {
-    const base::string16 ntdll(kNtdllName);
+    const std::wstring ntdll(kNtdllName);
     if (interception.dll != ntdll)
       return SBOX_ERROR_BAD_PARAMS;
 

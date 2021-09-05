@@ -30,15 +30,17 @@ import android.webkit.WebViewProvider;
 
 import com.android.webview.chromium.WebViewDelegateFactory.WebViewDelegate;
 
-import org.chromium.android_webview.AwAutofillProvider;
 import org.chromium.android_webview.AwBrowserContext;
 import org.chromium.android_webview.AwBrowserProcess;
 import org.chromium.android_webview.AwSettings;
-import org.chromium.android_webview.AwSwitches;
+import org.chromium.android_webview.ProductConfig;
 import org.chromium.android_webview.WebViewChromiumRunQueue;
+import org.chromium.android_webview.common.AwSwitches;
 import org.chromium.android_webview.common.CommandLineUtil;
+import org.chromium.android_webview.common.DeveloperModeUtils;
+import org.chromium.android_webview.common.FlagOverrideHelper;
+import org.chromium.android_webview.common.ProductionSupportedFlagList;
 import org.chromium.base.BuildInfo;
-import org.chromium.base.BundleUtils;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -49,14 +51,16 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.VerifiesOnN;
 import org.chromium.base.annotations.VerifiesOnP;
 import org.chromium.base.library_loader.NativeLibraries;
-import org.chromium.base.metrics.CachedMetrics.TimesHistogramSample;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.components.autofill.AutofillProvider;
+import org.chromium.components.autofill.AutofillProviderImpl;
 import org.chromium.components.embedder_support.application.ClassLoaderContextWrapperFactory;
 import org.chromium.content_public.browser.LGEmailActionModeWorkaround;
 
 import java.io.File;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 
@@ -96,6 +100,8 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     private static final Object sSingletonLock = new Object();
     private static WebViewChromiumFactoryProvider sSingleton;
+    // Used to indicate if WebLayer and WebView are running in the same process.
+    private static boolean sWebLayerRunningInSameProcess;
 
     private final WebViewChromiumRunQueue mRunQueue = new WebViewChromiumRunQueue(
             () -> { return WebViewChromiumFactoryProvider.this.mAwInit.hasStarted(); });
@@ -264,7 +270,8 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
             }
 
             // WebView needs to make sure to always use the wrapped application context.
-            ContextUtils.initApplicationContext(ClassLoaderContextWrapperFactory.get(ctx));
+            ctx = ClassLoaderContextWrapperFactory.get(ctx);
+            ContextUtils.initApplicationContext(ctx);
 
             // Find the package ID for the package that WebView's resources come from.
             // This will be the donor package if there is one, not our main package.
@@ -273,11 +280,9 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                 resourcePackage = packageInfo.applicationInfo.metaData.getString(
                         "com.android.webview.WebViewDonorPackage", resourcePackage);
             }
-            int packageId = webViewDelegate.getPackageId(
-                    ContextUtils.getApplicationContext().getResources(), resourcePackage);
+            int packageId = webViewDelegate.getPackageId(ctx.getResources(), resourcePackage);
 
-            mAwInit.setUpResourcesOnBackgroundThread(
-                    packageId, ContextUtils.getApplicationContext());
+            mAwInit.setUpResourcesOnBackgroundThread(packageId, ctx);
 
             try (ScopedSysTraceEvent e2 = ScopedSysTraceEvent.scoped(
                          "WebViewChromiumFactoryProvider.initCommandLine")) {
@@ -291,8 +296,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                 multiProcess = webViewDelegate.isMultiProcessEnabled();
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 // Check the multiprocess developer setting directly on N.
-                multiProcess = Settings.Global.getInt(
-                                       ContextUtils.getApplicationContext().getContentResolver(),
+                multiProcess = Settings.Global.getInt(ctx.getContentResolver(),
                                        Settings.Global.WEBVIEW_MULTIPROCESS, 0)
                         == 1;
             }
@@ -301,7 +305,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                 cl.appendSwitch(AwSwitches.WEBVIEW_SANDBOXED_RENDERER);
             }
 
-            int applicationFlags = ContextUtils.getApplicationContext().getApplicationInfo().flags;
+            int applicationFlags = ctx.getApplicationInfo().flags;
             boolean isAppDebuggable = (applicationFlags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
             boolean isOsDebuggable = BuildInfo.isDebugAndroid();
             // Enable logging JS console messages in system logs only if the app is debuggable or
@@ -309,6 +313,29 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
             if (isAppDebuggable || isOsDebuggable) {
                 CommandLine cl = CommandLine.getInstance();
                 cl.appendSwitch(AwSwitches.WEBVIEW_LOG_JS_CONSOLE_MESSAGES);
+            }
+
+            String webViewPackageName = AwBrowserProcess.getWebViewPackageName();
+            boolean isDeveloperModeEnabled =
+                    DeveloperModeUtils.isDeveloperModeEnabled(webViewPackageName);
+            RecordHistogram.recordBooleanHistogram(
+                    "Android.WebView.DevUi.DeveloperModeEnabled", isDeveloperModeEnabled);
+            if (isDeveloperModeEnabled) {
+                long start = SystemClock.elapsedRealtime();
+                try {
+                    FlagOverrideHelper helper =
+                            new FlagOverrideHelper(ProductionSupportedFlagList.sFlagList);
+                    Map<String, Boolean> flagOverrides =
+                            DeveloperModeUtils.getFlagOverrides(webViewPackageName);
+                    helper.applyFlagOverrides(flagOverrides);
+
+                    RecordHistogram.recordCount100Histogram(
+                            "Android.WebView.DevUi.ToggledFlagCount", flagOverrides.size());
+                } finally {
+                    long end = SystemClock.elapsedRealtime();
+                    RecordHistogram.recordTimesHistogram(
+                            "Android.WebView.DevUi.FlagLoadingBlockingTime", end - start);
+                }
             }
 
             ThreadUtils.setWillOverrideUiThread(true);
@@ -336,15 +363,19 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
             mAwInit.startVariationsInit();
 
-            mShouldDisableThreadChecking =
-                    shouldDisableThreadChecking(ContextUtils.getApplicationContext());
+            mShouldDisableThreadChecking = shouldDisableThreadChecking(ctx);
 
             setSingleton(this);
+
+            // sWebLayerRunningInSameProcess may have been set before initialize().
+            if (sWebLayerRunningInSameProcess) {
+                addTask(() -> { getBrowserContextOnUiThread().setWebLayerRunningInSameProcess(); });
+            }
         }
 
-        TimesHistogramSample histogram =
-                new TimesHistogramSample("Android.WebView.Startup.CreationTime.Stage1.FactoryInit");
-        histogram.record(SystemClock.elapsedRealtime() - startTime);
+        RecordHistogram.recordTimesHistogram(
+                "Android.WebView.Startup.CreationTime.Stage1.FactoryInit",
+                SystemClock.elapsedRealtime() - startTime);
     }
 
     /* package */ static void checkStorageIsNotDeviceProtected(Context context) {
@@ -394,7 +425,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     public static boolean preloadInZygote() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                && Build.VERSION.SDK_INT < Build.VERSION_CODES.P && BundleUtils.isBundle()) {
+                && Build.VERSION.SDK_INT < Build.VERSION_CODES.P && ProductConfig.IS_BUNDLE) {
             // Apply workaround if we're a bundle on O, where the split APK handling bug exists.
             SplitApkWorkaround.apply();
         }
@@ -580,7 +611,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
     AutofillProvider createAutofillProvider(Context context, ViewGroup containerView) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null;
-        return new AwAutofillProvider(context, containerView);
+        return new AutofillProviderImpl(context, containerView);
     }
 
     void startYourEngines(boolean onMainThread) {
@@ -647,5 +678,23 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
     @Override
     public ClassLoader getWebViewClassLoader() {
         return new FilteredClassLoader(WebViewChromiumFactoryProvider.class.getClassLoader());
+    }
+
+    // This is called from WebLayer when WebView and WebLayer are run in the same process. It's
+    // used to set a crash key to help attribute crashes. It's entirely possible WebView has not
+    // been initialized when this is called.
+    public static void setWebLayerRunningInSameProcess() {
+        // This may be called before initialize().
+        synchronized (sSingletonLock) {
+            sWebLayerRunningInSameProcess = true;
+            if (sSingleton == null) {
+                // initialize() hasn't been called yet. When initialize() is called
+                // |sWebLayerRunningInSameProcess| will be checked.
+                return;
+            }
+        }
+        getSingleton().addTask(() -> {
+            getSingleton().getBrowserContextOnUiThread().setWebLayerRunningInSameProcess();
+        });
     }
 }

@@ -6,8 +6,6 @@
 # it stabilizes, Chromium code MUST use this target instead of reaching directly
 # into //third_party/googletest.
 
-import("//build_overrides/build.gni")
-
 source_set("gmock") {
   testonly = true
   sources = [
@@ -16,20 +14,7 @@ source_set("gmock") {
     "include/gmock/gmock-matchers.h",
     "include/gmock/gmock.h",
   ]
-  deps = [
-    "//third_party/googletest:gmock",
-  ]
-
-  # TODO(crbug.com/806952): Depending on gmock_mutant only if build_with_chromium,
-  # because gmock_mutant depends on //base which uses C++14. Since gmock is a
-  # third_party library used by other projects it should not include C++14 only code.
-  if (build_with_chromium) {
-    # Allow Chromium targets depending on gmock to #include testing/gmock_mutant.h
-    # without triggering a `gn check` error.
-    public_deps = [
-      "//testing:gmock_mutant",
-    ]
-  }
+  deps = [ "//third_party/googletest:gmock" ]
 
   public_configs = [
     "//third_party/googletest:gmock_config",
@@ -42,7 +27,5 @@ source_set("gmock") {
 # into //third_party/googletest.
 source_set("gmock_main") {
   testonly = true
-  deps = [
-    "//third_party/googletest:gmock_main",
-  ]
+  deps = [ "//third_party/googletest:gmock_main" ]
 }

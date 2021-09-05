@@ -14,6 +14,7 @@
 #include "base/time/time.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_item.h"
+#include "components/download/public/common/download_url_parameters.h"
 #include "components/download/public/common/quarantine_connection.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/save_page_type.h"
@@ -27,16 +28,16 @@ class WebContents;
 
 // Called by SavePackage when it creates a download::DownloadItem.
 using SavePackageDownloadCreatedCallback =
-    base::Callback<void(download::DownloadItem*)>;
+    base::OnceCallback<void(download::DownloadItem*)>;
 
 // Will be called asynchronously with the results of the ChooseSavePath
 // operation.  If the delegate wants notification of the download item created
 // in response to this operation, the SavePackageDownloadCreatedCallback will be
 // non-null.
 using SavePackagePathPickedCallback =
-    base::Callback<void(const base::FilePath&,
-                        SavePageType,
-                        const SavePackageDownloadCreatedCallback&)>;
+    base::OnceCallback<void(const base::FilePath&,
+                            SavePageType,
+                            SavePackageDownloadCreatedCallback)>;
 
 // Called with the results of DetermineDownloadTarget().
 //
@@ -58,21 +59,19 @@ using SavePackagePathPickedCallback =
 //     results in the download being marked cancelled. Any other value results
 //     in the download being marked as interrupted. The other fields are only
 //     considered valid if |interrupt_reason| is NONE.
-using DownloadTargetCallback =
-    base::Callback<void(const base::FilePath& target_path,
-                        download::DownloadItem::TargetDisposition disposition,
-                        download::DownloadDangerType danger_type,
-                        const base::FilePath& intermediate_path,
-                        download::DownloadInterruptReason interrupt_reason)>;
+using DownloadTargetCallback = base::OnceCallback<void(
+    const base::FilePath& target_path,
+    download::DownloadItem::TargetDisposition disposition,
+    download::DownloadDangerType danger_type,
+    download::DownloadItem::MixedContentStatus mixed_content_status,
+    const base::FilePath& intermediate_path,
+    download::DownloadInterruptReason interrupt_reason)>;
 
 // Called when a download delayed by the delegate has completed.
-using DownloadOpenDelayedCallback = base::Callback<void(bool)>;
-
-// Called with the result of CheckForFileExistence().
-using CheckForFileExistenceCallback = base::OnceCallback<void(bool result)>;
+using DownloadOpenDelayedCallback = base::OnceCallback<void(bool)>;
 
 // On failure, |next_id| is equal to kInvalidId.
-using DownloadIdCallback = base::Callback<void(uint32_t /* next_id */)>;
+using DownloadIdCallback = base::OnceCallback<void(uint32_t /* next_id */)>;
 
 // Called on whether a download is allowed to continue.
 using CheckDownloadAllowedCallback = base::OnceCallback<void(bool /*allow*/)>;
@@ -86,7 +85,7 @@ class CONTENT_EXPORT DownloadManagerDelegate {
   // Runs |callback| with a new download id when possible, perhaps
   // synchronously. If this call fails, |callback| will be called with
   // kInvalidId.
-  virtual void GetNextId(const DownloadIdCallback& callback);
+  virtual void GetNextId(DownloadIdCallback callback);
 
   // Called to notify the delegate that a new download |item| requires a
   // download target to be determined. The delegate should return |true| if it
@@ -102,7 +101,7 @@ class CONTENT_EXPORT DownloadManagerDelegate {
   // If the download should be canceled, |callback| should be invoked with an
   // empty |target_path| argument.
   virtual bool DetermineDownloadTarget(download::DownloadItem* item,
-                                       const DownloadTargetCallback& callback);
+                                       DownloadTargetCallback* callback);
 
   // Tests if a file type should be opened automatically.
   virtual bool ShouldOpenFileBasedOnExtension(const base::FilePath& path);
@@ -117,11 +116,12 @@ class CONTENT_EXPORT DownloadManagerDelegate {
                                       base::OnceClosure complete_callback);
 
   // Allows the delegate to override opening the download. If this function
-  // returns false, the delegate needs to call callback when it's done
-  // with the item, and is responsible for opening it.  This function is called
-  // after the final rename, but before the download state is set to COMPLETED.
+  // returns false, the delegate needs to call |callback| when it's done
+  // with the item, and is responsible for opening it. When it returns true,
+  // the callback will not be used. This function is called after the final
+  // rename, but before the download state is set to COMPLETED.
   virtual bool ShouldOpenDownload(download::DownloadItem* item,
-                                  const DownloadOpenDelayedCallback& callback);
+                                  DownloadOpenDelayedCallback callback);
 
   // Checks and hands off the downloading to be handled by another system based
   // on mime type. Returns true if the download was intercepted.
@@ -147,8 +147,7 @@ class CONTENT_EXPORT DownloadManagerDelegate {
       const base::FilePath& suggested_path,
       const base::FilePath::StringType& default_extension,
       bool can_save_as_complete,
-      const SavePackagePathPickedCallback& callback) {
-  }
+      SavePackagePathPickedCallback callback) {}
 
   // Sanitize a filename that's going to be used for saving a subresource of a
   // SavePackage.
@@ -162,20 +161,19 @@ class CONTENT_EXPORT DownloadManagerDelegate {
   // relative path.
   virtual void SanitizeSavePackageResourceName(base::FilePath* filename) {}
 
+  // Sanitize a download parameters
+  //
+  // If the delegate does nothing, the default parameters already populated in
+  // |params| will be used. Otherwise, the delegate can update |params| to
+  // the desired parameters.
+  virtual void SanitizeDownloadParameters(
+      download::DownloadUrlParameters* params) {}
+
   // Opens the file associated with this download.
   virtual void OpenDownload(download::DownloadItem* download) {}
 
-  // Returns whether this is the most recent download in the rare event where
-  // multiple downloads are associated with the same file path.
-  virtual bool IsMostRecentDownloadItemAtFilePath(
-      download::DownloadItem* download);
-
   // Shows the download via the OS shell.
   virtual void ShowDownloadInShell(download::DownloadItem* download) {}
-
-  // Checks whether a downloaded file still exists.
-  virtual void CheckForFileExistence(download::DownloadItem* download,
-                                     CheckForFileExistenceCallback callback) {}
 
   // Return a GUID string used for identifying the application to the system AV
   // function for scanning downloaded files. If no GUID is provided or if the
@@ -192,6 +190,8 @@ class CONTENT_EXPORT DownloadManagerDelegate {
       const GURL& url,
       const std::string& request_method,
       base::Optional<url::Origin> request_initiator,
+      bool from_download_cross_origin_redirect,
+      bool content_initiated,
       CheckDownloadAllowedCallback check_download_allowed_cb);
 
   // Gets a callback which can connect the download manager to a Quarantine

@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/unsafe_shared_memory_region.h"
+#include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
@@ -27,7 +28,6 @@
 
 namespace base {
 class SingleThreadTaskRunner;
-class SharedMemory;
 }  // namespace base
 
 namespace gfx {
@@ -41,7 +41,7 @@ class SharedImageInterface;
 }
 
 namespace viz {
-class ContextProvider;
+class RasterContextProvider;
 }  // namespace viz
 
 namespace media {
@@ -69,6 +69,12 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
     BGRA,             // One 8:8:8:8 BGRA (Usually Mac)
   };
 
+  enum class Supported {
+    kFalse = 0,
+    kTrue,
+    kUnknown,
+  };
+
   // Return whether GPU encoding/decoding is enabled.
   virtual bool IsGpuVideoAcceleratorEnabled() = 0;
 
@@ -78,18 +84,20 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
   // Returns the |route_id| of the command buffer, or 0 if there is none.
   virtual int32_t GetCommandBufferRouteId() = 0;
 
-  // Return true if |config| is potentially supported by a decoder created with
-  // CreateVideoDecoder() using |implementation|.
+  // Returns Supported::kTrue if |config| is supported by a decoder created with
+  // CreateVideoDecoder() using |implementation|. Returns Supported::kMaybe if
+  // it's not known at this time whether |config| is supported or not. Returns
+  // Supported::kFalse if |config| is not supported.
   //
   // May be called on any thread.
-  virtual bool IsDecoderConfigSupported(
+  virtual Supported IsDecoderConfigSupported(
       VideoDecoderImplementation implementation,
       const VideoDecoderConfig& config) = 0;
 
   virtual std::unique_ptr<media::VideoDecoder> CreateVideoDecoder(
       MediaLog* media_log,
       VideoDecoderImplementation implementation,
-      const RequestOverlayInfoCB& request_overlay_info_cb) = 0;
+      RequestOverlayInfoCB request_overlay_info_cb) = 0;
 
   // Caller owns returned pointer, but should call Destroy() on it (instead of
   // directly deleting) for proper destruction, as per the
@@ -125,10 +133,6 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
   // ShouldUseGpuMemoryBuffersForVideoFrames return false.
   virtual gpu::GpuMemoryBufferManager* GpuMemoryBufferManager() = 0;
 
-  // Allocate & return a shared memory segment.
-  virtual std::unique_ptr<base::SharedMemory> CreateSharedMemory(
-      size_t size) = 0;
-
   // Allocate & return an unsafe shared memory region
   virtual base::UnsafeSharedMemoryRegion CreateSharedMemoryRegion(
       size_t size) = 0;
@@ -137,10 +141,12 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
   virtual scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() = 0;
 
   // Returns the supported codec profiles of video encode accelerator.
-  virtual VideoEncodeAccelerator::SupportedProfiles
+  // Returns nullopt if GpuVideoAcceleratorFactories don't know the VEA
+  // supported profiles.
+  virtual base::Optional<VideoEncodeAccelerator::SupportedProfiles>
   GetVideoEncodeAcceleratorSupportedProfiles() = 0;
 
-  virtual scoped_refptr<viz::ContextProvider> GetMediaContextProvider() = 0;
+  virtual viz::RasterContextProvider* GetMediaContextProvider() = 0;
 
   // Sets the current pipeline rendering color space.
   virtual void SetRenderingColorSpace(const gfx::ColorSpace& color_space) = 0;

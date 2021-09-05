@@ -11,11 +11,11 @@ import sys
 
 DIR_SOURCE_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
+IMAGES_ROOT = os.path.join(
+    DIR_SOURCE_ROOT, 'third_party', 'fuchsia-sdk', 'images')
 SDK_ROOT = os.path.join(DIR_SOURCE_ROOT, 'third_party', 'fuchsia-sdk', 'sdk')
-IMAGES_ROOT = os.path.join(DIR_SOURCE_ROOT, 'third_party', 'fuchsia-sdk',
-                           'images')
-
-_PM = os.path.join(SDK_ROOT, 'tools', 'pm')
+ARM64_SDK_TOOLS = os.path.join(SDK_ROOT, 'tools', 'arm64')
+X64_SDK_TOOLS = os.path.join(SDK_ROOT, 'tools', 'x64')
 
 def EnsurePathExists(path):
   """Checks that the file |path| exists on the filesystem and returns the path
@@ -40,6 +40,14 @@ def GetHostArchFromPlatform():
     return 'x64'
   elif host_arch == 'aarch64':
     return 'arm64'
+  raise Exception('Unsupported host architecture: %s' % host_arch)
+
+def GetHostToolPathFromPlatform(tool):
+  host_arch = platform.machine()
+  if host_arch == 'x86_64':
+    return os.path.join(X64_SDK_TOOLS, tool)
+  elif host_arch == 'aarch64':
+    return os.path.join(ARM64_SDK_TOOLS, tool)
   raise Exception('Unsupported host architecture: %s' % host_arch)
 
 def GetEmuRootForPlatform(emulator):
@@ -88,11 +96,3 @@ def GetAvailableTcpPort():
   port = sock.getsockname()[1]
   sock.close()
   return port
-
-
-def PublishPackage(package_path, tuf_root):
-  """Publishes a combined FAR package to a TUF repository root."""
-
-  subprocess.check_call(
-      [_PM, 'publish', '-a', '-f', package_path, '-r', tuf_root, '-vt', '-v'],
-      stderr=subprocess.STDOUT)

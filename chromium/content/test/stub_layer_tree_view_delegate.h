@@ -29,7 +29,8 @@ class StubLayerTreeViewDelegate : public LayerTreeViewDelegate {
   void OnDeferCommitsChanged(bool) override {}
   void DidBeginMainFrame() override {}
   void RecordStartOfFrameMetrics() override {}
-  void RecordEndOfFrameMetrics(base::TimeTicks) override {}
+  void RecordEndOfFrameMetrics(base::TimeTicks,
+                               cc::ActiveFrameSequenceTrackers) override {}
   std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
       override;
   void BeginUpdateLayers() override {}
@@ -38,7 +39,7 @@ class StubLayerTreeViewDelegate : public LayerTreeViewDelegate {
       LayerTreeFrameSinkCallback callback) override;
   void DidCommitAndDrawCompositorFrame() override {}
   void WillCommitCompositorFrame() override {}
-  void DidCommitCompositorFrame() override {}
+  void DidCommitCompositorFrame(base::TimeTicks) override {}
   void DidCompletePageScaleAnimation() override {}
   void UpdateVisualState() override {}
   void WillBeginCompositorFrame() override {}

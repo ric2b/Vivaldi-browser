@@ -11,7 +11,10 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/test/bind_test_util.h"
+#import "base/test/ios/wait_util.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
+#include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#include "components/password_manager/core/browser/mock_password_store.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/public/base/account_consistency_method.h"
 #include "components/signin/public/base/signin_pref_names.h"
@@ -61,6 +64,9 @@ const char kTestPassphrase[] = "dummy-passphrase";
 const char kTestScope1[] = "scope1.chromium.org";
 const char kTestScope2[] = "scope2.chromium.org";
 
+using base::test::ios::kWaitForActionTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
+
 std::unique_ptr<KeyedService> BuildMockSyncService(web::BrowserState* context) {
   return std::make_unique<syncer::MockSyncService>();
 }
@@ -86,15 +92,24 @@ class CWVSyncControllerTest : public TestWithLocaleAndResources {
 
     personal_data_manager_ =
         std::make_unique<autofill::TestPersonalDataManager>();
+    autofill_web_data_service_ = new autofill::AutofillWebDataService(
+        base::ThreadTaskRunnerHandle::Get(),
+        base::ThreadTaskRunnerHandle::Get());
+
+    password_store_ = new password_manager::MockPasswordStore;
+    password_store_->Init(nullptr);
 
     sync_controller_ = [[CWVSyncController alloc]
-          initWithSyncService:mock_sync_service()
-              identityManager:identity_manager()
-        signinErrorController:signin_error_controller()
-          personalDataManager:personal_data_manager_.get()];
+           initWithSyncService:mock_sync_service()
+               identityManager:identity_manager()
+         signinErrorController:signin_error_controller()
+           personalDataManager:personal_data_manager_.get()
+        autofillWebDataService:autofill_web_data_service_
+                 passwordStore:password_store_.get()];
   }
 
   ~CWVSyncControllerTest() override {
+    password_store_->ShutdownOnUIThread();
     EXPECT_CALL(*mock_sync_service(), RemoveObserver(_));
     EXPECT_CALL(*mock_sync_service(), Shutdown());
   }
@@ -120,7 +135,9 @@ class CWVSyncControllerTest : public TestWithLocaleAndResources {
   web::WebTaskEnvironment task_environment_;
   web::ScopedTestingWebClient web_client_;
   ios_web_view::WebViewBrowserState browser_state_;
+  scoped_refptr<password_manager::MockPasswordStore> password_store_;
   std::unique_ptr<autofill::TestPersonalDataManager> personal_data_manager_;
+  autofill::AutofillWebDataService* autofill_web_data_service_;
   CWVSyncController* sync_controller_ = nil;
   syncer::SyncServiceObserver* sync_service_observer_ = nullptr;
 };
@@ -172,13 +189,12 @@ TEST_F(CWVSyncControllerTest, DelegateCallbacks) {
 
     [[delegate expect] syncControllerDidStartSync:sync_controller_];
     sync_service_observer_->OnSyncConfigurationCompleted(mock_sync_service());
+
     [[delegate expect]
           syncController:sync_controller_
         didFailWithError:[OCMArg checkWithBlock:^BOOL(NSError* error) {
           return error.code == CWVSyncErrorInvalidGAIACredentials;
         }]];
-
-    // Create authentication error.
     GoogleServiceAuthError auth_error(
         GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS);
     signin::UpdatePersistentErrorOfRefreshTokenForAccount(
@@ -186,10 +202,15 @@ TEST_F(CWVSyncControllerTest, DelegateCallbacks) {
         auth_error);
 
     [[delegate expect] syncControllerDidStopSync:sync_controller_];
-    identity_manager()->GetPrimaryAccountMutator()->ClearPrimaryAccount(
-        signin::PrimaryAccountMutator::ClearAccountsAction::kDefault,
-        signin_metrics::ProfileSignout::USER_CLICKED_SIGNOUT_SETTINGS,
-        signin_metrics::SignoutDelete::IGNORE_METRIC);
+    EXPECT_CALL(*mock_sync_service(), StopAndClear());
+    EXPECT_CALL(*password_store_, RemoveLoginsCreatedBetweenImpl);
+    EXPECT_CALL(*password_store_, BeginTransaction);
+    EXPECT_CALL(*password_store_, NotifyLoginsChanged);
+    EXPECT_CALL(*password_store_, CommitTransaction);
+    [sync_controller_ stopSyncAndClearIdentity];
+
+    // Ensures that |password_store_| has a chance to run its deletion task.
+    base::RunLoop().RunUntilIdle();
 
     [delegate verify];
   }
@@ -211,7 +232,15 @@ TEST_F(CWVSyncControllerTest, CurrentIdentity) {
   EXPECT_NSEQ(identity.gaiaID, currentIdentity.gaiaID);
 
   EXPECT_CALL(*mock_sync_service(), StopAndClear());
+  EXPECT_CALL(*password_store_, RemoveLoginsCreatedBetweenImpl);
+  EXPECT_CALL(*password_store_, BeginTransaction);
+  EXPECT_CALL(*password_store_, NotifyLoginsChanged);
+  EXPECT_CALL(*password_store_, CommitTransaction);
   [sync_controller_ stopSyncAndClearIdentity];
+
+  // Ensures that |password_store_| has a chance to run its deletion task.
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_FALSE(sync_controller_.currentIdentity);
 }
 

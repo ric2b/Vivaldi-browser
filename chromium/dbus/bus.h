@@ -24,7 +24,6 @@
 
 namespace base {
 class SequencedTaskRunner;
-class TaskRunner;
 }
 
 namespace dbus {
@@ -38,7 +37,7 @@ class ObjectProxy;
 //
 // For asynchronous operations such as an asynchronous method call, the
 // bus object will use a task runner to monitor the underlying file
-// descriptor used for D-Bus communication. By default, the bus will use
+// descriptor used for D-Bus communication. By default, the bus will usegi
 // the current thread's task runner. If |dbus_task_runner| option is
 // specified, the bus will use that task runner instead.
 //
@@ -99,7 +98,7 @@ class ObjectProxy;
 //
 //   ...
 //   object_proxy.CallMethod(&method_call, timeout_ms,
-//                           base::Bind(&OnResponse));
+//                           base::BindOnce(&OnResponse));
 //
 // Exporting a method:
 //
@@ -111,7 +110,7 @@ class ObjectProxy;
 //     // Can send an immediate response here to implement a synchronous service
 //     // or store the response_sender and send a response later to implement an
 //     // asynchronous service.
-//     response_sender.Run(response);
+//     std::move(response_sender).Run(response);
 //   }
 //
 //   void OnExported(const std::string& interface_name,
@@ -124,8 +123,8 @@ class ObjectProxy;
 //   dbus::ExportedObject* exported_object =
 //       bus.GetExportedObject(service_name, object_path);
 //   exported_object.ExportMethod(interface_name, method_name,
-//                                base::Bind(&Echo),
-//                                base::Bind(&OnExported));
+//                                base::BindRepeating(&Echo),
+//                                base::BindOnce(&OnExported));
 //
 // WHY IS THIS A REF COUNTED OBJECT?
 //
@@ -225,12 +224,17 @@ class CHROME_DBUS_EXPORT Bus : public base::RefCountedThreadSafe<Bus> {
   // Parameters:
   // - the requested service name.
   // - whether ownership has been obtained or not.
-  typedef base::Callback<void (const std::string&, bool)> OnOwnershipCallback;
+  using OnOwnershipCallback =
+      base::OnceCallback<void(const std::string&, bool)>;
 
   // Called when GetServiceOwner() completes.
   // |service_owner| is the return value from GetServiceOwnerAndBlock().
-  typedef base::Callback<void (const std::string& service_owner)>
-      GetServiceOwnerCallback;
+  using GetServiceOwnerCallback =
+      base::OnceCallback<void(const std::string& service_owner)>;
+
+  // Called when a service owner changes.
+  using ServiceOwnerChangeCallback =
+      base::RepeatingCallback<void(const std::string& service_owner)>;
 
   // TODO(satorux): Remove the service name parameter as the caller of
   // RequestOwnership() knows the service name.
@@ -289,15 +293,14 @@ class CHROME_DBUS_EXPORT Bus : public base::RefCountedThreadSafe<Bus> {
   // Must be called in the origin thread.
   virtual bool RemoveObjectProxy(const std::string& service_name,
                                  const ObjectPath& object_path,
-                                 const base::Closure& callback);
+                                 base::OnceClosure callback);
 
   // Same as above, but also takes a bitfield of ObjectProxy::Options.
   // See object_proxy.h for available options.
-  virtual bool RemoveObjectProxyWithOptions(
-      const std::string& service_name,
-      const ObjectPath& object_path,
-      int options,
-      const base::Closure& callback);
+  virtual bool RemoveObjectProxyWithOptions(const std::string& service_name,
+                                            const ObjectPath& object_path,
+                                            int options,
+                                            base::OnceClosure callback);
 
   // Gets the exported object for the given object path.
   // The caller must not delete the returned object.
@@ -353,7 +356,7 @@ class CHROME_DBUS_EXPORT Bus : public base::RefCountedThreadSafe<Bus> {
   // Must be called in the origin thread.
   virtual bool RemoveObjectManager(const std::string& service_name,
                                    const ObjectPath& object_path,
-                                   const base::Closure& callback);
+                                   base::OnceClosure callback);
 
   // Shuts down the bus and blocks until it's done. More specifically, this
   // function does the following:
@@ -543,10 +546,10 @@ class CHROME_DBUS_EXPORT Bus : public base::RefCountedThreadSafe<Bus> {
   virtual void UnregisterObjectPath(const ObjectPath& object_path);
 
   // Returns the task runner of the D-Bus thread.
-  virtual base::TaskRunner* GetDBusTaskRunner();
+  virtual base::SequencedTaskRunner* GetDBusTaskRunner();
 
   // Returns the task runner of the thread that created the bus.
-  virtual base::TaskRunner* GetOriginTaskRunner();
+  virtual base::SequencedTaskRunner* GetOriginTaskRunner();
 
   // Returns true if the bus has the D-Bus thread.
   virtual bool HasDBusThread();
@@ -571,7 +574,7 @@ class CHROME_DBUS_EXPORT Bus : public base::RefCountedThreadSafe<Bus> {
   // A non-blocking version of GetServiceOwnerAndBlock().
   // Must be called in the origin thread.
   virtual void GetServiceOwner(const std::string& service_name,
-                               const GetServiceOwnerCallback& callback);
+                               GetServiceOwnerCallback callback);
 
   // Whenever the owner for |service_name| changes, run |callback| with the
   // name of the new owner. If the owner goes away, then |callback| receives
@@ -583,7 +586,7 @@ class CHROME_DBUS_EXPORT Bus : public base::RefCountedThreadSafe<Bus> {
   // Must be called in the origin thread.
   virtual void ListenForServiceOwnerChange(
       const std::string& service_name,
-      const GetServiceOwnerCallback& callback);
+      const ServiceOwnerChangeCallback& callback);
 
   // Stop listening for |service_name| owner changes for |callback|.
   // Any unique (service_name, callback) can be used. Non-registered callbacks
@@ -593,7 +596,7 @@ class CHROME_DBUS_EXPORT Bus : public base::RefCountedThreadSafe<Bus> {
   // Must be called in the origin thread.
   virtual void UnlistenForServiceOwnerChange(
       const std::string& service_name,
-      const GetServiceOwnerCallback& callback);
+      const ServiceOwnerChangeCallback& callback);
 
   // Return the unique name of the bus connnection if it is connected to
   // D-BUS. Otherwise, return an empty string.
@@ -625,15 +628,15 @@ class CHROME_DBUS_EXPORT Bus : public base::RefCountedThreadSafe<Bus> {
 
   // Helper function used for RemoveObjectProxy().
   void RemoveObjectProxyInternal(scoped_refptr<dbus::ObjectProxy> object_proxy,
-                                 const base::Closure& callback);
+                                 base::OnceClosure callback);
 
   // Helper functions used for RemoveObjectManager().
   void RemoveObjectManagerInternal(
       scoped_refptr<dbus::ObjectManager> object_manager,
-      const base::Closure& callback);
+      base::OnceClosure callback);
   void RemoveObjectManagerInternalHelper(
       scoped_refptr<dbus::ObjectManager> object_manager,
-      const base::Closure& callback);
+      base::OnceClosure callback);
 
   // Helper function used for UnregisterExportedObject().
   void UnregisterExportedObjectInternal(
@@ -649,17 +652,17 @@ class CHROME_DBUS_EXPORT Bus : public base::RefCountedThreadSafe<Bus> {
 
   // Helper function used for GetServiceOwner().
   void GetServiceOwnerInternal(const std::string& service_name,
-                               const GetServiceOwnerCallback& callback);
+                               GetServiceOwnerCallback callback);
 
   // Helper function used for ListenForServiceOwnerChange().
   void ListenForServiceOwnerChangeInternal(
       const std::string& service_name,
-      const GetServiceOwnerCallback& callback);
+      const ServiceOwnerChangeCallback& callback);
 
   // Helper function used for UnListenForServiceOwnerChange().
   void UnlistenForServiceOwnerChangeInternal(
       const std::string& service_name,
-      const GetServiceOwnerCallback& callback);
+      const ServiceOwnerChangeCallback& callback);
 
   // Processes the all incoming data to the connection, if any.
   //
@@ -763,8 +766,9 @@ class CHROME_DBUS_EXPORT Bus : public base::RefCountedThreadSafe<Bus> {
   // Only accessed on the DBus thread.
   // Key: Service name
   // Value: Vector of callbacks. Unique and expected to be small. Not using
-  //        std::set here because base::Callbacks don't have a '<' operator.
-  typedef std::map<std::string, std::vector<GetServiceOwnerCallback>>
+  //        std::set here because base::RepeatingCallbacks don't have a '<'
+  //        operator.
+  typedef std::map<std::string, std::vector<ServiceOwnerChangeCallback>>
       ServiceOwnerChangedListenerMap;
   ServiceOwnerChangedListenerMap service_owner_changed_listener_map_;
 

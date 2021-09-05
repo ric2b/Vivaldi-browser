@@ -21,11 +21,14 @@ jumbo_component("wifi") {
     "//base",
     "//components/onc",
     "//crypto",
-    "//third_party/libxml",
   ]
 
   if (is_win) {
     libs = [ "iphlpapi.lib" ]
+    deps += [
+      "//third_party/libxml:xml_reader",  # Safe, data come from system.
+      "//third_party/libxml:xml_writer",
+    ]
   }
 
   if (is_mac) {
@@ -51,9 +54,7 @@ jumbo_static_library("test_support") {
 }
 
 executable("wifi_test") {
-  sources = [
-    "wifi_test.cc",
-  ]
+  sources = [ "wifi_test.cc" ]
 
   deps = [
     ":wifi",

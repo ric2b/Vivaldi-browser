@@ -20,6 +20,7 @@ import androidx.annotation.IntDef;
 import org.chromium.android_webview.safe_browsing.AwSafeBrowsingConfigHelper;
 import org.chromium.android_webview.settings.ForceDarkBehavior;
 import org.chromium.android_webview.settings.ForceDarkMode;
+import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
@@ -145,7 +146,7 @@ public class AwSettings {
     // Not accessed by the native side.
     private boolean mBlockNetworkLoads;  // Default depends on permission of embedding APK.
     private boolean mAllowContentUrlAccess = true;
-    private boolean mAllowFileUrlAccess = true;
+    private boolean mAllowFileUrlAccess;
     private int mCacheMode = WebSettings.LOAD_DEFAULT;
     private boolean mShouldFocusFirstNode = true;
     private boolean mGeolocationEnabled = true;
@@ -290,6 +291,8 @@ public class AwSettings {
             mAllowGeolocationOnInsecureOrigins = allowGeolocationOnInsecureOrigins;
             mDoNotUpdateSelectionOnMutatingSelectionRange =
                     doNotUpdateSelectionOnMutatingSelectionRange;
+
+            mAllowFileUrlAccess = !BuildInfo.targetsAtLeastR();
         }
         // Defer initializing the native side until a native WebContents instance is set.
     }
@@ -409,12 +412,6 @@ public class AwSettings {
      */
     public boolean getSafeBrowsingEnabled() {
         synchronized (mAwSettingsLock) {
-            Boolean userOptIn = AwSafeBrowsingConfigHelper.getSafeBrowsingUserOptIn();
-
-            // If we don't know yet what the user's preference is, we go through Safe Browsing logic
-            // anyway and correct the assumption before sending data to GMS.
-            if (userOptIn != null && !userOptIn) return false;
-
             if (mSafeBrowsingEnabled == null) {
                 return AwSafeBrowsingConfigHelper.getSafeBrowsingEnabledByManifest();
             }
@@ -1762,6 +1759,18 @@ public class AwSettings {
     private boolean getUseStricMixedContentCheckingLocked() {
         assert Thread.holdsLock(mAwSettingsLock);
         return mMixedContentMode == WebSettings.MIXED_CONTENT_NEVER_ALLOW;
+    }
+
+    @CalledByNative
+    private boolean getAllowMixedContentAutoupgradesLocked() {
+        assert Thread.holdsLock(mAwSettingsLock);
+        // We only allow mixed content autoupgrades (upgrading HTTP subresources to HTTPS in HTTPS
+        // sites) when the mixed content mode is set to MIXED_CONTENT_COMPATIBILITY, which keeps it
+        // in line with the behavior in Chrome. With MIXED_CONTENT_ALWAYS_ALLOW, we disable
+        // autoupgrades since the developer is explicitly allowing mixed content, whereas with
+        // MIXED_CONTENT_NEVER_ALLOW, there is no need to autoupgrade since the content will be
+        // blocked.
+        return mMixedContentMode == WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE;
     }
 
     public boolean getOffscreenPreRaster() {

@@ -122,7 +122,7 @@ struct BASE_EXPORT PartitionRoot : public internal::PartitionRootBase {
     return reinterpret_cast<const internal::PartitionBucket*>(this + 1);
   }
 
-  void Init(size_t num_buckets, size_t max_allocation);
+  void Init(size_t bucket_count, size_t maximum_allocation);
 
   ALWAYS_INLINE void* Alloc(size_t size, const char* type_name);
   ALWAYS_INLINE void* AllocFlags(int flags, size_t size, const char* type_name);
@@ -220,7 +220,7 @@ class BASE_EXPORT PartitionStatsDumper {
                                          const PartitionBucketMemoryStats*) = 0;
 };
 
-BASE_EXPORT void PartitionAllocGlobalInit(void (*oom_handling_function)());
+BASE_EXPORT void PartitionAllocGlobalInit(OomFunction on_out_of_memory);
 
 // PartitionAlloc supports setting hooks to observe allocations/frees as they
 // occur as well as 'override' hooks that allow overriding those operations.
@@ -282,8 +282,6 @@ class BASE_EXPORT PartitionAllocHooks {
   static std::atomic<bool> hooks_enabled_;
 
   // Lock used to synchronize Set*Hooks calls.
-  static subtle::SpinLock set_hooks_lock_;
-
   static std::atomic<AllocationObserverHook*> allocation_observer_hook_;
   static std::atomic<FreeObserverHook*> free_observer_hook_;
 
@@ -318,11 +316,11 @@ ALWAYS_INLINE void* PartitionRoot::AllocFlags(int flags,
   }
   size_t requested_size = size;
   size = internal::PartitionCookieSizeAdjustAdd(size);
-  DCHECK(this->initialized);
+  DCHECK(initialized);
   size_t index = size >> kBucketShift;
-  DCHECK(index < this->num_buckets);
+  DCHECK(index < num_buckets);
   DCHECK(size == index << kBucketShift);
-  internal::PartitionBucket* bucket = &this->buckets()[index];
+  internal::PartitionBucket* bucket = &buckets()[index];
   result = AllocFromBucket(bucket, flags, size);
   if (UNLIKELY(hooks_enabled)) {
     PartitionAllocHooks::AllocationObserverHookIfEnabled(result, requested_size,
@@ -368,7 +366,8 @@ ALWAYS_INLINE void PartitionFree(void* ptr) {
   internal::PartitionPage* page = internal::PartitionPage::FromPointer(ptr);
   // TODO(palmer): See if we can afford to make this a CHECK.
   DCHECK(internal::PartitionRootBase::IsValidPage(page));
-  page->Free(ptr);
+  internal::DeferredUnmap deferred_unmap = page->Free(ptr);
+  deferred_unmap.Run();
 #endif
 }
 
@@ -447,7 +446,7 @@ ALWAYS_INLINE void PartitionRootGeneric::Free(void* ptr) {
 #if defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
   free(ptr);
 #else
-  DCHECK(this->initialized);
+  DCHECK(initialized);
 
   if (UNLIKELY(!ptr))
     return;
@@ -462,10 +461,12 @@ ALWAYS_INLINE void PartitionRootGeneric::Free(void* ptr) {
   internal::PartitionPage* page = internal::PartitionPage::FromPointer(ptr);
   // TODO(palmer): See if we can afford to make this a CHECK.
   DCHECK(IsValidPage(page));
+  internal::DeferredUnmap deferred_unmap;
   {
-    subtle::SpinLock::Guard guard(this->lock);
-    page->Free(ptr);
+    subtle::SpinLock::Guard guard(lock);
+    deferred_unmap = page->Free(ptr);
   }
+  deferred_unmap.Run();
 #endif
 }
 
@@ -479,7 +480,7 @@ ALWAYS_INLINE size_t PartitionRootGeneric::ActualSize(size_t size) {
 #if defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
   return size;
 #else
-  DCHECK(this->initialized);
+  DCHECK(initialized);
   size = internal::PartitionCookieSizeAdjustAdd(size);
   internal::PartitionBucket* bucket = PartitionGenericSizeToBucket(this, size);
   if (LIKELY(!bucket->is_direct_mapped())) {

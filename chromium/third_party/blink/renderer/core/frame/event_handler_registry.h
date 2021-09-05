@@ -78,8 +78,7 @@ class CORE_EXPORT EventHandlerRegistry final
   // references to handlers that are no longer related to it.
   void DocumentDetached(Document&);
 
-  void Trace(blink::Visitor*);
-  void ClearWeakMembers(Visitor*);
+  void Trace(Visitor*);
 
  private:
   enum ChangeOperation {
@@ -129,6 +128,8 @@ class CORE_EXPORT EventHandlerRegistry final
   void CheckConsistency(EventHandlerClass) const;
 
   Page* GetPage() const;
+
+  void ProcessCustomWeakness(const WeakCallbackInfo&);
 
   Member<LocalFrame> frame_;
   EventTargetSet targets_[kEventHandlerClassCount];

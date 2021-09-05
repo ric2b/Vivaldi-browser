@@ -14,13 +14,12 @@
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/browser/service_worker/service_worker_navigation_handle.h"
+#include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/common/navigation_params.mojom.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_task_traits.h"
-#include "content/public/common/resource_type.h"
 #include "content/public/test/browser_task_environment.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/redirect_info.h"
@@ -55,14 +54,15 @@ class ServiceWorkerRequestHandlerTest : public testing::Test {
   void InitializeHandlerForNavigationSimpleTest(const std::string& url,
                                                 bool expected_handler_created) {
     auto navigation_handle =
-        std::make_unique<ServiceWorkerNavigationHandle>(context_wrapper());
+        std::make_unique<ServiceWorkerMainResourceHandle>(context_wrapper());
     GURL gurl(url);
     auto begin_params = mojom::BeginNavigationParams::New();
     begin_params->request_context_type =
         blink::mojom::RequestContextType::HYPERLINK;
     url::Origin origin = url::Origin::Create(gurl);
     NavigationRequestInfo request_info(
-        CreateCommonNavigationParams(), std::move(begin_params), gurl,
+        CreateCommonNavigationParams(), std::move(begin_params),
+        net::SiteForCookies::FromUrl(gurl),
         net::NetworkIsolationKey(origin, origin), true /* is_main_frame */,
         false /* parent_is_main_frame */, true /* are_ancestors_secure */,
         -1 /* frame_tree_node_id */, false /* is_for_guests_only */,

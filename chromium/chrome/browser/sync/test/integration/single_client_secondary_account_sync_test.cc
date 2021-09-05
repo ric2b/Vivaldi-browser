@@ -26,10 +26,13 @@ namespace {
 syncer::ModelTypeSet AllowedTypesInStandaloneTransportMode() {
   // Only some special whitelisted types (and control types) are allowed in
   // standalone transport mode.
-  syncer::ModelTypeSet allowed_types(syncer::USER_CONSENTS,
-                                     syncer::SECURITY_EVENTS,
-                                     syncer::AUTOFILL_WALLET_DATA);
+  syncer::ModelTypeSet allowed_types(
+      syncer::USER_CONSENTS, syncer::SECURITY_EVENTS,
+      syncer::AUTOFILL_WALLET_DATA, syncer::SHARING_MESSAGE);
   allowed_types.PutAll(syncer::ControlTypes());
+  if (base::FeatureList::IsEnabled(switches::kSyncDeviceInfoInTransportMode)) {
+    allowed_types.Put(syncer::DEVICE_INFO);
+  }
   return allowed_types;
 }
 
@@ -80,13 +83,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientSecondaryAccountSyncTest,
   // transport mode.
   secondary_account_helper::SignInSecondaryAccount(
       profile(), &test_url_loader_factory_, "user@email.com");
-  if (browser_defaults::kSyncAutoStarts) {
-    EXPECT_EQ(syncer::SyncService::TransportState::INITIALIZING,
-              GetSyncService(0)->GetTransportState());
-  } else {
-    EXPECT_EQ(syncer::SyncService::TransportState::START_DEFERRED,
-              GetSyncService(0)->GetTransportState());
-  }
+  EXPECT_EQ(syncer::SyncService::TransportState::INITIALIZING,
+            GetSyncService(0)->GetTransportState());
 
   EXPECT_TRUE(GetClient(0)->AwaitSyncTransportActive());
 
@@ -186,6 +184,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSecondaryAccountSyncTest,
 
   // Save the cache GUID to file to remember after restart, for test
   // verification purposes only.
+  base::ScopedAllowBlockingForTesting allow_blocking;
   ASSERT_NE(-1, base::WriteFile(GetTestFilePathForCacheGuid(),
                                 cache_guid.c_str(), cache_guid.size()));
 }

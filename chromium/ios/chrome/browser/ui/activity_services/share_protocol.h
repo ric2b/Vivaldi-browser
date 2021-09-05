@@ -8,16 +8,14 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+
 @protocol ActivityServicePassword;
 @protocol ActivityServicePositioner;
 @protocol ActivityServicePresentation;
 @protocol BrowserCommands;
+class ChromeBrowserState;
 @class ShareToData;
 @protocol SnackbarCommands;
-
-namespace ios {
-class ChromeBrowserState;
-}
 
 namespace ShareTo {
 
@@ -50,7 +48,7 @@ enum ShareResult {
 // Shares the given data. The given providers must not be nil.  On iPad, the
 // |positionProvider| must return a non-nil view and a non-zero size.
 - (void)shareWithData:(ShareToData*)data
-            browserState:(ios::ChromeBrowserState*)browserState
+            browserState:(ChromeBrowserState*)browserState
               dispatcher:(id<BrowserCommands, SnackbarCommands>)dispatcher
         passwordProvider:(id<ActivityServicePassword>)passwordProvider
         positionProvider:(id<ActivityServicePositioner>)positionProvider

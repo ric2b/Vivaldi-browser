@@ -5,9 +5,13 @@
 #ifndef UI_VIEWS_CONTROLS_COMBOBOX_COMBOBOX_H_
 #define UI_VIEWS_CONTROLS_COMBOBOX_COMBOBOX_H_
 
+#include <memory>
+
 #include "base/macros.h"
+#include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "ui/base/models/combobox_model.h"
 #include "ui/base/models/combobox_model_observer.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/prefix_delegate.h"
@@ -18,7 +22,6 @@ class FontList;
 }
 
 namespace ui {
-class ComboboxModel;
 class MenuModel;
 }
 
@@ -84,6 +87,7 @@ class VIEWS_EXPORT Combobox : public View,
 
   // Overridden from View:
   gfx::Size CalculatePreferredSize() const override;
+  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   bool SkipDefaultKeyEventProcessing(const ui::KeyEvent& e) override;
   bool OnKeyPressed(const ui::KeyEvent& e) override;
   void OnPaint(gfx::Canvas* canvas) override;
@@ -91,7 +95,6 @@ class VIEWS_EXPORT Combobox : public View,
   void OnBlur() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
-  void Layout() override;
   void OnThemeChanged() override;
 
   // Overridden from PrefixDelegate:
@@ -205,6 +208,8 @@ class VIEWS_EXPORT Combobox : public View,
 
   // The focus ring for this Combobox.
   std::unique_ptr<FocusRing> focus_ring_;
+
+  ScopedObserver<ui::ComboboxModel, ui::ComboboxModelObserver> observer_{this};
 
   DISALLOW_COPY_AND_ASSIGN(Combobox);
 };

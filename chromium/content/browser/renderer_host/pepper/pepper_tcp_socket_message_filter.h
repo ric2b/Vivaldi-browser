@@ -108,7 +108,7 @@ class CONTENT_EXPORT PepperTCPSocketMessageFilter
 
   // ppapi::host::ResourceMessageFilter overrides.
   void OnFilterDestroyed() override;
-  scoped_refptr<base::TaskRunner> OverrideTaskRunnerForMessage(
+  scoped_refptr<base::SequencedTaskRunner> OverrideTaskRunnerForMessage(
       const IPC::Message& message) override;
   int32_t OnResourceMessageReceived(
       const IPC::Message& msg,
@@ -123,6 +123,7 @@ class CONTENT_EXPORT PepperTCPSocketMessageFilter
   // network::mojom::ResolveHostClient overrides.
   void OnComplete(
       int result,
+      const net::ResolveErrorInfo& resolve_error_info,
       const base::Optional<net::AddressList>& resolved_addresses) override;
 
   // network::mojom::SocketObserver overrides.

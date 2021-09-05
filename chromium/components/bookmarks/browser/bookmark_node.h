@@ -45,13 +45,12 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
 
   typedef std::map<std::string, std::string> MetaInfoMap;
 
-  static const int64_t kInvalidSyncTransactionVersion;
   static const char kRootNodeGuid[];
   static const char kBookmarkBarNodeGuid[];
   static const char kOtherBookmarksNodeGuid[];
   static const char kMobileBookmarksNodeGuid[];
   static const char kManagedNodeGuid[];
-  static const char kTrashNodeGuid[];
+  static const char kVivaldiTrashNodeGuid[];
 
   // Creates a new node with |id|, |guid| and |url|.
   BookmarkNode(int64_t id, const std::string& guid, const GURL& url);
@@ -84,9 +83,9 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   const GURL& url() const { return url_; }
   void set_url(const GURL& url) { url_ = url; }
 
-  // Returns the favicon's URL. Returns an empty URL if there is no favicon
-  // associated with this bookmark.
-  const GURL* icon_url() const { return icon_url_ ? icon_url_.get() : nullptr; }
+  // Returns the favicon's URL. Return null if there is no favicon associated
+  // with this bookmark.
+  const GURL* icon_url() const { return icon_url_.get(); }
 
   Type type() const { return type_; }
 
@@ -103,35 +102,13 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
     date_folder_modified_ = date;
   }
 
-  // <-- Vivaldi
-  base::string16 GetNickName() const;
-  void set_nickname(const base::string16 &nick);
-
-  base::string16 GetThumbnail() const;
-
-  base::string16 GetPartner() const;
-
-  bool GetBookmarkbar() const;
-
-  bool GetSpeeddial() const;
-
-  base::string16 GetDescription() const;
-  void set_description(const base::string16 &desc);
-
-  base::string16 GetDefaultFaviconUri() const;
-
-  // Returns the time the node was last visited.
-  const base::Time date_visited() const;
-
-  bool is_separator() const;
-  // Vivaldi -->
-
   // Convenience for testing if this node represents a folder. A folder is a
   // node whose type is not URL.
   bool is_folder() const { return type_ != URL; }
   bool is_url() const { return type_ == URL; }
 
   bool is_favicon_loaded() const { return favicon_state_ == LOADED_FAVICON; }
+  bool is_favicon_loading() const { return favicon_state_ == LOADING_FAVICON; }
 
   // Accessor method for controlling the visibility of a bookmark node/sub-tree.
   // Note that visibility is not propagated down the tree hierarchy so if a
@@ -149,11 +126,6 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   void SetMetaInfoMap(const MetaInfoMap& meta_info_map);
   // Returns NULL if there are no values in the map.
   const MetaInfoMap* GetMetaInfoMap() const;
-
-  void set_sync_transaction_version(int64_t sync_transaction_version) {
-    sync_transaction_version_ = sync_transaction_version;
-  }
-  int64_t sync_transaction_version() const { return sync_transaction_version_; }
 
   // TitledUrlNode interface methods.
   const base::string16& GetTitledUrlNodeTitle() const override;
@@ -246,9 +218,6 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
   // A map that stores arbitrary meta information about the node.
   std::unique_ptr<MetaInfoMap> meta_info_map_;
 
-  // The sync transaction version.
-  int64_t sync_transaction_version_ = kInvalidSyncTransactionVersion;
-
   const bool is_permanent_node_;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkNode);
@@ -259,20 +228,21 @@ class BookmarkNode : public ui::TreeNode<BookmarkNode>, public TitledUrlNode {
 // Node used for the permanent folders (excluding the root).
 class BookmarkPermanentNode : public BookmarkNode {
  public:
-  BookmarkPermanentNode(int64_t id, Type type);
+  // TODO(mastiz): Remove default value for |visible_when_empty|.
+  BookmarkPermanentNode(int64_t id, Type type, bool visible_when_empty = false);
   ~BookmarkPermanentNode() override;
-
-  // WARNING: this code is used for other projects. Contact noyau@ for details.
-  void set_visible(bool value) { visible_ = value; }
 
   // BookmarkNode overrides:
   bool IsVisible() const override;
 
  private:
-  bool visible_ = false;
+  const bool visible_when_empty_;
 
   DISALLOW_COPY_AND_ASSIGN(BookmarkPermanentNode);
 };
+
+// If you are looking for gMock printing via PrintTo(), please check
+// bookmark_test_util.h.
 
 }  // namespace bookmarks
 

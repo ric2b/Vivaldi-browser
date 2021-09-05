@@ -194,8 +194,6 @@ std::string GetAccountConsistencyDescription(
       return "None";
     case signin::AccountConsistencyMethod::kMirror:
       return "Mirror";
-    case signin::AccountConsistencyMethod::kDiceMigration:
-      return "DICE migration";
     case signin::AccountConsistencyMethod::kDice:
       return "DICE";
   }
@@ -335,7 +333,7 @@ void AboutSigninInternals::OnContentSettingChanged(
     ContentSettingsType content_type,
     const std::string& resource_identifier) {
   // If this is not a change to cookie settings, just ignore.
-  if (content_type != CONTENT_SETTINGS_TYPE_COOKIES)
+  if (content_type != ContentSettingsType::COOKIES)
     return;
 
   NotifyObservers();
@@ -361,7 +359,7 @@ std::unique_ptr<base::DictionaryValue> AboutSigninInternals::GetSigninStatus() {
 void AboutSigninInternals::OnAccessTokenRequested(
     const CoreAccountId& account_id,
     const std::string& consumer_id,
-    const identity::ScopeSet& scopes) {
+    const signin::ScopeSet& scopes) {
   TokenInfo* token = signin_status_.FindToken(account_id, consumer_id, scopes);
   if (token) {
     *token = TokenInfo(consumer_id, scopes);
@@ -376,7 +374,7 @@ void AboutSigninInternals::OnAccessTokenRequested(
 void AboutSigninInternals::OnAccessTokenRequestCompleted(
     const CoreAccountId& account_id,
     const std::string& consumer_id,
-    const identity::ScopeSet& scopes,
+    const signin::ScopeSet& scopes,
     GoogleServiceAuthError error,
     base::Time expiration_time) {
   TokenInfo* token = signin_status_.FindToken(account_id, consumer_id, scopes);
@@ -430,7 +428,7 @@ void AboutSigninInternals::OnEndBatchOfRefreshTokenStateChanges() {
 
 void AboutSigninInternals::OnAccessTokenRemovedFromCache(
     const CoreAccountId& account_id,
-    const identity::ScopeSet& scopes) {
+    const signin::ScopeSet& scopes) {
   for (const std::unique_ptr<TokenInfo>& token :
        signin_status_.token_info_map[account_id]) {
     if (token->scopes == scopes)
@@ -492,7 +490,7 @@ void AboutSigninInternals::OnAccountsInCookieUpdated(
 }
 
 AboutSigninInternals::TokenInfo::TokenInfo(const std::string& consumer_id,
-                                           const identity::ScopeSet& scopes)
+                                           const signin::ScopeSet& scopes)
     : consumer_id(consumer_id),
       scopes(scopes),
       request_time(base::Time::Now()),
@@ -578,7 +576,7 @@ AboutSigninInternals::SigninStatus::~SigninStatus() {}
 AboutSigninInternals::TokenInfo* AboutSigninInternals::SigninStatus::FindToken(
     const CoreAccountId& account_id,
     const std::string& consumer_id,
-    const identity::ScopeSet& scopes) {
+    const signin::ScopeSet& scopes) {
   for (const std::unique_ptr<TokenInfo>& token : token_info_map[account_id]) {
     if (token->consumer_id == consumer_id && token->scopes == scopes)
       return token.get();
@@ -624,7 +622,7 @@ AboutSigninInternals::SigninStatus::ToValue(
     CoreAccountInfo account_info = identity_manager->GetPrimaryAccountInfo();
     AddSectionEntry(basic_info,
                     SigninStatusFieldToLabel(signin_internals_util::ACCOUNT_ID),
-                    account_info.account_id.id);
+                    account_info.account_id.ToString());
     AddSectionEntry(basic_info,
                     SigninStatusFieldToLabel(signin_internals_util::GAIA_ID),
                     account_info.gaia);
@@ -640,7 +638,8 @@ AboutSigninInternals::SigninStatus::ToValue(
                   error_account_id);
       AddSectionEntry(basic_info, "Auth Error",
           signin_error_controller->auth_error().ToString());
-      AddSectionEntry(basic_info, "Auth Error Account Id", error_account_id.id);
+      AddSectionEntry(basic_info, "Auth Error Account Id",
+                      error_account_id.ToString());
 
       // The error_account_info optional should never be unset when we reach
       // this line (as we should have a refresh token, even if in an error
@@ -699,7 +698,8 @@ AboutSigninInternals::SigninStatus::ToValue(
   // Token information for all services.
   auto token_info = std::make_unique<base::ListValue>();
   for (auto it = token_info_map.begin(); it != token_info_map.end(); ++it) {
-    base::ListValue* token_details = AddSection(token_info.get(), it->first.id);
+    base::ListValue* token_details =
+        AddSection(token_info.get(), it->first.ToString());
     std::sort(it->second.begin(), it->second.end(), TokenInfo::LessThan);
     for (const std::unique_ptr<TokenInfo>& token : it->second)
       token_details->Append(token->ToValue());
@@ -717,7 +717,7 @@ AboutSigninInternals::SigninStatus::ToValue(
   } else {
     for (const CoreAccountInfo& account_info : accounts_with_refresh_tokens) {
       auto entry = std::make_unique<base::DictionaryValue>();
-      entry->SetString("accountId", account_info.account_id.id);
+      entry->SetString("accountId", account_info.account_id.ToString());
       // TODO(https://crbug.com/919793): Remove this field once the token
       // service is internally consistent on all platforms.
       entry->SetBoolean("hasRefreshToken",
@@ -736,7 +736,7 @@ AboutSigninInternals::SigninStatus::ToValue(
   auto refresh_token_events_value = std::make_unique<base::ListValue>();
   for (const auto& event : refresh_token_events) {
     auto entry = std::make_unique<base::DictionaryValue>();
-    entry->SetString("accountId", event.account_id.id);
+    entry->SetString("accountId", event.account_id.ToString());
     entry->SetString("timestamp", base::TimeToISO8601(event.timestamp));
     entry->SetString("type", event.GetTypeAsString());
     entry->SetString("source", event.source);

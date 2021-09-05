@@ -18,8 +18,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/values.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/camera_presence_notifier.h"
 #include "chrome/browser/chromeos/login/users/avatar/user_image_manager.h"
@@ -39,7 +39,6 @@
 #include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/data_url.h"
@@ -230,8 +229,8 @@ void ChangePictureHandler::SendSelectedImage() {
         DCHECK(previous_image_.IsThreadSafe());
         // Post a task because GetBitmapDataUrl does PNG encoding, which is
         // slow for large images.
-        base::PostTaskAndReplyWithResult(
-            FROM_HERE, {base::ThreadPool(), base::TaskPriority::USER_BLOCKING},
+        base::ThreadPool::PostTaskAndReplyWithResult(
+            FROM_HERE, {base::TaskPriority::USER_BLOCKING},
             base::BindOnce(&webui::GetBitmapDataUrl, *previous_image_.bitmap()),
             base::BindOnce(&ChangePictureHandler::SendOldImage,
                            weak_ptr_factory_.GetWeakPtr()));

@@ -112,7 +112,9 @@
     // Platform apps have a restricted content security policy that cannot be
     // overriden (except for a whitelist of exceptions, see the
     // app.content_security_policy whitelist).
-    "extension_types": ["extension", "legacy_packaged_app"]
+    "extension_types": [
+      "extension", "legacy_packaged_app", "login_screen_extension"
+    ]
   },
   "current_locale": {
     "channel": "stable",
@@ -128,6 +130,10 @@
     "extension_types": "all"
   },
   "description": {
+    "channel": "stable",
+    "extension_types": "all"
+  },
+  "differential_fingerprint": {
     "channel": "stable",
     "extension_types": "all"
   },
@@ -240,7 +246,8 @@
     "channel": "stable",
     "extension_types": [
       "extension", "legacy_packaged_app", "hosted_app", "platform_app"
-    ]
+    ],
+    "max_manifest_version": 2
   },
   "name": {
     "channel": "stable",
@@ -313,10 +320,20 @@
     ],
     "min_manifest_version": 2
   },
-  "sockets": {
-    "channel": "stable",
-    "extension_types": ["platform_app"]
-  },
+  "sockets": [
+    {
+      "channel": "stable",
+      "extension_types": ["platform_app"]
+    },
+    {
+      "channel": "stable",
+      "extension_types": ["extension"],
+      "whitelist": [
+        "3BC1ED0B3E6EFDC7BD4D3D1D75D44B52DEE0A226",  // Secure Shell Ext (stable)
+        "38C361D4A0726CE45D3572D65071B6BDB3092371"   // Secure Shell Ext (dev)
+      ]
+    }
+  ],
   "usb_printers": {
     "channel": "stable",
     "extension_types": ["platform_app"]
@@ -343,6 +360,10 @@
       "location": "component"
     }
   ],
+  "web_app_file_handlers": {
+    "channel": "stable",
+    "extension_types": ["hosted_app"]
+  },
   "webview": {
     "channel": "stable",
     "extension_types": ["platform_app"],

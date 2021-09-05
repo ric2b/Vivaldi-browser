@@ -4,6 +4,7 @@
 
 #include "chrome/browser/policy/policy_test_utils.h"
 
+#include "base/bind_helpers.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
@@ -90,30 +91,23 @@ void PolicyTest::SetScreenshotPolicy(bool enabled) {
   UpdateProviderPolicy(policies);
 }
 
-void PolicyTest::SetShouldRequireCTForTesting(bool* required) {
+void PolicyTest::SetRequireCTForTesting(bool required) {
   if (content::IsOutOfProcessNetworkService()) {
     mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
     content::GetNetworkService()->BindTestInterface(
         network_service_test.BindNewPipeAndPassReceiver());
-    network::mojom::NetworkServiceTest::ShouldRequireCT required_ct;
-    if (!required) {
-      required_ct = network::mojom::NetworkServiceTest::ShouldRequireCT::RESET;
-    } else {
-      required_ct =
-          *required
-              ? network::mojom::NetworkServiceTest::ShouldRequireCT::REQUIRE
-              : network::mojom::NetworkServiceTest::ShouldRequireCT::
-                    DONT_REQUIRE;
-    }
+    network::mojom::NetworkServiceTest::RequireCT required_ct =
+        required ? network::mojom::NetworkServiceTest::RequireCT::REQUIRE
+                 : network::mojom::NetworkServiceTest::RequireCT::DEFAULT;
 
     mojo::ScopedAllowSyncCallForTesting allow_sync_call;
-    network_service_test->SetShouldRequireCT(required_ct);
+    network_service_test->SetRequireCT(required_ct);
     return;
   }
 
   base::PostTask(
       FROM_HERE, {BrowserThread::IO},
-      base::BindOnce(&net::TransportSecurityState::SetShouldRequireCTForTesting,
+      base::BindOnce(&net::TransportSecurityState::SetRequireCTForTesting,
                      required));
 }
 

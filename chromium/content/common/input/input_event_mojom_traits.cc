@@ -7,14 +7,14 @@
 #include "base/i18n/char_iterator.h"
 #include "content/common/input_messages.h"
 #include "mojo/public/cpp/base/time_mojom_traits.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "ui/latency/mojom/latency_info_mojom_traits.h"
 
 namespace mojo {
 namespace {
 
-void CopyString(blink::WebUChar* dst, const base::string16& text) {
+void CopyString(base::char16* dst, const base::string16& text) {
   base::i18n::UTF16CharIterator iter(&text);
   size_t pos = 0;
   while (!iter.end() && pos < blink::WebKeyboardEvent::kTextLengthCap - 1) {
@@ -130,7 +130,6 @@ bool StructTraits<content::mojom::EventDataView, InputEventUniquePtr>::Read(
     gesture_event->primary_pointer_type = gesture_data->primary_pointer_type;
     gesture_event->SetSourceDevice(gesture_data->source_device);
     gesture_event->unique_touch_event_id = gesture_data->unique_touch_event_id;
-    gesture_event->resending_plugin_id = gesture_data->resending_plugin_id;
 
     if (gesture_data->contact_size) {
       switch (type) {
@@ -334,7 +333,6 @@ bool StructTraits<content::mojom::EventDataView, InputEventUniquePtr>::Read(
         wheel_event->wheel_ticks_y = wheel_data->wheel_ticks_y;
         wheel_event->acceleration_ratio_x = wheel_data->acceleration_ratio_x;
         wheel_event->acceleration_ratio_y = wheel_data->acceleration_ratio_y;
-        wheel_event->resending_plugin_id = wheel_data->resending_plugin_id;
         wheel_event->phase =
             static_cast<blink::WebMouseWheelEvent::Phase>(wheel_data->phase);
         wheel_event->momentum_phase =
@@ -345,8 +343,7 @@ bool StructTraits<content::mojom::EventDataView, InputEventUniquePtr>::Read(
             static_cast<blink::WebMouseWheelEvent::EventAction>(
                 wheel_data->event_action);
         wheel_event->delta_units =
-            static_cast<ui::input_types::ScrollGranularity>(
-                wheel_data->delta_units);
+            static_cast<ui::ScrollGranularity>(wheel_data->delta_units);
       }
     }
 
@@ -395,9 +392,8 @@ StructTraits<content::mojom::EventDataView, InputEventUniquePtr>::pointer_data(
     wheel_data = content::mojom::WheelData::New(
         wheel_event->delta_x, wheel_event->delta_y, wheel_event->wheel_ticks_x,
         wheel_event->wheel_ticks_y, wheel_event->acceleration_ratio_x,
-        wheel_event->acceleration_ratio_y, wheel_event->resending_plugin_id,
-        wheel_event->phase, wheel_event->momentum_phase,
-        wheel_event->dispatch_type,
+        wheel_event->acceleration_ratio_y, wheel_event->phase,
+        wheel_event->momentum_phase, wheel_event->dispatch_type,
         static_cast<uint8_t>(wheel_event->event_action),
         static_cast<uint8_t>(wheel_event->delta_units));
   }
@@ -424,7 +420,6 @@ StructTraits<content::mojom::EventDataView, InputEventUniquePtr>::gesture_data(
       gesture_event->is_source_touch_event_set_non_blocking;
   gesture_data->primary_pointer_type = gesture_event->primary_pointer_type;
   gesture_data->unique_touch_event_id = gesture_event->unique_touch_event_id;
-  gesture_data->resending_plugin_id = gesture_event->resending_plugin_id;
   switch (gesture_event->GetType()) {
     default:
       break;

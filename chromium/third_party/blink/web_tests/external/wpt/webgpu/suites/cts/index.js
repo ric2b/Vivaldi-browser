@@ -2,6 +2,14 @@
 
 export const listing = [
   {
+    "path": "",
+    "description": "WebGPU conformance test suite."
+  },
+  {
+    "path": "buffers/",
+    "description": "GPUBuffer tests."
+  },
+  {
     "path": "buffers/create_mapped",
     "description": ""
   },
@@ -46,12 +54,20 @@ export const listing = [
     "description": "renderPass store op test that drawn quad is either stored or cleared based on storeop"
   },
   {
+    "path": "copyImageBitmapToTexture",
+    "description": "copy imageBitmap To texture tests."
+  },
+  {
     "path": "examples",
-    "description": "Examples of writing CTS tests with various features."
+    "description": "Examples of writing CTS tests with various features.\n\nStart here when looking for examples of basic framework usage."
   },
   {
     "path": "fences",
     "description": ""
+  },
+  {
+    "path": "resource_init/sampled_texture_clear",
+    "description": "computePass test that sampled texture is cleared"
   },
   {
     "path": "validation/createBindGroup",
@@ -122,7 +138,7 @@ export const listing = [
     "description": "setViewport validation tests."
   },
   {
-    "path": "validation/vertex_input",
-    "description": "vertexInput validation tests."
+    "path": "validation/vertex_state",
+    "description": "vertexState validation tests."
   }
 ];

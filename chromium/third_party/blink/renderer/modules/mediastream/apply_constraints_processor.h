@@ -12,9 +12,9 @@
 #include "media/capture/video_capture_types.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/mojom/mediastream/media_devices.mojom-blink-forward.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_constraints_util.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
 #include "third_party/blink/renderer/modules/mediastream/apply_constraints_request.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -75,7 +75,7 @@ class MODULES_EXPORT ApplyConstraintsProcessor final
   void ApplyConstraintsSucceeded();
   void ApplyConstraintsFailed(const char* failed_constraint_name);
   void CannotApplyConstraints(const String& message);
-  void CleanupRequest(base::OnceClosure web_request_callback);
+  void CleanupRequest(base::OnceClosure user_media_request_callback);
   blink::mojom::blink::MediaDevicesDispatcherHost* GetMediaDevicesDispatcher();
 
   // ApplyConstraints requests are processed sequentially. |current_request_|

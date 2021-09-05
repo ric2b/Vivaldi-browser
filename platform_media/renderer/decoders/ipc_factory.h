@@ -19,40 +19,18 @@ namespace media {
 class MEDIA_EXPORT IPCFactory
 {
 public:
-
-  class MEDIA_EXPORT ScopedDisableForTesting {
-  public:
-    ScopedDisableForTesting();
-    ~ScopedDisableForTesting();
-  };
-
   static bool IsAvailable();
   static void Preinitialize(
       const IPCMediaPipelineHost::Creator& ipc_media_pipeline_host_creator,
       const scoped_refptr<base::SequencedTaskRunner>& main_task_runner,
       const scoped_refptr<base::SequencedTaskRunner>& media_task_runner);
 
-  void RunCreatorOnMainThread(
-      DataSource* data_source,
-      std::unique_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host);
+  // This must be called on the main thread.
+  static std::unique_ptr<IPCMediaPipelineHost> CreateHostOnMainThread();
 
-  void CreatePipeline(
-      std::unique_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host);
+  static const scoped_refptr<base::SequencedTaskRunner>& MediaTaskRunner();
 
-  void ReleasePipeline(
-      std::unique_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host);
-
-  void PostTaskAndWait(
-          const scoped_refptr<base::SequencedTaskRunner>& task_runner,
-          const base::Location& from_here,
-          const base::Closure& task);
-
-  const scoped_refptr<base::SequencedTaskRunner>& MediaTaskRunner();
-
-  const scoped_refptr<base::SequencedTaskRunner>& MainTaskRunner();
-
-private:
-  static bool g_enabled;
+  static const scoped_refptr<base::SequencedTaskRunner>& MainTaskRunner();
 };
 
 }

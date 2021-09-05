@@ -29,7 +29,6 @@ namespace viz {
 class DisplayResourceProvider;
 class StreamVideoDrawQuad;
 class TextureDrawQuad;
-class TileDrawQuad;
 class VideoHoleDrawQuad;
 
 class VIZ_SERVICE_EXPORT OverlayCandidate {
@@ -91,6 +90,8 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
   bool no_occluding_damage;
   // Texture resource to present in an overlay.
   unsigned resource_id;
+  // Mailbox from resource_id. It is used by SkiaRenderer.
+  gpu::Mailbox mailbox;
 
 #if defined(OS_ANDROID)
   // For candidates from StreamVideoDrawQuads, this records whether the quad is
@@ -127,9 +128,6 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
   static bool FromTextureQuad(DisplayResourceProvider* resource_provider,
                               const TextureDrawQuad* quad,
                               OverlayCandidate* candidate);
-  static bool FromTileQuad(DisplayResourceProvider* resource_provider,
-                           const TileDrawQuad* quad,
-                           OverlayCandidate* candidate);
   static bool FromStreamVideoQuad(DisplayResourceProvider* resource_provider,
                                   const StreamVideoDrawQuad* quad,
                                   OverlayCandidate* candidate);
@@ -137,6 +135,8 @@ class VIZ_SERVICE_EXPORT OverlayCandidate {
                                 const VideoHoleDrawQuad* quad,
                                 OverlayCandidate* candidate);
 };
+
+using OverlayCandidateList = std::vector<OverlayCandidate>;
 
 }  // namespace viz
 

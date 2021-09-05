@@ -29,17 +29,15 @@ class CryptoModulePasswordDialogView : public views::DialogDelegateView,
   ~CryptoModulePasswordDialogView() override;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(CryptoModulePasswordDialogViewTest, TestAccept);
+  FRIEND_TEST_ALL_PREFIXES(CryptoModulePasswordDialogViewTest,
+                           AcceptUsesPassword);
+  FRIEND_TEST_ALL_PREFIXES(CryptoModulePasswordDialogViewTest,
+                           CancelDoesntUsePassword);
 
   // views::WidgetDelegate:
   views::View* GetInitiallyFocusedView() override;
   ui::ModalType GetModalType() const override;
   base::string16 GetWindowTitle() const override;
-
-  // views::DialogDelegate:
-  base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
-  bool Cancel() override;
-  bool Accept() override;
 
   // views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,

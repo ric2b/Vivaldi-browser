@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/system/sys_info.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -19,7 +20,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/drive/task_util.h"
 #include "storage/browser/blob/shareable_file_reference.h"
-#include "storage/browser/fileapi/file_system_context.h"
+#include "storage/browser/file_system/file_system_context.h"
 #include "third_party/cros_system_api/constants/cryptohome.h"
 
 namespace file_manager {
@@ -53,9 +54,8 @@ void ComputeSpaceNeedToBeFreedAfterGetMetadata(
     return;
   }
 
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
       base::BindOnce(&ComputeSpaceNeedToBeFreedAfterGetMetadataAsync, path,
                      file_info.size),
       std::move(callback));
@@ -69,8 +69,8 @@ void GetMetadataOnIOThread(const base::FilePath& path,
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   context->operation_runner()->GetMetadata(
       url, storage::FileSystemOperation::GET_METADATA_FIELD_SIZE,
-      base::Bind(&ComputeSpaceNeedToBeFreedAfterGetMetadata, path,
-                 base::Passed(std::move(callback))));
+      base::BindOnce(&ComputeSpaceNeedToBeFreedAfterGetMetadata, path,
+                     std::move(callback)));
 }
 
 // Computes the size of space that need to be __additionally__ made available

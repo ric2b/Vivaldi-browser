@@ -34,6 +34,11 @@ std::vector<std::string> WhitelistedSchemes() {
   return std::vector<std::string>();
 }
 
+std::vector<std::string> WhitelistedSchemes(const char* scheme1) {
+  const char* schemes[] = {scheme1};
+  return std::vector<std::string>(schemes, schemes + base::size(schemes));
+}
+
 std::vector<std::string> WhitelistedSchemes(const char* scheme1,
                                             const char* scheme2) {
   const char* schemes[] = {scheme1, scheme2};
@@ -45,6 +50,21 @@ std::vector<std::string> WhitelistedSchemes(const char* scheme1,
                                             const char* scheme3) {
   const char* schemes[] = {scheme1, scheme2, scheme3};
   return std::vector<std::string>(schemes, schemes + base::size(schemes));
+}
+
+base::flat_set<url::Origin> ForceAllowedOrigins() {
+  return base::flat_set<url::Origin>();
+}
+
+url::Origin CreateOrigin(const char* origin) {
+  url::Origin url_origin = url::Origin::Create(GURL(origin));
+  return url_origin;
+}
+
+template <typename... T>
+base::flat_set<url::Origin> ForceAllowedOrigins(T... origins) {
+  return base::flat_set<url::Origin>(
+      {CreateOrigin(std::forward<T>(origins))...});
 }
 
 std::set<ContentSetting> ValidSettings() {
@@ -135,9 +155,10 @@ void ContentSettingsRegistry::Init() {
   // WARNING: The string names of the permissions passed in below are used to
   // generate preference names and should never be changed!
 
-  Register(CONTENT_SETTINGS_TYPE_COOKIES, "cookies", CONTENT_SETTING_ALLOW,
+  Register(ContentSettingsType::COOKIES, "cookies", CONTENT_SETTING_ALLOW,
            WebsiteSettingsInfo::SYNCABLE,
            WhitelistedSchemes(kChromeUIScheme, kChromeDevToolsScheme),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_SESSION_ONLY),
            WebsiteSettingsInfo::COOKIES_SCOPE,
@@ -146,10 +167,11 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(CONTENT_SETTINGS_TYPE_IMAGES, "images", CONTENT_SETTING_ALLOW,
+  Register(ContentSettingsType::IMAGES, "images", CONTENT_SETTING_ALLOW,
            WebsiteSettingsInfo::SYNCABLE,
            WhitelistedSchemes(kChromeUIScheme, kChromeDevToolsScheme,
                               kExtensionScheme),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_WITH_EMBEDDED_EXCEPTIONS_SCOPE,
            WebsiteSettingsRegistry::DESKTOP,
@@ -157,10 +179,11 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(CONTENT_SETTINGS_TYPE_JAVASCRIPT, "javascript",
-           CONTENT_SETTING_ALLOW, WebsiteSettingsInfo::SYNCABLE,
+  Register(ContentSettingsType::JAVASCRIPT, "javascript", CONTENT_SETTING_ALLOW,
+           WebsiteSettingsInfo::SYNCABLE,
            WhitelistedSchemes(kChromeUIScheme, kChromeDevToolsScheme,
                               kExtensionScheme),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_WITH_EMBEDDED_EXCEPTIONS_SCOPE,
            WebsiteSettingsRegistry::DESKTOP |
@@ -169,9 +192,10 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(CONTENT_SETTINGS_TYPE_PLUGINS, "plugins", CONTENT_SETTING_BLOCK,
+  Register(ContentSettingsType::PLUGINS, "plugins", CONTENT_SETTING_BLOCK,
            WebsiteSettingsInfo::UNSYNCABLE,
            WhitelistedSchemes(kChromeUIScheme, kChromeDevToolsScheme),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK,
                          CONTENT_SETTING_DETECT_IMPORTANT_CONTENT),
@@ -181,10 +205,11 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::EPHEMERAL,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(CONTENT_SETTINGS_TYPE_POPUPS, "popups", CONTENT_SETTING_BLOCK,
+  Register(ContentSettingsType::POPUPS, "popups", CONTENT_SETTING_BLOCK,
            WebsiteSettingsInfo::SYNCABLE,
            WhitelistedSchemes(kChromeUIScheme, kChromeDevToolsScheme,
                               kExtensionScheme),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_WITH_EMBEDDED_EXCEPTIONS_SCOPE,
            WebsiteSettingsRegistry::ALL_PLATFORMS,
@@ -192,9 +217,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(CONTENT_SETTINGS_TYPE_GEOLOCATION, "geolocation",
-           CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(),
+  Register(ContentSettingsType::GEOLOCATION, "geolocation", CONTENT_SETTING_ASK,
+           WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK),
            WebsiteSettingsInfo::REQUESTING_ORIGIN_AND_TOP_LEVEL_ORIGIN_SCOPE,
@@ -204,9 +229,10 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, "notifications",
+  Register(ContentSettingsType::NOTIFICATIONS, "notifications",
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
            WhitelistedSchemes(),
+           ForceAllowedOrigins(kChromeUIUntrustedTerminalAppURL),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
@@ -218,9 +244,10 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC, "media-stream-mic",
+  Register(ContentSettingsType::MEDIASTREAM_MIC, "media-stream-mic",
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
            WhitelistedSchemes(kChromeUIScheme, kChromeDevToolsScheme),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
@@ -230,9 +257,10 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, "media-stream-camera",
+  Register(ContentSettingsType::MEDIASTREAM_CAMERA, "media-stream-camera",
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
            WhitelistedSchemes(kChromeUIScheme, kChromeDevToolsScheme),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
@@ -242,9 +270,10 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_PPAPI_BROKER, "ppapi-broker",
+  Register(ContentSettingsType::PPAPI_BROKER, "ppapi-broker",
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
            WhitelistedSchemes(kChromeUIScheme, kChromeDevToolsScheme),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_WITH_EMBEDDED_EXCEPTIONS_SCOPE,
@@ -253,10 +282,11 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS, "automatic-downloads",
+  Register(ContentSettingsType::AUTOMATIC_DOWNLOADS, "automatic-downloads",
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::SYNCABLE,
            WhitelistedSchemes(kChromeUIScheme, kChromeDevToolsScheme,
                               kExtensionScheme),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_WITH_EMBEDDED_EXCEPTIONS_SCOPE,
@@ -269,8 +299,9 @@ void ContentSettingsRegistry::Init() {
   // TODO(raymes): We're temporarily making midi sysex unsyncable while we roll
   // out the kPermissionDelegation feature. We may want to make it syncable
   // again sometime in the future. See https://crbug.com/879954 for details.
-  Register(CONTENT_SETTINGS_TYPE_MIDI_SYSEX, "midi-sysex", CONTENT_SETTING_ASK,
+  Register(ContentSettingsType::MIDI_SYSEX, "midi-sysex", CONTENT_SETTING_ASK,
            WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK),
            WebsiteSettingsInfo::REQUESTING_ORIGIN_AND_TOP_LEVEL_ORIGIN_SCOPE,
@@ -282,9 +313,10 @@ void ContentSettingsRegistry::Init() {
 
   const auto protected_media_identifier_setting =
       GetInitialDefaultContentSettingForProtectedMediaIdentifier();
-  Register(CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER,
+  Register(ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER,
            "protected-media-identifier", protected_media_identifier_setting,
            WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK),
            WebsiteSettingsInfo::REQUESTING_ORIGIN_AND_TOP_LEVEL_ORIGIN_SCOPE,
@@ -296,9 +328,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_DURABLE_STORAGE, "durable-storage",
+  Register(ContentSettingsType::DURABLE_STORAGE, "durable-storage",
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(),
+           WhitelistedSchemes(), ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
@@ -308,9 +340,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC, "background-sync",
+  Register(ContentSettingsType::BACKGROUND_SYNC, "background-sync",
            CONTENT_SETTING_ALLOW, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(),
+           WhitelistedSchemes(), ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::DESKTOP |
@@ -319,8 +351,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_AUTOPLAY, "autoplay", CONTENT_SETTING_ALLOW,
+  Register(ContentSettingsType::AUTOPLAY, "autoplay", CONTENT_SETTING_ALLOW,
            WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::DESKTOP |
@@ -329,8 +362,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(CONTENT_SETTINGS_TYPE_SOUND, "sound", CONTENT_SETTING_ALLOW,
+  Register(ContentSettingsType::SOUND, "sound", CONTENT_SETTING_ALLOW,
            WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::DESKTOP |
@@ -339,9 +373,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(CONTENT_SETTINGS_TYPE_ADS, "subresource-filter",
+  Register(ContentSettingsType::ADS, "subresource-filter",
            CONTENT_SETTING_BLOCK, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(),
+           WhitelistedSchemes(), ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::DESKTOP |
@@ -354,9 +388,10 @@ void ContentSettingsRegistry::Init() {
       net::cookie_util::IsSameSiteByDefaultCookiesEnabled()
           ? CONTENT_SETTING_BLOCK
           : CONTENT_SETTING_ALLOW;
-  Register(CONTENT_SETTINGS_TYPE_LEGACY_COOKIE_ACCESS, "legacy-cookie-access",
+  Register(ContentSettingsType::LEGACY_COOKIE_ACCESS, "legacy-cookie-access",
            legacy_cookie_access_initial_default,
            WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::ALL_PLATFORMS,
@@ -368,18 +403,18 @@ void ContentSettingsRegistry::Init() {
   // different mechanism rather than content settings to represent these.
   // Since nothing is stored in them, there is no real point in them being a
   // content setting.
-  Register(CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS, "protocol-handler",
+  Register(ContentSettingsType::PROTOCOL_HANDLERS, "protocol-handler",
            CONTENT_SETTING_DEFAULT, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(), ValidSettings(),
+           WhitelistedSchemes(), ForceAllowedOrigins(), ValidSettings(),
            WebsiteSettingsInfo::SINGLE_ORIGIN_WITH_EMBEDDED_EXCEPTIONS_SCOPE,
            WebsiteSettingsRegistry::DESKTOP,
            ContentSettingsInfo::INHERIT_IF_LESS_PERMISSIVE,
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(CONTENT_SETTINGS_TYPE_MIXEDSCRIPT, "mixed-script",
+  Register(ContentSettingsType::MIXEDSCRIPT, "mixed-script",
            CONTENT_SETTING_BLOCK, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(),
+           WhitelistedSchemes(), ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::DESKTOP,
@@ -387,9 +422,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(CONTENT_SETTINGS_TYPE_BLUETOOTH_GUARD, "bluetooth-guard",
+  Register(ContentSettingsType::BLUETOOTH_GUARD, "bluetooth-guard",
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(),
+           WhitelistedSchemes(), ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ASK, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::DESKTOP |
@@ -398,9 +433,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_ACCESSIBILITY_EVENTS, "accessibility-events",
+  Register(ContentSettingsType::ACCESSIBILITY_EVENTS, "accessibility-events",
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(),
+           WhitelistedSchemes(), ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
@@ -413,8 +448,9 @@ void ContentSettingsRegistry::Init() {
   // TODO(crbug.com/904439): Update this to "SECURE_ONLY" once
   // DeviceOrientationEvents and DeviceMotionEvents are only fired in secure
   // contexts.
-  Register(CONTENT_SETTINGS_TYPE_SENSORS, "sensors", CONTENT_SETTING_ALLOW,
+  Register(ContentSettingsType::SENSORS, "sensors", CONTENT_SETTING_ALLOW,
            WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::DESKTOP |
@@ -423,9 +459,10 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 
-  Register(CONTENT_SETTINGS_TYPE_CLIPBOARD_READ, "clipboard",
+  Register(ContentSettingsType::CLIPBOARD_READ_WRITE, "clipboard",
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(),
+           WhitelistedSchemes(kChromeUIScheme),
+           ForceAllowedOrigins(kChromeUIUntrustedTerminalAppURL),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK,
                          CONTENT_SETTING_ASK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
@@ -435,9 +472,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_PAYMENT_HANDLER, "payment-handler",
+  Register(ContentSettingsType::PAYMENT_HANDLER, "payment-handler",
            CONTENT_SETTING_ALLOW, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(),
+           WhitelistedSchemes(), ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::DESKTOP |
@@ -446,8 +483,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_USB_GUARD, "usb-guard", CONTENT_SETTING_ASK,
+  Register(ContentSettingsType::USB_GUARD, "usb-guard", CONTENT_SETTING_ASK,
            WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ASK, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_WITH_EMBEDDED_EXCEPTIONS_SCOPE,
            WebsiteSettingsRegistry::DESKTOP |
@@ -456,9 +494,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_SERIAL_GUARD, "serial-guard",
+  Register(ContentSettingsType::SERIAL_GUARD, "serial-guard",
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(),
+           WhitelistedSchemes(), ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ASK, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_WITH_EMBEDDED_EXCEPTIONS_SCOPE,
            WebsiteSettingsRegistry::DESKTOP,
@@ -466,20 +504,20 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_PERIODIC_BACKGROUND_SYNC,
-           "periodic-background-sync", CONTENT_SETTING_ALLOW,
-           WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
-           ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
-           WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
-           WebsiteSettingsRegistry::DESKTOP |
-               WebsiteSettingsRegistry::PLATFORM_ANDROID,
-           ContentSettingsInfo::INHERIT_IN_INCOGNITO,
-           ContentSettingsInfo::EPHEMERAL,
-           ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
+  Register(
+      ContentSettingsType::PERIODIC_BACKGROUND_SYNC, "periodic-background-sync",
+      CONTENT_SETTING_ALLOW, WebsiteSettingsInfo::UNSYNCABLE,
+      WhitelistedSchemes(), ForceAllowedOrigins(),
+      ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_BLOCK),
+      WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
+      WebsiteSettingsRegistry::DESKTOP |
+          WebsiteSettingsRegistry::PLATFORM_ANDROID,
+      ContentSettingsInfo::INHERIT_IN_INCOGNITO, ContentSettingsInfo::EPHEMERAL,
+      ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_BLUETOOTH_SCANNING, "bluetooth-scanning",
+  Register(ContentSettingsType::BLUETOOTH_SCANNING, "bluetooth-scanning",
            CONTENT_SETTING_ASK, WebsiteSettingsInfo::UNSYNCABLE,
-           WhitelistedSchemes(),
+           WhitelistedSchemes(), ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ASK, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::DESKTOP |
@@ -488,8 +526,9 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_HID_GUARD, "hid-guard", CONTENT_SETTING_ASK,
+  Register(ContentSettingsType::HID_GUARD, "hid-guard", CONTENT_SETTING_ASK,
            WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
            ValidSettings(CONTENT_SETTING_ASK, CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_WITH_EMBEDDED_EXCEPTIONS_SCOPE,
            WebsiteSettingsRegistry::DESKTOP,
@@ -497,15 +536,75 @@ void ContentSettingsRegistry::Init() {
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
 
-  Register(CONTENT_SETTINGS_TYPE_NATIVE_FILE_SYSTEM_WRITE_GUARD,
+  Register(ContentSettingsType::NATIVE_FILE_SYSTEM_WRITE_GUARD,
            "native-file-system-write-guard", CONTENT_SETTING_ASK,
-           WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
-           ValidSettings(CONTENT_SETTING_ASK, CONTENT_SETTING_BLOCK),
+           WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(kChromeUIScheme),
+           ForceAllowedOrigins(),
+           ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_ASK,
+                         CONTENT_SETTING_BLOCK),
            WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
            WebsiteSettingsRegistry::DESKTOP,
            ContentSettingsInfo::INHERIT_IF_LESS_PERMISSIVE,
            ContentSettingsInfo::PERSISTENT,
            ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
+
+  Register(ContentSettingsType::NATIVE_FILE_SYSTEM_READ_GUARD,
+           "native-file-system-read-guard", CONTENT_SETTING_ASK,
+           WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(kChromeUIScheme),
+           ForceAllowedOrigins(),
+           ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_ASK,
+                         CONTENT_SETTING_BLOCK),
+           WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
+           WebsiteSettingsRegistry::DESKTOP,
+           ContentSettingsInfo::INHERIT_IF_LESS_PERMISSIVE,
+           ContentSettingsInfo::PERSISTENT,
+           ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
+
+  Register(ContentSettingsType::NFC, "nfc", CONTENT_SETTING_ASK,
+           WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
+           ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_ASK,
+                         CONTENT_SETTING_BLOCK),
+           WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
+           WebsiteSettingsRegistry::DESKTOP |
+               WebsiteSettingsRegistry::PLATFORM_ANDROID,
+           ContentSettingsInfo::INHERIT_IF_LESS_PERMISSIVE,
+           ContentSettingsInfo::PERSISTENT,
+           ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
+
+  Register(ContentSettingsType::VR, "vr", CONTENT_SETTING_ASK,
+           WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
+           ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_ASK,
+                         CONTENT_SETTING_BLOCK),
+           WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
+           WebsiteSettingsRegistry::DESKTOP |
+               WebsiteSettingsRegistry::PLATFORM_ANDROID,
+           ContentSettingsInfo::INHERIT_IF_LESS_PERMISSIVE,
+           ContentSettingsInfo::PERSISTENT,
+           ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
+
+  Register(ContentSettingsType::AR, "ar", CONTENT_SETTING_ASK,
+           WebsiteSettingsInfo::UNSYNCABLE, WhitelistedSchemes(),
+           ForceAllowedOrigins(),
+           ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_ASK,
+                         CONTENT_SETTING_BLOCK),
+           WebsiteSettingsInfo::SINGLE_ORIGIN_ONLY_SCOPE,
+           WebsiteSettingsRegistry::DESKTOP |
+               WebsiteSettingsRegistry::PLATFORM_ANDROID,
+           ContentSettingsInfo::INHERIT_IF_LESS_PERMISSIVE,
+           ContentSettingsInfo::PERSISTENT,
+           ContentSettingsInfo::EXCEPTIONS_ON_SECURE_ORIGINS_ONLY);
+  Register(ContentSettingsType::STORAGE_ACCESS, "storage-access",
+           CONTENT_SETTING_ASK, WebsiteSettingsInfo::SYNCABLE,
+           WhitelistedSchemes(), ForceAllowedOrigins(),
+           ValidSettings(CONTENT_SETTING_ALLOW, CONTENT_SETTING_ASK,
+                         CONTENT_SETTING_BLOCK, CONTENT_SETTING_SESSION_ONLY),
+           WebsiteSettingsInfo::COOKIES_SCOPE,
+           WebsiteSettingsRegistry::ALL_PLATFORMS,
+           ContentSettingsInfo::INHERIT_IN_INCOGNITO,
+           ContentSettingsInfo::PERSISTENT,
+           ContentSettingsInfo::EXCEPTIONS_ON_SECURE_AND_INSECURE_ORIGINS);
 }
 
 void ContentSettingsRegistry::Register(
@@ -514,6 +613,7 @@ void ContentSettingsRegistry::Register(
     ContentSetting initial_default_value,
     WebsiteSettingsInfo::SyncStatus sync_status,
     const std::vector<std::string>& whitelisted_schemes,
+    const base::flat_set<url::Origin>& force_allowed_origins,
     const std::set<ContentSetting>& valid_settings,
     WebsiteSettingsInfo::ScopingType scoping_type,
     Platforms platforms,
@@ -537,8 +637,8 @@ void ContentSettingsRegistry::Register(
 
   DCHECK(!base::Contains(content_settings_info_, type));
   content_settings_info_[type] = std::make_unique<ContentSettingsInfo>(
-      website_settings_info, whitelisted_schemes, valid_settings,
-      incognito_behavior, storage_behavior, origin_restriction);
+      website_settings_info, whitelisted_schemes, force_allowed_origins,
+      valid_settings, incognito_behavior, storage_behavior, origin_restriction);
 }
 
 }  // namespace content_settings

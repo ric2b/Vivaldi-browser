@@ -41,6 +41,6 @@
 <translation id="8131263257437993507">{SECONDS,plural, =1{nog 1 sec.}other{nog # sec.}}</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> kB/s</translation>
 <translation id="8798099450830957504">Standaard</translation>
-<translation id="8901569739625249689"><ph name="QUANTITY" />  kB</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" /> kB</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 sec.}other{# sec.}}</translation>
 </translationbundle>

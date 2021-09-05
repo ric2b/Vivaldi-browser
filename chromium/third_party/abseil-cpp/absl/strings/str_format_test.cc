@@ -10,6 +10,7 @@
 #include "absl/strings/string_view.h"
 
 namespace absl {
+ABSL_NAMESPACE_BEGIN
 namespace {
 using str_format_internal::FormatArgImpl;
 
@@ -241,7 +242,7 @@ class TempFile {
 
   std::FILE* file() const { return file_; }
 
-  // Read the file into a std::string.
+  // Read the file into a string.
   std::string ReadFile() {
     std::fseek(file_, 0, SEEK_END);
     int size = std::ftell(file_);
@@ -344,7 +345,7 @@ TEST(StrFormat, BehavesAsDocumented) {
   EXPECT_EQ(StrFormat("%c", int{'a'}), "a");
   EXPECT_EQ(StrFormat("%c", long{'a'}), "a");  // NOLINT
   EXPECT_EQ(StrFormat("%c", uint64_t{'a'}), "a");
-  //     "s" - std::string       Eg: "C" -> "C", std::string("C++") -> "C++"
+  //     "s" - string       Eg: "C" -> "C", std::string("C++") -> "C++"
   //           Formats std::string, char*, string_view, and Cord.
   EXPECT_EQ(StrFormat("%s", "C"), "C");
   EXPECT_EQ(StrFormat("%s", std::string("C++")), "C++");
@@ -449,7 +450,7 @@ struct SummarizeConsumer {
     if (conv.precision.is_from_arg()) {
       *out += "." + std::to_string(conv.precision.get_from_arg()) + "$*";
     }
-    *out += conv.conv.Char();
+    *out += FormatConversionCharToChar(conv.conv);
     *out += "}";
     return true;
   }
@@ -539,19 +540,19 @@ TEST_F(ParsedFormatTest, UncheckedCorrect) {
   EXPECT_EQ("[ABC]{d:1$d}[DEF]", SummarizeParsedFormat(*f));
 
   std::string format = "%sFFF%dZZZ%f";
-  auto f2 =
-      ExtendedParsedFormat<Conv::string, Conv::d, Conv::floating>::New(format);
+  auto f2 = ExtendedParsedFormat<Conv::kString, Conv::d, Conv::kFloating>::New(
+      format);
 
   ASSERT_TRUE(f2);
   EXPECT_EQ("{s:1$s}[FFF]{d:2$d}[ZZZ]{f:3$f}", SummarizeParsedFormat(*f2));
 
-  f2 = ExtendedParsedFormat<Conv::string, Conv::d, Conv::floating>::New(
+  f2 = ExtendedParsedFormat<Conv::kString, Conv::d, Conv::kFloating>::New(
       "%s %d %f");
 
   ASSERT_TRUE(f2);
   EXPECT_EQ("{s:1$s}[ ]{d:2$d}[ ]{f:3$f}", SummarizeParsedFormat(*f2));
 
-  auto star = ExtendedParsedFormat<Conv::star, Conv::d>::New("%*d");
+  auto star = ExtendedParsedFormat<Conv::kStar, Conv::d>::New("%*d");
   ASSERT_TRUE(star);
   EXPECT_EQ("{*d:2$1$*d}", SummarizeParsedFormat(*star));
 
@@ -622,6 +623,7 @@ TEST_F(FormatWrapperTest, ParsedFormat) {
 }
 
 }  // namespace
+ABSL_NAMESPACE_END
 }  // namespace absl
 
 // Some codegen thunks that we can use to easily dump the generated assembly for

@@ -8,8 +8,9 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
-#include "content/browser/appcache/appcache_response.h"
+#include "content/browser/appcache/appcache_disk_cache_ops.h"
 #include "content/browser/service_worker/service_worker_cache_writer.h"
 #include "content/browser/service_worker/service_worker_consts.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
@@ -23,7 +24,8 @@
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_status_flags.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "net/http/http_response_info.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 
 namespace content {
@@ -51,13 +53,14 @@ ServiceWorkerNewScriptLoader::CreateAndStart(
     int32_t request_id,
     uint32_t options,
     const network::ResourceRequest& original_request,
-    network::mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     scoped_refptr<ServiceWorkerVersion> version,
     scoped_refptr<network::SharedURLLoaderFactory> loader_factory,
-    const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
+    const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
+    int64_t cache_resource_id) {
   return base::WrapUnique(new ServiceWorkerNewScriptLoader(
       routing_id, request_id, options, original_request, std::move(client),
-      version, loader_factory, traffic_annotation));
+      version, loader_factory, traffic_annotation, cache_resource_id));
 }
 
 // TODO(nhiroki): We're doing multiple things in the ctor. Consider factors out
@@ -67,49 +70,36 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
     int32_t request_id,
     uint32_t options,
     const network::ResourceRequest& original_request,
-    network::mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     scoped_refptr<ServiceWorkerVersion> version,
     scoped_refptr<network::SharedURLLoaderFactory> loader_factory,
-    const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
+    const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
+    int64_t cache_resource_id)
     : request_url_(original_request.url),
-      resource_type_(static_cast<ResourceType>(original_request.resource_type)),
+      resource_type_(static_cast<blink::mojom::ResourceType>(
+          original_request.resource_type)),
       original_options_(options),
       version_(version),
-      network_client_binding_(this),
       network_watcher_(FROM_HERE,
                        mojo::SimpleWatcher::ArmingPolicy::MANUAL,
                        base::SequencedTaskRunnerHandle::Get()),
       loader_factory_(std::move(loader_factory)),
       client_(std::move(client)) {
+  DCHECK_NE(cache_resource_id, blink::mojom::kInvalidServiceWorkerResourceId);
+
   network::ResourceRequest resource_request(original_request);
 #if DCHECK_IS_ON()
   CheckVersionStatusBeforeLoad();
 #endif  // DCHECK_IS_ON()
 
-  // TODO(nhiroki): Handle the case where |cache_resource_id| is invalid.
-  int64_t cache_resource_id = version->context()->storage()->NewResourceId();
-
-  // |incumbent_cache_resource_id| is valid if the incumbent service worker
-  // exists and it's required to do the byte-for-byte check.
-  int64_t incumbent_cache_resource_id =
-      ServiceWorkerConsts::kInvalidServiceWorkerResourceId;
   scoped_refptr<ServiceWorkerRegistration> registration =
       version_->context()->GetLiveRegistration(version_->registration_id());
   // ServiceWorkerVersion keeps the registration alive while the service
   // worker is starting up, and it must be starting up here.
   DCHECK(registration);
-  const bool is_main_script = resource_type_ == ResourceType::kServiceWorker;
+  const bool is_main_script =
+      resource_type_ == blink::mojom::ResourceType::kServiceWorker;
   if (is_main_script) {
-    ServiceWorkerVersion* stored_version = registration->waiting_version()
-                                               ? registration->waiting_version()
-                                               : registration->active_version();
-    // |pause_after_download()| indicates the version is required to do the
-    // byte-for-byte check.
-    if (stored_version && stored_version->script_url() == request_url_ &&
-        version_->pause_after_download()) {
-      incumbent_cache_resource_id =
-          stored_version->script_cache_map()->LookupResourceId(request_url_);
-    }
     // Request SSLInfo. It will be persisted in service worker storage and
     // may be used by ServiceWorkerNavigationLoader for navigations handled
     // by this service worker.
@@ -129,19 +119,8 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
   }
 
   ServiceWorkerStorage* storage = version_->context()->storage();
-  if (incumbent_cache_resource_id !=
-      ServiceWorkerConsts::kInvalidServiceWorkerResourceId) {
-    // Create response readers only when we have to do the byte-for-byte check.
-    cache_writer_ = ServiceWorkerCacheWriter::CreateForComparison(
-        storage->CreateResponseReader(incumbent_cache_resource_id),
-        storage->CreateResponseReader(incumbent_cache_resource_id),
-        storage->CreateResponseWriter(cache_resource_id),
-        false /* pause_when_not_identical */);
-  } else {
-    // The script is new, create a cache writer for write back.
-    cache_writer_ = ServiceWorkerCacheWriter::CreateForWriteBack(
-        storage->CreateResponseWriter(cache_resource_id));
-  }
+  cache_writer_ = ServiceWorkerCacheWriter::CreateForWriteBack(
+      storage->CreateResponseWriter(cache_resource_id));
 
   version_->script_cache_map()->NotifyStartedCaching(request_url_,
                                                      cache_resource_id);
@@ -150,16 +129,28 @@ ServiceWorkerNewScriptLoader::ServiceWorkerNewScriptLoader(
   // JavaScript MIME type. Therefore, no sniffing is needed.
   options &= ~network::mojom::kURLLoadOptionSniffMimeType;
 
-  network::mojom::URLLoaderClientPtr network_client;
-  network_client_binding_.Bind(mojo::MakeRequest(&network_client));
   loader_factory_->CreateLoaderAndStart(
-      mojo::MakeRequest(&network_loader_), routing_id, request_id, options,
-      resource_request, std::move(network_client), traffic_annotation);
+      network_loader_.BindNewPipeAndPassReceiver(), routing_id, request_id,
+      options, resource_request,
+      network_client_receiver_.BindNewPipeAndPassRemote(), traffic_annotation);
   DCHECK_EQ(LoaderState::kNotStarted, network_loader_state_);
   network_loader_state_ = LoaderState::kLoadingHeader;
 }
 
-ServiceWorkerNewScriptLoader::~ServiceWorkerNewScriptLoader() = default;
+ServiceWorkerNewScriptLoader::~ServiceWorkerNewScriptLoader() {
+  // This class is used as a SelfOwnedReceiver and its lifetime is tied to the
+  // corresponding mojo connection. There could be cases where the mojo
+  // connection is disconnected while writing the response to the storage.
+  // Complete this loader with ERR_FAILED in such cases to update the script
+  // cache map.
+  bool writers_completed = header_writer_state_ == WriterState::kCompleted &&
+                           body_writer_state_ == WriterState::kCompleted;
+  if (network_loader_state_ == LoaderState::kCompleted && !writers_completed) {
+    DCHECK(client_);
+    CommitCompleted(network::URLLoaderCompletionStatus(net::ERR_FAILED),
+                    ServiceWorkerConsts::kServiceWorkerInvalidVersionError);
+  }
+}
 
 void ServiceWorkerNewScriptLoader::FollowRedirect(
     const std::vector<std::string>& removed_headers,
@@ -203,7 +194,7 @@ void ServiceWorkerNewScriptLoader::OnReceiveResponse(
   std::string error_message;
   std::unique_ptr<net::HttpResponseInfo> response_info =
       service_worker_loader_helpers::CreateHttpResponseInfoAndCheckHeaders(
-          response_head, &service_worker_state, &completion_status,
+          *response_head, &service_worker_state, &completion_status,
           &error_message);
   if (!response_info) {
     DCHECK_NE(net::OK, completion_status.error_code);
@@ -211,7 +202,7 @@ void ServiceWorkerNewScriptLoader::OnReceiveResponse(
     return;
   }
 
-  if (resource_type_ == ResourceType::kServiceWorker) {
+  if (resource_type_ == blink::mojom::ResourceType::kServiceWorker) {
     // Check the path restriction defined in the spec:
     // https://w3c.github.io/ServiceWorker/#service-worker-script-response
     std::string service_worker_allowed;
@@ -227,10 +218,15 @@ void ServiceWorkerNewScriptLoader::OnReceiveResponse(
       return;
     }
 
+    version_->set_cross_origin_embedder_policy(
+        response_head->cross_origin_embedder_policy);
+
     if (response_head->network_accessed)
       version_->embedded_worker()->OnNetworkAccessedForScriptLoad();
 
-    version_->SetMainScriptHttpResponseInfo(*response_info);
+    version_->SetMainScriptResponse(
+        std::make_unique<ServiceWorkerVersion::MainScriptResponse>(
+            *response_head));
   }
 
   network_loader_state_ = LoaderState::kWaitingForBody;
@@ -347,9 +343,9 @@ void ServiceWorkerNewScriptLoader::CheckVersionStatusBeforeLoad() {
   // defines importScripts() works only on the initial script evaluation and the
   // install event. Update this check once importScripts() is fixed.
   // (https://crbug.com/719052)
-  DCHECK((resource_type_ == ResourceType::kServiceWorker &&
+  DCHECK((resource_type_ == blink::mojom::ResourceType::kServiceWorker &&
           version_->status() == ServiceWorkerVersion::NEW) ||
-         (resource_type_ == ResourceType::kScript &&
+         (resource_type_ == blink::mojom::ResourceType::kScript &&
           version_->status() != ServiceWorkerVersion::REDUNDANT));
 }
 #endif  // DCHECK_IS_ON()
@@ -535,14 +531,7 @@ void ServiceWorkerNewScriptLoader::CommitCompleted(
     DCHECK_EQ(LoaderState::kCompleted, network_loader_state_);
     DCHECK_EQ(WriterState::kCompleted, header_writer_state_);
     DCHECK_EQ(WriterState::kCompleted, body_writer_state_);
-    // If all the calls to WriteHeaders/WriteData succeeded, but the incumbent
-    // entry wasn't actually replaced because the new entry was equivalent, the
-    // new version didn't actually install because it already exists.
-    if (!cache_writer_->did_replace()) {
-      version_->SetStartWorkerStatusCode(
-          blink::ServiceWorkerStatusCode::kErrorExists);
-      error_code = net::ERR_FILE_EXISTS;
-    }
+    DCHECK(cache_writer_->did_replace());
     bytes_written = cache_writer_->bytes_written();
   } else {
     // AddMessageConsole must be called before notifying that an error occurred
@@ -559,7 +548,7 @@ void ServiceWorkerNewScriptLoader::CommitCompleted(
   client_producer_.reset();
 
   network_loader_.reset();
-  network_client_binding_.Close();
+  network_client_receiver_.reset();
   network_consumer_.reset();
   network_watcher_.Cancel();
   cache_writer_.reset();

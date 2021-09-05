@@ -15,14 +15,16 @@
 #include "content/common/frame_proxy.mojom.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
-#include "third_party/blink/public/platform/web_focus_type.h"
-#include "third_party/blink/public/platform/web_scroll_types.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom.h"
+#include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
+#include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-forward.h"
 
 struct FrameHostMsg_OpenURL_Params;
 struct FrameMsg_PostMessage_Params;
 
 namespace blink {
-struct WebScrollIntoViewParams;
+class AssociatedInterfaceProvider;
 }
 
 namespace gfx {
@@ -64,11 +66,19 @@ class RenderWidgetHostView;
 // forward. It also instructs the RenderFrameHost to run the unload event
 // handler and is kept alive for the duration. Once the event handling is
 // complete, the RenderFrameHost is deleted.
-class RenderFrameProxyHost : public IPC::Listener,
-                             public IPC::Sender,
-                             public mojom::RenderFrameProxyHost {
+class CONTENT_EXPORT RenderFrameProxyHost
+    : public IPC::Listener,
+      public IPC::Sender,
+      public mojom::RenderFrameProxyHost,
+      public blink::mojom::RemoteFrameHost {
  public:
+  using CreatedCallback = base::RepeatingCallback<void(RenderFrameProxyHost*)>;
+
   static RenderFrameProxyHost* FromID(int process_id, int routing_id);
+
+  // Sets a callback to be called whenever any RenderFrameProxyHost is created.
+  static void SetCreatedCallbackForTesting(
+      const CreatedCallback& created_callback);
 
   RenderFrameProxyHost(SiteInstance* site_instance,
                        scoped_refptr<RenderViewHostImpl> render_view_host,
@@ -123,12 +133,7 @@ class RenderFrameProxyHost : public IPC::Listener,
   // the frame's current process. |rect_to_scroll| is with respect to the
   // coordinates of the originating frame in OOPIF process.
   void ScrollRectToVisible(const gfx::Rect& rect_to_scroll,
-                           const blink::WebScrollIntoViewParams& params);
-
-  // Continues to bubble a logical scroll from the frame's process. Bubbling
-  // continues from the frame owner element in the parent process.
-  void BubbleLogicalScroll(blink::WebScrollDirection direction,
-                           ui::input_types::ScrollGranularity granularity);
+                           blink::mojom::ScrollIntoViewParamsPtr params);
 
   // Sets render frame proxy created state. If |created| is false, any existing
   // mojo connections to RenderFrameProxyHost will be closed.
@@ -137,14 +142,45 @@ class RenderFrameProxyHost : public IPC::Listener,
   // Returns if the RenderFrameProxy for this host is alive.
   bool is_render_frame_proxy_live() { return render_frame_proxy_created_; }
 
+  // Returns associated remote for the blink::mojom::RemoteFrame Mojo interface.
+  const mojo::AssociatedRemote<blink::mojom::RemoteFrame>&
+  GetAssociatedRemoteFrame();
+
+  // blink::mojom::RemoteFrameHost
+  void SetInheritedEffectiveTouchAction(cc::TouchAction touch_action) override;
+  void UpdateRenderThrottlingStatus(bool is_throttled,
+                                    bool subtree_throttled) override;
+  void VisibilityChanged(blink::mojom::FrameVisibility visibility) override;
+  void DidFocusFrame() override;
+  void CheckCompleted() override;
+  void CapturePaintPreviewOfCrossProcessSubframe(
+      const gfx::Rect& clip_rect,
+      const base::UnguessableToken& guid) override;
+  void SetIsInert(bool inert) override;
+
+  // Returns associated remote for the content::mojom::RenderFrameProxy Mojo
+  // interface.
+  const mojo::AssociatedRemote<mojom::RenderFrameProxy>&
+  GetAssociatedRenderFrameProxy();
+  // Requests a viz::LocalSurfaceId to enable auto-resize mode from the parent
+  // renderer.
+  void EnableAutoResize(const gfx::Size& min_size, const gfx::Size& max_size);
+  // Requests a viz::LocalSurfaceId to disable auto-resize mode from the parent
+  // renderer.
+  void DisableAutoResize();
+  void DidUpdateVisualProperties(const cc::RenderFrameMetadata& metadata);
+  void ChildProcessGone();
+
+  blink::AssociatedInterfaceProvider* GetRemoteAssociatedInterfacesTesting();
+  bool IsInertForTesting();
+
  private:
   // IPC Message handlers.
   void OnDetach();
   void OnOpenURL(const FrameHostMsg_OpenURL_Params& params);
-  void OnCheckCompleted();
   void OnRouteMessageEvent(const FrameMsg_PostMessage_Params& params);
   void OnDidChangeOpener(int32_t opener_routing_id);
-  void OnAdvanceFocus(blink::WebFocusType type, int32_t source_routing_id);
+  void OnAdvanceFocus(blink::mojom::FocusType type, int32_t source_routing_id);
   void OnPrintCrossProcessSubframe(const gfx::Rect& rect, int document_cookie);
 
   // IPC::Listener
@@ -152,8 +188,7 @@ class RenderFrameProxyHost : public IPC::Listener,
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle handle) override;
 
-  // mojom::RenderFrameProxyHost
-  void FrameFocused() override;
+  blink::AssociatedInterfaceProvider* GetRemoteAssociatedInterfaces();
 
   // This RenderFrameProxyHost's routing id.
   int routing_id_;
@@ -188,9 +223,21 @@ class RenderFrameProxyHost : public IPC::Listener,
   // some form of page context.
   scoped_refptr<RenderViewHostImpl> render_view_host_;
 
-  // Mojo binding to this RenderFrameProxyHost.
-  mojo::AssociatedBinding<mojom::RenderFrameProxyHost>
-      frame_proxy_host_associated_binding_;
+  std::unique_ptr<blink::AssociatedInterfaceProvider>
+      remote_associated_interfaces_;
+
+  // Mojo receiver to this RenderFrameProxyHost.
+  mojo::AssociatedReceiver<mojom::RenderFrameProxyHost>
+      frame_proxy_host_associated_receiver_{this};
+
+  // Holder of Mojo connection with the Frame service in Blink.
+  mojo::AssociatedRemote<blink::mojom::RemoteFrame> remote_frame_;
+
+  // Holder of Mojo connection with the content::mojom::RenderFrameProxy.
+  mojo::AssociatedRemote<mojom::RenderFrameProxy> render_frame_proxy_;
+
+  mojo::AssociatedReceiver<blink::mojom::RemoteFrameHost>
+      remote_frame_host_receiver_{this};
 
   DISALLOW_COPY_AND_ASSIGN(RenderFrameProxyHost);
 };

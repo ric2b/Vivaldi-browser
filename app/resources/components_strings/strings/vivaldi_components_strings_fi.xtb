@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">Internetyhteytesi on estetty</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> vaatii käyttäjätunnuksen ja salasanan.</translation>
 <translation id="2337852623177822836">Järjestelmänvalvojan hallinnoima asetus</translation>
+<translation id="2344028582131185878">Automaattiset lataukset</translation>
 <translation id="2355395290879513365">Hyökkääjät saattavat nähdä kuvat, joita katselet sivustolla, ja huijata sinua muokkaamalla niitä.</translation>
 <translation id="2356070529366658676">Kysy</translation>
 <translation id="2359808026110333948">Jatka</translation>
@@ -75,6 +76,7 @@
 <translation id="3447661539832366887">Tämän laitteen omistaja on poistanut dinosauruspelin käytöstä.</translation>
 <translation id="3447884698081792621">Näytä varmenne (myöntänyt <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Piilota lisäasetukset</translation>
+<translation id="3484560055331845446">Saatat menettää pääsyn Google-tiliisi. Chrome suosittelee vaihtamaan salasanan nyt. Sinua pyydetään kirjautumaan sisään.</translation>
 <translation id="3566021033012934673">Yhteytesi ei ole yksityinen</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Piilota lisätiedot</translation>
@@ -88,7 +90,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> on estetty</translation>
 <translation id="3987940399970879459">Alle 1 Mt</translation>
 <translation id="4075732493274867456">Asiakassovellus ja palvelin eivät tue samaa SSL-yhteyskäytäntöversiota tai salaustekniikkaa.</translation>
-<translation id="410351446219883937">Automaattitoisto</translation>
 <translation id="4116663294526079822">Salli aina tällä sivustolla</translation>
 <translation id="4130226655945681476">tarkistaa verkkojohdot, modeemi ja reititin</translation>
 <translation id="4151403195736952345">Käytä yleistä oletusta (havaitse)</translation>
@@ -107,6 +108,7 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Kokeile poistaa laajennukset käytöstä.</translation>
 <translation id="4592951414987517459">Yhteytesi sivustoon <ph name="DOMAIN" /> on suojattu nykyaikaisella salaustekniikalla.</translation>
+<translation id="4690462567478992370">Lakkaa käyttämästä epäkelpoa varmennetta</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Yhteys keskeytyi</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Diagnosoidaan Windowsin verkkoasetuksia<ph name="END_LINK" /></translation>
@@ -114,8 +116,10 @@
 <translation id="4750917950439032686">Salasanasi, luottokorttinumerosi ja muut tietosi säilyvät yksityisinä niitä sivustolle lähetettäessä.</translation>
 <translation id="4764776831041365478">Osoitteessa <ph name="URL" /> oleva sivu saattaa olla väliaikaisesti pois käytöstä tai se on voitu siirtää pysyvästi uuteen osoitteeseen.</translation>
 <translation id="4943872375798546930">Ei tuloksia</translation>
+<translation id="4974590756084640048">Palauta varoitukset käyttöön</translation>
 <translation id="5023310440958281426">Tarkista järjestelmänvalvojan käytännöt</translation>
 <translation id="5039804452771397117">Salli</translation>
+<translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 käytössä)}other{(# käytössä)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />tarkistaa välityspalvelimen osoite<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bittinen)</translation>
 <translation id="5287240709317226393">Näytä evästeet</translation>
@@ -163,6 +167,7 @@
 <translation id="6657585470893396449">Salasana</translation>
 <translation id="6685834062052613830">Kirjaudu ulos ja viimeistele määritys</translation>
 <translation id="6711464428925977395">Välityspalvelimessa on jotain vikaa tai osoite on virheellinen.</translation>
+<translation id="6757797048963528358">Laitteesi siirtyi nukkumaan.</translation>
 <translation id="6897140037006041989">User agent</translation>
 <translation id="7053983685419859001">Estä</translation>
 <translation id="7079718277001814089">Sivustolla on haittaohjelmia</translation>
@@ -197,12 +202,14 @@
 <translation id="8041940743680923270">Käytä yleistä oletusasetusta (kysy)</translation>
 <translation id="808894953321890993">Vaihda salasana</translation>
 <translation id="8142868475871995937">Voit lukea listan kielletyistä URL-osoitteista ja muut järjestelmänvalvojasi määräämät käytännöt osoitteessa &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
+<translation id="8149426793427495338">Tietokoneesi siirtyi nukkumaan.</translation>
 <translation id="8150722005171944719">Tiedosto osoitteessa <ph name="URL" /> ei ole luettavissa. Se on voitu poistaa tai siirtää, tai tiedoston käyttöluvat voivat estää sen käytön.</translation>
 <translation id="8184538546369750125">Käytä yleistä oletusasetusta (salli)</translation>
 <translation id="8211406090763984747">Yhteys on salattu</translation>
 <translation id="8225771182978767009">Tämän tietokoneen määrittänyt henkilö on estänyt tämän sivuston.</translation>
 <translation id="8241707690549784388">Etsimäsi sivu käytti antamiasi tietoja. Sivulle palaaminen voi johtaa jokaisen tekemäsi toiminnon toistamiseen. Haluatko jatkaa?</translation>
 <translation id="8241712895048303527">Estä tällä sivustolla</translation>
+<translation id="8286036467436129157">Kirjaudu</translation>
 <translation id="8288807391153049143">Näytä varmenne</translation>
 <translation id="8289355894181816810">Ota yhteyttä verkon ylläpitäjään, jos et tiedä, mitä tämä tarkoittaa.</translation>
 <translation id="8332188693563227489">Sivuston <ph name="HOST_NAME" /> käyttöoikeus evättiin</translation>
@@ -220,6 +227,7 @@
 <translation id="9169664750068251925">Estä aina tällä sivustolla</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> käyttää protokollaa, jota ei tueta.</translation>
 <translation id="9219103736887031265">Kuvat</translation>
+<translation id="936602727769022409">Saatat menettää pääsyn Google-tiliisi. Chromium suosittelee vaihtamaan salasanan nyt. Sinua pyydetään kirjautumaan sisään.</translation>
 <translation id="969892804517981540">Virallinen koontiversio</translation>
 <translation id="988159990683914416">Kehittäjän koontiversio</translation>
 </translationbundle>

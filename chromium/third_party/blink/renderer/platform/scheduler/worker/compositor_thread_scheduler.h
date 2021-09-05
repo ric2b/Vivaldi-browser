@@ -8,9 +8,9 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "components/scheduling_metrics/task_duration_metric_reporter.h"
-#include "third_party/blink/public/platform/web_thread_type.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/scheduler/common/single_thread_idle_task_runner.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_type.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/compositor_metrics_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/non_main_thread_scheduler_impl.h"
 
@@ -40,9 +40,10 @@ class PLATFORM_EXPORT CompositorThreadScheduler
 
   // WebThreadScheduler:
   scoped_refptr<base::SingleThreadTaskRunner> V8TaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> IPCTaskRunner() override;
-  scoped_refptr<base::SingleThreadTaskRunner> InputTaskRunner() override;
+  scoped_refptr<base::SingleThreadTaskRunner> NonWakingTaskRunner() override;
   bool ShouldYieldForHighPriorityWork() override;
   bool CanExceedIdleDeadlineIfRequired() const override;
   void AddTaskObserver(base::TaskObserver* task_observer) override;
@@ -66,9 +67,6 @@ class PLATFORM_EXPORT CompositorThreadScheduler
   void InitImpl() override;
 
  private:
-  scoped_refptr<NonMainThreadTaskQueue> input_task_queue_;
-  scoped_refptr<base::SingleThreadTaskRunner> input_task_runner_;
-
   CompositorMetricsHelper compositor_metrics_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(CompositorThreadScheduler);

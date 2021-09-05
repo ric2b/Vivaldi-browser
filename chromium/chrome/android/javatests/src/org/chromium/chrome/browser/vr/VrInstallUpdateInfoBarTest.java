@@ -30,7 +30,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.vr.keyboard.GvrKeyboardLoaderClient;
 import org.chromium.chrome.browser.vr.rules.XrActivityRestriction;
 import org.chromium.chrome.browser.vr.util.NativeUiUtils;
@@ -64,9 +64,12 @@ public class VrInstallUpdateInfoBarTest {
 
     private ChromeActivityTestRule mVrTestRule;
 
+    private VrBrowserTestFramework mVrBrowserTestFramework;
+
     public VrInstallUpdateInfoBarTest(Callable<ChromeActivityTestRule> callable) throws Exception {
         mVrTestRule = callable.call();
         mRuleChain = VrTestRuleUtils.wrapRuleInActivityRestrictionRule(mVrTestRule);
+        mVrBrowserTestFramework = new VrBrowserTestFramework(mVrTestRule);
     }
 
     /**
@@ -83,7 +86,8 @@ public class VrInstallUpdateInfoBarTest {
         } else if (checkerReturnCompatibility == VrCoreCompatibility.VR_OUT_OF_DATE
                 || checkerReturnCompatibility == VrCoreCompatibility.VR_NOT_AVAILABLE) {
             // Out of date and missing cases are the same, but with different text
-            String expectedMessage, expectedButton;
+            String expectedMessage;
+            String expectedButton;
             if (checkerReturnCompatibility == VrCoreCompatibility.VR_OUT_OF_DATE) {
                 expectedMessage = ContextUtils.getApplicationContext().getString(
                         org.chromium.chrome.vr.R.string.vr_services_check_infobar_update_text);
@@ -180,8 +184,7 @@ public class VrInstallUpdateInfoBarTest {
     }
 
     private void testKeyboardInstallUpgradeImpl(final int uiElementToClick) {
-        mVrTestRule.loadUrl(
-                VrBrowserTestFramework.getFileUrlForHtmlTestFile("test_web_input_editing"),
+        mVrTestRule.loadUrl(mVrBrowserTestFramework.getUrlForFile("test_web_input_editing"),
                 PAGE_LOAD_TIMEOUT_S);
         GvrKeyboardLoaderClient.setFailLoadForTesting(true);
         VrBrowserTransitionUtils.forceEnterVrBrowserOrFail(POLL_TIMEOUT_LONG_MS);

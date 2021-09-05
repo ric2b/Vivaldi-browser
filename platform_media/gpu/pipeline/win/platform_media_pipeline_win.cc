@@ -5,21 +5,42 @@
 //
 // This file is an original work developed by Opera Software ASA
 
-#include "platform_media/gpu/pipeline/platform_media_pipeline_create.h"
-#include "platform_media/gpu/pipeline/platform_media_pipeline.h"
+#include "platform_media/gpu/pipeline/platform_media_pipeline_factory.h"
 
-#include "platform_media/gpu/data_source/ipc_data_source.h"
 #include "platform_media/gpu/pipeline/win/wmf_media_pipeline.h"
+
+#include "media/base/win/mf_initializer.h"
 
 namespace media {
 
+namespace {
+
+class WMFMediaPipelineFactory : public PlatformMediaPipelineFactory {
+ public:
+  std::unique_ptr<PlatformMediaPipeline> CreatePipeline() override {
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
+    if (!session_) {
+      session_ = InitializeMediaFoundation();
+      if (!session_) {
+        LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                   << " Failed to initialize Media Foundation ";
+        return nullptr;
+      }
+    }
+    return std::make_unique<WMFMediaPipeline>();
+  }
+
+ private:
+  MFSessionLifetime session_;
+};
+
+}  // namespace
+
 // static
-PlatformMediaPipeline* PlatformMediaPipelineCreate(
-    IPCDataSource* data_source,
-    const PlatformMediaPipeline::AudioConfigChangedCB& audio_config_changed_cb,
-    const PlatformMediaPipeline::VideoConfigChangedCB& video_config_changed_cb) {
-  return new WMFMediaPipeline(
-      data_source, audio_config_changed_cb, video_config_changed_cb);
+std::unique_ptr<PlatformMediaPipelineFactory>
+PlatformMediaPipelineFactory::Create() {
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
+  return std::make_unique<WMFMediaPipelineFactory>();
 }
 
 }  // namespace media

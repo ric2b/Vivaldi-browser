@@ -11,7 +11,10 @@
 #include "chromecast/media/audio/mixer_service/conversions.h"
 #include "chromecast/media/audio/mixer_service/mixer_service.pb.h"
 #include "chromecast/media/audio/mixer_service/mixer_socket.h"
+#include "chromecast/media/cma/backend/mixer/audio_output_redirector.h"
+#include "chromecast/media/cma/backend/mixer/loopback_handler.h"
 #include "chromecast/media/cma/backend/mixer/mixer_input_connection.h"
+#include "chromecast/media/cma/backend/mixer/mixer_loopback_connection.h"
 #include "chromecast/media/cma/backend/mixer/stream_mixer.h"
 
 namespace chromecast {
@@ -77,17 +80,21 @@ class MixerServiceReceiver::ControlConnection
       send_stream_count_ = message.request_stream_count().subscribe();
       OnStreamCountChanged();
     }
+    if (message.has_set_num_output_channels()) {
+      mixer_->SetNumOutputChannels(
+          message.set_num_output_channels().channels());
+    }
 
     return true;
   }
 
-  bool HandleAudioData(char* data, int size, int64_t timestamp) override {
+  bool HandleAudioData(char* data, size_t size, int64_t timestamp) override {
     return true;
   }
 
   bool HandleAudioBuffer(scoped_refptr<net::IOBuffer> buffer,
                          char* data,
-                         int size,
+                         size_t size,
                          int64_t timestamp) override {
     return true;
   }
@@ -105,8 +112,11 @@ class MixerServiceReceiver::ControlConnection
   DISALLOW_COPY_AND_ASSIGN(ControlConnection);
 };
 
-MixerServiceReceiver::MixerServiceReceiver(StreamMixer* mixer) : mixer_(mixer) {
+MixerServiceReceiver::MixerServiceReceiver(StreamMixer* mixer,
+                                           LoopbackHandler* loopback_handler)
+    : mixer_(mixer), loopback_handler_(loopback_handler) {
   DCHECK(mixer_);
+  DCHECK(loopback_handler_);
 }
 
 MixerServiceReceiver::~MixerServiceReceiver() = default;
@@ -133,13 +143,21 @@ void MixerServiceReceiver::CreateOutputStream(
 void MixerServiceReceiver::CreateLoopbackConnection(
     std::unique_ptr<mixer_service::MixerSocket> socket,
     const mixer_service::Generic& message) {
-  LOG(INFO) << "Unhandled loopback connection";
+  auto connection =
+      std::make_unique<MixerLoopbackConnection>(std::move(socket));
+  loopback_handler_->AddConnection(std::move(connection));
 }
 
 void MixerServiceReceiver::CreateAudioRedirection(
     std::unique_ptr<mixer_service::MixerSocket> socket,
     const mixer_service::Generic& message) {
-  LOG(INFO) << "Unhandled redirection connection";
+  if (message.redirection_request().has_num_channels() &&
+      message.redirection_request().num_channels() <= 0) {
+    LOG(INFO) << "Bad redirection request";
+    return;
+  }
+  mixer_->AddAudioOutputRedirector(std::make_unique<AudioOutputRedirector>(
+      mixer_, std::move(socket), message));
 }
 
 void MixerServiceReceiver::CreateControlConnection(

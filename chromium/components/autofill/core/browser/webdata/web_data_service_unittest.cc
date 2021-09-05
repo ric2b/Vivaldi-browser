@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -16,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -30,6 +32,7 @@
 #include "components/autofill/core/browser/webdata/autofill_webdata_service_observer.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/os_crypt/os_crypt_mocker.h"
 #include "components/webdata/common/web_data_results.h"
 #include "components/webdata/common/web_data_service_base.h"
 #include "components/webdata/common/web_data_service_consumer.h"
@@ -96,21 +99,22 @@ class WebDataServiceTest : public testing::Test {
  protected:
   void SetUp() override {
     base::FilePath path(WebDatabase::kInMemoryPath);
+    // OSCrypt is used for encryption of credit card data in this test.
+    OSCryptMocker::SetUp();
 
     // TODO(pkasting): http://crbug.com/740773 This should likely be sequenced,
     // not single-threaded; it's also possible the various uses of this below
     // should each use their own sequences instead of sharing this one.
-    auto db_task_runner = base::CreateSingleThreadTaskRunner(
-        {base::ThreadPool(), base::MayBlock()});
+    auto db_task_runner =
+        base::ThreadPool::CreateSingleThreadTaskRunner({base::MayBlock()});
     wdbs_ = new WebDatabaseService(path, base::ThreadTaskRunnerHandle::Get(),
                                    db_task_runner);
     wdbs_->AddTable(std::make_unique<AutofillTable>());
     wdbs_->LoadDatabase();
 
     wds_ = new AutofillWebDataService(
-        wdbs_, base::ThreadTaskRunnerHandle::Get(), db_task_runner,
-        WebDataServiceBase::ProfileErrorCallback());
-    wds_->Init();
+        wdbs_, base::ThreadTaskRunnerHandle::Get(), db_task_runner);
+    wds_->Init(base::NullCallback());
   }
 
   void TearDown() override {
@@ -119,6 +123,7 @@ class WebDataServiceTest : public testing::Test {
     wds_ = nullptr;
     wdbs_ = nullptr;
     task_environment_.RunUntilIdle();
+    OSCryptMocker::TearDown();
   }
 
   base::test::TaskEnvironment task_environment_;

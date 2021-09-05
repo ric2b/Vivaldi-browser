@@ -6,14 +6,13 @@
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/vr/test/mock_xr_device_hook_base.h"
 #include "chrome/browser/vr/test/multi_class_browser_test.h"
-#include "chrome/browser/vr/test/webvr_browser_test.h"
 #include "chrome/browser/vr/test/webxr_vr_browser_test.h"
 #include "device/vr/public/mojom/browser_test_interfaces.mojom.h"
 #include "third_party/openvr/src/headers/openvr.h"
 
 // Browser test equivalent of
 // chrome/android/javatests/src/.../browser/vr/WebXrVrInputTest.java.
-// End-to-end tests for user input interaction with WebXR/WebVR.
+// End-to-end tests for user input interaction with WebXR.
 
 namespace vr {
 
@@ -49,28 +48,15 @@ void VerifyInputCounts(WebXrVrBrowserTestBase* t,
 // input.
 void TestPresentationLocksFocusImpl(WebXrVrBrowserTestBase* t,
                                     std::string filename) {
-  t->LoadUrlAndAwaitInitialization(t->GetFileUrlForHtmlTestFile(filename));
+  t->LoadFileAndAwaitInitialization(filename);
   t->EnterSessionWithUserGestureOrFail();
   t->ExecuteStepAndWait("stepSetupFocusLoss()");
   t->EndTest();
 }
 
-IN_PROC_BROWSER_TEST_F(WebVrOpenVrBrowserTest, TestPresentationLocksFocus) {
-  TestPresentationLocksFocusImpl(this, "test_presentation_locks_focus");
-}
 WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestPresentationLocksFocus) {
   TestPresentationLocksFocusImpl(t, "webxr_test_presentation_locks_focus");
 }
-
-#if BUILDFLAG(ENABLE_OPENXR)
-IN_PROC_BROWSER_TEST_F(WebVrOpenXrBrowserTest, TestPresentationLocksFocus) {
-  // Create a mock so that the test hook on OpenXRAPIWrapper is set.
-  // This is needed to set the environment variable in LoadOpenXRRuntime
-  // to use the mock runtime instead of the real system runtime.
-  MockXRDeviceHookBase my_mock;
-  TestPresentationLocksFocusImpl(this, "test_presentation_locks_focus");
-}
-#endif  // BUILDFLAG(ENABLE_OPENXR)
 
 class WebXrControllerInputMock : public MockXRDeviceHookBase {
  public:
@@ -264,8 +250,7 @@ WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestInputHandednessChange) {
   WebXrControllerInputMock my_mock;
   unsigned int controller_index = my_mock.CreateAndConnectMinimalGamepad();
 
-  t->LoadUrlAndAwaitInitialization(
-      t->GetFileUrlForHtmlTestFile("test_webxr_input_same_object"));
+  t->LoadFileAndAwaitInitialization("test_webxr_input_same_object");
   t->EnterSessionWithUserGestureOrFail();
 
   // We should only have seen the first change indicating we have input sources.
@@ -317,8 +302,7 @@ WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestInputSourcesChange) {
       device::ControllerRole::kControllerRoleRight, insufficient_axis_types,
       insufficient_buttons);
 
-  t->LoadUrlAndAwaitInitialization(
-      t->GetFileUrlForHtmlTestFile("test_webxr_input_sources_change_event"));
+  t->LoadFileAndAwaitInitialization("test_webxr_input_sources_change_event");
   t->EnterSessionWithUserGestureOrFail();
 
   // Wait for the first changed event
@@ -380,8 +364,7 @@ IN_PROC_BROWSER_TEST_F(WebXrVrOpenVrBrowserTest, TestInputProfilesChange) {
   WebXrControllerInputMock my_mock;
   unsigned int controller_index = my_mock.CreateAndConnectMinimalGamepad();
 
-  LoadUrlAndAwaitInitialization(
-      GetFileUrlForHtmlTestFile("test_webxr_input_same_object"));
+  LoadFileAndAwaitInitialization("test_webxr_input_same_object");
   EnterSessionWithUserGestureOrFail();
 
   // Wait for the first changed event
@@ -443,8 +426,7 @@ IN_PROC_BROWSER_TEST_F(WebXrVrOpenVrBrowserTest, TestInputGamepadSameObject) {
       device::ControllerRole::kControllerRoleRight, insufficient_axis_types,
       insufficient_buttons);
 
-  LoadUrlAndAwaitInitialization(
-      GetFileUrlForHtmlTestFile("test_webxr_input_same_object"));
+  LoadFileAndAwaitInitialization("test_webxr_input_same_object");
   EnterSessionWithUserGestureOrFail();
 
   // We should only have seen the first change indicating we have input sources.
@@ -498,8 +480,7 @@ IN_PROC_BROWSER_TEST_F(WebXrVrOpenVrBrowserTest, TestGamepadIncompleteData) {
   my_mock.CreateAndConnectController(
       device::ControllerRole::kControllerRoleRight, {}, supported_buttons);
 
-  LoadUrlAndAwaitInitialization(
-      GetFileUrlForHtmlTestFile("test_webxr_gamepad_support"));
+  LoadFileAndAwaitInitialization("test_webxr_gamepad_support");
   EnterSessionWithUserGestureOrFail();
   PollJavaScriptBooleanOrFail("inputSourceHasNoGamepad()", kPollTimeoutShort);
   PollJavaScriptBooleanOrFail("isProfileCountEqualTo(0)", kPollTimeoutShort);
@@ -515,8 +496,7 @@ WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestGamepadMinimumData) {
 
   unsigned int controller_index = my_mock.CreateAndConnectMinimalGamepad();
 
-  t->LoadUrlAndAwaitInitialization(
-      t->GetFileUrlForHtmlTestFile("test_webxr_gamepad_support"));
+  t->LoadFileAndAwaitInitialization("test_webxr_gamepad_support");
   t->EnterSessionWithUserGestureOrFail();
 
   VerifyInputCounts(t, 1, 1);
@@ -577,8 +557,7 @@ WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestMultipleGamepads) {
       device::ControllerRole::kControllerRoleLeft);
   unsigned int controller_index2 = my_mock.CreateAndConnectMinimalGamepad();
 
-  t->LoadUrlAndAwaitInitialization(
-      t->GetFileUrlForHtmlTestFile("test_webxr_gamepad_support"));
+  t->LoadFileAndAwaitInitialization("test_webxr_gamepad_support");
   t->EnterSessionWithUserGestureOrFail();
 
   VerifyInputCounts(t, 2, 2);
@@ -674,8 +653,7 @@ WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestGamepadCompleteData) {
       device::ControllerRole::kControllerRoleRight, axis_types,
       supported_buttons);
 
-  t->LoadUrlAndAwaitInitialization(
-      t->GetFileUrlForHtmlTestFile("test_webxr_gamepad_support"));
+  t->LoadFileAndAwaitInitialization("test_webxr_gamepad_support");
   t->EnterSessionWithUserGestureOrFail();
 
   VerifyInputCounts(t, 1, 1);
@@ -704,7 +682,7 @@ WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestGamepadCompleteData) {
 
   // Controller should meet the requirements for the 'xr-standard' mapping.
   t->PollJavaScriptBooleanOrFail("isMappingEqualTo('xr-standard')",
-                                 WebVrBrowserTestBase::kPollTimeoutShort);
+                                 WebXrVrBrowserTestBase::kPollTimeoutShort);
 
   // Controller should have all required and optional xr-standard buttons
   t->PollJavaScriptBooleanOrFail("isButtonCountEqualTo(4)",
@@ -712,28 +690,28 @@ WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestGamepadCompleteData) {
 
   // The touchpad axes should be set appropriately.
   t->PollJavaScriptBooleanOrFail("areAxesValuesEqualTo(0, 0.25, -0.25)",
-                                 WebVrBrowserTestBase::kPollTimeoutShort);
+                                 WebXrVrBrowserTestBase::kPollTimeoutShort);
 
   // The thumbstick axes should be set appropriately.
   t->PollJavaScriptBooleanOrFail("areAxesValuesEqualTo(1, 0.67, -0.67)",
-                                 WebVrBrowserTestBase::kPollTimeoutShort);
+                                 WebXrVrBrowserTestBase::kPollTimeoutShort);
 
   // Button 1 is reserved for the Grip, and should be pressed.
   t->PollJavaScriptBooleanOrFail("isButtonPressedEqualTo(1, true)",
-                                 WebVrBrowserTestBase::kPollTimeoutShort);
+                                 WebXrVrBrowserTestBase::kPollTimeoutShort);
 
   // Button 2 is reserved for the trackpad and should be touched but not
   // pressed.
   t->PollJavaScriptBooleanOrFail("isButtonPressedEqualTo(2, false)",
-                                 WebVrBrowserTestBase::kPollTimeoutShort);
+                                 WebXrVrBrowserTestBase::kPollTimeoutShort);
   t->PollJavaScriptBooleanOrFail("isButtonTouchedEqualTo(2, true)",
-                                 WebVrBrowserTestBase::kPollTimeoutShort);
+                                 WebXrVrBrowserTestBase::kPollTimeoutShort);
 
   // Button 3 is reserved for the thumbstick and should be touched and pressed.
   t->PollJavaScriptBooleanOrFail("isButtonPressedEqualTo(3, true)",
-                                 WebVrBrowserTestBase::kPollTimeoutShort);
+                                 WebXrVrBrowserTestBase::kPollTimeoutShort);
   t->PollJavaScriptBooleanOrFail("isButtonTouchedEqualTo(3, true)",
-                                 WebVrBrowserTestBase::kPollTimeoutShort);
+                                 WebXrVrBrowserTestBase::kPollTimeoutShort);
 
   if (t->GetRuntimeType() == XrBrowserTestBase::RuntimeType::RUNTIME_WMR) {
     // WMR will still report having grip, touchpad, and thumbstick because it
@@ -787,8 +765,7 @@ IN_PROC_BROWSER_TEST_F(WebXrVrOpenVrBrowserTest, TestInputAxesWithNoButton) {
       device::ControllerRole::kControllerRoleRight, axis_types,
       supported_buttons);
 
-  LoadUrlAndAwaitInitialization(
-      GetFileUrlForHtmlTestFile("test_webxr_gamepad_support"));
+  LoadFileAndAwaitInitialization("test_webxr_gamepad_support");
   EnterSessionWithUserGestureOrFail();
 
   VerifyInputCounts(this, 1, 1);
@@ -800,7 +777,7 @@ IN_PROC_BROWSER_TEST_F(WebXrVrOpenVrBrowserTest, TestInputAxesWithNoButton) {
                   -0.25);
   // Controller should meet the requirements for the 'xr-standard' mapping.
   PollJavaScriptBooleanOrFail("isMappingEqualTo('xr-standard')",
-                              WebVrBrowserTestBase::kPollTimeoutShort);
+                              WebXrVrBrowserTestBase::kPollTimeoutShort);
 
   // Controller should have all required and optional xr-standard buttons
   PollJavaScriptBooleanOrFail("isButtonCountEqualTo(4)",
@@ -808,11 +785,11 @@ IN_PROC_BROWSER_TEST_F(WebXrVrOpenVrBrowserTest, TestInputAxesWithNoButton) {
 
   // The secondary set of axes should be set appropriately.
   PollJavaScriptBooleanOrFail("areAxesValuesEqualTo(1, 0.25, -0.25)",
-                              WebVrBrowserTestBase::kPollTimeoutShort);
+                              WebXrVrBrowserTestBase::kPollTimeoutShort);
 
   // If we have a non-zero axis value, the button should be touched.
   PollJavaScriptBooleanOrFail("isButtonTouchedEqualTo(3, true)",
-                              WebVrBrowserTestBase::kPollTimeoutShort);
+                              WebXrVrBrowserTestBase::kPollTimeoutShort);
 
   RunJavaScriptOrFail("done()");
   EndTest();
@@ -842,8 +819,7 @@ IN_PROC_BROWSER_TEST_F(WebXrVrOpenVrBrowserTest, TestGamepadReservedData) {
       device::ControllerRole::kControllerRoleRight, axis_types,
       supported_buttons);
 
-  LoadUrlAndAwaitInitialization(
-      GetFileUrlForHtmlTestFile("test_webxr_gamepad_support"));
+  LoadFileAndAwaitInitialization("test_webxr_gamepad_support");
   EnterSessionWithUserGestureOrFail();
 
   VerifyInputCounts(this, 1, 1);
@@ -900,8 +876,7 @@ IN_PROC_BROWSER_TEST_F(WebXrVrOpenVrBrowserTest, TestGamepadOptionalData) {
       device::ControllerRole::kControllerRoleRight, axis_types,
       supported_buttons);
 
-  LoadUrlAndAwaitInitialization(
-      GetFileUrlForHtmlTestFile("test_webxr_gamepad_support"));
+  LoadFileAndAwaitInitialization("test_webxr_gamepad_support");
   EnterSessionWithUserGestureOrFail();
 
   VerifyInputCounts(this, 1, 1);
@@ -919,6 +894,58 @@ IN_PROC_BROWSER_TEST_F(WebXrVrOpenVrBrowserTest, TestGamepadOptionalData) {
   EndTest();
 }
 
+#if BUILDFLAG(ENABLE_OPENXR)
+// Ensure that if OpenXR Runtime receive interaction profile chagnes event,
+// input profile name will be changed accordingly.
+IN_PROC_BROWSER_TEST_F(WebXrVrOpenXrBrowserTest,
+                       TestInteractionProfileChanged) {
+  WebXrControllerInputMock my_mock;
+
+  // Create a controller that supports all reserved buttons.
+  uint64_t supported_buttons =
+      device::XrButtonMaskFromId(device::XrButtonId::kAxisTrigger) |
+      device::XrButtonMaskFromId(device::XrButtonId::kAxisTrackpad) |
+      device::XrButtonMaskFromId(device::XrButtonId::kAxisThumbstick) |
+      device::XrButtonMaskFromId(device::XrButtonId::kGrip);
+
+  std::map<device::XrButtonId, unsigned int> axis_types = {
+      {device::XrButtonId::kAxisTrackpad, device::XrAxisType::kTrackpad},
+      {device::XrButtonId::kAxisTrigger, device::XrAxisType::kTrigger},
+      {device::XrButtonId::kAxisThumbstick, device::XrAxisType::kJoystick},
+  };
+
+  my_mock.CreateAndConnectController(
+      device::ControllerRole::kControllerRoleRight, axis_types,
+      supported_buttons);
+
+  this->LoadFileAndAwaitInitialization("test_webxr_input_same_object");
+  this->EnterSessionWithUserGestureOrFail();
+
+  // We should only have seen the first change indicating we have input sources.
+  PollJavaScriptBooleanOrFail("inputChangeEvents === 1", kPollTimeoutShort);
+
+  // We only expect one input source, cache it.
+  this->RunJavaScriptOrFail("validateInputSourceLength(1)");
+  this->RunJavaScriptOrFail("updateCachedInputSource(0)");
+
+  // Simulate Runtimes Sends change interaction profile event to change from
+  // Windows motion controller to Khronos simple Controller.
+  device_test::mojom::EventData data = {};
+  data.type = device_test::mojom::EventType::kInteractionProfileChanged;
+  data.interaction_profile =
+      device_test::mojom::InteractionProfileType::kKHRSimple;
+  my_mock.PopulateEvent(data);
+
+  // Make sure change events happens again since interaction profile changedd
+  PollJavaScriptBooleanOrFail("inputChangeEvents === 2", kPollTimeoutShort);
+  this->RunJavaScriptOrFail("validateInputSourceLength(1)");
+  this->RunJavaScriptOrFail("validateCachedSourcePresence(false)");
+
+  this->RunJavaScriptOrFail("done()");
+  this->EndTest();
+}
+#endif  // BUILDFLAG(ENABLE_OPENXR)
+
 // Test that controller input is registered via WebXR's input method. This uses
 // multiple controllers to make sure the input is going to the correct one.
 WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestMultipleControllerInputRegistered) {
@@ -929,8 +956,7 @@ WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestMultipleControllerInputRegistered) {
   unsigned int controller_index2 = my_mock.CreateAndConnectMinimalGamepad();
 
   // Load the test page and enter presentation.
-  t->LoadUrlAndAwaitInitialization(
-      t->GetFileUrlForHtmlTestFile("test_webxr_input"));
+  t->LoadFileAndAwaitInitialization("test_webxr_input");
   t->EnterSessionWithUserGestureOrFail();
 
   t->RunJavaScriptOrFail("stepSetupListeners(2)");
@@ -957,7 +983,7 @@ IN_PROC_BROWSER_TEST_F(WebXrVrWmrBrowserTest, TestVoiceSelectRegistered) {
   unsigned int index = my_mock.CreateVoiceController();
 
   // Load the test page and enter presentation.
-  LoadUrlAndAwaitInitialization(GetFileUrlForHtmlTestFile("test_webxr_input"));
+  LoadFileAndAwaitInitialization("test_webxr_input");
   EnterSessionWithUserGestureOrFail();
 
   RunJavaScriptOrFail("stepSetupListeners(1)");
@@ -974,13 +1000,14 @@ IN_PROC_BROWSER_TEST_F(WebXrVrWmrBrowserTest, TestVoiceSelectRegistered) {
 // Equivalent to
 // WebXrVrInputTest#testControllerClicksRegisteredOnDaydream_WebXr.
 WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestControllerInputRegistered) {
+  // TODO(crbug.com/1033087): Test is flaky on OpenVR
+  WEBXR_VR_DISABLE_TEST_ON(XrBrowserTestBase::RuntimeType::RUNTIME_OPENVR);
   WebXrControllerInputMock my_mock;
 
   unsigned int controller_index = my_mock.CreateAndConnectMinimalGamepad();
 
   // Load the test page and enter presentation.
-  t->LoadUrlAndAwaitInitialization(
-      t->GetFileUrlForHtmlTestFile("test_webxr_input"));
+  t->LoadFileAndAwaitInitialization("test_webxr_input");
   t->EnterSessionWithUserGestureOrFail();
 
   unsigned int num_iterations = 5;
@@ -997,67 +1024,6 @@ WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestControllerInputRegistered) {
   }
   t->EndTest();
 }
-
-void TestWebVrControllerInputRegistered(WebVrBrowserTestBase* t) {
-  WebXrControllerInputMock my_mock;
-
-  // Connect a controller.
-  auto controller_data = my_mock.CreateValidController(
-      device::ControllerRole::kControllerRoleRight);
-  // openvr_gamepad_helper assumes axis index 1 is the trigger, so we need to
-  // set that here, otherwise it won't check whether it's pressed or not.
-  // Note that we aren't able to use the CreateAndConnectMinimalGamepad helper
-  // here as that adds support for axis_data[0], which causes OpenVR on WebVR
-  // to treat that button as the primary input (per the defacto webvr standard),
-  // and we want it to only see the trigger.
-  controller_data
-      .axis_data[device::XrAxisOffsetFromId(device::XrButtonId::kAxisTrigger)]
-      .axis_type = device::XrAxisType::kTrigger;
-  unsigned int controller_index = my_mock.ConnectController(controller_data);
-
-  // Load the test page and enter presentation.
-  t->LoadUrlAndAwaitInitialization(
-      t->GetFileUrlForHtmlTestFile("test_gamepad_button"));
-  t->EnterSessionWithUserGestureOrFail();
-
-  // We need to have this, otherwise the JavaScript side of the Gamepad API
-  // doesn't seem to pick up the correct button state? I.e. if we don't have
-  // this, openvr_gamepad_helper properly sets the gamepad's button state,
-  // but JavaScript still shows no buttons pressed.
-  // TODO(bsheedy): Figure out why this is the case.
-  my_mock.PressReleasePrimaryTrigger(controller_index);
-
-  // Setting this in the Android version of the test needs to happen after a
-  // flakiness workaround. Coincidentally, it's also helpful for the different
-  // issue solved by the above PressReleasePrimaryTrigger, so make sure to set
-  // it here so that the above press/release isn't caught by the test code.
-  t->RunJavaScriptOrFail("canStartTest = true");
-  // Press and release the trigger, ensuring the Gamepad API detects both.
-  my_mock.TogglePrimaryTrigger(controller_index);
-  t->WaitOnJavaScriptStep();
-  // Re-register the callback since it unregisters itself after finishing the
-  // step.
-  t->RunJavaScriptOrFail(
-      "onPresentingAnimationFrameCallback = gamepadFrameCallback");
-  my_mock.TogglePrimaryTrigger(controller_index);
-  t->WaitOnJavaScriptStep();
-  t->EndTest();
-}
-
-// Test that OpenVR controller input is registered via the Gamepad API.
-// Equivalent to
-// WebXrVrInputTest#testControllerClicksRegisteredOnDaydream
-IN_PROC_BROWSER_TEST_F(WebVrOpenVrBrowserTest,
-                       TestWebVrControllerInputRegistered) {
-  TestWebVrControllerInputRegistered(this);
-}
-
-#if BUILDFLAG(ENABLE_OPENXR)
-IN_PROC_BROWSER_TEST_F(WebVrOpenXrBrowserTest,
-                       TestWebVrControllerInputRegistered) {
-  TestWebVrControllerInputRegistered(this);
-}
-#endif  // BUILDFLAG(ENABLE_OPENXR)
 
 std::string TransformToColMajorString(const gfx::Transform& t) {
   float array[16];
@@ -1080,8 +1046,7 @@ WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestControllerPositionTracking) {
       device::ControllerRole::kControllerRoleRight);
   unsigned int controller_index = my_mock.ConnectController(controller_data);
 
-  t->LoadUrlAndAwaitInitialization(
-      t->GetFileUrlForHtmlTestFile("webxr_test_controller_poses"));
+  t->LoadFileAndAwaitInitialization("webxr_test_controller_poses");
   t->EnterSessionWithUserGestureOrFail();
 
   auto pose = gfx::Transform();
@@ -1121,8 +1086,7 @@ class WebXrHeadPoseMock : public MockXRDeviceHookBase {
 WEBXR_VR_ALL_RUNTIMES_BROWSER_TEST_F(TestHeadPosesUpdate) {
   WebXrHeadPoseMock my_mock;
 
-  t->LoadUrlAndAwaitInitialization(
-      t->GetFileUrlForHtmlTestFile("webxr_test_head_poses"));
+  t->LoadFileAndAwaitInitialization("webxr_test_head_poses");
   t->EnterSessionWithUserGestureOrFail();
 
   auto pose = gfx::Transform();

@@ -22,6 +22,7 @@
 namespace blink {
 
 class AnimationEffectOrAnimationEffectSequence;
+class ScriptValue;
 class SerializedScriptValue;
 
 // The main-thread controller for a single AnimationWorklet animator instance.
@@ -60,7 +61,7 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
       String animator_name,
       const AnimationEffectOrAnimationEffectSequence&,
       DocumentTimelineOrScrollTimeline,
-      scoped_refptr<SerializedScriptValue>,
+      const ScriptValue& options,
       ExceptionState&);
 
   WorkletAnimation(WorkletAnimationId id,
@@ -68,15 +69,18 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
                    Document&,
                    const HeapVector<Member<KeyframeEffect>>&,
                    AnimationTimeline*,
-                   scoped_refptr<SerializedScriptValue>);
+                   scoped_refptr<SerializedScriptValue> options);
   ~WorkletAnimation() override = default;
 
   String animatorName() { return animator_name_; }
   AnimationEffect* effect() { return GetEffect(); }
   AnimationTimeline* timeline() { return timeline_; }
   String playState();
-  double currentTime(bool& is_null);
-  double startTime(bool& is_null);
+  base::Optional<double> currentTime();
+  base::Optional<double> startTime();
+  // TODO(crbug.com/1060971): Remove |is_null| version.
+  double currentTime(bool& is_null);  // DEPRECATED
+  double startTime(bool& is_null);    // DEPRECATED
 
   double playbackRate(ScriptState* script_state) const;
   void setPlaybackRate(ScriptState* script_state, double playback_rate);
@@ -91,9 +95,13 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
   // relevant to CSS animations which means it does not have any material effect
   // on worklet animations either way.
   bool IsEventDispatchAllowed() const override { return true; }
-  // Effect supression is used by devtool's animation inspection machinery which
-  // is not currently supported by worklet animations.
+  // Effect suppression is used by devtool's animation inspection machinery
+  // which is not currently supported by worklet animations.
   bool EffectSuppressed() const override { return false; }
+  // Worklet animations are not currently replaceable.
+  // TODO(crbug.com/833846): Make replaceable once a proper subclass of
+  // Animation.
+  bool ReplaceStateRemoved() const override { return false; }
 
   void EffectInvalidated() override;
   void UpdateIfNecessary() override;
@@ -114,6 +122,8 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
   void NotifyAnimationStarted(double monotonic_time, int group) override {}
   void NotifyAnimationFinished(double monotonic_time, int group) override {}
   void NotifyAnimationAborted(double monotonic_time, int group) override {}
+  void NotifyLocalTimeUpdated(
+      base::Optional<base::TimeDelta> local_time) override;
 
   Document* GetDocument() const override { return document_.Get(); }
   AnimationTimeline* GetTimeline() const override { return timeline_; }
@@ -125,8 +135,6 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
   }
   bool IsActiveAnimation() const override;
 
-  bool NeedsPeek(base::TimeDelta current_time);
-
   void UpdateInputState(AnimationWorkletDispatcherInput* input_state) override;
   void SetOutputState(
       const AnimationWorkletOutput::AnimationState& state) override;
@@ -135,7 +143,7 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
     running_on_main_thread_ = running_on_main_thread;
   }
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
   void Dispose();
 
  private:
@@ -218,8 +226,6 @@ class MODULES_EXPORT WorkletAnimation : public WorkletAnimationBase,
   // We use this to skip updating if current time has not changed since last
   // update.
   base::Optional<base::TimeDelta> last_input_update_current_time_;
-  // Time the main thread sends a peek request.
-  base::Optional<base::TimeDelta> last_peek_request_time_;
 
   Member<Document> document_;
 

@@ -22,7 +22,6 @@ class NGInlineChildLayoutContext;
 class NGInlineNodeLegacy;
 class NGLayoutResult;
 class NGOffsetMapping;
-struct MinMaxSize;
 struct NGInlineItemsData;
 
 // Represents an anonymous block box to be laid out, that contains consecutive
@@ -55,9 +54,9 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   // Computes the value of min-content and max-content for this anonymous block
   // box. min-content is the inline size when lines wrap at every break
   // opportunity, and max-content is when lines do not wrap at all.
-  MinMaxSize ComputeMinMaxSize(WritingMode container_writing_mode,
-                               const MinMaxSizeInput&,
-                               const NGConstraintSpace* = nullptr);
+  MinMaxSizes ComputeMinMaxSizes(WritingMode container_writing_mode,
+                                 const MinMaxSizesInput&,
+                                 const NGConstraintSpace* = nullptr);
 
   // Instruct to re-compute |PrepareLayout| on the next layout.
   void InvalidatePrepareLayoutForTest() {
@@ -72,10 +71,19 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
     return Data().ItemsData(is_first_line);
   }
 
+  // There's a special intrinsic size measure quirk for images that are direct
+  // children of table cells that have auto inline-size: When measuring
+  // intrinsic min/max inline sizes, we pretend that it's not possible to break
+  // between images, or between text and images. Note that this only applies
+  // when measuring. During actual layout, on the other hand, standard breaking
+  // rules are to be followed.
+  // See https://quirks.spec.whatwg.org/#the-table-cell-width-calculation-quirk
+  bool IsStickyImagesQuirkForContentSize() const;
+
   // Returns the text content to use for content sizing. This is normally the
   // same as |items_data.text_content|, except when sticky images quirk is
   // needed.
-  String TextContentForContentSize(const NGInlineItemsData& items_data) const;
+  static String TextContentForStickyImagesQuirk(const NGInlineItemsData&);
 
   // Clear associated fragments for LayoutObjects.
   // They are associated when NGPaintFragment is constructed, but when clearing,
@@ -121,6 +129,16 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
 
   String ToString() const;
 
+  struct FloatingObject {
+    DISALLOW_NEW();
+
+    void Trace(Visitor* visitor) {}
+
+    const ComputedStyle& float_style;
+    const ComputedStyle& style;
+    LayoutUnit float_inline_max_size_with_margin;
+  };
+
  protected:
   bool IsPrepareLayoutFinished() const;
 
@@ -160,8 +178,6 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   }
   const NGInlineNodeData& EnsureData();
 
-  static String TextContentForStickyImagesQuirk(const NGInlineItemsData&);
-
   static void ComputeOffsetMapping(LayoutBlockFlow* layout_block_flow,
                                    NGInlineNodeData* data);
 
@@ -169,28 +185,14 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   friend class NGInlineNodeLegacy;
 };
 
-inline String NGInlineNode::TextContentForContentSize(
-    const NGInlineItemsData& items_data) const {
-  const String& text_content = items_data.text_content;
-  if (UNLIKELY(text_content.IsEmpty()))
-    return text_content;
-
-  // There's a special intrinsic size measure quirk for images that are direct
-  // children of table cells that have auto inline-size: When measuring
-  // intrinsic min/max inline sizes, we pretend that it's not possible to break
-  // between images, or between text and images. Note that this only applies
-  // when measuring. During actual layout, on the other hand, standard breaking
-  // rules are to be followed.
-  // See https://quirks.spec.whatwg.org/#the-table-cell-width-calculation-quirk
+inline bool NGInlineNode::IsStickyImagesQuirkForContentSize() const {
   if (UNLIKELY(GetDocument().InQuirksMode())) {
     const ComputedStyle& style = Style();
     if (UNLIKELY(style.Display() == EDisplay::kTableCell &&
-                 style.LogicalWidth().IsIntrinsicOrAuto())) {
-      return TextContentForStickyImagesQuirk(items_data);
-    }
+                 style.LogicalWidth().IsIntrinsicOrAuto()))
+      return true;
   }
-
-  return text_content;
+  return false;
 }
 
 template <>
@@ -201,5 +203,8 @@ struct DowncastTraits<NGInlineNode> {
 };
 
 }  // namespace blink
+
+WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(
+    blink::NGInlineNode::FloatingObject)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_INLINE_NG_INLINE_NODE_H_

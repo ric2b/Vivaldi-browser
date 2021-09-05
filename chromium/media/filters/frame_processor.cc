@@ -32,7 +32,7 @@ class MseTrackBuffer {
  public:
   MseTrackBuffer(ChunkDemuxerStream* stream,
                  MediaLog* media_log,
-                 const SourceBufferParseWarningCB& parse_warning_cb);
+                 SourceBufferParseWarningCB parse_warning_cb);
   ~MseTrackBuffer();
 
   // Get/set |last_decode_timestamp_|.
@@ -190,10 +190,9 @@ class MseTrackBuffer {
   DISALLOW_COPY_AND_ASSIGN(MseTrackBuffer);
 };
 
-MseTrackBuffer::MseTrackBuffer(
-    ChunkDemuxerStream* stream,
-    MediaLog* media_log,
-    const SourceBufferParseWarningCB& parse_warning_cb)
+MseTrackBuffer::MseTrackBuffer(ChunkDemuxerStream* stream,
+                               MediaLog* media_log,
+                               SourceBufferParseWarningCB parse_warning_cb)
     : last_decode_timestamp_(kNoDecodeTimestamp()),
       last_processed_decode_timestamp_(DecodeTimestamp()),
       pending_group_start_pts_(kNoTimestamp),
@@ -205,7 +204,7 @@ MseTrackBuffer::MseTrackBuffer(
       needs_random_access_point_(true),
       stream_(stream),
       media_log_(media_log),
-      parse_warning_cb_(parse_warning_cb) {
+      parse_warning_cb_(std::move(parse_warning_cb)) {
   DCHECK(stream_);
   DCHECK(parse_warning_cb_);
 }
@@ -250,10 +249,7 @@ bool MseTrackBuffer::EnqueueProcessedFrame(
       if (!num_keyframe_time_greater_than_dependant_warnings_) {
         // At most once per each track (but potentially multiple times per
         // playback, if there are more than one tracks that exhibit this
-        // sequence in a playback) report a RAPPOR URL instance and also run the
-        // warning's callback.
-        media_log_->RecordRapporWithSecurityOrigin(
-            "Media.OriginUrl.MSE.KeyframeTimeGreaterThanDependant");
+        // sequence in a playback) run the warning's callback.
         DCHECK(parse_warning_cb_);
         parse_warning_cb_.Run(
             SourceBufferParseWarning::kKeyframeTimeGreaterThanDependant);
@@ -339,13 +335,13 @@ void MseTrackBuffer::NotifyStartOfCodedFrameGroup(DecodeTimestamp start_dts,
   stream_->OnStartOfCodedFrameGroup(start_dts, start_pts);
 }
 
-FrameProcessor::FrameProcessor(const UpdateDurationCB& update_duration_cb,
+FrameProcessor::FrameProcessor(UpdateDurationCB update_duration_cb,
                                MediaLog* media_log)
     : group_start_timestamp_(kNoTimestamp),
-      update_duration_cb_(update_duration_cb),
+      update_duration_cb_(std::move(update_duration_cb)),
       media_log_(media_log) {
   DVLOG(2) << __func__ << "()";
-  DCHECK(update_duration_cb);
+  DCHECK(update_duration_cb_);
 }
 
 FrameProcessor::~FrameProcessor() {
@@ -353,10 +349,10 @@ FrameProcessor::~FrameProcessor() {
 }
 
 void FrameProcessor::SetParseWarningCallback(
-    const SourceBufferParseWarningCB& parse_warning_cb) {
+    SourceBufferParseWarningCB parse_warning_cb) {
   DCHECK(!parse_warning_cb_);
   DCHECK(parse_warning_cb);
-  parse_warning_cb_ = parse_warning_cb;
+  parse_warning_cb_ = std::move(parse_warning_cb);
 }
 
 void FrameProcessor::SetSequenceMode(bool sequence_mode) {
@@ -396,10 +392,7 @@ bool FrameProcessor::ProcessFrames(
     if (!num_muxed_sequence_mode_warnings_) {
       // At most once per SourceBuffer (but potentially multiple times per
       // playback, if there are more than one SourceBuffers used this way in a
-      // playback) report a RAPPOR URL instance and also run the warning's
-      // callback.
-      media_log_->RecordRapporWithSecurityOrigin(
-          "Media.OriginUrl.MSE.MuxedSequenceModeSourceBuffer");
+      // playback) run the warning's callback.
       DCHECK(parse_warning_cb_);
       parse_warning_cb_.Run(SourceBufferParseWarning::kMuxedSequenceMode);
     }
@@ -483,7 +476,7 @@ void FrameProcessor::SetGroupStartTimestampIfInSequenceMode(
     group_start_timestamp_ = timestamp_offset;
 
   // Changes to timestampOffset should invalidate the preroll buffer.
-  audio_preroll_buffer_ = NULL;
+  audio_preroll_buffer_.reset();
 }
 
 bool FrameProcessor::AddTrack(StreamParser::TrackId id,
@@ -563,7 +556,7 @@ void FrameProcessor::OnPossibleAudioConfigUpdate(
   DCHECK(config.IsValidConfig());
 
   // Always clear the preroll buffer when a config update is received.
-  audio_preroll_buffer_ = NULL;
+  audio_preroll_buffer_.reset();
 
   if (config.Matches(current_audio_config_))
     return;
@@ -659,7 +652,7 @@ bool FrameProcessor::HandlePartialAppendWindowTrimming(
           << "us that ends too far (" << delta
           << "us) from next buffer with PTS "
           << buffer->timestamp().InMicroseconds() << "us";
-      audio_preroll_buffer_ = NULL;
+      audio_preroll_buffer_.reset();
     }
   }
 

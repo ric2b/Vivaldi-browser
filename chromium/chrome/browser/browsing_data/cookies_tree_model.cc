@@ -16,10 +16,11 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
 #include "build/build_config.h"
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browsing_data/browsing_data_appcache_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_cache_storage_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_cookie_helper.h"
@@ -27,7 +28,6 @@
 #include "chrome/browser/browsing_data/browsing_data_file_system_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_flash_lso_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_indexed_db_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_quota_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_service_worker_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_shared_worker_helper.h"
@@ -35,7 +35,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/browsing_data/content/local_storage_helper.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_usage_info.h"
 #include "content/public/common/url_constants.h"
@@ -547,8 +549,8 @@ class CookieTreeIndexedDBNode : public CookieTreeNode {
     LocalDataContainer* container = GetLocalDataContainerForNode(this);
 
     if (container) {
-      container->indexed_db_helper_->DeleteIndexedDB(
-          usage_info_->origin.GetURL());
+      container->indexed_db_helper_->DeleteIndexedDB(usage_info_->origin,
+                                                     base::DoNothing());
       container->indexed_db_info_list_.erase(usage_info_);
     }
   }
@@ -753,8 +755,7 @@ class CookieTreeCacheStorageNode : public CookieTreeNode {
     LocalDataContainer* container = GetLocalDataContainerForNode(this);
 
     if (container) {
-      container->cache_storage_helper_->DeleteCacheStorage(
-          usage_info_->origin.GetURL());
+      container->cache_storage_helper_->DeleteCacheStorage(usage_info_->origin);
       container->cache_storage_info_list_.erase(usage_info_);
     }
   }
@@ -1399,8 +1400,8 @@ int CookiesTreeModel::GetSendForMessageID(const net::CanonicalCookie& cookie) {
 // Returns the set of icons for the nodes in the tree. You only need override
 // this if you don't want to use the default folder icons.
 void CookiesTreeModel::GetIcons(std::vector<gfx::ImageSkia>* icons) {
-  icons->push_back(
-      gfx::CreateVectorIcon(kCookieIcon, 18, gfx::kChromeIconGrey));
+  icons->push_back(gfx::CreateVectorIcon(vector_icons::kCookieIcon, 18,
+                                         gfx::kChromeIconGrey));
   icons->push_back(*ui::ResourceBundle::GetSharedInstance()
                         .GetNativeImageNamed(IDR_COOKIE_STORAGE_ICON)
                         .ToImageSkia());
@@ -1959,10 +1960,10 @@ std::unique_ptr<CookiesTreeModel> CookiesTreeModel::CreateForProfile(
   auto container = std::make_unique<LocalDataContainer>(
       new BrowsingDataCookieHelper(storage_partition),
       new BrowsingDataDatabaseHelper(profile),
-      new BrowsingDataLocalStorageHelper(profile),
+      new browsing_data::LocalStorageHelper(profile),
       /*session_storage_helper=*/nullptr,
       new BrowsingDataAppCacheHelper(storage_partition->GetAppCacheService()),
-      new BrowsingDataIndexedDBHelper(storage_partition->GetIndexedDBContext()),
+      new BrowsingDataIndexedDBHelper(storage_partition),
       BrowsingDataFileSystemHelper::Create(file_system_context),
       BrowsingDataQuotaHelper::Create(profile),
       new BrowsingDataServiceWorkerHelper(

@@ -4,6 +4,7 @@
 <translation id="1018939186200882850">voce di menu</translation>
 <translation id="10623998915015855">pulsante di attivazione/disattivazione</translation>
 <translation id="1088086359088493902">Secondi</translation>
+<translation id="1142001580032786438">Mostra selettore settimana</translation>
 <translation id="1171774979989969504">Inserisci un indirizzo email.</translation>
 <translation id="1178581264944972037">Pausa</translation>
 <translation id="1188858454923323853">elementi complementari</translation>
@@ -11,6 +12,7 @@
 <translation id="1206693055195146388">dispositivo di scorrimento</translation>
 <translation id="1211441953136645838">nota finale</translation>
 <translation id="1281252709823657822">finestra di dialogo</translation>
+<translation id="1306460908038601864">Off</translation>
 <translation id="1335095011850992622">ringraziamenti</translation>
 <translation id="1342835525016946179">articolo</translation>
 <translation id="1359897965706325498">banner</translation>
@@ -21,6 +23,7 @@
 <translation id="1727886345390570319">nascondi menu sottotitoli</translation>
 <translation id="1729654308190250600">Inserisci un indirizzo email valido.</translation>
 <translation id="1758486001363313524">Altro...</translation>
+<translation id="1787192514241997742">tempo totale: <ph name="REMAINING_TIME" /></translation>
 <translation id="1806710327868736751">alert_dialog</translation>
 <translation id="1821985195704844674">griglia ad albero</translation>
 <translation id="1822429046913737220">AM/PM</translation>
@@ -54,7 +57,6 @@
 <translation id="2674318244760992338">piè di pagina</translation>
 <translation id="2709516037105925701">Compilazione automatica</translation>
 <translation id="2723001399770238859">audio</translation>
-<translation id="2725963129578236554">commenti</translation>
 <translation id="2746543609216772311">Il valore deve essere <ph name="MINIMUM_DATE_OR_TIME" /> o successivo.</translation>
 <translation id="2759744352195237655">pulsante popup</translation>
 <translation id="2761667185364618470">Seleziona questa casella se intendi procedere.</translation>
@@ -83,7 +85,6 @@
 <translation id="3822383571486410024">Prolunga questo testo a <ph name="MIN_CHARACTERS" /> o più caratteri (al momento stai utilizzando <ph name="CURRENT_LENGTH" /> caratteri).</translation>
 <translation id="383465348367842624">Una parte seguita da "<ph name="ATSIGN" />" non deve contenere il simbolo "<ph name="INVALIDCHARACTER" />".</translation>
 <translation id="3846214748874656680">Esci da schermo intero</translation>
-<translation id="3889183436948184105">revisione</translation>
 <translation id="3920932319529768807">conclusioni</translation>
 <translation id="3924558731517983934">applicazione</translation>
 <translation id="3944740393230681990">prologo</translation>
@@ -101,11 +102,11 @@
 <translation id="4444765639179266822">Sembra che dica: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">riferimento glossario</translation>
 <translation id="4522570452068850558">Dettagli</translation>
-<translation id="4542388879936266156">Tempo rimanente: <ph name="REMAINING_TIME" /></translation>
 <translation id="4597532268155981612">modulo</translation>
 <translation id="4661075872484491155">tree</translation>
 <translation id="4664250907885839816">Una parte che segue "<ph name="ATSIGN" />" non deve contenere il simbolo "<ph name="INVALIDCHARACTER" />".</translation>
 <translation id="4668956016107839909">appendice</translation>
+<translation id="4698212723196775569">codice</translation>
 <translation id="4718048029184481307">Riproduzione in modalità Picture in picture</translation>
 <translation id="4742539557769756338">copertina</translation>
 <translation id="4748357248530471599">attiva/disattiva lo schermo intero tagliato dalla visualizzazione</translation>
@@ -114,9 +115,14 @@
 <translation id="479989351350248267">ricerca</translation>
 <translation id="4812940957355064477">Inserisci un numero.</translation>
 <translation id="4912536737030637138">voce bibliografica</translation>
+<translation id="4915360478455618802">Mostra selettore ora</translation>
+<translation id="492244087561876220">commento</translation>
+<translation id="4950364064308314478">Mostra selettore di data e ora locali</translation>
+<translation id="4971739861736909480">Elemento <ph name="ACCNAME" /> selezionato</translation>
 <translation id="4975562563186953947">Elementi selezionati: <ph name="SELECTED_COUNT" /></translation>
 <translation id="4992066212339426712">Riattiva audio</translation>
 <translation id="49969490063480558">Inserisci una parte dopo "<ph name="ATSIGN" />". Il valore "<ph name="INVALIDADDRESS" />" è incompleto.</translation>
+<translation id="5022314756875057021">gruppo di righe</translation>
 <translation id="5034860022980953847">indicatore di avanzamento</translation>
 <translation id="5090250355906949916">dispositivo di scorrimento durata video</translation>
 <translation id="5093189678851173835">epigrafe</translation>
@@ -127,6 +133,7 @@
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">Inserisci una parte seguita da "<ph name="ATSIGN" />". Il valore "<ph name="INVALIDADDRESS" />" è incompleto.</translation>
 <translation id="5334352251556557839">Impossibile riprodurre i contenuti multimediali.</translation>
+<translation id="537648784377940524">Il termine minimo (<ph name="MIN_DATE_OR_TIME" />) deve essere precedente al termine massimo (<ph name="MAX_DATE_OR_TIME" />).</translation>
 <translation id="5406322316791861025">figura</translation>
 <translation id="5453733299334684579">elemento albero</translation>
 <translation id="5466621249238537318">Seleziona uno o più file.</translation>
@@ -142,7 +149,6 @@
 <translation id="5677946354068040947">altre opzioni</translation>
 <translation id="576709008726043716">introduzione</translation>
 <translation id="57838592816432529">Disattiva audio</translation>
-<translation id="5860033963881614850">OFF</translation>
 <translation id="588258955323874662">Schermo intero</translation>
 <translation id="5888666972993069672">Trasmissione in corso a <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">casella di ricerca</translation>
@@ -163,7 +169,6 @@
 <translation id="6404546809543547843">dispositivo di scorrimento durata audio</translation>
 <translation id="6443871981718447451">mostra menu sottotitoli</translation>
 <translation id="6453774872122745852">riconoscimenti</translation>
-<translation id="6475115390776617481">presenza dal vivo</translation>
 <translation id="648732519525291180">selettore di ora</translation>
 <translation id="6550675742724504774">Opzioni</translation>
 <translation id="6572309429103589720">Grammatica non valida</translation>
@@ -191,6 +196,7 @@
 <translation id="7118469954320184356">Descrizione non disponibile.</translation>
 <translation id="7139483182332611405">prefazione</translation>
 <translation id="7214187073215825913">informazioni sui contenuti</translation>
+<translation id="7238347055216017155">corsivo</translation>
 <translation id="7263440858009898357">Seleziona un elemento nell'elenco.</translation>
 <translation id="727747134524199931">intestazione di colonna</translation>
 <translation id="7320576522385648310">Buffering</translation>
@@ -217,6 +223,8 @@
 <translation id="7888071071722539607">Aggiungi un simbolo "<ph name="ATSIGN" />" nell'indirizzo email. In "<ph name="INVALIDADDRESS" />" manca un simbolo "<ph name="ATSIGN" />".</translation>
 <translation id="7891486169920085145">barra di divisione</translation>
 <translation id="795667975304826397">Nessun file selezionato</translation>
+<translation id="7962328325860248200">Elemento <ph name="ACCNAME" /> non selezionato</translation>
+<translation id="8034303206267677282">importante</translation>
 <translation id="8053789581856978548">campo di testo della ricerca</translation>
 <translation id="8057695513531652401">informativa</translation>
 <translation id="8105797009065549151">riferimento note</translation>
@@ -228,6 +236,7 @@
 <translation id="8284326494547611709">Sottotitoli</translation>
 <translation id="8346634859695247203">sezione</translation>
 <translation id="835897206747267392">Valore non valido.</translation>
+<translation id="839593075537728968">Il valore deve essere compreso tra <ph name="MINIMUM_TIME" /> e <ph name="MAXIMUM_TIME" />.</translation>
 <translation id="8403857369060869934">Tempo trascorso: <ph name="ELAPSED_TIME" /></translation>
 <translation id="8415319359811155763">parte</translation>
 <translation id="8433900881053900389">barra degli strumenti</translation>
@@ -244,10 +253,10 @@
 <translation id="860475260694818407">sommario</translation>
 <translation id="8613126697340063924">gestisci riproduzione remota</translation>
 <translation id="862370744433916922">sottotitolo</translation>
+<translation id="8634971699417195529">Mostra selettore mese</translation>
 <translation id="8711688047404765493">uscita</translation>
 <translation id="8750798805984357768">Seleziona una di queste opzioni.</translation>
 <translation id="8808573423886751634">capitolo</translation>
-<translation id="8822203815165896261">informazioni creazione</translation>
 <translation id="8845239796550121995">Ora in fase di trasmissione alla TV</translation>
 <translation id="8851136666856101339">main</translation>
 <translation id="8875657656876809964">Errore di riproduzione video</translation>

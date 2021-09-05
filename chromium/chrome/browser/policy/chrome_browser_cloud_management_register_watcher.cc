@@ -17,7 +17,7 @@
 
 namespace policy {
 
-using RegisterResult = MachineLevelUserCloudPolicyController::RegisterResult;
+using RegisterResult = ChromeBrowserCloudManagementController::RegisterResult;
 
 const char
     ChromeBrowserCloudManagementRegisterWatcher::kStartupDialogHistogramName[] =
@@ -25,7 +25,7 @@ const char
 
 ChromeBrowserCloudManagementRegisterWatcher::
     ChromeBrowserCloudManagementRegisterWatcher(
-        MachineLevelUserCloudPolicyController* controller)
+        ChromeBrowserCloudManagementController* controller)
     : controller_(controller) {
   controller_->AddObserver(this);
 }
@@ -42,7 +42,7 @@ RegisterResult ChromeBrowserCloudManagementRegisterWatcher::
     return RegisterResult::kNoEnrollmentNeeded;
 
   // We are already enrolled successfully.
-  if (!token_storage->RetrieveDMToken().empty())
+  if (token_storage->RetrieveDMToken().is_valid())
     return RegisterResult::kEnrollmentSuccessBeforeDialogDisplayed;
 
   EnterpriseStartupDialog::DialogResultCallback callback = base::BindOnce(

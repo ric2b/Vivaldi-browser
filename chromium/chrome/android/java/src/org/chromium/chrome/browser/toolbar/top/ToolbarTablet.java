@@ -14,39 +14,50 @@ import android.content.res.Resources;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LevelListDrawable;
-import android.support.v4.view.ViewCompat;
-import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewStub;
 import android.widget.ImageButton;
 
-import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.view.ViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.NavigationPopup;
 import org.chromium.chrome.browser.download.DownloadUtils;
+import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarTablet;
-import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.KeyboardNavigationListener;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
+import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
-import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.Collection;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
+
+import org.vivaldi.browser.panels.PanelUtils;
+import org.vivaldi.browser.toolbar.PanelButton;
+import org.vivaldi.browser.toolbar.TrackerShieldButton;
 
 /**
  * The Toolbar object for Tablet screens.
@@ -72,7 +83,8 @@ public class ToolbarTablet extends ToolbarLayout
     private boolean mShowTabStack;
     private boolean mToolbarButtonsVisible;
     private ImageButton[] mToolbarButtons;
-    private ImageButton mExperimentalButton;
+    private ImageButton mOptionalButton;
+    private boolean mOptionalButtonUsesTint;
 
     private NavigationPopup mNavigationPopup;
 
@@ -85,6 +97,17 @@ public class ToolbarTablet extends ToolbarLayout
     private AnimatorSet mButtonVisibilityAnimators;
 
     private NewTabPage mVisibleNtp;
+
+    /** Vivaldi **/
+    private PanelButton mPanelButton;
+    /**
+     * Vivaldi tracker shield button.
+     */
+    private TrackerShieldButton mShieldButton;
+
+    /** Vivaldi **/
+    private ImageButton mModelSelectorButton;
+    private ChromeTabbedActivity mActivity;
 
     /**
      * Constructs a ToolbarTablet object.
@@ -108,6 +131,20 @@ public class ToolbarTablet extends ToolbarLayout
         mBackButton = findViewById(R.id.back_button);
         mForwardButton = findViewById(R.id.forward_button);
         mReloadButton = findViewById(R.id.refresh_button);
+
+        if (ChromeApplication.isVivaldi()) {
+            mReloadButton.setVisibility(View.GONE);
+            mPanelButton = findViewById(R.id.panel_button);
+            mPanelButton.setOnClickListener(this);
+            mBackButton.setImageDrawable(getResources()
+                    .getDrawable(R.drawable.vivaldi_bottom_nav_back_56dp));
+            mForwardButton.setImageDrawable(getResources()
+                    .getDrawable(R.drawable.vivaldi_bottom_nav_forward_56dp));
+            mModelSelectorButton = findViewById((R.id.vivaldi_model_selector_button));
+            mModelSelectorButton.setOnClickListener(this);
+        }
+        // Vivaldi
+        mShieldButton = findViewById(R.id.shield_button);
         // ImageView tinting doesn't work with LevelListDrawable, use Drawable tinting instead.
         // See https://crbug.com/891593 for details.
         // Also, using Drawable tinting doesn't work correctly with LevelListDrawable on Android L
@@ -117,10 +154,10 @@ public class ToolbarTablet extends ToolbarLayout
         final int reloadLevel = getResources().getInteger(R.integer.reload_button_level_reload);
         final int stopLevel = getResources().getInteger(R.integer.reload_button_level_stop);
         final Drawable reloadLevelDrawable = UiUtils.getTintedDrawable(
-                getContext(), R.drawable.btn_toolbar_reload, R.color.standard_mode_tint);
+                getContext(), R.drawable.btn_toolbar_reload, R.color.default_icon_color_tint_list);
         reloadIcon.addLevel(reloadLevel, reloadLevel, reloadLevelDrawable);
         final Drawable stopLevelDrawable = UiUtils.getTintedDrawable(
-                getContext(), R.drawable.btn_close, R.color.standard_mode_tint);
+                getContext(), R.drawable.btn_close, R.color.default_icon_color_tint_list);
         reloadIcon.addLevel(stopLevel, stopLevel, stopLevelDrawable);
         mReloadButton.setImageDrawable(reloadIcon);
         mShowTabStack = AccessibilityUtil.isAccessibilityEnabled()
@@ -146,13 +183,21 @@ public class ToolbarTablet extends ToolbarLayout
         // changes.
         mShouldAnimateButtonVisibilityChange = false;
         mToolbarButtonsVisible = true;
+        if (ChromeApplication.isVivaldi())
+            mToolbarButtons = new ImageButton[]{mBackButton, mForwardButton};
+        else
         mToolbarButtons = new ImageButton[] {mBackButton, mForwardButton, mReloadButton};
+
+        // Vivaldi
+        mActivity = (ChromeTabbedActivity) getContext();
     }
 
     @Override
     void destroy() {
         super.destroy();
         mHomeButton.destroy();
+        // Vivaldi
+        mShieldButton.destroy();
     }
 
     /**
@@ -224,6 +269,7 @@ public class ToolbarTablet extends ToolbarLayout
             }
         });
 
+        if (!ChromeApplication.isVivaldi()) {
         mReloadButton.setOnClickListener(this);
         mReloadButton.setOnLongClickListener(this);
         mReloadButton.setOnKeyListener(new KeyboardNavigationListener() {
@@ -245,6 +291,7 @@ public class ToolbarTablet extends ToolbarLayout
                 }
             }
         });
+        }
 
         mBookmarkButton.setOnClickListener(this);
         mBookmarkButton.setOnLongClickListener(this);
@@ -271,6 +318,9 @@ public class ToolbarTablet extends ToolbarLayout
 
         mSaveOfflineButton.setOnClickListener(this);
         mSaveOfflineButton.setOnLongClickListener(this);
+
+        // Vivaldi
+        mShieldButton.initAdblockObserver();
     }
 
     @Override
@@ -300,8 +350,8 @@ public class ToolbarTablet extends ToolbarLayout
     private void displayNavigationPopup(boolean isForward, View anchorView) {
         Tab tab = getToolbarDataProvider().getTab();
         if (tab == null || tab.getWebContents() == null) return;
-        mNavigationPopup = new NavigationPopup(tab.getProfile(), getContext(),
-                tab.getWebContents().getNavigationController(),
+        mNavigationPopup = new NavigationPopup(Profile.fromWebContents(tab.getWebContents()),
+                getContext(), tab.getWebContents().getNavigationController(),
                 isForward ? NavigationPopup.Type.TABLET_FORWARD : NavigationPopup.Type.TABLET_BACK);
         mNavigationPopup.show(anchorView);
     }
@@ -327,6 +377,14 @@ public class ToolbarTablet extends ToolbarLayout
             DownloadUtils.downloadOfflinePage(getContext(), getToolbarDataProvider().getTab());
             RecordUserAction.record("MobileToolbarDownloadPage");
         }
+        /** Vivaldi **/
+        else if (mPanelButton == v) {
+            PanelUtils.showPanel(null, false);
+        } else if (mModelSelectorButton == v) {
+            if(!mModelSelectorButton.isShown()) return;
+            mActivity.getTabModelSelector().selectModel(
+                    !mActivity.getTabModelSelector().isIncognitoSelected());
+        }
     }
 
     @Override
@@ -349,6 +407,10 @@ public class ToolbarTablet extends ToolbarLayout
     }
 
     private void updateSwitcherButtonVisibility(boolean enabled) {
+        // Note(david@vivaldi.com): We always show the tab switcher button on tablet.
+        if (ChromeApplication.isVivaldi())
+            mAccessibilitySwitcherButton.setVisibility(View.VISIBLE);
+        else
         mAccessibilitySwitcherButton.setVisibility(
                 mShowTabStack || enabled ? View.VISIBLE : View.GONE);
     }
@@ -365,12 +427,17 @@ public class ToolbarTablet extends ToolbarLayout
         if (mIsIncognito == null || mIsIncognito != incognito) {
             // TODO (amaralp): Have progress bar observe theme color and incognito changes directly.
             getProgressBar().setThemeColor(
-                    ColorUtils.getDefaultThemeColor(getResources(), incognito), isIncognito());
+                    ChromeColors.getDefaultThemeColor(getResources(), incognito), isIncognito());
 
             mIsIncognito = incognito;
         }
 
         updateNtp();
+
+        // Note(david@vivaldi.com): We can add this if we decided to use the tab model selector
+        // button again.
+        /*mModelSelectorButton.setVisibility(
+                mActivity.getTabModelSelector().getModel(true).getCount() != 0 ? VISIBLE : GONE);*/
     }
 
     @Override
@@ -380,14 +447,22 @@ public class ToolbarTablet extends ToolbarLayout
         ApiCompatibilityUtils.setImageTintList(mForwardButton, tint);
         ApiCompatibilityUtils.setImageTintList(mSaveOfflineButton, tint);
         ApiCompatibilityUtils.setImageTintList(mReloadButton, tint);
+        // Vivaldi
+        ApiCompatibilityUtils.setImageTintList(mShieldButton, tint);
+        ApiCompatibilityUtils.setImageTintList(mModelSelectorButton, tint);
+        ApiCompatibilityUtils.setImageTintList(mPanelButton, tint);
         mAccessibilitySwitcherButton.setUseLightDrawables(useLight);
+
+        if (mOptionalButton != null && mOptionalButtonUsesTint) {
+            ApiCompatibilityUtils.setImageTintList(mOptionalButton, tint);
+        }
     }
 
     @Override
     public void onThemeColorChanged(int color, boolean shouldAnimate) {
         setBackgroundColor(color);
-        final int textBoxColor = ColorUtils.getTextBoxColorForToolbarBackground(
-                getResources(), false, color, isIncognito());
+        final int textBoxColor = ToolbarColors.getTextBoxColorForToolbarBackgroundInNonNativePage(
+                getResources(), color, isIncognito());
         mLocationBar.getBackground().setColorFilter(textBoxColor, PorterDuff.Mode.SRC_IN);
 
         mLocationBar.updateVisualsForState();
@@ -425,6 +500,7 @@ public class ToolbarTablet extends ToolbarLayout
 
     @Override
     void updateButtonVisibility() {
+        mShieldButton.updateVisibility();
         mLocationBar.updateButtonVisibility();
     }
 
@@ -444,6 +520,7 @@ public class ToolbarTablet extends ToolbarLayout
 
     @Override
     void updateReloadButtonVisibility(boolean isReloading) {
+        if (ChromeApplication.isVivaldi()) return;
         if (isReloading) {
             mReloadButton.getDrawable().setLevel(
                     getResources().getInteger(R.integer.reload_button_level_stop));
@@ -487,6 +564,7 @@ public class ToolbarTablet extends ToolbarLayout
             mBackButton.setEnabled(false);
             mForwardButton.setEnabled(false);
             mReloadButton.setEnabled(false);
+            mShieldButton.setEnabled(false); // Vivaldi
             mLocationBar.getContainerView().setVisibility(View.INVISIBLE);
             setAppMenuUpdateBadgeSuppressed(true);
         } else {
@@ -559,37 +637,44 @@ public class ToolbarTablet extends ToolbarLayout
     }
 
     @Override
-    void enableExperimentalButton(OnClickListener onClickListener, Drawable image,
-            @StringRes int contentDescriptionResId) {
-        if (mExperimentalButton == null) {
-            ViewStub viewStub = findViewById(R.id.experimental_button_stub);
-            mExperimentalButton = (ImageButton) viewStub.inflate();
+    void updateOptionalButton(ButtonData buttonData) {
+        if (mOptionalButton == null) {
+            ViewStub viewStub = findViewById(R.id.optional_button_stub);
+            mOptionalButton = (ImageButton) viewStub.inflate();
         }
-        mExperimentalButton.setOnClickListener(onClickListener);
-        mExperimentalButton.setImageDrawable(image);
-        mExperimentalButton.setContentDescription(
-                getContext().getResources().getString(contentDescriptionResId));
-        mExperimentalButton.setVisibility(View.VISIBLE);
+
+        mOptionalButtonUsesTint = buttonData.supportsTinting;
+        if (mOptionalButtonUsesTint) {
+            ApiCompatibilityUtils.setImageTintList(mOptionalButton, getTint());
+        } else {
+            ApiCompatibilityUtils.setImageTintList(mOptionalButton, null);
+        }
+
+        mOptionalButton.setOnClickListener(buttonData.onClickListener);
+        mOptionalButton.setImageDrawable(buttonData.drawable);
+        mOptionalButton.setContentDescription(
+                getContext().getResources().getString(buttonData.contentDescriptionResId));
+        mOptionalButton.setVisibility(View.VISIBLE);
     }
 
     @Override
-    void updateExperimentalButtonImage(Drawable image) {
-        assert mExperimentalButton != null;
-        mExperimentalButton.setImageDrawable(image);
-    }
-
-    @Override
-    void disableExperimentalButton() {
-        if (mExperimentalButton == null || mExperimentalButton.getVisibility() == View.GONE) {
+    void hideOptionalButton() {
+        if (mOptionalButton == null || mOptionalButton.getVisibility() == View.GONE) {
             return;
         }
 
-        mExperimentalButton.setVisibility(View.GONE);
+        mOptionalButton.setVisibility(View.GONE);
     }
 
     @Override
-    View getExperimentalButtonView() {
-        return mExperimentalButton;
+    @VisibleForTesting
+    public View getOptionalButtonView() {
+        return mOptionalButton;
+    }
+
+    @Override
+    public HomeButton getHomeButtonForTesting() {
+        return mHomeButton;
     }
 
     private void setToolbarButtonsVisible(boolean visible) {
@@ -712,7 +797,14 @@ public class ToolbarTablet extends ToolbarLayout
     }
 
     private boolean isAccessibilityTabSwitcherPreferenceEnabled() {
-        return ChromePreferenceManager.getInstance().readBoolean(
-                ChromePreferenceManager.ACCESSIBILITY_TAB_SWITCHER, true);
+        return SharedPreferencesManager.getInstance().readBoolean(
+                ChromePreferenceKeys.ACCESSIBILITY_TAB_SWITCHER, true);
+    }
+
+    // Vivaldi
+    @Override
+    public void onUrlFocusChange(final boolean hasFocus) {
+        super.onUrlFocusChange(hasFocus);
+        mShieldButton.onUrlFocusChange(hasFocus);
     }
 }

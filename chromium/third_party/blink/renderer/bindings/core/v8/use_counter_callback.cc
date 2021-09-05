@@ -234,6 +234,39 @@ void UseCounterCallback(v8::Isolate* isolate,
     case v8::Isolate::kCallSiteAPIGetThisSloppyCall:
       blink_feature = WebFeature::kV8CallSiteAPIGetThisSloppyCall;
       break;
+    case v8::Isolate::kRegExpExecCalledOnSlowRegExp:
+      blink_feature = WebFeature::kV8RegExpExecCalledOnSlowRegExp;
+      break;
+    case v8::Isolate::kRegExpReplaceCalledOnSlowRegExp:
+      blink_feature = WebFeature::kV8RegExpReplaceCalledOnSlowRegExp;
+      break;
+    case v8::Isolate::kSharedArrayBufferConstructed:
+      blink_feature = WebFeature::kV8SharedArrayBufferConstructed;
+      break;
+    case v8::Isolate::kArrayPrototypeHasElements:
+      blink_feature = WebFeature::kV8ArrayPrototypeHasElements;
+      break;
+    case v8::Isolate::kObjectPrototypeHasElements:
+      blink_feature = WebFeature::kV8ObjectPrototypeHasElements;
+      break;
+    case v8::Isolate::kDisplayNames:
+      blink_feature = WebFeature::kDisplayNames;
+      break;
+    case v8::Isolate::kNumberFormatStyleUnit:
+      blink_feature = WebFeature::kNumberFormatStyleUnit;
+      break;
+    case v8::Isolate::kDateTimeFormatRange:
+      blink_feature = WebFeature::kDateTimeFormatRange;
+      break;
+    case v8::Isolate::kDateTimeFormatDateTimeStyle:
+      blink_feature = WebFeature::kDateTimeFormatDateTimeStyle;
+      break;
+    case v8::Isolate::kBreakIteratorTypeWord:
+      blink_feature = WebFeature::kBreakIteratorTypeWord;
+      break;
+    case v8::Isolate::kBreakIteratorTypeLine:
+      blink_feature = WebFeature::kBreakIteratorTypeLine;
+      break;
     default:
       // This can happen if V8 has added counters that this version of Blink
       // does not know about. It's harmless.

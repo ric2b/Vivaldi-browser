@@ -7,10 +7,10 @@
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/autofill/core/common/password_form.h"
-#import "ios/chrome/browser/ui/settings/password/reauthentication_module.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller_test.h"
 #import "ios/chrome/browser/web/chrome_web_test.h"
+#import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/test/app/password_test_util.h"
 #include "ios/web/public/test/web_task_environment.h"
@@ -30,7 +30,7 @@ NSString* const kSite = @"https://testorigin.com/";
 NSString* const kUsername = @"testusername";
 NSString* const kPassword = @"testpassword";
 
-// Indices related to the layout for a non-blacklisted, non-federated password.
+// Indices related to the layout for a non-blocked, non-federated password.
 const int kSiteSection = 0;
 const int kSiteItem = 0;
 const int kCopySiteButtonItem = 1;
@@ -61,7 +61,7 @@ class PasswordDetailsTableViewControllerTest
   void SetUp() override {
     ChromeTableViewControllerTest::SetUp();
     reauthentication_module_ = [[MockReauthenticationModule alloc] init];
-    reauthentication_module_.shouldSucceed = YES;
+    reauthentication_module_.expectedResult = ReauthenticationResult::kSuccess;
   }
 
   ChromeTableViewController* InstantiateController() override {
@@ -119,13 +119,13 @@ TEST_F(PasswordDetailsTableViewControllerTest,
                           kDeleteSection, kDeleteButtonItem);
 }
 
-TEST_F(PasswordDetailsTableViewControllerTest, TestInitialization_Blacklisted) {
-  constexpr int kBlacklistedSiteSection = 0;
-  constexpr int kBlacklistedSiteItem = 0;
-  constexpr int kBlacklistedCopySiteButtonItem = 1;
+TEST_F(PasswordDetailsTableViewControllerTest, TestInitialization_Blocked) {
+  constexpr int kBlockedSiteSection = 0;
+  constexpr int kBlockedSiteItem = 0;
+  constexpr int kBlockedCopySiteButtonItem = 1;
 
-  constexpr int kBlacklistedDeleteSection = 1;
-  constexpr int kBlacklistedDeleteButtonItem = 0;
+  constexpr int kBlockedDeleteSection = 1;
+  constexpr int kBlockedDeleteButtonItem = 0;
 
   form_.username_value.clear();
   form_.password_value.clear();
@@ -134,21 +134,19 @@ TEST_F(PasswordDetailsTableViewControllerTest, TestInitialization_Blacklisted) {
   CheckController();
   EXPECT_EQ(2, NumberOfSections());
   // Site section
-  EXPECT_EQ(2, NumberOfItemsInSection(kBlacklistedSiteSection));
+  EXPECT_EQ(2, NumberOfItemsInSection(kBlockedSiteSection));
   CheckSectionHeaderWithId(IDS_IOS_SHOW_PASSWORD_VIEW_SITE,
-                           kBlacklistedSiteSection);
+                           kBlockedSiteSection);
   TableViewTextItem* siteItem =
-      GetTableViewItem(kBlacklistedSiteSection, kBlacklistedSiteItem);
+      GetTableViewItem(kBlockedSiteSection, kBlockedSiteItem);
   EXPECT_NSEQ(origin_, siteItem.text);
   EXPECT_FALSE(siteItem.masked);
   CheckTextCellTextWithId(IDS_IOS_SETTINGS_SITE_COPY_BUTTON,
-                          kBlacklistedSiteSection,
-                          kBlacklistedCopySiteButtonItem);
+                          kBlockedSiteSection, kBlockedCopySiteButtonItem);
   // Delete section
-  EXPECT_EQ(1, NumberOfItemsInSection(kBlacklistedDeleteSection));
+  EXPECT_EQ(1, NumberOfItemsInSection(kBlockedDeleteSection));
   CheckTextCellTextWithId(IDS_IOS_SETTINGS_PASSWORD_DELETE_BUTTON,
-                          kBlacklistedDeleteSection,
-                          kBlacklistedDeleteButtonItem);
+                          kBlockedDeleteSection, kBlockedDeleteButtonItem);
 }
 
 TEST_F(PasswordDetailsTableViewControllerTest, TestInitialization_Federated) {

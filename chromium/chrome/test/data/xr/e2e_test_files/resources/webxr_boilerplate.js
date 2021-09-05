@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Add additional setup steps to the object from webvr_e2e.js if it exists.
+// Add additional setup steps to the object from webxr_e2e.js if it exists.
 if (typeof initializationSteps !== 'undefined') {
   initializationSteps['magicWindowStarted'] = false;
 } else {
@@ -19,6 +19,7 @@ var glAttribs = {
 var gl = null;
 var onMagicWindowXRFrameCallback = null;
 var onImmersiveXRFrameCallback = null;
+var onARFrameCallback = null;
 var onSessionStartedCallback = null;
 var onPoseCallback = null;
 var shouldSubmitFrame = true;
@@ -75,6 +76,10 @@ sessionInfos[sessionTypes.AR] = new SessionInfo();
 sessionInfos[sessionTypes.MAGIC_WINDOW] = new SessionInfo();
 
 var immersiveSessionInit = {};
+// AR sessions will use the `immersiveSessionInit` and `immersiveArSessionInit`
+// to request a session. If they both contain the same keys, the one present in
+// `immersiveArSessionInit` will be chosen.
+var immersiveArSessionInit = { requiredFeatures: ['hit-test'] };
 var nonImmersiveSessionInit = {};
 
 function getSessionType(session) {
@@ -98,6 +103,7 @@ function sessionTypeWouldTriggerConsent(sessionType) {
 }
 
 function onRequestSession() {
+  console.log('onRequestSession');
   switch (sessionTypeToRequest) {
     case sessionTypes.IMMERSIVE:
       console.info('Requesting immersive VR session');
@@ -114,7 +120,8 @@ function onRequestSession() {
       break;
     case sessionTypes.AR:
       console.info('Requesting Immersive AR session');
-      navigator.xr.requestSession('immersive-ar', immersiveSessionInit)
+      navigator.xr.requestSession('immersive-ar',
+        Object.assign({}, immersiveSessionInit, immersiveArSessionInit))
       .then((session) => {
         session.mode = 'immersive-ar';
         console.info('Immersive AR session request succeeded');
@@ -140,6 +147,7 @@ function onRequestSession() {
 }
 
 function onSessionStarted(session) {
+  console.info('onSessionStarted');
   // Record that we've started this session type so that we know not to expect
   // the consent dialog for it in the future.
   let sessionType = getSessionType(session);
@@ -177,6 +185,7 @@ function onSessionStarted(session) {
 }
 
 function onSessionEnded(event) {
+  console.info('onSessionEnded');
   sessionInfos[getSessionType(event.session)].clearSession();
 }
 
@@ -210,7 +219,9 @@ function onXRFrame(t, frame) {
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       break;
     case sessionTypes.AR:
-      // Do nothing for now
+      if (onARFrameCallback) {
+        onARFrameCallback(session, frame);
+      }
       break;
     default:
       if (onMagicWindowXRFrameCallback) {
@@ -257,4 +268,9 @@ if (navigator.xr) {
   initializationSteps['magicWindowStarted'] = true;
 }
 
-webglCanvas.onclick = onRequestSession;
+var canvasClicked = false;
+webglCanvas.onclick = function(ev) {
+  console.log('canvas onclick');
+  canvasClicked = true;
+  onRequestSession();
+}

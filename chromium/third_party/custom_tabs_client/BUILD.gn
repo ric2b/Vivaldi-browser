@@ -5,22 +5,65 @@
 import("//build/config/android/rules.gni")
 
 android_resources("chrome_tabs_client_example_apk_resources") {
-  resource_dirs = [ "src/Application/src/main/res" ]
+  sources = [
+    "src/Application/src/main/res/anim/slide_in_left.xml",
+    "src/Application/src/main/res/anim/slide_in_right.xml",
+    "src/Application/src/main/res/anim/slide_out_left.xml",
+    "src/Application/src/main/res/anim/slide_out_right.xml",
+    "src/Application/src/main/res/drawable-hdpi/ic_arrow_back.png",
+    "src/Application/src/main/res/drawable-hdpi/ic_launcher.png",
+    "src/Application/src/main/res/drawable-hdpi/ic_notification_icon.png",
+    "src/Application/src/main/res/drawable-hdpi/ic_play.png",
+    "src/Application/src/main/res/drawable-hdpi/ic_share.png",
+    "src/Application/src/main/res/drawable-hdpi/ic_stop.png",
+    "src/Application/src/main/res/drawable-mdpi/ic_arrow_back.png",
+    "src/Application/src/main/res/drawable-mdpi/ic_launcher.png",
+    "src/Application/src/main/res/drawable-mdpi/ic_notification_icon.png",
+    "src/Application/src/main/res/drawable-mdpi/ic_play.png",
+    "src/Application/src/main/res/drawable-mdpi/ic_share.png",
+    "src/Application/src/main/res/drawable-mdpi/ic_stop.png",
+    "src/Application/src/main/res/drawable-xhdpi/ic_arrow_back.png",
+    "src/Application/src/main/res/drawable-xhdpi/ic_launcher.png",
+    "src/Application/src/main/res/drawable-xhdpi/ic_notification_icon.png",
+    "src/Application/src/main/res/drawable-xhdpi/ic_play.png",
+    "src/Application/src/main/res/drawable-xhdpi/ic_share.png",
+    "src/Application/src/main/res/drawable-xhdpi/ic_stop.png",
+    "src/Application/src/main/res/drawable-xxhdpi/cover.jpg",
+    "src/Application/src/main/res/drawable-xxhdpi/ic_arrow_back.png",
+    "src/Application/src/main/res/drawable-xxhdpi/ic_launcher.png",
+    "src/Application/src/main/res/drawable-xxhdpi/ic_notification_icon.png",
+    "src/Application/src/main/res/drawable-xxhdpi/ic_play.png",
+    "src/Application/src/main/res/drawable-xxhdpi/ic_share.png",
+    "src/Application/src/main/res/drawable-xxhdpi/ic_stop.png",
+    "src/Application/src/main/res/drawable-xxxhdpi/ic_arrow_back.png",
+    "src/Application/src/main/res/drawable-xxxhdpi/ic_launcher.png",
+    "src/Application/src/main/res/drawable-xxxhdpi/ic_share.png",
+    "src/Application/src/main/res/layout/main.xml",
+    "src/Application/src/main/res/layout/remote_view.xml",
+    "src/Application/src/main/res/raw/amazing_grace.mp3",
+    "src/Application/src/main/res/values/strings.xml",
+  ]
   android_manifest = "src/Application/src/main/AndroidManifest.xml"
   custom_package = "org.chromium.customtabsclient"
-  deps = [
-    "//third_party/android_deps:android_support_v7_appcompat_java",
-  ]
+  deps = [ "//third_party/android_deps:android_support_v7_appcompat_java" ]
 }
 
 android_resources("custom_tabs_support_resources") {
-  resource_dirs = [ "src/customtabs/res" ]
+  sources = [
+    "src/customtabs/res/layout/browser_actions_context_menu_page.xml",
+    "src/customtabs/res/layout/browser_actions_context_menu_row.xml",
+    "src/customtabs/res/values/colors.xml",
+    "src/customtabs/res/values/dimens.xml",
+    "src/customtabs/res/values/strings.xml",
+    "src/customtabs/res/xml/image_share_filepaths.xml",
+  ]
   android_manifest = "src/customtabs/AndroidManifest.xml"
   custom_package = "android.support.customtabs"
 }
 
 android_apk("custom_tabs_client_example_apk") {
-  java_files = [
+  skip_jetify = true
+  sources = [
     "src/Application/src/main/java/org/chromium/customtabsclient/BottomBarManager.java",
     "src/Application/src/main/java/org/chromium/customtabsclient/BrowserActionsReceiver.java",
     "src/Application/src/main/java/org/chromium/customtabsclient/MainActivity.java",
@@ -36,27 +79,40 @@ android_apk("custom_tabs_client_example_apk") {
     ":custom_tabs_support_java",
     "//third_party/android_deps:android_arch_lifecycle_common_java",
     "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//third_party/android_deps:com_android_support_appcompat_v7_java",
     "//third_party/android_deps:com_android_support_support_annotations_java",
   ]
   chromium_code = false
 }
 
 android_library("custom_tabs_client_shared_java") {
-  java_files = [
+  skip_jetify = true
+  sources = [
     "src/shared/src/main/java/org/chromium/customtabsclient/shared/CustomTabsHelper.java",
     "src/shared/src/main/java/org/chromium/customtabsclient/shared/KeepAliveService.java",
-    "src/shared/src/main/java/org/chromium/customtabsclient/shared/ServiceConnectionCallback.java",
     "src/shared/src/main/java/org/chromium/customtabsclient/shared/ServiceConnection.java",
+    "src/shared/src/main/java/org/chromium/customtabsclient/shared/ServiceConnectionCallback.java",
   ]
 
-  deps = [
-    ":custom_tabs_support_java",
-  ]
-  chromium_code = true
+  deps = [ ":custom_tabs_support_java" ]
+  chromium_code = false
 }
 
 android_library("custom_tabs_support_java") {
-  java_files = [
+  skip_jetify = true
+  sources = [
+    "src/customtabs/src/android/support/customtabs/CustomTabColorSchemeParams.java",
+    "src/customtabs/src/android/support/customtabs/CustomTabsCallback.java",
+    "src/customtabs/src/android/support/customtabs/CustomTabsClient.java",
+    "src/customtabs/src/android/support/customtabs/CustomTabsIntent.java",
+    "src/customtabs/src/android/support/customtabs/CustomTabsService.java",
+    "src/customtabs/src/android/support/customtabs/CustomTabsServiceConnection.java",
+    "src/customtabs/src/android/support/customtabs/CustomTabsSession.java",
+    "src/customtabs/src/android/support/customtabs/CustomTabsSessionToken.java",
+    "src/customtabs/src/android/support/customtabs/PostMessageBackend.java",
+    "src/customtabs/src/android/support/customtabs/PostMessageService.java",
+    "src/customtabs/src/android/support/customtabs/PostMessageServiceConnection.java",
+    "src/customtabs/src/android/support/customtabs/TrustedWebUtils.java",
     "src/customtabs/src/android/support/customtabs/browseractions/BrowserActionItem.java",
     "src/customtabs/src/android/support/customtabs/browseractions/BrowserActionsFallbackMenuAdapter.java",
     "src/customtabs/src/android/support/customtabs/browseractions/BrowserActionsFallbackMenuDialog.java",
@@ -67,25 +123,17 @@ android_library("custom_tabs_support_java") {
     "src/customtabs/src/android/support/customtabs/browseractions/BrowserServiceImageReadTask.java",
     "src/customtabs/src/android/support/customtabs/trusted/TrustedWebActivityBuilder.java",
     "src/customtabs/src/android/support/customtabs/trusted/TrustedWebActivityService.java",
-    "src/customtabs/src/android/support/customtabs/trusted/TrustedWebActivityServiceWrapper.java",
     "src/customtabs/src/android/support/customtabs/trusted/TrustedWebActivityServiceConnectionManager.java",
-    "src/customtabs/src/android/support/customtabs/CustomTabsCallback.java",
-    "src/customtabs/src/android/support/customtabs/CustomTabsClient.java",
-    "src/customtabs/src/android/support/customtabs/CustomTabsIntent.java",
-    "src/customtabs/src/android/support/customtabs/CustomTabsService.java",
-    "src/customtabs/src/android/support/customtabs/CustomTabsServiceConnection.java",
-    "src/customtabs/src/android/support/customtabs/CustomTabsSession.java",
-    "src/customtabs/src/android/support/customtabs/CustomTabsSessionToken.java",
-    "src/customtabs/src/android/support/customtabs/CustomTabColorSchemeParams.java",
-    "src/customtabs/src/android/support/customtabs/PostMessageBackend.java",
-    "src/customtabs/src/android/support/customtabs/PostMessageService.java",
-    "src/customtabs/src/android/support/customtabs/PostMessageServiceConnection.java",
-    "src/customtabs/src/android/support/customtabs/TrustedWebUtils.java",
+    "src/customtabs/src/android/support/customtabs/trusted/TrustedWebActivityServiceWrapper.java",
   ]
   deps = [
     ":custom_tabs_support_resources",
-    "//third_party/android_deps:android_support_v7_appcompat_java",
-    "//third_party/android_deps:com_android_support_collections_java",
+
+    # TODO (bjoyce): Restore to android_support_v7_appcompat_java once source
+    # files are manually written to androidx crbug.com/1047843.
+    # "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//third_party/android_deps:com_android_support_appcompat_v7_java_orig",
+    "//third_party/android_deps:com_android_support_collections_java_orig",
     "//third_party/android_deps:com_android_support_interpolator_java",
     "//third_party/android_deps:com_android_support_support_annotations_java",
     "//third_party/android_deps:com_android_support_support_compat_java",

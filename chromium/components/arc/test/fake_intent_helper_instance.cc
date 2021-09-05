@@ -55,6 +55,12 @@ FakeIntentHelperInstance::~FakeIntentHelperInstance() {}
 void FakeIntentHelperInstance::AddPreferredPackage(
     const std::string& package_name) {}
 
+void FakeIntentHelperInstance::AddPreferredApp(const std::string& package_name,
+                                               IntentFilter intent_filter,
+                                               mojom::IntentInfoPtr intent) {}
+void FakeIntentHelperInstance::ResetVerifiedLinks(
+    const std::vector<std::string>& package_names) {}
+
 void FakeIntentHelperInstance::GetFileSizeDeprecated(
     const std::string& url,
     GetFileSizeDeprecatedCallback callback) {}
@@ -110,7 +116,12 @@ void FakeIntentHelperInstance::RequestIntentHandlerList(
 
 void FakeIntentHelperInstance::RequestUrlHandlerList(
     const std::string& url,
-    RequestUrlHandlerListCallback callback) {}
+    RequestUrlHandlerListCallback callback) {
+  std::vector<mojom::IntentHandlerInfoPtr> handlers;
+  // Post the reply to run asynchronously to match the real implementation.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), std::move(handlers)));
+}
 
 void FakeIntentHelperInstance::RequestUrlListHandlerList(
     std::vector<mojom::UrlWithMimeTypePtr> urls,

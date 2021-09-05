@@ -8,11 +8,11 @@
 
 #include "gpu/command_buffer/client/webgpu_interface.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_buffer_descriptor.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/modules/webgpu/dawn_callback.h"
 #include "third_party/blink/renderer/modules/webgpu/dawn_conversions.h"
-#include "third_party/blink/renderer/modules/webgpu/gpu_buffer_descriptor.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -44,12 +44,12 @@ bool ValidateMapSize(uint64_t buffer_size,
   return true;
 }
 
-DawnBufferDescriptor AsDawnType(const GPUBufferDescriptor* webgpu_desc) {
+WGPUBufferDescriptor AsDawnType(const GPUBufferDescriptor* webgpu_desc) {
   DCHECK(webgpu_desc);
 
-  DawnBufferDescriptor dawn_desc = {};
+  WGPUBufferDescriptor dawn_desc = {};
   dawn_desc.nextInChain = nullptr;
-  dawn_desc.usage = AsDawnEnum<DawnBufferUsage>(webgpu_desc->usage());
+  dawn_desc.usage = AsDawnEnum<WGPUBufferUsage>(webgpu_desc->usage());
   dawn_desc.size = webgpu_desc->size();
   if (webgpu_desc->hasLabel()) {
     dawn_desc.label = webgpu_desc->label().Utf8().data();
@@ -61,15 +61,11 @@ DawnBufferDescriptor AsDawnType(const GPUBufferDescriptor* webgpu_desc) {
 DOMArrayBuffer* CreateArrayBufferForMappedData(void* data, size_t data_length) {
   DCHECK(data);
 
-  WTF::ArrayBufferContents::DataHandle handle(
-      data, data_length,
-      [](void* data, size_t length, void* info) {
-        // DataDeleter does nothing because Dawn wire owns the memory.
-      },
-      nullptr);
-
-  WTF::ArrayBufferContents contents(
-      std::move(handle), WTF::ArrayBufferContents::SharingType::kNotShared);
+  ArrayBufferContents contents(data, data_length,
+                               [](void* data, size_t length, void* info) {
+                                 // DataDeleter does nothing because Dawn wire
+                                 // owns the memory.
+                               });
 
   return DOMArrayBuffer::Create(contents);
 }
@@ -81,7 +77,7 @@ GPUBuffer* GPUBuffer::Create(GPUDevice* device,
                              const GPUBufferDescriptor* webgpu_desc) {
   DCHECK(device);
 
-  DawnBufferDescriptor dawn_desc = AsDawnType(webgpu_desc);
+  WGPUBufferDescriptor dawn_desc = AsDawnType(webgpu_desc);
   return MakeGarbageCollected<GPUBuffer>(
       device, dawn_desc.size,
       device->GetProcs().deviceCreateBuffer(device->GetHandle(), &dawn_desc));
@@ -94,13 +90,13 @@ std::pair<GPUBuffer*, DOMArrayBuffer*> GPUBuffer::CreateMapped(
     ExceptionState& exception_state) {
   DCHECK(device);
 
-  DawnBufferDescriptor dawn_desc = AsDawnType(webgpu_desc);
+  WGPUBufferDescriptor dawn_desc = AsDawnType(webgpu_desc);
 
   if (!ValidateMapSize(dawn_desc.size, exception_state)) {
     return std::make_pair(nullptr, nullptr);
   }
 
-  DawnCreateBufferMappedResult result =
+  WGPUCreateBufferMappedResult result =
       device->GetProcs().deviceCreateBufferMapped(device->GetHandle(),
                                                   &dawn_desc);
 
@@ -115,8 +111,8 @@ std::pair<GPUBuffer*, DOMArrayBuffer*> GPUBuffer::CreateMapped(
   return std::make_pair(gpu_buffer, gpu_buffer->mapped_buffer_);
 }
 
-GPUBuffer::GPUBuffer(GPUDevice* device, uint64_t size, DawnBuffer buffer)
-    : DawnObject<DawnBuffer>(device, buffer), size_(size) {}
+GPUBuffer::GPUBuffer(GPUDevice* device, uint64_t size, WGPUBuffer buffer)
+    : DawnObject<WGPUBuffer>(device, buffer), size_(size) {}
 
 GPUBuffer::~GPUBuffer() {
   if (IsDawnControlClientDestroyed()) {
@@ -125,19 +121,19 @@ GPUBuffer::~GPUBuffer() {
   GetProcs().bufferRelease(GetHandle());
 }
 
-void GPUBuffer::Trace(blink::Visitor* visitor) {
+void GPUBuffer::Trace(Visitor* visitor) {
   visitor->Trace(mapped_buffer_);
-  DawnObject<DawnBuffer>::Trace(visitor);
+  DawnObject<WGPUBuffer>::Trace(visitor);
 }
 
 void GPUBuffer::setSubData(uint64_t dst_byte_offset,
-                           const MaybeShared<DOMArrayBufferView>& src,
+                           const FlexibleArrayBufferView& src,
                            uint64_t src_byte_offset,
                            uint64_t byte_length,
                            ExceptionState& exception_state) {
   const uint8_t* src_base =
-      reinterpret_cast<const uint8_t*>(src.View()->BaseAddress());
-  size_t src_byte_length = src.View()->byteLength();
+      reinterpret_cast<const uint8_t*>(src.BaseAddressMaybeOnStack());
+  size_t src_byte_length = src.ByteLengthAsSizeT();
 
   if (src_byte_offset > src_byte_length) {
     exception_state.ThrowRangeError("srcOffset is too large");
@@ -156,25 +152,22 @@ void GPUBuffer::setSubData(uint64_t dst_byte_offset,
 }
 
 void GPUBuffer::OnMapAsyncCallback(ScriptPromiseResolver* resolver,
-                                   DawnBufferMapAsyncStatus status,
+                                   WGPUBufferMapAsyncStatus status,
                                    void* data,
                                    uint64_t data_length) {
   switch (status) {
-    case DAWN_BUFFER_MAP_ASYNC_STATUS_SUCCESS:
+    case WGPUBufferMapAsyncStatus_Success:
       DCHECK(data);
       DCHECK_LE(data_length, kLargestMappableSize);
       mapped_buffer_ = CreateArrayBufferForMappedData(
           data, static_cast<size_t>(data_length));
       resolver->Resolve(mapped_buffer_);
       break;
-    case DAWN_BUFFER_MAP_ASYNC_STATUS_ERROR:
+    case WGPUBufferMapAsyncStatus_Error:
+    case WGPUBufferMapAsyncStatus_Unknown:
+    case WGPUBufferMapAsyncStatus_DeviceLost:
       resolver->Reject(MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kOperationError));
-      break;
-    case DAWN_BUFFER_MAP_ASYNC_STATUS_UNKNOWN:
-    case DAWN_BUFFER_MAP_ASYNC_STATUS_DEVICE_LOST:
-      resolver->Reject(
-          MakeGarbageCollected<DOMException>(DOMExceptionCode::kAbortError));
       break;
     default:
       NOTREACHED();
@@ -203,7 +196,7 @@ ScriptPromise GPUBuffer::mapReadAsync(ScriptState* script_state,
 
   GetProcs().bufferMapReadAsync(
       GetHandle(),
-      [](DawnBufferMapAsyncStatus status, const void* data,
+      [](WGPUBufferMapAsyncStatus status, const void* data,
          uint64_t data_length, void* userdata) {
         // It is safe to const_cast the |data| pointer because it is a shadow
         // copy that Dawn wire makes and does not point to the mapped GPU data.
@@ -262,7 +255,7 @@ void GPUBuffer::DetachArrayBufferForCurrentMapping(ScriptState* script_state) {
   DCHECK(mapped_buffer->IsDetachable(isolate));
 
   // Detach the array buffer by transferring the contents out and dropping them.
-  WTF::ArrayBufferContents contents;
+  ArrayBufferContents contents;
   DCHECK(mapped_buffer->Transfer(isolate, contents));
 }
 

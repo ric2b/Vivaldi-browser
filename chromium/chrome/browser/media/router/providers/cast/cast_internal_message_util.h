@@ -9,14 +9,35 @@
 #include "base/macros.h"
 #include "base/values.h"
 #include "third_party/blink/public/mojom/presentation/presentation.mojom.h"
-
-namespace cast_channel {
-class CastMessage;
-}
+#include "third_party/openscreen/src/cast/common/channel/proto/cast_channel.pb.h"
 
 namespace media_router {
 
+using cast::channel::CastMessage;
+
 class MediaSinkInternal;
+
+// Values in the "supportedMediaCommands" list in media status messages
+// sent to the Cast sender SDK.
+constexpr char kMediaCommandPause[] = "pause";
+constexpr char kMediaCommandSeek[] = "seek";
+constexpr char kMediaCommandStreamVolume[] = "stream_volume";
+constexpr char kMediaCommandStreamMute[] = "stream_mute";
+constexpr char kMediaCommandQueueNext[] = "queue_next";
+constexpr char kMediaCommandQueuePrev[] = "queue_prev";
+
+// Values in the "supportedMediaCommands" bit array in media status messages
+// received from Cast receivers. They are converted to string values by
+// SupportedMediaCommandsToListValue().
+enum class MediaCommand {
+  kPause = 1 << 0,
+  kSeek = 1 << 1,
+  kStreamVolume = 1 << 2,
+  kStreamMute = 1 << 3,
+  // 1 << 4 and 1 << 5 are not in use.
+  kQueueNext = 1 << 6,
+  kQueuePrev = 1 << 7,
+};
 
 // Represents a message sent or received by the Cast SDK via a
 // PresentationConnection.
@@ -203,7 +224,7 @@ blink::mojom::PresentationConnectionMessagePtr CreateAppMessageAck(
 blink::mojom::PresentationConnectionMessagePtr CreateAppMessage(
     const std::string& session_id,
     const std::string& client_id,
-    const cast_channel::CastMessage& cast_message);
+    const CastMessage& cast_message);
 blink::mojom::PresentationConnectionMessagePtr CreateV2Message(
     const std::string& client_id,
     const base::Value& payload,
@@ -219,7 +240,7 @@ blink::mojom::PresentationConnectionMessagePtr CreateLeaveSessionAckMessage(
     const std::string& client_id,
     base::Optional<int> sequence_number);
 
-base::Value SupportedMediaRequestsToListValue(int media_requests);
+base::Value SupportedMediaCommandsToListValue(int media_commands);
 
 }  // namespace media_router
 

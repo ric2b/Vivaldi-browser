@@ -35,19 +35,23 @@ const char kRanContentWithCertErrorSecurityStateIssueId[] =
 const char kPkpBypassedSecurityStateIssueId[] = "pkp-bypassed";
 const char kIsErrorPageSecurityStateIssueId[] = "is-error-page";
 const char kInsecureInputEventsSecurityStateIssueId[] = "insecure-input-events";
+const char kCertMissingSubjectAltName[] = "cert-missing-subject-alt-name";
 
 std::string SecurityLevelToProtocolSecurityState(
     security_state::SecurityLevel security_level) {
   switch (security_level) {
     case security_state::NONE:
+      return protocol::Security::SecurityStateEnum::Neutral;
     case security_state::WARNING:
+      if (security_state::ShouldShowDangerTriangleForWarningLevel())
+        return protocol::Security::SecurityStateEnum::Insecure;
       return protocol::Security::SecurityStateEnum::Neutral;
     case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
     case security_state::EV_SECURE:
     case security_state::SECURE:
       return protocol::Security::SecurityStateEnum::Secure;
     case security_state::DANGEROUS:
-      return protocol::Security::SecurityStateEnum::Insecure;
+      return protocol::Security::SecurityStateEnum::InsecureBroken;
     case security_state::SECURITY_LEVEL_COUNT:
       NOTREACHED();
       return protocol::Security::SecurityStateEnum::Neutral;
@@ -106,6 +110,10 @@ CreateCertificateSecurityState(
   bool certificate_has_weak_signature =
       (state.cert_status & net::CERT_STATUS_WEAK_SIGNATURE_ALGORITHM);
 
+  bool certificate_has_sha1_signature =
+      state.certificate &&
+      (state.cert_status & net::CERT_STATUS_SHA1_SIGNATURE_PRESENT);
+
   int status = net::ObsoleteSSLStatus(state.connection_status,
                                       state.peer_signature_algorithm);
   bool modern_ssl = status == net::OBSOLETE_SSL_NONE;
@@ -124,7 +132,8 @@ CreateCertificateSecurityState(
           .SetIssuer(issuer_name)
           .SetValidFrom(valid_from)
           .SetValidTo(valid_to)
-          .SetCertifcateHasWeakSignature(certificate_has_weak_signature)
+          .SetCertificateHasWeakSignature(certificate_has_weak_signature)
+          .SetCertificateHasSha1Signature(certificate_has_sha1_signature)
           .SetModernSSL(modern_ssl)
           .SetObsoleteSslProtocol(obsolete_ssl_protocol)
           .SetObsoleteSslKeyExchange(obsolete_ssl_key_exchange)
@@ -132,6 +141,10 @@ CreateCertificateSecurityState(
           .SetObsoleteSslSignature(obsolete_ssl_signature)
           .Build();
 
+  if (net::IsCertStatusError(state.cert_status)) {
+    certificate_security_state->SetCertificateNetworkError(
+        net::ErrorToString(net::MapCertStatusToNetError(state.cert_status)));
+  }
   if (key_exchange_group)
     certificate_security_state->SetKeyExchangeGroup(key_exchange_group);
   if (mac)
@@ -140,25 +153,57 @@ CreateCertificateSecurityState(
   return certificate_security_state;
 }
 
+std::unique_ptr<protocol::Security::SafetyTipInfo> CreateSafetyTipInfo(
+    const security_state::SafetyTipInfo& safety_tip_info) {
+  switch (safety_tip_info.status) {
+    case security_state::SafetyTipStatus::kBadReputation:
+    case security_state::SafetyTipStatus::kBadReputationIgnored:
+      return protocol::Security::SafetyTipInfo::Create()
+          .SetSafetyTipStatus(
+              protocol::Security::SafetyTipStatusEnum::BadReputation)
+          .Build();
+
+    case security_state::SafetyTipStatus::kLookalike:
+    case security_state::SafetyTipStatus::kLookalikeIgnored:
+      return protocol::Security::SafetyTipInfo::Create()
+          .SetSafetyTipStatus(
+              protocol::Security::SafetyTipStatusEnum::Lookalike)
+          .SetSafeUrl(safety_tip_info.safe_url.spec())
+          .Build();
+
+    case security_state::SafetyTipStatus::kBadKeyword:
+      NOTREACHED();
+      return nullptr;
+
+    case security_state::SafetyTipStatus::kNone:
+    case security_state::SafetyTipStatus::kUnknown:
+      return nullptr;
+  }
+}
+
 std::unique_ptr<protocol::Security::VisibleSecurityState>
-CreateVisibleSecurityState(const security_state::VisibleSecurityState& state,
-                           content::WebContents* web_contents) {
+CreateVisibleSecurityState(content::WebContents* web_contents) {
   SecurityStateTabHelper* helper =
       SecurityStateTabHelper::FromWebContents(web_contents);
   DCHECK(helper);
+  auto state = helper->GetVisibleSecurityState();
   std::string security_state =
       SecurityLevelToProtocolSecurityState(helper->GetSecurityLevel());
 
   bool scheme_is_cryptographic =
-      security_state::IsSchemeCryptographic(state.url);
-  bool malicious_content = state.malicious_content_status !=
+      security_state::IsSchemeCryptographic(state->url);
+  bool malicious_content = state->malicious_content_status !=
                            security_state::MALICIOUS_CONTENT_STATUS_NONE;
   bool insecure_input_events =
-      state.insecure_input_events.insecure_field_edited;
+      state->insecure_input_events.insecure_field_edited;
 
   bool secure_origin = scheme_is_cryptographic;
   if (!scheme_is_cryptographic)
-    secure_origin = content::IsOriginSecure(state.url);
+    secure_origin = content::IsOriginSecure(state->url);
+
+  bool cert_missing_subject_alt_name =
+      state->certificate &&
+      !state->certificate->GetSubjectAltName(nullptr, nullptr);
 
   std::vector<std::string> security_state_issue_ids;
   if (!secure_origin)
@@ -168,26 +213,28 @@ CreateVisibleSecurityState(const security_state::VisibleSecurityState& state,
         kSchemeIsNotCryptographicSecurityStateIssueId);
   if (malicious_content)
     security_state_issue_ids.push_back(kMalicousContentSecurityStateIssueId);
-  if (state.displayed_mixed_content)
+  if (state->displayed_mixed_content)
     security_state_issue_ids.push_back(
         kDisplayedMixedContentSecurityStateIssueId);
-  if (state.contained_mixed_form)
+  if (state->contained_mixed_form)
     security_state_issue_ids.push_back(kContainedMixedFormSecurityStateIssueId);
-  if (state.ran_mixed_content)
+  if (state->ran_mixed_content)
     security_state_issue_ids.push_back(kRanMixedContentSecurityStateIssueId);
-  if (state.displayed_content_with_cert_errors)
+  if (state->displayed_content_with_cert_errors)
     security_state_issue_ids.push_back(
         kDisplayedContentWithCertErrorsSecurityStateIssueId);
-  if (state.ran_content_with_cert_errors)
+  if (state->ran_content_with_cert_errors)
     security_state_issue_ids.push_back(
         kRanContentWithCertErrorSecurityStateIssueId);
-  if (state.pkp_bypassed)
+  if (state->pkp_bypassed)
     security_state_issue_ids.push_back(kPkpBypassedSecurityStateIssueId);
-  if (state.is_error_page)
+  if (state->is_error_page)
     security_state_issue_ids.push_back(kIsErrorPageSecurityStateIssueId);
   if (insecure_input_events)
     security_state_issue_ids.push_back(
         kInsecureInputEventsSecurityStateIssueId);
+  if (cert_missing_subject_alt_name)
+    security_state_issue_ids.push_back(kCertMissingSubjectAltName);
 
   auto visible_security_state =
       protocol::Security::VisibleSecurityState::Create()
@@ -197,11 +244,16 @@ CreateVisibleSecurityState(const security_state::VisibleSecurityState& state,
                   security_state_issue_ids))
           .Build();
 
-  if (state.connection_status != 0) {
-    auto certificate_security_state = CreateCertificateSecurityState(state);
+  if (state->connection_status != 0) {
+    auto certificate_security_state = CreateCertificateSecurityState(*state);
     visible_security_state->SetCertificateSecurityState(
         std::move(certificate_security_state));
   }
+
+  auto safety_tip_info = CreateSafetyTipInfo(state->safety_tip_info);
+  if (safety_tip_info)
+    visible_security_state->SetSafetyTipInfo(std::move(safety_tip_info));
+
   return visible_security_state;
 }
 
@@ -239,8 +291,6 @@ void SecurityHandler::DidChangeVisibleSecurityState() {
   if (!enabled_)
     return;
 
-  auto state = security_state::GetVisibleSecurityState(web_contents());
-  auto visible_security_state =
-      CreateVisibleSecurityState(*state.get(), web_contents());
+  auto visible_security_state = CreateVisibleSecurityState(web_contents());
   frontend_->VisibleSecurityStateChanged(std::move(visible_security_state));
 }

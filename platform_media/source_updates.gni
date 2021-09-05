@@ -15,8 +15,6 @@ update_target("//media/test:pipeline_integration_test_base") {
     "//vivaldi/platform_media/test/platform_media_pipeline_integration_test.cc",
     "//vivaldi/platform_media/test/platform_pipeline_test_base.cc",
     "//vivaldi/platform_media/test/platform_pipeline_test_base.h",
-    "//vivaldi/platform_media/test/test_ipc_data_source.cc",
-    "//vivaldi/platform_media/test/test_ipc_data_source.h",
     "//vivaldi/platform_media/test/test_pipeline_host.cc",
     "//vivaldi/platform_media/test/test_pipeline_host.h",
   ]
@@ -26,8 +24,6 @@ update_target("//media/test:pipeline_integration_test_base") {
       "//vivaldi/platform_media/test/mac/avf_data_buffer_queue_unittest.mm",
       "//vivaldi/platform_media/test/mac/data_request_handler_unittest.mm",
     ]
-    # VB-24641 dispatch_get_current_queue is deprecated
-    cflags = [ "-Wno-deprecated-declarations" ]
   }
 
   deps += [
@@ -43,11 +39,6 @@ update_target("//media/gpu/ipc/service:service") {
   sources += [
   "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host_impl.cc",
   "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host_impl.h",
-  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_data.cc",
-  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_data.h",
-  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_source.h",
-  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_data_source.cc",
-  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_data_source.h",
 #  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_buffer_source.cc",
 #  "//vivaldi/platform_media/renderer/pipeline/ipc_pipeline_buffer_source.h",
   "//vivaldi/platform_media/gpu/data_source/ipc_data_source_impl.cc",
@@ -75,9 +66,14 @@ update_target("//media/base:base") {
   sources += [
   "//vivaldi/platform_media/common/feature_toggles.h",
   "//vivaldi/platform_media/common/platform_media_pipeline_types.h",
-  "//vivaldi/platform_media/common/media_pipeline_messages.h",
   "//vivaldi/platform_media/common/video_frame_transformer.cc",
   "//vivaldi/platform_media/common/video_frame_transformer.h",
+  ]
+}
+
+update_target("//media/base/ipc:ipc") {
+  sources += [
+  "//vivaldi/platform_media/common/media_pipeline_messages.h",
   ]
 }
 
@@ -102,9 +98,6 @@ update_target("//content/common:common") {
       "//vivaldi/platform_media/gpu/decoders/mac/avf_media_reader_warmup.mm",
     ]
 
-    # VB-24641 dispatch_get_current_queue is deprecated
-    cflags = [ "-Wno-deprecated-declarations" ]
-
     libs += [
       "AudioToolbox.framework",
     ]
@@ -118,8 +111,10 @@ update_target("//content/common:common") {
 update_target("//media:media") {
   sources = [
     "//vivaldi/platform_media/gpu/data_source/ipc_data_source.h",
+    "//vivaldi/platform_media/gpu/pipeline/ipc_decoding_buffer.cc",
+    "//vivaldi/platform_media/gpu/pipeline/ipc_decoding_buffer.h",
     "//vivaldi/platform_media/gpu/pipeline/platform_media_pipeline.h",
-    "//vivaldi/platform_media/gpu/pipeline/platform_media_pipeline_create.h",
+    "//vivaldi/platform_media/gpu/pipeline/platform_media_pipeline_factory.h",
   ]
 
   if (is_linux) {
@@ -148,7 +143,7 @@ update_target("//media:media") {
       "//vivaldi/platform_media/gpu/pipeline/mac/avf_media_pipeline.mm",
       "//vivaldi/platform_media/gpu/pipeline/mac/avf_media_reader_runner.h",
       "//vivaldi/platform_media/gpu/pipeline/mac/avf_media_reader_runner.mm",
-      "//vivaldi/platform_media/gpu/pipeline/mac/platform_media_pipeline_mac.cc",
+      "//vivaldi/platform_media/gpu/pipeline/mac/platform_media_pipeline_mac.mm",
     ]
 
     defines = [ "GPU_IMPLEMENTATION" ]
@@ -170,16 +165,10 @@ update_target("//media:media") {
       configs -= [ "//build/config/compiler:default_optimization" ]
       cflags += [ "-O1" ]
     }
-
-    # VB-24641 dispatch_get_current_queue is deprecated
-    cflags += [ "-Wno-deprecated-declarations" ]
   }
 
   if (is_win) {
     sources += [
-      "//vivaldi/platform_media/gpu/decoders/win/read_stream_listener.h",
-      "//vivaldi/platform_media/gpu/decoders/win/read_stream.cc",
-      "//vivaldi/platform_media/gpu/decoders/win/read_stream.h",
       "//vivaldi/platform_media/gpu/decoders/win/wmf_byte_stream.cc",
       "//vivaldi/platform_media/gpu/decoders/win/wmf_byte_stream.h",
       "//vivaldi/platform_media/gpu/pipeline/win/platform_media_pipeline_win.cc",
@@ -202,6 +191,13 @@ update_target("//media:media") {
 
     deps += [ "//net" ]  # For GetMimeTypeFromFile
   }
+
+  deps += [ "//base:base_static" ]   # For vivaldi_switches
+
+  allow_circular_includes_from = [
+    "//media/filters",
+    "//media/renderers",
+  ]
 }
 
 # ------------------
@@ -211,8 +207,6 @@ update_target("//media:media") {
 update_target("//media:media") {
 
    sources += [
-    "//vivaldi/platform_media/common/platform_logging_util.cc",
-    "//vivaldi/platform_media/common/platform_logging_util.h",
     "//vivaldi/platform_media/renderer/decoders/debug_buffer_logger.cc",
     "//vivaldi/platform_media/renderer/decoders/debug_buffer_logger.h",
     "//vivaldi/platform_media/renderer/decoders/ipc_audio_decoder.cc",
@@ -305,6 +299,8 @@ update_target("//media:media") {
 update_target("//media/base:base") {
 
    sources += [
+    "//vivaldi/platform_media/common/platform_logging_util.cc",
+    "//vivaldi/platform_media/common/platform_logging_util.h",
     "//vivaldi/platform_media/common/platform_mime_util.h",
    ]
 

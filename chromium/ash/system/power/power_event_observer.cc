@@ -336,7 +336,7 @@ void PowerEventObserver::StopCompositingAndSuspendDisplays() {
   ui::UserActivityDetector::Get()->OnDisplayPowerChanging();
 
   Shell::Get()->display_configurator()->SuspendDisplays(
-      base::Bind(&OnSuspendDisplaysCompleted, block_suspend_token_));
+      base::BindOnce(&OnSuspendDisplaysCompleted, block_suspend_token_));
   block_suspend_token_ = {};
 }
 
@@ -345,7 +345,7 @@ void PowerEventObserver::EndPendingWallpaperAnimations() {
     WallpaperWidgetController* wallpaper_widget_controller =
         RootWindowController::ForWindow(window)->wallpaper_widget_controller();
     if (wallpaper_widget_controller->IsAnimating())
-      wallpaper_widget_controller->EndPendingAnimation();
+      wallpaper_widget_controller->StopAnimating();
   }
 }
 

@@ -39,7 +39,7 @@
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/loader/fetch/https_state.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
-#include "third_party/blink/renderer/platform/weborigin/security_violation_reporting_policy.h"
+#include "third_party/blink/renderer/platform/weborigin/reporting_disposition.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -54,6 +54,7 @@ class KURL;
 class ResourceResponse;
 class SecurityOrigin;
 class SourceLocation;
+class WebContentSettingsClient;
 class WorkerFetchContext;
 
 // Checks resource loads for mixed content. If PlzNavigate is enabled then this
@@ -68,18 +69,18 @@ class CORE_EXPORT MixedContentChecker final {
   DISALLOW_NEW();
 
  public:
-  static bool ShouldBlockFetch(LocalFrame*,
-                               mojom::RequestContextType,
-                               ResourceRequest::RedirectStatus,
-                               const KURL&,
-                               SecurityViolationReportingPolicy =
-                                   SecurityViolationReportingPolicy::kReport);
+  static bool ShouldBlockFetch(
+      LocalFrame*,
+      mojom::RequestContextType,
+      ResourceRequest::RedirectStatus,
+      const KURL&,
+      ReportingDisposition = ReportingDisposition::kReport);
 
   static bool ShouldBlockFetchOnWorker(const WorkerFetchContext&,
                                        mojom::RequestContextType,
                                        ResourceRequest::RedirectStatus,
                                        const KURL&,
-                                       SecurityViolationReportingPolicy,
+                                       ReportingDisposition,
                                        bool is_worklet_global_scope);
 
   static bool IsWebSocketAllowed(const FrameFetchContext&,
@@ -89,13 +90,15 @@ class CORE_EXPORT MixedContentChecker final {
 
   static bool IsMixedContent(const SecurityOrigin*, const KURL&);
   static bool IsMixedContent(const FetchClientSettingsObject&, const KURL&);
-  static bool IsMixedFormAction(LocalFrame*,
-                                const KURL&,
-                                SecurityViolationReportingPolicy =
-                                    SecurityViolationReportingPolicy::kReport);
+  static bool IsMixedFormAction(
+      LocalFrame*,
+      const KURL&,
+      ReportingDisposition = ReportingDisposition::kReport);
 
   static bool ShouldAutoupgrade(HttpsState context_https_state,
-                                WebMixedContentContextType type);
+                                mojom::RequestContextType type,
+                                WebContentSettingsClient* settings_client,
+                                const KURL& url);
 
   static void CheckMixedPrivatePublic(LocalFrame*,
                                       const AtomicString& resource_ip_address);
@@ -121,10 +124,6 @@ class CORE_EXPORT MixedContentChecker final {
       const KURL& main_resource_url,
       const KURL& mixed_content_url);
 
-  static ConsoleMessage* CreateConsoleMessageAboutWebSocketAutoupgrade(
-      const KURL& main_resource_url,
-      const KURL& mixed_content_url);
-
   // Upgrade the insecure requests.
   // https://w3c.github.io/webappsec-upgrade-insecure-requests/
   // Upgrading itself is done based on |fetch_client_settings_object|.
@@ -134,7 +133,8 @@ class CORE_EXPORT MixedContentChecker final {
       ResourceRequest&,
       const FetchClientSettingsObject* fetch_client_settings_object,
       ExecutionContext* execution_context_for_logging,
-      network::mojom::RequestContextFrameType);
+      mojom::RequestContextFrameType,
+      WebContentSettingsClient* settings_client);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(MixedContentCheckerTest, HandleCertificateError);

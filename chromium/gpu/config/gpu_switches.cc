@@ -6,17 +6,12 @@
 
 namespace switches {
 
-// Disable workarounds for various GPU driver bugs.
-const char kDisableGpuDriverBugWorkarounds[] =
-    "disable-gpu-driver-bug-workarounds";
-
 // Disable GPU rasterization, i.e. rasterize on the CPU only.
-// Overrides the kEnableGpuRasterization and kForceGpuRasterization flags.
+// Overrides the kEnableGpuRasterization flag.
 const char kDisableGpuRasterization[] = "disable-gpu-rasterization";
 
 // Allow heuristics to determine when a layer tile should be drawn with the
-// Skia GPU backend. Only valid with GPU accelerated compositing +
-// impl-side painting.
+// Skia GPU backend. Only valid with GPU accelerated compositing.
 const char kEnableGpuRasterization[] = "enable-gpu-rasterization";
 
 // Select a different set of GPU blacklist entries with the specificed
@@ -55,5 +50,8 @@ const char kUseHighGPUThreadPriorityForPerfTests[] =
 // seconds.
 const char kNoDelayForDX12VulkanInfoCollection[] =
     "no-delay-for-dx12-vulkan-info-collection";
+
+// Enables measures of how long GPU Main Thread was blocked between SwapBuffers
+const char kEnableGpuBlockedTime[] = "enable-gpu-blocked-time";
 
 }  // namespace switches

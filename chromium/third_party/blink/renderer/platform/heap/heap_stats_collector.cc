@@ -14,11 +14,13 @@ namespace blink {
 void ThreadHeapStatsCollector::IncreaseCompactionFreedSize(size_t bytes) {
   DCHECK(is_started_);
   current_.compaction_freed_bytes += bytes;
+  current_.compaction_recorded_events = true;
 }
 
 void ThreadHeapStatsCollector::IncreaseCompactionFreedPages(size_t pages) {
   DCHECK(is_started_);
   current_.compaction_freed_pages += pages;
+  current_.compaction_recorded_events = true;
 }
 
 void ThreadHeapStatsCollector::IncreaseAllocatedObjectSize(size_t bytes) {
@@ -100,11 +102,14 @@ void ThreadHeapStatsCollector::IncreaseCollectedWrapperCount(size_t count) {
   collected_wrapper_count_ += count;
 }
 
-void ThreadHeapStatsCollector::NotifyMarkingStarted(BlinkGC::GCReason reason) {
+void ThreadHeapStatsCollector::NotifyMarkingStarted(
+    BlinkGC::CollectionType collection_type,
+    BlinkGC::GCReason reason) {
   DCHECK(!is_started_);
   DCHECK(current_.marking_time().is_zero());
   is_started_ = true;
   current_.reason = reason;
+  current_.collection_type = collection_type;
 }
 
 void ThreadHeapStatsCollector::NotifyMarkingCompleted(size_t marked_bytes) {
@@ -170,6 +175,10 @@ base::TimeDelta ThreadHeapStatsCollector::estimated_marking_time() const {
   return base::TimeDelta::FromSecondsD(estimated_marking_time_in_seconds());
 }
 
+base::TimeDelta ThreadHeapStatsCollector::Event::roots_marking_time() const {
+  return scope_data[kVisitRoots];
+}
+
 base::TimeDelta ThreadHeapStatsCollector::Event::incremental_marking_time()
     const {
   return scope_data[kIncrementalMarkingStartMarking] +
@@ -195,8 +204,8 @@ base::TimeDelta ThreadHeapStatsCollector::Event::foreground_marking_time()
 
 base::TimeDelta ThreadHeapStatsCollector::Event::background_marking_time()
     const {
-  return base::TimeDelta::FromMicroseconds(
-      concurrent_scope_data[kConcurrentMark]);
+  return base::TimeDelta::FromMicroseconds(base::subtle::NoBarrier_Load(
+      &concurrent_scope_data[kConcurrentMarkingStep]));
 }
 
 base::TimeDelta ThreadHeapStatsCollector::Event::marking_time() const {
@@ -229,7 +238,7 @@ base::TimeDelta ThreadHeapStatsCollector::Event::foreground_sweeping_time()
 base::TimeDelta ThreadHeapStatsCollector::Event::background_sweeping_time()
     const {
   return base::TimeDelta::FromMicroseconds(
-      concurrent_scope_data[kConcurrentSweep]);
+      concurrent_scope_data[kConcurrentSweepingStep]);
 }
 
 base::TimeDelta ThreadHeapStatsCollector::Event::sweeping_time() const {

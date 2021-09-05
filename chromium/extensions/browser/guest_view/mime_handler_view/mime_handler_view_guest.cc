@@ -15,11 +15,9 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/common/child_process_host.h"
-#include "content/public/common/mime_handler_view_mode.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "extensions/browser/api/extensions_api_client.h"
-#include "extensions/browser/api/mime_handler_private/mime_handler_private.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_stream_manager.h"
@@ -36,7 +34,7 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
 
 using content::WebContents;
 using guest_view::GuestViewBase;
@@ -90,8 +88,7 @@ MimeHandlerViewGuest::MimeHandlerViewGuest(WebContents* owner_web_contents)
 
 MimeHandlerViewGuest::~MimeHandlerViewGuest() {
   // Before attaching is complete, the instance ID is not valid.
-  if (content::MimeHandlerViewMode::UsesCrossProcessFrame() &&
-      element_instance_id() != guest_view::kInstanceIDNone) {
+  if (element_instance_id() != guest_view::kInstanceIDNone) {
     // If we are awaiting attaching to outer WebContents
     if (GetEmbedderFrame() && GetEmbedderFrame()->GetParent()) {
       // TODO(ekaramad): This should only be needed if the embedder frame is in
@@ -105,10 +102,6 @@ MimeHandlerViewGuest::~MimeHandlerViewGuest() {
       container_manager->DestroyFrameContainer(element_instance_id());
     }
   }
-}
-
-bool MimeHandlerViewGuest::CanUseCrossProcessFrames() {
-  return content::MimeHandlerViewMode::UsesCrossProcessFrame();
 }
 
 content::RenderWidgetHost* MimeHandlerViewGuest::GetOwnerRenderWidgetHost() {
@@ -150,9 +143,8 @@ void MimeHandlerViewGuest::SetEmbedderFrame(int process_id, int routing_id) {
       owner_type == blink::FrameOwnerElementType::kEmbed ||
       owner_type == blink::FrameOwnerElementType::kObject;
   DCHECK_NE(MSG_ROUTING_NONE, embedder_widget_routing_id_);
-  if (content::MimeHandlerViewMode::UsesCrossProcessFrame())
-    delegate_->RecordLoadMetric(
-        /* in_main_frame */ !GetEmbedderFrame()->GetParent(), mime_type_);
+  delegate_->RecordLoadMetric(
+      /* in_main_frame */ !GetEmbedderFrame()->GetParent(), mime_type_);
 }
 
 void MimeHandlerViewGuest::SetBeforeUnloadController(
@@ -222,11 +214,6 @@ void MimeHandlerViewGuest::CreateWebContents(
           params,
           owner_web_contents()->GetController().GetSessionStorageNamespaceMap())
           .release());
-
-  registry_.AddInterface(
-      base::Bind(&MimeHandlerServiceImpl::Create, stream_->GetWeakPtr()));
-  registry_.AddInterface(base::BindRepeating(
-      &MimeHandlerViewGuest::FuseBeforeUnloadControl, base::Unretained(this)));
 }
 
 void MimeHandlerViewGuest::DidAttachToEmbedder() {
@@ -278,14 +265,8 @@ void MimeHandlerViewGuest::NavigationStateChanged(
   if (changed_flags & content::INVALIDATE_TYPE_URL)
     return;
 
-  // NOTE(andre@vivaldi.com): Vivaldi enable
-  // MimeHandlerViewMode::UsesCrossProcessFrame for PDFs. Make sure the title of
-  // the PDF is updated in the embedder. is_full_page_plugin is false in this
-  // mode.
-  if (!content::MimeHandlerViewMode::UsesCrossProcessFrame()) {
   if (!is_full_page_plugin())
     return;
-  }
 
   content::NavigationEntry* last_committed_entry =
       embedder_web_contents()->GetController().GetLastCommittedEntry();
@@ -421,6 +402,8 @@ content::WebContents* MimeHandlerViewGuest::CreateCustomWebContents(
                                      WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                      ui::PAGE_TRANSITION_LINK, true);
   open_params.initiator_origin = opener->GetLastCommittedOrigin();
+  open_params.source_site_instance = source_site_instance;
+
   // Extensions are allowed to open popups under circumstances covered by
   // running as a mime handler.
   open_params.user_gesture = true;
@@ -447,32 +430,15 @@ void MimeHandlerViewGuest::DocumentOnLoadCompletedInMainFrame() {
   // Assume the embedder WebContents is valid here.
   DCHECK(embedder_web_contents());
 
-  // If the guest is embedded inside a cross-process frame and the frame is
-  // removed before the guest is properly loaded, then owner RenderWidgetHost
-  // will be nullptr.
-  if (CanUseCrossProcessFrames()) {
-    // For plugin elements, the embedder should be notified so that the queued
-    // messages (postMessage) are forwarded to the guest page. Otherwise we
-    // just send the upadte to the embedder (full page  MHV).
-    auto* rfh = maybe_has_frame_container_ ? GetEmbedderFrame()->GetParent()
-                                           : GetEmbedderFrame();
-    mojo::AssociatedRemote<mojom::MimeHandlerViewContainerManager>
-        container_manager;
-    rfh->GetRemoteAssociatedInterfaces()->GetInterface(&container_manager);
-    container_manager->DidLoad(element_instance_id(), original_resource_url_);
-    return;
-  }
-  if (auto* rwh = GetOwnerRenderWidgetHost()) {
-    rwh->Send(new ExtensionsGuestViewMsg_MimeHandlerViewGuestOnLoadCompleted(
-        element_instance_id()));
-  }
-}
-
-void MimeHandlerViewGuest::OnInterfaceRequestFromFrame(
-    content::RenderFrameHost* render_frame_host,
-    const std::string& interface_name,
-    mojo::ScopedMessagePipeHandle* interface_pipe) {
-  registry_.TryBindInterface(interface_name, interface_pipe);
+  // For plugin elements, the embedder should be notified so that the queued
+  // messages (postMessage) are forwarded to the guest page. Otherwise we
+  // just send the update to the embedder (full page  MHV).
+  auto* rfh = maybe_has_frame_container_ ? GetEmbedderFrame()->GetParent()
+                                         : GetEmbedderFrame();
+  mojo::AssociatedRemote<mojom::MimeHandlerViewContainerManager>
+      container_manager;
+  rfh->GetRemoteAssociatedInterfaces()->GetInterface(&container_manager);
+  container_manager->DidLoad(element_instance_id(), original_resource_url_);
 }
 
 void MimeHandlerViewGuest::ReadyToCommitNavigation(
@@ -497,6 +463,10 @@ content::RenderFrameHost* MimeHandlerViewGuest::GetEmbedderFrame() {
 
 base::WeakPtr<MimeHandlerViewGuest> MimeHandlerViewGuest::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
+}
+
+base::WeakPtr<StreamContainer> MimeHandlerViewGuest::GetStreamWeakPtr() {
+  return stream_->GetWeakPtr();
 }
 
 }  // namespace extensions

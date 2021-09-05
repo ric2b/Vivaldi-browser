@@ -7,13 +7,14 @@
 #include <limits>
 #include <vector>
 
+#include "ash/public/ash_interfaces.h"
 #include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/ash_prefs.h"
-#include "ash/public/mojom/constants.mojom.h"
 #include "ash/public/mojom/cros_display_config.mojom.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -32,6 +33,7 @@
 #include "chrome/browser/chromeos/net/wake_on_wifi_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/sync/turn_sync_on_helper.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
@@ -40,6 +42,7 @@
 #include "chrome/browser/ui/ash/system_tray_client.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/system/devicemode.h"
@@ -58,8 +61,6 @@
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/system_connector.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "third_party/blink/public/mojom/speech/speech_synthesis.mojom.h"
 #include "third_party/cros_system_api/dbus/update_engine/dbus-constants.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
@@ -116,6 +117,10 @@ void TryMigrateToResolveTimezoneByGeolocationMethod(PrefService* prefs) {
                     static_cast<int>(method));
 }
 
+bool AreScrollSettingsAllowed() {
+  return base::FeatureList::IsEnabled(features::kAllowScrollSettings);
+}
+
 }  // namespace
 
 Preferences::Preferences()
@@ -126,12 +131,8 @@ Preferences::Preferences(input_method::InputMethodManager* input_method_manager)
       input_method_manager_(input_method_manager),
       user_(NULL),
       user_is_primary_(false) {
-  // |connector| may be null in tests.
-  service_manager::Connector* connector = content::GetSystemConnector();
-  if (connector) {
-    connector->Connect(ash::mojom::kServiceName,
-                       cros_display_config_.BindNewPipeAndPassReceiver());
-  }
+  ash::BindCrosDisplayConfigController(
+      cros_display_config_.BindNewPipeAndPassReceiver());
 }
 
 Preferences::~Preferences() {
@@ -166,6 +167,10 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
 // static
 void Preferences::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+  // Some classes register their own prefs.
+  TurnSyncOnHelper::RegisterProfilePrefs(registry);
+  input_method::InputMethodSyncer::RegisterProfilePrefs(registry);
+
   std::string hardware_keyboard_id;
   // TODO(yusukes): Remove the runtime hack.
   if (IsRunningAsSystemCompositor()) {
@@ -190,185 +195,65 @@ void Preferences::RegisterProfilePrefs(
       prefs::kAccountManagerNumTimesWelcomeScreenShown, 0 /* default_value */);
 
   registry->RegisterBooleanPref(
-      prefs::kTapToClickEnabled,
-      true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      prefs::kTapToClickEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(prefs::kEnableTouchpadThreeFingerClick, false);
   // This preference can only be set to true by policy or command_line flag
   // and it should not carry over to sessions were neither of these is set.
   registry->RegisterBooleanPref(prefs::kUnifiedDesktopEnabledByDefault, false,
                                 PrefRegistry::NO_REGISTRATION_FLAGS);
+  // TODO(anasalazar): Finish moving this to ash.
   registry->RegisterBooleanPref(
-      prefs::kNaturalScroll, base::CommandLine::ForCurrentProcess()->HasSwitch(
-                                 switches::kNaturalScrollDefault),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      ash::prefs::kNaturalScroll,
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kNaturalScrollDefault),
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
-      prefs::kPrimaryMouseButtonRight,
-      false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      ash::prefs::kMouseReverseScroll, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
+
   registry->RegisterBooleanPref(
-      prefs::kMouseReverseScroll, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      prefs::kPrimaryMouseButtonRight, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
       prefs::kMouseAcceleration, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kMouseScrollAcceleration, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
       prefs::kTouchpadAcceleration, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kTouchpadScrollAcceleration, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(prefs::kLabsMediaplayerEnabled, false);
   registry->RegisterBooleanPref(prefs::kLabsAdvancedFilesystemEnabled, false);
   registry->RegisterBooleanPref(prefs::kAppReinstallRecommendationEnabled,
                                 false);
 
-  // TODO(jamescook): Move ownership and registration into ash. This will need
-  // changes to policy::RecommendationRestorer which requires that prefs are
-  // available immediately during startup.
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityStickyKeysEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityLargeCursorEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterIntegerPref(ash::prefs::kAccessibilityLargeCursorDipSize,
-                                ash::kDefaultLargeCursorSize,
-                                PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(ash::prefs::kAccessibilitySpokenFeedbackEnabled,
-                                false, PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityHighContrastEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kHighContrastAcceleratorDialogHasBeenAccepted, false,
-      PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(ash::prefs::kDockedMagnifierEnabled, false,
-                                PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kDockedMagnifierAcceleratorDialogHasBeenAccepted, false,
-      PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityScreenMagnifierCenterFocus, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterBooleanPref(
-      ash::prefs::kScreenMagnifierAcceleratorDialogHasBeenAccepted, false,
-      PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kDictationAcceleratorDialogHasBeenAccepted, false,
-      PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted2, false,
-      PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityScreenMagnifierEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityDictationEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterDoublePref(ash::prefs::kAccessibilityScreenMagnifierScale,
-                               std::numeric_limits<double>::min(),
-                               PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityAutoclickEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
   registry->RegisterIntegerPref(
-      ash::prefs::kAccessibilityAutoclickDelayMs, ash::kDefaultAutoclickDelayMs,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
+      prefs::kMouseSensitivity, 3,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
-      ash::prefs::kAccessibilityAutoclickEventType,
-      static_cast<int>(ash::kDefaultAutoclickEventType),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityAutoclickRevertToLeftClick, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityAutoclickStabilizePosition, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
+      prefs::kMouseScrollSensitivity, 3,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
-      ash::prefs::kAccessibilityAutoclickMovementThreshold,
-      ash::kDefaultAutoclickMovementThreshold,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
+      prefs::kTouchpadSensitivity, 3,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
-      ash::prefs::kAccessibilityAutoclickMenuPosition,
-      static_cast<int>(ash::kDefaultAutoclickMenuPosition),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
+      prefs::kTouchpadScrollSensitivity, 3,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityVirtualKeyboardEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityMonoAudioEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityCaretHighlightEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityCursorHighlightEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilityFocusHighlightEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilitySelectToSpeakEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilitySwitchAccessEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterListPref(
-      ash::prefs::kAccessibilitySwitchAccessSelectKeyCodes,
-      base::Value(std::vector<base::Value>()),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterIntegerPref(
-      ash::prefs::kAccessibilitySwitchAccessSelectSetting,
-      ash::kSwitchAccessAssignmentNone,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterListPref(
-      ash::prefs::kAccessibilitySwitchAccessNextKeyCodes,
-      base::Value(std::vector<base::Value>()),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterIntegerPref(
-      ash::prefs::kAccessibilitySwitchAccessNextSetting,
-      ash::kSwitchAccessAssignmentNone,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterListPref(
-      ash::prefs::kAccessibilitySwitchAccessPreviousKeyCodes,
-      base::Value(std::vector<base::Value>()),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterIntegerPref(
-      ash::prefs::kAccessibilitySwitchAccessPreviousSetting,
-      ash::kSwitchAccessAssignmentNone,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kAccessibilitySwitchAccessAutoScanEnabled, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterIntegerPref(
-      ash::prefs::kAccessibilitySwitchAccessAutoScanSpeedMs,
-      ash::kDefaultSwitchAccessAutoScanSpeed.InMilliseconds(),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterIntegerPref(
-      ash::prefs::kAccessibilitySwitchAccessAutoScanKeyboardSpeedMs,
-      ash::kDefaultSwitchAccessAutoScanSpeed.InMilliseconds(),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kShouldAlwaysShowAccessibilityMenu, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-
-  registry->RegisterIntegerPref(
-      prefs::kMouseSensitivity,
-      3,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
-  registry->RegisterIntegerPref(
-      prefs::kTouchpadSensitivity,
-      3,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
-  registry->RegisterBooleanPref(
-      prefs::kUse24HourClock,
-      base::GetHourClockType() == base::k24HourClock,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+      prefs::kUse24HourClock, base::GetHourClockType() == base::k24HourClock,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterBooleanPref(prefs::kCameraMediaConsolidated, false);
   registry->RegisterBooleanPref(
       drive::prefs::kDisableDrive, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterBooleanPref(
       drive::prefs::kDisableDriveOverCellular, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterBooleanPref(drive::prefs::kDriveFsWasLaunchedAtLeastOnce,
                                 false);
   registry->RegisterStringPref(drive::prefs::kDriveFsProfileSalt, "");
@@ -387,20 +272,19 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterIntegerPref(
       prefs::kLanguageRemapSearchKeyTo,
       static_cast<int>(ui::chromeos::ModifierKey::kSearchKey),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF |
-          PrefRegistry::PUBLIC);  // Used in ash.
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
       prefs::kLanguageRemapControlKeyTo,
       static_cast<int>(ui::chromeos::ModifierKey::kControlKey),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
       prefs::kLanguageRemapAltKeyTo,
       static_cast<int>(ui::chromeos::ModifierKey::kAltKey),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
       prefs::kLanguageRemapAssistantKeyTo,
       static_cast<int>(ui::chromeos::ModifierKey::kAssistantKey),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   // We don't sync the CapsLock remapping pref, since the UI hides this pref
   // on certain devices, so syncing a non-default value to a device that
   // doesn't allow changing the pref would be odd. http://crbug.com/167237
@@ -410,23 +294,23 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterIntegerPref(
       prefs::kLanguageRemapEscapeKeyTo,
       static_cast<int>(ui::chromeos::ModifierKey::kEscapeKey),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
       prefs::kLanguageRemapBackspaceKeyTo,
       static_cast<int>(ui::chromeos::ModifierKey::kBackspaceKey),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   // The Command key on external Apple keyboards is remapped by default to Ctrl
   // until the user changes it from the keyboard settings.
   registry->RegisterIntegerPref(
       prefs::kLanguageRemapExternalCommandKeyTo,
       static_cast<int>(ui::chromeos::ModifierKey::kControlKey),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   // The Meta key (Search or Windows keys) on external keyboards is remapped by
   // default to Search until the user changes it from the keyboard settings.
   registry->RegisterIntegerPref(
       prefs::kLanguageRemapExternalMetaKeyTo,
       static_cast<int>(ui::chromeos::ModifierKey::kSearchKey),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   // The following pref isn't synced since the user may desire a different value
   // depending on whether an external keyboard is attached to a particular
   // device.
@@ -434,15 +318,15 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       prefs::kLanguageXkbAutoRepeatEnabled,
       language_prefs::kXkbAutoRepeatEnabled,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterIntegerPref(
       prefs::kLanguageXkbAutoRepeatDelay,
       language_prefs::kXkbAutoRepeatDelayInMs,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterIntegerPref(
       prefs::kLanguageXkbAutoRepeatInterval,
       language_prefs::kXkbAutoRepeatIntervalInMs,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
   // Don't sync the note-taking app; it may not be installed on other devices.
   registry->RegisterStringPref(prefs::kNoteTakingAppId, std::string());
@@ -451,14 +335,6 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kRestoreLastLockScreenNote, true);
   registry->RegisterDictionaryPref(prefs::kNoteTakingAppsLockScreenToastShown);
 
-  // TODO(warx): Move prefs::kAllowScreenLock and prefs::kEnableAutoScreenLock
-  // registration to ash, which requires refactoring in SessionControllerClient.
-  registry->RegisterBooleanPref(ash::prefs::kAllowScreenLock, true,
-                                PrefRegistry::PUBLIC);
-  registry->RegisterBooleanPref(
-      ash::prefs::kEnableAutoScreenLock, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-
   // We don't sync wake-on-wifi related prefs because they are device specific.
   registry->RegisterBooleanPref(prefs::kWakeOnWifiDarkConnect, true);
 
@@ -466,15 +342,14 @@ void Preferences::RegisterProfilePrefs(
 
   // Number of times Data Saver prompt has been shown on 3G data network.
   registry->RegisterIntegerPref(
-      prefs::kDataSaverPromptsShown,
-      0,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+      prefs::kDataSaverPromptsShown, 0,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
   // Initially all existing users would see "What's new" for current version
   // after update.
-  registry->RegisterStringPref(prefs::kChromeOSReleaseNotesVersion,
-                               "0.0.0.0",
-                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterStringPref(
+      prefs::kChromeOSReleaseNotesVersion, "0.0.0.0",
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
   registry->RegisterBooleanPref(prefs::kExternalStorageDisabled, false);
 
@@ -483,8 +358,6 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterStringPref(prefs::kTermsOfServiceURL, "");
 
   registry->RegisterBooleanPref(prefs::kTouchVirtualKeyboardEnabled, false);
-
-  input_method::InputMethodSyncer::RegisterProfilePrefs(registry);
 
   std::string current_timezone_id;
   if (chromeos::CrosSettings::IsInitialized()) {
@@ -498,17 +371,34 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(
       prefs::kResolveTimezoneByGeolocation, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
   registry->RegisterBooleanPref(
       prefs::kResolveTimezoneByGeolocationMigratedToMethod, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+
+  bool allow_time_zone_resolve_by_default = true;
+  // CfM devices default to static timezone unless time zone resolving is
+  // explicitly enabled for the signin screen (usually by policy).
+  // We need local_state fully initialized, which does not happen in tests.
+  if (!g_browser_process->local_state() ||
+      g_browser_process->local_state()
+              ->GetAllPrefStoresInitializationStatus() ==
+          PrefService::INITIALIZATION_STATUS_WAITING ||
+      system::InputDeviceSettings::Get()->ForceKeyboardDrivenUINavigation() ||
+      !system::TimeZoneResolverManager::
+          IfServiceShouldBeRunningForSigninScreen()) {
+    allow_time_zone_resolve_by_default = false;
+  }
 
   registry->RegisterIntegerPref(
       prefs::kResolveTimezoneByGeolocationMethod,
       static_cast<int>(
-          system::TimeZoneResolverManager::TimeZoneResolveMethod::IP_ONLY),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+          allow_time_zone_resolve_by_default
+              ? system::TimeZoneResolverManager::TimeZoneResolveMethod::IP_ONLY
+              : system::TimeZoneResolverManager::TimeZoneResolveMethod::
+                    DISABLED),
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
   registry->RegisterBooleanPref(prefs::kCaptivePortalAuthenticationIgnoresProxy,
                                 true);
@@ -532,8 +422,6 @@ void Preferences::RegisterProfilePrefs(
 
   // We don't sync EOL related prefs because they are device specific.
   registry->RegisterBooleanPref(prefs::kEolNotificationDismissed, false);
-  registry->RegisterIntegerPref(prefs::kEolStatus,
-                                update_engine::EndOfLifeStatus::kSupported);
   registry->RegisterTimePref(prefs::kEndOfLifeDate, base::Time());
   registry->RegisterBooleanPref(prefs::kFirstEolWarningDismissed, false);
   registry->RegisterBooleanPref(prefs::kSecondEolWarningDismissed, false);
@@ -545,16 +433,16 @@ void Preferences::RegisterProfilePrefs(
   // Text-to-speech prefs.
   registry->RegisterDictionaryPref(
       prefs::kTextToSpeechLangToVoiceName,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterDoublePref(
       prefs::kTextToSpeechRate, blink::mojom::kSpeechSynthesisDefaultRate,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterDoublePref(
       prefs::kTextToSpeechPitch, blink::mojom::kSpeechSynthesisDefaultPitch,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterDoublePref(
       prefs::kTextToSpeechVolume, blink::mojom::kSpeechSynthesisDefaultVolume,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
   // By default showing Sync Consent is set to true. It can changed by policy.
   registry->RegisterBooleanPref(prefs::kEnableSyncConsent, true);
@@ -567,6 +455,11 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(prefs::kSettingsShowBrowserBanner, true);
   registry->RegisterBooleanPref(prefs::kSettingsShowOSBanner, true);
+
+  // This pref is a per-session pref and must not be synced.
+  registry->RegisterStringPref(prefs::kLoginExtensionApiLaunchExtensionId,
+                               std::string(),
+                               PrefRegistry::NO_REGISTRATION_FLAGS);
 }
 
 void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
@@ -582,14 +475,24 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
                                    prefs, callback);
   unified_desktop_enabled_by_default_.Init(
       prefs::kUnifiedDesktopEnabledByDefault, prefs, callback);
-  natural_scroll_.Init(prefs::kNaturalScroll, prefs, callback);
+  // TODO(anasalazar): Finish moving this to ash.
+  natural_scroll_.Init(ash::prefs::kNaturalScroll, prefs, callback);
+  mouse_reverse_scroll_.Init(ash::prefs::kMouseReverseScroll, prefs, callback);
+
   mouse_sensitivity_.Init(prefs::kMouseSensitivity, prefs, callback);
+  mouse_scroll_sensitivity_.Init(prefs::kMouseScrollSensitivity, prefs,
+                                 callback);
   touchpad_sensitivity_.Init(prefs::kTouchpadSensitivity, prefs, callback);
+  touchpad_scroll_sensitivity_.Init(prefs::kTouchpadScrollSensitivity, prefs,
+                                    callback);
   primary_mouse_button_right_.Init(prefs::kPrimaryMouseButtonRight,
                                    prefs, callback);
-  mouse_reverse_scroll_.Init(prefs::kMouseReverseScroll, prefs, callback);
   mouse_acceleration_.Init(prefs::kMouseAcceleration, prefs, callback);
+  mouse_scroll_acceleration_.Init(prefs::kMouseScrollAcceleration, prefs,
+                                  callback);
   touchpad_acceleration_.Init(prefs::kTouchpadAcceleration, prefs, callback);
+  touchpad_scroll_acceleration_.Init(prefs::kTouchpadScrollAcceleration, prefs,
+                                     callback);
   download_default_directory_.Init(prefs::kDownloadDefaultDirectory,
                                    prefs, callback);
   preload_engines_.Init(prefs::kLanguagePreloadEngines, prefs, callback);
@@ -759,7 +662,9 @@ void Preferences::ApplyPreferences(ApplyReason reason,
           unified_desktop_enabled_by_default_.GetValue());
     }
   }
-  if (reason != REASON_PREF_CHANGED || pref_name == prefs::kNaturalScroll) {
+  // TODO(anasalazar): Finish moving this to ash.
+  if (reason != REASON_PREF_CHANGED ||
+      pref_name == ash::prefs::kNaturalScroll) {
     // Force natural scroll default if we've sync'd and if the cmd line arg is
     // set.
     ForceNaturalScrollDefault();
@@ -773,33 +678,91 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     else if (reason == REASON_INITIALIZATION)
       UMA_HISTOGRAM_BOOLEAN("Touchpad.NaturalScroll.Started", enabled);
   }
-  if (reason != REASON_PREF_CHANGED || pref_name == prefs::kMouseSensitivity) {
-    const int sensitivity = mouse_sensitivity_.GetValue();
+  if (reason != REASON_PREF_CHANGED ||
+      pref_name == ash::prefs::kMouseReverseScroll) {
+    const bool enabled = mouse_reverse_scroll_.GetValue();
     if (user_is_active)
-      mouse_settings.SetSensitivity(sensitivity);
+      mouse_settings.SetReverseScroll(enabled);
+    if (reason == REASON_PREF_CHANGED)
+      UMA_HISTOGRAM_BOOLEAN("Mouse.ReverseScroll.Changed", enabled);
+    else if (reason == REASON_INITIALIZATION)
+      UMA_HISTOGRAM_BOOLEAN("Mouse.ReverseScroll.Started", enabled);
+  }
+
+  if (reason != REASON_PREF_CHANGED || pref_name == prefs::kMouseSensitivity) {
+    const int sensitivity_int = mouse_sensitivity_.GetValue();
+    if (user_is_active) {
+      mouse_settings.SetSensitivity(sensitivity_int);
+
+      // With the flag off, also set scroll sensitivity (legacy fallback).
+      // TODO(https://crbug.com/836258): Remove check when flag is removed.
+      if (!AreScrollSettingsAllowed())
+        mouse_settings.SetScrollSensitivity(sensitivity_int);
+    }
+    system::PointerSensitivity sensitivity =
+        static_cast<system::PointerSensitivity>(sensitivity_int);
     if (reason == REASON_PREF_CHANGED) {
       UMA_HISTOGRAM_ENUMERATION("Mouse.PointerSensitivity.Changed",
-                                sensitivity,
-                                system::kMaxPointerSensitivity + 1);
+                                sensitivity);
     } else if (reason == REASON_INITIALIZATION) {
       UMA_HISTOGRAM_ENUMERATION("Mouse.PointerSensitivity.Started",
-                                sensitivity,
-                                system::kMaxPointerSensitivity + 1);
+                                sensitivity);
     }
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == prefs::kTouchpadSensitivity) {
-    const int sensitivity = touchpad_sensitivity_.GetValue();
+      pref_name == prefs::kMouseScrollSensitivity) {
+    // With the flag off, use to normal sensitivity (legacy fallback).
+    // TODO(https://crbug.com/836258): Remove check when flag is removed.
+    const int sensitivity_int = AreScrollSettingsAllowed()
+                                    ? mouse_scroll_sensitivity_.GetValue()
+                                    : mouse_sensitivity_.GetValue();
     if (user_is_active)
-      touchpad_settings.SetSensitivity(sensitivity);
+      mouse_settings.SetScrollSensitivity(sensitivity_int);
+    system::PointerSensitivity sensitivity =
+        static_cast<system::PointerSensitivity>(sensitivity_int);
+    if (reason == REASON_PREF_CHANGED)
+      UMA_HISTOGRAM_ENUMERATION("Mouse.ScrollSensitivity.Changed", sensitivity);
+    else if (reason == REASON_INITIALIZATION)
+      UMA_HISTOGRAM_ENUMERATION("Mouse.ScrollSensitivity.Started", sensitivity);
+  }
+  if (reason != REASON_PREF_CHANGED ||
+      pref_name == prefs::kTouchpadSensitivity) {
+    const int sensitivity_int = touchpad_sensitivity_.GetValue();
+    if (user_is_active) {
+      touchpad_settings.SetSensitivity(sensitivity_int);
+
+      // With the flag off, also set scroll sensitivity (legacy fallback).
+      // TODO(https://crbug.com/836258): Remove check when flag is removed.
+      if (!AreScrollSettingsAllowed())
+        touchpad_settings.SetScrollSensitivity(sensitivity_int);
+    }
+    system::PointerSensitivity sensitivity =
+        static_cast<system::PointerSensitivity>(sensitivity_int);
     if (reason == REASON_PREF_CHANGED) {
       UMA_HISTOGRAM_ENUMERATION("Touchpad.PointerSensitivity.Changed",
-                                sensitivity,
-                                system::kMaxPointerSensitivity + 1);
+                                sensitivity);
     } else if (reason == REASON_INITIALIZATION) {
       UMA_HISTOGRAM_ENUMERATION("Touchpad.PointerSensitivity.Started",
-                                sensitivity,
-                                system::kMaxPointerSensitivity + 1);
+                                sensitivity);
+    }
+  }
+  if (reason != REASON_PREF_CHANGED ||
+      pref_name == prefs::kTouchpadScrollSensitivity) {
+    // With the flag off, use normal sensitivity (legacy fallback).
+    // TODO(https://crbug.com/836258): Remove check when flag is removed.
+    const int sensitivity_int = AreScrollSettingsAllowed()
+                                    ? touchpad_scroll_sensitivity_.GetValue()
+                                    : touchpad_sensitivity_.GetValue();
+    if (user_is_active)
+      touchpad_settings.SetScrollSensitivity(sensitivity_int);
+    system::PointerSensitivity sensitivity =
+        static_cast<system::PointerSensitivity>(sensitivity_int);
+    if (reason == REASON_PREF_CHANGED) {
+      UMA_HISTOGRAM_ENUMERATION("Touchpad.ScrollSensitivity.Changed",
+                                sensitivity);
+    } else if (reason == REASON_INITIALIZATION) {
+      UMA_HISTOGRAM_ENUMERATION("Touchpad.ScrollSensitivity.Started",
+                                sensitivity);
     }
   }
   if (reason != REASON_PREF_CHANGED ||
@@ -818,16 +781,6 @@ void Preferences::ApplyPreferences(ApplyReason reason,
         prefs->SetBoolean(prefs::kOwnerPrimaryMouseButtonRight, right);
     }
   }
-  if (reason != REASON_PREF_CHANGED ||
-      pref_name == prefs::kMouseReverseScroll) {
-    const bool enabled = mouse_reverse_scroll_.GetValue();
-    if (user_is_active)
-      mouse_settings.SetReverseScroll(enabled);
-    if (reason == REASON_PREF_CHANGED)
-      UMA_HISTOGRAM_BOOLEAN("Mouse.ReverseScroll.Changed", enabled);
-    else if (reason == REASON_INITIALIZATION)
-      UMA_HISTOGRAM_BOOLEAN("Mouse.ReverseScroll.Started", enabled);
-  }
   if (reason != REASON_PREF_CHANGED || pref_name == prefs::kMouseAcceleration) {
     const bool enabled = mouse_acceleration_.GetValue();
     if (user_is_active)
@@ -838,6 +791,16 @@ void Preferences::ApplyPreferences(ApplyReason reason,
       base::UmaHistogramBoolean("Mouse.Acceleration.Started", enabled);
   }
   if (reason != REASON_PREF_CHANGED ||
+      pref_name == prefs::kMouseScrollAcceleration) {
+    const bool enabled = mouse_scroll_acceleration_.GetValue();
+    if (user_is_active)
+      mouse_settings.SetScrollAcceleration(enabled);
+    if (reason == REASON_PREF_CHANGED)
+      base::UmaHistogramBoolean("Mouse.ScrollAcceleration.Changed", enabled);
+    else if (reason == REASON_INITIALIZATION)
+      base::UmaHistogramBoolean("Mouse.ScrollAcceleration.Started", enabled);
+  }
+  if (reason != REASON_PREF_CHANGED ||
       pref_name == prefs::kTouchpadAcceleration) {
     const bool enabled = touchpad_acceleration_.GetValue();
     if (user_is_active)
@@ -846,6 +809,16 @@ void Preferences::ApplyPreferences(ApplyReason reason,
       base::UmaHistogramBoolean("Touchpad.Acceleration.Changed", enabled);
     else if (reason == REASON_INITIALIZATION)
       base::UmaHistogramBoolean("Touchpad.Acceleration.Started", enabled);
+  }
+  if (reason != REASON_PREF_CHANGED ||
+      pref_name == prefs::kTouchpadScrollAcceleration) {
+    const bool enabled = touchpad_scroll_acceleration_.GetValue();
+    if (user_is_active)
+      touchpad_settings.SetScrollAcceleration(enabled);
+    if (reason == REASON_PREF_CHANGED)
+      base::UmaHistogramBoolean("Touchpad.ScrollAcceleration.Changed", enabled);
+    else if (reason == REASON_INITIALIZATION)
+      base::UmaHistogramBoolean("Touchpad.ScrollAcceleration.Started", enabled);
   }
   if (reason != REASON_PREF_CHANGED ||
       pref_name == prefs::kDownloadDefaultDirectory) {
@@ -1033,11 +1006,13 @@ void Preferences::OnIsSyncingChanged() {
   ForceNaturalScrollDefault();
 }
 
+// TODO(anasalazar): Finish moving this to ash::TouchDevicesController.
 void Preferences::ForceNaturalScrollDefault() {
   DVLOG(1) << "ForceNaturalScrollDefault";
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kNaturalScrollDefault) &&
-      prefs_->IsSyncing() && !prefs_->GetUserPrefValue(prefs::kNaturalScroll)) {
+      prefs_->IsSyncing() &&
+      !prefs_->GetUserPrefValue(ash::prefs::kNaturalScroll)) {
     DVLOG(1) << "Natural scroll forced to true";
     natural_scroll_.SetValue(true);
     UMA_HISTOGRAM_BOOLEAN("Touchpad.NaturalScroll.Forced", true);

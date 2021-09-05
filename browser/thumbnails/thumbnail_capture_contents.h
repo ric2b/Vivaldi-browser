@@ -13,14 +13,9 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/weak_ptr.h"
-#include "base/time/time.h"
 #include "browser/thumbnails/capture_page.h"
-#include "chrome/browser/task_manager/providers/web_contents/renderer_task.h"
-#include "chrome/browser/task_manager/providers/web_contents/web_contents_tag.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "ui/gfx/geometry/size.h"
 
 namespace content {
 class BrowserContext;

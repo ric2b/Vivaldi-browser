@@ -5,7 +5,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -37,12 +36,6 @@ class OOPBrowserTest : public ContentBrowserTest {
     command_line->AppendSwitch(switches::kEnablePixelOutputInTests);
     command_line->AppendSwitch(switches::kEnableOopRasterization);
     command_line->AppendSwitch(switches::kUseGpuInTests);
-  }
-
-  void VerifyVisualStateUpdated(const base::Closure& done_cb,
-                                bool visual_state_updated) {
-    ASSERT_TRUE(visual_state_updated);
-    done_cb.Run();
   }
 
   SkBitmap snapshot_;

@@ -146,7 +146,8 @@ class HTMLMockHTMLResourcePreloader : public ResourcePreloader {
     PreloadRequestVerification(type, url, base_url, width, referrer_policy);
     Resource* resource = preload_request_->Start(document);
     ASSERT_TRUE(resource);
-    EXPECT_EQ(expected_referrer, resource->GetResourceRequest().HttpReferrer());
+    EXPECT_EQ(expected_referrer,
+              resource->GetResourceRequest().ReferrerString());
   }
 
   void PreconnectRequestVerification(const String& host,
@@ -633,11 +634,11 @@ TEST_F(HTMLPreloadScannerTest, testMetaAcceptCH) {
        "640w'>",
        "blabla.gif", "http://example.test/", ResourceType::kImage, 0},
       {"http://example.test",
-       "<meta http-equiv='accept-ch' content='dpr \t'><img srcset='bla.gif "
+       "<meta http-equiv='accept-ch' content='dpr  '><img srcset='bla.gif "
        "320w, blabla.gif 640w'>",
        "blabla.gif", "http://example.test/", ResourceType::kImage, 0, dpr},
       {"http://example.test",
-       "<meta http-equiv='accept-ch' content='bla,dpr \t'><img srcset='bla.gif "
+       "<meta http-equiv='accept-ch' content='bla,dpr  '><img srcset='bla.gif "
        "320w, blabla.gif 640w'>",
        "blabla.gif", "http://example.test/", ResourceType::kImage, 0, dpr},
       {"http://example.test",
@@ -662,7 +663,7 @@ TEST_F(HTMLPreloadScannerTest, testMetaAcceptCH) {
        viewport_width},
       {"http://example.test",
        "<meta http-equiv='accept-ch' content='  viewport-width  ,width, "
-       "wutever, dpr \t'><img sizes='90vw' srcset='bla.gif 320w, blabla.gif "
+       "wutever, dpr  '><img sizes='90vw' srcset='bla.gif 320w, blabla.gif "
        "640w'>",
        "blabla.gif", "http://example.test/", ResourceType::kImage, 450, all},
   };
@@ -684,7 +685,7 @@ TEST_F(HTMLPreloadScannerTest, testMetaAcceptCHInsecureDocument) {
   const PreloadScannerTestCase expect_no_client_hint = {
       "http://example.test",
       "<meta http-equiv='accept-ch' content='  viewport-width  ,width, "
-      "wutever, dpr \t'><img sizes='90vw' srcset='bla.gif 320w, blabla.gif "
+      "wutever, dpr  '><img sizes='90vw' srcset='bla.gif 320w, blabla.gif "
       "640w'>",
       "blabla.gif",
       "http://example.test/",
@@ -694,7 +695,7 @@ TEST_F(HTMLPreloadScannerTest, testMetaAcceptCHInsecureDocument) {
   const PreloadScannerTestCase expect_client_hint = {
       "http://example.test",
       "<meta http-equiv='accept-ch' content='  viewport-width  ,width, "
-      "wutever, dpr \t'><img sizes='90vw' srcset='bla.gif 320w, blabla.gif "
+      "wutever, dpr  '><img sizes='90vw' srcset='bla.gif 320w, blabla.gif "
       "640w'>",
       "blabla.gif",
       "http://example.test/",
@@ -871,9 +872,7 @@ TEST_F(HTMLPreloadScannerTest, testReferrerPolicy) {
        "referrerpolicy='strict-origin-when-cross-origin' "
        "href='bla.gif'/>",
        "bla.gif", "http://example.test/", ResourceType::kImage, 0,
-       network::mojom::ReferrerPolicy::
-           kNoReferrerWhenDowngradeOriginWhenCrossOrigin,
-       nullptr},
+       network::mojom::ReferrerPolicy::kStrictOriginWhenCrossOrigin, nullptr},
       {"http://example.test",
        "<link rel='stylesheet' href='sheet.css' type='text/css'>", "sheet.css",
        "http://example.test/", ResourceType::kCSSStyleSheet, 0,

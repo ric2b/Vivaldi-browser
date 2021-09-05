@@ -10,9 +10,9 @@ import android.view.Window;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
-import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.ui.UiUtils;
+import org.chromium.ui.util.ColorUtils;
 
 /**
  * Configures the system navigation bar while a Custom Tab activity is running.
@@ -27,7 +27,7 @@ public class CustomTabNavigationBarController {
      * Sets the navigation bar color according to intent extras.
      */
     public static void updateNavigationBarColor(Activity activity,
-            CustomTabIntentDataProvider intentDataProvider) {
+            BrowserServicesIntentDataProvider intentDataProvider) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
             return; // Window#setNavigationBar not available.
         }

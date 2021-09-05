@@ -13,7 +13,9 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
 #include "components/viz/common/frame_timing_details_map.h"
+#include "components/viz/common/hit_test/hit_test_region_list.h"
 #include "components/viz/common/resources/returned_resource.h"
+#include "components/viz/common/surfaces/local_surface_id.h"
 #include "content/common/content_export.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -28,6 +30,7 @@ class Transform;
 
 namespace viz {
 class CompositorFrame;
+class BeginFrameSource;
 }
 
 namespace content {
@@ -54,6 +57,7 @@ class CONTENT_EXPORT SynchronousCompositor {
 
     uint32_t layer_tree_frame_sink_id;
     std::unique_ptr<viz::CompositorFrame> frame;
+    base::Optional<viz::HitTestRegionList> hit_test_region_list;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Frame);
@@ -61,9 +65,10 @@ class CONTENT_EXPORT SynchronousCompositor {
 
   class FrameFuture : public base::RefCountedThreadSafe<FrameFuture> {
    public:
-    FrameFuture();
+    explicit FrameFuture(viz::LocalSurfaceId local_surface_id);
     void SetFrame(std::unique_ptr<Frame> frame);
     std::unique_ptr<Frame> GetFrame();
+    const viz::LocalSurfaceId& local_surface_id() { return local_surface_id_; }
 
    private:
     friend class base::RefCountedThreadSafe<FrameFuture>;
@@ -71,6 +76,7 @@ class CONTENT_EXPORT SynchronousCompositor {
 
     base::WaitableEvent waitable_event_;
     std::unique_ptr<Frame> frame_;
+    viz::LocalSurfaceId local_surface_id_;
 #if DCHECK_IS_ON()
     bool waited_ = false;
 #endif
@@ -120,6 +126,14 @@ class CONTENT_EXPORT SynchronousCompositor {
   // Called by the embedder to notify that the OnComputeScroll step is happening
   // and if any input animation is active, it should tick now.
   virtual void OnComputeScroll(base::TimeTicks animation_time) = 0;
+
+  // Sets BeginFrameSource to use
+  virtual void SetBeginFrameSource(
+      viz::BeginFrameSource* begin_frame_source) = 0;
+
+  // Called when client invalidated because it was necessary for drawing sub
+  // clients. Used with viz for webview only.
+  virtual void DidInvalidate() = 0;
 
  protected:
   virtual ~SynchronousCompositor() {}

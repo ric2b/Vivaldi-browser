@@ -7,7 +7,7 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window_tree_host_platform.h"
 #include "ui/base/hit_test.h"
-#include "ui/platform_window/platform_window_base.h"
+#include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_handler/wm_move_resize_handler.h"
 #include "ui/views/test/views_interactive_ui_test_base.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
@@ -41,7 +41,7 @@ bool IsNonClientComponent(int hittest) {
 class FakeWmMoveResizeHandler : public ui::WmMoveResizeHandler {
  public:
   using SetBoundsCallback = base::RepeatingCallback<void(gfx::Rect)>;
-  explicit FakeWmMoveResizeHandler(ui::PlatformWindowBase* window)
+  explicit FakeWmMoveResizeHandler(ui::PlatformWindow* window)
       : platform_window_(window), hittest_(-1) {}
   ~FakeWmMoveResizeHandler() override = default;
 
@@ -66,7 +66,7 @@ class FakeWmMoveResizeHandler : public ui::WmMoveResizeHandler {
   }
 
  private:
-  ui::PlatformWindowBase* platform_window_;
+  ui::PlatformWindow* platform_window_;
   gfx::Rect bounds_;
 
   int hittest_ = -1;
@@ -115,9 +115,9 @@ class HitTestNonClientFrameView : public NativeFrameView {
 };
 
 // This is used to return HitTestNonClientFrameView on create call.
-class HitTestWidgetDelegate : public views::WidgetDelegate {
+class HitTestWidgetDelegate : public WidgetDelegate {
  public:
-  explicit HitTestWidgetDelegate(views::Widget* widget) : widget_(widget) {}
+  explicit HitTestWidgetDelegate(Widget* widget) : widget_(widget) {}
   ~HitTestWidgetDelegate() override = default;
 
   void set_can_resize(bool can_resize) {
@@ -127,11 +127,11 @@ class HitTestWidgetDelegate : public views::WidgetDelegate {
 
   HitTestNonClientFrameView* frame_view() { return frame_view_; }
 
-  // views::WidgetDelegate:
+  // WidgetDelegate:
   bool CanResize() const override { return can_resize_; }
-  views::Widget* GetWidget() override { return widget_; }
-  views::Widget* GetWidget() const override { return widget_; }
-  views::NonClientFrameView* CreateNonClientFrameView(Widget* widget) override {
+  Widget* GetWidget() override { return widget_; }
+  Widget* GetWidget() const override { return widget_; }
+  NonClientFrameView* CreateNonClientFrameView(Widget* widget) override {
     DCHECK(widget_ == widget);
     if (!frame_view_)
       frame_view_ = new HitTestNonClientFrameView(widget);
@@ -140,7 +140,7 @@ class HitTestWidgetDelegate : public views::WidgetDelegate {
   void DeleteDelegate() override { delete this; }
 
  private:
-  views::Widget* const widget_;
+  Widget* const widget_;
   HitTestNonClientFrameView* frame_view_ = nullptr;
   bool can_resize_ = false;
 
@@ -157,7 +157,7 @@ class TestDesktopWindowTreeHostLinux : public DesktopWindowTreeHostLinux {
                                    desktop_native_widget_aura) {}
   ~TestDesktopWindowTreeHostLinux() override = default;
 
-  // PlatformWindowDelegateBase:
+  // PlatformWindowDelegate:
   // Instead of making these tests friends of the host, override the dispatch
   // method to make it public and nothing else.
   void DispatchEvent(ui::Event* event) override {
@@ -191,7 +191,7 @@ class DesktopWindowTreeHostLinuxTest : public ViewsInteractiveUITestBase {
     delegate_ = new HitTestWidgetDelegate(toplevel);
     Widget::InitParams toplevel_params =
         CreateParams(Widget::InitParams::TYPE_WINDOW);
-    auto* native_widget = new views::DesktopNativeWidgetAura(toplevel);
+    auto* native_widget = new DesktopNativeWidgetAura(toplevel);
     toplevel_params.native_widget = native_widget;
     host_ = new TestDesktopWindowTreeHostLinux(toplevel, native_widget);
     toplevel_params.desktop_window_tree_host = host_;

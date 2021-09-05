@@ -18,8 +18,9 @@ namespace vr {
 
 XrSessionRequestConsentDialogDelegate::XrSessionRequestConsentDialogDelegate(
     content::WebContents* web_contents,
-    XrConsentPromptLevel consent_level,
-    base::OnceCallback<void(XrConsentPromptLevel, bool)> response_callback)
+    content::XrConsentPromptLevel consent_level,
+    base::OnceCallback<void(content::XrConsentPromptLevel, bool)>
+        response_callback)
     : TabModalConfirmDialogDelegate(web_contents),
       response_callback_(std::move(response_callback)),
       consent_level_(consent_level),
@@ -38,30 +39,49 @@ base::string16 XrSessionRequestConsentDialogDelegate::GetTitle() {
 }
 
 base::string16 XrSessionRequestConsentDialogDelegate::GetDialogMessage() {
-  switch (consent_level_) {
-    case XrConsentPromptLevel::kDefault:
-      return l10n_util::GetStringUTF16(
-          IDS_XR_CONSENT_DIALOG_DESCRIPTION_DEFAULT);
-    case XrConsentPromptLevel::kVRFeatures:
-      return l10n_util::GetStringUTF16(
-          IDS_XR_CONSENT_DIALOG_DESCRIPTION_PHYSICAL_FEATURES);
-    case XrConsentPromptLevel::kVRFloorPlan:
-      return l10n_util::GetStringUTF16(
-          IDS_XR_CONSENT_DIALOG_DESCRIPTION_FLOOR_PLAN);
-    case XrConsentPromptLevel::kNone:
-      NOTREACHED();
-      return l10n_util::GetStringUTF16(
-          IDS_XR_CONSENT_DIALOG_DESCRIPTION_DEFAULT);
+  DCHECK_NE(consent_level_, content::XrConsentPromptLevel::kNone);
+  if (consent_level_ == content::XrConsentPromptLevel::kDefault) {
+    return base::string16();
   }
+
+  base::string16 dialog =
+      l10n_util::GetStringUTF16(IDS_XR_CONSENT_DIALOG_DESCRIPTION_DEFAULT) +
+      L"\n";
+
+  switch (consent_level_) {
+    case content::XrConsentPromptLevel::kVRFeatures:
+      dialog += l10n_util::GetStringFUTF16(
+          IDS_LIST_BULLET,
+          l10n_util::GetStringUTF16(
+              IDS_XR_CONSENT_DIALOG_DESCRIPTION_PHYSICAL_FEATURES));
+      break;
+    case content::XrConsentPromptLevel::kVRFloorPlan:
+      dialog += l10n_util::GetStringFUTF16(
+                    IDS_LIST_BULLET,
+                    l10n_util::GetStringUTF16(
+                        IDS_XR_CONSENT_DIALOG_DESCRIPTION_PHYSICAL_FEATURES)) +
+                L"\n" +
+                l10n_util::GetStringFUTF16(
+                    IDS_LIST_BULLET,
+                    l10n_util::GetStringUTF16(
+                        IDS_XR_CONSENT_DIALOG_DESCRIPTION_FLOOR_PLAN));
+      break;
+    // kDefault and kNone should both be handled by earlier checks, but the
+    // compiler doesn't know that. These are listed here explicltly rather than
+    // a "default" clause to ensure that we get compiler errors if new enum
+    // values are added and not handled.
+    case content::XrConsentPromptLevel::kDefault:
+    case content::XrConsentPromptLevel::kNone:
+      NOTREACHED();
+      return base::string16();
+  }
+
+  return dialog;
 }
 
 base::string16 XrSessionRequestConsentDialogDelegate::GetAcceptButtonTitle() {
   return l10n_util::GetStringUTF16(
       IDS_XR_CONSENT_DIALOG_BUTTON_ALLOW_AND_ENTER_VR);
-}
-
-base::string16 XrSessionRequestConsentDialogDelegate::GetCancelButtonTitle() {
-  return l10n_util::GetStringUTF16(IDS_XR_CONSENT_DIALOG_BUTTON_DENY_VR);
 }
 
 void XrSessionRequestConsentDialogDelegate::OnAccepted() {

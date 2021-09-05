@@ -424,6 +424,11 @@ void LogUpdateBindingsForContextTime(Feature::Context context_type,
           "Extensions.Bindings.UpdateBindingsForContextTime.WebUIContext",
           elapsed.InMicroseconds(), 1, kTenSecondsInMicroseconds,
           kHistogramBucketCount);
+      break;
+    case Feature::WEBUI_UNTRUSTED_CONTEXT:
+      // Extension APIs in untrusted WebUIs are temporary so don't bother
+      // recording metrics for them.
+      break;
   }
 }
 
@@ -574,6 +579,7 @@ void NativeExtensionBindingsSystem::UpdateBindingsForContext(
     case Feature::UNBLESSED_EXTENSION_CONTEXT:
     case Feature::CONTENT_SCRIPT_CONTEXT:
     case Feature::WEBUI_CONTEXT:
+    case Feature::WEBUI_UNTRUSTED_CONTEXT:
       is_webpage = false;
   }
 
@@ -980,7 +986,7 @@ void NativeExtensionBindingsSystem::UpdateContentCapabilities(
     GURL url = context->url();
     // We allow about:blank pages to take on the privileges of their parents if
     // they aren't sandboxed.
-    if (web_frame && !web_frame->GetSecurityOrigin().IsUnique())
+    if (web_frame && !web_frame->GetSecurityOrigin().IsOpaque())
       url = ScriptContext::GetEffectiveDocumentURL(web_frame, url, true);
     const ContentCapabilitiesInfo& info =
         ContentCapabilitiesInfo::Get(extension.get());

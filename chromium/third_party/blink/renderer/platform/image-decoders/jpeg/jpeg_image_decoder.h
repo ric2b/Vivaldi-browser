@@ -39,6 +39,7 @@ class PLATFORM_EXPORT JPEGImageDecoder final : public ImageDecoder {
   JPEGImageDecoder(AlphaOption,
                    const ColorBehavior&,
                    size_t max_decoded_bytes,
+                   const OverrideAllowDecodeToYuv allow_decode_to_yuv,
                    size_t offset = 0);
   ~JPEGImageDecoder() override;
 
@@ -49,7 +50,6 @@ class PLATFORM_EXPORT JPEGImageDecoder final : public ImageDecoder {
   bool SetSize(unsigned width, unsigned height) override;
   IntSize DecodedYUVSize(int component) const override;
   size_t DecodedYUVWidthBytes(int component) const override;
-  bool CanDecodeToYUV() override;
   void DecodeToYUV() override;
   SkYUVColorSpace GetYUVColorSpace() const override;
   Vector<SkISize> GetSupportedDecodeSizes() const override;
@@ -80,6 +80,10 @@ class PLATFORM_EXPORT JPEGImageDecoder final : public ImageDecoder {
   void Decode(size_t) override { Decode(false); }
   cc::YUVSubsampling GetYUVSubsampling() const override;
   cc::ImageHeaderMetadata MakeMetadataForDecodeAcceleration() const override;
+
+  // Attempts to calculate the coded size of the JPEG image. Returns a zero
+  // initialized gfx::Size upon failure.
+  gfx::Size GetImageCodedSize() const;
 
   // Decodes the image.  If |only_size| is true, stops decoding after
   // calculating the image size.  If decoding fails but there is no more

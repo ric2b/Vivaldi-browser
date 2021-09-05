@@ -42,6 +42,7 @@ constexpr char kAutocompleteUsername[] = "username";
 constexpr char kAutocompleteCurrentPassword[] = "current-password";
 constexpr char kAutocompleteNewPassword[] = "new-password";
 constexpr char kAutocompleteCreditCardPrefix[] = "cc-";
+constexpr char kAutocompleteOneTimePassword[] = "one-time-code";
 
 // The susbset of autocomplete flags related to passwords.
 enum class AutocompleteFlag {
@@ -49,8 +50,8 @@ enum class AutocompleteFlag {
   kUsername,
   kCurrentPassword,
   kNewPassword,
-  // Represents the whole family of cc-* flags.
-  kCreditCard
+  // Represents the whole family of cc-* flags + OTP flag.
+  kNonPassword
 };
 
 // The autocomplete attribute has one of the following structures:
@@ -61,7 +62,8 @@ enum class AutocompleteFlag {
 // For password forms, only the field_type is relevant. So parsing the attribute
 // amounts to just taking the last token.  If that token is one of "username",
 // "current-password" or "new-password", this returns an appropriate enum value.
-// If the token starts with a "cc-" prefix, this returns kCreditCard.
+// If the token starts with a "cc-" prefix or is "one-time-code" token, this
+// returns kNonPassword.
 // Otherwise, returns kNone.
 AutocompleteFlag ExtractAutocompleteFlag(const std::string& attribute) {
   std::vector<base::StringPiece> tokens =
@@ -78,10 +80,11 @@ AutocompleteFlag ExtractAutocompleteFlag(const std::string& attribute) {
   if (base::LowerCaseEqualsASCII(field_type, kAutocompleteNewPassword))
     return AutocompleteFlag::kNewPassword;
 
-  if (base::StartsWith(field_type, kAutocompleteCreditCardPrefix,
-                       base::CompareCase::SENSITIVE))
-    return AutocompleteFlag::kCreditCard;
-
+  if (base::LowerCaseEqualsASCII(field_type, kAutocompleteOneTimePassword) ||
+      base::StartsWith(field_type, kAutocompleteCreditCardPrefix,
+                       base::CompareCase::SENSITIVE)) {
+    return AutocompleteFlag::kNonPassword;
+  }
   return AutocompleteFlag::kNone;
 }
 
@@ -129,16 +132,37 @@ bool StringMatchesCVC(const base::string16& str) {
   return autofill::MatchesPattern(str, *kCardCvcReCached);
 }
 
+// Returns true if the |str| contains words related to SSN fields.
+bool StringMatchesSSN(const base::string16& str) {
+  static const base::NoDestructor<base::string16> kSSNReCached(
+      base::UTF8ToUTF16(autofill::kSocialSecurityRe));
+
+  return autofill::MatchesPattern(str, *kSSNReCached);
+}
+
+// Returns true if the |str| contains words related to one time password fields.
+bool StringMatchesOTP(const base::string16& str) {
+  static const base::NoDestructor<base::string16> kOTPReCached(
+      base::UTF8ToUTF16(autofill::kOneTimePwdRe));
+
+  return autofill::MatchesPattern(str, *kOTPReCached);
+}
+
 // TODO(crbug.com/860700): Remove name and attribute checking once server-side
 // provides hints for CVC.
 // Returns true if the |field| is suspected to be not the password field.
 // The suspicion is based on server-side provided hints and on checking the
-// field's id and name for hinting towards a CVC code.
+// field's id and name for hinting towards a CVC code, Social Security
+// Number or one-time password.
 bool IsNotPasswordField(const ProcessedField& field) {
   return field.server_hints_not_password ||
+         field.autocomplete_flag == AutocompleteFlag::kNonPassword ||
          StringMatchesCVC(field.field->name_attribute) ||
          StringMatchesCVC(field.field->id_attribute) ||
-         field.autocomplete_flag == AutocompleteFlag::kCreditCard;
+         StringMatchesSSN(field.field->name_attribute) ||
+         StringMatchesSSN(field.field->id_attribute) ||
+         StringMatchesOTP(field.field->name_attribute) ||
+         StringMatchesOTP(field.field->id_attribute);
 }
 
 // Returns true if the |field| is suspected to be not the username field.
@@ -456,7 +480,7 @@ void ParseUsingAutocomplete(const std::vector<ProcessedField>& processed_fields,
         else if (!result->confirmation_password)
           result->confirmation_password = processed_field.field;
         break;
-      case AutocompleteFlag::kCreditCard:
+      case AutocompleteFlag::kNonPassword:
       case AutocompleteFlag::kNone:
         break;
     }
@@ -679,10 +703,9 @@ const FormFieldData* FindUsernameFieldBaseHeuristics(
 }
 
 // A helper to return a |field|'s unique_renderer_id or
-// kNotSetFormControlRendererId if |field| is null.
+// kNotSetRendererId if |field| is null.
 uint32_t ExtractUniqueId(const FormFieldData* field) {
-  return field ? field->unique_renderer_id
-               : FormFieldData::kNotSetFormControlRendererId;
+  return field ? field->unique_renderer_id : FormData::kNotSetRendererId;
 }
 
 // Tries to find the username and password fields in |processed_fields| based
@@ -956,7 +979,6 @@ std::unique_ptr<PasswordForm> AssemblePasswordForm(
   result->all_possible_passwords = std::move(all_possible_passwords);
   result->all_possible_usernames = std::move(all_possible_usernames);
   result->scheme = PasswordForm::Scheme::kHtml;
-  result->preferred = false;
   result->blacklisted_by_user = false;
   result->type = PasswordForm::Type::kManual;
   result->username_may_use_prefilled_placeholder =

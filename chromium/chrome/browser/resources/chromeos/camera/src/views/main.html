@@ -9,30 +9,10 @@
     <title>&#xfeff;</title>
     <meta charset="utf-8">
     <link rel="stylesheet" href="../css/main.css">
-    <script src="../js/browser_proxy/browser_proxy.js"></script>
-    <script src="../js/google-analytics-bundle.js"></script>
-    <script src="../js/metrics.js"></script>
-    <script src="../js/intent.js"></script>
-    <script src="../js/util.js"></script>
-    <script src="../js/resolution_event_broker.js"></script>
-    <script src="../js/toast.js"></script>
-    <script src="../js/tooltip.js"></script>
-    <script src="../js/state.js"></script>
-    <script src="../js/sound.js"></script>
-    <script src="../js/scrollbar.js"></script>
-    <script src="../js/gallerybutton.js"></script>
-    <script src="../js/device/error.js"></script>
-    <script src="../js/device/camera3_device_info.js"></script>
-    <script src="../js/device/constraints_preferrer.js"></script>
-    <script src="../js/device/device_info_updater.js"></script>
-    <script src="../js/models/filenamer.js"></script>
-    <script src="../js/models/gallery.js"></script>
-    <script src="../js/models/filesystem.js"></script>
-    <script src="../js/models/result_saver.js"></script>
-    <script src="../js/models/video_saver_interface.js"></script>
-    <script src="../js/models/file_video_saver.js"></script>
-    <script src="../js/models/intent_video_saver.js"></script>
+    <script src="../js/lib/google-analytics-bundle.js"></script>
     <script src="../js/mojo/mojo_bindings_lite.js"></script>
+    <script src="../js/mojo/time.mojom-lite.js"></script>
+    <script src="../js/mojo/idle_manager.mojom-lite.js"></script>
     <script src="../js/mojo/camera_metadata_tags.mojom-lite.js"></script>
     <script src="../js/mojo/camera_metadata.mojom-lite.js"></script>
     <script src="../js/mojo/camera_common.mojom-lite.js"></script>
@@ -42,29 +22,10 @@
     <script src="../js/mojo/camera_intent.mojom-lite.js"></script>
     <script src="../js/mojo/camera_app.mojom-lite.js"></script>
     <script src="../js/mojo/camera_app_helper.mojom-lite.js"></script>
-    <script src="../js/mojo/chrome_helper.js"></script>
-    <script src="../js/mojo/device_operator.js"></script>
-    <script src="../js/mojo/image_capture.js"></script>
-    <script src="../js/views/view.js"></script>
-    <script src="../js/views/gallery_base.js"></script>
-    <script src="../js/views/camera.js"></script>
-    <script src="../js/views/camera_intent.js"></script>
-    <script src="../js/views/camera/layout.js"></script>
-    <script src="../js/views/camera/options.js"></script>
-    <script src="../js/views/camera/preview.js"></script>
-    <script src="../js/views/camera/recordtime.js"></script>
-    <script src="../js/views/camera/review_result.js"></script>
-    <script src="../js/views/camera/timertick.js"></script>
-    <script src="../js/views/camera/modes.js"></script>
-    <script src="../js/views/dialog.js"></script>
-    <script src="../js/views/browser.js"></script>
-    <script src="../js/views/settings.js"></script>
-    <script src="../js/views/warning.js"></script>
-    <script src="../js/nav.js"></script>
-    <script src="../js/main.js"></script>
+    <script type="module" src="../js/main.js"></script>
   </head>
   <body class="sound mirror mic _3x3">
-    <div id="camera">
+    <div id="view-camera">
       <div id="preview-wrapper">
         <img id="review-photo-result" class="preview-content"
           aria-hidden="true">
@@ -123,28 +84,28 @@
       <div id="modes-group" class="buttons right-stripe hide">
         <div class="mode-item">
           <input type="radio" name="mode"
-               data-mode="video-mode" tabindex="0"
+               data-mode="video" tabindex="0"
                i18n-aria="switch_record_video_button">
           <span i18n-content="label_switch_record_video_button"
                 aria-hidden="true"></span>
         </div>
         <div class="mode-item">
           <input type="radio" name="mode"
-               data-mode="photo-mode" tabindex="0"
+               data-mode="photo" tabindex="0"
                i18n-aria="switch_take_photo_button">
           <span i18n-content="label_switch_take_photo_button"
                 aria-hidden="true"></span>
         </div>
         <div class="mode-item">
           <input type="radio" name="mode"
-               data-mode="square-mode" tabindex="0"
+               data-mode="square" tabindex="0"
                i18n-aria="switch_take_square_photo_button">
           <span i18n-content="label_switch_take_square_photo_button"
                 aria-hidden="true"></span>
         </div>
         <div class="mode-item hide">
           <input type="radio" name="mode"
-               data-mode="portrait-mode" tabindex="0"
+               data-mode="portrait" tabindex="0"
                i18n-aria="switch_take_portrait_photo_button">
           <span i18n-content="label_switch_take_portrait_photo_button"
                 aria-hidden="true"></span>
@@ -195,13 +156,13 @@
         <div id="timer-tick-msg"></div>
       </div>
     </div>
-    <div id="settings">
+    <div id="view-settings">
       <div class="menu">
         <div class="menu-header circle">
           <button class="icon" tabindex="0" i18n-aria="back_button"></button>
           <div i18n-content="settings_button"></div>
         </div>
-        <button class="menu-item circle" id="settings-gridtype" tabindex="0"
+        <button class="menu-item" id="settings-gridtype" tabindex="0"
                 aria-describedby="gridtype-desc">
           <div class="icon"></div>
           <div>
@@ -214,7 +175,7 @@
           </div>
           <div class="icon end"></div>
         </button>
-        <button class="menu-item circle" id="settings-timerdur" tabindex="0"
+        <button class="menu-item" id="settings-timerdur" tabindex="0"
                 aria-describedby="timerdur-desc">
           <div class="icon"></div>
           <div>
@@ -226,29 +187,29 @@
           </div>
           <div class="icon end"></div>
         </button>
-        <button class="menu-item circle" id="settings-resolution" tabindex="0">
+        <button class="menu-item" id="settings-resolution" tabindex="0">
           <div class="icon"></div>
           <div i18n-content="camera_resolution_button">
           </div>
           <div class="icon end"></div>
         </button>
-        <button class="menu-item circle" id="settings-expert" tabindex="0">
+        <button class="menu-item" id="settings-expert" tabindex="0">
           <div class="icon"></div>
           <div i18n-content="expert_mode_button">
           </div>
           <div class="icon end"></div>
         </button>
-        <button class="menu-item circle" id="settings-feedback" tabindex="0">
+        <button class="menu-item" id="settings-feedback" tabindex="0">
           <div class="icon"></div>
           <div i18n-content="feedback_button"></div>
         </button>
-        <button class="menu-item circle" id="settings-help" tabindex="0">
+        <button class="menu-item" id="settings-help" tabindex="0">
           <div class="icon"></div>
           <div i18n-content="help_button"></div>
         </button>
       </div>
     </div>
-    <div id="gridsettings">
+    <div id="view-grid-settings">
       <div class="menu">
         <div class="menu-header circle">
           <button class="icon" tabindex="0" i18n-aria="back_button"></button>
@@ -271,7 +232,7 @@
         </label>
       </div>
     </div>
-    <div id="timersettings">
+    <div id="view-timer-settings">
       <div class="menu">
         <div class="menu-header circle">
           <button class="icon" tabindex="0" i18n-aria="back_button"></button>
@@ -290,7 +251,7 @@
         </label>
       </div>
     </div>
-    <div id="resolutionsettings">
+    <div id="view-resolution-settings">
       <div class="menu">
         <div class="menu-header circle">
           <button class="icon" tabindex="0" i18n-aria="back_button"></button>
@@ -298,7 +259,7 @@
         </div>
         <div id="builtin-photo-header" class="menu-item"
           i18n-content="label_switch_take_photo_button"></div>
-        <button class="menu-item resol-item circle"
+        <button class="menu-item resol-item photo-item"
                 id="settings-front-photores" tabindex="0"
                 aria-describedby="front-photores-desc">
           <div>
@@ -310,7 +271,7 @@
           </div>
           <div class="icon end"></div>
         </button>
-        <button class="menu-item resol-item circle"
+        <button class="menu-item resol-item photo-item"
                 id="settings-back-photores" tabindex="0"
                 aria-describedby="back-photores-desc">
           <div>
@@ -323,7 +284,7 @@
         </button>
         <div id="builtin-video-header" class="menu-item"
           i18n-content="label_switch_record_video_button"></div>
-        <button class="menu-item resol-item circle"
+        <button class="menu-item resol-item video-item"
                 id="settings-front-videores" tabindex="0"
                 aria-describedby="front-videores-desc">
           <div>
@@ -334,7 +295,7 @@
           </div>
           <div class="icon end"></div>
         </button>
-        <button class="menu-item resol-item circle"
+        <button class="menu-item resol-item video-item"
                 id="settings-back-videores" tabindex="0"
                 aria-describedby="back-videores-desc">
           <div>
@@ -347,7 +308,7 @@
         </button>
       </div>
     </div>
-    <div id="photoresolutionsettings">
+    <div id="view-photo-resolution-settings">
       <div class="menu" data-name="photores">
         <div class="menu-header circle">
           <button class="icon" tabindex="0" i18n-aria="back_button"></button>
@@ -355,7 +316,7 @@
         </div>
       </div>
     </div>
-    <div id="videoresolutionsettings">
+    <div id="view-video-resolution-settings">
       <div class="menu" data-name="videores">
         <div class="menu-header circle">
           <button class="icon" tabindex="0" i18n-aria="back_button"></button>
@@ -363,47 +324,38 @@
         </div>
       </div>
     </div>
-    <div id="expertsettings">
+    <div id="view-expert-settings">
       <div class="menu">
         <div class="menu-header circle">
           <button class="icon" tabindex="0" i18n-aria="back_button"></button>
           <div i18n-content="expert_mode_button"></div>
         </div>
-        <label class="menu-item circle" for="expert-show-metadata">
+        <label class="menu-item" for="expert-show-metadata">
           <input class="icon" id="expert-show-metadata" type="checkbox"
                  tabindex="0" data-state="show-metadata"
                  data-key="showMetadata">
           <span i18n-content="expert_preview_metadata"></span>
         </label>
-        <label class="menu-item circle" for="expert-save-metadata">
+        <label class="menu-item" for="expert-save-metadata">
           <input class="icon" id="expert-save-metadata" type="checkbox"
                  tabindex="0" data-state="save-metadata"
                  data-key="saveMetadata">
           <span i18n-content="expert_save_metadata"></span>
         </label>
+        <label class="menu-item" for="expert-print-performance-logs">
+          <input class="icon" id="expert-print-performance-logs" type="checkbox"
+                 tabindex="0" data-state="print-performance-logs"
+                 data-key="printPerformanceLogs">
+          <span i18n-content="expert_print_performance_logs"></span>
+        </label>
       </div>
     </div>
     <div class="centered-overlay" id="spinner"></div>
-    <div id="browser" role="listbox" i18n-aria="gallery_images">
-      <div class="padder">
-        <div class="bounds-padder"></div>
-        <div class="bounds-padder"></div>
-      </div>
-      <div class="buttons">
-        <button id="browser-back" tabindex="0"
-                i18n-label="back_button"></button>
-        <button id="browser-print" disabled tabindex="0"
-                i18n-label="print_button"></button>
-        <button id="browser-export" disabled tabindex="0"
-                i18n-label="export_button"></button>
-        <button id="browser-delete" disabled tabindex="0"
-                i18n-label="delete_button"></button>
-      </div>
-    </div>
-    <div id="warning">
+    <div id="view-splash"></div>
+    <div id="view-warning">
       <div id="error-msg" aria-live="polite"></div>
     </div>
-    <div id="message-dialog" class="dialog">
+    <div id="view-message-dialog" class="dialog">
       <div class="dialog-popup" role="dialog" aria-labelledby="dialog-msg">
         <div class="dialog-msg dialog-msg-holder"></div>
         <div class="dialog-buttons">
@@ -426,15 +378,15 @@
       data-timeout="200">
     <audio id="sound-rec-end" src="../sounds/record_end.ogg" data-timeout="450">
     <template id="resolution-item-template">
-      <label class="menu-item circle">
+      <label class="menu-item circle resolution-option">
         <input class="icon" type="radio" tabindex="0">
         <span></span>
       </label>
     </template>
     <template id="extcam-resolution-item-template">
-        <div class="menu-item external-camera"
+        <div class="menu-item external-camera title-item"
           i18n-content="label_external_camera"></div>
-        <button class="menu-item resol-item external-camera"
+        <button class="menu-item external-camera resol-item photo-item"
               tabindex="0">
           <div>
             <div i18n-content="photo_resolution_button"></div>
@@ -444,7 +396,7 @@
           </div>
           <div class="icon end"></div>
         </button>
-        <button class="menu-item resol-item circle external-camera"
+        <button class="menu-item external-camera resol-item video-item"
               tabindex="0">
           <div>
             <div i18n-content="video_resolution_button"></div>

@@ -6,6 +6,9 @@
 
 #include <stddef.h>
 
+#include <memory>
+#include <utility>
+
 #include "base/strings/utf_string_conversions.h"
 #include "ui/events/event.h"
 #include "ui/gfx/color_palette.h"
@@ -14,6 +17,7 @@
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/examples/examples_window.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/view.h"
 
@@ -63,10 +67,10 @@ void TextfieldExample::CreateExampleView(View* container) {
       container->SetLayoutManager(std::make_unique<views::GridLayout>());
 
   ColumnSet* column_set = layout->AddColumnSet(0);
-  column_set->AddColumn(GridLayout::LEADING, GridLayout::FILL,
-                        0.2f, GridLayout::USE_PREF, 0, 0);
-  column_set->AddColumn(GridLayout::FILL, GridLayout::FILL,
-                        0.8f, GridLayout::USE_PREF, 0, 0);
+  column_set->AddColumn(GridLayout::LEADING, GridLayout::FILL, 0.2f,
+                        GridLayout::USE_PREF, 0, 0);
+  column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, 0.8f,
+                        GridLayout::USE_PREF, 0, 0);
 
   name_ = MakeRow(layout, std::make_unique<Label>(ASCIIToUTF16("Name:")),
                   std::move(name));

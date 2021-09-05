@@ -4,12 +4,12 @@
 <translation id="1127811143501539442">{DAYS,plural, =1{Há 1 dia}other{Há # dias}}</translation>
 <translation id="1156623771253174079">{SECONDS,plural, =1{Há 1 minuto}other{Há # minutos}}</translation>
 <translation id="1368832886055348810">Da esquerda para a direita</translation>
-<translation id="1591184457164800433">{MINUTES,plural, =1{1 minuto e  }other{# minutos e  }}</translation>
+<translation id="1591184457164800433">{MINUTES,plural, =1{1 minuto e } other{# minutos e }}</translation>
 <translation id="1752946267035950200">{MINUTES,plural, =1{1 minuto}other{# minutos}}</translation>
 <translation id="1761785978543082658"><ph name="QUANTITY" /> B</translation>
 <translation id="1801827354178857021">Período</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
-<translation id="1830179671306812954">{HOURS,plural, =1{1 hora e  }other{# horas e  }}</translation>
+<translation id="1830179671306812954">{HOURS,plural,=1{1 hora e } other{# horas e }}</translation>
 <translation id="1859234291848436338">Direcção da escrita</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
 <translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
@@ -24,7 +24,7 @@
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5613020302032141669">Seta para a esquerda</translation>
 <translation id="5754277640426581776">{MINUTES,plural, =1{1 min}other{# min}}</translation>
-<translation id="5768079895599174203">{DAYS,plural, =1{1 dia e  }other{# dias e  }}</translation>
+<translation id="5768079895599174203">{DAYS,plural, =1{1 dia e } other{# dias e }}</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Falta 1 segundo}other{Faltam # segundos}}</translation>
 <translation id="5943826764092288734">{HOURS,plural, =1{1 hora}other{# horas}}</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
@@ -40,7 +40,7 @@
 <translation id="8106081041558092062">{HOURS,plural, =1{Há 1 hora}other{Há # horas}}</translation>
 <translation id="8131263257437993507">{SECONDS,plural, =1{Falta 1 s}other{Faltam # s}}</translation>
 <translation id="8677655579646609597"><ph name="QUANTITY" /> KB/s</translation>
-<translation id="8798099450830957504">Predefinição</translation>
+<translation id="8798099450830957504">Padrão</translation>
 <translation id="8901569739625249689"><ph name="QUANTITY" /> KB</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 seg}other{# seg}}</translation>
 </translationbundle>

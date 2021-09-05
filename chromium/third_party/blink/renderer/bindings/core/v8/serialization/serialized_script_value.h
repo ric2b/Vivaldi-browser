@@ -35,17 +35,19 @@
 
 #include "base/containers/span.h"
 #include "base/optional.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
+#include "third_party/blink/public/mojom/native_file_system/native_file_system_transfer_token.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/transferables.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/mojo/mojo_handle.h"
+#include "third_party/blink/renderer/core/typed_arrays/array_buffer/array_buffer_contents.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
-#include "third_party/blink/renderer/platform/wtf/typed_arrays/array_buffer_contents.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -71,11 +73,13 @@ class CORE_EXPORT SerializedScriptValue
   USING_FAST_MALLOC(SerializedScriptValue);
 
  public:
-  using ArrayBufferContentsArray = Vector<WTF::ArrayBufferContents, 1>;
-  using SharedArrayBufferContentsArray = Vector<WTF::ArrayBufferContents, 1>;
+  using ArrayBufferContentsArray = Vector<ArrayBufferContents, 1>;
+  using SharedArrayBufferContentsArray = Vector<ArrayBufferContents, 1>;
   using ImageBitmapContentsArray = Vector<scoped_refptr<StaticBitmapImage>, 1>;
   using TransferredWasmModulesArray = WTF::Vector<v8::CompiledWasmModule>;
   using MessagePortChannelArray = Vector<MessagePortChannel>;
+  using NativeFileSystemTokensArray =
+      Vector<mojo::PendingRemote<mojom::blink::NativeFileSystemTransferToken>>;
 
   // Increment this for each incompatible change to the wire format.
   // Version 2: Added StringUCharTag for UChar v8 strings.
@@ -93,6 +97,7 @@ class CORE_EXPORT SerializedScriptValue
   // Version 18: Add a list of key-value pairs for ImageBitmap and ImageData to
   //             support color space information, compression, etc.
   // Version 19: Add DetectedBarcode, DetectedFace, and DetectedText support.
+  // Version 20: Remove DetectedBarcode, DetectedFace, and DetectedText support.
   //
   // The following versions cannot be used, in order to be able to
   // deserialize version 0 SSVs. The class implementation has details.
@@ -105,7 +110,7 @@ class CORE_EXPORT SerializedScriptValue
   //
   // Recent changes are routinely reverted in preparation for branch, and this
   // has been the cause of at least one bug in the past.
-  static constexpr uint32_t kWireFormatVersion = 19;
+  static constexpr uint32_t kWireFormatVersion = 20;
 
   // This enumeration specifies whether we're serializing a value for storage;
   // e.g. when writing to IndexedDB. This corresponds to the forStorage flag of
@@ -172,7 +177,6 @@ class CORE_EXPORT SerializedScriptValue
    public:
     MessagePortArray* message_ports = nullptr;
     const WebBlobInfoArray* blob_info = nullptr;
-    bool read_wasm_from_stream = false;
   };
   v8::Local<v8::Value> Deserialize(v8::Isolate* isolate) {
     return Deserialize(isolate, DeserializeOptions());
@@ -246,6 +250,9 @@ class CORE_EXPORT SerializedScriptValue
     return shared_array_buffers_contents_;
   }
   BlobDataHandleMap& BlobDataHandles() { return blob_data_handles_; }
+  NativeFileSystemTokensArray& NativeFileSystemTokens() {
+    return native_file_system_tokens_;
+  }
   MojoScopedHandleArray& MojoHandles() { return mojo_handles_; }
   ArrayBufferContentsArray& GetArrayBufferContentsArray() {
     return array_buffer_contents_array_;
@@ -262,7 +269,39 @@ class CORE_EXPORT SerializedScriptValue
 
   bool IsLockedToAgentCluster() const {
     return !wasm_modules_.IsEmpty() ||
-           !shared_array_buffers_contents_.IsEmpty();
+           !shared_array_buffers_contents_.IsEmpty() ||
+           std::any_of(attachments_.begin(), attachments_.end(),
+                       [](const auto& entry) {
+                         return entry.value->IsLockedToAgentCluster();
+                       });
+  }
+
+  // Returns true after serializing script values that remote origins cannot
+  // access.
+  bool IsOriginCheckRequired() const;
+
+  // Derive from Attachments to define collections of objects to serialize in
+  // modules. They can be registered using GetOrCreateAttachment().
+  class Attachment {
+   public:
+    virtual ~Attachment() = default;
+    virtual bool IsLockedToAgentCluster() const = 0;
+  };
+
+  template <typename T>
+  T* GetOrCreateAttachment() {
+    auto result = attachments_.insert(&T::kAttachmentKey, std::unique_ptr<T>());
+    if (!result.stored_value->value)
+      result.stored_value->value = std::make_unique<T>();
+    return static_cast<T*>(result.stored_value->value.get());
+  }
+
+  template <typename T>
+  const T* GetAttachmentIfExists() const {
+    auto it = attachments_.find(&T::kAttachmentKey);
+    if (it == attachments_.end())
+      return nullptr;
+    return static_cast<T*>(it->value.get());
   }
 
  private:
@@ -314,6 +353,7 @@ class CORE_EXPORT SerializedScriptValue
   MessagePort* AddStreamChannel(ExecutionContext*);
 
   void CloneSharedArrayBuffers(SharedArrayBufferArray&);
+
   DataBufferPtr data_buffer_;
   size_t data_buffer_size_ = 0;
 
@@ -331,25 +371,13 @@ class CORE_EXPORT SerializedScriptValue
   BlobDataHandleMap blob_data_handles_;
   MojoScopedHandleArray mojo_handles_;
   SharedArrayBufferContentsArray shared_array_buffers_contents_;
+  NativeFileSystemTokensArray native_file_system_tokens_;
+  HashMap<const void* const*, std::unique_ptr<Attachment>> attachments_;
 
   bool has_registered_external_allocation_;
-  bool transferables_need_external_allocation_registration_;
 #if DCHECK_IS_ON()
   bool was_unpacked_ = false;
 #endif
-};
-
-template <>
-struct NativeValueTraits<SerializedScriptValue>
-    : public NativeValueTraitsBase<SerializedScriptValue> {
-  CORE_EXPORT static inline scoped_refptr<SerializedScriptValue> NativeValue(
-      v8::Isolate* isolate,
-      v8::Local<v8::Value> value,
-      const SerializedScriptValue::SerializeOptions& options,
-      ExceptionState& exception_state) {
-    return SerializedScriptValue::Serialize(isolate, value, options,
-                                            exception_state);
-  }
 };
 
 }  // namespace blink

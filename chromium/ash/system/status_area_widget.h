@@ -8,6 +8,8 @@
 #include "ash/ash_export.h"
 #include "ash/login_status.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/session/session_observer.h"
+#include "ash/shelf/shelf_component.h"
 #include "base/macros.h"
 #include "ui/views/widget/widget.h"
 
@@ -33,8 +35,14 @@ class VirtualKeyboardTray;
 // the bottom-right of the screen. Exists separately from ShelfView/ShelfWidget
 // so that it can be shown in cases where the rest of the shelf is hidden (e.g.
 // on secondary monitors at the login screen).
-class ASH_EXPORT StatusAreaWidget : public views::Widget {
+class ASH_EXPORT StatusAreaWidget : public SessionObserver,
+                                    public ShelfComponent,
+                                    public views::Widget {
  public:
+  // Whether the status area is collapsed or expanded. Currently, this is only
+  // applicable in in-app tablet mode. Otherwise the state is NOT_COLLAPSIBLE.
+  enum class CollapseState { NOT_COLLAPSIBLE, COLLAPSED, EXPANDED };
+
   StatusAreaWidget(aura::Window* status_container, Shelf* shelf);
   ~StatusAreaWidget() override;
 
@@ -43,13 +51,23 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget {
   // during construction.
   void Initialize();
 
-  // Update the alignment of the widget and tray views.
-  void UpdateAfterShelfAlignmentChange();
-
   // Called by the client when the login status changes. Caches login_status
   // and calls UpdateAfterLoginStatusChange for the system tray and the web
   // notification tray.
   void UpdateAfterLoginStatusChange(LoginStatus login_status);
+
+  // Updates the collapse state of the status area after the state of the shelf
+  // changes.
+  void UpdateCollapseState();
+
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
+
+  // ShelfComponent:
+  void CalculateTargetBounds() override;
+  gfx::Rect GetTargetBounds() const override;
+  void UpdateLayout(bool animate) override;
+  void UpdateTargetBoundsForGesture(int shelf_position) override;
 
   // Sets system tray visibility. Shows or hides widget if needed.
   void SetSystemTrayVisibility(bool visible);
@@ -109,12 +127,52 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget {
     return virtual_keyboard_tray_.get();
   }
 
+  CollapseState collapse_state() const { return collapse_state_; }
+  void set_collapse_state_for_test(CollapseState state) {
+    collapse_state_ = state;
+  }
+
  private:
-  friend class StatusAreaWidgetTestApi;
+  struct LayoutInputs {
+    gfx::Rect bounds;
+    CollapseState collapse_state = CollapseState::NOT_COLLAPSIBLE;
+    float opacity = 0.0f;
+    // Each bit keep track of one child's visibility.
+    long child_visibility_bitmask = 0;
+
+    bool operator==(const LayoutInputs& other) const {
+      return bounds == other.bounds && collapse_state == other.collapse_state &&
+             opacity == other.opacity &&
+             child_visibility_bitmask == other.child_visibility_bitmask;
+    }
+  };
+
+  // Collects the inputs for layout.
+  LayoutInputs GetLayoutInputs() const;
+
+  // The set of inputs that impact this widget's layout. The assumption is that
+  // this widget needs a relayout if, and only if, one or more of these has
+  // changed.
+  base::Optional<LayoutInputs> layout_inputs_;
 
   // views::Widget:
   void OnMouseEvent(ui::MouseEvent* event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
+  void OnScrollEvent(ui::ScrollEvent* event) override;
+
+  // Adds a new tray button to the status area.
+  void AddTrayButton(TrayBackgroundView* tray_button);
+
+  // Update the colors used for the tray buttons.
+  void UpdateAfterColorModeChange();
+
+  // Called when in the collapsed state to calculate and update the visibility
+  // of each tray button.
+  void CalculateButtonVisibilityForCollapsedState();
+
+  // Calculates and returns the appropriate collapse state depending on
+  // current conditions.
+  CollapseState CalculateCollapseState() const;
 
   StatusAreaWidgetDelegate* status_area_widget_delegate_;
 
@@ -128,9 +186,19 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget {
   std::unique_ptr<ImeMenuTray> ime_menu_tray_;
   std::unique_ptr<SelectToSpeakTray> select_to_speak_tray_;
 
+  // Vector of the tray buttons above. The ordering is used to determine which
+  // tray buttons are hidden when they overflow the available width.
+  std::vector<TrayBackgroundView*> tray_buttons_;
+
   LoginStatus login_status_ = LoginStatus::NOT_LOGGED_IN;
 
+  CollapseState collapse_state_ = CollapseState::NOT_COLLAPSIBLE;
+
+  gfx::Rect target_bounds_;
+
   Shelf* shelf_;
+
+  bool initialized_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(StatusAreaWidget);
 };

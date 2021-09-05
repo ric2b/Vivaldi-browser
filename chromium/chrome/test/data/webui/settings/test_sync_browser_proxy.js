@@ -2,10 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// #import {PageStatus} from 'chrome://settings/settings.js';
+// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
+// #import {isChromeOS} from 'chrome://resources/js/cr.m.js';
+
 /** @implements {settings.SyncBrowserProxy} */
-class TestSyncBrowserProxy extends TestBrowserProxy {
+/* #export */ class TestSyncBrowserProxy extends TestBrowserProxy {
   constructor() {
-    super([
+    const methodNames = [
       'didNavigateAwayFromSyncPage',
       'didNavigateToSyncPage',
       'getPromoImpressionCount',
@@ -19,7 +23,13 @@ class TestSyncBrowserProxy extends TestBrowserProxy {
       'sendSyncPrefsChanged',
       'startSignIn',
       'startSyncingWithEmail',
-    ]);
+    ];
+
+    if (cr.isChromeOS) {
+      methodNames.push('turnOnSync', 'turnOffSync');
+    }
+
+    super(methodNames);
 
     /** @private {number} */
     this.impressionCount_ = 0;
@@ -101,4 +111,16 @@ class TestSyncBrowserProxy extends TestBrowserProxy {
   sendSyncPrefsChanged() {
     this.methodCalled('sendSyncPrefsChanged');
   }
+}
+
+if (cr.isChromeOS) {
+  /** @override */
+  TestSyncBrowserProxy.prototype.turnOnSync = function() {
+    this.methodCalled('turnOnSync');
+  };
+
+  /** @override */
+  TestSyncBrowserProxy.prototype.turnOffSync = function() {
+    this.methodCalled('turnOffSync');
+  };
 }

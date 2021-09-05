@@ -52,7 +52,7 @@ class MyResourceHost : public ResourceHost {
       : ResourceHost(host, instance, resource),
         msg_type_(msg_type),
         reply_msg_type_(reply_msg_type),
-        last_reply_task_runner_(NULL) {}
+        last_reply_task_runner_(nullptr) {}
 
   const IPC::Message& last_handled_msg() const { return last_handled_msg_; }
   const IPC::Message& last_reply_msg() const { return last_reply_msg_; }
@@ -114,11 +114,11 @@ class MyResourceFilter : public ResourceMessageFilter {
     return last_task_runner_;
   }
 
-  scoped_refptr<base::TaskRunner> OverrideTaskRunnerForMessage(
+  scoped_refptr<base::SequencedTaskRunner> OverrideTaskRunnerForMessage(
       const IPC::Message& msg) override {
     if (msg.type() == msg_type_)
       return task_runner_;
-    return NULL;
+    return nullptr;
   }
 
   int32_t OnResourceMessageReceived(
@@ -163,7 +163,8 @@ class ResourceMessageFilterTest : public testing::Test {
 
     PP_Instance instance = 12345;
     PP_Resource resource = 67890;
-    MyResourceHost host(NULL, instance, resource, MSG3_TYPE, REPLY_MSG3_TYPE);
+    MyResourceHost host(nullptr, instance, resource, MSG3_TYPE,
+                        REPLY_MSG3_TYPE);
     host.AddMessageFilter(filter1);
     host.AddMessageFilter(filter2);
 

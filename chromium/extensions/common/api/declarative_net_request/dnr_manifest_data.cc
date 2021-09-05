@@ -5,13 +5,19 @@
 #include "extensions/common/api/declarative_net_request/dnr_manifest_data.h"
 
 #include <utility>
+
+#include "base/logging.h"
 #include "extensions/common/manifest_constants.h"
 
 namespace extensions {
 namespace declarative_net_request {
 
-DNRManifestData::DNRManifestData(base::FilePath ruleset_relative_path)
-    : ruleset_relative_path(std::move(ruleset_relative_path)) {}
+DNRManifestData::DNRManifestData(std::vector<RulesetInfo> rulesets)
+    : rulesets(std::move(rulesets)) {
+  // TODO(crbug.com/953894): Remove this DCHECK when we support specifying 0
+  // rulesets.
+  DCHECK(!(this->rulesets.empty()));
+}
 DNRManifestData::~DNRManifestData() = default;
 
 // static
@@ -20,16 +26,13 @@ bool DNRManifestData::HasRuleset(const Extension& extension) {
 }
 
 // static
-base::FilePath DNRManifestData::GetRulesetPath(const Extension& extension) {
+const std::vector<DNRManifestData::RulesetInfo>& DNRManifestData::GetRulesets(
+    const Extension& extension) {
   Extension::ManifestData* data =
       extension.GetManifestData(manifest_keys::kDeclarativeNetRequestKey);
   DCHECK(data);
 
-  // The ruleset path is validated during DNRManifestHandler::Validate, and
-  // hence is safe to use.
-  const base::FilePath& relative_path =
-      static_cast<DNRManifestData*>(data)->ruleset_relative_path;
-  return extension.path().Append(relative_path);
+  return static_cast<DNRManifestData*>(data)->rulesets;
 }
 
 }  // namespace declarative_net_request

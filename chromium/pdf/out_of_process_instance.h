@@ -114,8 +114,6 @@ class OutOfProcessInstance : public pp::Instance,
   void UpdateTickMarks(const std::vector<pp::Rect>& tickmarks) override;
   void NotifyNumberOfFindResultsChanged(int total, bool final_result) override;
   void NotifySelectedFindResultChanged(int current_find_index) override;
-  void NotifyPageBecameVisible(
-      const PDFEngine::PageFeatures* page_features) override;
   void GetDocumentPassword(
       pp::CompletionCallbackWithOutput<pp::Var> callback) override;
   void Beep() override;
@@ -158,6 +156,7 @@ class OutOfProcessInstance : public pp::Instance,
   // Helper functions for implementing PPP_PDF.
   void RotateClockwise();
   void RotateCounterclockwise();
+  void SetTwoUpView(bool enable_two_up_view);
 
   // Creates a file name for saving a PDF file, given the source URL. Exposed
   // for testing.
@@ -236,20 +235,31 @@ class OutOfProcessInstance : public pp::Instance,
   // Send a notification that the print preview has loaded.
   void SendPrintPreviewLoadedNotification();
 
+  // Send document metadata. (e.g. PDF title and bookmarks.)
+  void SendDocumentMetadata();
+
+  // Send the loading progress, where |percentage| represents the progress, or
+  // -1 for loading error.
+  void SendLoadingProgress(double percentage);
+
   // Bound the given scroll offset to the document.
   pp::FloatPoint BoundScrollOffsetToDocument(
       const pp::FloatPoint& scroll_offset);
 
+  // Add a sample to an enumerated histogram and filter out print preview usage.
+  template <typename T>
+  void HistogramEnumeration(const char* name, T sample);
+
   // Wrappers for |uma_| so histogram reporting only occurs when the PDF Viewer
   // is not being used for print preview.
-  void HistogramCustomCounts(const std::string& name,
-                             int32_t sample,
-                             int32_t min,
-                             int32_t max,
-                             uint32_t bucket_count);
-  void HistogramEnumeration(const std::string& name,
-                            int32_t sample,
-                            int32_t boundary_value);
+  void HistogramCustomCountsDeprecated(const std::string& name,
+                                       int32_t sample,
+                                       int32_t min,
+                                       int32_t max,
+                                       uint32_t bucket_count);
+  void HistogramEnumerationDeprecated(const std::string& name,
+                                      int32_t sample,
+                                      int32_t boundary_value);
 
   pp::ImageData image_data_;
   // Used when the plugin is embedded in a page and we have to create the loader
@@ -419,12 +429,6 @@ class OutOfProcessInstance : public pp::Instance,
   // The blank space above the first page of the document reserved for the
   // toolbar.
   int top_toolbar_height_in_viewport_coords_;
-
-  // Whether each page had its features processed.
-  std::vector<bool> page_is_processed_;
-
-  // Annotation types that were already counted for this document.
-  std::set<int> annotation_types_counted_;
 
   bool edit_mode_ = false;
 

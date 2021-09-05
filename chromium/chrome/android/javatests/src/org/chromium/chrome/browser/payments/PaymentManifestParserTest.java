@@ -16,7 +16,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.payments.PaymentManifestParser;
@@ -24,8 +24,7 @@ import org.chromium.components.payments.PaymentManifestParser.ManifestParseCallb
 import org.chromium.components.payments.WebAppManifestSection;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
-
-import java.net.URI;
+import org.chromium.url.URI;
 
 /** An integration test for the payment manifest parser. */
 @RunWith(ChromeJUnit4ClassRunner.class)
@@ -87,7 +86,8 @@ public class PaymentManifestParserTest implements ManifestParseCallback {
     @Feature({"Payments"})
     public void testParseInvalidPaymentMethodManifest() throws Throwable {
         mRule.runOnUiThread((Runnable) () -> mParser.parsePaymentMethodManifest(
-                "invalid payment method manifest", PaymentManifestParserTest.this));
+                URI.create("https://chromium.org/pmm.json"), "invalid payment method manifest",
+                PaymentManifestParserTest.this));
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
@@ -100,7 +100,8 @@ public class PaymentManifestParserTest implements ManifestParseCallback {
     @MediumTest
     @Feature({"Payments"})
     public void testParsePaymentMethodManifest() throws Throwable {
-        mRule.runOnUiThread((Runnable) () -> mParser.parsePaymentMethodManifest("{"
+        mRule.runOnUiThread((Runnable) () -> mParser.parsePaymentMethodManifest(
+                URI.create("https://bobpay.com/pmm.json"), "{"
                         + "  \"default_applications\": ["
                         + "    \"https://bobpay.com/app.json\","
                         + "    \"https://alicepay.com/app.json\""
@@ -133,6 +134,7 @@ public class PaymentManifestParserTest implements ManifestParseCallback {
     @Feature({"Payments"})
     public void testParsePaymentMethodManifestWithAllOriginsSupported() throws Throwable {
         mRule.runOnUiThread((Runnable) () -> mParser.parsePaymentMethodManifest(
+                URI.create("https://bobpay.com/pmm.json"),
                 "{\"supported_origins\": \"*\"}", PaymentManifestParserTest.this));
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
             @Override

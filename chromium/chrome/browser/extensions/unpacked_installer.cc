@@ -67,11 +67,11 @@ void MaybeCleanupMetadataFolder(const base::FilePath& extension_path) {
   const std::vector<base::FilePath> reserved_filepaths =
       file_util::GetReservedMetadataFilePaths(extension_path);
   for (const auto& file : reserved_filepaths)
-    base::DeleteFile(file, false /*recursive*/);
+    base::DeleteFile(file, true /*recursive*/);
 
   const base::FilePath& metadata_dir = extension_path.Append(kMetadataFolder);
   if (base::IsDirectoryEmpty(metadata_dir))
-    base::DeleteFile(metadata_dir, true /*recursive*/);
+    base::DeleteFileRecursively(metadata_dir);
 }
 
 }  // namespace
@@ -279,20 +279,28 @@ bool UnpackedInstaller::IndexAndPersistRulesIfNeeded(std::string* error) {
     return true;
   }
 
+  using RulesetSource = declarative_net_request::RulesetSource;
+
   // TODO(crbug.com/761107): Change this so that we don't need to parse JSON
   // in the browser process.
-  auto ruleset_source =
-      declarative_net_request::RulesetSource::CreateStatic(*extension());
-  declarative_net_request::IndexAndPersistJSONRulesetResult result =
-      ruleset_source.IndexAndPersistJSONRulesetUnsafe();
-  if (!result.success) {
-    *error = std::move(result.error);
-    return false;
-  }
+  // TODO(crbug.com/754526): Impose a limit on the total number of rules across
+  // all the rulesets for an extension. Also, limit the number of install
+  // warnings across all rulesets.
+  std::vector<RulesetSource> sources =
+      RulesetSource::CreateStatic(*extension());
 
-  dnr_ruleset_checksum_ = result.ruleset_checksum;
-  if (!result.warnings.empty())
-    extension_->AddInstallWarnings(std::move(result.warnings));
+  for (const RulesetSource& source : sources) {
+    declarative_net_request::IndexAndPersistJSONRulesetResult result =
+        source.IndexAndPersistJSONRulesetUnsafe();
+    if (!result.success) {
+      *error = std::move(result.error);
+      return false;
+    }
+
+    ruleset_checksums_.emplace_back(result.ruleset_id, result.ruleset_checksum);
+    if (!result.warnings.empty())
+      extension_->AddInstallWarnings(std::move(result.warnings));
+  }
 
   return true;
 }
@@ -309,8 +317,9 @@ bool UnpackedInstaller::IsLoadingUnpackedAllowed() const {
 void UnpackedInstaller::GetAbsolutePath() {
   extension_path_ = base::MakeAbsoluteFilePath(extension_path_);
 
+  // Set priority explicitly to avoid unwanted task priority inheritance.
   base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
+      FROM_HERE, {BrowserThread::UI, base::TaskPriority::USER_BLOCKING},
       base::BindOnce(&UnpackedInstaller::CheckExtensionFileAccess, this));
 }
 
@@ -332,13 +341,17 @@ void UnpackedInstaller::CheckExtensionFileAccess() {
 void UnpackedInstaller::LoadWithFileAccess(int flags) {
   std::string error;
   if (!LoadExtension(Manifest::UNPACKED, flags, &error)) {
-    base::PostTask(FROM_HERE, {BrowserThread::UI},
+    // Set priority explicitly to avoid unwanted task priority inheritance.
+    base::PostTask(FROM_HERE,
+                   {BrowserThread::UI, base::TaskPriority::USER_BLOCKING},
                    base::BindOnce(&UnpackedInstaller::ReportExtensionLoadError,
                                   this, error));
     return;
   }
 
-  base::PostTask(FROM_HERE, {BrowserThread::UI},
+  // Set priority explicitly to avoid unwanted task priority inheritance.
+  base::PostTask(FROM_HERE,
+                 {BrowserThread::UI, base::TaskPriority::USER_BLOCKING},
                  base::BindOnce(&UnpackedInstaller::StartInstallChecks, this));
 }
 
@@ -368,7 +381,7 @@ void UnpackedInstaller::InstallExtension() {
 
   service_weak_->OnExtensionInstalled(extension(), syncer::StringOrdinal(),
                                       kInstallFlagInstallImmediately,
-                                      dnr_ruleset_checksum_);
+                                      ruleset_checksums_);
 
   if (!callback_.is_null())
     std::move(callback_).Run(extension(), extension_path_, std::string());

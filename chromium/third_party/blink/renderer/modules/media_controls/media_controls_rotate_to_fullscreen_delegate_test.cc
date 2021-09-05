@@ -13,7 +13,6 @@
 #include "third_party/blink/renderer/core/css/css_style_declaration.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -47,7 +46,7 @@ class MockVideoWebMediaPlayer : public EmptyWebMediaPlayer {
   // EmptyWebMediaPlayer overrides:
   bool HasVideo() const override { return true; }
 
-  MOCK_CONST_METHOD0(NaturalSize, WebSize());
+  MOCK_CONST_METHOD0(NaturalSize, gfx::Size());
 };
 
 class MockChromeClient : public EmptyChromeClient {
@@ -64,8 +63,11 @@ class MockChromeClient : public EmptyChromeClient {
         ->SetScreenOrientationAssociatedRemoteForTests(
             std::move(screen_orientation));
   }
-  void EnterFullscreen(LocalFrame& frame, const FullscreenOptions*) override {
-    Fullscreen::DidEnterFullscreen(*frame.GetDocument());
+  void EnterFullscreen(LocalFrame& frame,
+                       const FullscreenOptions*,
+                       bool for_cross_process_descendant) override {
+    Fullscreen::DidResolveEnterFullscreenRequest(*frame.GetDocument(),
+                                                 true /* granted */);
   }
   void ExitFullscreen(LocalFrame& frame) override {
     Fullscreen::DidExitFullscreen(*frame.GetDocument());
@@ -154,7 +156,7 @@ class MediaControlsRotateToFullscreenDelegateTest
   }
 
   void InitScreenAndVideo(WebScreenOrientationType initial_screen_orientation,
-                          WebSize video_size,
+                          gfx::Size video_size,
                           bool with_device_orientation = true);
 
   void PlayVideo();
@@ -185,7 +187,7 @@ class MediaControlsRotateToFullscreenDelegateTest
 
 void MediaControlsRotateToFullscreenDelegateTest::InitScreenAndVideo(
     WebScreenOrientationType initial_screen_orientation,
-    WebSize video_size,
+    gfx::Size video_size,
     bool with_device_orientation /* = true */) {
   // Set initial screen orientation (called by `Attach` during `AppendChild`).
   WebScreenInfo screen_info;
@@ -218,11 +220,8 @@ void MediaControlsRotateToFullscreenDelegateTest::InitScreenAndVideo(
 }
 
 void MediaControlsRotateToFullscreenDelegateTest::PlayVideo() {
-  {
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
-    GetVideo().Play();
-  }
+  LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
+  GetVideo().Play();
   test::RunPendingTasks();
 }
 
@@ -266,18 +265,18 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest, ComputeVideoOrientation) {
   // one where the video is not yet ready.
   EXPECT_CALL(GetWebMediaPlayer(), NaturalSize())
       .Times(12)
-      .WillOnce(Return(WebSize(400, 400)))
-      .WillOnce(Return(WebSize(400, 400)))
-      .WillOnce(Return(WebSize(300, 200)))
-      .WillOnce(Return(WebSize(300, 200)))
-      .WillOnce(Return(WebSize(200, 300)))
-      .WillOnce(Return(WebSize(200, 300)))
-      .WillOnce(Return(WebSize(300, 199)))
-      .WillOnce(Return(WebSize(300, 199)))
-      .WillOnce(Return(WebSize(199, 300)))
-      .WillOnce(Return(WebSize(199, 300)))
-      .WillOnce(Return(WebSize(0, 0)))
-      .WillOnce(Return(WebSize(0, 0)));
+      .WillOnce(Return(gfx::Size(400, 400)))
+      .WillOnce(Return(gfx::Size(400, 400)))
+      .WillOnce(Return(gfx::Size(300, 200)))
+      .WillOnce(Return(gfx::Size(300, 200)))
+      .WillOnce(Return(gfx::Size(200, 300)))
+      .WillOnce(Return(gfx::Size(200, 300)))
+      .WillOnce(Return(gfx::Size(300, 199)))
+      .WillOnce(Return(gfx::Size(300, 199)))
+      .WillOnce(Return(gfx::Size(199, 300)))
+      .WillOnce(Return(gfx::Size(199, 300)))
+      .WillOnce(Return(gfx::Size(0, 0)))
+      .WillOnce(Return(gfx::Size(0, 0)));
 
   // Video is not yet ready.
   EXPECT_EQ(SimpleOrientation::kUnknown, ComputeVideoOrientation());
@@ -305,11 +304,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   EXPECT_FALSE(IsObservingVisibility());
 
   // Should start observing visibility when played.
-  {
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
-    GetVideo().Play();
-  }
+  LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
+  GetVideo().Play();
   test::RunPendingTasks();
   EXPECT_TRUE(IsObservingVisibility());
   EXPECT_FALSE(ObservedVisibility());
@@ -326,11 +322,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   EXPECT_FALSE(ObservedVisibility());
 
   // Should resume observing visibility when playback resumes.
-  {
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
-    GetVideo().Play();
-  }
+  LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
+  GetVideo().Play();
   test::RunPendingTasks();
   EXPECT_TRUE(IsObservingVisibility());
   EXPECT_FALSE(ObservedVisibility());
@@ -344,7 +337,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        EnterSuccessPortraitToLandscape) {
   // Portrait screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480));
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(640, 480));
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
@@ -365,7 +358,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        EnterSuccessLandscapeToPortrait) {
   // Landscape screen, portrait video.
-  InitScreenAndVideo(kWebScreenOrientationLandscapePrimary, WebSize(480, 640));
+  InitScreenAndVideo(kWebScreenOrientationLandscapePrimary,
+                     gfx::Size(480, 640));
   EXPECT_EQ(SimpleOrientation::kLandscape, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kPortrait, ComputeVideoOrientation());
 
@@ -386,7 +380,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        EnterSuccessSquarePortraitToLandscape) {
   // Portrait screen, square video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(400, 400));
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(400, 400));
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
@@ -407,7 +401,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
 TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailWrongOrientation) {
   // Landscape screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationLandscapePrimary, WebSize(640, 480));
+  InitScreenAndVideo(kWebScreenOrientationLandscapePrimary,
+                     gfx::Size(640, 480));
   EXPECT_EQ(SimpleOrientation::kLandscape, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
@@ -428,7 +423,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailWrongOrientation) {
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        EnterFailSquareWrongOrientation) {
   // Landscape screen, square video.
-  InitScreenAndVideo(kWebScreenOrientationLandscapePrimary, WebSize(400, 400));
+  InitScreenAndVideo(kWebScreenOrientationLandscapePrimary,
+                     gfx::Size(400, 400));
   EXPECT_EQ(SimpleOrientation::kLandscape, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
@@ -450,7 +446,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailNoControls) {
   DisableControls();
 
   // Portrait screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480));
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(640, 480));
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
@@ -470,7 +466,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailNoControls) {
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        EnterFailNoDeviceOrientation) {
   // Portrait screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480),
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(640, 480),
                      false /* with_device_orientation */);
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
@@ -497,7 +493,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        EnterFailZeroDeviceOrientation) {
   // Portrait screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480),
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(640, 480),
                      false /* with_device_orientation */);
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
@@ -526,7 +522,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
 TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailPaused) {
   // Portrait screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480));
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(640, 480));
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
@@ -545,7 +541,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailPaused) {
 
 TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailHidden) {
   // Portrait screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480));
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(640, 480));
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
@@ -556,8 +552,9 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailHidden) {
   EXPECT_TRUE(ObservedVisibility());
 
   // Move video offscreen.
-  GetDocument().body()->style()->setProperty(&GetDocument(), "margin-top",
-                                             "-999px", "", ASSERT_NO_EXCEPTION);
+  GetDocument().body()->style()->setProperty(GetDocument().ToExecutionContext(),
+                                             "margin-top", "-999px", "",
+                                             ASSERT_NO_EXCEPTION);
 
   UpdateVisibilityObserver();
 
@@ -574,7 +571,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        EnterFail180DegreeRotation) {
   // Landscape screen, landscape video.
   InitScreenAndVideo(kWebScreenOrientationLandscapeSecondary,
-                     WebSize(640, 480));
+                     gfx::Size(640, 480));
   EXPECT_EQ(SimpleOrientation::kLandscape, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
@@ -594,7 +591,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
 TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailSmall) {
   // Portrait screen, small landscape video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(300, 199));
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(300, 199));
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kUnknown, ComputeVideoOrientation());
 
@@ -614,17 +611,14 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest, EnterFailSmall) {
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        EnterFailDocumentFullscreen) {
   // Portrait screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480));
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(640, 480));
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
   // Simulate the webpage requesting fullscreen on some other element than the
   // video (in this case document.body).
-  {
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
-    Fullscreen::RequestFullscreen(*GetDocument().body());
-  }
+  LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
+  Fullscreen::RequestFullscreen(*GetDocument().body());
   test::RunPendingTasks();
   EXPECT_TRUE(Fullscreen::IsFullscreenElement(*GetDocument().body()));
   EXPECT_FALSE(GetVideo().IsFullscreen());
@@ -646,16 +640,14 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        ExitSuccessLandscapeFullscreenToPortraitInline) {
   // Landscape screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationLandscapePrimary, WebSize(640, 480));
+  InitScreenAndVideo(kWebScreenOrientationLandscapePrimary,
+                     gfx::Size(640, 480));
   EXPECT_EQ(SimpleOrientation::kLandscape, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
   // Start in fullscreen.
-  {
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
-    GetMediaControls().EnterFullscreen();
-  }
+  LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
+  GetMediaControls().EnterFullscreen();
   // n.b. omit to call Fullscreen::From(GetDocument()).DidEnterFullscreen() so
   // that MediaControlsOrientationLockDelegate doesn't trigger, which avoids
   // having to create deviceorientation events here to unlock it again.
@@ -677,16 +669,13 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        ExitSuccessPortraitFullscreenToLandscapeInline) {
   // Portrait screen, portrait video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(480, 640));
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(480, 640));
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kPortrait, ComputeVideoOrientation());
 
   // Start in fullscreen.
-  {
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
-    GetMediaControls().EnterFullscreen();
-  }
+  LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
+  GetMediaControls().EnterFullscreen();
   // n.b. omit to call Fullscreen::From(GetDocument()).DidEnterFullscreen() so
   // that MediaControlsOrientationLockDelegate doesn't trigger, which avoids
   // having to create deviceorientation events here to unlock it again.
@@ -708,17 +697,15 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        ExitFailDocumentFullscreen) {
   // Landscape screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationLandscapePrimary, WebSize(640, 480));
+  InitScreenAndVideo(kWebScreenOrientationLandscapePrimary,
+                     gfx::Size(640, 480));
   EXPECT_EQ(SimpleOrientation::kLandscape, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
   // Simulate the webpage requesting fullscreen on some other element than the
   // video (in this case document.body).
-  {
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
-    Fullscreen::RequestFullscreen(*GetDocument().body());
-  }
+  LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
+  Fullscreen::RequestFullscreen(*GetDocument().body());
   test::RunPendingTasks();
   EXPECT_TRUE(Fullscreen::IsFullscreenElement(*GetDocument().body()));
   EXPECT_FALSE(GetVideo().IsFullscreen());
@@ -738,7 +725,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        EnterFailControlsListNoFullscreen) {
   // Portrait screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480));
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(640, 480));
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 
@@ -761,7 +748,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 TEST_F(MediaControlsRotateToFullscreenDelegateTest,
        EnterSuccessControlsListNoDownload) {
   // Portrait screen, landscape video.
-  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, WebSize(640, 480));
+  InitScreenAndVideo(kWebScreenOrientationPortraitPrimary, gfx::Size(640, 480));
   EXPECT_EQ(SimpleOrientation::kPortrait, ObservedScreenOrientation());
   EXPECT_EQ(SimpleOrientation::kLandscape, ComputeVideoOrientation());
 

@@ -29,7 +29,7 @@ GPUCanvasContext::GPUCanvasContext(
 
 GPUCanvasContext::~GPUCanvasContext() {}
 
-void GPUCanvasContext::Trace(blink::Visitor* visitor) {
+void GPUCanvasContext::Trace(Visitor* visitor) {
   visitor->Trace(swapchain_);
   CanvasRenderingContext::Trace(visitor);
 }
@@ -76,7 +76,7 @@ GPUSwapChain* GPUCanvasContext::configureSwapChain(
     // destroy all its resources (and produce errors when used).
     swapchain_->Neuter();
   }
-  swapchain_ = GPUSwapChain::Create(this, descriptor);
+  swapchain_ = MakeGarbageCollected<GPUSwapChain>(this, descriptor);
   return swapchain_;
 }
 

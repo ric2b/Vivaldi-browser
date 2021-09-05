@@ -1,5 +1,5 @@
 <!doctype html>
-<html dir="ltr" lang="en">
+<html dir="$i18n{textdirection}" lang="$i18n{language}">
 <head>
 <meta charset="utf-8">
 <if expr="not is_ios">
@@ -21,7 +21,7 @@
 <script src="chrome://resources/js/cr/ui/focus_outline_manager.js"></script>
 <script src="chrome://resources/js/util.js"></script>
 <script src="chrome://resources/js/load_time_data.js"></script>
-<script src="chrome://flags/strings.js"></script>
+<script src="strings.js"></script>
 </head>
 <body>
 <div id="header">
@@ -86,7 +86,7 @@
                     : 'experiment-switched flex-container'">
               <div class="flex">
                 <h3 class="experiment-name" jscontent="name"
-                    jsvalues="title: is_default ? '' : $i18n{experiment-enabled};
+                    jsvalues="title: is_default ? '' : '$i18n{experiment-enabled}';
                         id:internal_name + '_name'"></h3>
                 <p>
                   <span jsvalues=".innerHTML:description"></span> –
@@ -133,7 +133,7 @@
                     : 'experiment-switched flex-container'">
               <div class="flex">
                 <h3 class="experiment-name" jscontent="name"
-                    jsvalues="title: is_default ? '' : $i18n{experiment-enabled};
+                    jsvalues="title: is_default ? '' : '$i18n{experiment-enabled}';
                         id:internal_name + '_name'"></h3>
                 <p>
                   <span jsvalues=".innerHTML:description"></span> –
@@ -224,7 +224,7 @@
     </div>
   </div>
 </div>
-<script src="chrome://flags/flags.js"></script>
+<script src="flags.js"></script>
 <script src="chrome://resources/js/jstemplate_compiled.js"></script>
 </body>
 </html>

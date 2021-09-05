@@ -29,7 +29,7 @@
 #include "printing/print_job_constants.h"
 #include "printing/units.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_range.h"
@@ -127,6 +127,7 @@ void CreatePrintSettingsDictionary(base::DictionaryValue* dict) {
   dict->SetBoolean(kIsFirstRequest, true);
   dict->SetInteger(kSettingMarginsType, DEFAULT_MARGINS);
   dict->SetBoolean(kSettingPreviewModifiable, true);
+  dict->SetBoolean(kSettingPreviewIsFromArc, false);
   dict->SetBoolean(kSettingPreviewIsPdf, false);
   dict->SetBoolean(kSettingHeaderFooterEnabled, false);
   dict->SetBoolean(kSettingShouldPrintBackgrounds, false);
@@ -237,7 +238,7 @@ class PrintRenderFrameHelperTestBase : public content::RenderViewTest {
   }
 
   void OnPrintPages() {
-    GetPrintRenderFrameHelper()->OnPrintPages();
+    GetPrintRenderFrameHelper()->PrintRequestedPages();
     base::RunLoop().RunUntilIdle();
   }
 
@@ -245,7 +246,7 @@ class PrintRenderFrameHelperTestBase : public content::RenderViewTest {
     PrintRenderFrameHelper* helper =
         GetPrintRenderFrameHelperForFrame(frame_name);
     ASSERT_TRUE(helper);
-    helper->OnPrintPages();
+    helper->PrintRequestedPages();
     base::RunLoop().RunUntilIdle();
   }
 
@@ -261,11 +262,12 @@ class PrintRenderFrameHelperTestBase : public content::RenderViewTest {
   void OnPrintPreview(const base::DictionaryValue& dict) {
     PrintRenderFrameHelper* print_render_frame_helper =
         GetPrintRenderFrameHelper();
-    print_render_frame_helper->InitiatePrintPreview(nullptr, false);
+    print_render_frame_helper->InitiatePrintPreview(
+        mojo::NullAssociatedRemote(), false);
     base::RunLoop run_loop;
     DidPreviewPageListener filter(&run_loop);
     render_thread_->sink().AddFilter(&filter);
-    print_render_frame_helper->OnPrintPreview(dict);
+    print_render_frame_helper->PrintPreview(dict.Clone());
     run_loop.Run();
     render_thread_->sink().RemoveFilter(&filter);
   }
@@ -741,11 +743,11 @@ TEST_F(MAYBE_PrintRenderFrameHelperPreviewTest, BlockScriptInitiatedPrinting) {
   LoadHTML(kHelloWorldHTML);
   PrintRenderFrameHelper* print_render_frame_helper =
       GetPrintRenderFrameHelper();
-  print_render_frame_helper->OnSetPrintingEnabled(false);
+  print_render_frame_helper->SetPrintingEnabled(false);
   PrintWithJavaScript();
   VerifyPreviewRequest(false);
 
-  print_render_frame_helper->OnSetPrintingEnabled(true);
+  print_render_frame_helper->SetPrintingEnabled(true);
   PrintWithJavaScript();
   VerifyPreviewRequest(true);
 }

@@ -23,7 +23,9 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/token.h"
 #include "build/build_config.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/platform/platform_handle.h"
@@ -169,12 +171,12 @@ class ServiceManagerTest : public testing::Test,
   Connector* connector() { return test_service_.connector(); }
 
   void AddListenerAndWaitForApplications() {
-    mojom::ServiceManagerPtr service_manager;
-    connector()->BindInterface(service_manager::mojom::kServiceName,
-                               &service_manager);
+    mojo::Remote<mojom::ServiceManager> service_manager;
+    connector()->Connect(service_manager::mojom::kServiceName,
+                         service_manager.BindNewPipeAndPassReceiver());
 
-    mojom::ServiceManagerListenerPtr listener;
-    binding_.Bind(mojo::MakeRequest(&listener));
+    mojo::PendingRemote<mojom::ServiceManagerListener> listener;
+    receiver_.Bind(listener.InitWithNewPipeAndPassReceiver());
     service_manager->AddListener(std::move(listener));
 
     wait_for_instances_loop_ = std::make_unique<base::RunLoop>();
@@ -385,7 +387,7 @@ class ServiceManagerTest : public testing::Test,
   TestServiceManager test_service_manager_;
   TestService test_service_;
 
-  mojo::Binding<mojom::ServiceManagerListener> binding_{this};
+  mojo::Receiver<mojom::ServiceManagerListener> receiver_{this};
   std::vector<InstanceInfo> instances_;
   std::vector<InstanceInfo> initial_instances_;
   std::unique_ptr<base::RunLoop> wait_for_instances_loop_;
@@ -564,7 +566,7 @@ TEST_F(ServiceManagerTest, ClientProcessCapabilityEnforced) {
 }
 
 TEST_F(ServiceManagerTest, ClonesDisconnectedConnectors) {
-  Connector connector((mojom::ConnectorPtrInfo()));
+  Connector connector((mojo::PendingRemote<mojom::Connector>()));
   EXPECT_TRUE(connector.Clone());
 }
 

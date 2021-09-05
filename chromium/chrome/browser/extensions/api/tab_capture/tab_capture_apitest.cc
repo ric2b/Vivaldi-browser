@@ -5,7 +5,6 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -178,7 +177,9 @@ IN_PROC_BROWSER_TEST_F(TabCaptureApiTest, MAYBE_MaxOffscreenTabs) {
 }
 
 // Tests that tab capture video frames can be received in a VIDEO element.
-IN_PROC_BROWSER_TEST_F(TabCaptureApiPixelTest, EndToEndWithoutRemoting) {
+// Flaky on all platforms. See https://crbug.com/1040894
+IN_PROC_BROWSER_TEST_F(TabCaptureApiPixelTest,
+                       DISABLED_EndToEndWithoutRemoting) {
   if (IsTooIntensiveForThisPlatform()) {
     LOG(WARNING) << "Skipping this CPU-intensive test on this platform/build.";
     return;
@@ -198,7 +199,8 @@ IN_PROC_BROWSER_TEST_F(TabCaptureApiPixelTest, EndToEndWithoutRemoting) {
 // received in a VIDEO element.  More allowance is provided for color deviation
 // because of the additional layers of video processing performed within
 // WebRTC.
-IN_PROC_BROWSER_TEST_F(TabCaptureApiPixelTest, EndToEndThroughWebRTC) {
+// Flaky on all platforms. See https://crbug.com/1040894
+IN_PROC_BROWSER_TEST_F(TabCaptureApiPixelTest, DISABLED_EndToEndThroughWebRTC) {
   if (IsTooIntensiveForThisPlatform()) {
     LOG(WARNING) << "Skipping this CPU-intensive test on this platform/build.";
     return;
@@ -390,9 +392,8 @@ IN_PROC_BROWSER_TEST_F(TabCaptureApiTest, DISABLED_GrantForChromePages) {
 // Tests that a tab in incognito mode can be captured.
 IN_PROC_BROWSER_TEST_F(TabCaptureApiTest, MAYBE_CaptureInSplitIncognitoMode) {
   AddExtensionToCommandLineWhitelist();
-  ASSERT_TRUE(RunExtensionSubtest("tab_capture",
-                                  "start_tab_capture.html",
-                                  kFlagEnableIncognito | kFlagUseIncognito))
+  ASSERT_TRUE(RunExtensionSubtest("tab_capture", "start_tab_capture.html",
+                                  kFlagEnableIncognito, kFlagUseIncognito))
       << message_;
 }
 

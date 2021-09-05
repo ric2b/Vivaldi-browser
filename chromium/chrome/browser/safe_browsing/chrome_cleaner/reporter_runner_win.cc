@@ -32,6 +32,8 @@
 #include "base/task/task_traits.h"
 #include "base/task_runner_util.h"
 #include "base/win/registry.h"
+#include "base/win/scoped_handle.h"
+#include "base/win/windows_version.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
@@ -115,12 +117,11 @@ enum SwReporterLogsUploadResultRegistryError {
 const char kRunningTimeErrorMetricName[] =
     "SoftwareReporter.RunningTimeRegistryError";
 
-SwReporterTestingDelegate* g_testing_delegate_ = nullptr;
+internal::SwReporterTestingDelegate* g_testing_delegate_ = nullptr;
 
 const char kFoundUwsMetricName[] = "SoftwareReporter.FoundUwS";
 const char kFoundUwsReadErrorMetricName[] =
     "SoftwareReporter.FoundUwSReadError";
-const char kScanTimesMetricName[] = "SoftwareReporter.UwSScanTimes";
 const char kMemoryUsedMetricName[] = "SoftwareReporter.MemoryUsed";
 const char kStepMetricName[] = "SoftwareReporter.Step";
 const char kLogsUploadEnabledMetricName[] =
@@ -312,45 +313,6 @@ class UMAHistogramReporter {
     }
   }
 
-  // Reports the UwS scan times of the software reporter tool via UMA.
-  void ReportScanTimes() const {
-    base::string16 scan_times_key_path = base::StringPrintf(
-        L"%ls\\%ls", registry_key_.c_str(), chrome_cleaner::kScanTimesSubKey);
-    // TODO(b/641081): This should only have KEY_QUERY_VALUE and KEY_SET_VALUE.
-    base::win::RegKey scan_times_key;
-    if (scan_times_key.Open(HKEY_CURRENT_USER, scan_times_key_path.c_str(),
-                            KEY_ALL_ACCESS) != ERROR_SUCCESS) {
-      return;
-    }
-
-    base::string16 value_name;
-    int uws_id = 0;
-    int64_t raw_scan_time = 0;
-    int num_scan_times = scan_times_key.GetValueCount();
-    for (int i = 0; i < num_scan_times; ++i) {
-      if (scan_times_key.GetValueNameAt(i, &value_name) == ERROR_SUCCESS &&
-          base::StringToInt(value_name, &uws_id) &&
-          scan_times_key.ReadInt64(value_name.c_str(), &raw_scan_time) ==
-              ERROR_SUCCESS) {
-        base::TimeDelta scan_time =
-            base::TimeDelta::FromInternalValue(raw_scan_time);
-        // We report the number of seconds plus one because it can take less
-        // than one second to scan some UwS and the count passed to |AddCount|
-        // must be at least one.
-        RecordSparseHistogramCount(kScanTimesMetricName, uws_id,
-                                   scan_time.InSeconds() + 1);
-      }
-    }
-    // Clean up by deleting the scan times key, which is a subkey of the main
-    // reporter key.
-    scan_times_key.Close();
-    base::win::RegKey reporter_key;
-    if (reporter_key.Open(HKEY_CURRENT_USER, registry_key_.c_str(),
-                          KEY_ENUMERATE_SUB_KEYS) == ERROR_SUCCESS) {
-      reporter_key.DeleteKey(chrome_cleaner::kScanTimesSubKey);
-    }
-  }
-
   void RecordReporterStep(SwReporterUmaValue value) {
     RecordEnumerationHistogram(kStepMetricName, value, SW_REPORTER_MAX);
   }
@@ -456,15 +418,6 @@ class UMAHistogramReporter {
       histogram->Add(sample);
   }
 
-  void RecordSparseHistogramCount(const std::string& name,
-                                  Sample sample,
-                                  int count) const {
-    auto* histogram =
-        base::SparseHistogram::FactoryGet(FullName(name), kUmaHistogramFlag);
-    if (histogram)
-      histogram->AddCount(sample, count);
-  }
-
   const std::string suffix_;
   const std::wstring registry_key_;
 };
@@ -479,45 +432,6 @@ void RecordReporterStepHistogram(SwReporterUmaValue value) {
 ChromeCleanerController* GetCleanerController() {
   return g_testing_delegate_ ? g_testing_delegate_->GetCleanerController()
                              : ChromeCleanerController::GetInstance();
-}
-
-// This function is called from a worker thread to launch the SwReporter and
-// wait for termination to collect its exit code. This task could be
-// interrupted by a shutdown at any time, so it shouldn't depend on anything
-// external that could be shut down beforehand.
-int LaunchAndWaitForExitOnBackgroundThread(
-    const SwReporterInvocation& invocation) {
-  TRACE_EVENT0("safe_browsing",
-               "ReporterRunner::LaunchAndWaitForExitOnBackgroundThread");
-  if (g_testing_delegate_)
-    return g_testing_delegate_->LaunchReporter(invocation);
-
-  base::FilePath tmpdir;
-  int exit_code = kReporterNotLaunchedExitCode;
-  if (!base::GetTempDir(&tmpdir)) {
-    return exit_code;
-  }
-
-  // The reporter runs from the system tmp directory. This is to avoid
-  // unnecessarily holding on to the installation directory while running as it
-  // prevents uninstallation of chrome.
-  base::LaunchOptions launch_options;
-  launch_options.current_directory = tmpdir;
-
-  base::Process reporter_process =
-      base::LaunchProcess(invocation.command_line(), launch_options);
-
-  // This exit code is used to identify that a reporter run didn't happen, so
-  // the result should be ignored and a rerun scheduled for the usual delay.
-  UMAHistogramReporter uma(invocation.suffix());
-  if (reporter_process.IsValid()) {
-    uma.RecordReporterStep(SW_REPORTER_START_EXECUTION);
-    bool success = reporter_process.WaitForExit(&exit_code);
-    DCHECK(success);
-  } else {
-    uma.RecordReporterStep(SW_REPORTER_FAILED_TO_START);
-  }
-  return exit_code;
 }
 
 SwReporterInvocationResult ExitCodeToInvocationResult(int exit_code) {
@@ -588,9 +502,14 @@ base::Time Now() {
 
 }  // namespace
 
+namespace internal {
+
 // This class tries to run a queue of reporters and react to their exit codes.
 // It schedules subsequent runs of the queue as needed, or retries as soon as a
 // browser is available when none is on first try.
+//
+// This can't be in the anonymous namespace because it's a friend of
+// ChromeMetricsServiceAccessor.
 class ReporterRunner {
  public:
   // Tries to run |invocations| immediately. This must be called on the UI
@@ -728,10 +647,10 @@ class ReporterRunner {
         g_testing_delegate_ ? g_testing_delegate_->BlockingTaskRunner()
                             : blocking_task_runner_.get();
     auto launch_and_wait =
-        base::Bind(&LaunchAndWaitForExitOnBackgroundThread, next_invocation);
+        base::BindOnce(&LaunchAndWaitForExit, next_invocation);
     auto reporter_done =
-        base::Bind(&ReporterRunner::ReporterDone, base::Unretained(this), Now(),
-                   next_invocation);
+        base::BindOnce(&ReporterRunner::ReporterDone, base::Unretained(this),
+                       Now(), next_invocation);
     base::PostTaskAndReplyWithResult(task_runner, FROM_HERE,
                                      std::move(launch_and_wait),
                                      std::move(reporter_done));
@@ -757,7 +676,7 @@ class ReporterRunner {
     // If the reporter failed to launch, do not process the results. (The exit
     // code itself doesn't need to be logged in this case because
     // SW_REPORTER_FAILED_TO_START is logged in
-    // |LaunchAndWaitForExitOnBackgroundThread|.)
+    // |LaunchAndWaitForExit|.)
     if (exit_code == kReporterNotLaunchedExitCode) {
       NotifySequenceDone(SwReporterInvocationResult::kProcessFailedToLaunch);
       return;
@@ -791,7 +710,6 @@ class ReporterRunner {
                             now.ToInternalValue());
     }
     uma.ReportRuntime(reporter_running_time);
-    uma.ReportScanTimes();
     uma.ReportMemoryUsage();
     if (finished_invocation.reporter_logs_upload_enabled())
       uma.RecordLogsUploadResult();
@@ -983,10 +901,10 @@ class ReporterRunner {
   static ReporterRunner* instance_;
 
   scoped_refptr<base::TaskRunner> blocking_task_runner_ =
-      base::CreateTaskRunner(
-          // LaunchAndWaitForExitOnBackgroundThread() creates (MayBlock()) and
-          // joins (WithBaseSyncPrimitives()) a process.
-          {base::ThreadPool(), base::MayBlock(), base::WithBaseSyncPrimitives(),
+      base::ThreadPool::CreateTaskRunner(
+          // LaunchAndWaitForExit creates (MayBlock()) and joins
+          // (WithBaseSyncPrimitives()) a process.
+          {base::MayBlock(), base::WithBaseSyncPrimitives(),
            base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
 
@@ -1010,6 +928,85 @@ class ReporterRunner {
 // static
 ReporterRunner* ReporterRunner::instance_ = nullptr;
 
+void SetSwReporterTestingDelegate(SwReporterTestingDelegate* delegate) {
+  g_testing_delegate_ = delegate;
+}
+
+bool ReporterTerminatesOnBrowserExit() {
+  // Windows 7 does not allow nested job objects, and the process may already
+  // be in a job (for example when running under a debugger or in Terminal
+  // Server) so only enable this on Windows 8+. The reporter will finish its
+  // scan and upload reports if the user has opted in, but not be able to
+  // prompt for cleanup if UwS is found.
+  return base::win::GetVersion() >= base::win::Version::WIN8;
+}
+
+// This function is called from a worker thread to launch the SwReporter and
+// wait for termination to collect its exit code. This task could be
+// interrupted by a shutdown at any time, so it shouldn't depend on anything
+// external that could be shut down beforehand.
+int LaunchAndWaitForExit(const SwReporterInvocation& invocation) {
+  TRACE_EVENT0("safe_browsing", "ReporterRunner::LaunchAndWaitForExit");
+
+  // This exit code is used to identify that a reporter run didn't happen, so
+  // the result should be ignored and a rerun scheduled for the usual delay.
+  int exit_code = kReporterNotLaunchedExitCode;
+
+  UMAHistogramReporter uma(invocation.suffix());
+
+  base::FilePath tmpdir;
+  if (!base::GetTempDir(&tmpdir)) {
+    uma.RecordReporterStep(SW_REPORTER_FAILED_TO_START);
+    return exit_code;
+  }
+
+  // The reporter runs from the system tmp directory. This is to avoid
+  // unnecessarily holding on to the installation directory while running as it
+  // prevents uninstallation of chrome.
+  base::LaunchOptions launch_options;
+  launch_options.current_directory = tmpdir;
+
+  // Assign the reporter process to a job. If the browser exits before the
+  // reporter, the OS will close the job handle and the reporter process.
+  base::win::ScopedHandle job;
+  if (ReporterTerminatesOnBrowserExit()) {
+    job.Set(::CreateJobObject(nullptr, nullptr));
+  }
+  if (job.IsValid()) {
+    base::SetJobObjectLimitFlags(job.Get(), JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE);
+    launch_options.job_handle = job.Get();
+  } else {
+    PLOG(WARNING) << "The Chrome Cleanup Tool's reporter process is not "
+                     "attached to a job and may outlive the browser.";
+  }
+
+  base::Process reporter_process =
+      g_testing_delegate_
+          ? g_testing_delegate_->LaunchReporterProcess(invocation,
+                                                       launch_options)
+          : base::LaunchProcess(invocation.command_line(), launch_options);
+
+  if (!reporter_process.IsValid()) {
+    uma.RecordReporterStep(SW_REPORTER_FAILED_TO_START);
+    return exit_code;
+  }
+
+  uma.RecordReporterStep(SW_REPORTER_START_EXECUTION);
+
+  if (g_testing_delegate_) {
+    exit_code = g_testing_delegate_->WaitForReporterExit(reporter_process);
+  } else {
+    bool success = reporter_process.WaitForExit(&exit_code);
+    DCHECK(success);
+  }
+
+  // After the reporter process has exited the job object is no longer needed.
+  // It will be closed when it goes out of scope here.
+  return exit_code;
+}
+
+}  // namespace internal
+
 bool IsUserInitiated(SwReporterInvocationType invocation_type) {
   return invocation_type ==
              SwReporterInvocationType::kUserInitiatedWithLogsAllowed ||
@@ -1022,8 +1019,8 @@ void MaybeStartSwReporter(SwReporterInvocationType invocation_type,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!invocations.container().empty());
 
-  ReporterRunner::MaybeStartInvocations(invocation_type,
-                                        std::move(invocations));
+  internal::ReporterRunner::MaybeStartInvocations(invocation_type,
+                                                  std::move(invocations));
 }
 
 bool SwReporterIsAllowedByPolicy() {
@@ -1051,10 +1048,6 @@ bool SwReporterReportingIsAllowedByPolicy(Profile* profile) {
                  profile_prefs->GetBoolean(prefs::kSwReporterReportingEnabled);
   }
   return is_allowed;
-}
-
-void SetSwReporterTestingDelegate(SwReporterTestingDelegate* delegate) {
-  g_testing_delegate_ = delegate;
 }
 
 }  // namespace safe_browsing

@@ -1,6 +1,37 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ko">
+<translation id="1089894737218087497">단독 설치</translation>
+<translation id="1682285232070778125">Vivaldi를 기본 브라우저로 설정</translation>
+<translation id="1974060860693918893">고급</translation>
+<translation id="2134216661302048561">Vivaldi 인스톨러가 아직 Vivaldi 브라우저 설치를 완료하지 못했습니다. 정말로 지금 나가시겠습니까?</translation>
+<translation id="2286454467119466181">단순</translation>
+<translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. 모든 권리 보유. &lt;a&gt;개인정보 보호방침&lt;/a&gt;</translation>
 <translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. All rights reserved.</translation>
+<translation id="2611953850925269349">Vivaldi를 종료하시겠습니까?</translation>
+<translation id="3004507951429848293">'동의 및 업데이트' 버튼을 누르면 Vivaldi의 &lt;a&gt;이용 약관&lt;/a&gt;에 동의한 것으로 간주합니다</translation>
+<translation id="335985608243443814">탐색...</translation>
+<translation id="3485073444286678268">목적지 폴더가 유효하지 않습니다. 다른 폴더를 선택해주세요.</translation>
+<translation id="3642991949832251880">Vivaldi를 종료하시겠습니까?</translation>
+<translation id="3784826321032465839">Vivaldi 설치</translation>
+<translation id="3850557856045828465">경고: Vivaldi에서는 확장 프로그램에 인터넷 사용 기록이 저장될 수 있습니다. 시크릿 모드에서 이 확장 프로그램을 사용 중지하려면 옵션을 선택 취소하세요.</translation>
+<translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4079588913451946215">모든 사용자에게 설치</translation>
+<translation id="421958613172216971">폴더 선택</translation>
+<translation id="4234678621326711327">사용자만 설치</translation>
+<translation id="4322221081772213228">'동의 및 설치' 버튼을 누르면 Vivaldi의 &lt;a&gt;이용 약관&lt;/a&gt;에 동의한 것으로 간주합니다</translation>
+<translation id="4380252528729894811">폴더 경로</translation>
+<translation id="4619978527973181021">동의 및 설치</translation>
+<translation id="479976146866774527">Vivaldi 설치 중</translation>
+<translation id="5051728323101947360">단독 Vivaldi를 기본 앱으로 만들기</translation>
+<translation id="5247376421371319618">동의 및 업데이트</translation>
+<translation id="5288672417093782294">Vivaldi 알림 설정으로 이동</translation>
+<translation id="5302048478445481009">언어</translation>
 <translation id="5743878272102782872">작업 관리자 - Vivaldi</translation>
+<translation id="6213772951145281007">Vivaldi을 종료할 때 쿠키 및 사이트 데이터 삭제</translation>
+<translation id="6569282126279967574">이런! Vivaldi에 충돌이 발생했습니다. 지금 재시작하시겠습니까?</translation>
+<translation id="694714344624446243">Vivaldi 인스톨러</translation>
+<translation id="7658239707568436148">취소</translation>
+<translation id="8773751185824654197">참고: 실행되고 있는 Vivaldi 브라우저를 업데이트하면 인스턴스가 종료되고 재실행됩니다</translation>
+<translation id="933060950687965486">설치 유형</translation>
 </translationbundle>

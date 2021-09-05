@@ -24,9 +24,10 @@ import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.util.Log;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.CalledByNativeUnchecked;
 import org.chromium.base.annotations.MainDex;
@@ -146,14 +147,6 @@ class AndroidNetworkLibrary {
     }
 
     /**
-     * Returns the ISO country code equivalent of the current MCC.
-     */
-    @CalledByNative
-    private static String getNetworkCountryIso() {
-        return AndroidTelephonyManagerBridge.getInstance().getNetworkCountryIso();
-    }
-
-    /**
      * Returns the MCC+MNC (mobile country code + mobile network code) as
      * the numeric name of the current registered operator.
      */
@@ -263,20 +256,34 @@ class AndroidNetworkLibrary {
             return -1;
         }
 
-        Intent intent = null;
-        try {
-            intent = ContextUtils.getApplicationContext().registerReceiver(
-                    null, new IntentFilter(WifiManager.RSSI_CHANGED_ACTION));
-        } catch (IllegalArgumentException e) {
-            // Some devices unexpectedly throw IllegalArgumentException when registering
-            // the broadcast receiver. See https://crbug.com/984179.
-            return -1;
-        }
-        if (intent == null) {
-            return -1;
+        int rssi;
+        // On Android Q and above, the WifiInfo cannot be obtained through broadcast. See
+        // https://crbug.com/1026686.
+        if (haveAccessWifiState()) {
+            WifiManager wifiManager =
+                    (WifiManager) ContextUtils.getApplicationContext().getSystemService(
+                            Context.WIFI_SERVICE);
+            WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+            if (wifiInfo == null) {
+                return -1;
+            }
+            rssi = wifiInfo.getRssi();
+        } else {
+            Intent intent = null;
+            try {
+                intent = ContextUtils.getApplicationContext().registerReceiver(
+                        null, new IntentFilter(WifiManager.RSSI_CHANGED_ACTION));
+            } catch (IllegalArgumentException e) {
+                // Some devices unexpectedly throw IllegalArgumentException when registering
+                // the broadcast receiver. See https://crbug.com/984179.
+                return -1;
+            }
+            if (intent == null) {
+                return -1;
+            }
+            rssi = intent.getIntExtra(WifiManager.EXTRA_NEW_RSSI, Integer.MIN_VALUE);
         }
 
-        final int rssi = intent.getIntExtra(WifiManager.EXTRA_NEW_RSSI, Integer.MIN_VALUE);
         if (rssi == Integer.MIN_VALUE) {
             return -1;
         }

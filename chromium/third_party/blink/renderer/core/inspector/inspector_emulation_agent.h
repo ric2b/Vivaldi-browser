@@ -48,6 +48,7 @@ class CORE_EXPORT InspectorEmulationAgent final
       protocol::Maybe<String> media,
       protocol::Maybe<protocol::Array<protocol::Emulation::MediaFeature>>
           features) override;
+  protocol::Response setEmulatedVisionDeficiency(const String&) override;
   protocol::Response setCPUThrottlingRate(double) override;
   protocol::Response setFocusEmulationEnabled(bool) override;
   protocol::Response setVirtualTimePolicy(
@@ -79,6 +80,7 @@ class CORE_EXPORT InspectorEmulationAgent final
       const String& user_agent,
       protocol::Maybe<String> accept_language,
       protocol::Maybe<String> platform) override;
+  protocol::Response setLocaleOverride(protocol::Maybe<String>) override;
 
   // InspectorInstrumentation API
   void ApplyAcceptLanguageOverride(String* accept_lang);
@@ -93,7 +95,7 @@ class CORE_EXPORT InspectorEmulationAgent final
   protocol::Response disable() override;
   void Restore() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   WebViewImpl* GetWebViewImpl();
@@ -126,9 +128,11 @@ class CORE_EXPORT InspectorEmulationAgent final
   InspectorAgentState::Integer max_touch_points_;
   InspectorAgentState::String emulated_media_;
   InspectorAgentState::StringMap emulated_media_features_;
+  InspectorAgentState::String emulated_vision_deficiency_;
   InspectorAgentState::String navigator_platform_override_;
   InspectorAgentState::String user_agent_override_;
   InspectorAgentState::String accept_language_override_;
+  InspectorAgentState::String locale_override_;
   InspectorAgentState::Double virtual_time_budget_;
   InspectorAgentState::Double virtual_time_budget_initial_offset_;
   InspectorAgentState::Double initial_virtual_time_;

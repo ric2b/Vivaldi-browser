@@ -16,6 +16,7 @@
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/cert/cert_database.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "url/gurl.h"
@@ -62,6 +63,25 @@ class CONTENT_EXPORT NetworkServiceClient
       const net::CookieAndLineStatusList& cookies_with_status,
       std::vector<network::mojom::HttpRawHeaderPairPtr> headers,
       const base::Optional<std::string>& raw_response_headers) override;
+  void OnCorsPreflightRequest(int32_t process_id,
+                              int32_t render_frame_id,
+                              const base::UnguessableToken& devtool_request_id,
+                              const network::ResourceRequest& request,
+                              const GURL& initiator_url) override;
+  void OnCorsPreflightResponse(
+      int32_t process_id,
+      int32_t render_frame_id,
+      const base::UnguessableToken& devtool_request_id,
+      const GURL& url,
+      network::mojom::URLResponseHeadPtr head) override;
+  void OnCorsPreflightRequestCompleted(
+      int32_t process_id,
+      int32_t render_frame_id,
+      const base::UnguessableToken& devtool_request_id,
+      const network::URLLoaderCompletionStatus& status) override;
+  void LogCrossOriginFetchFromContentScript3(
+      const std::string& isolated_world_host) override;
+
   // net::CertDatabase::Observer implementation:
   void OnCertDBChanged() override;
 
@@ -89,7 +109,6 @@ class CONTENT_EXPORT NetworkServiceClient
 
   // net::NetworkChangeNotifier::DNSObserver implementation:
   void OnDNSChanged() override;
-  void OnInitialDNSConfigRead() override;
 #endif
 
  private:
@@ -102,7 +121,7 @@ class CONTENT_EXPORT NetworkServiceClient
 #if defined(OS_ANDROID)
   std::unique_ptr<base::android::ApplicationStatusListener>
       app_status_listener_;
-  network::mojom::NetworkChangeManagerPtr network_change_manager_;
+  mojo::Remote<network::mojom::NetworkChangeManager> network_change_manager_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(NetworkServiceClient);

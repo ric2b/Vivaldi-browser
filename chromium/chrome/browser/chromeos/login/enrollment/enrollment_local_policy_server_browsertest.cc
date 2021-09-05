@@ -5,6 +5,7 @@
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "base/bind.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -209,7 +210,14 @@ class InitialEnrollmentTest : public EnrollmentLocalPolicyServerBase {
 };
 
 // Simple manual enrollment.
-IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase, ManualEnrollment) {
+// TODO(https://crbug.com/1031275): Slow on MSAN and debug builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_ManualEnrollment DISABLED_ManualEnrollment
+#else
+#define MAYBE_ManualEnrollment ManualEnrollment
+#endif
+IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
+                       MAYBE_ManualEnrollment) {
   TriggerEnrollmentAndSignInSuccessfully();
 
   enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepSuccess);
@@ -218,8 +226,16 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase, ManualEnrollment) {
 }
 
 // Simple manual enrollment with device attributes prompt.
+// TODO(https://crbug.com/1031275): Slow on MSAN and debug builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_ManualEnrollmentWithDeviceAttributes \
+  DISABLED_ManualEnrollmentWithDeviceAttributes
+#else
+#define MAYBE_ManualEnrollmentWithDeviceAttributes \
+  ManualEnrollmentWithDeviceAttributes
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       ManualEnrollmentWithDeviceAttributes) {
+                       MAYBE_ManualEnrollmentWithDeviceAttributes) {
   policy_server_.SetUpdateDeviceAttributesPermission(true);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -232,45 +248,18 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
   EXPECT_TRUE(InstallAttributes::Get()->IsCloudManaged());
 }
 
-// Simple manual enrollment with only license type available.
-// Client should automatically select the only available license type,
-// so no license selection UI should be displayed.
-IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       ManualEnrollmentWithSingleLicense) {
-  policy_server_.ExpectAvailableLicenseCount(5 /* perpetual */, 0 /* annual */,
-                                             0 /* kiosk */);
-
-  TriggerEnrollmentAndSignInSuccessfully();
-
-  enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepSuccess);
-  EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
-  EXPECT_TRUE(InstallAttributes::Get()->IsCloudManaged());
-}
-
-// Simple manual enrollment with license selection.
-// Enrollment selection UI should be displayed during enrollment.
-IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       ManualEnrollmentWithMultipleLicenses) {
-  policy_server_.ExpectAvailableLicenseCount(5 /* perpetual */, 5 /* annual */,
-                                             5 /* kiosk */);
-
-  TriggerEnrollmentAndSignInSuccessfully();
-
-  enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepLicenses);
-  enrollment_ui_.SelectEnrollmentLicense(test::values::kLicenseTypeAnnual);
-  enrollment_ui_.UseSelectedLicense();
-
-  enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepSuccess);
-  EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
-  EXPECT_TRUE(InstallAttributes::Get()->IsCloudManaged());
-}
-
 // Negative scenarios: see different HTTP error codes in
 // device_management_service.cc
 
 // Error during enrollment : 402 - missing licenses.
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorNoLicenses DISABLED_EnrollmentErrorNoLicenses
+#else
+#define MAYBE_EnrollmentErrorNoLicenses EnrollmentErrorNoLicenses
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorNoLicenses) {
+                       MAYBE_EnrollmentErrorNoLicenses) {
   policy_server_.SetExpectedDeviceEnrollmentError(402);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -284,8 +273,16 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : 403 - management not allowed.
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorManagementNotAllowed \
+  DISABLED_EnrollmentErrorManagementNotAllowed
+#else
+#define MAYBE_EnrollmentErrorManagementNotAllowed \
+  EnrollmentErrorManagementNotAllowed
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorManagementNotAllowed) {
+                       MAYBE_EnrollmentErrorManagementNotAllowed) {
   policy_server_.SetExpectedDeviceEnrollmentError(403);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -299,8 +296,16 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : 405 - invalid device serial.
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorInvalidDeviceSerial \
+  DISABLED_EnrollmentErrorInvalidDeviceSerial
+#else
+#define MAYBE_EnrollmentErrorInvalidDeviceSerial \
+  EnrollmentErrorInvalidDeviceSerial
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorInvalidDeviceSerial) {
+                       MAYBE_EnrollmentErrorInvalidDeviceSerial) {
   policy_server_.SetExpectedDeviceEnrollmentError(405);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -316,8 +321,15 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : 406 - domain mismatch
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorDomainMismatch \
+  DISABLED_EnrollmentErrorDomainMismatch
+#else
+#define MAYBE_EnrollmentErrorDomainMismatch EnrollmentErrorDomainMismatch
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorDomainMismatch) {
+                       MAYBE_EnrollmentErrorDomainMismatch) {
   policy_server_.SetExpectedDeviceEnrollmentError(406);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -331,8 +343,15 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : 409 - Device ID is already in use
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorDeviceIDConflict \
+  DISABLED_EnrollmentErrorDeviceIDConflict
+#else
+#define MAYBE_EnrollmentErrorDeviceIDConflict EnrollmentErrorDeviceIDConflict
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorDeviceIDConflict) {
+                       MAYBE_EnrollmentErrorDeviceIDConflict) {
   policy_server_.SetExpectedDeviceEnrollmentError(409);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -347,8 +366,16 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : 412 - Activation is pending
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorActivationIsPending \
+  DISABLED_EnrollmentErrorActivationIsPending
+#else
+#define MAYBE_EnrollmentErrorActivationIsPending \
+  EnrollmentErrorActivationIsPending
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorActivationIsPending) {
+                       MAYBE_EnrollmentErrorActivationIsPending) {
   policy_server_.SetExpectedDeviceEnrollmentError(412);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -362,8 +389,10 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : 417 - Consumer account with packaged license.
-IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorConsumerAccountWithPackagedLicense) {
+// Disable due to flaky crash/timeout on ChromeOS. https://crbug.com/1028650
+IN_PROC_BROWSER_TEST_F(
+    EnrollmentLocalPolicyServerBase,
+    DISABLED_EnrollmentErrorConsumerAccountWithPackagedLicense) {
   policy_server_.SetExpectedDeviceEnrollmentError(417);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -378,8 +407,14 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : 500 - Consumer account with packaged license.
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorServerError DISABLED_EnrollmentErrorServerError
+#else
+#define MAYBE_EnrollmentErrorServerError EnrollmentErrorServerError
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorServerError) {
+                       MAYBE_EnrollmentErrorServerError) {
   policy_server_.SetExpectedDeviceEnrollmentError(500);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -393,8 +428,14 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : Strange HTTP response from server.
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorServerIsDrunk DISABLED_EnrollmentErrorServerIsDrunk
+#else
+#define MAYBE_EnrollmentErrorServerIsDrunk EnrollmentErrorServerIsDrunk
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorServerIsDrunk) {
+                       MAYBE_EnrollmentErrorServerIsDrunk) {
   policy_server_.SetExpectedDeviceEnrollmentError(12345);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -408,8 +449,16 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : Can not update device attributes
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorUploadingDeviceAttributes \
+  DISABLED_EnrollmentErrorUploadingDeviceAttributes
+#else
+#define MAYBE_EnrollmentErrorUploadingDeviceAttributes \
+  EnrollmentErrorUploadingDeviceAttributes
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorUploadingDeviceAttributes) {
+                       MAYBE_EnrollmentErrorUploadingDeviceAttributes) {
   policy_server_.SetUpdateDeviceAttributesPermission(true);
   policy_server_.SetExpectedDeviceAttributeUpdateError(500);
 
@@ -427,8 +476,16 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : Error fetching policy : 500 server error.
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorFetchingPolicyTransient \
+  DISABLED_EnrollmentErrorFetchingPolicyTransient
+#else
+#define MAYBE_EnrollmentErrorFetchingPolicyTransient \
+  EnrollmentErrorFetchingPolicyTransient
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorFetchingPolicyTransient) {
+                       MAYBE_EnrollmentErrorFetchingPolicyTransient) {
   policy_server_.SetExpectedPolicyFetchError(500);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -442,8 +499,16 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : Error fetching policy : 902 - policy not found.
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorFetchingPolicyNotFound \
+  DISABLED_EnrollmentErrorFetchingPolicyNotFound
+#else
+#define MAYBE_EnrollmentErrorFetchingPolicyNotFound \
+  EnrollmentErrorFetchingPolicyNotFound
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorFetchingPolicyNotFound) {
+                       MAYBE_EnrollmentErrorFetchingPolicyNotFound) {
   policy_server_.SetExpectedPolicyFetchError(902);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -458,8 +523,16 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // Error during enrollment : Error fetching policy : 903 - deprovisioned.
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentErrorFetchingPolicyDeprovisioned \
+  DISABLED_EnrollmentErrorFetchingPolicyDeprovisioned
+#else
+#define MAYBE_EnrollmentErrorFetchingPolicyDeprovisioned \
+  EnrollmentErrorFetchingPolicyDeprovisioned
+#endif
 IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
-                       EnrollmentErrorFetchingPolicyDeprovisioned) {
+                       MAYBE_EnrollmentErrorFetchingPolicyDeprovisioned) {
   policy_server_.SetExpectedPolicyFetchError(903);
 
   TriggerEnrollmentAndSignInSuccessfully();
@@ -473,13 +546,27 @@ IN_PROC_BROWSER_TEST_F(EnrollmentLocalPolicyServerBase,
 }
 
 // No state keys on the server. Auto enrollment check should proceed to login.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, AutoEnrollmentCheck) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_AutoEnrollmentCheck DISABLED_AutoEnrollmentCheck
+#else
+#define MAYBE_AutoEnrollmentCheck AutoEnrollmentCheck
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer,
+                       MAYBE_AutoEnrollmentCheck) {
   host()->StartWizard(AutoEnrollmentCheckScreenView::kScreenId);
   OobeScreenWaiter(GaiaView::kScreenId).Wait();
 }
 
 // State keys are present but restore mode is not requested.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, ReenrollmentNone) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_ReenrollmentNone DISABLED_ReenrollmentNone
+#else
+#define MAYBE_ReenrollmentNone ReenrollmentNone
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer,
+                       MAYBE_ReenrollmentNone) {
   EXPECT_TRUE(policy_server_.SetDeviceStateRetrievalResponse(
       state_keys_broker(),
       enterprise_management::DeviceStateRetrievalResponse::RESTORE_MODE_NONE,
@@ -489,7 +576,14 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, ReenrollmentNone) {
 }
 
 // Reenrollment requested. User can skip.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, ReenrollmentRequested) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_ReenrollmentRequested DISABLED_ReenrollmentRequested
+#else
+#define MAYBE_ReenrollmentRequested ReenrollmentRequested
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer,
+                       MAYBE_ReenrollmentRequested) {
   EXPECT_TRUE(policy_server_.SetDeviceStateRetrievalResponse(
       state_keys_broker(),
       enterprise_management::DeviceStateRetrievalResponse::
@@ -502,7 +596,14 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, ReenrollmentRequested) {
 }
 
 // Reenrollment forced. User can not skip.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, ReenrollmentForced) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_ReenrollmentForced DISABLED_ReenrollmentForced
+#else
+#define MAYBE_ReenrollmentForced ReenrollmentForced
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer,
+                       MAYBE_ReenrollmentForced) {
   EXPECT_TRUE(policy_server_.SetDeviceStateRetrievalResponse(
       state_keys_broker(),
       enterprise_management::DeviceStateRetrievalResponse::
@@ -516,7 +617,13 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, ReenrollmentForced) {
 }
 
 // Device is disabled.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, DeviceDisabled) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_DeviceDisabled DISABLED_DeviceDisabled
+#else
+#define MAYBE_DeviceDisabled DeviceDisabled
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, MAYBE_DeviceDisabled) {
   EXPECT_TRUE(policy_server_.SetDeviceStateRetrievalResponse(
       state_keys_broker(),
       enterprise_management::DeviceStateRetrievalResponse::
@@ -527,7 +634,13 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, DeviceDisabled) {
 }
 
 // Attestation enrollment.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, Attestation) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_Attestation DISABLED_Attestation
+#else
+#define MAYBE_Attestation Attestation
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, MAYBE_Attestation) {
   policy_server_.SetFakeAttestationFlow();
   EXPECT_TRUE(policy_server_.SetDeviceStateRetrievalResponse(
       state_keys_broker(),
@@ -542,7 +655,13 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentLocalPolicyServer, Attestation) {
 }
 
 // FRE explicitly required in VPD, but the state keys are missing.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentNoStateKeys, FREExplicitlyRequired) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_FREExplicitlyRequired DISABLED_FREExplicitlyRequired
+#else
+#define MAYBE_FREExplicitlyRequired FREExplicitlyRequired
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentNoStateKeys, MAYBE_FREExplicitlyRequired) {
   SetFRERequiredKey("1");
   host()->StartWizard(AutoEnrollmentCheckScreenView::kScreenId);
   OobeScreenWaiter(AutoEnrollmentCheckScreenView::kScreenId).Wait();
@@ -553,14 +672,27 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentNoStateKeys, FREExplicitlyRequired) {
 
 // FRE not explicitly required and the state keys are missing. Should proceed to
 // normal signin.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentNoStateKeys, NotRequired) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_NotRequired DISABLED_NotRequired
+#else
+#define MAYBE_NotRequired NotRequired
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentNoStateKeys, MAYBE_NotRequired) {
   host()->StartWizard(AutoEnrollmentCheckScreenView::kScreenId);
   OobeScreenWaiter(GaiaView::kScreenId).Wait();
 }
 
 // FRE explicitly not required in VPD, so it should not even contact the policy
 // server.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentWithStatistics, ExplicitlyNotRequired) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_ExplicitlyNotRequired DISABLED_ExplicitlyNotRequired
+#else
+#define MAYBE_ExplicitlyNotRequired ExplicitlyNotRequired
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentWithStatistics,
+                       MAYBE_ExplicitlyNotRequired) {
   SetFRERequiredKey("0");
 
   // Should be ignored.
@@ -575,7 +707,14 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentWithStatistics, ExplicitlyNotRequired) {
 }
 
 // FRE is not required when VPD is valid and activate date is not there.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentWithStatistics, MachineNotActivated) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_MachineNotActivated DISABLED_MachineNotActivated
+#else
+#define MAYBE_MachineNotActivated MachineNotActivated
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentWithStatistics,
+                       MAYBE_MachineNotActivated) {
   // Should be ignored.
   EXPECT_TRUE(policy_server_.SetDeviceStateRetrievalResponse(
       state_keys_broker(),
@@ -588,7 +727,13 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentWithStatistics, MachineNotActivated) {
 }
 
 // FRE is required when VPD is valid and activate date is there.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentWithStatistics, MachineActivated) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_MachineActivated DISABLED_MachineActivated
+#else
+#define MAYBE_MachineActivated MachineActivated
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentWithStatistics, MAYBE_MachineActivated) {
   SetActivateDate("1970-01");
 
   EXPECT_TRUE(policy_server_.SetDeviceStateRetrievalResponse(
@@ -602,7 +747,13 @@ IN_PROC_BROWSER_TEST_F(AutoEnrollmentWithStatistics, MachineActivated) {
 }
 
 // FRE is required when VPD in invalid state.
-IN_PROC_BROWSER_TEST_F(AutoEnrollmentWithStatistics, CorruptedVPD) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_CorruptedVPD DISABLED_CorruptedVPD
+#else
+#define MAYBE_CorruptedVPD CorruptedVPD
+#endif
+IN_PROC_BROWSER_TEST_F(AutoEnrollmentWithStatistics, MAYBE_CorruptedVPD) {
   SetVPDCorrupted();
 
   EXPECT_TRUE(policy_server_.SetDeviceStateRetrievalResponse(
@@ -636,7 +787,13 @@ class EnrollmentRecoveryTest : public EnrollmentLocalPolicyServerBase {
   DISALLOW_COPY_AND_ASSIGN(EnrollmentRecoveryTest);
 };
 
-IN_PROC_BROWSER_TEST_F(EnrollmentRecoveryTest, Success) {
+// TODO(https://crbug.com/995784): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_Success DISABLED_Success
+#else
+#define MAYBE_Success Success
+#endif
+IN_PROC_BROWSER_TEST_F(EnrollmentRecoveryTest, MAYBE_Success) {
   test::SkipToEnrollmentOnRecovery();
 
   ASSERT_TRUE(StartupUtils::IsDeviceRegistered());
@@ -661,7 +818,13 @@ IN_PROC_BROWSER_TEST_F(EnrollmentRecoveryTest, Success) {
           .empty());
 }
 
-IN_PROC_BROWSER_TEST_F(EnrollmentRecoveryTest, DifferentDomain) {
+// TODO(https://crbug.com/995784): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_DifferentDomain DISABLED_DifferentDomain
+#else
+#define MAYBE_DifferentDomain DifferentDomain
+#endif
+IN_PROC_BROWSER_TEST_F(EnrollmentRecoveryTest, MAYBE_DifferentDomain) {
   test::SkipToEnrollmentOnRecovery();
 
   ASSERT_TRUE(StartupUtils::IsDeviceRegistered());
@@ -674,7 +837,13 @@ IN_PROC_BROWSER_TEST_F(EnrollmentRecoveryTest, DifferentDomain) {
   enrollment_ui_.RetryAfterError();
 }
 
-IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest, EnrollmentForced) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_EnrollmentForced DISABLED_EnrollmentForced
+#else
+#define MAYBE_EnrollmentForced EnrollmentForced
+#endif
+IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest, MAYBE_EnrollmentForced) {
   auto initial_enrollment =
       enterprise_management::DeviceInitialEnrollmentStateResponse::
           INITIAL_ENROLLMENT_MODE_ENROLLMENT_ENFORCED;
@@ -701,7 +870,15 @@ IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest, EnrollmentForced) {
 
 // Zero touch with attestation authentication fail. Attestation fails because we
 // send empty cert request. Should switch to interactive authentication.
-IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest, ZeroTouchForcedAttestationFail) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_ZeroTouchForcedAttestationFail \
+  DISABLED_ZeroTouchForcedAttestationFail
+#else
+#define MAYBE_ZeroTouchForcedAttestationFail ZeroTouchForcedAttestationFail
+#endif
+IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest,
+                       MAYBE_ZeroTouchForcedAttestationFail) {
   auto initial_enrollment =
       enterprise_management::DeviceInitialEnrollmentStateResponse::
           INITIAL_ENROLLMENT_MODE_ZERO_TOUCH_ENFORCED;
@@ -736,8 +913,16 @@ IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest, ZeroTouchForcedAttestationFail) {
   EXPECT_TRUE(InstallAttributes::Get()->IsEnterpriseManaged());
 }
 
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_ZeroTouchForcedAttestationSuccess \
+  DISABLED_ZeroTouchForcedAttestationSuccess
+#else
+#define MAYBE_ZeroTouchForcedAttestationSuccess \
+  ZeroTouchForcedAttestationSuccess
+#endif
 IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest,
-                       ZeroTouchForcedAttestationSuccess) {
+                       MAYBE_ZeroTouchForcedAttestationSuccess) {
   policy_server_.SetupZeroTouchForcedEnrollment();
 
   host()->StartWizard(AutoEnrollmentCheckScreenView::kScreenId);
@@ -762,7 +947,13 @@ class OobeGuestButtonPolicy : public testing::WithParamInterface<bool>,
   DISALLOW_COPY_AND_ASSIGN(OobeGuestButtonPolicy);
 };
 
-IN_PROC_BROWSER_TEST_P(OobeGuestButtonPolicy, VisibilityAfterEnrollment) {
+// TODO(https://crbug.com/1031275): Slow on MSAN builds.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_VisibilityAfterEnrollment DISABLED_VisibilityAfterEnrollment
+#else
+#define MAYBE_VisibilityAfterEnrollment VisibilityAfterEnrollment
+#endif
+IN_PROC_BROWSER_TEST_P(OobeGuestButtonPolicy, MAYBE_VisibilityAfterEnrollment) {
   TriggerEnrollmentAndSignInSuccessfully();
   enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepSuccess);
   enrollment_screen()->OnConfirmationClosed();
@@ -779,7 +970,7 @@ IN_PROC_BROWSER_TEST_P(OobeGuestButtonPolicy, VisibilityAfterEnrollment) {
   EXPECT_EQ(GetParam(), ash::LoginScreenTestApi::IsGuestButtonShown());
 }
 
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
+INSTANTIATE_TEST_SUITE_P(All,
                          OobeGuestButtonPolicy,
                          ::testing::Bool());
 

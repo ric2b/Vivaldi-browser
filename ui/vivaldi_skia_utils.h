@@ -3,7 +3,7 @@
 #ifndef UI_VIVALDI_SKIA_UTILS_H_
 #define UI_VIVALDI_SKIA_UTILS_H_
 
-#include "chromium/third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 
 namespace vivaldi {
 namespace skia_utils {

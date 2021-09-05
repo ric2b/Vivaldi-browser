@@ -27,9 +27,7 @@
 #include "chrome/browser/notifications/notification_test_util.h"
 #include "chrome/browser/notifications/platform_notification_service_factory.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
-#include "chrome/browser/permissions/permission_manager.h"
-#include "chrome/browser/permissions/permission_request_manager.h"
-#include "chrome/browser/permissions/permission_result.h"
+#include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
@@ -39,6 +37,9 @@
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/permissions/permission_manager.h"
+#include "components/permissions/permission_request_manager.h"
+#include "components/permissions/permission_result.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/base/filename_util.h"
@@ -128,8 +129,8 @@ class PlatformNotificationServiceBrowserTest : public InProcessBrowserTest {
   }
 
   bool RequestAndAcceptPermission() {
-    return "granted" ==
-           RequestAndRespondToPermission(PermissionRequestManager::ACCEPT_ALL);
+    return "granted" == RequestAndRespondToPermission(
+                            permissions::PermissionRequestManager::ACCEPT_ALL);
   }
 
   double GetEngagementScore(const GURL& origin) const {
@@ -161,10 +162,10 @@ class PlatformNotificationServiceBrowserTest : public InProcessBrowserTest {
   }
 
   std::string RequestAndRespondToPermission(
-      PermissionRequestManager::AutoResponseType bubble_response) {
+      permissions::PermissionRequestManager::AutoResponseType bubble_response) {
     std::string result;
     content::WebContents* web_contents = GetActiveWebContents(browser());
-    PermissionRequestManager::FromWebContents(web_contents)
+    permissions::PermissionRequestManager::FromWebContents(web_contents)
         ->set_auto_response_for_test(bubble_response);
     EXPECT_TRUE(RunScript("RequestPermission();", &result));
     return result;
@@ -677,19 +678,19 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
   // This case should succeed because a normal page URL is used.
   std::string script_result;
 
-  PermissionManager* permission_manager =
-      PermissionManager::Get(browser()->profile());
+  permissions::PermissionManager* permission_manager =
+      PermissionManagerFactory::GetForProfile(browser()->profile());
 
   EXPECT_EQ(CONTENT_SETTING_ASK,
             permission_manager
-                ->GetPermissionStatus(CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+                ->GetPermissionStatus(ContentSettingsType::NOTIFICATIONS,
                                       TestPageUrl(), TestPageUrl())
                 .content_setting);
 
   RequestAndAcceptPermission();
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             permission_manager
-                ->GetPermissionStatus(CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+                ->GetPermissionStatus(ContentSettingsType::NOTIFICATIONS,
                                       TestPageUrl(), TestPageUrl())
                 .content_setting);
 
@@ -704,14 +705,14 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
 
   EXPECT_EQ(CONTENT_SETTING_ASK,
             permission_manager
-                ->GetPermissionStatus(CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+                ->GetPermissionStatus(ContentSettingsType::NOTIFICATIONS,
                                       file_url, file_url)
                 .content_setting);
 
   RequestAndAcceptPermission();
   EXPECT_EQ(CONTENT_SETTING_ASK,
             permission_manager
-                ->GetPermissionStatus(CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+                ->GetPermissionStatus(ContentSettingsType::NOTIFICATIONS,
                                       file_url, file_url)
                 .content_setting)
       << "If this test fails, you may have fixed a bug preventing file origins "

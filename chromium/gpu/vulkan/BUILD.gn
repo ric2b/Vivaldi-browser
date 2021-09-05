@@ -22,6 +22,12 @@ if (enable_vulkan) {
     if (use_vulkan_xlib) {
       defines = [ "USE_VULKAN_XLIB" ]
     }
+    if (is_android) {
+      defines = [ "VK_USE_PLATFORM_ANDROID_KHR" ]
+    }
+    if (is_fuchsia) {
+      defines = [ "VK_USE_PLATFORM_FUCHSIA" ]
+    }
   }
 
   jumbo_component("vulkan") {
@@ -41,10 +47,10 @@ if (enable_vulkan) {
       "vulkan_fence_helper.h",
       "vulkan_function_pointers.cc",
       "vulkan_function_pointers.h",
+      "vulkan_image.cc",
+      "vulkan_image.h",
       "vulkan_implementation.cc",
       "vulkan_implementation.h",
-      "vulkan_info.cc",
-      "vulkan_info.h",
       "vulkan_instance.cc",
       "vulkan_instance.h",
       "vulkan_surface.cc",
@@ -59,30 +65,41 @@ if (enable_vulkan) {
     public_configs = [ ":vulkan_config" ]
 
     defines = [ "VULKAN_IMPLEMENTATION" ]
-    if (is_android) {
-      defines += [ "VK_USE_PLATFORM_ANDROID_KHR" ]
-    }
 
     all_dependent_configs = [ "//third_party/vulkan:vulkan_config" ]
 
     deps = [
       "//base",
+      "//base/util/type_safety",
+      "//gpu/ipc/common:vulkan_ycbcr_info",
       "//ui/gfx",
     ]
-    public_deps = []
+    public_deps = [ "//gpu/config:vulkan_info" ]
     data_deps = []
 
     if (is_posix) {
       sources += [
+        "vulkan_image_linux.cc",
         "vulkan_posix_util.cc",
         "vulkan_posix_util.h",
       ]
     }
 
-    if (is_fuchsia) {
-      sources += [ "fuchsia/vulkan_fuchsia_ext.h" ]
+    if (is_android) {
+      sources += [ "vulkan_image_android.cc" ]
+    }
 
-      public_deps += [ "//third_party/fuchsia-sdk/sdk:zx" ]
+    if (is_win) {
+      sources += [ "vulkan_image_win.cc" ]
+    }
+
+    if (is_fuchsia) {
+      sources += [
+        "fuchsia/vulkan_fuchsia_ext.h",
+        "vulkan_image_fuchsia.cc",
+      ]
+
+      public_deps += [ "//third_party/fuchsia-sdk/sdk/pkg/zx" ]
 
       data_deps += [ "//third_party/fuchsia-sdk:vulkan_base" ]
 
@@ -98,23 +115,45 @@ if (enable_vulkan) {
 
   jumbo_static_library("test_support") {
     testonly = true
-    sources = [
-      "tests/native_window.h",
-    ]
+    sources = [ "tests/native_window.h" ]
 
     deps = [
       "//ui/gfx",
       "//ui/gfx:native_widget_types",
     ]
-    if (use_x11) {
-      sources += [ "tests/native_window_x11.cc" ]
-      deps += [ "//ui/gfx/x" ]
-      configs += [ "//build/config/linux:x11" ]
+
+    if (use_x11 && !use_ozone) {
+      sources += [ "tests/native_window.cc" ]
+      deps += [
+        "//ui/platform_window",
+        "//ui/platform_window/x11",
+      ]
+    }
+
+    if (is_win) {
+      sources += [ "tests/native_window_win.cc" ]
+    }
+
+    if (use_ozone) {
+      sources += [ "tests/native_window.cc" ]
+      deps += [
+        "//ui/ozone",
+        "//ui/platform_window",
+      ]
+    }
+
+    if (is_android) {
+      sources += [ "tests/native_window_android.cc" ]
+      deps += [
+        "//ui/android:ui_java",
+        "//ui/gl",
+      ]
     }
   }
 
-  # TODO(cblume): These tests should run on each platform -- crbug.com/858614
-  if (use_x11) {
+  # TODO(penghuang): support more platforms
+  # https://crbug.com/1065499
+  if (is_android || use_x11 || is_win || use_ozone) {
     test("vulkan_tests") {
       sources = [
         "tests/basic_vulkan_test.cc",
@@ -132,10 +171,19 @@ if (enable_vulkan) {
         "//gpu/vulkan/init",
         "//testing/gmock",
         "//testing/gtest",
+        "//ui/events/platform",
         "//ui/gfx",
         "//ui/gfx:native_widget_types",
         "//ui/gfx/geometry",
       ]
+
+      if (use_x11) {
+        deps += [ "//ui/events/platform/x11" ]
+      }
+
+      if (use_ozone) {
+        deps += [ "//ui/ozone" ]
+      }
     }
   }
 }

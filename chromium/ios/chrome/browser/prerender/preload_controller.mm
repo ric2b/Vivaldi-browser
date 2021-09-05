@@ -24,9 +24,6 @@
 #include "ios/chrome/browser/prerender/preload_controller_delegate.h"
 #import "ios/chrome/browser/signin/account_consistency_service_factory.h"
 #import "ios/chrome/browser/tabs/tab_helper_util.h"
-#import "ios/web/public/deprecated/crw_native_content.h"
-#import "ios/web/public/deprecated/crw_native_content_holder.h"
-#import "ios/web/public/deprecated/crw_web_controller_util.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/navigation/web_state_policy_decider_bridge.h"
@@ -170,7 +167,7 @@ class PreloadJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
 }
 
 // The ChromeBrowserState passed on initialization.
-@property(nonatomic) ios::ChromeBrowserState* browserState;
+@property(nonatomic) ChromeBrowserState* browserState;
 
 // Redefine property as readwrite.  The URL that is prerendered in |_webState|.
 // This can be different from the value returned by WebState last committed
@@ -221,7 +218,7 @@ class PreloadJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
 
 @implementation PreloadController
 
-- (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState {
+- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState {
   DCHECK(browserState);
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   if ((self = [super init])) {
@@ -340,7 +337,6 @@ class PreloadJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
   std::unique_ptr<web::WebState> webState = std::move(_webState);
   DCHECK(![self isWebStatePrerendered:webState.get()]);
 
-  web_deprecated::SetNativeProvider(webState.get(), nil);
   webState->RemoveObserver(_webStateObserver.get());
   breakpad::StopMonitoringURLsForWebState(webState.get());
   webState->SetDelegate(nullptr);
@@ -520,12 +516,8 @@ class PreloadJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
   }
 
   web::WebState::CreateParams createParams(self.browserState);
-  if (web::GetWebClient()->IsSlimNavigationManagerEnabled()) {
-    _webState = web::WebState::CreateWithStorageSession(
-        createParams, webStateToReplace->BuildSessionStorage());
-  } else {
-    _webState = web::WebState::Create(createParams);
-  }
+  _webState = web::WebState::CreateWithStorageSession(
+      createParams, webStateToReplace->BuildSessionStorage());
 
   // Add the preload controller as a policyDecider before other tab helpers, so
   // that it can block the navigation if needed before other policy deciders
@@ -533,8 +525,6 @@ class PreloadJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
   _policyDeciderBridge =
       std::make_unique<web::WebStatePolicyDeciderBridge>(_webState.get(), self);
   AttachTabHelpers(_webState.get(), /*for_prerender=*/true);
-
-  web_deprecated::SetNativeProvider(_webState.get(), nil);
 
   _webState->SetDelegate(_webStateDelegate.get());
   _webState->AddObserver(_webStateObserver.get());
@@ -580,7 +570,6 @@ class PreloadJavaScriptDialogPresenter : public web::JavaScriptDialogPresenter {
   UMA_HISTOGRAM_ENUMERATION(kPrerenderFinalStatusHistogramName, reason,
                             PRERENDER_FINAL_STATUS_MAX);
 
-  web_deprecated::SetNativeProvider(_webState.get(), nil);
   _webState->RemoveObserver(_webStateObserver.get());
   breakpad::StopMonitoringURLsForWebState(_webState.get());
   _webState->SetDelegate(nullptr);

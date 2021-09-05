@@ -37,14 +37,15 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/events/message_event_init.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
+#include "third_party/blink/renderer/platform/bindings/v8_private_property.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
 namespace blink {
 
+class MessageEventInit;
 class UserActivation;
 
 class CORE_EXPORT MessageEvent final : public Event {
@@ -181,9 +182,20 @@ class CORE_EXPORT MessageEvent final : public Event {
     return data_as_serialized_script_value_->Value();
   }
 
+  // Returns true when |data_as_serialized_script_value_| contains values that
+  // remote origins cannot access. If true, remote origins must dispatch a
+  // messageerror event instead of message event.
+  bool IsOriginCheckRequiredToAccessData() const;
+
+  // Returns true when |data_as_serialized_script_value_| is locked to an
+  // agent cluster.
+  bool IsLockedToAgentCluster() const;
+
   void EntangleMessagePorts(ExecutionContext*);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
+
+  void LockToAgentCluster();
 
   WARN_UNUSED_RESULT v8::Local<v8::Object> AssociateWithWrapper(
       v8::Isolate*,
@@ -200,27 +212,16 @@ class CORE_EXPORT MessageEvent final : public Event {
     kDataTypeArrayBuffer
   };
 
-  class V8GCAwareString final {
-    DISALLOW_NEW();
+  size_t SizeOfExternalMemoryInBytes();
 
-   public:
-    V8GCAwareString() = default;
-    V8GCAwareString(const String&);
+  void RegisterAmountOfExternallyAllocatedMemory();
 
-    ~V8GCAwareString();
-
-    V8GCAwareString& operator=(const String&);
-
-    const String& data() const { return string_; }
-
-   private:
-    String string_;
-  };
+  void UnregisterAmountOfExternallyAllocatedMemory();
 
   DataType data_type_;
   WorldSafeV8Reference<v8::Value> data_as_v8_value_;
   Member<UnpackedSerializedScriptValue> data_as_serialized_script_value_;
-  V8GCAwareString data_as_string_;
+  String data_as_string_;
   Member<Blob> data_as_blob_;
   Member<DOMArrayBuffer> data_as_array_buffer_;
   bool is_data_dirty_ = true;
@@ -236,6 +237,11 @@ class CORE_EXPORT MessageEvent final : public Event {
   Member<UserActivation> user_activation_;
   bool transfer_user_activation_ = false;
   bool allow_autoplay_ = false;
+  size_t amount_of_external_memory_ = 0;
+  // For serialized messages across process this attribute contains the
+  // information of whether the actual original SerializedScriptValue was locked
+  // to the agent cluster.
+  bool locked_to_agent_cluster_ = false;
 };
 
 }  // namespace blink

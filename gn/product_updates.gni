@@ -23,10 +23,6 @@ if (!is_android && !is_mac) {
 }
 
 if (is_win) {
-  update_target("//chrome/chrome_watcher:chrome_watcher") {
-    output_name = "vivaldi_watcher"
-  }
-
   update_target("//chrome:main_dll") {
     if (is_win) {
       output_name = "vivaldi"
@@ -137,13 +133,6 @@ if (is_win) {
     sources -= ["chrome_elf.ver"]
     sources += [
       "//vivaldi/app/other_resources/vivaldi_elf.ver"
-    ]
-  }
-
-  update_template_instance("//chrome/chrome_watcher:chrome_watcher_resources") {
-    sources -= ["chrome_watcher.ver"]
-    sources += [
-      "//vivaldi/app/other_resources/vivaldi_watcher.ver"
     ]
   }
 }

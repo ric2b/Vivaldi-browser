@@ -4,6 +4,7 @@
 <translation id="1018939186200882850">пункт меню</translation>
 <translation id="10623998915015855">перемикач</translation>
 <translation id="1088086359088493902">Секунди</translation>
+<translation id="1142001580032786438">Показувати засіб вибору тижня</translation>
 <translation id="1171774979989969504">Введіть електронну адресу.</translation>
 <translation id="1178581264944972037">Пауза</translation>
 <translation id="1188858454923323853">додатково</translation>
@@ -11,6 +12,7 @@
 <translation id="1206693055195146388">повзунок</translation>
 <translation id="1211441953136645838">кінцева виноска</translation>
 <translation id="1281252709823657822">діалогове вікно</translation>
+<translation id="1306460908038601864">Вимкнено</translation>
 <translation id="1335095011850992622">подяки</translation>
 <translation id="1342835525016946179">стаття</translation>
 <translation id="1359897965706325498">банер</translation>
@@ -21,6 +23,7 @@
 <translation id="1727886345390570319">сховати меню субтитрів</translation>
 <translation id="1729654308190250600">Введіть електронну адресу.</translation>
 <translation id="1758486001363313524">Інші...</translation>
+<translation id="1787192514241997742">загальний час: <ph name="REMAINING_TIME" /></translation>
 <translation id="1806710327868736751">вікно сповіщення</translation>
 <translation id="1821985195704844674">сітка дерева</translation>
 <translation id="1822429046913737220">д.п./п.п.</translation>
@@ -54,7 +57,6 @@
 <translation id="2674318244760992338">нижній колонтитул</translation>
 <translation id="2709516037105925701">Автозаповнення</translation>
 <translation id="2723001399770238859">аудіо</translation>
-<translation id="2725963129578236554">коментарі</translation>
 <translation id="2746543609216772311">Має бути <ph name="MINIMUM_DATE_OR_TIME" /> або пізніша дата.</translation>
 <translation id="2759744352195237655">кнопка спливаючої підказки</translation>
 <translation id="2761667185364618470">Поставте тут прапорець, якщо хочете продовжити.</translation>
@@ -83,7 +85,6 @@
 <translation id="3822383571486410024">У тексті має бути на менше <ph name="MIN_CHARACTERS" /> символів (ви ввели <ph name="CURRENT_LENGTH" /> символів).</translation>
 <translation id="383465348367842624">Частина перед знаком "<ph name="ATSIGN" />" не може містити символ "<ph name="INVALIDCHARACTER" />".</translation>
 <translation id="3846214748874656680">Вийти з повноекранного режиму</translation>
-<translation id="3889183436948184105">редакція</translation>
 <translation id="3920932319529768807">висновок</translation>
 <translation id="3924558731517983934">додаток</translation>
 <translation id="3944740393230681990">пролог</translation>
@@ -101,11 +102,11 @@
 <translation id="4444765639179266822">Схоже, на зображенні написано "<ph name="OCR_TEXT" />"</translation>
 <translation id="4446524499724042288">посилання на глосарій</translation>
 <translation id="4522570452068850558">Деталі</translation>
-<translation id="4542388879936266156">залишилося часу: <ph name="REMAINING_TIME" /></translation>
 <translation id="4597532268155981612">форма</translation>
 <translation id="4661075872484491155">дерево</translation>
 <translation id="4664250907885839816">Частина після знака "<ph name="ATSIGN" />" не може містити символ "<ph name="INVALIDCHARACTER" />".</translation>
 <translation id="4668956016107839909">додаток</translation>
+<translation id="4698212723196775569">код</translation>
 <translation id="4718048029184481307">Відтворюється в режимі "Картинка в картинці"</translation>
 <translation id="4742539557769756338">обкладинка</translation>
 <translation id="4748357248530471599">перемкнути виріз у повноекранному режимі</translation>
@@ -114,9 +115,14 @@
 <translation id="479989351350248267">пошук</translation>
 <translation id="4812940957355064477">Введіть число.</translation>
 <translation id="4912536737030637138">бібліографічний запис</translation>
+<translation id="4915360478455618802">Засіб вибору часу</translation>
+<translation id="492244087561876220">коментар</translation>
+<translation id="4950364064308314478">Показувати засіб вибору місцевих дати й часу</translation>
+<translation id="4971739861736909480">Вибрано <ph name="ACCNAME" /></translation>
 <translation id="4975562563186953947">Вибрано <ph name="SELECTED_COUNT" /></translation>
 <translation id="4992066212339426712">Увімкнути звук</translation>
 <translation id="49969490063480558">Введіть частину електронної адреси після знака "<ph name="ATSIGN" />". Електронна адреса "<ph name="INVALIDADDRESS" />" неповна.</translation>
+<translation id="5022314756875057021">група рядків</translation>
 <translation id="5034860022980953847">індикатор перебігу</translation>
 <translation id="5090250355906949916">повзунок часу відтворення відео</translation>
 <translation id="5093189678851173835">епіграф</translation>
@@ -127,6 +133,7 @@
 <translation id="520299402983819650"><ph name="QUANTITY" /> Пб</translation>
 <translation id="5307600278924710095">Введіть частину електронної адреси до знака "<ph name="ATSIGN" />". Електронна адреса "<ph name="INVALIDADDRESS" />" неповна.</translation>
 <translation id="5334352251556557839">Не вдалося відтворити медіавміст.</translation>
+<translation id="537648784377940524">Мінімальна дата (<ph name="MIN_DATE_OR_TIME" />) має передувати максимальній (<ph name="MAX_DATE_OR_TIME" />).</translation>
 <translation id="5406322316791861025">фігура</translation>
 <translation id="5453733299334684579">елемент дерева</translation>
 <translation id="5466621249238537318">Виберіть один або декілька файлів.</translation>
@@ -142,7 +149,6 @@
 <translation id="5677946354068040947">більше опцій</translation>
 <translation id="576709008726043716">вступ</translation>
 <translation id="57838592816432529">Вимкнути звук</translation>
-<translation id="5860033963881614850">Вимк.</translation>
 <translation id="588258955323874662">Повноекранний режим</translation>
 <translation id="5888666972993069672">Транслюється на пристрій <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">вікно пошуку</translation>
@@ -163,7 +169,6 @@
 <translation id="6404546809543547843">повзунок часу відтворення аудіо</translation>
 <translation id="6443871981718447451">показати меню субтитрів</translation>
 <translation id="6453774872122745852">слова подяки</translation>
-<translation id="6475115390776617481">дані про присутність у реальному часі</translation>
 <translation id="648732519525291180">засіб вибору часу</translation>
 <translation id="6550675742724504774">Параметри</translation>
 <translation id="6572309429103589720">Граматична помилка</translation>
@@ -191,6 +196,7 @@
 <translation id="7118469954320184356">Немає опису.</translation>
 <translation id="7139483182332611405">передмова</translation>
 <translation id="7214187073215825913">інформація про контент</translation>
+<translation id="7238347055216017155">виділення</translation>
 <translation id="7263440858009898357">Виберіть елемент зі списку.</translation>
 <translation id="727747134524199931">заголовок стовпця</translation>
 <translation id="7320576522385648310">буферизація</translation>
@@ -217,6 +223,8 @@
 <translation id="7888071071722539607">Електронна адреса має містити знак "<ph name="ATSIGN" />". В електронній адресі "<ph name="INVALIDADDRESS" />" знака "<ph name="ATSIGN" />" немає.</translation>
 <translation id="7891486169920085145">розділювач</translation>
 <translation id="795667975304826397">Файл не вибрано</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" />: не вибрано</translation>
+<translation id="8034303206267677282">важливо</translation>
 <translation id="8053789581856978548">текстове поле пошуку</translation>
 <translation id="8057695513531652401">примітка</translation>
 <translation id="8105797009065549151">посилання на примітку</translation>
@@ -228,6 +236,7 @@
 <translation id="8284326494547611709">Субтитри</translation>
 <translation id="8346634859695247203">розділ</translation>
 <translation id="835897206747267392">Недійсне значення</translation>
+<translation id="839593075537728968">Значення має бути від <ph name="MINIMUM_TIME" /> до <ph name="MAXIMUM_TIME" />.</translation>
 <translation id="8403857369060869934">минуло часу: <ph name="ELAPSED_TIME" /></translation>
 <translation id="8415319359811155763">частина</translation>
 <translation id="8433900881053900389">панель інструментів</translation>
@@ -244,10 +253,10 @@
 <translation id="860475260694818407">зміст</translation>
 <translation id="8613126697340063924">керувати віддаленим відтворенням</translation>
 <translation id="862370744433916922">підзаголовок</translation>
+<translation id="8634971699417195529">Показувати засіб вибору місяця</translation>
 <translation id="8711688047404765493">вихід</translation>
 <translation id="8750798805984357768">Виберіть один із запропонованих варіантів.</translation>
 <translation id="8808573423886751634">розділ</translation>
-<translation id="8822203815165896261">інформація про автора</translation>
 <translation id="8845239796550121995">Транслюється на телевізор</translation>
 <translation id="8851136666856101339">головний</translation>
 <translation id="8875657656876809964">Помилка відтворення відео</translation>

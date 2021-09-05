@@ -37,7 +37,7 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  enum class CrossDocumentAccessFeaturePolicy { kAllowed, kDisallowed };
+  enum class CrossDocumentAccessPolicy { kAllowed, kDisallowed };
 
   ~DOMWindow() override;
 
@@ -58,14 +58,14 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData {
   }
 
   // GarbageCollected overrides:
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   virtual bool IsLocalDOMWindow() const = 0;
   virtual bool IsRemoteDOMWindow() const = 0;
 
   // ScriptWrappable overrides:
-  v8::Local<v8::Object> Wrap(v8::Isolate*,
-                             v8::Local<v8::Object> creation_context) final;
+  v8::Local<v8::Value> Wrap(v8::Isolate*,
+                            v8::Local<v8::Object> creation_context) final;
   v8::Local<v8::Object> AssociateWithWrapper(
       v8::Isolate*,
       const WrapperTypeInfo*,
@@ -111,10 +111,10 @@ class CORE_EXPORT DOMWindow : public EventTargetWithInlineData {
 
   String SanitizedCrossDomainAccessErrorMessage(
       const LocalDOMWindow* accessing_window,
-      CrossDocumentAccessFeaturePolicy cross_document_access) const;
+      CrossDocumentAccessPolicy cross_document_access) const;
   String CrossDomainAccessErrorMessage(
       const LocalDOMWindow* accessing_window,
-      CrossDocumentAccessFeaturePolicy cross_document_access) const;
+      CrossDocumentAccessPolicy cross_document_access) const;
 
   // FIXME: When this DOMWindow is no longer the active DOMWindow (i.e.,
   // when its document is no longer the document that is displayed in its

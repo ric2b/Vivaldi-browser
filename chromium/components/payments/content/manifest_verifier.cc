@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
 #include "components/payments/content/utility/payment_manifest_parser.h"
+#include "components/payments/core/method_strings.h"
 #include "components/payments/core/payment_manifest_downloader.h"
 #include "components/payments/core/url_util.h"
 #include "components/webdata/common/web_data_results.h"
@@ -57,11 +58,13 @@ void EnableMethodManifestUrlForSupportedApps(
 
 }  // namespace
 
-ManifestVerifier::ManifestVerifier(content::WebContents* web_contents,
+ManifestVerifier::ManifestVerifier(const url::Origin& merchant_origin,
+                                   content::WebContents* web_contents,
                                    PaymentManifestDownloader* downloader,
                                    PaymentManifestParser* parser,
                                    PaymentManifestWebDataService* cache)
-    : log_(web_contents),
+    : merchant_origin_(merchant_origin),
+      log_(web_contents),
       downloader_(downloader),
       parser_(parser),
       cache_(cache),
@@ -91,13 +94,10 @@ void ManifestVerifier::Verify(content::PaymentAppProvider::PaymentApps apps,
     for (const auto& method : app.second->enabled_methods) {
       // For non-URL payment method names, only names published by W3C should be
       // supported. Keep this in sync with AndroidPaymentAppFinder.java.
-      // https://w3c.github.io/payment-method-basic-card/
-      // https://w3c.github.io/webpayments/proposals/interledger-payment-method.html
-      // https://w3c.github.io/webpayments-methods-credit-transfer-direct-debit/
-      // https://w3c.github.io/webpayments-methods-tokenization/
-      if (method == "basic-card" || method == "interledger" ||
-          method == "payee-credit-transfer" ||
-          method == "payer-credit-transfer" || method == "tokenized-card") {
+      if (method == methods::kBasicCard || method == methods::kInterledger ||
+          method == methods::kPayeeCreditTransfer ||
+          method == methods::kPayerCreditTransfer ||
+          method == methods::kTokenizedCard) {
         verified_method_names.emplace_back(method);
         continue;
       }
@@ -205,7 +205,7 @@ void ManifestVerifier::OnWebDataServiceRequestDone(
   }
 
   downloader_->DownloadPaymentMethodManifest(
-      method_manifest_url,
+      merchant_origin_, method_manifest_url,
       base::BindOnce(&ManifestVerifier::OnPaymentMethodManifestDownloaded,
                      weak_ptr_factory_.GetWeakPtr(), method_manifest_url));
 }
@@ -235,7 +235,7 @@ void ManifestVerifier::OnPaymentMethodManifestDownloaded(
   }
 
   parser_->ParsePaymentMethodManifest(
-      content,
+      method_manifest_url, content,
       base::BindOnce(&ManifestVerifier::OnPaymentMethodManifestParsed,
                      weak_ptr_factory_.GetWeakPtr(), method_manifest_url));
 }

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stdlib.h>
+
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -16,6 +18,10 @@
 #include "tools/traffic_annotation/auditor/traffic_annotation_exporter.h"
 
 namespace {
+
+// extractor.py returns 2 if it has a parsing error (from invalid C++ source
+// code). Even in error-resilient mode, this should cause a CQ failure.
+const int EX_PARSE_ERROR = 2;
 
 const char* HELP_TEXT = R"(
 Traffic Annotation Auditor
@@ -33,22 +39,19 @@ Options:
   --source-path       Optional path to the src directory. If not provided and
                       build-path is available, assumed to be 'build-path/../..',
                       otherwise current directory.
-  --tool-path         Optional path to traffic_annotation_extractor clang tool.
-                      If not specified, it's assumed to be in the same path as
-                      auditor's executable.
   --extractor-output  Optional path to the temporary file that extracted
                       annotations will be stored into.
   --extractor-input   Optional path to the file that temporary extracted
                       annotations are already stored in. If this is provided,
-                      clang tool is not run and this is used as input.
+                      the extractor is not run and this is used as input.
   --no-filtering      Optional flag asking the tool to run on the whole
-                      repository without text filtering files. Using this flag
-                      may increase processing time x40.
+                      repository without text filtering files.
   --all-files         Optional flag asking to use compile_commands.json instead
                       of git to get the list of files that will be checked.
                       This flag is useful when using build flags that change
                       files, like jumbo. This flag slows down the execution as
-                      it checks every compiled file.
+                      it checks every compiled file. When enabled, path_filters
+                      are ignored.
   --test-only         Optional flag to request just running tests and not
                       updating any file. If not specified,
                       'tools/traffic_annotation/summary/annotations.xml' might
@@ -64,10 +67,6 @@ Options:
   --error-resilient   Optional flag, stating not to return error in exit code if
                       auditor fails to perform the tests. This flag can be used
                       for trybots to avoid spamming when tests cannot run.
-  --extractor-backend=[clang_tool,python_script]
-                      Optional flag specifying which backend to use for
-                      extracting annotation definitions from source code (Clang
-                      Tool or extractor.py). Defaults to "python_script".
   path_filters        Optional paths to filter which files the tool is run on.
                       It can also include deleted files names when auditor is
                       run on a partial repository. These are ignored if all of
@@ -134,14 +133,6 @@ std::string UpdateTextForTSV(std::string text) {
       text.find('\t') != std::string::npos)
     return base::StringPrintf("\"%s\"", text.c_str());
   return text;
-}
-
-ExtractorBackend GetExtractorBackend(const std::string& backend_switch) {
-  if (backend_switch == "clang_tool")
-    return ExtractorBackend::CLANG_TOOL;
-  if (backend_switch.empty() || backend_switch == "python_script")
-    return ExtractorBackend::PYTHON_SCRIPT;
-  return ExtractorBackend::INVALID;
 }
 
 // TODO(rhalavati): Update this function to extract the policy name and value
@@ -313,12 +304,11 @@ int main(int argc, char* argv[]) {
   if (command_line.HasSwitch("help") || command_line.HasSwitch("h") ||
       argc == 1) {
     printf("%s", HELP_TEXT);
-    return 1;
+    return EXIT_FAILURE;
   }
 
   base::FilePath build_path = command_line.GetSwitchValuePath("build-path");
   base::FilePath source_path = command_line.GetSwitchValuePath("source-path");
-  base::FilePath tool_path = command_line.GetSwitchValuePath("tool-path");
   base::FilePath extractor_output =
       command_line.GetSwitchValuePath("extractor-output");
   base::FilePath extractor_input =
@@ -341,14 +331,14 @@ int main(int argc, char* argv[]) {
           << "The value for 'limit' switch should be a positive integer.";
 
       // This error is always enforced, as it is a commandline switch.
-      return 1;
+      return EXIT_FAILURE;
     }
   }
 
   // If 'error-resilient' switch is provided, 0 will be returned in case of
   // operational errors, otherwise 1.
   bool error_resilient = command_line.HasSwitch("error-resilient");
-  int error_value = error_resilient ? 0 : 1;
+  int error_value = error_resilient ? EXIT_SUCCESS : EXIT_FAILURE;
 
 #if defined(OS_WIN)
   for (const auto& path : command_line.GetArgs()) {
@@ -360,18 +350,13 @@ int main(int argc, char* argv[]) {
   path_filters = command_line.GetArgs();
 #endif
 
-  // If tool path is not specified, assume it is in the same path as this
-  // executable.
-  if (tool_path.empty())
-    tool_path = command_line.GetProgram().DirName();
-
   // Get build directory, if it is empty issue an error.
   if (build_path.empty()) {
     LOG(ERROR)
         << "You must specify a compiled build directory to run the auditor.\n";
 
     // This error is always enforced, as it is a commandline switch.
-    return 1;
+    return EXIT_FAILURE;
   }
 
   // If source path is not provided, guess it using build path.
@@ -380,30 +365,28 @@ int main(int argc, char* argv[]) {
                       .Append(base::FilePath::kParentDirectory);
   }
 
-  TrafficAnnotationAuditor auditor(source_path, build_path, tool_path,
-                                   path_filters);
+  TrafficAnnotationAuditor auditor(source_path, build_path, path_filters);
 
   // Extract annotations.
   if (extractor_input.empty()) {
-    std::string backend_switch =
-        command_line.GetSwitchValueASCII("extractor-backend");
-    ExtractorBackend backend = GetExtractorBackend(backend_switch);
-    if (backend == ExtractorBackend::INVALID) {
-      LOG(ERROR) << "Unrecognized extractor backend '" << backend_switch << "'";
-      return error_value;
-    }
-
-    // If we're using the Python backend, it's fast enough that we can ignore
-    // any path filters when we say we want to audit everything.
-    if (backend == ExtractorBackend::PYTHON_SCRIPT &&
-        (!filter_files || all_files)) {
+    // We ignore any path filters when all files are requested.
+    if (!filter_files || all_files) {
       LOG(WARNING) << "The path_filters input is being ignored.";
       auditor.ClearPathFilters();
     }
 
-    if (!auditor.RunExtractor(backend, filter_files, all_files,
-                              !error_resilient, errors_file)) {
-      LOG(ERROR) << "Failed to run clang tool.";
+    int extractor_exit_code = EXIT_SUCCESS;
+    if (!auditor.RunExtractor(filter_files, all_files, errors_file,
+                              &extractor_exit_code)) {
+      LOG(ERROR) << "Failed to run extractor.py. (exit code "
+                 << extractor_exit_code << ")";
+      // Parsing errors cause failures, even in error-resilient mode.
+      if (extractor_exit_code == EX_PARSE_ERROR) {
+        LOG(ERROR) << "The Traffic Annotation Auditor failed to parse a "
+                   << "network annotation definition. (see CppParsingError "
+                   << "above)";
+        return EX_PARSE_ERROR;
+      }
       return error_value;
     }
 
@@ -425,7 +408,7 @@ int main(int argc, char* argv[]) {
   }
 
   // Process extractor output.
-  if (!auditor.ParseClangToolRawOutput())
+  if (!auditor.ParseExtractorRawOutput())
     return error_value;
 
   // Perform checks.

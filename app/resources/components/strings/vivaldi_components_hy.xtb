@@ -3,4 +3,34 @@
 <translationbundle lang="hy">
 <translation id="3830627370375585318">Արտոնեք Vivaldi-ի ցանցի հասանելիությունը Ձեր հրապատի կամ հակավիրուսի
           կարգավորումներում։</translation>
+<translation id="4200102020577305737">Բացեք
+          Vivaldi-ի մենյուն &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Ցանցի կարգավորումներ
+          և նշումից հանեք «Օգտագործել պրոքսի սերվեր լոկալ միացումների համար» ընտրանքը։</translation>
+<translation id="4932161901409251843">Բացեք
+          Vivaldi-ի մենյուն &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          և համոզվեք, որ սահմանված է «առանց պրոքսիի» կամ «ուղիղ» կոնֆիգուրացիա։</translation>
+<translation id="5248344925342018662">Դուք դիտում եք Vivaldi-ի անվտանգ էջ</translation>
+<translation id="7023871570427738255">Բացեք
+          Vivaldi-ի մենյուն &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          և նշումից հանեք «<ph name="NO_PREFETCH_DESCRIPTION" />»-ը։
+          Եթե դա չլուծի խնդիրը, խորհուրդ ենք տալիս կրկին նշել այն՝
+          ավելի լավ կատարողականության համար։</translation>
+<translation id="8187289872471304532">Բացեք
+          Ծրագրեր &gt; Համակարգային կարգավորումներ &gt; Ցանց &gt; Լրացուցիչ &gt; Պրոքսիներ
+          և նշումից հանեք բոլոր պրոքսիները, որոնք նշված են։</translation>
 </translationbundle>

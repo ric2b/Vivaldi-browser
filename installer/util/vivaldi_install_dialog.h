@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved.
 
 #ifndef INSTALLER_UTIL_VIVALDI_INSTALL_DIALOG_H_
 #define INSTALLER_UTIL_VIVALDI_INSTALL_DIALOG_H_
@@ -10,11 +10,22 @@
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/util_constants.h"
 
 namespace installer {
 
 class VivaldiInstallDialog {
+
+ class VivaldiTranslationDelegate : public installer::TranslationDelegate {
+  public:
+    base::string16 GetLocalizedString(int installer_string_id) override;
+    void SetLanguage(const std::wstring& language_code);
+
+  private:
+    int offset_ = 0;
+ };
+
  public:
   enum DlgResult {
     INSTALL_DLG_ERROR = -1,   // Dialog could not be shown.
@@ -59,6 +70,7 @@ class VivaldiInstallDialog {
 
  private:
   void InitDialog();
+  void TranslateDialog();
   void ShowBrowseFolderDialog();
   void DoDialog();
   void SetDefaultDestinationFolder();
@@ -95,7 +107,15 @@ class VivaldiInstallDialog {
                                   LPARAM lparam);
 
  private:
+  VivaldiTranslationDelegate translation_delegate_;
   std::wstring language_code_;
+  std::wstring txt_tos_accept_install_str_;
+  std::wstring btn_tos_accept_install_str_;
+  std::wstring txt_tos_accept_update_str_;
+  std::wstring btn_tos_accept_update_str_;
+  std::wstring btn_simple_mode_str_;
+  std::wstring btn_advanced_mode_str_;
+
   base::FilePath destination_folder_;
   base::FilePath last_standalone_folder_;
   InstallType install_type_ = INSTALL_UNDEFINED;

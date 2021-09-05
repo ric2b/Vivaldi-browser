@@ -152,6 +152,10 @@ void FtlSignalStrategy::Core::Connect() {
 void FtlSignalStrategy::Core::Disconnect() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  if (registration_manager_->IsSignedIn()) {
+    registration_manager_->SignOut();
+  }
+
   if (receive_message_subscription_) {
     local_address_ = SignalingAddress();
     receive_message_subscription_.reset();
@@ -297,8 +301,7 @@ void FtlSignalStrategy::Core::OnReceiveMessagesStreamClosed(
     const grpc::Status& status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (status.error_code() == grpc::StatusCode::CANCELLED) {
-    // Stream is canceled by calling Disconnect().
-    return;
+    LOG(WARNING) << "ReceiveMessages stream closed with CANCELLED code.";
   }
   DCHECK(!status.ok());
   HandleGrpcStatusError(FROM_HERE, status);
@@ -395,7 +398,6 @@ void FtlSignalStrategy::Core::HandleGrpcStatusError(
              << ", message: " << status.error_message()
              << ", location: " << location.ToString();
   if (status.error_code() == grpc::StatusCode::UNAUTHENTICATED) {
-    registration_manager_->SignOut();
     oauth_token_getter_->InvalidateCache();
   }
   Disconnect();
@@ -440,7 +442,8 @@ FtlSignalStrategy::FtlSignalStrategy(
   auto registration_manager = std::make_unique<FtlRegistrationManager>(
       oauth_token_getter.get(), std::move(device_id_provider));
   auto messaging_client = std::make_unique<FtlMessagingClient>(
-      oauth_token_getter.get(), registration_manager.get());
+      oauth_token_getter.get(), registration_manager.get(),
+      &signaling_tracker_);
   CreateCore(std::move(oauth_token_getter), std::move(registration_manager),
              std::move(messaging_client));
 }

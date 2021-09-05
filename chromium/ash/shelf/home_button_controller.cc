@@ -8,7 +8,6 @@
 #include "ash/assistant/assistant_controller.h"
 #include "ash/home_screen/home_screen_controller.h"
 #include "ash/root_window_controller.h"
-#include "ash/session/session_controller_impl.h"
 #include "ash/shelf/assistant_overlay.h"
 #include "ash/shelf/home_button.h"
 #include "ash/shelf/shelf_button.h"
@@ -23,6 +22,7 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "components/account_id/account_id.h"
 #include "ui/display/screen.h"
+#include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_state.h"
 #include "ui/views/widget/widget.h"
 
@@ -33,9 +33,9 @@ constexpr base::TimeDelta kAssistantAnimationDelay =
     base::TimeDelta::FromMilliseconds(200);
 
 // Returns true if the button should appear activatable.
-bool CanActivate() {
-  return Shell::Get()->tablet_mode_controller()->InTabletMode() ||
-         !Shell::Get()->app_list_controller()->IsVisible();
+bool CanActivate(int64_t display_id) {
+  return Shell::Get()->IsInTabletMode() ||
+         !Shell::Get()->app_list_controller()->IsVisible(display_id);
 }
 
 }  // namespace
@@ -43,18 +43,15 @@ bool CanActivate() {
 HomeButtonController::HomeButtonController(HomeButton* button)
     : button_(button) {
   DCHECK(button_);
+
+  InitializeAssistantOverlay();
+  DCHECK(assistant_overlay_);
+
   Shell* shell = Shell::Get();
   shell->app_list_controller()->AddObserver(this);
-  shell->session_controller()->AddObserver(this);
   shell->tablet_mode_controller()->AddObserver(this);
   shell->assistant_controller()->ui_controller()->AddModelObserver(this);
   AssistantState::Get()->AddObserver(this);
-
-  // Initialize the Assistant overlay and sync the flags if active user session
-  // has already started. This could happen when an external monitor is plugged
-  // in.
-  if (shell->session_controller()->IsActiveUserSessionStarted())
-    InitializeAssistantOverlay();
 }
 
 HomeButtonController::~HomeButtonController() {
@@ -68,7 +65,6 @@ HomeButtonController::~HomeButtonController() {
     shell->app_list_controller()->RemoveObserver(this);
   if (shell->tablet_mode_controller())
     shell->tablet_mode_controller()->RemoveObserver(this);
-  shell->session_controller()->RemoveObserver(this);
   if (AssistantState::Get())
     AssistantState::Get()->RemoveObserver(this);
 }
@@ -82,7 +78,7 @@ bool HomeButtonController::MaybeHandleGestureEvent(ui::GestureEvent* event) {
         assistant_animation_delay_timer_->Stop();
       }
 
-      if (CanActivate())
+      if (CanActivate(button_->GetDisplayId()))
         button_->AnimateInkDrop(views::InkDropState::ACTION_TRIGGERED, event);
 
       // After animating the ripple, let the button handle the event.
@@ -95,7 +91,7 @@ bool HomeButtonController::MaybeHandleGestureEvent(ui::GestureEvent* event) {
                            base::Unretained(this)));
       }
 
-      if (CanActivate())
+      if (CanActivate(button_->GetDisplayId()))
         button_->AnimateInkDrop(views::InkDropState::ACTION_PENDING, event);
 
       return false;
@@ -132,11 +128,8 @@ bool HomeButtonController::MaybeHandleGestureEvent(ui::GestureEvent* event) {
 
 bool HomeButtonController::IsAssistantAvailable() {
   AssistantStateBase* state = AssistantState::Get();
-  bool settings_enabled = state->settings_enabled().value_or(false);
-  bool feature_allowed =
-      state->allowed_state() == mojom::AssistantAllowedState::ALLOWED;
-
-  return assistant_overlay_ && feature_allowed && settings_enabled;
+  return state->allowed_state() == mojom::AssistantAllowedState::ALLOWED &&
+         state->settings_enabled().value_or(false);
 }
 
 bool HomeButtonController::IsAssistantVisible() {
@@ -147,8 +140,8 @@ bool HomeButtonController::IsAssistantVisible() {
              ->visibility() == AssistantVisibility::kVisible;
 }
 
-void HomeButtonController::OnAppListVisibilityChanged(bool shown,
-                                                      int64_t display_id) {
+void HomeButtonController::OnAppListVisibilityWillChange(bool shown,
+                                                         int64_t display_id) {
   if (button_->GetDisplayId() != display_id)
     return;
   if (shown)
@@ -157,23 +150,12 @@ void HomeButtonController::OnAppListVisibilityChanged(bool shown,
     OnAppListDismissed();
 }
 
-void HomeButtonController::OnActiveUserSessionChanged(
-    const AccountId& account_id) {
-  button_->OnAssistantAvailabilityChanged();
-  // Initialize the Assistant overlay when primary user session becomes
-  // active.
-  if (Shell::Get()->session_controller()->IsUserPrimary() &&
-      !assistant_overlay_) {
-    InitializeAssistantOverlay();
-  }
-}
-
 void HomeButtonController::OnTabletModeStarted() {
   button_->AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
 }
 
-void HomeButtonController::OnAssistantStatusChanged(
-    mojom::AssistantState state) {
+void HomeButtonController::OnAssistantFeatureAllowedChanged(
+    mojom::AssistantAllowedState state) {
   button_->OnAssistantAvailabilityChanged();
 }
 
@@ -196,7 +178,7 @@ void HomeButtonController::StartAssistantAnimation() {
 void HomeButtonController::OnAppListShown() {
   // Do not show a highlight in tablet mode, since the home screen view is
   // always open in the background.
-  if (!Shell::Get()->tablet_mode_controller()->InTabletMode())
+  if (!Shell::Get()->IsInTabletMode())
     button_->AnimateInkDrop(views::InkDropState::ACTIVATED, nullptr);
   is_showing_app_list_ = true;
   RootWindowController::ForWindow(button_->GetWidget()->GetNativeWindow())
@@ -204,13 +186,21 @@ void HomeButtonController::OnAppListShown() {
 }
 
 void HomeButtonController::OnAppListDismissed() {
+  // If ink drop is not hidden already, snap it to active state, so animation to
+  // DEACTIVATED state starts immediately (the animation would otherwise wait
+  // for the current animation to finish).
+  views::InkDrop* const ink_drop = button_->GetInkDrop();
+  if (ink_drop->GetTargetInkDropState() != views::InkDropState::HIDDEN)
+    ink_drop->SnapToActivated();
   button_->AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
+
   is_showing_app_list_ = false;
   RootWindowController::ForWindow(button_->GetWidget()->GetNativeWindow())
       ->UpdateShelfVisibility();
 }
 
 void HomeButtonController::InitializeAssistantOverlay() {
+  DCHECK_EQ(nullptr, assistant_overlay_);
   assistant_overlay_ = new AssistantOverlay(button_);
   button_->AddChildView(assistant_overlay_);
   assistant_overlay_->SetVisible(false);

@@ -21,6 +21,7 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/process/kill.h"
+#include "base/process/process_iterator.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -36,7 +37,6 @@
 #include "chrome/install_static/install_util.h"
 #include "chrome/installer/setup/brand_behaviors.h"
 #include "chrome/installer/setup/install.h"
-#include "chrome/installer/setup/install_service_work_item.h"
 #include "chrome/installer/setup/install_worker.h"
 #include "chrome/installer/setup/installer_state.h"
 #include "chrome/installer/setup/launch_chrome.h"
@@ -50,6 +50,7 @@
 #include "chrome/installer/util/google_update_constants.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chrome/installer/util/helper.h"
+#include "chrome/installer/util/install_service_work_item.h"
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/logging_installer.h"
@@ -58,7 +59,8 @@
 #include "chrome/installer/util/util_constants.h"
 #include "chrome/installer/util/work_item.h"
 #include "content/public/common/result_codes.h"
-#include "rlz/lib/rlz_lib.h"
+#include "rlz/lib/rlz_lib_clear.h"
+#include "rlz/lib/supplementary_branding.h"
 
 #include "installer/util/vivaldi_install_util.h"
 
@@ -132,7 +134,7 @@ bool RemoveInstallerFiles(const base::FilePath& installer_directory) {
   for (base::FilePath to_delete = file_enumerator.Next(); !to_delete.empty();
        to_delete = file_enumerator.Next()) {
     VLOG(1) << "Deleting installer path " << to_delete.value();
-    if (!base::DeleteFile(to_delete, true)) {
+    if (!base::DeleteFileRecursively(to_delete)) {
       LOG(ERROR) << "Failed to delete path: " << to_delete.value();
       success = false;
     }
@@ -141,12 +143,46 @@ bool RemoveInstallerFiles(const base::FilePath& installer_directory) {
   return success;
 }
 
-// Kills all Chrome processes, immediately.
-void CloseAllChromeProcesses() {
+// Filter for processes whose base name matches and whose path starts with a
+// specified prefix.
+class ProcessPathPrefixFilter : public base::ProcessFilter {
+ public:
+  explicit ProcessPathPrefixFilter(
+      const base::FilePath::StringPieceType& process_path_prefix)
+      : process_path_prefix_(process_path_prefix) {}
+
+  // base::ProcessFilter:
+  bool Includes(const base::ProcessEntry& entry) const override {
+    // Test if |entry|'s file path starts with the prefix we're looking for.
+    base::Process process(::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                        FALSE, entry.th32ProcessID));
+    if (!process.IsValid())
+      return false;
+
+    DWORD path_len = MAX_PATH;
+    wchar_t path_string[MAX_PATH];
+    if (::QueryFullProcessImageName(process.Handle(), 0, path_string,
+                                    &path_len)) {
+      base::FilePath file_path(path_string);
+      return base::StartsWith(file_path.value(), process_path_prefix_,
+                              base::CompareCase::INSENSITIVE_ASCII);
+    }
+    PLOG(WARNING) << "QueryFullProcessImageName failed for PID "
+                  << entry.th32ProcessID;
+    return false;
+  }
+
+ private:
+  const base::FilePath::StringPieceType process_path_prefix_;
+};
+
+// Kills all Chrome processes in |target_path|, immediately.
+void CloseAllChromeProcesses(const base::FilePath& target_path) {
+  ProcessPathPrefixFilter target_path_filter(target_path.value());
   base::CleanupProcesses(installer::kChromeExe, base::TimeDelta(),
-                         content::RESULT_CODE_HUNG, NULL);
+                         content::RESULT_CODE_HUNG, &target_path_filter);
   base::CleanupProcesses(installer::kNaClExe, base::TimeDelta(),
-                         content::RESULT_CODE_HUNG, NULL);
+                         content::RESULT_CODE_HUNG, &target_path_filter);
 }
 
 // Updates shortcuts to |old_target_exe| that have non-empty args, making them
@@ -224,7 +260,7 @@ DeleteResult DeleteEmptyDir(const base::FilePath& path) {
   if (!base::IsDirectoryEmpty(path))
     return DELETE_NOT_EMPTY;
 
-  if (base::DeleteFile(path, true))
+  if (base::DeleteFileRecursively(path))
     return DELETE_SUCCEEDED;
 
   LOG(ERROR) << "Failed to delete folder: " << path.value();
@@ -258,7 +294,7 @@ DeleteResult DeleteUserDataDir(const base::FilePath& user_data_dir) {
 
   DeleteResult result = DELETE_SUCCEEDED;
   VLOG(1) << "Deleting user profile " << user_data_dir.value();
-  if (!base::DeleteFile(user_data_dir, true)) {
+  if (!base::DeleteFileRecursively(user_data_dir)) {
     LOG(ERROR) << "Failed to delete user profile dir: "
                << user_data_dir.value();
     result = DELETE_FAILED;
@@ -369,11 +405,11 @@ DeleteResult DeleteChromeFilesAndFolders(const InstallerState& installer_state,
     }
 
     VLOG(1) << "Deleting install path " << to_delete.value();
-    if (!base::DeleteFile(to_delete, true)) {
+    if (!base::DeleteFileRecursively(to_delete)) {
       LOG(ERROR) << "Failed to delete path (1st try): " << to_delete.value();
       // Try closing any running Chrome processes and deleting files once again.
-      CloseAllChromeProcesses();
-      if (!base::DeleteFile(to_delete, true)) {
+      CloseAllChromeProcesses(target_path);
+      if (!base::DeleteFileRecursively(to_delete)) {
         LOG(ERROR) << "Failed to delete path (2nd try): " << to_delete.value();
         result = DELETE_FAILED;
         break;
@@ -554,7 +590,8 @@ void UninstallActiveSetupEntries(const InstallerState& installer_state) {
   VLOG(1) << "Uninstall per-user Active Setup keys.";
   std::vector<const base::string16*> paths = {&active_setup_path,
                                               &alternate_active_setup_path};
-  VisitUserHives(base::Bind(&DeleteUserRegistryKeys, base::Unretained(&paths)));
+  VisitUserHives(
+      base::BindRepeating(&DeleteUserRegistryKeys, base::Unretained(&paths)));
 }
 
 // Removes the persistent blacklist state for the current user.  Note: this will
@@ -826,11 +863,11 @@ InstallStatus UninstallProduct(const InstallationState& original_state,
   if (force_uninstall) {
     // Since --force-uninstall command line option is used, we are going to
     // do silent uninstall. Try to close all running Chrome instances.
-    CloseAllChromeProcesses();
+    CloseAllChromeProcesses(installer_state.target_path());
   } else {
     // Kill all lingering Vivaldi processes.
     if (cmd_line.HasSwitch(vivaldi::constants::kVivaldi))
-      CloseAllChromeProcesses();
+      CloseAllChromeProcesses(installer_state.target_path());
 
     // no --force-uninstall so lets show some UI dialog boxes.
     status = IsChromeActiveOrUserCancelled(installer_state);

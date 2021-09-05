@@ -23,7 +23,6 @@
 #include "media/audio/audio_logging.h"
 #include "media/base/media_switches.h"
 #include "media/base/user_input_monitor.h"
-#include "mojo/public/cpp/system/platform_handle.h"
 
 #if defined(OS_CHROMEOS)
 #include "content/browser/media/keyboard_mic_registration.h"
@@ -169,14 +168,11 @@ void AudioInputStreamBroker::CreateStream(
   constexpr int log_component_id = 0;
   factory->CreateInputStream(
       std::move(stream_receiver), std::move(client), std::move(observer),
-      MediaInternals::GetInstance()
-          ->CreateMojoAudioLog(
-              media::AudioLogFactory::AudioComponent::AUDIO_INPUT_CONTROLLER,
-              log_component_id, render_process_id(), render_frame_id())
-          .PassInterface(),
+      MediaInternals::GetInstance()->CreateMojoAudioLog(
+          media::AudioLogFactory::AudioComponent::AUDIO_INPUT_CONTROLLER,
+          log_component_id, render_process_id(), render_frame_id()),
       device_id_, params_, shared_memory_count_, enable_agc_,
-      mojo::WrapReadOnlySharedMemoryRegion(std::move(key_press_count_buffer)),
-      std::move(processing_config_),
+      std::move(key_press_count_buffer), std::move(processing_config_),
       base::BindOnce(&AudioInputStreamBroker::StreamCreated,
                      weak_ptr_factory_.GetWeakPtr(), std::move(stream)));
 }
@@ -206,10 +202,7 @@ void AudioInputStreamBroker::StreamCreated(
   DCHECK(stream_id.has_value());
   DCHECK(renderer_factory_client_);
   renderer_factory_client_->StreamCreated(
-      media::mojom::AudioInputStreamPtr(media::mojom::AudioInputStreamPtrInfo(
-          stream.PassPipe(), stream.version())),
-      media::mojom::AudioInputStreamClientRequest(
-          pending_client_receiver_.PassPipe()),
+      std::move(stream), std::move(pending_client_receiver_),
       std::move(data_pipe), initially_muted, stream_id);
 }
 void AudioInputStreamBroker::ObserverBindingLost(

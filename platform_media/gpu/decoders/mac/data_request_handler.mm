@@ -16,78 +16,71 @@
 
 namespace media {
 
-struct DataRequestHandler::Request {
-  explicit Request(id handle, const ResourceLoadingDataRequest& data_request);
-  ~Request();
+DataRequestHandler::Request::Request() = default;
 
-  base::scoped_nsobject<id> handle;
-  ResourceLoadingDataRequest data_request;
-};
-
-DataRequestHandler::Request::Request(
-    id handle,
-    const ResourceLoadingDataRequest& data_request)
-    : handle([handle retain]), data_request(data_request) {
+DataRequestHandler::Request::Request(id request_handle,
+                                     int64_t offset,
+                                     int64_t length)
+    : handle([request_handle retain]), offset(offset), length(length) {
+  DCHECK_GE(offset, 0);
+  DCHECK(length == -1 || length > 0);
 }
 
-DataRequestHandler::Request::~Request() = default;
+DataRequestHandler::Request::Request(Request&& request) = default;
 
-// A container for Requests uniquely identified by handles, but ordered by
-// requested offset.
-class DataRequestHandler::OrderedRequests {
- public:
-  void Add(const Request& request);
-  void Remove(id handle);
-  void RemoveAll();
-  const Request& Top() const;
-  void Pop();
-
-  bool is_empty() const { return requests_.empty(); }
-
- private:
-  using Container = std::vector<Request>;
-
-  Container::iterator Find(id handle);
-
-  Container requests_;
-};
-
-void DataRequestHandler::OrderedRequests::Add(const Request& request) {
-  DCHECK(Find(request.handle) == requests_.end());
-
-  const auto offset = request.data_request.offset;
-  const auto it = std::find_if(requests_.begin(), requests_.end(),
-                               [offset](const Request& request) {
-    return request.data_request.offset <= offset;
-  });
-  requests_.insert(it, request);
-
-  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Ongoing requests:";
-  for (const auto& r : requests_)
-    VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << "  " << r.handle << ": " << r.data_request.offset;
+DataRequestHandler::Request::~Request() {
+  // The request handle must be moved out at this point
+  CHECK(!handle);
 }
 
-void DataRequestHandler::OrderedRequests::Remove(id handle) {
+// This cannot be default as scoped_nsobject does not provide move assignment
+// operator.
+DataRequestHandler::Request& DataRequestHandler::Request::operator=(
+    Request&& request) {
+  handle.reset();
+  swap(handle, request.handle);
+  offset = request.offset;
+  length = request.length;
+  return *this;
+}
+
+DataRequestHandler::OrderedRequests::OrderedRequests() = default;
+DataRequestHandler::OrderedRequests::~OrderedRequests() = default;
+
+void DataRequestHandler::OrderedRequests::Add(Request* request) {
+  DCHECK(Find(request->handle) == requests_.end());
+
+  const auto offset = request->offset;
+  const auto it = std::find_if(
+      requests_.begin(), requests_.end(),
+      [offset](const Request& request) { return request.offset <= offset; });
+  requests_.insert(it, std::move(*request));
+
+  if (VLOG_IS_ON(7)) {
+    VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Ongoing requests:";
+    for (const auto& r : requests_) {
+      VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << "  " << r.handle
+              << ": " << r.offset;
+    }
+  }
+}
+
+DataRequestHandler::Request DataRequestHandler::OrderedRequests::Remove(
+    id handle) {
+  Request request;
   const auto it = Find(handle);
-  DCHECK(it != requests_.end());
-  requests_.erase(it);
+  if (it != requests_.end()) {
+    request = std::move(*it);
+    requests_.erase(it);
+  }
+  return request;
 }
 
-void DataRequestHandler::OrderedRequests::RemoveAll() {
-  requests_.clear();
-}
-
-const DataRequestHandler::Request& DataRequestHandler::OrderedRequests::Top()
-    const {
+DataRequestHandler::Request DataRequestHandler::OrderedRequests::Pop() {
   DCHECK(!requests_.empty());
-  return requests_.back();
-}
-
-void DataRequestHandler::OrderedRequests::Pop() {
-  DCHECK(!requests_.empty());
+  Request request = std::move(requests_.back());
   requests_.pop_back();
+  return request;
 }
 
 DataRequestHandler::OrderedRequests::Container::iterator
@@ -97,162 +90,216 @@ DataRequestHandler::OrderedRequests::Find(id handle) {
       [handle](const Request& request) { return request.handle == handle; });
 }
 
-DataRequestHandler::DataRequestHandler(
-    media::DataSource* data_source,
-    const RespondWithDataCB& respond_with_data_cb,
-    const FinishLoadingCB& finish_loading_cb,
-    dispatch_queue_t queue)
-    : data_source_(data_source),
-      queue_(queue),
-      requests_(new OrderedRequests),
-      last_size_read_(IPCDataSource::kReadError),
-      respond_with_data_cb_(respond_with_data_cb),
-      finish_loading_cb_(finish_loading_cb),
-      read_complete_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                     base::WaitableEvent::InitialState::NOT_SIGNALED) {
-  DCHECK(data_source_ != NULL);
-  DCHECK(!respond_with_data_cb_.is_null());
-  DCHECK(!finish_loading_cb_.is_null());
-}
+DataRequestHandler::DataRequestHandler() = default;
 
 DataRequestHandler::~DataRequestHandler() {
+  // Must either be stopped at this point or destructed before
+  // InitSourceReader() call.
+  DCHECK(!source_reader_);
   VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 }
 
-void DataRequestHandler::HandleDataRequest(
-    id request_handle,
-    const ResourceLoadingDataRequest& data_request) {
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " New data request " << request_handle << ": "
-          << data_request.length << " bytes @" << data_request.offset << "...";
-  DCHECK(queue_ == dispatch_get_current_queue());
+void DataRequestHandler::InitSourceReader(
+    ipc_data_source::Reader source_reader) {
+  // This can only be called once.
+  DCHECK(!source_reader_);
 
-  requests_->Add(Request(request_handle, data_request));
+  source_reader_ = std::move(source_reader);
+}
 
-  DispatchBlockingRead();
+void DataRequestHandler::InitCallbacks(RespondWithDataCB respond_with_data_cb,
+                                       FinishLoadingCB finish_loading_cb) {
+  // This can only be called once.
+  DCHECK(!respond_with_data_cb.is_null());
+  DCHECK(!finish_loading_cb.is_null());
+  DCHECK(respond_with_data_cb_.is_null());
+  DCHECK(finish_loading_cb_.is_null());
+  respond_with_data_cb_ = std::move(respond_with_data_cb);
+  finish_loading_cb_ = std::move(finish_loading_cb);
+}
+
+void DataRequestHandler::HandleDataRequest(id request_handle,
+                                           int64_t offset,
+                                           int64_t length) {
+  DCHECK(request_handle != nil);
+  DCHECK(CanHandleRequests());
+  Request request(request_handle, offset, length);
+  if (waiting_for_reply_) {
+    VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " request_handle=" << request.handle
+            << " queue_size=" << pending_requests_.size() + 1
+            << " length=" << request.length << " offset=" << request.offset;
+    pending_requests_.Add(&request);
+  } else {
+    DispatchRead(&request);
+  }
 }
 
 void DataRequestHandler::CancelDataRequest(id request_handle) {
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  DCHECK(queue_ == dispatch_get_current_queue());
+  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " request_handle=" << request_handle;
 
-  requests_->Remove(request_handle);
-
-  FinishLoading(request_handle, CANCELED);
+  if (active_request_.handle == request_handle) {
+    DCHECK(waiting_for_reply_);
+    FinishLoading(&active_request_, Status::kCancelled);
+  } else {
+    Request request = pending_requests_.Remove(request_handle);
+    FinishLoading(&request, Status::kCancelled);
+  }
 }
 
 void DataRequestHandler::AbortAllDataRequests() {
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  DCHECK(queue_ == dispatch_get_current_queue());
-
-  while (!requests_->is_empty()) {
-    FinishLoading(requests_->Top().handle, ERROR);
-    requests_->Pop();
+  // We only clear waiting_for_reply_ when we get the reply.
+  if (active_request_.handle) {
+    DCHECK(waiting_for_reply_);
+    FinishLoading(&active_request_, Status::kAborted);
   }
+  while (!pending_requests_.is_empty()) {
+    Request request = pending_requests_.Pop();
+    FinishLoading(&request, Status::kAborted);
+  }
+}
+
+void DataRequestHandler::Stop() {
+  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " stopped=" << source_reader_.is_null()
+          << " waiting_for_reply_=" << waiting_for_reply_
+          << " pending_requests_.size()=" << pending_requests_.size();
+
+  if (!source_reader_)
+    return;
+
+  // Clear source_reader_ before we execute any callbacks so they can query for
+  // IsStopped().
+  source_reader_.Reset();
+  AbortAllDataRequests();
+
+  // Clear callbacks to break any reference cycles.
+  respond_with_data_cb_.Reset();
+  finish_loading_cb_.Reset();
+}
+
+bool DataRequestHandler::IsStopped() const {
+  return source_reader_.is_null();
+}
+
+void DataRequestHandler::Suspend() {
+  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " stopped=" << source_reader_.is_null()
+          << " waiting_for_reply_=" << waiting_for_reply_
+          << " pending_requests_.size()=" << pending_requests_.size()
+          << " suspended_=" << suspended_;
+
+  if (suspended_)
+    return;
+  suspended_= true;
+  AbortAllDataRequests();
+}
+
+void DataRequestHandler::Resume() {
+  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " stopped=" << source_reader_.is_null()
+          << " waiting_for_reply_=" << waiting_for_reply_
+          << " pending_requests_.size()=" << pending_requests_.size()
+          << " suspended_=" << suspended_;
+
+  suspended_ = false;
+}
+
+bool DataRequestHandler::CanHandleRequests() {
+  return source_reader_ && !suspended_;
 }
 
 bool DataRequestHandler::IsHandlingDataRequests() const {
-  DCHECK(queue_ == dispatch_get_current_queue());
-  return !requests_->is_empty();
+  // We return true to indicate that we called the finish callback for all
+  // requests. waiting_for_reply_ can still be true at this point if the active
+  // request was aborted or cancelled.
+  return active_request_.handle || pending_requests_.size() != 0;
 }
 
-void DataRequestHandler::DispatchBlockingRead() {
-  DCHECK(queue_ == dispatch_get_current_queue());
+void DataRequestHandler::DispatchRead(Request* request) {
+  DCHECK(!waiting_for_reply_);
+  waiting_for_reply_ = true;
+  active_request_ = std::move(*request);
 
-  // Let the block below capture |this| by copying the scoped_refptr.  This
-  // creates an additional reference that can then be safely used within the
-  // block even if all other references are gone.
-  scoped_refptr<DataRequestHandler> handler(this);
-
-  dispatch_async(queue_, ^{
-    if (!handler->requests_->is_empty())
-      handler->ReadNextChunk();
-    else
-      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-              << " All requests have been canceled";
-  });
-}
-
-void DataRequestHandler::ReadNextChunk() {
-  DCHECK(queue_ == dispatch_get_current_queue());
-
-  const ResourceLoadingDataRequest& data_request =
-      requests_->Top().data_request;
-
-  DCHECK_GT(data_request.length, 0);
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Blocking to read @" << data_request.offset;
-
-  // We're performing a blocking read to enforce proper serialization of reads
-  // on the dispatch queue.  AVAssetResourceLoader sometimes makes overlapping
-  // read requests, but an IPCDataSource cannot handle overlapping reads.
+  int chunk_size = kMaxReadChunkSize;
+  if (active_request_.length > 0 &&
+      active_request_.length < static_cast<int64_t>(kMaxReadChunkSize)) {
+    chunk_size = static_cast<int>(active_request_.length);
+  }
 
   VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Requesting read of size " << chunk_size(data_request)
-          << " from position " << data_request.offset;
+          << " request_handle=" << active_request_.handle
+          << " length=" << active_request_.length
+          << " chunk_size=" << chunk_size
+          << " continues_read=" << (stream_position_ == active_request_.offset)
+          << " offset=" << active_request_.offset;
 
+  stream_position_ = active_request_.offset;
   TRACE_EVENT0("IPC_MEDIA", __FUNCTION__);
-  data_source_->Read(data_request.offset,
-                     chunk_size(data_request),
-                     buffer_,
-                     base::Bind(&DataRequestHandler::DidReadNextChunk, this));
-  read_complete_.Wait();
-
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " ...chunk complete";
-  ProcessChunk();
+  source_reader_.Run(active_request_.offset, chunk_size,
+                   base::BindOnce(&DataRequestHandler::DidReadNextChunk, this));
 }
 
-void DataRequestHandler::DidReadNextChunk(int size) {
-  // We don't control which thread or dispatch queue this is called on.  All
-  // we're doing here must be thread-safe.
+void DataRequestHandler::DidReadNextChunk(int read_size, const uint8_t* data) {
+  DCHECK(waiting_for_reply_);
 
   VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Read Chunk of size " << size;
-  last_size_read_ = size;
-  read_complete_.Signal();
-}
+          << " request_handle=" << active_request_.handle
+          << " read_size=" << read_size
+          << " offset=" << active_request_.offset;
 
-void DataRequestHandler::ProcessChunk() {
-  DCHECK(queue_ == dispatch_get_current_queue());
+  do {
+    Request request = std::move(active_request_);
+    waiting_for_reply_ = false;
 
-  Request request = requests_->Top();
-  requests_->Pop();
+    if (!request.handle) {
+      // Canceled or aborted.
+      break;
+    }
 
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Processing chunk: " << last_size_read_ << " @"
-          << request.data_request.offset;
+    if (read_size < 0) {
+      FinishLoading(&request, Status::kError);
+      Stop();
+      break;
+    }
+    if (read_size == 0) {
+      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " eos=true";
+      FinishLoading(&request, Status::kEOS);
+      break;
+    }
+    DCHECK(request.length < 0 || read_size <= request.length);
+    stream_position_ += read_size;
 
-  if (last_size_read_ <= 0) {
-    VLOG_IF(1, last_size_read_ == 0) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                                     << " DataSource reports EOS";
-    FinishLoading(request.handle, ERROR);
-    AbortAllDataRequests();
-    return;
+    respond_with_data_cb_.Run(request.handle, data, read_size);
+
+    // We're done if we read all the data that was requested
+    if (request.length > 0) {
+      if (request.length == read_size) {
+        FinishLoading(&request, Status::kSuccess);
+        break;
+      }
+      request.length -= read_size;
+    }
+    request.offset += read_size;
+    pending_requests_.Add(&request);
+  } while (false);
+
+  if (!pending_requests_.is_empty()) {
+    DCHECK(source_reader_);
+    Request request = pending_requests_.Pop();
+    DispatchRead(&request);
   }
-
-  respond_with_data_cb_.Run(request.handle, buffer_, last_size_read_);
-
-  DCHECK_LE(last_size_read_, request.data_request.length);
-  // We're done if we read all the data that was requested
-  if (request.data_request.length == last_size_read_) {
-    FinishLoading(request.handle, SUCCESS);
-  } else {
-    request.data_request.length -= last_size_read_;
-    request.data_request.offset += last_size_read_;
-    requests_->Add(request);
-  }
-
-  if (!requests_->is_empty())
-    DispatchBlockingRead();
 }
 
-void DataRequestHandler::FinishLoading(id request_handle, Status status) {
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Finishing " << request_handle << ": " << status;
-  DCHECK(queue_ == dispatch_get_current_queue());
-
-  finish_loading_cb_.Run(request_handle, status);
+void DataRequestHandler::FinishLoading(Request* request, Status status) {
+  if (request->handle) {
+    VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " request_handle=" << request->handle
+            << " status=" << static_cast<int>(status);
+    finish_loading_cb_.Run(request->handle, status);
+    request->handle.reset();
+  }
 }
 
 }  // namespace media

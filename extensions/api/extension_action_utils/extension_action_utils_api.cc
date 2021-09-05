@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
+#include "chrome/browser/extensions/api/context_menus/context_menus_api_helpers.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action.h"
@@ -22,17 +23,20 @@
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
+#include "chrome/browser/extensions/menu_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/extensions/api/context_menus.h"
 #include "chrome/common/extensions/api/commands/commands_handler.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
 #include "chrome/common/extensions/command.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/sessions/content/session_tab_helper.h"
+#include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/api/tabs/tabs_private_api.h"
@@ -358,7 +362,9 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
       web_contents ? chrome::FindBrowserWithWebContents(web_contents) : nullptr;
   if (browser) {
     TabStripModel* tab_strip = browser->tab_strip_model();
-    tab_id = SessionTabHelper::IdForTab(tab_strip->GetActiveWebContents()).id();
+    tab_id =
+        sessions::SessionTabHelper::IdForTab(tab_strip->GetActiveWebContents())
+            .id();
   }
 
   vivaldi::extension_action_utils::ExtensionInfo info;
@@ -563,6 +569,10 @@ std::string NoExtensionAction(const std::string& extension_id) {
   return "No action for the extension with id " + extension_id;
 }
 
+std::string NoSuchMenuItem(const std::string& menu_id) {
+  return "No menu action for the menu with id " + menu_id;
+}
+
 }  // namespace
 
 
@@ -607,7 +617,6 @@ ExtensionActionUtilsGetToolbarExtensionsFunction::Run() {
                                             &manifest_string)) {
         info.optionspage.reset(new std::string(manifest_string));
       }
-
       toolbar_extensionactions.push_back(std::move(info));
     }
   }
@@ -651,8 +660,8 @@ ExtensionActionUtilsExecuteExtensionActionFunction::Run() {
       ExtensionActionRunner::GetForWebContents(web_contents);
   if (action_runner && action_runner->RunAction(extension, true) ==
                            ExtensionAction::ACTION_SHOW_POPUP) {
-    GURL popup_url =
-        action->GetPopupUrl(SessionTabHelper::IdForTab(web_contents).id());
+    GURL popup_url = action->GetPopupUrl(
+        sessions::SessionTabHelper::IdForTab(web_contents).id());
     popup_url_str = popup_url.spec();
   }
 
@@ -783,6 +792,165 @@ ExtensionActionUtilsShowExtensionOptionsFunction::Run() {
   ExtensionTabUtil::OpenOptionsPage(extension, browser);
 
   return RespondNow(NoArguments());
+}
+
+namespace {
+
+vivaldi::extension_action_utils::MenuType MenuItemTypeToEnum(
+    MenuItem::Type type) {
+  using vivaldi::extension_action_utils::MenuType;
+
+  MenuType type_enum = MenuType::MENU_TYPE_NONE;
+
+  switch (type) {
+    case MenuItem::Type::NORMAL:
+      type_enum = MenuType::MENU_TYPE_NORMAL;
+      break;
+
+    case MenuItem::Type::CHECKBOX:
+      type_enum = MenuType::MENU_TYPE_CHECKBOX;
+      break;
+
+    case MenuItem::Type::RADIO:
+      type_enum = MenuType::MENU_TYPE_RADIO;
+      break;
+
+    case MenuItem::Type::SEPARATOR:
+      type_enum = MenuType::MENU_TYPE_SEPARATOR;
+      break;
+  }
+  return type_enum;
+}
+
+void RecursivelyFillMenu(
+    bool top_level,
+    const MenuItem::OwnedList* all_items,
+    bool can_cross_incognito,
+    std::vector<vivaldi::extension_action_utils::MenuItem>* menu_items,
+    content::BrowserContext* browser_context) {
+  if (!all_items || all_items->empty())
+    return;
+
+  const int top_level_limit =
+      top_level ? api::context_menus::ACTION_MENU_TOP_LEVEL_LIMIT : INT_MAX;
+  int cnt = 0;
+
+  for (auto i = all_items->begin();
+       i != all_items->end() && cnt < top_level_limit; ++i, cnt++) {
+    MenuItem* item = i->get();
+
+    if (item->id().incognito == browser_context->IsOffTheRecord() ||
+        can_cross_incognito) {
+      vivaldi::extension_action_utils::MenuItem menuitem;
+
+      menuitem.name = item->title();
+      menuitem.id = context_menus_api_helpers::GetIDString(item->id());
+      menuitem.visible = item->visible();
+      menuitem.enabled = item->enabled();
+      menuitem.checked = item->checked();
+      menuitem.menu_type = MenuItemTypeToEnum(item->type());
+
+      // Only go down one level from the top as a limit for now.
+      if (top_level && item->children().size()) {
+        menuitem.submenu = std::make_unique<
+            std::vector<vivaldi::extension_action_utils::MenuItem>>();
+        top_level = false;
+        RecursivelyFillMenu(top_level, &item->children(), can_cross_incognito,
+                            menuitem.submenu.get(), browser_context);
+      }
+      menu_items->push_back(std::move(menuitem));
+    }
+  }
+}
+
+std::vector<vivaldi::extension_action_utils::MenuItem>
+FillMenuFromManifest(const Extension* extension,
+                     content::BrowserContext* browser_context) {
+  std::vector<vivaldi::extension_action_utils::MenuItem> menu_items;
+  bool can_cross_incognito =
+      util::CanCrossIncognito(extension, browser_context);
+
+  MenuManager* manager = MenuManager::Get(browser_context);
+  const MenuItem::OwnedList* all_items =
+      manager->MenuItems(MenuItem::ExtensionKey(extension->id()));
+
+  RecursivelyFillMenu(true, all_items, can_cross_incognito, &menu_items,
+                      browser_context);
+
+  return std::vector<vivaldi::extension_action_utils::MenuItem>(
+      std::move(menu_items));
+}
+
+}  // namespace
+
+ExtensionFunction::ResponseAction
+ExtensionActionUtilsGetExtensionMenuFunction::Run() {
+  using vivaldi::extension_action_utils::GetExtensionMenu::Params;
+  namespace Results =
+    vivaldi::extension_action_utils::GetExtensionMenu::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  const Extension* extension =
+    extensions::ExtensionRegistry::Get(browser_context())
+    ->GetExtensionById(params->extension_id,
+      extensions::ExtensionRegistry::ENABLED);
+  if (!extension) {
+    return RespondNow(Error(NoSuchExtension(params->extension_id)));
+  }
+
+  const std::vector<vivaldi::extension_action_utils::MenuItem> menu =
+      FillMenuFromManifest(extension, browser_context());
+
+  return RespondNow(ArgumentList(Results::Create(menu)));
+}
+
+ExtensionFunction::ResponseAction
+ExtensionActionUtilsExecuteMenuActionFunction::Run() {
+  using vivaldi::extension_action_utils::ExecuteMenuAction::Params;
+  namespace Results =
+    vivaldi::extension_action_utils::ExecuteMenuAction::Results;
+
+  std::unique_ptr<Params> params = Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  const Extension* extension =
+    extensions::ExtensionRegistry::Get(browser_context())
+    ->GetExtensionById(params->extension_id,
+      extensions::ExtensionRegistry::ENABLED);
+  if (!extension) {
+    return RespondNow(Error(NoSuchExtension(params->extension_id)));
+  }
+  Browser* browser = ::vivaldi::FindBrowserByWindowId(params->window_id);
+  if (!browser) {
+    return RespondNow(Error(NoSuchWindow(params->window_id)));
+  }
+  // TODO: Check incognito here
+  bool incognito = browser_context()->IsOffTheRecord();
+  content::WebContents* contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  MenuItem::ExtensionKey extension_key(extension->id());
+  MenuItem::Id action_id(incognito, extension_key);
+  action_id.string_uid = params->menu_id;
+  MenuManager* manager = MenuManager::Get(browser_context());
+  MenuItem* item = manager->GetItemById(action_id);
+  if (!item) {
+    // This means the id might be numerical, so convert it and try
+    // again.  We currently don't maintain the type through the
+    // layers.
+    action_id.string_uid = "";
+    base::StringToInt(params->menu_id, &action_id.uid);
+
+    MenuItem* item = manager->GetItemById(action_id);
+    if (!item) {
+      return RespondNow(Error(NoSuchMenuItem(params->menu_id)));
+    }
+  }
+  manager->ExecuteCommand(browser_context(), contents, nullptr,
+                          content::ContextMenuParams(),
+                          action_id);
+  return RespondNow(ArgumentList(Results::Create(true)));
 }
 
 }  // namespace extensions

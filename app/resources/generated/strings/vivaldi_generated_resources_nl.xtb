@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="nl">
 <translation id="1017280919048282932">Toevoegen &amp;aan woordenboek</translation>
+<translation id="1029317248976101138">Zoom</translation>
 <translation id="1031362278801463162">Voorbeeld wordt geladen</translation>
 <translation id="1047431265488717055">&amp;Koppelingstekst kopiëren</translation>
 <translation id="1049795001945932310">&amp;Taalinstellingen</translation>
@@ -54,6 +55,7 @@
 <translation id="1886996562706621347">Websites laten vragen om als standaardhandler voor protocollen in te stellen (aanbevolen)</translation>
 <translation id="1901303067676059328">&amp;Alles selecteren</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Geef met een cijfer aan hoeveel exemplaren je wilt afdrukken (1-<ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Alles verwijderen</translation>
 <translation id="1994173015038366702">Website-URL</translation>
 <translation id="2019718679933488176">Audio &amp;openen in nieuwe tab</translation>
@@ -66,7 +68,6 @@
 <translation id="2150139952286079145">Bestemmingen zoeken</translation>
 <translation id="215753907730220065">Volledig scherm sluiten</translation>
 <translation id="2177950615300672361">Privétab: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Gebruik een cijfer om aan te geven hoeveel exemplaren er moeten worden afgedrukt (1-999).</translation>
 <translation id="219008588003277019">Native Client-module: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Knop verbergen</translation>
 <translation id="2218515861914035131">Plakken als platte &amp;tekst</translation>
@@ -78,11 +79,9 @@
 <translation id="2282146716419988068">GPU-proces</translation>
 <translation id="2301382460326681002">Hoofddirectory van extensie is ongeldig.</translation>
 <translation id="2318143611928805047">Papierformaat</translation>
-<translation id="2318923050469484167">Huidige privésessie (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Kop- en voettekst</translation>
 <translation id="2326931316514688470">App he&amp;rladen</translation>
 <translation id="2327492829706409234">App inschakelen</translation>
-<translation id="2344028582131185878">Automatische downloads</translation>
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Selecteer de directory van de extensie.</translation>
 <translation id="2379281330731083556">Afdrukken via systeemdialoogvenster... <ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +94,12 @@
 <translation id="2470702053775288986">Niet-ondersteunde extensies uitgeschakeld</translation>
 <translation id="2476578072172137802">Website-instellingen</translation>
 <translation id="2482878487686419369">Meldingen</translation>
+<translation id="2498539833203011245">Minimaliseer</translation>
 <translation id="2509495747794740764">De waarde voor de schaal moet een getal tussen de 10 en 200 zijn.</translation>
 <translation id="253557089021624350">Aantal keepalive-activiteiten</translation>
 <translation id="2546283357679194313">Cookies en websitegegevens</translation>
 <translation id="2550212893339833758">Wisselgeheugen</translation>
 <translation id="2553440850688409052">Deze plug-in verbergen</translation>
-<translation id="2580924999637585241">Totaal: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Niet toestaan dat websites protocollen verwerken</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Opnieuw inschakelen</translation>
@@ -120,7 +119,6 @@
 <translation id="2932883381142163287">Misbruik melden</translation>
 <translation id="2941112035454246133">Laag</translation>
 <translation id="2972581237482394796">Op&amp;nieuw</translation>
-<translation id="299483336428448530">Geïnstalleerd door je ouder.</translation>
 <translation id="3003623123441819449">Css-cachegeheugen</translation>
 <translation id="3008272652534848354">Rechten herstellen</translation>
 <translation id="3012631534724231212">(Iframe)</translation>
@@ -274,7 +272,6 @@
 <translation id="5425042808445046667">Doorgaan met downloaden</translation>
 <translation id="5427459444770871191">Rechtsom &amp;draaien</translation>
 <translation id="5431318178759467895">Kleur</translation>
-<translation id="5472133193607270166">Als deze optie is ingeschakeld, kunnen websites je browse-activiteit op verschillende sites niet gebruiken om advertenties te personaliseren. Bepaalde websites werken mogelijk niet correct.</translation>
 <translation id="5483785310822538350">Toegang tot bestand en apparaat intrekken</translation>
 <translation id="5485102783864353244">App toevoegen</translation>
 <translation id="5486561344817861625">Browserherstart simuleren</translation>
@@ -302,7 +299,6 @@
 <translation id="5804241973901381774">Rechten</translation>
 <translation id="5828633471261496623">Bezig met afdrukken...</translation>
 <translation id="583281660410589416">Onbekend</translation>
-<translation id="5838456317242088717">Huidige privésessie</translation>
 <translation id="5860491529813859533">Inschakelen</translation>
 <translation id="5867841422488265304">Voer een adres of zoekopdracht in</translation>
 <translation id="5908769186679515905">Niet toestaan dat websites Flash uitvoeren</translation>
@@ -322,7 +318,6 @@
 <translation id="6147020289383635445">Kan afdrukvoorbeeld niet weergeven.</translation>
 <translation id="6156863943908443225">Scriptcache</translation>
 <translation id="6169666352732958425">Kan bureaublad niet casten.</translation>
-<translation id="6196640612572343990">Indirecte cookies blokkeren</translation>
 <translation id="6196854373336333322">De extensie "<ph name="EXTENSION_NAME" />" heeft het beheer van je proxyinstellingen overgenomen. Dit betekent dat de extensie alles wat je online doet, kan wijzigen, beschadigen of bekijken. Als je niet zeker weet waarom deze wijziging heeft plaatsgevonden, is het waarschijnlijk een ongewenste wijziging.</translation>
 <translation id="6206311232642889873">A&amp;fbeelding kopiëren</translation>
 <translation id="6239558157302047471">&amp;Frame herladen</translation>
@@ -335,6 +330,7 @@
 <translation id="6295158916970320988">Alle websites</translation>
 <translation id="6295855836753816081">Opslaan...</translation>
 <translation id="6308937455967653460">Koppeling &amp;opslaan als...</translation>
+<translation id="6315493146179903667">Alles op voorgrond</translation>
 <translation id="6326855256003666642">Aantal keepalive-activiteiten</translation>
 <translation id="6374469231428023295">Opnieuw proberen</translation>
 <translation id="6385543213911723544">Websites kunnen cookiegegevens opslaan en lezen</translation>
@@ -380,6 +376,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Besturingselementen &amp;weergeven</translation>
 <translation id="7311079019872751559">Plug-in-toegang zonder sandbox</translation>
+<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Er is iets misgegaan bij het afdrukken. Controleer de printer en probeer het opnieuw.</translation>
 <translation id="7412226954991670867">GPU-geheugen</translation>
 <translation id="7421925624202799674">Paginabron &amp;weergeven</translation>
@@ -446,7 +443,7 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="8382913212082956454">&amp;E-mailadres kopiëren</translation>
 <translation id="8413385045638830869">Eerst vragen (aanbevolen)</translation>
 <translation id="8434480141477525001">NaCl Debug Port</translation>
-<translation id="8449008133205184768">Plakken en stijl aanpassen</translation>
+<translation id="8449008133205184768">Plak en pas stijl aan</translation>
 <translation id="8496717697661868878">Deze plug-in uitvoeren</translation>
 <translation id="8512476990829870887">Proces beëindigen</translation>
 <translation id="8523493869875972733">Wijzigingen behouden</translation>

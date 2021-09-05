@@ -4,23 +4,17 @@
 
 #include "ash/wm/gestures/wm_gesture_handler.h"
 
-#include "ash/public/cpp/ash_features.h"
 #include "ash/shell.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_histogram_enums.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "base/metrics/user_metrics.h"
 #include "ui/events/event.h"
-#include "ui/events/event_constants.h"
+#include "ui/events/types/event_type.h"
 
 namespace ash {
 
 namespace {
-
-bool CanHandleVirtualDesksGestures() {
-  return features::IsVirtualDesksEnabled() &&
-         features::IsVirtualDesksGesturesEnabled();
-}
 
 // Handles vertical 3-finger scroll gesture by entering overview on scrolling
 // up, and exiting it on scrolling down.
@@ -50,8 +44,6 @@ bool Handle3FingerVerticalScroll(float scroll_y) {
 // Handles horizontal 4-finger scroll by switching desks if possible.
 // Returns true if the gesture was handled.
 bool HandleDesksSwitchHorizontalScroll(float scroll_x) {
-  DCHECK(CanHandleVirtualDesksGestures());
-
   if (std::fabs(scroll_x) < WmGestureHandler::kHorizontalThresholdDp)
     return false;
 
@@ -65,8 +57,7 @@ bool HandleDesksSwitchHorizontalScroll(float scroll_x) {
 
 }  // namespace
 
-WmGestureHandler::WmGestureHandler()
-    : can_handle_desks_gestures_(CanHandleVirtualDesksGestures()) {}
+WmGestureHandler::WmGestureHandler() = default;
 
 WmGestureHandler::~WmGestureHandler() = default;
 
@@ -129,8 +120,7 @@ bool WmGestureHandler::EndScroll() {
     return MoveOverviewSelection(finger_count, scroll_x, scroll_y);
   }
 
-  return finger_count == 4 && can_handle_desks_gestures_ &&
-         HandleDesksSwitchHorizontalScroll(scroll_x);
+  return finger_count == 4 && HandleDesksSwitchHorizontalScroll(scroll_x);
 }
 
 bool WmGestureHandler::MoveOverviewSelection(int finger_count,

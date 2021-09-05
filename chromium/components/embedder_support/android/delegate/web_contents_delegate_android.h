@@ -13,7 +13,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "third_party/blink/public/common/frame/blocked_navigation_types.h"
+#include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 
 class GURL;
 
@@ -61,8 +61,6 @@ class WebContentsDelegateAndroid : public content::WebContentsDelegate {
   void ActivateContents(content::WebContents* contents) override;
   void LoadingStateChanged(content::WebContents* source,
                            bool to_different_document) override;
-  void LoadProgressChanged(content::WebContents* source,
-                           double load_progress) override;
   void RendererUnresponsive(
       content::WebContents* source,
       content::RenderWidgetHost* render_widget_host,
@@ -104,12 +102,16 @@ class WebContentsDelegateAndroid : public content::WebContentsDelegate {
   void ExitFullscreenModeForTab(content::WebContents* web_contents) override;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) override;
-  void OnDidBlockNavigation(content::WebContents* web_contents,
-                            const GURL& blocked_url,
-                            const GURL& initiator_url,
-                            blink::NavigationBlockedReason reason) override;
+  void OnDidBlockNavigation(
+      content::WebContents* web_contents,
+      const GURL& blocked_url,
+      const GURL& initiator_url,
+      blink::mojom::NavigationBlockedReason reason) override;
   int GetTopControlsHeight() override;
+  int GetTopControlsMinHeight() override;
   int GetBottomControlsHeight() override;
+  int GetBottomControlsMinHeight() override;
+  bool ShouldAnimateBrowserControlsHeightChanges() override;
   bool DoBrowserControlsShrinkRendererSize(
       const content::WebContents* contents) override;
 

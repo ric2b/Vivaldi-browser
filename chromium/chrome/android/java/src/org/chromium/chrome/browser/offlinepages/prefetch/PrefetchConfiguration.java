@@ -6,7 +6,8 @@ package org.chromium.chrome.browser.offlinepages.prefetch;
 
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.CachedFeatureFlags;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.ProfileKey;
 
 import org.chromium.chrome.browser.ChromeApplication;
@@ -25,6 +26,18 @@ public class PrefetchConfiguration {
         if (ChromeApplication.isVivaldi())
             return false;
         return ChromeFeatureList.isEnabled(ChromeFeatureList.OFFLINE_PAGES_PREFETCHING);
+    }
+
+    /**
+     * Returns true if PrefetchBackgroundTask should load native in service manager only mode.
+     *
+     * Can be called even when native is not loaded yet.
+     */
+    public static boolean isServiceManagerForBackgroundPrefetchEnabled() {
+        return CachedFeatureFlags.isEnabled(
+                       ChromeFeatureList.SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH)
+                && CachedFeatureFlags.isEnabled(
+                        ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS);
     }
 
     /**

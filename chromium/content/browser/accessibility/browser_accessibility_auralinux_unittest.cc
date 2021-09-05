@@ -34,11 +34,14 @@ class BrowserAccessibilityAuraLinuxTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(BrowserAccessibilityAuraLinuxTest);
 };
 
-BrowserAccessibilityAuraLinuxTest::BrowserAccessibilityAuraLinuxTest() {}
+BrowserAccessibilityAuraLinuxTest::BrowserAccessibilityAuraLinuxTest() =
+    default;
 
-BrowserAccessibilityAuraLinuxTest::~BrowserAccessibilityAuraLinuxTest() {}
+BrowserAccessibilityAuraLinuxTest::~BrowserAccessibilityAuraLinuxTest() =
+    default;
 
 void BrowserAccessibilityAuraLinuxTest::SetUp() {
+  ui::AXPlatformNode::NotifyAddAXModeFlags(ui::kAXModeComplete);
   test_browser_accessibility_delegate_ =
       std::make_unique<TestBrowserAccessibilityDelegate>();
 }
@@ -146,10 +149,10 @@ TEST_F(BrowserAccessibilityAuraLinuxTest, TestComplexHypertext) {
   const std::string text2_name = " Four five six.";
   const std::string check_box_name = "I agree";
   const std::string check_box_value = "Checked";
-  const std::string button_text_name = "Red";
+  const std::string radio_button_text_name = "Red";
   const std::string link_text_name = "Blue";
-  // Each control (combo / check box, button and link) will be represented by an
-  // embedded object character.
+  // Each control (combo / check box, radio button and link) will be represented
+  // by an embedded object character.
   const base::string16 string16_embed(
       1, ui::AXPlatformNodeAuraLinux::kEmbeddedCharacter);
   const std::string embed = base::UTF16ToUTF8(string16_embed);
@@ -180,13 +183,13 @@ TEST_F(BrowserAccessibilityAuraLinuxTest, TestComplexHypertext) {
   check_box.SetName(check_box_name);
   check_box.SetValue(check_box_value);
 
-  ui::AXNodeData button, button_text;
-  button.id = 15;
-  button_text.id = 17;
-  button_text.SetName(button_text_name);
-  button.role = ax::mojom::Role::kButton;
-  button_text.role = ax::mojom::Role::kStaticText;
-  button.child_ids.push_back(button_text.id);
+  ui::AXNodeData radio_button, radio_button_text;
+  radio_button.id = 15;
+  radio_button_text.id = 17;
+  radio_button_text.SetName(radio_button_text_name);
+  radio_button.role = ax::mojom::Role::kRadioButton;
+  radio_button_text.role = ax::mojom::Role::kStaticText;
+  radio_button.child_ids.push_back(radio_button_text.id);
 
   ui::AXNodeData link, link_text;
   link.id = 16;
@@ -203,13 +206,13 @@ TEST_F(BrowserAccessibilityAuraLinuxTest, TestComplexHypertext) {
   root.child_ids.push_back(combo_box.id);
   root.child_ids.push_back(text2.id);
   root.child_ids.push_back(check_box.id);
-  root.child_ids.push_back(button.id);
+  root.child_ids.push_back(radio_button.id);
   root.child_ids.push_back(link.id);
 
   std::unique_ptr<BrowserAccessibilityManager> manager(
       BrowserAccessibilityManager::Create(
-          MakeAXTreeUpdate(root, text1, combo_box, text2, check_box, button,
-                           button_text, link, link_text),
+          MakeAXTreeUpdate(root, text1, combo_box, text2, check_box,
+                           radio_button, radio_button_text, link, link_text),
           test_browser_accessibility_delegate_.get(),
           new BrowserAccessibilityFactory()));
 
@@ -270,8 +273,8 @@ TEST_F(BrowserAccessibilityAuraLinuxTest, TestComplexHypertext) {
   // Get the text of the check box. It should be its name.
   verify_atk_link_text(check_box_name.c_str(), 1, 30);
 
-  // Get the text of the button.
-  verify_atk_link_text(button_text_name.c_str(), 2, 31);
+  // Get the text of the radio button.
+  verify_atk_link_text(radio_button_text_name.c_str(), 2, 31);
 
   // Get the text of the link.
   verify_atk_link_text(link_text_name.c_str(), 3, 32);
@@ -301,7 +304,7 @@ TEST_F(BrowserAccessibilityAuraLinuxTest, TestComplexHypertext) {
   // The hypertext offsets should reflect the new length of the static text.
   verify_atk_link_text(combo_box_value.c_str(), 0, 28);
   verify_atk_link_text(check_box_name.c_str(), 1, 44);
-  verify_atk_link_text(button_text_name.c_str(), 2, 45);
+  verify_atk_link_text(radio_button_text_name.c_str(), 2, 45);
   verify_atk_link_text(link_text_name.c_str(), 3, 46);
 
   manager.reset();
@@ -730,6 +733,42 @@ TEST_F(BrowserAccessibilityAuraLinuxTest,
   }
 
   manager.reset();
+}
+
+TEST_F(BrowserAccessibilityAuraLinuxTest, TextAtkStaticTextChange) {
+  ui::AXNodeData root;
+  root.id = 1;
+  root.role = ax::mojom::Role::kRootWebArea;
+  root.AddState(ax::mojom::State::kFocusable);
+
+  ui::AXNodeData div_editable;
+  div_editable.id = 2;
+  div_editable.role = ax::mojom::Role::kGenericContainer;
+
+  ui::AXNodeData text;
+  text.id = 3;
+  text.role = ax::mojom::Role::kStaticText;
+  text.SetName("Text1 ");
+
+  root.child_ids.push_back(div_editable.id);
+  div_editable.child_ids.push_back(text.id);
+
+  std::unique_ptr<BrowserAccessibilityManager> manager(
+      BrowserAccessibilityManager::Create(
+          MakeAXTreeUpdate(root, div_editable, text),
+          test_browser_accessibility_delegate_.get(),
+          new BrowserAccessibilityFactory()));
+
+  text.SetName("Text2");
+  ui::AXTree* tree = const_cast<ui::AXTree*>(manager->ax_tree());
+  ASSERT_TRUE(tree->Unserialize(MakeAXTreeUpdate(text)));
+
+  // The change to the static text node should have triggered an update of the
+  // containing div's hypertext.
+  ui::AXPlatformNodeAuraLinux* div_node =
+      ToBrowserAccessibilityAuraLinux(manager->GetFromID(div_editable.id))
+          ->GetNode();
+  EXPECT_STREQ(base::UTF16ToUTF8(div_node->GetHypertext()).c_str(), "Text2");
 }
 
 }  // namespace content

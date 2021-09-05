@@ -33,6 +33,28 @@ TEST(PDFiumPageHelperDeathTest, ToPDFiumRotation) {
 #endif
 }
 
+void CompareTextRuns(
+    const pp::PDF::PrivateAccessibilityTextRunInfo& expected_text_run,
+    const pp::PDF::PrivateAccessibilityTextRunInfo actual_text_run) {
+  EXPECT_EQ(expected_text_run.len, actual_text_run.len);
+  CompareRect(expected_text_run.bounds, actual_text_run.bounds);
+  EXPECT_EQ(expected_text_run.direction, actual_text_run.direction);
+
+  const pp::PDF::PrivateAccessibilityTextStyleInfo& expected_style =
+      expected_text_run.style;
+  const pp::PDF::PrivateAccessibilityTextStyleInfo& actual_style =
+      actual_text_run.style;
+
+  EXPECT_EQ(expected_style.font_name, actual_style.font_name);
+  EXPECT_EQ(expected_style.font_weight, actual_style.font_weight);
+  EXPECT_EQ(expected_style.render_mode, actual_style.render_mode);
+  EXPECT_FLOAT_EQ(expected_style.font_size, actual_style.font_size);
+  EXPECT_EQ(expected_style.fill_color, actual_style.fill_color);
+  EXPECT_EQ(expected_style.stroke_color, actual_style.stroke_color);
+  EXPECT_EQ(expected_style.is_italic, actual_style.is_italic);
+  EXPECT_EQ(expected_style.is_bold, actual_style.is_bold);
+}
+
 }  // namespace
 
 using PDFiumPageTest = PDFiumTestBase;
@@ -206,33 +228,44 @@ TEST_F(PDFiumPageTextTest, GetTextRunInfo) {
 
   int current_char_index = 0;
 
+  pp::PDF::PrivateAccessibilityTextStyleInfo expected_style_1 = {
+      "Times-Roman",
+      0,
+      PP_TEXTRENDERINGMODE_FILL,
+      12,
+      0xff000000,
+      0xff000000,
+      false,
+      false};
+  pp::PDF::PrivateAccessibilityTextStyleInfo expected_style_2 = {
+      "Helvetica", 0,    PP_TEXTRENDERINGMODE_FILL, 16, 0xff000000, 0xff000000,
+      false,       false};
   // The links span from [7, 22], [52, 66] and [92, 108] with 16, 15 and 17
   // text run lengths respectively. There are text runs preceding and
   // succeeding them.
-  PP_PrivateAccessibilityTextRunInfo expected_text_runs[] = {
-      {7, 12,
+  pp::PDF::PrivateAccessibilityTextRunInfo expected_text_runs[] = {
+      {7,
        PP_MakeFloatRectFromXYWH(26.666666f, 189.333333f, 38.666672f,
                                 13.333344f),
-       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR},
-      {16, 12,
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, expected_style_1},
+      {16,
        PP_MakeFloatRectFromXYWH(70.666664f, 189.333333f, 108.0f, 14.666672f),
-       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR},
-      {20, 12,
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, expected_style_1},
+      {20,
        PP_MakeFloatRectFromXYWH(181.333333f, 189.333333f, 117.333333f,
                                 14.666672f),
-       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR},
-      {9, 16, PP_MakeFloatRectFromXYWH(28.0f, 117.33334f, 89.333328f, 20.0f),
-       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR},
-      {15, 16,
-       PP_MakeFloatRectFromXYWH(126.66666f, 117.33334f, 137.33334f, 20.0f),
-       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR},
-      {20, 16,
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, expected_style_1},
+      {9, PP_MakeFloatRectFromXYWH(28.0f, 117.33334f, 89.333328f, 20.0f),
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, expected_style_2},
+      {15, PP_MakeFloatRectFromXYWH(126.66666f, 117.33334f, 137.33334f, 20.0f),
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, expected_style_2},
+      {20,
        PP_MakeFloatRectFromXYWH(266.66666f, 118.66666f, 169.33334f, 18.666664f),
-       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR},
-      {5, 16, PP_MakeFloatRectFromXYWH(28.0f, 65.333336f, 40.0f, 18.666664f),
-       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR},
-      {17, 16, PP_MakeFloatRectFromXYWH(77.333336f, 64.0f, 160.0f, 20.0f),
-       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR}};
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, expected_style_2},
+      {5, PP_MakeFloatRectFromXYWH(28.0f, 65.333336f, 40.0f, 18.666664f),
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, expected_style_2},
+      {17, PP_MakeFloatRectFromXYWH(77.333336f, 64.0f, 160.0f, 20.0f),
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, expected_style_2}};
 
   if (IsRunningOnChromeOS()) {
     expected_text_runs[4].bounds =
@@ -244,20 +277,18 @@ TEST_F(PDFiumPageTextTest, GetTextRunInfo) {
   }
 
   // Test negative char index returns nullopt
-  base::Optional<PP_PrivateAccessibilityTextRunInfo> text_run_info_result =
-      engine->GetTextRunInfo(0, -1);
+  base::Optional<pp::PDF::PrivateAccessibilityTextRunInfo>
+      text_run_info_result = engine->GetTextRunInfo(0, -1);
   ASSERT_FALSE(text_run_info_result.has_value());
 
-  // Test valid char index returns expected text run info
+  // Test valid char index returns expected text run info and expected text
+  // style info
   for (const auto& expected_text_run : expected_text_runs) {
     text_run_info_result = engine->GetTextRunInfo(0, current_char_index);
     ASSERT_TRUE(text_run_info_result.has_value());
-    const auto& text_run_info = text_run_info_result.value();
-    EXPECT_EQ(expected_text_run.len, text_run_info.len);
-    EXPECT_EQ(expected_text_run.font_size, text_run_info.font_size);
-    CompareRect(expected_text_run.bounds, text_run_info.bounds);
-    EXPECT_EQ(expected_text_run.direction, text_run_info.direction);
-    current_char_index += text_run_info.len;
+    const auto& actual_text_run = text_run_info_result.value();
+    CompareTextRuns(expected_text_run, actual_text_run);
+    current_char_index += actual_text_run.len;
   }
 
   // Test char index outside char range returns nullopt
@@ -266,6 +297,130 @@ TEST_F(PDFiumPageTextTest, GetTextRunInfo) {
   EXPECT_EQ(page->GetCharCount(), current_char_index);
   text_run_info_result = engine->GetTextRunInfo(0, current_char_index);
   ASSERT_FALSE(text_run_info_result.has_value());
+}
+
+TEST_F(PDFiumPageTextTest, TestHighlightTextRunInfo) {
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("highlights.pdf"));
+  ASSERT_TRUE(engine);
+
+  // Highlights span across text run indices 0, 2 and 3.
+  static const pp::PDF::PrivateAccessibilityTextStyleInfo kExpectedStyle = {
+      "Helvetica", 0,    PP_TEXTRENDERINGMODE_FILL, 16, 0xff000000, 0xff000000,
+      false,       false};
+  pp::PDF::PrivateAccessibilityTextRunInfo expected_text_runs[] = {
+      {5,
+       PP_MakeFloatRectFromXYWH(1.3333334f, 198.66667f, 46.666668f, 14.666672f),
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, kExpectedStyle},
+      {7,
+       PP_MakeFloatRectFromXYWH(50.666668f, 198.66667f, 47.999996f, 17.333328f),
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, kExpectedStyle},
+      {7,
+       PP_MakeFloatRectFromXYWH(106.66666f, 198.66667f, 73.333336f, 18.666672f),
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, kExpectedStyle},
+      {2, PP_MakeFloatRectFromXYWH(188.0f, 202.66667f, 9.333333f, 14.666667f),
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_NONE, kExpectedStyle},
+      {2,
+       PP_MakeFloatRectFromXYWH(198.66667f, 202.66667f, 21.333328f, 10.666672f),
+       PP_PrivateDirection::PP_PRIVATEDIRECTION_LTR, kExpectedStyle}};
+
+  if (IsRunningOnChromeOS()) {
+    expected_text_runs[2].bounds = PP_MakeFloatRectFromXYWH(
+        106.66666f, 198.66667f, 73.333336f, 19.999985f);
+    expected_text_runs[4].bounds = PP_MakeFloatRectFromXYWH(
+        198.66667f, 201.33333f, 21.333328f, 12.000015f);
+  }
+
+  PDFiumPage* page = GetPDFiumPageForTest(engine.get(), 0);
+  ASSERT_TRUE(page);
+
+  int current_char_index = 0;
+  for (const auto& expected_text_run : expected_text_runs) {
+    base::Optional<pp::PDF::PrivateAccessibilityTextRunInfo>
+        text_run_info_result = engine->GetTextRunInfo(0, current_char_index);
+    ASSERT_TRUE(text_run_info_result.has_value());
+    const auto& actual_text_run = text_run_info_result.value();
+    CompareTextRuns(expected_text_run, actual_text_run);
+    current_char_index += actual_text_run.len;
+  }
+}
+
+using PDFiumPageHighlightTest = PDFiumTestBase;
+
+TEST_F(PDFiumPageHighlightTest, TestPopulateHighlights) {
+  struct ExpectedHighlight {
+    int32_t start_char_index;
+    int32_t char_count;
+    pp::Rect bounding_rect;
+    uint32_t color;
+  };
+
+  constexpr uint32_t kHighlightDefaultColor = MakeARGB(255, 255, 255, 0);
+  constexpr uint32_t kHighlightRedColor = MakeARGB(102, 230, 0, 0);
+  constexpr uint32_t kHighlightNoColor = MakeARGB(0, 0, 0, 0);
+  static const ExpectedHighlight kExpectedHighlights[] = {
+      {0, 5, {5, 196, 49, 26}, kHighlightDefaultColor},
+      {12, 7, {110, 196, 77, 26}, kHighlightRedColor},
+      {20, 1, {192, 196, 13, 26}, kHighlightNoColor}};
+
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("highlights.pdf"));
+  ASSERT_TRUE(engine);
+  ASSERT_EQ(1, engine->GetNumberOfPages());
+
+  PDFiumPage* page = GetPDFiumPageForTest(engine.get(), 0);
+  ASSERT_TRUE(page);
+  page->PopulateAnnotations();
+  ASSERT_EQ(base::size(kExpectedHighlights), page->highlights_.size());
+
+  for (size_t i = 0; i < page->highlights_.size(); ++i) {
+    ASSERT_EQ(kExpectedHighlights[i].start_char_index,
+              page->highlights_[i].start_char_index);
+    ASSERT_EQ(kExpectedHighlights[i].char_count,
+              page->highlights_[i].char_count);
+    CompareRect(kExpectedHighlights[i].bounding_rect,
+                page->highlights_[i].bounding_rect);
+    ASSERT_EQ(kExpectedHighlights[i].color, page->highlights_[i].color);
+  }
+}
+
+using PDFiumPageTextFieldTest = PDFiumTestBase;
+
+TEST_F(PDFiumPageTextFieldTest, TestPopulateTextFields) {
+  struct ExpectedTextField {
+    const char* name;
+    const char* value;
+    pp::Rect bounding_rect;
+    int flags;
+  };
+
+  static const ExpectedTextField kExpectedTextFields[] = {
+      {"Text Box", "Text", {138, 230, 135, 41}, 0},
+      {"ReadOnly", "Elephant", {138, 163, 135, 41}, 1},
+      {"Required", "Required Field", {138, 303, 135, 34}, 2},
+      {"Password", "", {138, 356, 135, 35}, 8192}};
+
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("form_text_fields.pdf"));
+  ASSERT_TRUE(engine);
+  ASSERT_EQ(1, engine->GetNumberOfPages());
+
+  PDFiumPage* page = GetPDFiumPageForTest(engine.get(), 0);
+  ASSERT_TRUE(page);
+  page->PopulateAnnotations();
+  size_t text_fields_count = page->text_fields_.size();
+  ASSERT_EQ(base::size(kExpectedTextFields), text_fields_count);
+
+  for (size_t i = 0; i < text_fields_count; ++i) {
+    EXPECT_EQ(kExpectedTextFields[i].name, page->text_fields_[i].name);
+    EXPECT_EQ(kExpectedTextFields[i].value, page->text_fields_[i].value);
+    CompareRect(kExpectedTextFields[i].bounding_rect,
+                page->text_fields_[i].bounding_rect);
+    EXPECT_EQ(kExpectedTextFields[i].flags, page->text_fields_[i].flags);
+  }
 }
 
 }  // namespace chrome_pdf

@@ -314,6 +314,22 @@ void ParamTraits<net::OCSPVerifyResult>::Log(const param_type& p,
   l->append("<OCSPVerifyResult>");
 }
 
+void ParamTraits<net::ResolveErrorInfo>::Write(base::Pickle* m,
+                                               const param_type& p) {
+  WriteParam(m, p.error);
+  WriteParam(m, p.is_secure_network_error);
+}
+bool ParamTraits<net::ResolveErrorInfo>::Read(const base::Pickle* m,
+                                              base::PickleIterator* iter,
+                                              param_type* r) {
+  return ReadParam(m, iter, &r->error) &&
+         ReadParam(m, iter, &r->is_secure_network_error);
+}
+void ParamTraits<net::ResolveErrorInfo>::Log(const param_type& p,
+                                             std::string* l) {
+  l->append("<ResolveErrorInfo>");
+}
+
 void ParamTraits<scoped_refptr<net::SSLCertRequestInfo>>::Write(
     base::Pickle* m,
     const param_type& p) {
@@ -544,6 +560,31 @@ void ParamTraits<net::LoadTimingInfo>::Log(const param_type& p,
   LogParam(p.push_start, l);
   l->append(", ");
   LogParam(p.push_end, l);
+  l->append(")");
+}
+
+void ParamTraits<net::SiteForCookies>::Write(base::Pickle* m,
+                                             const param_type& p) {
+  WriteParam(m, p.scheme());
+  WriteParam(m, p.registrable_domain());
+}
+
+bool ParamTraits<net::SiteForCookies>::Read(const base::Pickle* m,
+                                            base::PickleIterator* iter,
+                                            param_type* r) {
+  std::string scheme, registrable_domain;
+  if (!ReadParam(m, iter, &scheme) || !ReadParam(m, iter, &registrable_domain))
+    return false;
+
+  return net::SiteForCookies::FromWire(scheme, registrable_domain, r);
+}
+
+void ParamTraits<net::SiteForCookies>::Log(const param_type& p,
+                                           std::string* l) {
+  l->append("(");
+  LogParam(p.scheme(), l);
+  l->append(",");
+  LogParam(p.registrable_domain(), l);
   l->append(")");
 }
 

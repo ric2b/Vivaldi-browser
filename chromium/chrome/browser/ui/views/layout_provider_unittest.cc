@@ -159,7 +159,11 @@ TEST_F(LayoutProviderTest, MAYBE_LegacyFontSizeConstants) {
   EXPECT_EQ(11, title_font.GetCapHeight());
 #endif
 
+#if defined(OS_WIN)
+  EXPECT_EQ(7, title_font.GetExpectedTextWidth(1));
+#else
   EXPECT_EQ(8, title_font.GetExpectedTextWidth(1));
+#endif
 
   gfx::FontList small_font = rb.GetFontList(ui::ResourceBundle::SmallFont);
   gfx::FontList base_font = rb.GetFontList(ui::ResourceBundle::BaseFont);

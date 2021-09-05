@@ -8,11 +8,14 @@
 
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/run_loop.h"
+#include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromecast/media/audio/fake_external_audio_pipeline_support.h"
+#include "chromecast/media/audio/mixer_service/loopback_connection.h"
+#include "chromecast/media/audio/mixer_service/mixer_socket.h"
+#include "chromecast/media/cma/backend/mixer/loopback_test_support.h"
 #include "chromecast/media/cma/backend/mixer/mock_mixer_source.h"
 #include "chromecast/media/cma/backend/mixer/mock_post_processor_factory.h"
 #include "chromecast/media/cma/backend/mixer/stream_mixer.h"
@@ -30,7 +33,8 @@ using ::testing::_;
 using ::testing::AtLeast;
 
 // Mock for saving and checking loopback audio data.
-class MockLoopbackAudioObserver : public CastMediaShlib::LoopbackAudioObserver {
+class MockLoopbackAudioObserver
+    : public mixer_service::LoopbackConnection::Delegate {
  public:
   MockLoopbackAudioObserver() {
     ON_CALL(*this, OnLoopbackAudio(_, _, _, _, _, _))
@@ -45,8 +49,7 @@ class MockLoopbackAudioObserver : public CastMediaShlib::LoopbackAudioObserver {
                     int num_channels,
                     uint8_t* data,
                     int length));
-  MOCK_METHOD0(OnLoopbackInterrupted, void());
-  MOCK_METHOD0(OnRemoved, void());
+  MOCK_METHOD1(OnLoopbackInterrupted, void(LoopbackInterruptReason));
 
   const std::vector<float>& data() const { return data_; }
 
@@ -73,9 +76,7 @@ class ExternalAudioPipelineTest : public ::testing::Test {
  public:
   ExternalAudioPipelineTest()
       : external_audio_pipeline_support_(
-            testing::GetFakeExternalAudioPipelineSupport()),
-        message_loop_(
-            std::make_unique<base::MessageLoop>(base::MessagePumpType::IO)) {}
+            testing::GetFakeExternalAudioPipelineSupport()) {}
 
   void SetUp() override {
     // Set that external library is supported.
@@ -92,8 +93,19 @@ class ExternalAudioPipelineTest : public ::testing::Test {
   // Run async operations in the stream mixer.
   void RunLoopForMixer() {
     base::RunLoop run_loop;
-    message_loop_->task_runner()->PostTask(FROM_HERE, run_loop.QuitClosure());
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  run_loop.QuitClosure());
     run_loop.Run();
+  }
+
+  std::unique_ptr<mixer_service::LoopbackConnection> AddLoopbackObserver(
+      mixer_service::LoopbackConnection::Delegate* observer) {
+    std::unique_ptr<mixer_service::MixerSocket> loopback_socket =
+        CreateLoopbackConnectionForTest(mixer_->GetLoopbackHandlerForTest());
+    auto connection = std::make_unique<mixer_service::LoopbackConnection>(
+        observer, std::move(loopback_socket));
+    connection->Connect();
+    return connection;
   }
 
  protected:
@@ -102,7 +114,8 @@ class ExternalAudioPipelineTest : public ::testing::Test {
       external_audio_pipeline_support_;
 
  private:
-  const std::unique_ptr<base::MessageLoop> message_loop_;
+  base::test::SingleThreadTaskEnvironment task_environment_{
+      base::test::TaskEnvironment::MainThreadType::IO};
 
   DISALLOW_COPY_AND_ASSIGN(ExternalAudioPipelineTest);
 };
@@ -166,13 +179,6 @@ TEST_F(ExternalAudioPipelineTest, ExternalAudioPipelineLoopbackData) {
   mixer_->ResetPostProcessorsForTest(
       std::make_unique<MockPostProcessorFactory>(), "{}");
 
-  // CastMediaShlib::LoopbackAudioObserver mock observer.
-  MockLoopbackAudioObserver mock_loopback_observer;
-  EXPECT_CALL(mock_loopback_observer, OnLoopbackAudio(_, _, _, _, _, _))
-      .Times(AtLeast(1));
-  EXPECT_CALL(mock_loopback_observer, OnLoopbackInterrupted())
-      .Times(AtLeast(1));
-  EXPECT_CALL(mock_loopback_observer, OnRemoved()).Times(1);
   // Input.
   MockMixerSource input(48000);
   EXPECT_CALL(input, InitializeAudioPlayback(_, _)).Times(1);
@@ -194,14 +200,17 @@ TEST_F(ExternalAudioPipelineTest, ExternalAudioPipelineLoopbackData) {
   auto expected = ::media::AudioBus::Create(kNumChannels, kNumFrames);
   data->CopyTo(expected.get());
 
-  // Start the test. Set loopback observer.
-  mixer_->AddLoopbackAudioObserver(&mock_loopback_observer);
-
   mixer_->AddInput(&input);
+  MockLoopbackAudioObserver mock_loopback_observer;
+  auto connection = AddLoopbackObserver(&mock_loopback_observer);
+  EXPECT_CALL(mock_loopback_observer, OnLoopbackAudio(_, _, _, _, _, _))
+      .Times(AtLeast(1));
   RunLoopForMixer();
 
   // Send data to the stream mixer.
   input.SetData(std::move(data));
+  RunLoopForMixer();
+  RunLoopForMixer();
   RunLoopForMixer();
 
   // Get actual data from our mocked loopback observer.
@@ -215,7 +224,6 @@ TEST_F(ExternalAudioPipelineTest, ExternalAudioPipelineLoopbackData) {
   CompareAudioData(*expected, *actual);
 
   // Check OnRemoved.
-  mixer_->RemoveLoopbackAudioObserver(&mock_loopback_observer);
   mixer_->RemoveInput(&input);
 
   RunLoopForMixer();

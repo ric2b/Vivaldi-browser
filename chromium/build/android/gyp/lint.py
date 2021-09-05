@@ -19,31 +19,32 @@ from xml.etree import ElementTree
 
 from util import build_utils
 from util import manifest_utils
+from util import md5_check
 
 _LINT_MD_URL = 'https://chromium.googlesource.com/chromium/src/+/master/build/android/docs/lint.md' # pylint: disable=line-too-long
 
 if os.environ.get("CHROME_HEADLESS", 0) and "DISPLAY" in os.environ:
   del os.environ["DISPLAY"]
 
-def _OnStaleMd5(lint_path,
-                config_path,
-                processed_config_path,
-                manifest_path,
-                result_path,
-                product_dir,
-                sources,
-                jar_path,
-                cache_dir,
-                android_sdk_version,
-                srcjars,
-                min_sdk_version,
-                manifest_package,
-                resource_sources,
-                disable=None,
-                classpath=None,
-                can_fail_build=False,
-                include_unexpected=False,
-                silent=False):
+def _RunLint(lint_path,
+             config_path,
+             processed_config_path,
+             manifest_path,
+             result_path,
+             product_dir,
+             sources,
+             jar_path,
+             cache_dir,
+             android_sdk_version,
+             srcjars,
+             min_sdk_version,
+             manifest_package,
+             resource_sources,
+             disable=None,
+             classpath=None,
+             can_fail_build=False,
+             include_unexpected=False,
+             silent=False):
 
   def _RebasePath(path):
     """Returns relative path to top-level src dir.
@@ -229,14 +230,17 @@ def _OnStaleMd5(lint_path,
       os.remove(result_path)
 
     env = os.environ.copy()
-    stderr_filter = None
+    stderr_filter = build_utils.FilterReflectiveAccessJavaWarnings
     if cache_dir:
       env['_JAVA_OPTIONS'] = '-Duser.home=%s' % _RebasePath(cache_dir)
       # When _JAVA_OPTIONS is set, java prints to stderr:
       # Picked up _JAVA_OPTIONS: ...
       #
       # We drop all lines that contain _JAVA_OPTIONS from the output
-      stderr_filter = lambda l: re.sub(r'.*_JAVA_OPTIONS.*\n?', '', l)
+      stderr_filter = lambda l: re.sub(
+          r'.*_JAVA_OPTIONS.*\n?',
+          '',
+          build_utils.FilterReflectiveAccessJavaWarnings(l))
 
     def fail_func(returncode, stderr):
       if returncode != 0:
@@ -247,6 +251,8 @@ def _OnStaleMd5(lint_path,
       return False
 
     try:
+      env['JAVA_HOME'] = os.path.relpath(build_utils.JAVA_HOME,
+                                         build_utils.DIR_SOURCE_ROOT)
       build_utils.CheckOutput(cmd, cwd=build_utils.DIR_SOURCE_ROOT,
                               env=env or None, stderr_filter=stderr_filter,
                               fail_func=fail_func)
@@ -351,6 +357,7 @@ def main():
                       help='Directories containing java files.')
   parser.add_argument('--srcjars',
                       help='GN list of included srcjars.')
+  parser.add_argument('--stamp', help='Path to stamp upon success.')
   parser.add_argument(
       '--min-sdk-version',
       required=True,
@@ -418,26 +425,34 @@ def main():
     disable = build_utils.ParseGnList(args.disable)
     input_strings.extend(disable)
 
-  output_paths = [args.result_path, args.processed_config_path]
+  output_paths = [args.stamp]
 
-  build_utils.CallAndWriteDepfileIfStale(
-      lambda: _OnStaleMd5(args.lint_path,
-                          args.config_path,
-                          args.processed_config_path,
-                          args.manifest_path, args.result_path,
-                          args.product_dir, sources,
-                          args.jar_path,
-                          args.cache_dir,
-                          args.android_sdk_version,
-                          args.srcjars,
-                          args.min_sdk_version,
-                          args.manifest_package,
-                          resource_sources,
-                          disable=disable,
-                          classpath=classpath,
-                          can_fail_build=args.can_fail_build,
-                          include_unexpected=args.include_unexpected_failures,
-                          silent=args.silent),
+  def on_stale_md5():
+    _RunLint(
+        args.lint_path,
+        args.config_path,
+        args.processed_config_path,
+        args.manifest_path,
+        args.result_path,
+        args.product_dir,
+        sources,
+        args.jar_path,
+        args.cache_dir,
+        args.android_sdk_version,
+        args.srcjars,
+        args.min_sdk_version,
+        args.manifest_package,
+        resource_sources,
+        disable=disable,
+        classpath=classpath,
+        can_fail_build=args.can_fail_build,
+        include_unexpected=args.include_unexpected_failures,
+        silent=args.silent)
+
+    build_utils.Touch(args.stamp)
+
+  md5_check.CallAndWriteDepfileIfStale(
+      on_stale_md5,
       args,
       input_paths=input_paths,
       input_strings=input_strings,

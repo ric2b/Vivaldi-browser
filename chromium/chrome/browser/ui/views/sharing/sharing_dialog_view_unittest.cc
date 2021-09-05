@@ -10,20 +10,26 @@
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
+#include "chrome/browser/sharing/fake_device_info.h"
 #include "chrome/browser/sharing/sharing_app.h"
 #include "chrome/browser/sharing/sharing_metrics.h"
 #include "chrome/browser/ui/views/hover_button.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/sync_device_info/device_info.h"
+#include "components/url_formatter/elide_url.h"
 #include "components/vector_icons/vector_icons.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event_utils.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/bubble/bubble_frame_view.h"
+#include "ui/views/controls/styled_label.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+using ::testing::Property;
 
 namespace {
 
@@ -42,10 +48,6 @@ class SharingDialogViewFake : public SharingDialogView {
 };
 
 }  // namespace
-
-MATCHER_P(DeviceEquals, device, "") {
-  return device->guid() == arg.guid();
-}
 
 MATCHER_P(AppEquals, app, "") {
   return app->name == arg.name;
@@ -68,14 +70,9 @@ class SharingDialogViewTest : public BrowserWithTestWindowTest {
   std::vector<std::unique_ptr<syncer::DeviceInfo>> CreateDevices(int count) {
     std::vector<std::unique_ptr<syncer::DeviceInfo>> devices;
     for (int i = 0; i < count; i++) {
-      devices.emplace_back(std::make_unique<syncer::DeviceInfo>(
-          base::StrCat({"device_guid_", base::NumberToString(i)}),
-          base::StrCat({"device", base::NumberToString(i)}), "chrome_version",
-          "user_agent", sync_pb::SyncEnums_DeviceType_TYPE_PHONE, "device_id",
-          base::SysInfo::HardwareInfo(),
-          /*last_updated_timestamp=*/base::Time::Now(),
-          /*send_tab_to_self_receiving_enabled=*/false,
-          /*sharing_info=*/base::nullopt));
+      devices.emplace_back(CreateFakeDeviceInfo(
+          base::StrCat({"guid_", base::NumberToString(i)}),
+          base::StrCat({"name_", base::NumberToString(i)})));
     }
     return devices;
   }
@@ -115,6 +112,8 @@ class SharingDialogViewTest : public BrowserWithTestWindowTest {
 
     data.help_text_id =
         IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_HELP_TEXT_NO_DEVICES;
+    data.help_text_origin_id =
+        IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_HELP_TEXT_NO_DEVICES_ORIGIN;
     data.help_link_text_id =
         IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_TROUBLESHOOT_LINK;
     data.origin_text_id =
@@ -146,14 +145,8 @@ TEST_F(SharingDialogViewTest, PopulateDialogView) {
 }
 
 TEST_F(SharingDialogViewTest, DevicePressed) {
-  syncer::DeviceInfo device_info("device_guid_1", "device1", "chrome_version",
-                                 "user_agent",
-                                 sync_pb::SyncEnums_DeviceType_TYPE_PHONE,
-                                 "device_id", base::SysInfo::HardwareInfo(),
-                                 /*last_updated_timestamp=*/base::Time::Now(),
-                                 /*send_tab_to_self_receiving_enabled=*/false,
-                                 /*sharing_info=*/base::nullopt);
-  EXPECT_CALL(device_callback_, Call(DeviceEquals(&device_info)));
+  EXPECT_CALL(device_callback_,
+              Call(Property(&syncer::DeviceInfo::guid, "guid_1")));
 
   auto dialog_data = CreateDialogData(/*devices=*/3, /*apps=*/2);
   auto dialog = CreateDialogView(std::move(dialog_data));
@@ -217,7 +210,7 @@ TEST_F(SharingDialogViewTest, OriginView) {
   auto dialog_data = CreateDialogData(/*devices=*/1, /*apps=*/1);
   auto dialog = CreateDialogView(std::move(dialog_data));
   // No footnote by default if there is no initiating origin set.
-  EXPECT_EQ(nullptr, dialog->CreateFootnoteView());
+  EXPECT_EQ(nullptr, dialog->GetFootnoteViewForTesting());
 
   dialog_data = CreateDialogData(/*devices=*/1, /*apps=*/1);
   dialog_data.initiating_origin =
@@ -225,7 +218,7 @@ TEST_F(SharingDialogViewTest, OriginView) {
   dialog = CreateDialogView(std::move(dialog_data));
   // Origin should be shown in the footnote if the initiating origin does not
   // match the main frame origin.
-  EXPECT_NE(nullptr, dialog->CreateFootnoteView());
+  EXPECT_NE(nullptr, dialog->GetFootnoteViewForTesting());
 
   dialog_data = CreateDialogData(/*devices=*/1, /*apps=*/1);
   dialog_data.initiating_origin =
@@ -233,5 +226,44 @@ TEST_F(SharingDialogViewTest, OriginView) {
   dialog = CreateDialogView(std::move(dialog_data));
   // Origin should not be shown in the footnote if the initiating origin does
   // match the main frame origin.
-  EXPECT_EQ(nullptr, dialog->CreateFootnoteView());
+  EXPECT_EQ(nullptr, dialog->GetFootnoteViewForTesting());
+}
+
+TEST_F(SharingDialogViewTest, HelpTextContent) {
+  url::Origin current_origin = url::Origin::Create(GURL("https://google.com"));
+  url::Origin other_origin = url::Origin::Create(GURL("https://example.com"));
+  base::string16 link_text = l10n_util::GetStringUTF16(
+      IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_TROUBLESHOOT_LINK);
+  base::string16 origin_text = url_formatter::FormatOriginForSecurityDisplay(
+      other_origin, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
+  base::string16 expected_default = l10n_util::GetStringFUTF16(
+      IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_HELP_TEXT_NO_DEVICES, link_text);
+  base::string16 expected_origin = l10n_util::GetStringFUTF16(
+      IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_HELP_TEXT_NO_DEVICES_ORIGIN,
+      origin_text, link_text);
+
+  // Expect default help text if no initiating origin is set.
+  auto dialog_data = CreateDialogData(/*devices=*/0, /*apps=*/1);
+  auto dialog = CreateDialogView(std::move(dialog_data));
+  views::View* footnote_view = dialog->GetFootnoteViewForTesting();
+  EXPECT_EQ(expected_default,
+            static_cast<views::StyledLabel*>(footnote_view)->GetText());
+
+  // Still expect the default help text if the initiating origin matches the
+  // main frame origin.
+  dialog_data = CreateDialogData(/*devices=*/0, /*apps=*/1);
+  dialog_data.initiating_origin = current_origin;
+  dialog = CreateDialogView(std::move(dialog_data));
+  footnote_view = dialog->GetFootnoteViewForTesting();
+  EXPECT_EQ(expected_default,
+            static_cast<views::StyledLabel*>(footnote_view)->GetText());
+
+  // Expect the origin to be included in the help text if it does not match the
+  // main frame origin.
+  dialog_data = CreateDialogData(/*devices=*/0, /*apps=*/1);
+  dialog_data.initiating_origin = other_origin;
+  dialog = CreateDialogView(std::move(dialog_data));
+  footnote_view = dialog->GetFootnoteViewForTesting();
+  EXPECT_EQ(expected_origin,
+            static_cast<views::StyledLabel*>(footnote_view)->GetText());
 }

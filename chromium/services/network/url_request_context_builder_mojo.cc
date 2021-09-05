@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "build/build_config.h"
+#include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/proxy_resolution/pac_file_fetcher_impl.h"
 #include "net/proxy_resolution/proxy_config_service.h"
 #include "services/network/network_context.h"
@@ -24,14 +25,15 @@ URLRequestContextBuilderMojo::URLRequestContextBuilderMojo() = default;
 URLRequestContextBuilderMojo::~URLRequestContextBuilderMojo() = default;
 
 void URLRequestContextBuilderMojo::SetMojoProxyResolverFactory(
-    proxy_resolver::mojom::ProxyResolverFactoryPtr
+    mojo::PendingRemote<proxy_resolver::mojom::ProxyResolverFactory>
         mojo_proxy_resolver_factory) {
   mojo_proxy_resolver_factory_ = std::move(mojo_proxy_resolver_factory);
 }
 
 #if defined(OS_CHROMEOS)
 void URLRequestContextBuilderMojo::SetDhcpWpadUrlClient(
-    network::mojom::DhcpWpadUrlClientPtr dhcp_wpad_url_client) {
+    mojo::PendingRemote<network::mojom::DhcpWpadUrlClient>
+        dhcp_wpad_url_client) {
   dhcp_wpad_url_client_ = std::move(dhcp_wpad_url_client);
 }
 #endif  // defined(OS_CHROMEOS)
@@ -65,7 +67,7 @@ URLRequestContextBuilderMojo::CreateProxyResolutionService(
 
     std::unique_ptr<net::PacFileFetcherImpl> pac_file_fetcher;
     pac_file_fetcher = net::PacFileFetcherImpl::Create(url_request_context);
-    return CreateProxyResolutionServiceUsingMojoFactory(
+    return CreateConfiguredProxyResolutionServiceUsingMojoFactory(
         std::move(mojo_proxy_resolver_factory_),
         std::move(proxy_config_service), std::move(pac_file_fetcher),
         std::move(dhcp_pac_file_fetcher), host_resolver, net_log,

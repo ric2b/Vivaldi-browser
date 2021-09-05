@@ -27,7 +27,7 @@
 #include "media/base/video_frame.h"
 #include "media/base/video_types.h"
 #include "media/gpu/chromeos/fourcc.h"
-#include "media/gpu/linux/platform_video_frame_utils.h"
+#include "media/gpu/chromeos/platform_video_frame_utils.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/video_frame_mapper.h"
 #include "media/gpu/video_frame_mapper_factory.h"
@@ -616,9 +616,8 @@ bool V4L2MjpegDecodeAccelerator::CreateOutputBuffers() {
   for (size_t i = 0; i < output_buffer_num_planes_; ++i)
     output_strides_[i] = format.fmt.pix_mp.plane_fmt[i].bytesperline;
 
-  VideoPixelFormat output_format =
-      Fourcc::FromV4L2PixFmt(output_buffer_pixelformat_).ToVideoPixelFormat();
-  if (output_format == PIXEL_FORMAT_UNKNOWN) {
+  auto output_format = Fourcc::FromV4L2PixFmt(output_buffer_pixelformat_);
+  if (!output_format) {
     VLOGF(1) << "unknown V4L2 pixel format: "
              << FourccToString(output_buffer_pixelformat_);
     PostNotifyError(kInvalidTaskId, PLATFORM_FAILURE);
@@ -655,7 +654,7 @@ bool V4L2MjpegDecodeAccelerator::CreateOutputBuffers() {
     for (size_t j = 0; j < buffer.length; ++j) {
       if (base::checked_cast<int64_t>(planes[j].length) <
           VideoFrame::PlaneSize(
-              output_format, j,
+              output_format->ToVideoPixelFormat(), j,
               gfx::Size(format.fmt.pix_mp.width, format.fmt.pix_mp.height))
               .GetArea()) {
         return false;
@@ -763,8 +762,7 @@ bool V4L2MjpegDecodeAccelerator::DequeueSourceChangeEvent() {
   if (device_->Ioctl(VIDIOC_DQEVENT, &ev) == 0) {
     if (ev.type == V4L2_EVENT_SOURCE_CHANGE) {
       VLOGF(2) << ": got source change event: " << ev.u.src_change.changes;
-      if (ev.u.src_change.changes &
-          (V4L2_EVENT_SRC_CH_RESOLUTION | V4L2_EVENT_SRC_CH_PIXELFORMAT)) {
+      if (ev.u.src_change.changes & V4L2_EVENT_SRC_CH_RESOLUTION) {
         return true;
       }
       VLOGF(1) << "unexpected source change event.";
@@ -862,7 +860,8 @@ bool V4L2MjpegDecodeAccelerator::ConvertOutputImage(
   // Dmabuf-backed frame needs to be mapped for SW access.
   if (dst_frame->HasDmaBufs()) {
     std::unique_ptr<VideoFrameMapper> frame_mapper =
-        VideoFrameMapperFactory::CreateMapper(dst_frame->format());
+        VideoFrameMapperFactory::CreateMapper(dst_frame->format(),
+                                              VideoFrame::STORAGE_DMABUFS);
     if (!frame_mapper) {
       VLOGF(1) << "Failed to create video frame mapper";
       return false;
@@ -886,15 +885,14 @@ bool V4L2MjpegDecodeAccelerator::ConvertOutputImage(
   if (output_buffer_num_planes_ == 1 &&
       dst_frame->format() == PIXEL_FORMAT_I420) {
     DCHECK_EQ(dst_frame->layout().num_planes(), 3u);
-    const VideoPixelFormat format =
-        Fourcc::FromV4L2PixFmt(output_buffer_pixelformat_).ToVideoPixelFormat();
-    if (format == PIXEL_FORMAT_UNKNOWN) {
+    const auto format = Fourcc::FromV4L2PixFmt(output_buffer_pixelformat_);
+    if (!format) {
       VLOGF(1) << "Unknown V4L2 format: "
                << FourccToString(output_buffer_pixelformat_);
       return false;
     }
-    const size_t src_size =
-        VideoFrame::AllocationSize(format, output_buffer_coded_size_);
+    const size_t src_size = VideoFrame::AllocationSize(
+        format->ToVideoPixelFormat(), output_buffer_coded_size_);
     if (libyuv::ConvertToI420(
             static_cast<uint8_t*>(output_buffer.address[0]), src_size,
             dst_ptrs[0], dst_strides[0], dst_ptrs[1], dst_strides[1],

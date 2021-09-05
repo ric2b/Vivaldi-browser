@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/page_info/chosen_object_view_observer.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
+#include "components/page_info/page_info_delegate.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -23,7 +24,8 @@
 #include "ui/views/layout/grid_layout.h"
 
 ChosenObjectView::ChosenObjectView(
-    std::unique_ptr<PageInfoUI::ChosenObjectInfo> info)
+    std::unique_ptr<PageInfoUI::ChosenObjectInfo> info,
+    base::string16 display_name)
     : info_(std::move(info)) {
   // |ChosenObjectView| layout (fills parent):
   // *------------------------------------*
@@ -68,8 +70,8 @@ ChosenObjectView::ChosenObjectView(
   icon_ = layout->AddView(std::make_unique<views::ImageView>());
 
   // Create the label that displays the chosen object name.
-  auto label = std::make_unique<views::Label>(
-      PageInfoUI::ChosenObjectToUIString(*info_), CONTEXT_BODY_TEXT_LARGE);
+  auto label =
+      std::make_unique<views::Label>(display_name, CONTEXT_BODY_TEXT_LARGE);
   icon_->SetImage(
       PageInfoUI::GetChosenObjectIcon(*info_, false, label->GetEnabledColor()));
   layout->AddView(std::move(label));

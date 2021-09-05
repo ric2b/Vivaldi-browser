@@ -196,12 +196,10 @@ void PDFResource::SetLinkUnderCursor(const char* url) {
   Post(RENDERER, PpapiHostMsg_PDF_SetLinkUnderCursor(url));
 }
 
-void PDFResource::GetV8ExternalSnapshotData(const char** natives_data_out,
-                                            int* natives_size_out,
-                                            const char** snapshot_data_out,
+void PDFResource::GetV8ExternalSnapshotData(const char** snapshot_data_out,
                                             int* snapshot_size_out) {
-  gin::V8Initializer::GetV8ExternalSnapshotData(
-      natives_data_out, natives_size_out, snapshot_data_out, snapshot_size_out);
+  gin::V8Initializer::GetV8ExternalSnapshotData(snapshot_data_out,
+                                                snapshot_size_out);
 }
 
 void PDFResource::SetAccessibilityDocInfo(
@@ -219,13 +217,15 @@ void PDFResource::SetAccessibilityPageInfo(
     const PP_PrivateAccessibilityTextRunInfo text_runs[],
     const PP_PrivateAccessibilityCharInfo chars[],
     const PP_PrivateAccessibilityPageObjects* page_objects) {
-  std::vector<PP_PrivateAccessibilityTextRunInfo> text_run_vector(
-      text_runs, text_runs + page_info->text_run_count);
   std::vector<PP_PrivateAccessibilityCharInfo> char_vector(
       chars, chars + page_info->char_count);
   // Pepper APIs require us to pass strings as char*, but IPC expects
-  // std::string. Convert information for links and images to meet these
-  // requirements.
+  // std::string. Convert information for text runs style, links and images to
+  // meet these requirements.
+  std::vector<ppapi::PdfAccessibilityTextRunInfo> text_run_vector;
+  text_run_vector.reserve(page_info->text_run_count);
+  for (size_t i = 0; i < page_info->text_run_count; i++)
+    text_run_vector.emplace_back(text_runs[i]);
   std::vector<ppapi::PdfAccessibilityLinkInfo> link_vector;
   link_vector.reserve(page_objects->link_count);
   for (size_t i = 0; i < page_objects->link_count; i++) {
@@ -236,10 +236,22 @@ void PDFResource::SetAccessibilityPageInfo(
   for (size_t i = 0; i < page_objects->image_count; i++) {
     image_vector.emplace_back(page_objects->images[i]);
   }
+  std::vector<ppapi::PdfAccessibilityHighlightInfo> highlight_vector;
+  highlight_vector.reserve(page_objects->highlight_count);
+  for (size_t i = 0; i < page_objects->highlight_count; i++) {
+    highlight_vector.emplace_back(page_objects->highlights[i]);
+  }
+  std::vector<ppapi::PdfAccessibilityTextFieldInfo> text_field_vector;
+  text_field_vector.reserve(page_objects->text_field_count);
+  for (size_t i = 0; i < page_objects->text_field_count; i++) {
+    text_field_vector.emplace_back(page_objects->text_fields[i]);
+  }
 
   ppapi::PdfAccessibilityPageObjects ppapi_page_objects;
   ppapi_page_objects.links = std::move(link_vector);
   ppapi_page_objects.images = std::move(image_vector);
+  ppapi_page_objects.highlights = std::move(highlight_vector);
+  ppapi_page_objects.text_fields = std::move(text_field_vector);
 
   Post(RENDERER,
        PpapiHostMsg_PDF_SetAccessibilityPageInfo(

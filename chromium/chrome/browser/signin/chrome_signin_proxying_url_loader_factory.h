@@ -11,8 +11,10 @@
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
-#include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "mojo/public/cpp/bindings/remote.h"
+#include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 
 #include <memory>
 #include <set>
@@ -40,7 +42,7 @@ class ProxyingURLLoaderFactory : public network::mojom::URLLoaderFactory {
       std::unique_ptr<HeaderModificationDelegate> delegate,
       content::WebContents::Getter web_contents_getter,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
-      network::mojom::URLLoaderFactoryPtrInfo target_factory,
+      mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory,
       DisconnectCallback on_disconnect);
   ~ProxyingURLLoaderFactory() override;
 
@@ -56,14 +58,15 @@ class ProxyingURLLoaderFactory : public network::mojom::URLLoaderFactory {
           factory_receiver);
 
   // network::mojom::URLLoaderFactory:
-  void CreateLoaderAndStart(network::mojom::URLLoaderRequest loader_request,
-                            int32_t routing_id,
-                            int32_t request_id,
-                            uint32_t options,
-                            const network::ResourceRequest& request,
-                            network::mojom::URLLoaderClientPtr client,
-                            const net::MutableNetworkTrafficAnnotationTag&
-                                traffic_annotation) override;
+  void CreateLoaderAndStart(
+      mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
+      int32_t routing_id,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& request,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
+      override;
   void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory>
                  loader_receiver) override;
 
@@ -86,7 +89,7 @@ class ProxyingURLLoaderFactory : public network::mojom::URLLoaderFactory {
   mojo::ReceiverSet<network::mojom::URLLoaderFactory> proxy_receivers_;
   std::set<std::unique_ptr<InProgressRequest>, base::UniquePtrComparator>
       requests_;
-  network::mojom::URLLoaderFactoryPtr target_factory_;
+  mojo::Remote<network::mojom::URLLoaderFactory> target_factory_;
   DisconnectCallback on_disconnect_;
 
   DISALLOW_COPY_AND_ASSIGN(ProxyingURLLoaderFactory);

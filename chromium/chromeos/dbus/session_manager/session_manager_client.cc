@@ -67,8 +67,8 @@ RetrievePolicyResponseType GetPolicyResponseTypeByError(
     return RetrievePolicyResponseType::SUCCESS;
   } else if (error_name == login_manager::dbus_error::kGetServiceFail ||
              error_name == login_manager::dbus_error::kSessionDoesNotExist) {
-    // TODO(crbug.com/765644, ljusten): Remove kSessionDoesNotExist case once
-    // Chrome OS has switched to kGetServiceFail.
+    // TODO(crbug.com/765644): Remove kSessionDoesNotExist case once Chrome OS
+    // has switched to kGetServiceFail.
     return RetrievePolicyResponseType::GET_SERVICE_FAIL;
   } else if (error_name == login_manager::dbus_error::kSigEncodeFail) {
     return RetrievePolicyResponseType::POLICY_ENCODE_ERROR;
@@ -343,11 +343,12 @@ class SessionManagerClientImpl : public SessionManagerClient {
                                        base::DoNothing());
   }
 
-  void StopSession() override {
-    dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
-                                 login_manager::kSessionManagerStopSession);
+  void StopSession(login_manager::SessionStopReason reason) override {
+    dbus::MethodCall method_call(
+        login_manager::kSessionManagerInterface,
+        login_manager::kSessionManagerStopSessionWithReason);
     dbus::MessageWriter writer(&method_call);
-    writer.AppendString("");  // Unique ID is deprecated
+    writer.AppendUint32(static_cast<uint32_t>(reason));
     session_manager_proxy_->CallMethod(&method_call,
                                        dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
                                        base::DoNothing());
@@ -656,36 +657,38 @@ class SessionManagerClientImpl : public SessionManagerClient {
     session_manager_proxy_->ConnectToSignal(
         login_manager::kSessionManagerInterface,
         login_manager::kOwnerKeySetSignal,
-        base::Bind(&SessionManagerClientImpl::OwnerKeySetReceived,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(&SessionManagerClientImpl::OwnerKeySetReceived,
+                            weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&SessionManagerClientImpl::SignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
     session_manager_proxy_->ConnectToSignal(
         login_manager::kSessionManagerInterface,
         login_manager::kPropertyChangeCompleteSignal,
-        base::Bind(&SessionManagerClientImpl::PropertyChangeCompleteReceived,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(
+            &SessionManagerClientImpl::PropertyChangeCompleteReceived,
+            weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&SessionManagerClientImpl::SignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
     session_manager_proxy_->ConnectToSignal(
         login_manager::kSessionManagerInterface,
         login_manager::kScreenIsLockedSignal,
-        base::Bind(&SessionManagerClientImpl::ScreenIsLockedReceived,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(&SessionManagerClientImpl::ScreenIsLockedReceived,
+                            weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&SessionManagerClientImpl::SignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
     session_manager_proxy_->ConnectToSignal(
         login_manager::kSessionManagerInterface,
         login_manager::kScreenIsUnlockedSignal,
-        base::Bind(&SessionManagerClientImpl::ScreenIsUnlockedReceived,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(&SessionManagerClientImpl::ScreenIsUnlockedReceived,
+                            weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&SessionManagerClientImpl::SignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
     session_manager_proxy_->ConnectToSignal(
         login_manager::kSessionManagerInterface,
         login_manager::kArcInstanceStopped,
-        base::Bind(&SessionManagerClientImpl::ArcInstanceStoppedReceived,
-                   weak_ptr_factory_.GetWeakPtr()),
+        base::BindRepeating(
+            &SessionManagerClientImpl::ArcInstanceStoppedReceived,
+            weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&SessionManagerClientImpl::SignalConnected,
                        weak_ptr_factory_.GetWeakPtr()));
   }
@@ -1006,7 +1009,11 @@ class SessionManagerClientImpl : public SessionManagerClient {
     if (!response) {
       LOG(ERROR) << "Failed to call EnableAdbSideload: "
                  << (error ? error->ToString() : "(null)");
-      std::move(callback).Run(false);
+      if (error && error->GetErrorName() == DBUS_ERROR_NOT_SUPPORTED) {
+        std::move(callback).Run(AdbSideloadResponseCode::NEED_POWERWASH);
+      } else {
+        std::move(callback).Run(AdbSideloadResponseCode::FAILED);
+      }
       return;
     }
 
@@ -1014,10 +1021,10 @@ class SessionManagerClientImpl : public SessionManagerClient {
     dbus::MessageReader reader(response);
     if (!reader.PopBool(&succeeded)) {
       LOG(ERROR) << "Failed to enable sideloading";
-      std::move(callback).Run(false);
+      std::move(callback).Run(AdbSideloadResponseCode::FAILED);
       return;
     }
-    std::move(callback).Run(true);
+    std::move(callback).Run(AdbSideloadResponseCode::SUCCESS);
   }
 
   void OnQueryAdbSideload(QueryAdbSideloadCallback callback,
@@ -1026,7 +1033,11 @@ class SessionManagerClientImpl : public SessionManagerClient {
     if (!response) {
       LOG(ERROR) << "Failed to call QueryAdbSideload: "
                  << (error ? error->ToString() : "(null)");
-      std::move(callback).Run(false, false);
+      if (error && error->GetErrorName() == DBUS_ERROR_NOT_SUPPORTED) {
+        std::move(callback).Run(AdbSideloadResponseCode::NEED_POWERWASH, false);
+      } else {
+        std::move(callback).Run(AdbSideloadResponseCode::FAILED, false);
+      }
       return;
     }
 
@@ -1034,9 +1045,10 @@ class SessionManagerClientImpl : public SessionManagerClient {
     dbus::MessageReader reader(response);
     if (!reader.PopBool(&is_allowed)) {
       LOG(ERROR) << "Failed to interpret the response";
-      std::move(callback).Run(false, false);
+      std::move(callback).Run(AdbSideloadResponseCode::FAILED, false);
+      return;
     }
-    std::move(callback).Run(true, is_allowed);
+    std::move(callback).Run(AdbSideloadResponseCode::SUCCESS, is_allowed);
   }
 
   dbus::ObjectProxy* session_manager_proxy_ = nullptr;
@@ -1081,8 +1093,10 @@ void SessionManagerClient::InitializeFake() {
 
 // static
 void SessionManagerClient::InitializeFakeInMemory() {
-  new FakeSessionManagerClient(
-      FakeSessionManagerClient::PolicyStorageType::kInMemory);
+  if (!FakeSessionManagerClient::Get()) {
+    new FakeSessionManagerClient(
+        FakeSessionManagerClient::PolicyStorageType::kInMemory);
+  }
 }
 
 // static

@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -186,7 +187,7 @@ DownloadFileImpl::~DownloadFileImpl() {
 
 void DownloadFileImpl::Initialize(
     InitializeCallback initialize_callback,
-    const CancelRequestCallback& cancel_request_callback,
+    CancelRequestCallback cancel_request_callback,
     const DownloadItem::ReceivedSlices& received_slices,
     bool is_parallelizable) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -195,6 +196,8 @@ void DownloadFileImpl::Initialize(
   int64_t bytes_so_far = 0;
   cancel_request_callback_ = cancel_request_callback;
   received_slices_ = received_slices;
+  if (!task_runner_)
+    task_runner_ = base::SequencedTaskRunnerHandle::Get();
 
   // If the last slice is finished, then we know the actual content size.
   if (!received_slices_.empty() && received_slices_.back().finished) {
@@ -337,11 +340,10 @@ bool DownloadFileImpl::CalculateBytesToWrite(SourceStream* source_stream,
   return false;
 }
 
-void DownloadFileImpl::RenameAndUniquify(
-    const base::FilePath& full_path,
-    const RenameCompletionCallback& callback) {
+void DownloadFileImpl::RenameAndUniquify(const base::FilePath& full_path,
+                                         RenameCompletionCallback callback) {
   std::unique_ptr<RenameParameters> parameters(
-      new RenameParameters(UNIQUIFY, full_path, callback));
+      new RenameParameters(UNIQUIFY, full_path, std::move(callback)));
   RenameWithRetryInternal(std::move(parameters));
 }
 
@@ -351,9 +353,9 @@ void DownloadFileImpl::RenameAndAnnotate(
     const GURL& source_url,
     const GURL& referrer_url,
     mojo::PendingRemote<quarantine::mojom::Quarantine> remote_quarantine,
-    const RenameCompletionCallback& callback) {
+    RenameCompletionCallback callback) {
   std::unique_ptr<RenameParameters> parameters(new RenameParameters(
-      ANNOTATE_WITH_SOURCE_INFORMATION, full_path, callback));
+      ANNOTATE_WITH_SOURCE_INFORMATION, full_path, std::move(callback)));
   parameters->client_guid = client_guid;
   parameters->source_url = source_url;
   parameters->referrer_url = referrer_url;
@@ -368,7 +370,7 @@ void DownloadFileImpl::RenameToIntermediateUri(
     const base::FilePath& file_name,
     const std::string& mime_type,
     const base::FilePath& current_path,
-    const RenameCompletionCallback& callback) {
+    RenameCompletionCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Create new content URI if |current_path| is not content URI
   // or if it is already deleted.
@@ -384,13 +386,12 @@ void DownloadFileImpl::RenameToIntermediateUri(
   }
   if (display_name_.empty())
     display_name_ = file_name;
-  OnRenameComplete(content_path, callback, reason);
+  OnRenameComplete(content_path, std::move(callback), reason);
 }
 
-void DownloadFileImpl::PublishDownload(
-    const RenameCompletionCallback& callback) {
+void DownloadFileImpl::PublishDownload(RenameCompletionCallback callback) {
   DownloadInterruptReason reason = file_.PublishDownload();
-  OnRenameComplete(file_.full_path(), callback, reason);
+  OnRenameComplete(file_.full_path(), std::move(callback), reason);
 }
 
 base::FilePath DownloadFileImpl::GetDisplayName() {
@@ -452,7 +453,7 @@ void DownloadFileImpl::RenameWithRetryInternal(
     --parameters->retries_left;
     if (parameters->time_of_first_failure.is_null())
       parameters->time_of_first_failure = base::TimeTicks::Now();
-    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+    task_runner_->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&DownloadFileImpl::RenameWithRetryInternal,
                        weak_factory_.GetWeakPtr(), std::move(parameters)),
@@ -478,17 +479,17 @@ void DownloadFileImpl::RenameWithRetryInternal(
         parameters->referrer_url, std::move(parameters->remote_quarantine),
         base::BindOnce(&DownloadFileImpl::OnRenameComplete,
                        weak_factory_.GetWeakPtr(), new_path,
-                       parameters->completion_callback));
+                       std::move(parameters->completion_callback)));
     return;
   }
 
-  OnRenameComplete(new_path, parameters->completion_callback, reason);
+  OnRenameComplete(new_path, std::move(parameters->completion_callback),
+                   reason);
 }
 
-void DownloadFileImpl::OnRenameComplete(
-    const base::FilePath& new_path,
-    const RenameCompletionCallback& callback,
-    DownloadInterruptReason reason) {
+void DownloadFileImpl::OnRenameComplete(const base::FilePath& new_path,
+                                        RenameCompletionCallback callback,
+                                        DownloadInterruptReason reason) {
   if (reason != DOWNLOAD_INTERRUPT_REASON_NONE) {
     // Make sure our information is updated, since we're about to
     // error out.
@@ -502,7 +503,7 @@ void DownloadFileImpl::OnRenameComplete(
   }
 
   main_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(callback, reason,
+      FROM_HERE, base::BindOnce(std::move(callback), reason,
                                 reason == DOWNLOAD_INTERRUPT_REASON_NONE
                                     ? new_path
                                     : base::FilePath()));
@@ -635,8 +636,8 @@ void DownloadFileImpl::StreamActive(SourceStream* source_stream,
     source_stream->read_stream_callback()->Reset(base::BindOnce(
         &DownloadFileImpl::StreamActive, weak_factory_.GetWeakPtr(),
         source_stream, MOJO_RESULT_OK));
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, source_stream->read_stream_callback()->callback());
+    task_runner_->PostTask(FROM_HERE,
+                           source_stream->read_stream_callback()->callback());
   } else if (state == InputStream::EMPTY && !should_terminate) {
     source_stream->RegisterDataReadyCallback(
         base::Bind(&DownloadFileImpl::StreamActive, weak_factory_.GetWeakPtr(),
@@ -913,14 +914,19 @@ void DownloadFileImpl::DebugStates() const {
   DebugSlicesInfo(received_slices_);
 }
 
+void DownloadFileImpl::SetTaskRunnerForTesting(
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
+  task_runner_ = std::move(task_runner);
+}
+
 DownloadFileImpl::RenameParameters::RenameParameters(
     RenameOption option,
     const base::FilePath& new_path,
-    const RenameCompletionCallback& completion_callback)
+    RenameCompletionCallback completion_callback)
     : option(option),
       new_path(new_path),
       retries_left(kMaxRenameRetries),
-      completion_callback(completion_callback) {}
+      completion_callback(std::move(completion_callback)) {}
 
 DownloadFileImpl::RenameParameters::~RenameParameters() {}
 

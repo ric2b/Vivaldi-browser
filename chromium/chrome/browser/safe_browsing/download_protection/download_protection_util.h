@@ -9,7 +9,7 @@
 
 #include "base/callback_list.h"
 #include "components/download/public/common/download_item.h"
-#include "components/safe_browsing/proto/csd.pb.h"
+#include "components/safe_browsing/core/proto/csd.pb.h"
 #include "net/cert/x509_certificate.h"
 
 namespace safe_browsing {
@@ -25,6 +25,11 @@ enum class DownloadCheckResult {
   ASYNC_SCANNING,
   BLOCKED_PASSWORD_PROTECTED,
   BLOCKED_TOO_LARGE,
+  SENSITIVE_CONTENT_WARNING,
+  SENSITIVE_CONTENT_BLOCK,
+  DEEP_SCANNED_SAFE,
+  PROMPT_FOR_SCANNING,
+  BLOCKED_UNSUPPORTED_FILE_TYPE,
 };
 
 // Enum to keep track why a particular download verdict was chosen.
@@ -61,6 +66,11 @@ enum DownloadCheckResultReason {
   REASON_DOWNLOAD_DESTROYED = 28,
   REASON_BLOCKED_PASSWORD_PROTECTED = 29,
   REASON_BLOCKED_TOO_LARGE = 30,
+  REASON_SENSITIVE_CONTENT_WARNING = 31,
+  REASON_SENSITIVE_CONTENT_BLOCK = 32,
+  REASON_DEEP_SCANNED_SAFE = 33,
+  REASON_ADVANCED_PROTECTION_PROMPT = 34,
+  REASON_BLOCKED_UNSUPPORTED_FILE_TYPE = 35,
   REASON_MAX  // Always add new values before this one.
 };
 

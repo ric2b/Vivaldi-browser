@@ -20,13 +20,13 @@
 /** @const */ var SCREEN_OOBE_DEMO_PREFERENCES = 'demo-preferences';
 /** @const */ var SCREEN_OOBE_KIOSK_ENABLE = 'kiosk-enable';
 /** @const */ var SCREEN_OOBE_AUTO_ENROLLMENT_CHECK = 'auto-enrollment-check';
+/** @const */ var SCREEN_PACKAGED_LICENSE = 'packaged-license';
 /** @const */ var SCREEN_GAIA_SIGNIN = 'gaia-signin';
 /** @const */ var SCREEN_ACCOUNT_PICKER = 'account-picker';
 /** @const */ var SCREEN_ERROR_MESSAGE = 'error-message';
 /** @const */ var SCREEN_TPM_ERROR = 'tpm-error-message';
 /** @const */ var SCREEN_PASSWORD_CHANGED = 'password-changed';
 /** @const */ var SCREEN_APP_LAUNCH_SPLASH = 'app-launch-splash';
-/** @const */ var SCREEN_ARC_KIOSK_SPLASH = 'arc-kiosk-splash';
 /** @const */ var SCREEN_CONFIRM_PASSWORD = 'confirm-password';
 /** @const */ var SCREEN_FATAL_ERROR = 'fatal-error';
 /** @const */ var SCREEN_KIOSK_ENABLE = 'kiosk-enable';
@@ -60,21 +60,6 @@
 /** @const */ var ACCELERATOR_DEMO_MODE = "demo_mode";
 /** @const */ var ACCELERATOR_SEND_FEEDBACK = "send_feedback";
 
-/* Signin UI state constants. Used to control header bar UI. */
-/* TODO(https://crbug.com/981544): Sync with login_types.h */
-/** @const */ var SIGNIN_UI_STATE = {
-  HIDDEN: 0,
-  GAIA_SIGNIN: 1,
-  ACCOUNT_PICKER: 2,
-  WRONG_HWID_WARNING: 3,
-  DEPRECATED_SUPERVISED_USER_CREATION_FLOW: 4,
-  SAML_PASSWORD_CONFIRM: 5,
-  PASSWORD_CHANGED: 6,
-  ENROLLMENT: 7,
-  ERROR: 8,
-  SYNC_CONSENT: 9,
-};
-
 /* Possible UI states of the error screen. */
 /** @const */ var ERROR_SCREEN_UI_STATE = {
   UNKNOWN: 'ui-state-unknown',
@@ -103,7 +88,8 @@ cr.define('cr.ui.login', function() {
 
   /**
    * Group of screens (screen IDs) where factory-reset screen invocation is
-   * available.
+   * available. Newer screens using Polymer use the attribute
+   * `resetAllowed` in their `ready()` method.
    * @type Array<string>
    * @const
    */
@@ -119,7 +105,6 @@ cr.define('cr.ui.login', function() {
     SCREEN_ERROR_MESSAGE,
     SCREEN_TPM_ERROR,
     SCREEN_PASSWORD_CHANGED,
-    SCREEN_TERMS_OF_SERVICE,
     SCREEN_ARC_TERMS_OF_SERVICE,
     SCREEN_WRONG_HWID,
     SCREEN_CONFIRM_PASSWORD,
@@ -134,16 +119,15 @@ cr.define('cr.ui.login', function() {
 
   /**
    * Group of screens (screen IDs) where enable debuggingscreen invocation is
-   * available.
+   * available. Newer screens using Polymer use the attribute
+   * `enableDebuggingAllowed` in their `ready()` method.
    * @type Array<string>
    * @const
    */
   var ENABLE_DEBUGGING_AVAILABLE_SCREEN_GROUP = [
-    SCREEN_OOBE_HID_DETECTION,
     SCREEN_OOBE_NETWORK,
     SCREEN_OOBE_EULA,
-    SCREEN_OOBE_UPDATE,
-    SCREEN_TERMS_OF_SERVICE
+    SCREEN_OOBE_UPDATE
   ];
 
   /**
@@ -410,6 +394,7 @@ cr.define('cr.ui.login', function() {
       } else if (name == ACCELERATOR_ENROLLMENT) {
         if (attributes.startEnrollmentAllowed ||
             currentStepId == SCREEN_GAIA_SIGNIN ||
+            currentStepId == SCREEN_PACKAGED_LICENSE ||
             currentStepId == SCREEN_ACCOUNT_PICKER) {
           chrome.send('toggleEnrollmentScreen');
         } else if (attributes.postponeEnrollmentAllowed ||
@@ -432,8 +417,7 @@ cr.define('cr.ui.login', function() {
           $('version-labels').hidden = !$('version-labels').hidden;
       } else if (name == ACCELERATOR_RESET) {
         if (currentStepId == SCREEN_OOBE_RESET) {
-          $('reset').send(
-              login.Screen.CALLBACK_USER_ACTED, USER_ACTION_ROLLBACK_TOGGLED);
+          $('reset').userActed(USER_ACTION_ROLLBACK_TOGGLED);
         } else if (attributes.resetAllowed ||
             RESET_AVAILABLE_SCREEN_GROUP.indexOf(currentStepId) != -1) {
           chrome.send('toggleResetScreen');
@@ -442,14 +426,12 @@ cr.define('cr.ui.login', function() {
         if (this.isOobeUI())
           this.showDeviceRequisitionPrompt_();
       } else if (name == ACCELERATOR_DEVICE_REQUISITION_REMORA) {
-        if (this.isOobeUI())
+        if (this.isOobeUI() && !attributes.changeRequisitonProhibited)
           this.showDeviceRequisitionRemoraPrompt_(
               'deviceRequisitionRemoraPromptText', 'remora');
       } else if (name == ACCELERATOR_APP_LAUNCH_BAILOUT) {
         if (currentStepId == SCREEN_APP_LAUNCH_SPLASH)
           chrome.send('cancelAppLaunch');
-        if (currentStepId == SCREEN_ARC_KIOSK_SPLASH)
-          chrome.send('cancelArcKioskLaunch');
       } else if (name == ACCELERATOR_APP_LAUNCH_NETWORK_CONFIG) {
         if (currentStepId == SCREEN_APP_LAUNCH_SPLASH)
           chrome.send('networkConfigRequest');
@@ -544,6 +526,12 @@ cr.define('cr.ui.login', function() {
       // Need to do this before calling newStep.onBeforeShow() so that new step
       // is back in DOM tree and has correct offsetHeight / offsetWidth.
       newStep.hidden = false;
+
+      if (newStep.getOobeUIInitialState) {
+        this.setOobeUIState(newStep.getOobeUIInitialState());
+      } else {
+        this.setOobeUIState(OOBE_UI_STATE.HIDDEN);
+      }
 
       if (newStep.onBeforeShow)
         newStep.onBeforeShow(screenData);
@@ -687,8 +675,7 @@ cr.define('cr.ui.login', function() {
       // screen.
       // TODO: remove this special case when a better fix is found for the race
       // condition. This if statement was introduced to fix http://b/113786350.
-      if ((this.currentScreen.id == SCREEN_APP_LAUNCH_SPLASH ||
-           this.currentScreen.id == SCREEN_ARC_KIOSK_SPLASH) &&
+      if (this.currentScreen.id == SCREEN_APP_LAUNCH_SPLASH &&
           screen.id == SCREEN_GAIA_SIGNIN) {
         console.log(
             this.currentScreen.id +
@@ -811,6 +798,12 @@ cr.define('cr.ui.login', function() {
         this.appendButtons_(screen.buttons, screenId);
         if (screen.updateLocalizedContent)
           screen.updateLocalizedContent();
+      }
+      var dynamicElements = document.getElementsByClassName('i18n-dynamic');
+      for (var child of dynamicElements) {
+        if (typeof(child.i18nUpdateLocale) === 'function') {
+          child.i18nUpdateLocale();
+        }
       }
       var isInTabletMode = loadTimeData.getBoolean('isInTabletMode');
       this.setTabletModeState_(isInTabletMode);
@@ -1003,11 +996,10 @@ cr.define('cr.ui.login', function() {
      * Notifies the C++ handler in views login that the OOBE signin state has
      * been updated. This information is primarily used by the login shelf to
      * update button visibility state.
-     * @param {number} state The state (see SIGNIN_UI_STATE) of the OOBE UI.
+     * @param {number} state The state (see OOBE_UI_STATE) of the OOBE UI.
      */
-    setSigninUIState: function(state) {
-      if (Oobe.getInstance().showingViewsLogin)
-        chrome.send('updateSigninUIState', [state]);
+    setOobeUIState: function(state) {
+      chrome.send('updateOobeUIState', [state]);
     },
 
   };
@@ -1087,7 +1079,7 @@ cr.define('cr.ui.login', function() {
   DisplayManager.showSigninUI = function(opt_email) {
     var currentScreenId = Oobe.getInstance().currentScreen.id;
     if (currentScreenId == SCREEN_GAIA_SIGNIN)
-      Oobe.getInstance().setSigninUIState(SIGNIN_UI_STATE.GAIA_SIGNIN);
+      Oobe.getInstance().setOobeUIState(OOBE_UI_STATE.GAIA_SIGNIN);
     chrome.send('showAddUser', [opt_email]);
   };
 

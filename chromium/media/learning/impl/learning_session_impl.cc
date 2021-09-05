@@ -50,7 +50,8 @@ class WeakLearningTaskController : public LearningTaskController {
   void BeginObservation(
       base::UnguessableToken id,
       const FeatureVector& features,
-      const base::Optional<TargetValue>& default_target) override {
+      const base::Optional<TargetValue>& default_target,
+      const base::Optional<ukm::SourceId>& source_id) override {
     if (!weak_session_)
       return;
 
@@ -59,7 +60,7 @@ class WeakLearningTaskController : public LearningTaskController {
     // doesn't support it.  Since all client calls eventually come through us
     // anyway, it seems okay to handle it here.
     controller_->Post(FROM_HERE, &LearningTaskController::BeginObservation, id,
-                      features, base::nullopt);
+                      features, base::nullopt, source_id);
   }
 
   void CompleteObservation(base::UnguessableToken id,
@@ -79,7 +80,22 @@ class WeakLearningTaskController : public LearningTaskController {
                       id);
   }
 
+  void UpdateDefaultTarget(
+      base::UnguessableToken id,
+      const base::Optional<TargetValue>& default_target) override {
+    if (!weak_session_)
+      return;
+
+    outstanding_observations_[id] = default_target;
+  }
+
   const LearningTask& GetLearningTask() override { return task_; }
+
+  void PredictDistribution(const FeatureVector& features,
+                           PredictionCB callback) override {
+    controller_->Post(FROM_HERE, &LearningTaskController::PredictDistribution,
+                      features, std::move(callback));
+  }
 
   base::WeakPtr<LearningSessionImpl> weak_session_;
   base::SequenceBound<LearningTaskController>* controller_;

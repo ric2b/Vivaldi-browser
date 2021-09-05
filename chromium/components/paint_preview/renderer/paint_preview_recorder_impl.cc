@@ -7,8 +7,9 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/memory/shared_memory.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/task_runner.h"
+#include "base/time/time.h"
 #include "cc/paint/paint_record.h"
 #include "cc/paint/paint_recorder.h"
 #include "components/paint_preview/renderer/paint_preview_recorder_utils.h"
@@ -26,13 +27,12 @@ mojom::PaintPreviewStatus FinishRecording(
     const gfx::Rect& bounds,
     PaintPreviewTracker* tracker,
     base::File skp_file,
-    base::ReadOnlySharedMemoryRegion* region) {
+    mojom::PaintPreviewCaptureResponse* response) {
   ParseGlyphs(recording.get(), tracker);
   if (!SerializeAsSkPicture(recording, tracker, bounds, std::move(skp_file)))
     return mojom::PaintPreviewStatus::kCaptureFailed;
 
-  if (!BuildAndSerializeProto(tracker, region))
-    return mojom::PaintPreviewStatus::kProtoSerializationFailed;
+  BuildResponse(tracker, response);
   return mojom::PaintPreviewStatus::kOk;
 }
 
@@ -42,8 +42,7 @@ PaintPreviewRecorderImpl::PaintPreviewRecorderImpl(
     content::RenderFrame* render_frame)
     : content::RenderFrameObserver(render_frame),
       is_painting_preview_(false),
-      is_main_frame_(render_frame->IsMainFrame()),
-      routing_id_(render_frame->GetRoutingID()) {
+      is_main_frame_(render_frame->IsMainFrame()) {
   render_frame->GetAssociatedInterfaceRegistry()->AddInterface(
       base::BindRepeating(&PaintPreviewRecorderImpl::BindPaintPreviewRecorder,
                           weak_ptr_factory_.GetWeakPtr()));
@@ -63,15 +62,16 @@ void PaintPreviewRecorderImpl::CapturePaintPreview(
   // might happen due to it being tied to a RenderFrame rather than
   // RenderWidget and we don't want to crash the renderer as this is
   // recoverable.
+  auto response = mojom::PaintPreviewCaptureResponse::New();
   if (is_painting_preview_) {
     status = mojom::PaintPreviewStatus::kAlreadyCapturing;
-    std::move(callback).Run(status, std::move(region));
+    std::move(callback).Run(status, std::move(response));
     return;
   }
   base::AutoReset<bool>(&is_painting_preview_, true);
 
-  CapturePaintPreviewInternal(params, &region, &status);
-  std::move(callback).Run(status, std::move(region));
+  CapturePaintPreviewInternal(params, response.get(), &status);
+  std::move(callback).Run(status, std::move(response));
 }
 
 void PaintPreviewRecorderImpl::OnDestruct() {
@@ -86,9 +86,15 @@ void PaintPreviewRecorderImpl::BindPaintPreviewRecorder(
 
 void PaintPreviewRecorderImpl::CapturePaintPreviewInternal(
     const mojom::PaintPreviewCaptureParamsPtr& params,
-    base::ReadOnlySharedMemoryRegion* region,
+    mojom::PaintPreviewCaptureResponse* response,
     mojom::PaintPreviewStatus* status) {
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
+  // Ensure the a frame actually exists to avoid a possible crash.
+  if (!frame) {
+    DVLOG(1) << "Error: renderer has no frame yet!";
+    return;
+  }
+
   // Warm up paint for an out-of-lifecycle paint phase.
   frame->DispatchBeforePrintEvent();
 
@@ -96,25 +102,67 @@ void PaintPreviewRecorderImpl::CapturePaintPreviewInternal(
   gfx::Rect bounds;
   if (is_main_frame_ || params->clip_rect == gfx::Rect(0, 0, 0, 0)) {
     auto size = frame->DocumentSize();
+
+    // |size| may be 0 if a tab is captured prior to layout finishing. This
+    // shouldn't occur often, if at all, in normal usage. However, this may
+    // occur during tests. Capturing prior to layout is non-sensical as the
+    // canvas size cannot be deremined so just abort.
+    if (size.height == 0 || size.width == 0) {
+      *status = mojom::PaintPreviewStatus::kCaptureFailed;
+      return;
+    }
     bounds = gfx::Rect(0, 0, size.width, size.height);
   } else {
     bounds = gfx::Rect(params->clip_rect.size());
   }
 
   cc::PaintRecorder recorder;
-  recorder.beginRecording(bounds.width(), bounds.height());
-  PaintPreviewTracker tracker(params->guid, routing_id_, is_main_frame_);
-  // TODO(crbug/1008885): Create a method on |canvas| to inject |tracker_| to
-  // propagate to graphics contexts and inner canvases
-  // TODO(crbug/1001109): Create a method on |frame| to execute the capture
-  // within Blink.
+  PaintPreviewTracker tracker(params->guid, frame->GetEmbeddingToken(),
+                              is_main_frame_);
+  cc::PaintCanvas* canvas =
+      recorder.beginRecording(bounds.width(), bounds.height());
+  canvas->SetPaintPreviewTracker(&tracker);
+
+  // Use time ticks manually rather than a histogram macro so as to;
+  // 1. Account for main frames and subframes separately.
+  // 2. Mitigate binary size as this won't be used that often.
+  // 3. Record only on successes as failures are likely to be outliers (fast or
+  //    slow).
+  base::TimeTicks start_time = base::TimeTicks::Now();
+  bool success = frame->CapturePaintPreview(bounds, canvas);
+  base::TimeDelta capture_time = base::TimeTicks::Now() - start_time;
+  response->blink_recording_time = capture_time;
+
+  if (is_main_frame_) {
+    base::UmaHistogramBoolean("Renderer.PaintPreview.Capture.MainFrameSuccess",
+                              success);
+    if (success) {
+      // Main frame should generally be the largest cost and will always run so
+      // it is tracked separately.
+      base::UmaHistogramTimes(
+          "Renderer.PaintPreview.Capture.MainFrameBlinkCaptureDuration",
+          capture_time);
+    }
+  } else {
+    base::UmaHistogramBoolean("Renderer.PaintPreview.Capture.SubframeSuccess",
+                              success);
+    if (success) {
+      base::UmaHistogramTimes(
+          "Renderer.PaintPreview.Capture.SubframeBlinkCaptureDuration",
+          capture_time);
+    }
+  }
 
   // Restore to before out-of-lifecycle paint phase.
   frame->DispatchAfterPrintEvent();
+  if (!success) {
+    *status = mojom::PaintPreviewStatus::kCaptureFailed;
+    return;
+  }
 
   // TODO(crbug/1011896): Determine if making this async would be beneficial.
   *status = FinishRecording(recorder.finishRecordingAsPicture(), bounds,
-                            &tracker, std::move(params->file), region);
+                            &tracker, std::move(params->file), response);
 }
 
 }  // namespace paint_preview

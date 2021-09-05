@@ -13,14 +13,13 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "components/safe_browsing/db/test_database_manager.h"
+#include "components/safe_browsing/core/db/test_database_manager.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/fake_safe_browsing_database_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_client.h"
@@ -141,8 +140,8 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
     : public content::RenderViewHostTestHarness,
       public content::WebContentsObserver {
  public:
-  SubresourceFilterSafeBrowsingActivationThrottleTest()
-      : field_trial_list_(nullptr) {}
+  SubresourceFilterSafeBrowsingActivationThrottleTest() {}
+
   ~SubresourceFilterSafeBrowsingActivationThrottleTest() override {}
 
   void SetUp() override {
@@ -330,7 +329,6 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
   }
 
  private:
-  base::FieldTrialList field_trial_list_;
   testing::ScopedSubresourceFilterConfigurator scoped_configuration_;
   scoped_refptr<base::TestMockTimeTaskRunner> test_io_task_runner_;
 
@@ -894,11 +892,7 @@ struct RedirectSamplesAndResults {
 };
 
 TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
-       ActivationTriggeredOnRedirect) {
-  // Turn on the feature to perform safebrowsing on redirects.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      kSafeBrowsingSubresourceFilterConsiderRedirects);
+       RedirectPositionLogged) {
   std::string histogram_string =
       "SubresourceFilter.PageLoad.Activation.RedirectPosition2.Enforcement";
 
@@ -922,9 +916,10 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
   ConfigureForMatch(bad_url, safe_browsing::SB_THREAT_TYPE_SUBRESOURCE_FILTER);
   ConfigureForMatch(worse_url, safe_browsing::SB_THREAT_TYPE_URL_PHISHING);
 
-  // Check cases where there are multiple redirection.
+  // Check cases where there are multiple redirects. Activation only triggers
+  // on the final url, but redirect position is evaluated based on the worst.
   const RedirectSamplesAndResults kTestCases[] = {
-      {{worse_url, normal_url, normal_url}, true, RedirectPosition::kFirst},
+      {{worse_url, normal_url, normal_url}, false, RedirectPosition::kFirst},
       {{bad_url, normal_url, worse_url}, true, RedirectPosition::kLast},
       {{worse_url, normal_url, bad_url}, true, RedirectPosition::kLast},
       {{normal_url, worse_url, bad_url}, true, RedirectPosition::kLast},

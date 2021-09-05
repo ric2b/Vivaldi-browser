@@ -17,7 +17,8 @@
 #include "components/remote_cocoa/app_shim/remote_cocoa_app_shim_export.h"
 #include "components/remote_cocoa/common/native_widget_ns_window.mojom.h"
 #include "components/remote_cocoa/common/text_input_host.mojom.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "ui/accelerated_widget_mac/ca_transaction_observer.h"
 #include "ui/accelerated_widget_mac/display_ca_layer_tree.h"
@@ -84,12 +85,12 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
       remote_cocoa::mojom::TextInputHost* text_input_host);
   ~NativeWidgetNSWindowBridge() override;
 
-  // Bind |bridge_mojo_binding_| to |request|, and set the connection error
-  // callback for |bridge_mojo_binding_| to |connection_closed_callback| (which
+  // Bind |bridge_mojo_receiver_| to |receiver|, and set the connection error
+  // callback for |bridge_mojo_receiver_| to |connection_closed_callback| (which
   // will delete |this| when the connection is closed).
-  void BindRequest(
-      remote_cocoa::mojom::NativeWidgetNSWindowAssociatedRequest request,
-      base::OnceClosure connection_closed_callback);
+  void BindReceiver(mojo::PendingAssociatedReceiver<
+                        remote_cocoa::mojom::NativeWidgetNSWindow> receiver,
+                    base::OnceClosure connection_closed_callback);
 
   // Initialize the NSWindow by taking ownership of the specified object.
   // TODO(ccameron): When a NativeWidgetNSWindowBridge is allocated across a
@@ -152,8 +153,6 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   // Called by the window show animation when it completes and wants to destroy
   // itself.
   void OnShowAnimationComplete();
-  // Sort child NSViews according to their ranking in |rank|.
-  void SortSubviews(std::map<NSView*, int> rank);
 
   BridgedContentView* ns_view() { return bridged_view_; }
   NativeWidgetNSWindowHost* host() { return host_; }
@@ -239,6 +238,8 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   void SetWindowTitle(const base::string16& title) override;
   void SetIgnoresMouseEvents(bool ignores_mouse_events) override;
   void MakeFirstResponder() override;
+  void SortSubviews(
+      const std::vector<uint64_t>& associated_subview_ids) override;
   void ClearTouchBar() override;
   void UpdateTooltip() override;
   void AcquireCapture() override;
@@ -254,8 +255,8 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   // update widget and compositor size.
   void UpdateWindowGeometry();
 
-  // The offset in screen pixels for positioning child windows owned by |this|.
-  gfx::Vector2d GetChildWindowOffset() const;
+  // Vivaldi
+  void VerifyWindowSize();
 
  private:
   friend class views::test::BridgedNativeWidgetTestApi;
@@ -311,8 +312,6 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   std::unique_ptr<CocoaWindowMoveLoop> window_move_loop_;
   ui::ModalType modal_type_ = ui::MODAL_TYPE_NONE;
   bool is_translucent_window_ = false;
-  bool widget_is_top_level_ = false;
-  bool position_window_in_screen_coords_ = false;
 
   NativeWidgetNSWindowBridge* parent_ =
       nullptr;  // Weak. If non-null, owns this.
@@ -374,8 +373,8 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   // the first time it's shown.
   std::vector<uint8_t> pending_restoration_data_;
 
-  mojo::AssociatedBinding<remote_cocoa::mojom::NativeWidgetNSWindow>
-      bridge_mojo_binding_;
+  mojo::AssociatedReceiver<remote_cocoa::mojom::NativeWidgetNSWindow>
+      bridge_mojo_receiver_{this};
   DISALLOW_COPY_AND_ASSIGN(NativeWidgetNSWindowBridge);
 };
 

@@ -27,6 +27,10 @@ const base::Feature kCleanArcDataOnRegularToChildTransitionFeature{
 const base::Feature kCustomTabsExperimentFeature{
     "ArcCustomTabsExperiment", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Controls whether ARC applications support zoom in/out.
+const base::Feature kEnableApplicationZoomFeature{
+    "ArcEnableApplicationZoomFeature", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether ARC handles child->regular account transition.
 const base::Feature kEnableChildToRegularTransitionFeature{
     "ArcEnableChildToRegularTransition", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -62,7 +66,7 @@ const base::Feature kPictureInPictureFeature{"ArcPictureInPicture",
 
 // Controls experimental print spooler feature for ARC.
 const base::Feature kPrintSpoolerExperimentFeature{
-    "ArcPrintSpoolerExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
+    "ArcPrintSpoolerExperiment", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls Smart Text Selection for Chrome.
 // When enabled, the context menu will show contextual quick actions based on
@@ -81,9 +85,11 @@ const base::Feature kUsbHostFeature{"ArcUsbHost",
 const base::Feature kUsbStorageUIFeature{"ArcUsbStorageUI",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Controls ARC VPN integration.
-// When enabled, Chrome traffic will be routed through VPNs connected in
-// Android apps.
-const base::Feature kVpnFeature{"ArcVpn", base::FEATURE_ENABLED_BY_DEFAULT};
+// Controls whether ARC uses VideoDecoder-backed video decoding.
+// When enabled, GpuArcVideoDecodeAccelerator will use VdVideoDecodeAccelerator
+// to delegate decoding tasks to VideoDecoder implementations, instead of using
+// VDA implementations created by GpuVideoDecodeAcceleratorFactory.
+const base::Feature kVideoDecoder{"ArcVideoDecoder",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace arc

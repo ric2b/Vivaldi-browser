@@ -26,18 +26,20 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "third_party/blink/public/common/page/page_visibility_state.h"
+#include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
 #include "third_party/blink/public/platform/web_text_autosizer_page_info.h"
 #include "third_party/blink/public/web/web_window_features.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/css/vision_deficiency.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
-#include "third_party/blink/renderer/core/frame/hosts_using_features.h"
 #include "third_party/blink/renderer/core/frame/settings_delegate.h"
 #include "third_party/blink/renderer/core/page/page_animator.h"
-#include "third_party/blink/renderer/core/page/page_visibility_notifier.h"
 #include "third_party/blink/renderer/core/page/page_visibility_observer.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
+#include "third_party/blink/renderer/platform/heap_observer_list.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_lifecycle_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
@@ -55,6 +57,7 @@ class AutoscrollController;
 class BrowserControls;
 class ChromeClient;
 class ConsoleMessageStorage;
+class InspectorIssueStorage;
 class ContextMenuController;
 class Document;
 class DragCaret;
@@ -87,7 +90,6 @@ float DeviceScaleFactorDeprecated(LocalFrame*);
 
 class CORE_EXPORT Page final : public GarbageCollected<Page>,
                                public Supplementable<Page>,
-                               public PageVisibilityNotifier,
                                public SettingsDelegate,
                                public PageScheduler::Delegate {
   USING_GARBAGE_COLLECTED_MIXIN(Page);
@@ -101,9 +103,8 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
 
    public:
     PageClients();
-    ~PageClients();
 
-    Member<ChromeClient> chrome_client;
+    ChromeClient* chrome_client;
     DISALLOW_COPY_AND_ASSIGN(PageClients);
   };
 
@@ -135,6 +136,7 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   HeapVector<Member<Page>> RelatedPages();
 
   static void PlatformColorsChanged();
+  static void ColorSchemeChanged();
 
   void InitialStyleChanged();
   void UpdateAcceleratedCompositingSettings();
@@ -196,7 +198,6 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   Settings& GetSettings() const { return *settings_; }
 
   Deprecation& GetDeprecation() { return deprecation_; }
-  HostsUsingFeatures& GetHostsUsingFeatures() { return hosts_using_features_; }
 
   void SetWindowFeatures(const WebWindowFeatures& features) {
     window_features_ = features;
@@ -213,6 +214,9 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
 
   ConsoleMessageStorage& GetConsoleMessageStorage();
   const ConsoleMessageStorage& GetConsoleMessageStorage() const;
+
+  InspectorIssueStorage& GetInspectorIssueStorage();
+  const InspectorIssueStorage& GetInspectorIssueStorage() const;
 
   TopDocumentRootScrollerController& GlobalRootScrollerController() const;
 
@@ -260,7 +264,9 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   static void AllVisitedStateChanged(bool invalidate_visited_link_hashes);
   static void VisitedStateChanged(LinkHash visited_hash);
 
-  void SetIsHidden(bool hidden, bool is_initial_state);
+  void SetVisibilityState(PageVisibilityState visibility_state,
+                          bool is_initial_state);
+  PageVisibilityState GetVisibilityState() const;
   bool IsPageVisible() const;
 
   PageLifecycleState LifecycleState() const;
@@ -293,7 +299,7 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
 
   void AcceptLanguagesChanged();
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   void AnimationHostInitialized(cc::AnimationHost&, LocalFrameView*);
   void WillCloseAnimationHost(LocalFrameView*);
@@ -321,7 +327,7 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   void SetInsidePortal(bool inside_portal);
   bool InsidePortal() const;
 
-  void SetTextAutosizePageInfo(const WebTextAutosizerPageInfo& page_info) {
+  void SetTextAutosizerPageInfo(const WebTextAutosizerPageInfo& page_info) {
     web_text_autosizer_page_info_ = page_info;
   }
   const WebTextAutosizerPageInfo& TextAutosizerPageInfo() const {
@@ -334,6 +340,19 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
     return media_feature_overrides_.get();
   }
   void ClearMediaFeatureOverrides();
+
+  void SetVisionDeficiency(VisionDeficiency new_vision_deficiency);
+  VisionDeficiency GetVisionDeficiency() const { return vision_deficiency_; }
+
+  WebScopedVirtualTimePauser& HistoryNavigationVirtualTimePauser() {
+    return history_navigation_virtual_time_pauser_;
+  }
+
+  HeapObserverList<PageVisibilityObserver>& PageVisibilityObserverList() {
+    return page_visibility_observer_list_;
+  }
+
+  static void PrepareForLeakDetection();
 
  private:
   friend class ScopedPagePauser;
@@ -348,8 +367,8 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
 
   void SetPageScheduler(std::unique_ptr<PageScheduler>);
 
-  void UpdateHasRelatedPages();
-
+  void InvalidateColorScheme();
+  void InvalidatePaint();
   // Typically, the main frame and Page should both be owned by the embedder,
   // which must call Page::willBeDestroyed() prior to destroying Page. This
   // call detaches the main frame and clears this pointer, thus ensuring that
@@ -372,10 +391,12 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   const Member<FocusController> focus_controller_;
   const Member<ContextMenuController> context_menu_controller_;
   const Member<PageScaleConstraintsSet> page_scale_constraints_set_;
+  HeapObserverList<PageVisibilityObserver> page_visibility_observer_list_;
   const Member<PointerLockController> pointer_lock_controller_;
   Member<ScrollingCoordinator> scrolling_coordinator_;
   const Member<BrowserControls> browser_controls_;
   const Member<ConsoleMessageStorage> console_message_storage_;
+  const Member<InspectorIssueStorage> inspector_issue_storage_;
   const Member<TopDocumentRootScrollerController>
       global_root_scroller_controller_;
   const Member<VisualViewport> visual_viewport_;
@@ -392,7 +413,6 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
   Member<AgentMetricsCollector> agent_metrics_collector_;
 
   Deprecation deprecation_;
-  HostsUsingFeatures hosts_using_features_;
   WebWindowFeatures window_features_;
 
   bool opened_by_dom_;
@@ -408,7 +428,7 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
 
   float device_scale_factor_;
 
-  bool is_hidden_;
+  PageVisibilityState visibility_state_;
 
   bool is_ordinary_;
 
@@ -435,8 +455,11 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
 
   std::unique_ptr<PageScheduler> page_scheduler_;
 
-  // Overrides for various media features set from the devtools.
+  // Overrides for various media features, set from DevTools.
   std::unique_ptr<MediaFeatureOverrides> media_feature_overrides_;
+
+  // Emulated vision deficiency, set from DevTools.
+  VisionDeficiency vision_deficiency_ = VisionDeficiency::kNoVisionDeficiency;
 
   int32_t autoplay_flags_;
 
@@ -445,10 +468,18 @@ class CORE_EXPORT Page final : public GarbageCollected<Page>,
 
   WebTextAutosizerPageInfo web_text_autosizer_page_info_;
 
+  WebScopedVirtualTimePauser history_navigation_virtual_time_pauser_;
+
   DISALLOW_COPY_AND_ASSIGN(Page);
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<Page>;
+
+class CORE_EXPORT InternalSettingsPageSupplementBase : public Supplement<Page> {
+ public:
+  using Supplement<Page>::Supplement;
+  static const char kSupplementName[];
+};
 
 }  // namespace blink
 

@@ -35,11 +35,14 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -47,12 +50,15 @@
 #include "chrome/browser/chromeos/extensions/external_cache.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
+#include "chrome/browser/chromeos/login/screens/terms_of_service_screen.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager_test_api.h"
 #include "chrome/browser/chromeos/login/signin_specifics.h"
+#include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/login/test/local_policy_test_server_mixin.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/chromeos/login/test/session_manager_state_waiter.h"
+#include "chrome/browser/chromeos/login/test/webview_content_extractor.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/login/users/avatar/user_image_manager.h"
@@ -69,12 +75,15 @@
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/system/timezone_util.h"
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/updater/chromeos_extension_cache_delegate.h"
 #include "chrome/browser/extensions/updater/extension_cache_impl.h"
 #include "chrome/browser/extensions/updater/local_extension_cache.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/net/profile_network_context_service.h"
+#include "chrome/browser/net/profile_network_context_service_test_utils.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
@@ -92,8 +101,10 @@
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/terms_of_service_screen_handler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/constants/chromeos_paths.h"
@@ -102,6 +113,7 @@
 #include "chromeos/login/auth/mock_auth_status_consumer.h"
 #include "chromeos/login/auth/user_context.h"
 #include "chromeos/network/policy_certificate_provider.h"
+#include "chromeos/settings/timezone_settings.h"
 #include "components/crx_file/crx_verifier.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
@@ -141,6 +153,7 @@
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_builder.h"
 #include "net/base/url_util.h"
 #include "net/http/http_status_code.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -156,16 +169,18 @@
 #include "ui/base/ime/chromeos/input_method_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
 namespace em = enterprise_management;
 
-using chromeos::LoginScreenContext;
+using chromeos::test::GetOobeElementPath;
+using testing::_;
 using testing::InvokeWithoutArgs;
 using testing::Return;
-using testing::_;
 
 namespace policy {
 
@@ -198,9 +213,6 @@ const char kHostedAppVersion[] = "1.0.0.0";
 const char kGoodExtensionID[] = "ldnnhddmnhbkjipkidpdiheffobcpfmf";
 const char kGoodExtensionCRXPath[] = "extensions/good.crx";
 const char kGoodExtensionVersion[] = "1.0";
-// Chrome RDP extension
-const char kPublicSessionWhitelistedExtensionID[] =
-    "cbkkbcmdlboombapidmoeolnmdacpkch";
 const char kPackagedAppCRXPath[] = "extensions/platform_apps/app_window_2.crx";
 const char kShowManagedStorageID[] = "ongnjlefhnoajpbodoldndkbkdgfomlp";
 const char kShowManagedStorageCRXPath[] = "extensions/show_managed_storage.crx";
@@ -307,29 +319,93 @@ class TestingUpdateManifestProvider
   DISALLOW_COPY_AND_ASSIGN(TestingUpdateManifestProvider);
 };
 
-// Helper that observes the dictionary |pref| in local state and waits until the
-// value stored for |key| matches |expected_value|.
-class DictionaryPrefValueWaiter {
+// Helper base class used for waiting for a pref value stored in local state
+// to change to a particular expected value.
+class PrefValueWaiter {
  public:
-  DictionaryPrefValueWaiter(const std::string& pref,
-                            const std::string& key,
-                            const std::string& expected_value);
-  ~DictionaryPrefValueWaiter();
+  PrefValueWaiter(const std::string& pref, base::Value expected_value)
+      : pref_(pref), expected_value_(std::move(expected_value)) {
+    pref_change_registrar_.Init(g_browser_process->local_state());
+  }
+
+  PrefValueWaiter(const PrefValueWaiter&) = delete;
+  PrefValueWaiter& operator=(const PrefValueWaiter&) = delete;
+
+  virtual bool ExpectedValueFound();
+  virtual ~PrefValueWaiter() = default;
 
   void Wait();
 
- private:
-  void QuitLoopIfExpectedValueFound();
-
+ protected:
   const std::string pref_;
-  const std::string key_;
-  const std::string expected_value_;
+  const base::Value expected_value_;
 
-  base::RunLoop run_loop_;
   PrefChangeRegistrar pref_change_registrar_;
 
-  DISALLOW_COPY_AND_ASSIGN(DictionaryPrefValueWaiter);
+ private:
+  base::RunLoop run_loop_;
+  void QuitLoopIfExpectedValueFound();
 };
+
+bool PrefValueWaiter::ExpectedValueFound() {
+  const base::Value* pref_value =
+      pref_change_registrar_.prefs()->Get(pref_.c_str());
+  if (!pref_value) {
+    // Can't use ASSERT_* in non-void functions so this is the next best
+    // thing.
+    ADD_FAILURE() << "Pref " << pref_ << " not found";
+    return true;
+  }
+  return *pref_value == expected_value_;
+}
+
+void PrefValueWaiter::QuitLoopIfExpectedValueFound() {
+  if (ExpectedValueFound())
+    run_loop_.Quit();
+}
+
+void PrefValueWaiter::Wait() {
+  pref_change_registrar_.Add(
+      pref_.c_str(), base::Bind(&PrefValueWaiter::QuitLoopIfExpectedValueFound,
+                                base::Unretained(this)));
+  // Necessary if the pref value changes before the run loop is run. It is
+  // safe to call RunLoop::Quit before RunLoop::Run (in which case the call
+  // to Run will do nothing).
+  QuitLoopIfExpectedValueFound();
+  run_loop_.Run();
+}
+
+class DictionaryPrefValueWaiter : public PrefValueWaiter {
+ public:
+  DictionaryPrefValueWaiter(const std::string& pref,
+                            const std::string& expected_value,
+                            const std::string& key)
+      : PrefValueWaiter(pref, base::Value(expected_value)), key_(key) {}
+
+  DictionaryPrefValueWaiter(const DictionaryPrefValueWaiter&) = delete;
+  DictionaryPrefValueWaiter& operator=(const DictionaryPrefValueWaiter&) =
+      delete;
+  ~DictionaryPrefValueWaiter() override = default;
+
+ private:
+  bool ExpectedValueFound() override;
+
+  const std::string key_;
+};
+
+bool DictionaryPrefValueWaiter::ExpectedValueFound() {
+  const base::DictionaryValue* pref =
+      pref_change_registrar_.prefs()->GetDictionary(pref_.c_str());
+  if (!pref) {
+    // Can't use ASSERT_* in non-void functions so this is the next best
+    // thing.
+    ADD_FAILURE() << "Pref " << pref_ << " not found";
+    return true;
+  }
+  std::string actual_value;
+  return (pref->GetStringWithoutPathExpansion(key_, &actual_value) &&
+          actual_value == expected_value_.GetString());
+}
 
 TestingUpdateManifestProvider::Update::Update(const std::string& version,
                                               const GURL& crx_url)
@@ -389,38 +465,6 @@ TestingUpdateManifestProvider::HandleRequest(
 TestingUpdateManifestProvider::~TestingUpdateManifestProvider() {
 }
 
-DictionaryPrefValueWaiter::DictionaryPrefValueWaiter(
-    const std::string& pref,
-    const std::string& key,
-    const std::string& expected_value)
-    : pref_(pref),
-      key_(key),
-      expected_value_(expected_value) {
-  pref_change_registrar_.Init(g_browser_process->local_state());
-}
-
-DictionaryPrefValueWaiter::~DictionaryPrefValueWaiter() {
-}
-
-void DictionaryPrefValueWaiter::Wait() {
-  pref_change_registrar_.Add(
-      pref_.c_str(),
-      base::Bind(&DictionaryPrefValueWaiter::QuitLoopIfExpectedValueFound,
-                 base::Unretained(this)));
-  QuitLoopIfExpectedValueFound();
-  run_loop_.Run();
-}
-
-void DictionaryPrefValueWaiter::QuitLoopIfExpectedValueFound() {
-  const base::DictionaryValue* pref =
-      pref_change_registrar_.prefs()->GetDictionary(pref_.c_str());
-  ASSERT_TRUE(pref);
-  std::string actual_value;
-  if (pref->GetStringWithoutPathExpansion(key_, &actual_value) &&
-      actual_value == expected_value_) {
-    run_loop_.Quit();
-  }
-}
 
 bool DoesInstallFailureReferToId(const std::string& id,
                                  const content::NotificationSource& source,
@@ -639,6 +683,18 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
     EXPECT_EQ(user_manager::USER_TYPE_PUBLIC_ACCOUNT, user->GetType());
   }
 
+  void SetSystemTimezoneAutomaticDetectionPolicy(
+      em::SystemTimezoneProto_AutomaticTimezoneDetectionType policy) {
+    em::ChromeDeviceSettingsProto& proto(device_policy()->payload());
+    proto.mutable_system_timezone()->set_timezone_detection_type(policy);
+    RefreshDevicePolicy();
+
+    PrefValueWaiter(prefs::kSystemTimezoneAutomaticDetectionPolicy,
+                    base::Value(policy))
+        .Wait();
+    ASSERT_TRUE(local_policy_mixin_.UpdateDevicePolicy(proto));
+  }
+
   base::FilePath GetExtensionCacheDirectoryForAccountID(
       const std::string& account_id) {
     base::FilePath extension_cache_root_dir;
@@ -672,9 +728,8 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
 
   void WaitForDisplayName(const std::string& user_id,
                           const std::string& expected_display_name) {
-    DictionaryPrefValueWaiter("UserDisplayName",
-                              user_id,
-                              expected_display_name).Wait();
+    DictionaryPrefValueWaiter("UserDisplayName", expected_display_name, user_id)
+        .Wait();
   }
 
   void WaitForPolicy() {
@@ -721,7 +776,7 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
     chromeos::LoginDisplayHost* host =
         chromeos::LoginDisplayHost::default_host();
     ASSERT_TRUE(host);
-    host->StartSignInScreen(LoginScreenContext());
+    host->StartSignInScreen();
     chromeos::ExistingUserController* controller =
         chromeos::ExistingUserController::current_controller();
     ASSERT_TRUE(controller);
@@ -1104,7 +1159,8 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, StartSession) {
   Profile* profile = GetProfileForTest();
   ASSERT_TRUE(profile);
   EXPECT_FALSE(
-      IdentityManagerFactory::GetForProfile(profile)->HasPrimaryAccount());
+      IdentityManagerFactory::GetForProfile(profile)->HasPrimaryAccount(
+          signin::ConsentLevel::kNotRequired));
 }
 
 IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, FullscreenAllowed) {
@@ -1647,10 +1703,17 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, LastWindowClosedLogoutReminder) {
 
   // Start the platform app, causing it to open a window.
   run_loop_.reset(new base::RunLoop);
-  apps::LaunchService::Get(profile)->OpenApplication(apps::AppLaunchParams(
-      app->id(), apps::mojom::LaunchContainer::kLaunchContainerNone,
-      WindowOpenDisposition::NEW_WINDOW,
-      apps::mojom::AppLaunchSource::kSourceTest));
+  apps::AppServiceProxy* proxy =
+      apps::AppServiceProxyFactory::GetForProfile(profile);
+  proxy->FlushMojoCallsForTesting();
+  proxy->Launch(
+      app->id(),
+      apps::GetEventFlags(apps::mojom::LaunchContainer::kLaunchContainerWindow,
+                          WindowOpenDisposition::NEW_WINDOW,
+                          false /* preferred_containner */),
+      apps::mojom::LaunchSource::kFromChromeInternal,
+      display::Screen::GetScreen()->GetPrimaryDisplay().id());
+  proxy->FlushMojoCallsForTesting();
   run_loop_->Run();
   EXPECT_EQ(1U, app_window_registry->app_windows().size());
 
@@ -1835,6 +1898,63 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, NoRecommendedLocaleSwitch) {
                 ->GetActiveIMEState()
                 ->GetCurrentInputMethod()
                 .id());
+}
+
+// Tests whether or not managed guest session users can change the system
+// timezone, which should be possible iff the timezone automatic detection
+// policy is set to either DISABLED or USERS_DECIDE.
+IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, ManagedSessionTimezoneChange) {
+  SetManagedSessionsEnabled(true);
+  UploadAndInstallDeviceLocalAccountPolicy();
+  AddPublicSessionToDevicePolicy(kAccountId1);
+  EnableAutoLogin();
+
+  WaitForPolicy();
+
+  WaitForSessionStart();
+
+  CheckPublicSessionPresent(account_id_1_);
+
+  const user_manager::User* user =
+      user_manager::UserManager::Get()->FindUser(account_id_1_);
+  ASSERT_TRUE(user);
+  ASSERT_EQ(user->GetType(), user_manager::USER_TYPE_PUBLIC_ACCOUNT);
+
+  std::string timezone_id1("America/Los_Angeles");
+  std::string timezone_id2("Europe/Berlin");
+  base::string16 timezone_id1_utf16(base::UTF8ToUTF16(timezone_id1));
+  base::string16 timezone_id2_utf16(base::UTF8ToUTF16(timezone_id2));
+
+  chromeos::system::TimezoneSettings* timezone_settings =
+      chromeos::system::TimezoneSettings::GetInstance();
+
+  timezone_settings->SetTimezoneFromID(timezone_id1_utf16);
+  SetSystemTimezoneAutomaticDetectionPolicy(em::SystemTimezoneProto::DISABLED);
+  chromeos::system::SetSystemTimezone(user, timezone_id2);
+  EXPECT_EQ(timezone_settings->GetCurrentTimezoneID(), timezone_id2_utf16);
+
+  timezone_settings->SetTimezoneFromID(timezone_id1_utf16);
+  SetSystemTimezoneAutomaticDetectionPolicy(
+      em::SystemTimezoneProto::USERS_DECIDE);
+  chromeos::system::SetSystemTimezone(user, timezone_id2);
+  EXPECT_EQ(timezone_settings->GetCurrentTimezoneID(), timezone_id2_utf16);
+
+  timezone_settings->SetTimezoneFromID(timezone_id1_utf16);
+  SetSystemTimezoneAutomaticDetectionPolicy(em::SystemTimezoneProto::IP_ONLY);
+  chromeos::system::SetSystemTimezone(user, timezone_id2);
+  EXPECT_NE(timezone_settings->GetCurrentTimezoneID(), timezone_id2_utf16);
+
+  timezone_settings->SetTimezoneFromID(timezone_id1_utf16);
+  SetSystemTimezoneAutomaticDetectionPolicy(
+      em::SystemTimezoneProto::SEND_WIFI_ACCESS_POINTS);
+  chromeos::system::SetSystemTimezone(user, timezone_id2);
+  EXPECT_NE(timezone_settings->GetCurrentTimezoneID(), timezone_id2_utf16);
+
+  timezone_settings->SetTimezoneFromID(timezone_id1_utf16);
+  SetSystemTimezoneAutomaticDetectionPolicy(
+      em::SystemTimezoneProto::SEND_ALL_LOCATION_INFO);
+  chromeos::system::SetSystemTimezone(user, timezone_id2);
+  EXPECT_NE(timezone_settings->GetCurrentTimezoneID(), timezone_id2_utf16);
 }
 
 IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, OneRecommendedLocale) {
@@ -2236,22 +2356,11 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, TermsOfServiceWithLocaleSwitch) {
             wizard_controller->current_screen()->screen_id());
 
   // Wait for the Terms of Service to finish downloading.
-  bool done = false;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(contents_,
-      "var screenElement = document.getElementById('terms-of-service');"
-      "function SendReplyIfDownloadDone() {"
-      "  if (screenElement.classList.contains('tos-loading'))"
-      "    return false;"
-      "  domAutomationController.send(true);"
-      "  observer.disconnect();"
-      "  return true;"
-      "}"
-      "var observer = new MutationObserver(SendReplyIfDownloadDone);"
-      "if (!SendReplyIfDownloadDone()) {"
-      "  var options = { attributes: true, attributeFilter: [ 'class' ] };"
-      "  observer.observe(screenElement, options);"
-      "}",
-      &done));
+  chromeos::test::OobeJS()
+      .CreateWaiter(GetOobeElementPath({"terms-of-service"}) + ".uiState == " +
+                    base::NumberToString(static_cast<int>(
+                        chromeos::TermsOfServiceScreen::ScreenState::LOADED)))
+      ->Wait();
 
   // Verify that the locale and keyboard layout have been applied.
   EXPECT_EQ(kPublicSessionLocale, g_browser_process->GetApplicationLocale());
@@ -2264,27 +2373,12 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, TermsOfServiceWithLocaleSwitch) {
                 .id());
 
   // Wait for 'tos-accept-button' to become enabled.
-  done = false;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      contents_,
-      "var screenElement = document.getElementById('tos-accept-button');"
-      "function SendReplyIfAcceptEnabled() {"
-      "  if ($('tos-accept-button').disabled)"
-      "    return false;"
-      "  domAutomationController.send(true);"
-      "  observer.disconnect();"
-      "  return true;"
-      "}"
-      "var observer = new MutationObserver(SendReplyIfAcceptEnabled);"
-      "if (!SendReplyIfAcceptEnabled()) {"
-      "  var options = { attributes: true };"
-      "  observer.observe(screenElement, options);"
-      "}",
-      &done));
+  chromeos::test::OobeJS()
+      .CreateEnabledWaiter(true, {"terms-of-service", "acceptButton"})
+      ->Wait();
 
   // Click the accept button.
-  ASSERT_TRUE(content::ExecuteScript(contents_,
-                                     "$('tos-accept-button').click();"));
+  chromeos::test::OobeJS().ClickOnPath({"terms-of-service", "acceptButton"});
 
   WaitForSessionStart();
 
@@ -2422,6 +2516,10 @@ class ManagedSessionsTest : public DeviceLocalAccountTest {
         kGoodExtensionID, kGoodExtensionVersion,
         embedded_test_server()->GetURL(std::string("/") +
                                        kGoodExtensionCRXPath));
+    testing_update_manifest_provider->AddUpdate(
+        kShowManagedStorageID, kShowManagedStorageVersion,
+        embedded_test_server()->GetURL(std::string("/") +
+                                       kShowManagedStorageCRXPath));
     embedded_test_server()->RegisterRequestHandler(
         base::BindRepeating(&TestingUpdateManifestProvider::HandleRequest,
                             testing_update_manifest_provider));
@@ -2448,7 +2546,7 @@ class ManagedSessionsTest : public DeviceLocalAccountTest {
   void AddForceInstalledExtension() { AddExtension(kGoodExtensionID); }
 
   void AddForceInstalledWhitelistedExtension() {
-    AddExtension(kPublicSessionWhitelistedExtensionID);
+    AddExtension(kShowManagedStorageID);
   }
 
   void WaitForCertificateUpdate() {
@@ -2519,6 +2617,16 @@ IN_PROC_BROWSER_TEST_F(ManagedSessionsTest, ManagedSessionsEnabledNonRisky) {
       chromeos::ChromeUserManager::Get()->IsManagedSessionEnabledForUser(
           *user));
 
+  // Management disclosure warning is shown in the beginning, because
+  // kManagedSessionUseFullLoginWarning pref is set to true in the beginning.
+  ASSERT_TRUE(
+      chromeos::ChromeUserManager::Get()->IsFullManagementDisclosureNeeded(
+          broker));
+
+  ASSERT_NO_FATAL_FAILURE(StartLogin(std::string(), std::string()));
+  WaitForSessionStart();
+
+  // After the login, kManagedSessionUseFullLoginWarning pref is updated.
   // Check that management disclosure warning is not shown when managed sessions
   // are enabled, but policy settings are not risky.
   ASSERT_FALSE(
@@ -2549,6 +2657,20 @@ IN_PROC_BROWSER_TEST_F(ManagedSessionsTest, ForceInstalledExtension) {
       chromeos::ChromeUserManager::Get()->IsManagedSessionEnabledForUser(
           *user));
 
+  // Management disclosure warning is shown in the beginning, because
+  // kManagedSessionUseFullLoginWarning pref is set to true in the beginning.
+  ASSERT_TRUE(
+      chromeos::ChromeUserManager::Get()->IsFullManagementDisclosureNeeded(
+          broker));
+
+  ExtensionInstallObserver install_observer(kGoodExtensionID);
+
+  ASSERT_NO_FATAL_FAILURE(StartLogin(std::string(), std::string()));
+  WaitForSessionStart();
+
+  install_observer.Wait();
+
+  // After the login, kManagedSessionUseFullLoginWarning pref is updated.
   // Check that force-installed extension activates managed session mode for
   // device-local users.
   EXPECT_TRUE(
@@ -2579,6 +2701,20 @@ IN_PROC_BROWSER_TEST_F(ManagedSessionsTest, WhitelistedExtension) {
       chromeos::ChromeUserManager::Get()->IsManagedSessionEnabledForUser(
           *user));
 
+  // Management disclosure warning is shown in the beginning, because
+  // kManagedSessionUseFullLoginWarning pref is set to true in the beginning.
+  ASSERT_TRUE(
+      chromeos::ChromeUserManager::Get()->IsFullManagementDisclosureNeeded(
+          broker));
+
+  ExtensionInstallObserver install_observer(kShowManagedStorageID);
+
+  ASSERT_NO_FATAL_FAILURE(StartLogin(std::string(), std::string()));
+  WaitForSessionStart();
+
+  install_observer.Wait();
+
+  // After the login, kManagedSessionUseFullLoginWarning pref is updated.
   // Check that white-listed extension is not considered risky and doesn't
   // activate managed session mode.
   EXPECT_FALSE(
@@ -2654,13 +2790,17 @@ class TermsOfServiceDownloadTest : public DeviceLocalAccountTest,
 };
 
 IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, TermsOfServiceScreen) {
+  // Parameterization for using valid and invalid URLs.
+  const bool use_valid_url = GetParam();
+
   // Specify Terms of Service URL.
   ASSERT_TRUE(embedded_test_server()->Start());
   device_local_account_policy_.payload().mutable_termsofserviceurl()->set_value(
-      embedded_test_server()->GetURL(
-            std::string("/") +
-                (GetParam() ? kExistentTermsOfServicePath
-                            : kNonexistentTermsOfServicePath)).spec());
+      embedded_test_server()
+          ->GetURL(std::string("/") + (use_valid_url
+                                           ? kExistentTermsOfServicePath
+                                           : kNonexistentTermsOfServicePath))
+          .spec());
   UploadAndInstallDeviceLocalAccountPolicy();
   AddPublicSessionToDevicePolicy(kAccountId1);
 
@@ -2692,89 +2832,54 @@ IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, TermsOfServiceScreen) {
   EXPECT_EQ(chromeos::TermsOfServiceScreenView::kScreenId.AsId(),
             wizard_controller->current_screen()->screen_id());
 
-  // Wait for the Terms of Service to finish downloading, then get the status of
-  // the screen's UI elements.
-  std::string json;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      contents_,
-      "var screenElement = document.getElementById('terms-of-service');"
-      "function SendReplyIfDownloadDone() {"
-      "  if (screenElement.classList.contains('tos-loading'))"
-      "    return false;"
-      "  var status = {};"
-      "  status.heading = document.getElementById('tos-heading').textContent;"
-      "  status.subheading ="
-      "      document.getElementById('tos-subheading').textContent;"
-      "  status.contentHeading ="
-      "      document.getElementById('tos-content-heading').textContent;"
-      "  status.error = screenElement.classList.contains('error');"
-      "  status.acceptEnabled ="
-      "      !document.getElementById('tos-accept-button').disabled;"
-      "  var tosWebview = document.getElementById('tos-content-main');"
-      "  if (status.error) {"
-      "    status.content = tosWebview.src;"
-      "    domAutomationController.send(JSON.stringify(status));"
-      "  } else {"
-      "    var extractTos = function() {"
-      "      tosWebview.executeScript("
-      "          {code:'document.body.textContent'},"
-      "          (results) => {"
-      "            status.content = results[0];"
-      "            domAutomationController.send(JSON.stringify(status));"
-      "            tosWebview.removeEventListener('contentload', extractTos);"
-      "          });"
-      "    };"
-      "    tosWebview.addEventListener('contentload', extractTos);"
-      "    extractTos();"
-      "  }"
-      "  observer.disconnect();"
-      "  return true;"
-      "}"
-      "var observer = new MutationObserver(SendReplyIfDownloadDone);"
-      "if (!SendReplyIfDownloadDone()) {"
-      "  var options = { attributes: true, attributeFilter: [ 'class' ] };"
-      "  observer.observe(screenElement, options);"
-      "}",
-      &json));
-  std::unique_ptr<base::Value> value_ptr =
-      base::JSONReader::ReadDeprecated(json);
-  const base::DictionaryValue* status = NULL;
-  ASSERT_TRUE(value_ptr);
-  ASSERT_TRUE(value_ptr->GetAsDictionary(&status));
-  std::string heading;
-  EXPECT_TRUE(status->GetString("heading", &heading));
-  std::string subheading;
-  EXPECT_TRUE(status->GetString("subheading", &subheading));
-  std::string content_heading;
-  EXPECT_TRUE(status->GetString("contentHeading", &content_heading));
-  std::string content;
-  EXPECT_TRUE(status->GetString("content", &content));
-  bool error;
-  EXPECT_TRUE(status->GetBoolean("error", &error));
-  bool accept_enabled;
-  EXPECT_TRUE(status->GetBoolean("acceptEnabled", &accept_enabled));
+  // Wait for the Terms of Service to finish loading.
 
-  // Verify that the screen's headings have been set correctly.
-  EXPECT_EQ(
-      l10n_util::GetStringFUTF8(IDS_TERMS_OF_SERVICE_SCREEN_HEADING,
-                                base::UTF8ToUTF16(kDomain)),
-      heading);
-  EXPECT_EQ(
-      l10n_util::GetStringFUTF8(IDS_TERMS_OF_SERVICE_SCREEN_SUBHEADING,
-                                base::UTF8ToUTF16(kDomain)),
-      subheading);
-  EXPECT_EQ(
-      l10n_util::GetStringFUTF8(IDS_TERMS_OF_SERVICE_SCREEN_CONTENT_HEADING,
-                                base::UTF8ToUTF16(kDomain)),
-      content_heading);
-
-  if (!GetParam()) {
+  if (!use_valid_url) {
     // The Terms of Service URL was invalid. Verify that the screen is showing
     // an error and the accept button is disabled.
-    EXPECT_TRUE(error);
-    EXPECT_FALSE(accept_enabled);
+    chromeos::test::OobeJS()
+        .CreateVisibilityWaiter(
+            true, {"terms-of-service", "termsOfServiceErrorDialog"})
+        ->Wait();
+
+    chromeos::test::OobeJS().ExpectTrue(
+        GetOobeElementPath({"terms-of-service"}) + ".uiState == " +
+        base::NumberToString(static_cast<int>(
+            chromeos::TermsOfServiceScreen::ScreenState::ERROR)));
+
+    chromeos::test::OobeJS().ExpectDisabledPath(
+        {"terms-of-service", "acceptButton"});
     return;
   }
+
+  chromeos::test::OobeJS()
+      .CreateWaiter(GetOobeElementPath({"terms-of-service"}) + ".uiState == " +
+                    base::NumberToString(static_cast<int>(
+                        chromeos::TermsOfServiceScreen::ScreenState::LOADED)))
+      ->Wait();
+
+  chromeos::test::OobeJS()
+      .CreateVisibilityWaiter(true, {"terms-of-service", "termsOfServiceFrame"})
+      ->Wait();
+
+  // Get the Terms Of Service from the webview.
+  const std::string content = chromeos::test::GetWebViewContents(
+      {"terms-of-service", "termsOfServiceFrame"});
+
+  // Get the expected values for heading and subheading.
+  const std::string expected_heading = l10n_util::GetStringFUTF8(
+      IDS_TERMS_OF_SERVICE_SCREEN_HEADING, base::UTF8ToUTF16(kDomain));
+  const std::string expected_subheading = l10n_util::GetStringFUTF8(
+      IDS_TERMS_OF_SERVICE_SCREEN_SUBHEADING, base::UTF8ToUTF16(kDomain));
+
+  // Compare heading and subheading
+  chromeos::test::OobeJS().ExpectEQ(
+      GetOobeElementPath({"terms-of-service", "tosHeading"}) + ".textContent",
+      expected_heading);
+  chromeos::test::OobeJS().ExpectEQ(
+      GetOobeElementPath({"terms-of-service", "tosSubheading"}) +
+          ".textContent",
+      expected_subheading);
 
   // The Terms of Service URL was valid. Verify that the screen is showing the
   // downloaded Terms of Service and the accept button is enabled.
@@ -2787,12 +2892,17 @@ IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, TermsOfServiceScreen) {
         test_dir.Append(kExistentTermsOfServicePath), &terms_of_service));
   }
   EXPECT_EQ(terms_of_service, content);
-  EXPECT_FALSE(error);
-  EXPECT_TRUE(accept_enabled);
+
+  chromeos::test::OobeJS().ExpectFalse(
+      GetOobeElementPath({"terms-of-service"}) + ".uiState == " +
+      base::NumberToString(static_cast<int>(
+          chromeos::TermsOfServiceScreen::ScreenState::ERROR)));
+
+  chromeos::test::OobeJS().ExpectEnabledPath(
+      {"terms-of-service", "acceptButton"});
 
   // Click the accept button.
-  ASSERT_TRUE(content::ExecuteScript(contents_,
-                                     "$('tos-accept-button').click();"));
+  chromeos::test::OobeJS().ClickOnPath({"terms-of-service", "acceptButton"});
 
   WaitForSessionStart();
 }
@@ -2839,8 +2949,7 @@ IN_PROC_BROWSER_TEST_P(TermsOfServiceDownloadTest, DeclineTermsOfService) {
             wizard_controller->current_screen()->screen_id());
 
   // Click the back button.
-  ASSERT_TRUE(
-      content::ExecuteScript(contents_, "$('tos-back-button').click();"));
+  chromeos::test::OobeJS().ClickOnPath({"terms-of-service", "backButton"});
 
   EXPECT_TRUE(session_manager_client()->session_stopped());
 }
@@ -2865,3 +2974,74 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, WebAppsInPublicSession) {
 }
 
 }  // namespace policy
+
+class AmbientAuthenticationManagedGuestSessionTest
+    : public policy::DeviceLocalAccountTest,
+      public testing::WithParamInterface<net::AmbientAuthAllowedProfileTypes> {
+ public:
+  AmbientAuthenticationManagedGuestSessionTest() {
+    // Switching off the feature flags to test policies in isolation.
+    AmbientAuthenticationTestHelper::CookTheFeatureList(
+        scoped_feature_list_,
+        AmbientAuthenticationFeatureState::GUEST_OFF_INCOGNITO_OFF);
+  }
+
+  void SetAmbientAuthPolicy(net::AmbientAuthAllowedProfileTypes value) {
+    device_local_account_policy_.payload()
+        .mutable_ambientauthenticationinprivatemodesenabled()
+        ->set_value(static_cast<int>(value));
+    UploadDeviceLocalAccountPolicy();
+  }
+
+  void IsAmbientAuthAllowedForProfilesTest() {
+    int policy_value = device_local_account_policy_.payload()
+                           .ambientauthenticationinprivatemodesenabled()
+                           .value();
+    Profile* regular_profile = GetCurrentBrowser()->profile();
+    Profile* incognito_profile = regular_profile->GetOffTheRecordProfile();
+
+    EXPECT_TRUE(AmbientAuthenticationTestHelper::IsAmbientAuthAllowedForProfile(
+        regular_profile));
+    EXPECT_EQ(AmbientAuthenticationTestHelper::IsAmbientAuthAllowedForProfile(
+                  incognito_profile),
+              AmbientAuthenticationTestHelper::IsIncognitoAllowedInPolicy(
+                  policy_value));
+  }
+
+  Browser* GetCurrentBrowser() {
+    BrowserList* browser_list = BrowserList::GetInstance();
+    EXPECT_EQ(1U, browser_list->size());
+    Browser* browser = browser_list->get(0);
+    DCHECK(browser);
+    return browser;
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_P(AmbientAuthenticationManagedGuestSessionTest,
+                       AmbientAuthenticationInPrivateModesEnabledPolicy) {
+  SetManagedSessionsEnabled(true);
+  SetAmbientAuthPolicy(GetParam());
+
+  UploadAndInstallDeviceLocalAccountPolicy();
+  AddPublicSessionToDevicePolicy(policy::kAccountId1);
+  EnableAutoLogin();
+
+  WaitForPolicy();
+
+  WaitForSessionStart();
+
+  CheckPublicSessionPresent(account_id_1_);
+
+  IsAmbientAuthAllowedForProfilesTest();
+}
+
+INSTANTIATE_TEST_CASE_P(
+    AmbientAuthAllPolicyValuesTest,
+    AmbientAuthenticationManagedGuestSessionTest,
+    testing::Values(net::AmbientAuthAllowedProfileTypes::REGULAR_ONLY,
+                    net::AmbientAuthAllowedProfileTypes::INCOGNITO_AND_REGULAR,
+                    net::AmbientAuthAllowedProfileTypes::GUEST_AND_REGULAR,
+                    net::AmbientAuthAllowedProfileTypes::ALL));

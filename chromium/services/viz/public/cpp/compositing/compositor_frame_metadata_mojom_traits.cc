@@ -8,6 +8,7 @@
 #include "services/viz/public/cpp/compositing/begin_frame_args_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/selection_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/surface_id_mojom_traits.h"
+#include "ui/gfx/mojom/display_color_spaces_mojom_traits.h"
 #include "ui/gfx/mojom/selection_bound_mojom_traits.h"
 #include "ui/latency/mojom/latency_info_mojom_traits.h"
 
@@ -32,14 +33,18 @@ bool StructTraits<viz::mojom::CompositorFrameMetadataDataView,
     return false;
   out->frame_token = data.frame_token();
 
+  if (!data.ReadContentColorUsage(&out->content_color_usage))
+    return false;
   out->may_contain_video = data.may_contain_video();
   out->is_resourceless_software_draw_with_scroll_or_animation =
       data.is_resourceless_software_draw_with_scroll_or_animation();
   out->send_frame_token_to_embedder = data.send_frame_token_to_embedder();
   out->root_background_color = data.root_background_color();
   out->min_page_scale_factor = data.min_page_scale_factor();
-  out->top_controls_height = data.top_controls_height();
-  out->top_controls_shown_ratio = data.top_controls_shown_ratio();
+  if (data.top_controls_visible_height_set()) {
+    out->top_controls_visible_height.emplace(
+        data.top_controls_visible_height());
+  }
 
   return data.ReadLatencyInfo(&out->latency_info) &&
          data.ReadReferencedSurfaces(&out->referenced_surfaces) &&
@@ -49,7 +54,8 @@ bool StructTraits<viz::mojom::CompositorFrameMetadataDataView,
          data.ReadLocalSurfaceIdAllocationTime(
              &out->local_surface_id_allocation_time) &&
          !out->local_surface_id_allocation_time.is_null() &&
-         data.ReadPreferredFrameInterval(&out->preferred_frame_interval);
+         data.ReadPreferredFrameInterval(&out->preferred_frame_interval) &&
+         data.ReadDisplayTransformHint(&out->display_transform_hint);
 }
 
 }  // namespace mojo

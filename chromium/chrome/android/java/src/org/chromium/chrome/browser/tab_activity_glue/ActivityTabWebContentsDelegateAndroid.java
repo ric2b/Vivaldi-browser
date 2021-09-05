@@ -11,39 +11,42 @@ import android.content.res.Resources;
 import android.graphics.Rect;
 import android.media.AudioManager;
 import android.os.Build;
-import android.support.v4.util.ArrayMap;
 import android.view.KeyEvent;
 import android.view.View;
 
 import androidx.annotation.Nullable;
+import androidx.collection.ArrayMap;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.SwipeRefreshHandler;
+import org.chromium.chrome.browser.document.ChromeIntentUtil;
 import org.chromium.chrome.browser.document.DocumentWebContentsDelegate;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
+import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.media.PictureInPicture;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.policy.PolicyAuditor.AuditEvent;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.util.ChromeIntentUtil;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
+import org.chromium.ui.modaldialog.SimpleModalDialogController;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 
@@ -80,7 +83,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         return mActivity != null ? mActivity.getTabCreator(mTab.isIncognito()) : null;
     }
 
-    private FullscreenManager getFullscreenManager() {
+    private ChromeFullscreenManager getFullscreenManager() {
         return mActivity != null && !mActivity.isActivityFinishingOrDestroyed()
                 ? mActivity.getFullscreenManager()
                 : null;
@@ -94,7 +97,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         SwipeRefreshHandler handler = SwipeRefreshHandler.get(mTab);
         if (handler != null) handler.reset();
 
-        new RepostFormWarningHelper().show();
+        showRepostFormWarningTabModalDialog();
     }
 
     @Override
@@ -163,8 +166,8 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
                 }
             } else if (disposition == WindowOpenDisposition.NEW_POPUP) {
                 PolicyAuditor auditor = AppHooks.get().getPolicyAuditor();
-                auditor.notifyAuditEvent(
-                        mTab.getApplicationContext(), AuditEvent.OPEN_POPUP_URL_SUCCESS, url, "");
+                auditor.notifyAuditEvent(ContextUtils.getApplicationContext(),
+                        AuditEvent.OPEN_POPUP_URL_SUCCESS, url, "");
             }
         }
 
@@ -219,7 +222,7 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         Intent newIntent = ChromeIntentUtil.createBringTabToFrontIntent(mTab.getId());
         if (newIntent != null) {
             newIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            mTab.getApplicationContext().startActivity(newIntent);
+            ContextUtils.getApplicationContext().startActivity(newIntent);
         }
     }
 
@@ -281,8 +284,9 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
             case KeyEvent.KEYCODE_MEDIA_CLOSE:
             case KeyEvent.KEYCODE_MEDIA_EJECT:
             case KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK:
-                AudioManager am = (AudioManager) mTab.getApplicationContext().getSystemService(
-                        Context.AUDIO_SERVICE);
+                AudioManager am =
+                        (AudioManager) ContextUtils.getApplicationContext().getSystemService(
+                                Context.AUDIO_SERVICE);
                 am.dispatchMediaKeyEvent(e);
                 break;
             default:
@@ -302,15 +306,47 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
     }
 
     @Override
+    public int getTopControlsMinHeight() {
+        FullscreenManager manager = getFullscreenManager();
+        return manager != null ? manager.getTopControlsMinHeight() : 0;
+    }
+
+    @Override
     public int getBottomControlsHeight() {
         FullscreenManager manager = getFullscreenManager();
         return manager != null ? manager.getBottomControlsHeight() : 0;
     }
 
     @Override
-    public boolean controlsResizeView() {
+    public int getBottomControlsMinHeight() {
         FullscreenManager manager = getFullscreenManager();
-        return manager != null ? ((ChromeFullscreenManager) manager).controlsResizeView() : false;
+        return manager != null ? manager.getBottomControlsMinHeight() : 0;
+    }
+
+    @Override
+    public boolean shouldAnimateBrowserControlsHeightChanges() {
+        FullscreenManager manager = getFullscreenManager();
+        return manager != null && manager.shouldAnimateBrowserControlsHeightChanges();
+    }
+
+    @Override
+    public boolean controlsResizeView() {
+        ChromeFullscreenManager manager = getFullscreenManager();
+        return manager != null ? manager.controlsResizeView() : false;
+    }
+
+    @Override
+    public void enterFullscreenModeForTab(boolean prefersNavigationBar) {
+        ChromeFullscreenManager manager = getFullscreenManager();
+        if (manager != null) {
+            manager.onEnterFullscreen(mTab, new FullscreenOptions(prefersNavigationBar));
+        }
+    }
+
+    @Override
+    public void exitFullscreenModeForTab() {
+        ChromeFullscreenManager manager = getFullscreenManager();
+        if (manager != null) manager.onExitFullscreen(mTab);
     }
 
     @Override
@@ -324,31 +360,23 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
         return mActivity != null ? mActivity.getNightModeStateProvider().isInNightMode() : false;
     }
 
-    private class RepostFormWarningHelper extends EmptyTabObserver {
-        private ModalDialogManager mModalDialogManager;
-        private PropertyModel mDialogModel;
+    @Override
+    protected boolean isCustomTab() {
+        return mActivity != null && mActivity.isCustomTab();
+    }
 
-        void show() {
-            if (mActivity == null) return;
-            mTab.addObserver(this);
-            mModalDialogManager = mActivity.getModalDialogManager();
+    private void showRepostFormWarningTabModalDialog() {
+        // As a rule, showRepostFormWarningDialog should only be called on active tabs, as it's
+        // called right after WebContents::Activate. But in various corner cases, that
+        // activation may fail.
+        if (mActivity == null || !mTab.isUserInteractable()) {
+            mTab.getWebContents().getNavigationController().cancelPendingReload();
+            return;
+        }
 
-            ModalDialogProperties
-                    .Controller dialogController = new ModalDialogProperties.Controller() {
-                @Override
-                public void onClick(PropertyModel model, int buttonType) {
-                    if (buttonType == ModalDialogProperties.ButtonType.POSITIVE) {
-                        mModalDialogManager.dismissDialog(
-                                model, DialogDismissalCause.POSITIVE_BUTTON_CLICKED);
-                    } else if (buttonType == ModalDialogProperties.ButtonType.NEGATIVE) {
-                        mModalDialogManager.dismissDialog(
-                                model, DialogDismissalCause.NEGATIVE_BUTTON_CLICKED);
-                    }
-                }
-
-                @Override
-                public void onDismiss(PropertyModel model, int dismissalCause) {
-                    mTab.removeObserver(RepostFormWarningHelper.this);
+        ModalDialogManager modalDialogManager = mActivity.getModalDialogManager();
+        ModalDialogProperties.Controller dialogController =
+                new SimpleModalDialogController(modalDialogManager, (Integer dismissalCause) -> {
                     if (!mTab.isInitialized()) return;
                     switch (dismissalCause) {
                         case DialogDismissalCause.POSITIVE_BUTTON_CLICKED:
@@ -362,31 +390,22 @@ public class ActivityTabWebContentsDelegateAndroid extends TabWebContentsDelegat
                             mTab.getWebContents().getNavigationController().cancelPendingReload();
                             break;
                     }
-                }
-            };
+                });
 
-            Resources resources = mActivity.getResources();
-            mDialogModel = new PropertyModel.Builder(ModalDialogProperties.ALL_KEYS)
-                                   .with(ModalDialogProperties.CONTROLLER, dialogController)
-                                   .with(ModalDialogProperties.TITLE, resources,
-                                           R.string.http_post_warning_title)
-                                   .with(ModalDialogProperties.MESSAGE, resources,
-                                           R.string.http_post_warning)
-                                   .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, resources,
-                                           R.string.http_post_warning_resend)
-                                   .with(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, resources,
-                                           R.string.cancel)
-                                   .with(ModalDialogProperties.CANCEL_ON_TOUCH_OUTSIDE, true)
-                                   .build();
+        Resources resources = mActivity.getResources();
+        PropertyModel dialogModel =
+                new PropertyModel.Builder(ModalDialogProperties.ALL_KEYS)
+                        .with(ModalDialogProperties.CONTROLLER, dialogController)
+                        .with(ModalDialogProperties.TITLE, resources,
+                                R.string.http_post_warning_title)
+                        .with(ModalDialogProperties.MESSAGE, resources, R.string.http_post_warning)
+                        .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, resources,
+                                R.string.http_post_warning_resend)
+                        .with(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, resources,
+                                R.string.cancel)
+                        .with(ModalDialogProperties.CANCEL_ON_TOUCH_OUTSIDE, true)
+                        .build();
 
-            mModalDialogManager.showDialog(
-                    mDialogModel, ModalDialogManager.ModalDialogType.TAB, true);
-        }
-
-        @Override
-        public void onDestroyed(Tab tab) {
-            super.onDestroyed(tab);
-            mModalDialogManager.dismissDialog(mDialogModel, DialogDismissalCause.TAB_DESTROYED);
-        }
+        modalDialogManager.showDialog(dialogModel, ModalDialogManager.ModalDialogType.TAB, true);
     }
 }

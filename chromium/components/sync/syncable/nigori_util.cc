@@ -243,13 +243,13 @@ bool UpdateEntryWithEncryption(BaseTransaction* const trans,
           generated_specifics.mutable_bookmark();
       if (!entry->GetIsDir())
         bookmark_specifics->set_url(kEncryptedString);
-      bookmark_specifics->set_title(kEncryptedString);
+      bookmark_specifics->set_legacy_canonicalized_title(kEncryptedString);
     } else if (type == NOTES) {
       sync_pb::NotesSpecifics* notes_specifics =
           generated_specifics.mutable_notes();
       if (!entry->GetIsDir())
         notes_specifics->set_url(kEncryptedString);
-      notes_specifics->set_subject(kEncryptedString);
+      notes_specifics->set_legacy_canonicalized_title(kEncryptedString);
       notes_specifics->set_content(kEncryptedString);
     }
   }
@@ -296,7 +296,6 @@ void UpdateNigoriFromEncryptedTypes(ModelTypeSet encrypted_types,
   nigori->set_encrypt_arc_package(encrypted_types.Has(ARC_PACKAGE));
   nigori->set_encrypt_printers(encrypted_types.Has(PRINTERS));
   nigori->set_encrypt_reading_list(encrypted_types.Has(READING_LIST));
-  nigori->set_encrypt_mountain_shares(encrypted_types.Has(MOUNTAIN_SHARES));
   nigori->set_encrypt_send_tab_to_self(encrypted_types.Has(SEND_TAB_TO_SELF));
   nigori->set_encrypt_web_apps(encrypted_types.Has(WEB_APPS));
   nigori->set_encrypt_os_preferences(encrypted_types.Has(OS_PREFERENCES));
@@ -352,8 +351,6 @@ ModelTypeSet GetEncryptedTypesFromNigori(
     encrypted_types.Put(PRINTERS);
   if (nigori.encrypt_reading_list())
     encrypted_types.Put(READING_LIST);
-  if (nigori.encrypt_mountain_shares())
-    encrypted_types.Put(MOUNTAIN_SHARES);
   if (nigori.encrypt_send_tab_to_self())
     encrypted_types.Put(SEND_TAB_TO_SELF);
   if (nigori.encrypt_web_apps())

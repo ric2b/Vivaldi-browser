@@ -20,10 +20,14 @@
 
 #include "app/vivaldi_apptools.h"
 
-TranslateIconView::TranslateIconView(CommandUpdater* command_updater,
-                                     PageActionIconView::Delegate* delegate)
-    : PageActionIconView(command_updater, IDC_TRANSLATE_PAGE, delegate) {
-  DCHECK(delegate);
+TranslateIconView::TranslateIconView(
+    CommandUpdater* command_updater,
+    IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+    PageActionIconView::Delegate* page_action_icon_delegate)
+    : PageActionIconView(command_updater,
+                         IDC_TRANSLATE_PAGE,
+                         icon_label_bubble_delegate,
+                         page_action_icon_delegate) {
   SetID(VIEW_ID_TRANSLATE_BUTTON);
 }
 
@@ -33,14 +37,13 @@ views::BubbleDialogDelegateView* TranslateIconView::GetBubble() const {
   return TranslateBubbleView::GetCurrentBubble();
 }
 
-bool TranslateIconView::Update() {
+void TranslateIconView::UpdateImpl() {
   if (!GetWebContents())
-    return false;
+    return;
 
   if (vivaldi::IsVivaldiRunning())
-    return false;
+    return;
 
-  const bool was_visible = GetVisible();
   const translate::LanguageState& language_state =
       ChromeTranslateClient::FromWebContents(GetWebContents())
           ->GetLanguageState();
@@ -51,8 +54,6 @@ bool TranslateIconView::Update() {
   SetVisible(enabled);
   if (!enabled)
     TranslateBubbleView::CloseCurrentBubble();
-
-  return was_visible != GetVisible();
 }
 
 void TranslateIconView::OnExecuting(
@@ -70,4 +71,8 @@ const gfx::VectorIcon& TranslateIconView::GetVectorIcon() const {
 
 base::string16 TranslateIconView::GetTextForTooltipAndAccessibleName() const {
   return l10n_util::GetStringUTF16(IDS_TOOLTIP_TRANSLATE);
+}
+
+const char* TranslateIconView::GetClassName() const {
+  return "TranslateIconView";
 }

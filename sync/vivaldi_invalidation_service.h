@@ -6,8 +6,7 @@
 #include <memory>
 #include <string>
 
-#include "components/invalidation/impl/deprecated_invalidator_registrar.h"
-#include "components/invalidation/impl/invalidator_registrar.h"
+#include "components/invalidation/impl/invalidator_registrar_with_memory.h"
 #include "components/invalidation/public/invalidation_service.h"
 
 class Profile;
@@ -23,14 +22,14 @@ class VivaldiInvalidationService : public invalidation::InvalidationService {
   explicit VivaldiInvalidationService(Profile*);
   ~VivaldiInvalidationService() override;
 
-  void PerformInvalidation(const syncer::ObjectIdInvalidationMap&);
+  void PerformInvalidation(const syncer::TopicInvalidationMap&);
   void UpdateInvalidatorState(syncer::InvalidatorState state);
 
   // InvalidationService
   void RegisterInvalidationHandler(
       syncer::InvalidationHandler* handler) override;
-  bool UpdateRegisteredInvalidationIds(syncer::InvalidationHandler* handler,
-                                       const syncer::ObjectIdSet& ids) override;
+  bool UpdateInterestedTopics(syncer::InvalidationHandler* handler,
+                              const syncer::TopicSet& ids) override;
   void UnregisterInvalidationHandler(
       syncer::InvalidationHandler* handler) override;
   syncer::InvalidatorState GetInvalidatorState() const override;
@@ -41,7 +40,7 @@ class VivaldiInvalidationService : public invalidation::InvalidationService {
 
  private:
   std::string client_id_;
-  syncer::DeprecatedInvalidatorRegistrar invalidator_registrar_;
+  syncer::InvalidatorRegistrarWithMemory invalidator_registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiInvalidationService);
 };

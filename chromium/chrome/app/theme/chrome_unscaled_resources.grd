@@ -109,23 +109,6 @@
         <include name="IDR_PROFILE_AVATAR_2X_25" file="default_200_percent/common/profile_avatar_sun_cloud.png" type="BINDATA" />
         <include name="IDR_PROFILE_AVATAR_2X_26" file="default_200_percent/common/profile_avatar_placeholder.png" type="BINDATA" />
       </if>
-      <if expr="is_linux and enable_app_list">
-        <!-- App Launcher icons for desktop icon. -->
-        <if expr="_google_chrome">
-          <then>
-            <include name="IDR_APP_LIST_16" file="google_chrome/linux/app_list_16.png" type="BINDATA" />
-            <include name="IDR_APP_LIST_32" file="google_chrome/linux/app_list_32.png" type="BINDATA" />
-            <include name="IDR_APP_LIST_48" file="google_chrome/linux/app_list_48.png" type="BINDATA" />
-            <include name="IDR_APP_LIST_256" file="google_chrome/linux/app_list_256.png" type="BINDATA" />
-          </then>
-          <else>
-            <include name="IDR_APP_LIST_16" file="chromium/linux/app_list_16.png" type="BINDATA" />
-            <include name="IDR_APP_LIST_32" file="chromium/linux/app_list_32.png" type="BINDATA" />
-            <include name="IDR_APP_LIST_48" file="chromium/linux/app_list_48.png" type="BINDATA" />
-            <include name="IDR_APP_LIST_256" file="chromium/linux/app_list_256.png" type="BINDATA" />
-          </else>
-        </if>
-      </if>
       <if expr="is_macosx">
         <include name="IDR_APPS_FOLDER_16" file="mac/apps_folder_16.png" type="BINDATA" />
         <include name="IDR_APPS_FOLDER_32" file="mac/apps_folder_32.png" type="BINDATA" />
@@ -139,11 +122,12 @@
         <include name="IDR_LOGO_CROSTINI_DEFAULT_192" file="crostini/logo_crostini_default_192.png" type="BINDATA" />
         <include name="IDR_CROSTINI_MASCOT" file="crostini/crostini_mascot_1x.svg" type="BINDATA" />
         <include name="IDR_LINUX_ILLUSTRATION" file="crostini/linux_illustration_2x.png" type="BINDATA" />
+        <include name="IDR_LINUX_SUCCESS_ILLUSTRATION" file="crostini/linux_success_illustration.svg" type="BINDATA" />
         <!-- PluginVm icons -->
         <include name="IDR_LOGO_PLUGIN_VM_DEFAULT_32" file="plugin_vm/logo_plugin_vm_default_32.png" type="BINDATA" />
         <include name="IDR_LOGO_PLUGIN_VM_DEFAULT_192" file="plugin_vm/logo_plugin_vm_default_192.png" type="BINDATA" />
-        <include name="IDR_PLUGIN_VM_LAUNCHER" file="plugin_vm/plugin_vm_launcher.png" type="BINDATA" />
-        <include name="IDR_PLUGIN_VM_LAUNCHER_ERROR" file="plugin_vm/plugin_vm_launcher_error.png" type="BINDATA" />
+        <include name="IDR_PLUGIN_VM_INSTALLER" file="plugin_vm/plugin_vm_installer.png" type="BINDATA" />
+        <include name="IDR_PLUGIN_VM_INSTALLER_ERROR" file="plugin_vm/plugin_vm_installer_error.png" type="BINDATA" />
       </if>
     </includes>
   </release>

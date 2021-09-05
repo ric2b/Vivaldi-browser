@@ -12,7 +12,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.weblayer.Browser;
 import org.chromium.weblayer.Tab;
@@ -26,7 +25,7 @@ import java.util.List;
 /**
  * Tests that NewTabCallback methods are invoked as expected.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(WebLayerJUnit4ClassRunner.class)
 public class TabListCallbackTest {
     @Rule
     public InstrumentationActivityTestRule mActivityTestRule =
@@ -104,8 +103,7 @@ public class TabListCallbackTest {
     @SmallTest
     public void testMoveToDifferentFragment() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Browser browser2 =
-                    Browser.fromFragment(mActivity.createBrowserFragment(0));
+            Browser browser2 = Browser.fromFragment(mActivity.createBrowserFragment(0));
             Browser browser1 = mActivity.getBrowser();
             TabListCallbackImpl callback1 = new TabListCallbackImpl();
             browser1.registerTabListCallback(callback1);

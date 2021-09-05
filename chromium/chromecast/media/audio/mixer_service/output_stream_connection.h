@@ -11,17 +11,16 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "chromecast/media/audio/mixer_service/mixer_connection.h"
-#include "chromecast/media/audio/mixer_service/mixer_service.pb.h"
 #include "chromecast/media/audio/mixer_service/mixer_socket.h"
 #include "net/base/io_buffer.h"
 
-namespace net {
-class StreamSocket;
-}  // namespace net
-
 namespace chromecast {
+class IOBufferPool;
+
 namespace media {
 namespace mixer_service {
+class Generic;
+class OutputStreamParams;
 
 // Mixer service connection for an audio output stream. Not thread-safe; all
 // usage of a given instance must be on the same sequence.
@@ -30,6 +29,14 @@ class OutputStreamConnection : public MixerConnection,
  public:
   class Delegate {
    public:
+    // Keep in sync with mixer_service.proto:MixerUnderrun.Type
+    enum class MixerUnderrunType {
+      // An underrun was detected on mixer input.
+      kStream = 0,
+      // An underrun was detected on mixer output.
+      kMixer = 1,
+    };
+
     // Called to fill more audio data. The implementation should write up to
     // |frames| frames of audio data into |buffer|, and then call
     // SendNextBuffer() with the actual number of frames that were filled (or
@@ -40,9 +47,21 @@ class OutputStreamConnection : public MixerConnection,
                                 int frames,
                                 int64_t playout_timestamp) = 0;
 
+    // Called when audio is ready to begin playing out, ie the start threshold
+    // has been reached. |mixer_delay| is the delay before the first buffered
+    // audio will start playing out, in microseconds.
+    virtual void OnAudioReadyForPlayback(int64_t mixer_delay) {}
+
     // Called when the end of the stream has been played out. At this point it
-    // is safe to delete the OutputStreamConnection without dropping any audio.
+    // is safe to delete the delegate without dropping any audio.
     virtual void OnEosPlayed() = 0;
+
+    // Called when a mixer error has occurred; audio from this stream will no
+    // longer be played out.
+    virtual void OnMixerError() {}
+
+    // Called when an underrun happens on mixer input/output.
+    virtual void OnMixerUnderrun(MixerUnderrunType type) {}
 
    protected:
     virtual ~Delegate() = default;
@@ -82,6 +101,10 @@ class OutputStreamConnection : public MixerConnection,
   // 2.0 / sample_rate seconds.
   void SetPlaybackRate(float playback_rate);
 
+  // Changes the audio output clock rate. If the provided |rate| is outside of
+  // the supported range, the rate will be clamped to the supported range.
+  void SetAudioClockRate(double rate);
+
   // Pauses playback.
   void Pause();
 
@@ -90,18 +113,20 @@ class OutputStreamConnection : public MixerConnection,
 
  private:
   // MixerConnection implementation:
-  void OnConnected(std::unique_ptr<net::StreamSocket> socket) override;
+  void OnConnected(std::unique_ptr<MixerSocket> socket) override;
   void OnConnectionError() override;
 
   // MixerSocket::Delegate implementation:
   bool HandleMetadata(const Generic& message) override;
 
   Delegate* const delegate_;
-  OutputStreamParams params_;
+  std::unique_ptr<OutputStreamParams> params_;
 
   const int frame_size_;
   const int fill_size_frames_;
-  const scoped_refptr<net::IOBuffer> audio_buffer_;
+
+  const scoped_refptr<IOBufferPool> buffer_pool_;
+  scoped_refptr<net::IOBuffer> audio_buffer_;
 
   std::unique_ptr<MixerSocket> socket_;
   float volume_multiplier_ = 1.0f;
@@ -110,6 +135,7 @@ class OutputStreamConnection : public MixerConnection,
   int64_t start_pts_ = INT64_MIN;
 
   float playback_rate_ = 1.0f;
+  double audio_clock_rate_ = 1.0;
 
   bool paused_ = false;
   bool sent_eos_ = false;

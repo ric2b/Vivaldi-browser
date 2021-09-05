@@ -11,12 +11,13 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/lazy_instance.h"
-#include "base/memory/shared_memory.h"
+#include "base/no_destructor.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/gpu/metal_context_provider.h"
 #include "components/viz/common/gpu/vulkan_context_provider.h"
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
@@ -30,8 +31,10 @@
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/config/gpu_util.h"
+#include "gpu/config/skia_limits.h"
 #include "gpu/ipc/common/gpu_client_ids.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
+#include "gpu/ipc/common/gpu_peak_memory.h"
 #include "gpu/ipc/common/memory_stats.h"
 #include "gpu/ipc/in_process_command_buffer.h"
 #include "gpu/ipc/service/gpu_channel.h"
@@ -50,6 +53,7 @@
 #include "media/gpu/ipc/service/media_gpu_channel_manager.h"
 #include "media/mojo/services/mojo_video_encode_accelerator_provider.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "skia/buildflags.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLAssembleInterface.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
@@ -89,6 +93,10 @@
 #include "ui/base/cocoa/quartz_util.h"
 #endif
 
+#if BUILDFLAG(SKIA_USE_DAWN)
+#include "components/viz/common/gpu/dawn_context_provider.h"
+#endif
+
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "platform_media/gpu/pipeline/propmedia_gpu_channel_manager.h"
 #endif
@@ -97,9 +105,137 @@ namespace viz {
 
 namespace {
 
-static base::LazyInstance<base::RepeatingCallback<
-    void(int severity, size_t message_start, const std::string& message)>>::
-    Leaky g_log_callback = LAZY_INSTANCE_INITIALIZER;
+using LogCallback = base::RepeatingCallback<
+    void(int severity, const std::string& header, const std::string& message)>;
+
+struct LogMessage {
+  LogMessage(int severity,
+             const std::string& header,
+             const std::string& message)
+      : severity(severity),
+        header(std::move(header)),
+        message(std::move(message)) {}
+  const int severity;
+  const std::string header;
+  const std::string message;
+};
+
+// Forward declare log handlers so they can be used within LogMessageManager.
+bool PreInitializeLogHandler(int severity,
+                             const char* file,
+                             int line,
+                             size_t message_start,
+                             const std::string& message);
+bool PostInitializeLogHandler(int severity,
+                              const char* file,
+                              int line,
+                              size_t message_start,
+                              const std::string& message);
+
+// Class which manages LOG() message forwarding before and after GpuServiceImpl
+// InitializeWithHost(). Prior to initialize, log messages are deferred and kept
+// within the class. During initialize, InstallPostInitializeLogHandler() will
+// be called to flush deferred messages and route new ones directly to GpuHost.
+class LogMessageManager {
+ public:
+  LogMessageManager() = default;
+  ~LogMessageManager() = delete;
+
+  // Queues a deferred LOG() message into |deferred_messages_| unless
+  // |log_callback_| has been set -- in which case RouteMessage() is called.
+  void AddDeferredMessage(int severity,
+                          const std::string& header,
+                          const std::string& message) {
+    base::AutoLock lock(message_lock_);
+    // During InstallPostInitializeLogHandler() there's a brief window where a
+    // call into this function may be waiting on |message_lock_|, so we need to
+    // check if |log_callback_| was set once we get the lock.
+    if (log_callback_) {
+      RouteMessage(severity, std::move(header), std::move(message));
+      return;
+    }
+
+    // Otherwise just queue the message for InstallPostInitializeLogHandler() to
+    // forward later.
+    deferred_messages_.emplace_back(severity, std::move(header),
+                                    std::move(message));
+  }
+
+  // Used after InstallPostInitializeLogHandler() to route messages directly to
+  // |log_callback_|; avoids the need for a global lock.
+  void RouteMessage(int severity,
+                    const std::string& header,
+                    const std::string& message) {
+    log_callback_.Run(severity, std::move(header), std::move(message));
+  }
+
+  // If InstallPostInitializeLogHandler() will never be called, this method is
+  // called prior to process exit to ensure logs are forwarded.
+  void FlushMessages(mojom::GpuHost* gpu_host) {
+    base::AutoLock lock(message_lock_);
+    for (auto& log : deferred_messages_) {
+      gpu_host->RecordLogMessage(log.severity, std::move(log.header),
+                                 std::move(log.message));
+    }
+    deferred_messages_.clear();
+  }
+
+  // Used prior to InitializeWithHost() during GpuMain startup to ensure logs
+  // aren't lost before initialize.
+  void InstallPreInitializeLogHandler() {
+    DCHECK(!log_callback_);
+    logging::SetLogMessageHandler(PreInitializeLogHandler);
+  }
+
+  // Called by InitializeWithHost() to take over logging from the
+  // PostInitializeLogHandler(). Flushes all deferred messages.
+  void InstallPostInitializeLogHandler(LogCallback log_callback) {
+    base::AutoLock lock(message_lock_);
+    DCHECK(!log_callback_);
+    log_callback_ = std::move(log_callback);
+    for (auto& log : deferred_messages_)
+      RouteMessage(log.severity, std::move(log.header), std::move(log.message));
+    deferred_messages_.clear();
+    logging::SetLogMessageHandler(PostInitializeLogHandler);
+  }
+
+  // Called when it's no longer safe to invoke |log_callback_|.
+  void ShutdownLogging() { logging::SetLogMessageHandler(nullptr); }
+
+ private:
+  base::Lock message_lock_;
+  std::vector<LogMessage> deferred_messages_ GUARDED_BY(message_lock_);
+
+  // Set once under |mesage_lock_|, but may be accessed without lock after that.
+  LogCallback log_callback_;
+};
+
+LogMessageManager* GetLogMessageManager() {
+  static base::NoDestructor<LogMessageManager> message_manager;
+  return message_manager.get();
+}
+
+bool PreInitializeLogHandler(int severity,
+                             const char* file,
+                             int line,
+                             size_t message_start,
+                             const std::string& message) {
+  GetLogMessageManager()->AddDeferredMessage(severity,
+                                             message.substr(0, message_start),
+                                             message.substr(message_start));
+  return false;
+}
+
+bool PostInitializeLogHandler(int severity,
+                              const char* file,
+                              int line,
+                              size_t message_start,
+                              const std::string& message) {
+  GetLogMessageManager()->RouteMessage(severity,
+                                       message.substr(0, message_start),
+                                       message.substr(message_start));
+  return false;
+}
 
 bool IsAcceleratedJpegDecodeSupported() {
 #if defined(OS_CHROMEOS)
@@ -108,15 +244,6 @@ bool IsAcceleratedJpegDecodeSupported() {
 #else
   return false;
 #endif  // defined(OS_CHROMEOS)
-}
-
-bool GpuLogMessageHandler(int severity,
-                          const char* file,
-                          int line,
-                          size_t message_start,
-                          const std::string& message) {
-  g_log_callback.Get().Run(severity, message_start, message);
-  return false;
 }
 
 // Returns a callback which does a PostTask to run |callback| on the |runner|
@@ -135,12 +262,6 @@ base::OnceCallback<void(Params&&...)> WrapCallback(
       base::RetainedRef(std::move(runner)), std::move(callback));
 }
 
-void DestroyBinding(mojo::BindingSet<mojom::GpuService>* binding,
-                    base::WaitableEvent* wait) {
-  binding->CloseAllBindings();
-  wait->Signal();
-}
-
 }  // namespace
 
 GpuServiceImpl::GpuServiceImpl(
@@ -153,8 +274,9 @@ GpuServiceImpl::GpuServiceImpl(
     const base::Optional<gpu::GpuFeatureInfo>&
         gpu_feature_info_for_hardware_gpu,
     const gpu::GpuExtraInfo& gpu_extra_info,
+    const base::Optional<gpu::DevicePerfInfo>& device_perf_info,
     gpu::VulkanImplementation* vulkan_implementation,
-    base::OnceClosure exit_callback)
+    base::OnceCallback<void(bool /*immediately*/)> exit_callback)
     : main_runner_(base::ThreadTaskRunnerHandle::Get()),
       io_runner_(std::move(io_runner)),
       watchdog_thread_(std::move(watchdog_thread)),
@@ -164,11 +286,11 @@ GpuServiceImpl::GpuServiceImpl(
       gpu_info_for_hardware_gpu_(gpu_info_for_hardware_gpu),
       gpu_feature_info_for_hardware_gpu_(gpu_feature_info_for_hardware_gpu),
       gpu_extra_info_(gpu_extra_info),
+      device_perf_info_(device_perf_info),
 #if BUILDFLAG(ENABLE_VULKAN)
       vulkan_implementation_(vulkan_implementation),
 #endif
-      exit_callback_(std::move(exit_callback)),
-      bindings_(std::make_unique<mojo::BindingSet<mojom::GpuService>>()) {
+      exit_callback_(std::move(exit_callback)) {
   DCHECK(!io_runner_->BelongsToCurrentThread());
   DCHECK(exit_callback_);
 
@@ -176,17 +298,42 @@ GpuServiceImpl::GpuServiceImpl(
   protected_buffer_manager_ = new arc::ProtectedBufferManager();
 #endif  // defined(OS_CHROMEOS)
 
+  size_t max_resource_cache_bytes;
+  size_t max_glyph_cache_texture_bytes;
+  gpu::DetermineGrCacheLimitsFromAvailableMemory(
+      &max_resource_cache_bytes, &max_glyph_cache_texture_bytes);
+  GrContextOptions context_options;
+  context_options.fGlyphCacheTextureMaximumBytes =
+      max_glyph_cache_texture_bytes;
+  if (gpu_preferences_.force_max_texture_size) {
+    context_options.fMaxTextureSizeOverride =
+        gpu_preferences_.force_max_texture_size;
+  }
+
 #if BUILDFLAG(ENABLE_VULKAN)
   if (vulkan_implementation_) {
-    vulkan_context_provider_ =
-        VulkanInProcessContextProvider::Create(vulkan_implementation_);
+    vulkan_context_provider_ = VulkanInProcessContextProvider::Create(
+        vulkan_implementation_, context_options);
     if (vulkan_context_provider_) {
       // If Vulkan is supported, then OOP-R is supported.
       gpu_info_.oop_rasterization_supported = true;
       gpu_feature_info_.status_values[gpu::GPU_FEATURE_TYPE_OOP_RASTERIZATION] =
           gpu::kGpuFeatureStatusEnabled;
     } else {
-      DLOG(WARNING) << "Failed to create Vulkan context provider.";
+      DLOG(ERROR) << "Failed to create Vulkan context provider.";
+    }
+  }
+#endif
+
+#if BUILDFLAG(SKIA_USE_DAWN)
+  if (gpu_preferences_.gr_context_type == gpu::GrContextType::kDawn) {
+    dawn_context_provider_ = DawnContextProvider::Create();
+    if (dawn_context_provider_) {
+      gpu_info_.oop_rasterization_supported = true;
+      gpu_feature_info_.status_values[gpu::GPU_FEATURE_TYPE_OOP_RASTERIZATION] =
+          gpu::kGpuFeatureStatusEnabled;
+    } else {
+      DLOG(ERROR) << "Failed to create Dawn context provider.";
     }
   }
 #endif
@@ -199,7 +346,7 @@ GpuServiceImpl::GpuServiceImpl(
 #if defined(OS_MACOSX)
   if (gpu_feature_info_.status_values[gpu::GPU_FEATURE_TYPE_METAL] ==
       gpu::kGpuFeatureStatusEnabled) {
-    metal_context_provider_ = MetalContextProvider::Create();
+    metal_context_provider_ = MetalContextProvider::Create(context_options);
   }
 #endif
 
@@ -216,13 +363,19 @@ GpuServiceImpl::~GpuServiceImpl() {
   is_exiting_.Set();
 
   bind_task_tracker_.TryCancelAll();
-  logging::SetLogMessageHandler(nullptr);
-  g_log_callback.Get().Reset();
+  GetLogMessageManager()->ShutdownLogging();
+
+  // Destroy the receiver on the IO thread.
   base::WaitableEvent wait;
-  if (io_runner_->PostTask(
-          FROM_HERE, base::BindOnce(&DestroyBinding, bindings_.get(), &wait))) {
+  auto destroy_receiver_task = base::BindOnce(
+      [](mojo::Receiver<mojom::GpuService>* receiver,
+         base::WaitableEvent* wait) {
+        receiver->reset();
+        wait->Signal();
+      },
+      &receiver_, &wait);
+  if (io_runner_->PostTask(FROM_HERE, std::move(destroy_receiver_task)))
     wait.Wait();
-  }
 
   if (watchdog_thread_)
     watchdog_thread_->OnGpuProcessTearDown();
@@ -276,11 +429,6 @@ void GpuServiceImpl::UpdateGPUInfo() {
   // Record initialization only after collecting the GPU info because that can
   // take a significant amount of time.
   gpu_info_.initialization_time = base::Time::Now() - start_time_;
-
-  // For the GPU watchdog - how long the init might take on a slow machine?
-  UMA_HISTOGRAM_CUSTOM_TIMES(
-      "GPU.GPUInitializationTime", gpu_info_.initialization_time,
-      base::TimeDelta::FromSeconds(1), base::TimeDelta::FromSeconds(60), 50);
 }
 
 void GpuServiceImpl::InitializeWithHost(
@@ -301,9 +449,8 @@ void GpuServiceImpl::InitializeWithHost(
     // The global callback is reset from the dtor. So Unretained() here is safe.
     // Note that the callback can be called from any thread. Consequently, the
     // callback cannot use a WeakPtr.
-    g_log_callback.Get() = base::BindRepeating(
-        &GpuServiceImpl::RecordLogMessage, base::Unretained(this));
-    logging::SetLogMessageHandler(GpuLogMessageHandler);
+    GetLogMessageManager()->InstallPostInitializeLogHandler(base::BindRepeating(
+        &GpuServiceImpl::RecordLogMessage, base::Unretained(this)));
   }
 
   if (!sync_point_manager) {
@@ -312,11 +459,17 @@ void GpuServiceImpl::InitializeWithHost(
   }
 
   if (!shared_image_manager) {
-    // The shared image will be only used on GPU main thread, so it doesn't need
-    // to be thread safe.
-    owned_shared_image_manager_ =
-        std::make_unique<gpu::SharedImageManager>(false /* thread_safe */);
+    // When using real buffers for testing overlay configurations, we need
+    // access to SharedImageManager on the viz thread to obtain the buffer
+    // corresponding to a mailbox.
+    bool thread_safe_manager = features::ShouldUseRealBuffersForPageFlipTest();
+    owned_shared_image_manager_ = std::make_unique<gpu::SharedImageManager>(
+        thread_safe_manager, false /* display_context_on_another_thread */);
     shared_image_manager = owned_shared_image_manager_.get();
+  } else {
+    // With this feature enabled, we don't expect to receive an external
+    // SharedImageManager.
+    DCHECK(!features::ShouldUseRealBuffersForPageFlipTest());
   }
 
   shutdown_event_ = shutdown_event;
@@ -327,8 +480,8 @@ void GpuServiceImpl::InitializeWithHost(
     shutdown_event_ = owned_shutdown_event_.get();
   }
 
-  scheduler_ =
-      std::make_unique<gpu::Scheduler>(main_runner_, sync_point_manager);
+  scheduler_ = std::make_unique<gpu::Scheduler>(
+      main_runner_, sync_point_manager, gpu_preferences_);
 
   // Defer creation of the render thread. This is to prevent it from handling
   // IPC messages before the sandbox has been enabled and all other necessary
@@ -339,7 +492,7 @@ void GpuServiceImpl::InitializeWithHost(
       gpu_memory_buffer_factory_.get(), gpu_feature_info_,
       std::move(activity_flags), std::move(default_offscreen_surface),
       image_decode_accelerator_worker_.get(), vulkan_context_provider(),
-      metal_context_provider_.get());
+      metal_context_provider_.get(), dawn_context_provider());
 
   media_gpu_channel_manager_.reset(
       new media::MediaGpuChannelManager(gpu_channel_manager_.get()));
@@ -353,15 +506,17 @@ void GpuServiceImpl::InitializeWithHost(
     watchdog_thread()->AddPowerObserver();
 }
 
-void GpuServiceImpl::Bind(mojom::GpuServiceRequest request) {
+void GpuServiceImpl::Bind(
+    mojo::PendingReceiver<mojom::GpuService> pending_receiver) {
   if (main_runner_->BelongsToCurrentThread()) {
     bind_task_tracker_.PostTask(
         io_runner_.get(), FROM_HERE,
         base::BindOnce(&GpuServiceImpl::Bind, base::Unretained(this),
-                       std::move(request)));
+                       std::move(pending_receiver)));
     return;
   }
-  bindings_->AddBinding(this, std::move(request));
+  DCHECK(!receiver_.is_bound());
+  receiver_.Bind(std::move(pending_receiver));
 }
 
 void GpuServiceImpl::DisableGpuCompositing() {
@@ -381,13 +536,21 @@ gpu::ImageFactory* GpuServiceImpl::gpu_image_factory() {
              : nullptr;
 }
 
+// static
+void GpuServiceImpl::InstallPreInitializeLogHandler() {
+  GetLogMessageManager()->InstallPreInitializeLogHandler();
+}
+
+// static
+void GpuServiceImpl::FlushPreInitializeLogMessages(mojom::GpuHost* gpu_host) {
+  GetLogMessageManager()->FlushMessages(gpu_host);
+}
+
 void GpuServiceImpl::RecordLogMessage(int severity,
-                                      size_t message_start,
-                                      const std::string& str) {
+                                      const std::string& header,
+                                      const std::string& message) {
   // This can be run from any thread.
-  std::string header = str.substr(0, message_start);
-  std::string message = str.substr(message_start);
-  gpu_host_->RecordLogMessage(severity, header, message);
+  gpu_host_->RecordLogMessage(severity, std::move(header), std::move(message));
 }
 
 #if defined(OS_CHROMEOS)
@@ -556,14 +719,15 @@ void GpuServiceImpl::GetPeakMemoryUsage(uint32_t sequence_num,
 }
 
 #if defined(OS_WIN)
-void GpuServiceImpl::GetGpuSupportedRuntimeVersion(
-    GetGpuSupportedRuntimeVersionCallback callback) {
+void GpuServiceImpl::GetGpuSupportedRuntimeVersionAndDevicePerfInfo(
+    GetGpuSupportedRuntimeVersionAndDevicePerfInfoCallback callback) {
   if (io_runner_->BelongsToCurrentThread()) {
     auto wrap_callback = WrapCallback(io_runner_, std::move(callback));
     main_runner_->PostTask(
         FROM_HERE,
-        base::BindOnce(&GpuServiceImpl::GetGpuSupportedRuntimeVersion,
-                       weak_ptr_, std::move(wrap_callback)));
+        base::BindOnce(
+            &GpuServiceImpl::GetGpuSupportedRuntimeVersionAndDevicePerfInfo,
+            weak_ptr_, std::move(wrap_callback)));
     return;
   }
   DCHECK(main_runner_->BelongsToCurrentThread());
@@ -575,12 +739,9 @@ void GpuServiceImpl::GetGpuSupportedRuntimeVersion(
 
   gpu::RecordGpuSupportedRuntimeVersionHistograms(
       &gpu_info_.dx12_vulkan_version_info);
-  std::move(callback).Run(gpu_info_.dx12_vulkan_version_info);
-
-  // The unsandboxed GPU process fulfilled its duty and Dxdiag task is not
-  // running. Bye bye.
-  if (!long_dx_task_different_thread_in_progress_)
-    MaybeExit(false);
+  DCHECK(device_perf_info_.has_value());
+  std::move(callback).Run(gpu_info_.dx12_vulkan_version_info,
+                          device_perf_info_.value());
 }
 
 void GpuServiceImpl::RequestCompleteGpuInfo(
@@ -600,9 +761,6 @@ void GpuServiceImpl::RequestCompleteGpuInfo(
           [](GpuServiceImpl* gpu_service,
              RequestCompleteGpuInfoCallback callback) {
             std::move(callback).Run(gpu_service->gpu_info_.dx_diagnostics);
-            // The unsandboxed GPU process fulfilled its duty. Bye bye.
-            gpu_service->long_dx_task_different_thread_in_progress_ = false;
-            gpu_service->MaybeExit(false);
           },
           this, std::move(callback))));
 }
@@ -637,10 +795,9 @@ void GpuServiceImpl::UpdateGpuInfoPlatform(
 
   // We can continue on shutdown here because we're not writing any critical
   // state in this task.
-  long_dx_task_different_thread_in_progress_ = true;
   base::PostTaskAndReplyWithResult(
-      base::CreateCOMSTATaskRunner(
-          {base::ThreadPool(), base::TaskPriority::USER_VISIBLE,
+      base::ThreadPool::CreateCOMSTATaskRunner(
+          {base::TaskPriority::USER_VISIBLE,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
           .get(),
       FROM_HERE, base::BindOnce([]() {
@@ -707,6 +864,11 @@ void GpuServiceImpl::DidDestroyChannel(int client_id) {
   gpu_host_->DidDestroyChannel(client_id);
 }
 
+void GpuServiceImpl::DidDestroyAllChannels() {
+  DCHECK(main_runner_->BelongsToCurrentThread());
+  gpu_host_->DidDestroyAllChannels();
+}
+
 void GpuServiceImpl::DidDestroyOffscreenContext(const GURL& active_url) {
   DCHECK(main_runner_->BelongsToCurrentThread());
   gpu_host_->DidDestroyOffscreenContext(active_url);
@@ -718,6 +880,13 @@ void GpuServiceImpl::DidLoseContext(bool offscreen,
   DCHECK(main_runner_->BelongsToCurrentThread());
   gpu_host_->DidLoseContext(offscreen, reason, active_url);
 }
+
+#if defined(OS_WIN)
+void GpuServiceImpl::DidUpdateOverlayInfo(
+    const gpu::OverlayInfo& overlay_info) {
+  gpu_host_->DidUpdateOverlayInfo(gpu_info_.overlay_info);
+}
+#endif
 
 void GpuServiceImpl::StoreShaderToDisk(int client_id,
                                        const std::string& key,
@@ -752,7 +921,7 @@ void GpuServiceImpl::EstablishGpuChannel(int32_t client_id,
     if (IsExiting()) {
       // We are already exiting so there is no point in responding. Close the
       // receiver so we can safely drop the callback.
-      bindings_->CloseAllBindings();
+      receiver_.reset();
       return;
     }
 
@@ -835,10 +1004,47 @@ void GpuServiceImpl::WakeUpGpu() {
 #endif
 }
 
-void GpuServiceImpl::GpuSwitched() {
+void GpuServiceImpl::GpuSwitched(gl::GpuPreference active_gpu_heuristic) {
   DVLOG(1) << "GPU: GPU has switched";
   if (!in_host_process())
-    ui::GpuSwitchingManager::GetInstance()->NotifyGpuSwitched();
+    ui::GpuSwitchingManager::GetInstance()->NotifyGpuSwitched(
+        active_gpu_heuristic);
+}
+
+void GpuServiceImpl::DisplayAdded() {
+  if (io_runner_->BelongsToCurrentThread()) {
+    main_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&GpuServiceImpl::DisplayAdded, weak_ptr_));
+    return;
+  }
+  DVLOG(1) << "GPU: A monitor is plugged in";
+
+  if (!in_host_process())
+    ui::GpuSwitchingManager::GetInstance()->NotifyDisplayAdded();
+
+#if defined(OS_WIN)
+  // Update overlay info in the GPU process and send the updated data back to
+  // the GPU host in the Browser process through mojom if the info has changed.
+  UpdateOverlayInfo();
+#endif
+}
+
+void GpuServiceImpl::DisplayRemoved() {
+  if (io_runner_->BelongsToCurrentThread()) {
+    main_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&GpuServiceImpl::DisplayRemoved, weak_ptr_));
+    return;
+  }
+  DVLOG(1) << "GPU: A monitor is unplugged ";
+
+  if (!in_host_process())
+    ui::GpuSwitchingManager::GetInstance()->NotifyDisplayRemoved();
+
+#if defined(OS_WIN)
+  // Update overlay info in the GPU process and send the updated data back to
+  // the GPU host in the Browser process through mojom if the info has changed.
+  UpdateOverlayInfo();
+#endif
 }
 
 void GpuServiceImpl::DestroyAllChannels() {
@@ -887,6 +1093,14 @@ void GpuServiceImpl::OnForegrounded() {
     watchdog_thread_->OnForegrounded();
 }
 
+#if !defined(OS_ANDROID)
+void GpuServiceImpl::OnMemoryPressure(
+    ::base::MemoryPressureListener::MemoryPressureLevel level) {
+  // Forward the notification to the registry of MemoryPressureListeners.
+  base::MemoryPressureListener::NotifyMemoryPressure(level);
+}
+#endif
+
 #if defined(OS_MACOSX)
 void GpuServiceImpl::BeginCATransaction() {
   DCHECK(io_runner_->BelongsToCurrentThread());
@@ -934,9 +1148,12 @@ void GpuServiceImpl::StartPeakMemoryMonitorOnMainThread(uint32_t sequence_num) {
 void GpuServiceImpl::GetPeakMemoryUsageOnMainThread(
     uint32_t sequence_num,
     GetPeakMemoryUsageCallback callback) {
-  uint64_t peak_memory = gpu_channel_manager_->GetPeakMemoryUsage(sequence_num);
+  uint64_t peak_memory = 0u;
+  auto allocation_per_source =
+      gpu_channel_manager_->GetPeakMemoryUsage(sequence_num, &peak_memory);
   io_runner_->PostTask(FROM_HERE,
-                       base::BindOnce(std::move(callback), peak_memory));
+                       base::BindOnce(std::move(callback), peak_memory,
+                                      std::move(allocation_per_source)));
 }
 
 void GpuServiceImpl::MaybeExit(bool for_context_loss) {
@@ -954,7 +1171,24 @@ void GpuServiceImpl::MaybeExit(bool for_context_loss) {
                   "from errors. GPU process will restart shortly.";
   }
   is_exiting_.Set();
-  std::move(exit_callback_).Run();
+  // For the unsandboxed GPU info collection process used for info collection,
+  // if we exit immediately, then the reply message could be lost. That's why
+  // the |exit_callback_| takes the boolean argument.
+  std::move(exit_callback_).Run(/*immediately=*/for_context_loss);
 }
+
+gpu::Scheduler* GpuServiceImpl::GetGpuScheduler() {
+  return scheduler_.get();
+}
+
+#if defined(OS_WIN)
+void GpuServiceImpl::UpdateOverlayInfo() {
+  gpu::OverlayInfo old_overlay_info = gpu_info_.overlay_info;
+  gpu::CollectHardwareOverlayInfo(&gpu_info_.overlay_info);
+
+  if (old_overlay_info != gpu_info_.overlay_info)
+    DidUpdateOverlayInfo(gpu_info_.overlay_info);
+}
+#endif
 
 }  // namespace viz

@@ -44,6 +44,7 @@
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_user_data.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
@@ -58,9 +59,9 @@
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #endif
 
-#if defined(OS_CHROMEOS)
-#include "chromeos/constants/chromeos_features.h"
-#endif
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace {
 
@@ -79,16 +80,6 @@ const char* const kChromeSettingsSubPages[] = {
 #endif
 };
 #endif  // !defined(OS_ANDROID)
-
-#if defined(OS_CHROMEOS)
-const char* const kChromeOSSettingsSubPages[] = {
-    chrome::kAccessibilitySubPage, chrome::kBluetoothSubPage,
-    chrome::kDateTimeSubPage,      chrome::kDisplaySubPage,
-    chrome::kInternetSubPage,      chrome::kNativePrintingSettingsSubPage,
-    chrome::kPowerSubPage,         chrome::kStylusSubPage,
-    chrome::kWiFiSettingsSubPage,
-};
-#endif  // defined(OS_CHROMEOS)
 
 }  // namespace
 
@@ -236,18 +227,6 @@ std::vector<base::string16> ChromeAutocompleteProviderClient::GetBuiltinURLs() {
   }
 #endif
 
-#if defined(OS_CHROMEOS)
-  // TODO(crbug/950007): Delete this after the settings split is complete since
-  // the OS setting routes should not show up as an autocomplete suggestion in
-  // browser.
-  if (!base::FeatureList::IsEnabled(chromeos::features::kSplitSettings)) {
-    for (size_t i = 0; i < base::size(kChromeOSSettingsSubPages); i++) {
-      builtins.push_back(settings +
-                         base::ASCIIToUTF16(kChromeOSSettingsSubPages[i]));
-    }
-  }
-#endif
-
   return builtins;
 }
 
@@ -275,6 +254,12 @@ bool ChromeAutocompleteProviderClient::IsOffTheRecord() const {
 }
 
 bool ChromeAutocompleteProviderClient::SearchSuggestEnabled() const {
+#if defined(OS_ANDROID) && defined(VIVALDI_BUILD)
+  if (vivaldi::IsVivaldiRunning()) {
+    const PrefService* prefs = profile_->GetPrefs();
+    return prefs->GetBoolean(vivaldiprefs::kAddressBarInlineSearchSuggestEnabled);
+  }
+#endif
   return profile_->GetPrefs()->GetBoolean(prefs::kSearchSuggestEnabled);
 }
 
@@ -322,51 +307,9 @@ void ChromeAutocompleteProviderClient::PrefetchImage(const GURL& url) {
   // Note: Android uses different image fetching mechanism to avoid
   // penalty of copying byte buffers from C++ to Java.
 #if !defined(OS_ANDROID)
-  BitmapFetcherService* image_service =
+  BitmapFetcherService* bitmap_fetcher_service =
       BitmapFetcherServiceFactory::GetForBrowserContext(profile_);
-  DCHECK(image_service);
-
-  // TODO(jdonnelly, rhalavati): Create a helper function with Callback to
-  // create annotation and pass it to image_service, merging the annotations
-  // in omnibox_page_handler.cc, chrome_omnibox_client.cc,
-  // and chrome_autocomplete_provider_client.cc.
-  net::NetworkTrafficAnnotationTag traffic_annotation =
-      net::DefineNetworkTrafficAnnotation("omnibox_prefetch_image", R"(
-        semantics {
-          sender: "Omnibox"
-          description:
-            "Chromium provides answers in the suggestion list for certain "
-            "queries that the user types in the omnibox. This request "
-            "retrieves a small image (for example, an icon illustrating the "
-            "current weather conditions) when this can add information to an "
-            "answer."
-          trigger:
-            "Change of results for the query typed by the user in the "
-            "omnibox."
-          data:
-            "The only data sent is the path to an image. No user data is "
-            "included, although some might be inferrable (e.g. whether the "
-            "weather is sunny or rainy in the user's current location) from "
-            "the name of the image in the path."
-          destination: WEBSITE
-        }
-        policy {
-          cookies_allowed: YES
-          cookies_store: "user"
-          setting:
-            "You can enable or disable this feature via 'Use a prediction "
-            "service to help complete searches and URLs typed in the "
-            "address bar.' in Chromium's settings under Advanced. The "
-            "feature is enabled by default."
-          chrome_policy {
-            SearchSuggestEnabled {
-                policy_options {mode: MANDATORY}
-                SearchSuggestEnabled: false
-            }
-          }
-        })");
-
-  image_service->Prefetch(url, traffic_annotation);
+  bitmap_fetcher_service->Prefetch(url);
 #endif  // !defined(OS_ANDROID)
 }
 
@@ -392,7 +335,6 @@ void ChromeAutocompleteProviderClient::StartServiceWorker(
                                                base::DoNothing());
 }
 
-// TODO(crbug.com/46623): Maintain a map of URL->WebContents for fast look-up.
 bool ChromeAutocompleteProviderClient::IsTabOpenWithURL(
     const GURL& url,
     const AutocompleteInput* input) {
@@ -413,8 +355,7 @@ bool ChromeAutocompleteProviderClient::IsTabOpenWithURL(
         content::WebContents* web_contents =
             browser->tab_strip_model()->GetWebContentsAt(i);
         if (web_contents != active_tab &&
-            IsURLEqualToStrippedURL(web_contents->GetLastCommittedURL(),
-                                    stripped_url, *input))
+            IsStrippedURLEqualToWebContentsURL(stripped_url, web_contents))
           return true;
       }
     }
@@ -445,12 +386,59 @@ bool ChromeAutocompleteProviderClient::StrippedURLsAreEqual(
              url2, *input, template_url_service, base::string16());
 }
 
-bool ChromeAutocompleteProviderClient::IsURLEqualToStrippedURL(
-    const GURL& url1,
-    const GURL& stripped_url2,
-    const AutocompleteInput& input) const {
-  const TemplateURLService* template_url_service = GetTemplateURLService();
-  return AutocompleteMatch::GURLToStrippedGURL(
-             url1, input, template_url_service, base::string16()) ==
-         stripped_url2;
+class AutocompleteClientWebContentsUserData
+    : public content::WebContentsUserData<
+          AutocompleteClientWebContentsUserData> {
+ public:
+  ~AutocompleteClientWebContentsUserData() override = default;
+
+  int GetLastCommittedEntryIndex() { return last_committed_entry_index_; }
+  const GURL& GetLastCommittedStrippedURL() {
+    return last_committed_stripped_url_;
+  }
+  void UpdateLastCommittedStrippedURL(
+      int last_committed_index,
+      const GURL& last_committed_url,
+      TemplateURLService* template_url_service) {
+    if (last_committed_url.is_valid()) {
+      last_committed_entry_index_ = last_committed_index;
+      // Use blank input since we will re-use this stripped URL with other
+      // inputs.
+      last_committed_stripped_url_ = AutocompleteMatch::GURLToStrippedGURL(
+          last_committed_url, AutocompleteInput(), template_url_service,
+          base::string16());
+    }
+  }
+
+ private:
+  explicit AutocompleteClientWebContentsUserData(
+      content::WebContents* contents);
+  friend class content::WebContentsUserData<
+      AutocompleteClientWebContentsUserData>;
+
+  int last_committed_entry_index_ = -1;
+  GURL last_committed_stripped_url_;
+  WEB_CONTENTS_USER_DATA_KEY_DECL();
+};
+
+AutocompleteClientWebContentsUserData::AutocompleteClientWebContentsUserData(
+    content::WebContents*)
+    : content::WebContentsUserData<AutocompleteClientWebContentsUserData>() {}
+
+WEB_CONTENTS_USER_DATA_KEY_IMPL(AutocompleteClientWebContentsUserData)
+
+bool ChromeAutocompleteProviderClient::IsStrippedURLEqualToWebContentsURL(
+    const GURL& stripped_url,
+    content::WebContents* web_contents) {
+  AutocompleteClientWebContentsUserData::CreateForWebContents(web_contents);
+  AutocompleteClientWebContentsUserData* user_data =
+      AutocompleteClientWebContentsUserData::FromWebContents(web_contents);
+  DCHECK(user_data);
+  if (user_data->GetLastCommittedEntryIndex() !=
+      web_contents->GetController().GetLastCommittedEntryIndex()) {
+    user_data->UpdateLastCommittedStrippedURL(
+        web_contents->GetController().GetLastCommittedEntryIndex(),
+        web_contents->GetLastCommittedURL(), GetTemplateURLService());
+  }
+  return stripped_url == user_data->GetLastCommittedStrippedURL();
 }

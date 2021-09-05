@@ -31,6 +31,9 @@ GlobalMediaControlsPromoController::GlobalMediaControlsPromoController(
   DCHECK(profile_);
 }
 
+GlobalMediaControlsPromoController::~GlobalMediaControlsPromoController() =
+    default;
+
 void GlobalMediaControlsPromoController::ShowPromo() {
   // This shouldn't be called more than once. Check that state is fresh.
   DCHECK(!show_promo_called_);
@@ -56,10 +59,10 @@ void GlobalMediaControlsPromoController::ShowPromo() {
   promo_bubble_ = FeaturePromoBubbleView::CreateOwned(
       owner_, views::BubbleBorder::Arrow::TOP_RIGHT,
       FeaturePromoBubbleView::ActivationAction::DO_NOT_ACTIVATE,
-      string_specifier, base::nullopt, base::nullopt,
+      string_specifier, base::nullopt, base::nullopt, base::nullopt,
       std::move(feature_promo_bubble_timeout));
   promo_bubble_->set_close_on_deactivate(false);
-  promo_bubble_->GetWidget()->AddObserver(this);
+  observer_.Add(promo_bubble_->GetWidget());
 }
 
 void GlobalMediaControlsPromoController::OnMediaDialogOpened() {
@@ -78,6 +81,8 @@ void GlobalMediaControlsPromoController::OnWidgetDestroying(
     views::Widget* widget) {
   DCHECK(promo_bubble_);
   promo_bubble_ = nullptr;
+
+  observer_.Remove(widget);
 
   FinishPromo();
 }

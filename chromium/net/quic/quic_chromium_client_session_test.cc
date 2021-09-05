@@ -10,7 +10,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
-#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
@@ -56,6 +55,7 @@
 #include "net/third_party/quiche/src/quic/platform/api/quic_flags.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_test.h"
 #include "net/third_party/quiche/src/quic/test_tools/crypto_test_utils.h"
+#include "net/third_party/quiche/src/quic/test_tools/qpack/qpack_test_utils.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_client_promised_info_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_connection_peer.h"
 #include "net/third_party/quiche/src/quic/test_tools/quic_session_peer.h"
@@ -84,7 +84,7 @@ struct TestParams {
 
 // Used by ::testing::PrintToStringParamName().
 std::string PrintToString(const TestParams& p) {
-  return quic::QuicStrCat(
+  return quiche::QuicheStrCat(
       ParsedQuicVersionToString(p.version), "_",
       (p.client_headers_include_h2_stream_dependency ? "" : "No"),
       "Dependency");
@@ -108,6 +108,8 @@ class TestingQuicChromiumClientSession : public QuicChromiumClientSession {
   using QuicChromiumClientSession::QuicChromiumClientSession;
 
   MOCK_METHOD0(OnPathDegrading, void());
+
+  void ReallyOnPathDegrading() { QuicChromiumClientSession::OnPathDegrading(); }
 };
 
 class QuicChromiumClientSessionTest
@@ -145,8 +147,10 @@ class QuicChromiumClientSessionTest
                       kServerHostname,
                       quic::Perspective::IS_SERVER,
                       false),
-        migrate_session_early_v2_(false) {
-    SetQuicReloadableFlag(quic_supports_tls_handshake, true);
+        migrate_session_early_v2_(false),
+        go_away_on_path_degrading_(false) {
+    FLAGS_quic_enable_http3_grease_randomness = false;
+    quic::QuicEnableVersion(version_);
     // Advance the time, because timers do not like uninitialized times.
     clock_.AdvanceTime(quic::QuicTime::Delta::FromSeconds(1));
   }
@@ -191,9 +195,9 @@ class QuicChromiumClientSessionTest
         kQuicYieldAfterPacketsRead,
         quic::QuicTime::Delta::FromMilliseconds(
             kQuicYieldAfterDurationMilliseconds),
-        /*cert_verify_flags=*/0, /*go_away_on_path_degrading*/ false,
+        go_away_on_path_degrading_,
         client_headers_include_h2_stream_dependency_,
-        quic::test::DefaultQuicConfig(),
+        /*cert_verify_flags=*/0, quic::test::DefaultQuicConfig(),
         std::make_unique<TestQuicCryptoClientConfigHandle>(&crypto_config_),
         "CONNECTION_UNKNOWN", base::TimeTicks::Now(), base::TimeTicks::Now(),
         &push_promise_index_, &test_push_delegate_,
@@ -206,6 +210,11 @@ class QuicChromiumClientSessionTest
     verify_details_.cert_verify_result.verified_cert = cert;
     verify_details_.cert_verify_result.is_issued_by_known_root = true;
     session_->Initialize();
+    // Blackhole QPACK decoder stream instead of constructing mock writes.
+    if (VersionUsesHttp3(version_.transport_version)) {
+      session_->qpack_decoder()->set_qpack_stream_sender_delegate(
+          &noop_qpack_stream_sender_delegate_);
+    }
     session_->StartReading();
     writer->set_delegate(session_.get());
   }
@@ -244,7 +253,7 @@ class QuicChromiumClientSessionTest
   size_t GetMaxAllowedOutgoingBidirectionalStreams() {
     quic::QuicSession* quic_session =
         dynamic_cast<quic::QuicSession*>(&*session_);
-    if (version_.transport_version != quic::QUIC_VERSION_99) {
+    if (!version_.HasIetfQuicFrames()) {
       return quic::test::QuicSessionPeer::GetStreamIdManager(quic_session)
           ->max_open_outgoing_streams();
     }
@@ -259,8 +268,8 @@ class QuicChromiumClientSessionTest
   const bool client_headers_include_h2_stream_dependency_;
   QuicFlagSaver flags_;  // Save/restore all QUIC flag values.
   quic::QuicCryptoClientConfig crypto_config_;
-  TestNetLog net_log_;
-  BoundTestNetLog bound_test_net_log_;
+  RecordingTestNetLog net_log_;
+  RecordingBoundTestNetLog bound_test_net_log_;
   MockClientSocketFactory socket_factory_;
   std::unique_ptr<MockRead> default_read_;
   std::unique_ptr<SequencedSocketData> socket_data_;
@@ -281,6 +290,8 @@ class QuicChromiumClientSessionTest
   QuicTestPacketMaker server_maker_;
   ProofVerifyDetailsChromium verify_details_;
   bool migrate_session_early_v2_;
+  quic::test::NoopQpackStreamSenderDelegate noop_qpack_stream_sender_delegate_;
+  bool go_away_on_path_degrading_;
 };
 
 INSTANTIATE_TEST_SUITE_P(VersionIncludeStreamDependencySequence,
@@ -305,8 +316,7 @@ TEST_P(QuicChromiumClientSessionTest, IsFatalErrorNotSetForNonFatalError) {
   ProofVerifyDetailsChromium details;
   details.cert_verify_result.verified_cert =
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
-  details.cert_verify_result.cert_status =
-      MapNetErrorToCertStatus(ERR_CERT_DATE_INVALID);
+  details.cert_verify_result.cert_status = CERT_STATUS_DATE_INVALID;
   details.is_fatal_cert_error = false;
   CompleteCryptoHandshake();
   session_->OnProofVerifyDetailsAvailable(details);
@@ -328,8 +338,7 @@ TEST_P(QuicChromiumClientSessionTest, IsFatalErrorSetForFatalError) {
   ProofVerifyDetailsChromium details;
   details.cert_verify_result.verified_cert =
       ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
-  details.cert_verify_result.cert_status =
-      MapNetErrorToCertStatus(ERR_CERT_DATE_INVALID);
+  details.cert_verify_result.cert_status = CERT_STATUS_DATE_INVALID;
   details.is_fatal_cert_error = true;
   CompleteCryptoHandshake();
   session_->OnProofVerifyDetailsAvailable(details);
@@ -365,8 +374,8 @@ TEST_P(QuicChromiumClientSessionTest, Handle) {
   std::unique_ptr<QuicChromiumClientSession::Handle> handle =
       session_->CreateHandle(destination_);
   EXPECT_TRUE(handle->IsConnected());
-  EXPECT_FALSE(handle->IsCryptoHandshakeConfirmed());
-  EXPECT_EQ(version_.transport_version, handle->GetQuicVersion());
+  EXPECT_FALSE(handle->OneRttKeysAvailable());
+  EXPECT_EQ(version_, handle->GetQuicVersion());
   EXPECT_EQ(session_key_.server_id(), handle->server_id());
   EXPECT_EQ(session_net_log.source().type, handle->net_log().source().type);
   EXPECT_EQ(session_net_log.source().id, handle->net_log().source().id);
@@ -378,7 +387,7 @@ TEST_P(QuicChromiumClientSessionTest, Handle) {
 
   CompleteCryptoHandshake();
 
-  EXPECT_TRUE(handle->IsCryptoHandshakeConfirmed());
+  EXPECT_TRUE(handle->OneRttKeysAvailable());
 
   // Request a stream and verify that a stream was created.
   TestCompletionCallback callback;
@@ -393,8 +402,8 @@ TEST_P(QuicChromiumClientSessionTest, Handle) {
 
   // Veirfy that the handle works correctly after the session is closed.
   EXPECT_FALSE(handle->IsConnected());
-  EXPECT_TRUE(handle->IsCryptoHandshakeConfirmed());
-  EXPECT_EQ(version_.transport_version, handle->GetQuicVersion());
+  EXPECT_TRUE(handle->OneRttKeysAvailable());
+  EXPECT_EQ(version_, handle->GetQuicVersion());
   EXPECT_EQ(session_key_.server_id(), handle->server_id());
   EXPECT_EQ(session_net_log.source().type, handle->net_log().source().type);
   EXPECT_EQ(session_net_log.source().id, handle->net_log().source().id);
@@ -406,7 +415,7 @@ TEST_P(QuicChromiumClientSessionTest, Handle) {
     std::unique_ptr<QuicChromiumClientSession::Handle> handle2 =
         session_->CreateHandle(destination_);
     EXPECT_FALSE(handle2->IsConnected());
-    EXPECT_TRUE(handle2->IsCryptoHandshakeConfirmed());
+    EXPECT_TRUE(handle2->OneRttKeysAvailable());
     ASSERT_EQ(ERR_CONNECTION_CLOSED,
               handle2->RequestStream(/*requires_confirmation=*/false,
                                      callback.callback(),
@@ -415,10 +424,10 @@ TEST_P(QuicChromiumClientSessionTest, Handle) {
 
   session_.reset();
 
-  // Veirfy that the handle works correctly after the session is deleted.
+  // Verify that the handle works correctly after the session is deleted.
   EXPECT_FALSE(handle->IsConnected());
-  EXPECT_TRUE(handle->IsCryptoHandshakeConfirmed());
-  EXPECT_EQ(version_.transport_version, handle->GetQuicVersion());
+  EXPECT_TRUE(handle->OneRttKeysAvailable());
+  EXPECT_EQ(version_, handle->GetQuicVersion());
   EXPECT_EQ(session_key_.server_id(), handle->server_id());
   EXPECT_EQ(session_net_log.source().type, handle->net_log().source().type);
   EXPECT_EQ(session_net_log.source().id, handle->net_log().source().id);
@@ -546,7 +555,7 @@ TEST_P(QuicChromiumClientSessionTest, CancelStreamRequestBeforeRelease) {
 
 TEST_P(QuicChromiumClientSessionTest, AsyncStreamRequest) {
   MockQuicData quic_data(version_);
-  if (version_.transport_version == quic::QUIC_VERSION_99) {
+  if (version_.HasIetfQuicFrames()) {
     quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeInitialSettingsPacket(1));
     // The open stream limit is set to 50 by
     // MockCryptoClientStream::SetConfigNegotiated() so when the 51st stream is
@@ -599,7 +608,7 @@ TEST_P(QuicChromiumClientSessionTest, AsyncStreamRequest) {
                                GetNthClientInitiatedBidirectionalStreamId(0),
                                quic::QUIC_STREAM_CANCELLED, 0);
   session_->OnRstStream(rst);
-  if (version_.transport_version == quic::QUIC_VERSION_99) {
+  if (version_.HasIetfQuicFrames()) {
     // For version99, to close the stream completely, we also must receive a
     // STOP_SENDING frame:
     quic::QuicStopSendingFrame stop_sending(
@@ -620,9 +629,79 @@ TEST_P(QuicChromiumClientSessionTest, AsyncStreamRequest) {
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
 }
 
+// Regression test for https://crbug.com/1021938.
+// When the connection is closed, there may be tasks queued in the message loop
+// to read the last packet, reading that packet should not crash.
+TEST_P(QuicChromiumClientSessionTest, ReadAfterConnectionClose) {
+  MockQuicData quic_data(version_);
+  if (version_.HasIetfQuicFrames()) {
+    quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeInitialSettingsPacket(1));
+    // The open stream limit is set to 50 by
+    // MockCryptoClientStream::SetConfigNegotiated() so when the 51st stream is
+    // requested, a STREAMS_BLOCKED will be sent, indicating that it's blocked
+    // at the limit of 50.
+    quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeStreamsBlockedPacket(
+                                        2, true, 50,
+                                        /*unidirectional=*/false));
+    quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeStreamsBlockedPacket(
+                                        3, true, 50,
+                                        /*unidirectional=*/false));
+  }
+  quic_data.AddRead(ASYNC, ERR_IO_PENDING);
+  // This packet will be read after connection is closed.
+  quic_data.AddRead(
+      ASYNC,
+      server_maker_.MakeConnectionClosePacket(
+          1, false, quic::QUIC_CRYPTO_VERSION_NOT_SUPPORTED, "Time to panic!"));
+  quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  Initialize();
+  CompleteCryptoHandshake();
+
+  // Open the maximum number of streams so that a subsequent request
+  // can not proceed immediately.
+  const size_t kMaxOpenStreams = GetMaxAllowedOutgoingBidirectionalStreams();
+  for (size_t i = 0; i < kMaxOpenStreams; i++) {
+    QuicChromiumClientSessionPeer::CreateOutgoingStream(session_.get());
+  }
+  EXPECT_EQ(kMaxOpenStreams, session_->GetNumOpenOutgoingStreams());
+
+  // Request two streams which will both be pending.
+  // In V99 each will generate a max stream id for each attempt.
+  std::unique_ptr<QuicChromiumClientSession::Handle> handle =
+      session_->CreateHandle(destination_);
+  std::unique_ptr<QuicChromiumClientSession::Handle> handle2 =
+      session_->CreateHandle(destination_);
+
+  ASSERT_EQ(
+      ERR_IO_PENDING,
+      handle->RequestStream(
+          /*requires_confirmation=*/false,
+          base::BindOnce(&QuicChromiumClientSessionTest::ResetHandleOnError,
+                         base::Unretained(this), &handle2),
+          TRAFFIC_ANNOTATION_FOR_TESTS));
+
+  TestCompletionCallback callback2;
+  ASSERT_EQ(ERR_IO_PENDING,
+            handle2->RequestStream(/*requires_confirmation=*/false,
+                                   callback2.callback(),
+                                   TRAFFIC_ANNOTATION_FOR_TESTS));
+
+  session_->connection()->CloseConnection(
+      quic::QUIC_NETWORK_IDLE_TIMEOUT, "Timed out",
+      quic::ConnectionCloseBehavior::SILENT_CLOSE);
+
+  // Pump the message loop to read the connection close packet.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(handle2.get());
+  quic_data.Resume();
+  EXPECT_TRUE(quic_data.AllReadDataConsumed());
+  EXPECT_TRUE(quic_data.AllWriteDataConsumed());
+}
+
 TEST_P(QuicChromiumClientSessionTest, ClosedWithAsyncStreamRequest) {
   MockQuicData quic_data(version_);
-  if (version_.transport_version == quic::QUIC_VERSION_99) {
+  if (version_.HasIetfQuicFrames()) {
     quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeInitialSettingsPacket(1));
     // The open stream limit is set to 50 by
     // MockCryptoClientStream::SetConfigNegotiated() so when the 51st stream is
@@ -685,7 +764,7 @@ TEST_P(QuicChromiumClientSessionTest, ClosedWithAsyncStreamRequest) {
 
 TEST_P(QuicChromiumClientSessionTest, CancelPendingStreamRequest) {
   MockQuicData quic_data(version_);
-  if (version_.transport_version == quic::QUIC_VERSION_99) {
+  if (version_.HasIetfQuicFrames()) {
     quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeInitialSettingsPacket(1));
     // The open stream limit is set to 50 by
     // MockCryptoClientStream::SetConfigNegotiated() so when the 51st stream is
@@ -738,7 +817,7 @@ TEST_P(QuicChromiumClientSessionTest, CancelPendingStreamRequest) {
                                GetNthClientInitiatedBidirectionalStreamId(0),
                                quic::QUIC_STREAM_CANCELLED, 0);
   session_->OnRstStream(rst);
-  if (version_.transport_version == quic::QUIC_VERSION_99) {
+  if (version_.HasIetfQuicFrames()) {
     // For version99, we require a STOP_SENDING as well as a RESET_STREAM to
     // fully close the stream.
     quic::QuicStopSendingFrame stop_sending(
@@ -835,13 +914,13 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionCloseBeforeHandshakeConfirmed) {
 TEST_P(QuicChromiumClientSessionTest, ConnectionCloseWithPendingStreamRequest) {
   MockQuicData quic_data(version_);
   int packet_num = 1;
-  if (version_.transport_version == quic::QUIC_VERSION_99) {
+  if (version_.HasIetfQuicFrames()) {
     quic_data.AddWrite(SYNCHRONOUS,
                        client_maker_.MakeInitialSettingsPacket(packet_num++));
   }
   quic_data.AddWrite(SYNCHRONOUS,
                      client_maker_.MakePingPacket(packet_num++, true));
-  if (version_.transport_version == quic::QUIC_VERSION_99) {
+  if (version_.HasIetfQuicFrames()) {
     quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeStreamsBlockedPacket(
                                         packet_num++, true, 50,
                                         /*unidirectional=*/false));
@@ -889,7 +968,7 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionCloseWithPendingStreamRequest) {
 
 TEST_P(QuicChromiumClientSessionTest, MaxNumStreams) {
   MockQuicData quic_data(version_);
-  if (version_.transport_version == quic::QUIC_VERSION_99) {
+  if (version_.HasIetfQuicFrames()) {
     quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeInitialSettingsPacket(1));
     // Initial configuration is 50 dynamic streams. Taking into account
     // the static stream (headers), expect to block on when hitting the limit
@@ -955,12 +1034,14 @@ TEST_P(QuicChromiumClientSessionTest, MaxNumStreams) {
 }
 
 TEST_P(QuicChromiumClientSessionTest, PushStreamTimedOutNoResponse) {
-  base::HistogramTester histogram_tester;
   MockQuicData quic_data(version_);
   int packet_num = 1;
   if (VersionUsesHttp3(version_.transport_version)) {
     quic_data.AddWrite(ASYNC,
                        client_maker_.MakeInitialSettingsPacket(packet_num++));
+  } else if (GetParam().client_headers_include_h2_stream_dependency) {
+    quic_data.AddWrite(
+        ASYNC, client_maker_.MakePriorityPacket(packet_num++, true, 2, 0, 3));
   }
   quic_data.AddWrite(ASYNC, client_maker_.MakeRstPacket(
                                 packet_num++, true,
@@ -1009,12 +1090,14 @@ TEST_P(QuicChromiumClientSessionTest, PushStreamTimedOutNoResponse) {
 }
 
 TEST_P(QuicChromiumClientSessionTest, PushStreamTimedOutWithResponse) {
-  base::HistogramTester histogram_tester;
   MockQuicData quic_data(version_);
   int packet_num = 1;
   if (VersionUsesHttp3(version_.transport_version)) {
     quic_data.AddWrite(ASYNC,
                        client_maker_.MakeInitialSettingsPacket(packet_num++));
+  } else if (GetParam().client_headers_include_h2_stream_dependency) {
+    quic_data.AddWrite(
+        ASYNC, client_maker_.MakePriorityPacket(packet_num++, true, 2, 0, 3));
   }
   quic_data.AddWrite(ASYNC, client_maker_.MakeRstPacket(
                                 packet_num++, true,
@@ -1052,7 +1135,7 @@ TEST_P(QuicChromiumClientSessionTest, PushStreamTimedOutWithResponse) {
       GetNthServerInitiatedUnidirectionalStreamId(0), spdy::SpdyHeaderBlock());
   // Read data on the pushed stream.
   quic::QuicStreamFrame data(GetNthServerInitiatedUnidirectionalStreamId(0),
-                             false, 0, quic::QuicStringPiece("SP"));
+                             false, 0, quiche::QuicheStringPiece("SP"));
   session_->OnStreamFrame(data);
 
   quic::QuicClientPromisedInfo* promised =
@@ -1090,7 +1173,7 @@ TEST_P(QuicChromiumClientSessionTest, PendingStreamOnRst) {
   CompleteCryptoHandshake();
 
   quic::QuicStreamFrame data(GetNthServerInitiatedUnidirectionalStreamId(0),
-                             false, 1, quic::QuicStringPiece("SP"));
+                             false, 1, quiche::QuicheStringPiece("SP"));
   session_->OnStreamFrame(data);
   EXPECT_EQ(0u, session_->GetNumOpenIncomingStreams());
   quic::QuicRstStreamFrame rst(quic::kInvalidControlFrameId,
@@ -1122,7 +1205,7 @@ TEST_P(QuicChromiumClientSessionTest, ClosePendingStream) {
   CompleteCryptoHandshake();
 
   quic::QuicStreamId id = GetNthServerInitiatedUnidirectionalStreamId(0);
-  quic::QuicStreamFrame data(id, false, 1, quic::QuicStringPiece("SP"));
+  quic::QuicStreamFrame data(id, false, 1, quiche::QuicheStringPiece("SP"));
   session_->OnStreamFrame(data);
   EXPECT_EQ(0u, session_->GetNumOpenIncomingStreams());
   session_->CloseStream(id);
@@ -1134,6 +1217,9 @@ TEST_P(QuicChromiumClientSessionTest, CancelPushWhenPendingValidation) {
   if (VersionUsesHttp3(version_.transport_version)) {
     quic_data.AddWrite(ASYNC,
                        client_maker_.MakeInitialSettingsPacket(packet_num++));
+  } else if (GetParam().client_headers_include_h2_stream_dependency) {
+    quic_data.AddWrite(
+        ASYNC, client_maker_.MakePriorityPacket(packet_num++, true, 2, 0, 3));
   }
   quic_data.AddWrite(ASYNC, client_maker_.MakeRstPacket(
                                 packet_num++, true,
@@ -1186,12 +1272,14 @@ TEST_P(QuicChromiumClientSessionTest, CancelPushWhenPendingValidation) {
 }
 
 TEST_P(QuicChromiumClientSessionTest, CancelPushBeforeReceivingResponse) {
-  base::HistogramTester histogram_tester;
   MockQuicData quic_data(version_);
   int packet_num = 1;
   if (VersionUsesHttp3(version_.transport_version)) {
     quic_data.AddWrite(ASYNC,
                        client_maker_.MakeInitialSettingsPacket(packet_num++));
+  } else if (GetParam().client_headers_include_h2_stream_dependency) {
+    quic_data.AddWrite(
+        ASYNC, client_maker_.MakePriorityPacket(packet_num++, true, 2, 0, 3));
   }
   quic_data.AddWrite(ASYNC, client_maker_.MakeRstPacket(
                                 packet_num++, true,
@@ -1240,12 +1328,14 @@ TEST_P(QuicChromiumClientSessionTest, CancelPushBeforeReceivingResponse) {
 }
 
 TEST_P(QuicChromiumClientSessionTest, CancelPushAfterReceivingResponse) {
-  base::HistogramTester histogram_tester;
   MockQuicData quic_data(version_);
   int packet_num = 1;
   if (VersionUsesHttp3(version_.transport_version)) {
     quic_data.AddWrite(ASYNC,
                        client_maker_.MakeInitialSettingsPacket(packet_num++));
+  } else if (GetParam().client_headers_include_h2_stream_dependency) {
+    quic_data.AddWrite(
+        ASYNC, client_maker_.MakePriorityPacket(packet_num++, true, 2, 0, 3));
   }
   quic_data.AddWrite(ASYNC, client_maker_.MakeRstPacket(
                                 packet_num++, true,
@@ -1284,7 +1374,7 @@ TEST_P(QuicChromiumClientSessionTest, CancelPushAfterReceivingResponse) {
       GetNthServerInitiatedUnidirectionalStreamId(0), spdy::SpdyHeaderBlock());
   // Read data on the pushed stream.
   quic::QuicStreamFrame data(GetNthServerInitiatedUnidirectionalStreamId(0),
-                             false, 0, quic::QuicStringPiece("SP"));
+                             false, 0, quiche::QuicheStringPiece("SP"));
   session_->OnStreamFrame(data);
 
   quic::QuicClientPromisedInfo* promised =
@@ -1303,7 +1393,7 @@ TEST_P(QuicChromiumClientSessionTest, CancelPushAfterReceivingResponse) {
 
 TEST_P(QuicChromiumClientSessionTest, MaxNumStreamsViaRequest) {
   MockQuicData quic_data(version_);
-  if (version_.transport_version == quic::QUIC_VERSION_99) {
+  if (version_.HasIetfQuicFrames()) {
     quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeInitialSettingsPacket(1));
     quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeStreamsBlockedPacket(
                                         2, true, 50,
@@ -1618,7 +1708,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocket) {
   }
   ack_and_data_out = client_maker_.MakeDataPacket(
       packet_num++, GetNthClientInitiatedBidirectionalStreamId(0), true, false,
-      quic::QuicStringPiece(data));
+      quiche::QuicheStringPiece(data));
   std::unique_ptr<quic::QuicEncryptedPacket> server_ping(
       server_maker_.MakePingPacket(1, /*include_version=*/false));
   MockRead reads[] = {
@@ -1661,7 +1751,8 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocket) {
   iov[0].iov_len = 4;
   quic::test::QuicStreamPeer::SendBuffer(stream).SaveStreamData(iov, 1, 0, 4);
   quic::test::QuicStreamPeer::SetStreamBytesWritten(4, stream);
-  session_->WritevData(stream, stream->id(), 4, 0, quic::NO_FIN);
+  session_->WritevData(stream->id(), 4, 0, quic::NO_FIN,
+                       quic::NOT_RETRANSMISSION, QuicheNullOpt);
 
   EXPECT_TRUE(socket_data.AllReadDataConsumed());
   EXPECT_TRUE(socket_data.AllWriteDataConsumed());
@@ -1849,7 +1940,7 @@ TEST_P(QuicChromiumClientSessionTest, DetectPathDegradingDuringHandshake) {
       session_->CreateHandle(destination_);
   TestCompletionCallback callback;
   EXPECT_TRUE(handle->IsConnected());
-  EXPECT_FALSE(handle->IsCryptoHandshakeConfirmed());
+  EXPECT_FALSE(handle->OneRttKeysAvailable());
   EXPECT_EQ(
       ERR_IO_PENDING,
       handle->RequestStream(/*require_handshake_confirmation=*/true,
@@ -1870,6 +1961,25 @@ TEST_P(QuicChromiumClientSessionTest, DetectPathDegradingDuringHandshake) {
   EXPECT_TRUE(session_->connection()->IsPathDegrading());
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
+}
+
+TEST_P(QuicChromiumClientSessionTest,
+       GoAwayOnPathDegradingOnlyWhenHandshakeConfirmed) {
+  go_away_on_path_degrading_ = true;
+  MockQuicData quic_data(version_);
+  if (VersionUsesHttp3(version_.transport_version))
+    quic_data.AddWrite(SYNCHRONOUS, client_maker_.MakeInitialSettingsPacket(1));
+  quic_data.AddRead(ASYNC, ERR_IO_PENDING);
+  quic_data.AddRead(ASYNC, OK);  // EOF
+  quic_data.AddSocketDataToFactory(&socket_factory_);
+  Initialize();
+  session_->ReallyOnPathDegrading();
+  EXPECT_FALSE(
+      QuicChromiumClientSessionPeer::GetSessionGoingAway(session_.get()));
+  CompleteCryptoHandshake();
+  session_->ReallyOnPathDegrading();
+  EXPECT_TRUE(
+      QuicChromiumClientSessionPeer::GetSessionGoingAway(session_.get()));
 }
 
 TEST_P(QuicChromiumClientSessionTest, RetransmittableOnWireTimeout) {
@@ -1897,7 +2007,7 @@ TEST_P(QuicChromiumClientSessionTest, RetransmittableOnWireTimeout) {
   CompleteCryptoHandshake();
 
   EXPECT_EQ(quic::QuicTime::Delta::FromMilliseconds(200),
-            session_->connection()->retransmittable_on_wire_timeout());
+            session_->connection()->initial_retransmittable_on_wire_timeout());
 
   // Open a stream since the connection only sends PINGs to keep a
   // retransmittable packet on the wire if there's an open stream.
@@ -1923,6 +2033,65 @@ TEST_P(QuicChromiumClientSessionTest, RetransmittableOnWireTimeout) {
   alarm_factory_.FireAlarm(alarm);
   base::RunLoop().RunUntilIdle();
 
+  quic_data.Resume();
+  EXPECT_TRUE(quic_data.AllReadDataConsumed());
+  EXPECT_TRUE(quic_data.AllWriteDataConsumed());
+}
+
+// Regression test for https://crbug.com/1043531.
+TEST_P(QuicChromiumClientSessionTest, ResetOnEmptyResponseHeaders) {
+  MockQuicData quic_data(version_);
+  int packet_num = 1;
+  if (VersionUsesHttp3(version_.transport_version)) {
+    quic_data.AddWrite(ASYNC,
+                       client_maker_.MakeInitialSettingsPacket(packet_num++));
+  } else {
+    // In case of Google QUIC, QuicSpdyStream resets the stream.
+    quic_data.AddWrite(ASYNC, client_maker_.MakeRstPacket(
+                                  packet_num++, true,
+                                  GetNthClientInitiatedBidirectionalStreamId(0),
+                                  quic::QUIC_HEADERS_TOO_LARGE));
+  }
+  quic_data.AddRead(ASYNC, ERR_IO_PENDING);
+  quic_data.AddRead(ASYNC, OK);  // EOF
+  quic_data.AddSocketDataToFactory(&socket_factory_);
+  Initialize();
+
+  ProofVerifyDetailsChromium details;
+  details.cert_verify_result.verified_cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
+  ASSERT_TRUE(details.cert_verify_result.verified_cert.get());
+
+  CompleteCryptoHandshake();
+  session_->OnProofVerifyDetailsAvailable(details);
+
+  auto session_handle = session_->CreateHandle(destination_);
+  TestCompletionCallback callback;
+  EXPECT_EQ(OK, session_handle->RequestStream(/*requires_confirmation=*/false,
+                                              callback.callback(),
+                                              TRAFFIC_ANNOTATION_FOR_TESTS));
+
+  auto stream_handle = session_handle->ReleaseStream();
+  EXPECT_TRUE(stream_handle->IsOpen());
+
+  auto* stream = quic::test::QuicSessionPeer::GetOrCreateStream(
+      session_.get(), stream_handle->id());
+
+  const quic::QuicHeaderList empty_response_headers;
+  static_cast<quic::QuicSpdyStream*>(stream)->OnStreamHeaderList(
+      /* fin = */ false, /* frame_len = */ 0, empty_response_headers);
+
+  if (VersionUsesHttp3(version_.transport_version)) {
+    // In case of IETF QUIC, QuicSpdyStream::OnStreamHeaderList() calls
+    // QuicChromiumClientStream::OnInitialHeadersComplete() with the empty
+    // header list, and QuicChromiumClientStream signals an error.
+    spdy::SpdyHeaderBlock header_block;
+    int rv = stream_handle->ReadInitialHeaders(&header_block,
+                                               CompletionOnceCallback());
+    EXPECT_THAT(rv, IsError(ERR_INVALID_RESPONSE));
+  }
+
+  base::RunLoop().RunUntilIdle();
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());

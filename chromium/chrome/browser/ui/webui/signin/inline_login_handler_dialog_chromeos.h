@@ -23,10 +23,13 @@ class InlineLoginHandlerDialogChromeOS
     : public SystemWebDialogDelegate,
       public web_modal::WebContentsModalDialogHost {
  public:
+  enum class Source { kChrome = 0, kArc };
+
   // Displays the dialog. |email| is an optional parameter that if provided,
   // pre-fills the account email field in the sign-in dialog - useful for
   // account re-authentication.
-  static void Show(const std::string& email = std::string());
+  static void Show(const std::string& email = std::string(),
+                   const Source& source = Source::kChrome);
 
   // ui::SystemWebDialogDelegate overrides.
   void AdjustWidgetInitParams(views::Widget::InitParams* params) override;
@@ -39,18 +42,19 @@ class InlineLoginHandlerDialogChromeOS
   void RemoveObserver(web_modal::ModalDialogHostObserver* observer) override;
 
  protected:
-  explicit InlineLoginHandlerDialogChromeOS(const GURL& url);
+  InlineLoginHandlerDialogChromeOS(const GURL& url, const Source& source);
   ~InlineLoginHandlerDialogChromeOS() override;
 
   // ui::WebDialogDelegate overrides
   void GetDialogSize(gfx::Size* size) const override;
   std::string GetDialogArgs() const override;
   bool ShouldShowDialogTitle() const override;
-  void OnDialogShown(content::WebUI* webui,
-                     content::RenderViewHost* render_view_host) override;
+  void OnDialogShown(content::WebUI* webui) override;
 
  private:
   InlineLoginHandlerModalDelegate delegate_;
+  const Source source_;
+  const GURL url_;
 
   DISALLOW_COPY_AND_ASSIGN(InlineLoginHandlerDialogChromeOS);
 };

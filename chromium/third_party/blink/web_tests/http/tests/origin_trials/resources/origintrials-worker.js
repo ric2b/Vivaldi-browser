@@ -28,7 +28,7 @@ expect_failure_worker = () => {
   test(() => {
     var testObject = self.internals.originTrialsTest();
     assert_idl_attribute(testObject, 'throwingAttribute');
-    assert_throws('NotSupportedError', () => {
+    assert_throws_dom('NotSupportedError', () => {
       testObject.throwingAttribute;
     }, 'Accessing attribute should throw error');
   }, 'Accessing attribute should throw error in ' + worker_type + ' worker');
@@ -42,6 +42,20 @@ expect_failure_worker = () => {
     assert_false('CONSTANT' in testObject);
     assert_equals(testObject.CONSTANT, undefined);
   }, 'Constant should not exist in ' + worker_type + ' worker');
+  done();
+}
+
+// Test whether the origin-trial-enabled attributes are *NOT* attached in a
+// worker where the deprecation trial is not enabled.
+expect_failure_worker_deprecation = () => {
+  // Use |worker_type| to make the test descriptions unique when multiple
+  // workers are created in a single test file.
+  var worker_type = get_worker_type();
+  test(() => {
+    var testObject = self.internals.originTrialsTest();
+    assert_false('deprecationAttribute' in testObject);
+    assert_equals(testObject.deprecationAttribute, undefined);
+  }, 'Deprecation attribute should not exist in ' + worker_type + ' worker');
   done();
 }
 
@@ -102,6 +116,21 @@ expect_success_worker = () => {
       testObject.CONSTANT = 10;
       assert_equals(testObject.CONSTANT, 1, 'Constant should not be modifiable');
     }, 'Constant should exist and not be modifiable in ' + worker_type + ' worker');
+  done();
+}
+
+// Test whether the origin-trial-enabled attributes are attached in a worker
+// where the deprecation trial is enabled, either directly or by the related
+// trial.
+expect_success_worker_deprecation = () => {
+  // Use |worker_type| to make the test descriptions unique when multiple
+  // workers are created in a single test file.
+  var worker_type = get_worker_type();
+  test(() => {
+      var testObject = self.internals.originTrialsTest();
+      assert_idl_attribute(testObject, 'deprecationAttribute');
+      assert_true(testObject.deprecationAttribute, 'Attribute should return boolean value');
+    }, 'Deprecation attribute should exist and return value in ' + worker_type + ' worker');
   done();
 }
 

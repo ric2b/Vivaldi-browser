@@ -8,6 +8,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_items.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_test.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 
@@ -22,9 +23,12 @@ class NGFragmentItemTest : public NGLayoutTest,
 
   Vector<const NGFragmentItem*> ItemsForAsVector(
       const LayoutObject& layout_object) {
-    const auto items = NGFragmentItem::ItemsFor(layout_object);
     Vector<const NGFragmentItem*> list;
-    for (const NGFragmentItem& item : items) {
+    NGInlineCursor cursor;
+    for (cursor.MoveTo(layout_object); cursor;
+         cursor.MoveToNextForSameLayoutObject()) {
+      DCHECK(cursor.Current().Item());
+      const NGFragmentItem& item = *cursor.Current().Item();
       EXPECT_EQ(item.GetLayoutObject(), &layout_object);
       list.push_back(&item);
     }
@@ -67,12 +71,12 @@ TEST_F(NGFragmentItemTest, BasicText) {
   const NGFragmentItem& text1 = *items_for_text[0];
   EXPECT_EQ(text1.Type(), NGFragmentItem::kText);
   EXPECT_EQ(text1.GetLayoutObject(), layout_text);
-  EXPECT_EQ(text1.Offset(), PhysicalOffset());
+  EXPECT_EQ(text1.OffsetInContainerBlock(), PhysicalOffset());
 
   const NGFragmentItem& text2 = *items_for_text[1];
   EXPECT_EQ(text2.Type(), NGFragmentItem::kText);
   EXPECT_EQ(text2.GetLayoutObject(), layout_text);
-  EXPECT_EQ(text2.Offset(), PhysicalOffset(0, 10));
+  EXPECT_EQ(text2.OffsetInContainerBlock(), PhysicalOffset(0, 10));
 
   EXPECT_EQ(IntRect(0, 0, 70, 20),
             layout_text->FragmentsVisualRectBoundingBox());
@@ -108,7 +112,6 @@ TEST_F(NGFragmentItemTest, BasicInlineBox) {
   ASSERT_NE(span1, nullptr);
   Vector<const NGFragmentItem*> items_for_span1 = ItemsForAsVector(*span1);
   EXPECT_EQ(items_for_span1.size(), 2u);
-
   EXPECT_EQ(IntRect(0, 0, 80, 20), span1->FragmentsVisualRectBoundingBox());
 
   // "span2" doesn't wrap, produces only one fragment.
@@ -116,8 +119,52 @@ TEST_F(NGFragmentItemTest, BasicInlineBox) {
   ASSERT_NE(span2, nullptr);
   Vector<const NGFragmentItem*> items_for_span2 = ItemsForAsVector(*span2);
   EXPECT_EQ(items_for_span2.size(), 1u);
-
   EXPECT_EQ(IntRect(0, 20, 80, 10), span2->FragmentsVisualRectBoundingBox());
+}
+
+// Same as |BasicInlineBox| but `<span>`s do not have background.
+// They will not need box fragments, but all operations should work the same.
+TEST_F(NGFragmentItemTest, CulledInlineBox) {
+  LoadAhem();
+  SetBodyInnerHTML(R"HTML(
+    <style>
+    html, body {
+      margin: 0;
+      font-family: Ahem;
+      font-size: 10px;
+      line-height: 1;
+    }
+    #container {
+      width: 10ch;
+    }
+    </style>
+    <div id="container">
+      000
+      <span id="span1">1234 5678</span>
+      999
+      <span id="span2">12345678</span>
+    </div>
+  )HTML");
+
+  // "span1" wraps, produces two fragments.
+  const LayoutObject* span1 = GetLayoutObjectByElementId("span1");
+  ASSERT_NE(span1, nullptr);
+  Vector<const NGFragmentItem*> items_for_span1 = ItemsForAsVector(*span1);
+  EXPECT_EQ(items_for_span1.size(), 2u);
+  EXPECT_EQ(IntRect(0, 0, 80, 20), span1->FragmentsVisualRectBoundingBox());
+
+  // "span2" doesn't wrap, produces only one fragment.
+  const LayoutObject* span2 = GetLayoutObjectByElementId("span2");
+  ASSERT_NE(span2, nullptr);
+  Vector<const NGFragmentItem*> items_for_span2 = ItemsForAsVector(*span2);
+  EXPECT_EQ(items_for_span2.size(), 1u);
+  EXPECT_EQ(IntRect(0, 20, 80, 10), span2->FragmentsVisualRectBoundingBox());
+
+  // Except that they do not produce box fragments.
+  for (const NGFragmentItem* item : items_for_span1)
+    EXPECT_EQ(item->BoxFragment(), nullptr);
+  for (const NGFragmentItem* item : items_for_span2)
+    EXPECT_EQ(item->BoxFragment(), nullptr);
 }
 
 }  // namespace blink

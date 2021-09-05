@@ -17,7 +17,6 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
 #include "base/bind_helpers.h"
-#include "base/command_line.h"
 #include "ui/aura/window.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -82,9 +81,8 @@ class CollisionDetectionUtilsDisplayTest
           std::tuple<std::string, std::size_t>> {
  public:
   void SetUp() override {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        keyboard::switches::kEnableVirtualKeyboard);
     AshTestBase::SetUp();
+    SetVirtualKeyboardEnabled(true);
 
     const std::string& display_string = std::get<0>(GetParam());
     const std::size_t root_window_index = std::get<1>(GetParam());
@@ -94,7 +92,7 @@ class CollisionDetectionUtilsDisplayTest
     scoped_root_.reset(new ScopedRootWindowForNewWindows(root_window_));
     for (auto* root_window_controller : Shell::GetAllRootWindowControllers()) {
       auto* shelf = root_window_controller->shelf();
-      shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
+      shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlwaysHidden);
     }
   }
 
@@ -206,7 +204,7 @@ TEST_P(CollisionDetectionUtilsDisplayTest, RestingPositionSnapsInsideDisplay) {
 
 TEST_P(CollisionDetectionUtilsDisplayTest,
        RestingPositionWorksIfKeyboardIsDisabled) {
-  SetTouchKeyboardEnabled(false);
+  SetVirtualKeyboardEnabled(false);
   auto display = GetDisplay();
 
   // Snap near top edge to top.
@@ -311,7 +309,7 @@ TEST_P(CollisionDetectionUtilsDisplayTest, GetRestingPositionAvoidsKeyboard) {
 
 TEST_P(CollisionDetectionUtilsDisplayTest, AutoHideShownShelfAffectsWindow) {
   auto* shelf = Shelf::ForWindow(root_window());
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
   EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
 
   auto shelf_bounds = shelf->GetWindow()->GetBoundsInScreen();

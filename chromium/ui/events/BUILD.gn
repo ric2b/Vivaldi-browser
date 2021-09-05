@@ -10,7 +10,6 @@ import("//ui/base/ui_features.gni")
 import("//ui/ozone/ozone.gni")
 
 if (is_android) {
-  import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
 }
 
@@ -18,22 +17,11 @@ if (is_ios) {
   import("//ios/build/config.gni")
 }
 
-if (is_android) {
-  if (!defined(keycode_conversion_data_android_path)) {
-    keycode_conversion_data_android_path =
-        "keycodes/dom/keycode_conversion_data_android.inc"
-  }
-  keycode_conversion_data_android_gen_path = "$target_gen_dir/keycodes/dom/keycode_conversion_data_android_generated.inc"
-
-  copy("keycode_conversion_data_android") {
-    sources = [
-      keycode_conversion_data_android_path,
-    ]
-    outputs = [
-      keycode_conversion_data_android_gen_path,
-    ]
-  }
-}
+# Reset sources_assignment_filter for the BUILD.gn file to prevent
+# regression during the migration of Chromium away from the feature.
+# See docs/no_sources_assignment_filter.md for more information.
+# TODO(crbug.com/1018739): remove this when migration is done.
+set_sources_assignment_filter([])
 
 jumbo_static_library("dom_keycode_converter") {
   public = [
@@ -44,23 +32,15 @@ jumbo_static_library("dom_keycode_converter") {
   ]
 
   sources = [
+    "keycodes/dom/dom_code_data.inc",
     "keycodes/dom/dom_key_data.inc",
     "keycodes/dom/keycode_converter.cc",
-    "keycodes/dom/keycode_converter_data.inc",
   ]
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 
   if (!is_ios) {
     deps += [ "//ipc:param_traits" ]
-  }
-
-  if (is_android) {
-    sources += [ keycode_conversion_data_android_gen_path ]
-
-    deps += [ ":keycode_conversion_data_android" ]
   }
 }
 
@@ -68,31 +48,37 @@ static_library("dom_keyboard_layout") {
   public = [
     "keycodes/dom/dom_keyboard_layout.h",
     "keycodes/dom/dom_keyboard_layout_manager.h",
-    "keycodes/dom/dom_keyboard_layout_map.h",
   ]
 
   sources = [
     "keycodes/dom/dom_keyboard_layout.cc",
     "keycodes/dom/dom_keyboard_layout_manager.cc",
-    "keycodes/dom/dom_keyboard_layout_map_base.cc",
-    "keycodes/dom/dom_keyboard_layout_map_base.h",
   ]
+
+  deps = [
+    ":dom_keycode_converter",
+    ":events_base",
+    "//base",
+  ]
+
+  if (is_win || is_mac || use_ozone) {
+    public += [ "keycodes/dom/dom_keyboard_layout_map.h" ]
+
+    sources += [
+      "keycodes/dom/dom_keyboard_layout_map_base.cc",
+      "keycodes/dom/dom_keyboard_layout_map_base.h",
+    ]
+  }
 
   # Make sure we don't compile two versions of dom_keyboard_layout_map*
   if (is_mac) {
     sources += [ "keycodes/dom/dom_keyboard_layout_map_mac.mm" ]
   } else if (is_win) {
     sources += [ "keycodes/dom/dom_keyboard_layout_map_win.cc" ]
-  } else {
+  } else if (use_ozone) {
     sources += [ "keycodes/dom/dom_keyboard_layout_map_ozone.cc" ]
+    deps += [ "//ui/events/ozone/layout" ]
   }
-
-  deps = [
-    ":dom_keycode_converter",
-    ":events_base",
-    "//base",
-    "//ui/events/ozone:events_ozone_layout",
-  ]
 
   if (!is_ios) {
     deps += [ "//ipc:param_traits" ]
@@ -106,15 +92,11 @@ static_library("dom_keyboard_layout") {
 }
 
 source_set("event_constants") {
-  sources = [
-    "event_constants.h",
-  ]
+  sources = [ "event_constants.h" ]
 }
 
 source_set("platform_event") {
-  sources = [
-    "platform_event.h",
-  ]
+  sources = [ "platform_event.h" ]
 }
 
 jumbo_component("events_base") {
@@ -133,21 +115,38 @@ jumbo_component("events_base") {
     "gestures/fixed_velocity_curve.h",
     "gestures/fling_curve.cc",
     "gestures/fling_curve.h",
+    "gestures/physics_based_fling_curve.cc",
+    "gestures/physics_based_fling_curve.h",
     "keycodes/dom_us_layout_data.h",
     "keycodes/keyboard_code_conversion.cc",
     "keycodes/keyboard_code_conversion.h",
-    "keycodes/keyboard_code_conversion_android.cc",
-    "keycodes/keyboard_code_conversion_android.h",
-    "keycodes/keyboard_code_conversion_mac.h",
-    "keycodes/keyboard_code_conversion_mac.mm",
-    "keycodes/keyboard_code_conversion_win.cc",
-    "keycodes/keyboard_code_conversion_win.h",
     "keycodes/keyboard_codes.h",
     "mobile_scroller.cc",
     "mobile_scroller.h",
     "pointer_details.cc",
     "pointer_details.h",
   ]
+
+  if (is_android) {
+    sources += [
+      "keycodes/keyboard_code_conversion_android.cc",
+      "keycodes/keyboard_code_conversion_android.h",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "keycodes/keyboard_code_conversion_mac.h",
+      "keycodes/keyboard_code_conversion_mac.mm",
+    ]
+  }
+
+  if (is_win) {
+    sources += [
+      "keycodes/keyboard_code_conversion_win.cc",
+      "keycodes/keyboard_code_conversion_win.h",
+    ]
+  }
 
   defines = [ "EVENTS_BASE_IMPLEMENTATION" ]
 
@@ -161,10 +160,11 @@ jumbo_component("events_base") {
     ":platform_event",
     "//base",
     "//ui/events/platform",
+    "//ui/events/types:headers",
     "//ui/gfx/geometry",
   ]
 
-  if (use_x11) {
+  if (use_x11 || ozone_platform_x11) {
     public_deps += [ "//ui/events/keycodes:x11" ]
   }
 
@@ -177,12 +177,6 @@ jumbo_component("events_base") {
       "AppKit.framework",
       "Carbon.framework",
     ]
-  }
-
-  if (is_android) {
-    sources += [ keycode_conversion_data_android_gen_path ]
-
-    deps += [ ":keycode_conversion_data_android" ]
   }
 }
 
@@ -204,18 +198,13 @@ jumbo_component("events") {
     "event_utils.h",
     "events_export.h",
     "gestures/gesture_recognizer.h",
-    "gestures/gesture_recognizer_impl_mac.h",
     "gestures/gesture_types.h",
     "keyboard_hook.h",
     "null_event_targeter.h",
     "scoped_target_handler.h",
-    "win/events_win_utils.h",
-    "win/system_event_state_lookup.h",
   ]
 
   sources = [
-    "cocoa/cocoa_event_utils.mm",
-    "cocoa/events_mac.mm",
     "event.cc",
     "event_dispatcher.cc",
     "event_handler.cc",
@@ -229,23 +218,42 @@ jumbo_component("events") {
     "events_exports.cc",
     "events_stub.cc",
     "gestures/gesture_recognizer.cc",
-    "gestures/gesture_recognizer_impl_mac.cc",
     "gestures/gesture_types.cc",
     "keyboard_hook_base.cc",
     "keyboard_hook_base.h",
-    "keycodes/platform_key_map_win.cc",
-    "keycodes/platform_key_map_win.h",
-    "mac/keyboard_hook_mac.mm",
     "null_event_targeter.cc",
     "scoped_target_handler.cc",
-    "win/events_win.cc",
-    "win/events_win_utils.cc",
-    "win/keyboard_hook_win_base.cc",
-    "win/keyboard_hook_win_base.h",
-    "win/media_keyboard_hook_win.cc",
-    "win/modifier_keyboard_hook_win.cc",
-    "win/system_event_state_lookup.cc",
   ]
+
+  if (is_win) {
+    public += [
+      "win/events_win_utils.h",
+      "win/system_event_state_lookup.h",
+    ]
+
+    sources += [
+      "keycodes/platform_key_map_win.cc",
+      "keycodes/platform_key_map_win.h",
+      "win/events_win.cc",
+      "win/events_win_utils.cc",
+      "win/keyboard_hook_win_base.cc",
+      "win/keyboard_hook_win_base.h",
+      "win/media_keyboard_hook_win.cc",
+      "win/modifier_keyboard_hook_win.cc",
+      "win/system_event_state_lookup.cc",
+    ]
+  }
+
+  if (is_mac) {
+    public += [ "gestures/gesture_recognizer_impl_mac.h" ]
+
+    sources += [
+      "cocoa/cocoa_event_utils.mm",
+      "cocoa/events_mac.mm",
+      "gestures/gesture_recognizer_impl_mac.cc",
+      "mac/keyboard_hook_mac.mm",
+    ]
+  }
 
   defines = [ "EVENTS_IMPLEMENTATION" ]
 
@@ -270,10 +278,12 @@ jumbo_component("events") {
   friend = [ ":*" ]
 
   if (use_x11) {
-    sources += [
-      "x/events_x.cc",
-      "x/keyboard_hook_x11.cc",
-    ]
+    sources += [ "x/keyboard_hook_x11.cc" ]
+  }
+
+  if (use_x11 || ozone_platform_x11) {
+    public += [ "x/x11_event_translation.h" ]
+    sources += [ "x/x11_event_translation.cc" ]
     configs += [ "//build/config/linux:x11" ]
     deps += [
       "//ui/events/devices",
@@ -287,7 +297,7 @@ jumbo_component("events") {
     configs += [ "//build/config/linux:glib" ]
   }
 
-  if (use_ozone) {
+  if (use_ozone || use_x11) {
     sources += [ "events_default.cc" ]
   }
 
@@ -301,7 +311,7 @@ jumbo_component("events") {
       "ozone/events_ozone.cc",
       "ozone/keyboard_hook_ozone.cc",
     ]
-    deps += [ "//ui/events/ozone:events_ozone_layout" ]
+    deps += [ "//ui/events/ozone/layout" ]
   }
 
   if (use_aura) {
@@ -356,7 +366,7 @@ jumbo_component("events") {
       "fuchsia/input_event_dispatcher_delegate.h",
     ]
     sources += [ "fuchsia/input_event_dispatcher.cc" ]
-    public_deps += [ "//third_party/fuchsia-sdk/sdk:ui_input" ]
+    public_deps += [ "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.input" ]
   }
 }
 
@@ -426,28 +436,23 @@ jumbo_component("gesture_detection") {
 
 jumbo_static_library("test_support") {
   sources = [
-    "test/cocoa_test_event_utils.h",
-    "test/cocoa_test_event_utils.mm",
     "test/event_generator.cc",
     "test/event_generator.h",
     "test/events_test_utils.cc",
     "test/events_test_utils.h",
     "test/keyboard_layout.cc",
     "test/keyboard_layout.h",
-    "test/keyboard_layout_mac.cc",
-    "test/keyboard_layout_win.cc",
     "test/motion_event_test_utils.cc",
     "test/motion_event_test_utils.h",
     "test/platform_event_source_test_api.cc",
     "test/platform_event_source_test_api.h",
-    "test/platform_event_waiter.cc",
-    "test/platform_event_waiter.h",
     "test/test_event_handler.cc",
     "test/test_event_handler.h",
     "test/test_event_processor.cc",
     "test/test_event_processor.h",
     "test/test_event_rewriter.cc",
     "test/test_event_rewriter.h",
+    "test/test_event_rewriter_continuation.h",
     "test/test_event_source.cc",
     "test/test_event_source.h",
     "test/test_event_target.cc",
@@ -455,6 +460,18 @@ jumbo_static_library("test_support") {
     "test/test_event_targeter.cc",
     "test/test_event_targeter.h",
   ]
+
+  if (is_win) {
+    sources += [ "test/keyboard_layout_win.cc" ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "test/cocoa_test_event_utils.h",
+      "test/cocoa_test_event_utils.mm",
+      "test/keyboard_layout_mac.cc",
+    ]
+  }
 
   public_deps = [
     ":dom_keycode_converter",
@@ -471,13 +488,6 @@ jumbo_static_library("test_support") {
     "//ui/gfx/geometry",
   ]
 
-  if (is_ios) {
-    sources -= [
-      "test/cocoa_test_event_utils.h",
-      "test/cocoa_test_event_utils.mm",
-    ]
-  }
-
   if (is_mac) {
     libs = [ "Carbon.framework" ]
   }
@@ -486,16 +496,20 @@ jumbo_static_library("test_support") {
     sources += [
       "test/events_test_utils_x11.cc",
       "test/events_test_utils_x11.h",
+      "test/x11_event_waiter.cc",
+      "test/x11_event_waiter.h",
     ]
     deps += [
       "//ui/events/devices/x11",
       "//ui/events/keycodes:x11",
+      "//ui/events/platform/x11",
+      "//ui/events/x",
       "//ui/gfx/x",
     ]
   }
 
-  if (use_x11 || ozone_platform_x11) {
-    deps += [ "//ui/events/x" ]
+  if (use_ozone) {
+    deps += [ "//ui/events/ozone/layout" ]
   }
 }
 
@@ -517,10 +531,10 @@ if (!is_ios) {
       "blink/prediction/linear_predictor_unittest.cc",
       "blink/prediction/linear_resampling_unittest.cc",
       "blink/prediction/one_euro_filter_unittests.cc",
+      "blink/prediction/prediction_metrics_handler_unittest.cc",
       "blink/scroll_predictor_unittest.cc",
       "blink/web_input_event_traits_unittest.cc",
       "blink/web_input_event_unittest.cc",
-      "cocoa/events_mac_unittest.mm",
       "event_dispatcher_unittest.cc",
       "event_processor_unittest.cc",
       "event_rewriter_unittest.cc",
@@ -538,18 +552,27 @@ if (!is_ios) {
       "gesture_detection/velocity_tracker_unittest.cc",
       "gestures/blink/web_gesture_curve_impl_unittest.cc",
       "gestures/fling_curve_unittest.cc",
-      "keycodes/dom/dom_keyboard_layout_map_unittest.cc",
+      "gestures/physics_based_fling_curve_unittest.cc",
       "keycodes/dom/keycode_converter_unittest.cc",
       "keycodes/keyboard_code_conversion_unittest.cc",
-      "keycodes/platform_key_map_win_unittest.cc",
       "mobile_scroller_unittest.cc",
       "mojom/mojom_traits_unittest.cc",
       "platform/platform_event_source_unittest.cc",
       "scoped_target_handler_unittest.cc",
-      "win/event_utils_win_unittest.cc",
-      "win/media_keyboard_hook_win_unittest.cc",
-      "win/modifier_keyboard_hook_win_unittest.cc",
     ]
+
+    if (is_mac) {
+      sources += [ "cocoa/events_mac_unittest.mm" ]
+    }
+
+    if (is_win) {
+      sources += [
+        "keycodes/platform_key_map_win_unittest.cc",
+        "win/event_utils_win_unittest.cc",
+        "win/media_keyboard_hook_win_unittest.cc",
+        "win/modifier_keyboard_hook_win_unittest.cc",
+      ]
+    }
 
     deps = [
       ":dom_keyboard_layout",
@@ -580,27 +603,19 @@ if (!is_ios) {
       "//ui/gfx/ipc/geometry",
     ]
 
-    defines = []
-
     if (is_android) {
       sources += [ "android/motion_event_android_unittest.cc" ]
       deps += [ "//ui/android:ui_full_java" ]
     } else {
-      data_deps = [
-        "//third_party/mesa_headers",
-      ]
+      data_deps = [ "//third_party/mesa_headers" ]
     }
 
     if (use_x11) {
-      sources += [
-        "devices/x11/device_data_manager_x11_unittest.cc",
-        "x/events_x_unittest.cc",
-      ]
+      sources += [ "devices/x11/device_data_manager_x11_unittest.cc" ]
       configs += [ "//build/config/linux:x11" ]
       deps += [
         "//ui/events/devices/x11",
-        "//ui/events/x",
-        "//ui/gfx/x",
+        "//ui/events/x:unittests",
       ]
     }
 
@@ -608,38 +623,10 @@ if (!is_ios) {
       sources += [ "devices/device_data_manager_unittest.cc" ]
     }
 
-    if (use_ozone && (is_linux || is_chromeos)) {
-      sources += [
-        "ozone/chromeos/cursor_controller_unittest.cc",
-        "ozone/evdev/event_converter_evdev_impl_unittest.cc",
-        "ozone/evdev/event_converter_test_util.cc",
-        "ozone/evdev/event_converter_test_util.h",
-        "ozone/evdev/event_device_info_unittest.cc",
-        "ozone/evdev/event_device_test_util.cc",
-        "ozone/evdev/event_device_test_util.h",
-        "ozone/evdev/gamepad_event_converter_evdev_unittest.cc",
-        "ozone/evdev/input_injector_evdev_unittest.cc",
-        "ozone/evdev/tablet_event_converter_evdev_unittest.cc",
-        "ozone/evdev/testing/fake_cursor_delegate_evdev.h",
-        "ozone/evdev/touch_event_converter_evdev_unittest.cc",
-        "ozone/evdev/touch_filter/false_touch_finder_unittest.cc",
-        "ozone/evdev/touch_filter/heuristic_stylus_palm_detection_filter_unittest.cc",
-        "ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_util_unittest.cc",
-        "ozone/evdev/touch_filter/open_palm_detection_filter_unittest.cc",
-        "ozone/evdev/touch_filter/palm_detection_filter_factory_unittest.cc",
-      ]
-
-      if (use_xkbcommon) {
-        sources += [
-          "ozone/layout/keyboard_layout_engine_unittest.cc",
-          "ozone/layout/xkb/xkb_keyboard_layout_engine_unittest.cc",
-        ]
-      }
-
+    if (use_ozone) {
       deps += [
-        "//ui/events/ozone:events_ozone",
-        "//ui/events/ozone:events_ozone_evdev",
-        "//ui/events/ozone:events_ozone_layout",
+        "//ui/events/ozone:unittests",
+        "//ui/events/ozone/layout",
       ]
     }
 
@@ -660,7 +647,12 @@ if (!is_ios) {
 
     if (is_fuchsia) {
       sources += [ "fuchsia/input_event_dispatcher_unittest.cc" ]
-      deps += [ "//third_party/fuchsia-sdk/sdk:ui_input" ]
+      deps += [ "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.input" ]
+    }
+
+    if (is_win || is_mac || use_ozone) {
+      sources += [ "keycodes/dom/dom_keyboard_layout_map_unittest.cc" ]
+      deps += [ ":dom_keyboard_layout" ]
     }
   }
 }
@@ -680,9 +672,7 @@ if (is_android) {
 source_set("events_interactive_ui_tests") {
   testonly = true
   if (is_win) {
-    sources = [
-      "win/media_keyboard_hook_win_interactive_test.cc",
-    ]
+    sources = [ "win/media_keyboard_hook_win_interactive_test.cc" ]
 
     deps = [
       ":events",

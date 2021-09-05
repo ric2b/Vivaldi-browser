@@ -20,6 +20,7 @@ static_library("core") {
     "distiller.h",
     "distiller_page.cc",
     "distiller_page.h",
+    "distiller_ui_handle.h",
     "distiller_url_fetcher.cc",
     "distiller_url_fetcher.h",
     "dom_distiller_constants.cc",
@@ -58,12 +59,12 @@ static_library("core") {
   ]
   deps = [
     "//base",
+    "//components/dom_distiller/core/mojom",
     "//components/leveldb_proto",
     "//components/pref_registry",
     "//components/prefs",
     "//components/resources",
     "//components/strings",
-    "//components/sync",
     "//components/variations",
     "//services/network/public/cpp:cpp",
     "//skia",
@@ -95,7 +96,6 @@ static_library("test_support") {
     ":core",
     "//base",
     "//components/leveldb_proto:test_support",
-    "//components/sync",
     "//testing/gmock",
     "//testing/gtest",
     "//url",
@@ -109,10 +109,8 @@ bundle_data("unit_tests_bundle_data") {
     "//components/test/data/dom_distiller/core_features.json",
     "//components/test/data/dom_distiller/derived_features.json",
   ]
-  outputs = [
-    "{{bundle_resources_dir}}/" +
-        "{{source_root_relative_dir}}/{{source_file_part}}",
-  ]
+  outputs = [ "{{bundle_resources_dir}}/" +
+              "{{source_root_relative_dir}}/{{source_file_part}}" ]
 }
 
 source_set("unit_tests") {
@@ -140,7 +138,6 @@ source_set("unit_tests") {
     "//components/leveldb_proto:test_support",
     "//components/resources",
     "//components/strings",
-    "//components/sync",
     "//components/sync_preferences:test_support",
     "//net:test_support",
     "//services/network:test_support",
@@ -164,8 +161,6 @@ if (is_android) {
   }
 
   java_cpp_enum("distiller_type_java") {
-    sources = [
-      "experiments.h",
-    ]
+    sources = [ "experiments.h" ]
   }
 }

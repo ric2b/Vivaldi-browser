@@ -40,7 +40,7 @@ import org.chromium.ui.base.EventForwarder;
 public class ContentView extends FrameLayout
         implements ViewEventSink.InternalAccessDelegate, SmartClipProvider,
                    OnHierarchyChangeListener, OnSystemUiVisibilityChangeListener {
-    private static final String TAG = "cr.ContentView";
+    private static final String TAG = "ContentView";
 
     // Default value to signal that the ContentView's size need not be overridden.
     public static final int DEFAULT_MEASURE_SPEC =
@@ -100,6 +100,10 @@ public class ContentView extends FrameLayout
 
         setOnHierarchyChangeListener(this);
         setOnSystemUiVisibilityChangeListener(this);
+    }
+
+    public WebContents getWebContents() {
+        return mWebContents;
     }
 
     protected WebContentsAccessibility getWebContentsAccessibility() {

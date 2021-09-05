@@ -10,11 +10,13 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "content/public/common/isolated_world_ids.h"
 #include "content/public/renderer/chrome_object_extensions_utils.h"
 #include "content/public/renderer/render_frame.h"
 #include "gin/arguments.h"
 #include "gin/function_template.h"
 #include "google_apis/gaia/gaia_urls.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "url/origin.h"
@@ -26,6 +28,26 @@ const url::Origin& GetAllowedOrigin() {
       url::Origin::Create(GaiaUrls::GetInstance()->gaia_url()));
   CHECK(!origin->opaque());
   return *origin;
+}
+
+// This function is intended to convert a binary blob representing an encryption
+// key and provided by the web via a Javascript ArrayBuffer.
+std::vector<uint8_t> ArrayBufferAsBytes(
+    const v8::Local<v8::ArrayBuffer>& array_buffer) {
+  auto backing_store = array_buffer->GetBackingStore();
+  const uint8_t* start =
+      reinterpret_cast<const uint8_t*>(backing_store->Data());
+  const size_t length = backing_store->ByteLength();
+  return std::vector<uint8_t>(start, start + length);
+}
+
+std::vector<std::vector<uint8_t>> EncryptionKeysAsBytes(
+    const std::vector<v8::Local<v8::ArrayBuffer>>& encryption_keys) {
+  std::vector<std::vector<uint8_t>> encryption_keys_as_bytes;
+  for (const v8::Local<v8::ArrayBuffer>& encryption_key : encryption_keys) {
+    encryption_keys_as_bytes.push_back(ArrayBufferAsBytes(encryption_key));
+  }
+  return encryption_keys_as_bytes;
 }
 
 }  // namespace
@@ -45,13 +67,17 @@ void SyncEncryptionKeysExtension::OnDestruct() {
   delete this;
 }
 
-void SyncEncryptionKeysExtension::DidClearWindowObject() {
+void SyncEncryptionKeysExtension::DidCreateScriptContext(
+    v8::Local<v8::Context> v8_context,
+    int32_t world_id) {
   if (!render_frame()) {
     return;
   }
 
   url::Origin origin = render_frame()->GetWebFrame()->GetSecurityOrigin();
-  if (origin == GetAllowedOrigin()) {
+  if (render_frame()->IsMainFrame() &&
+      world_id == content::ISOLATED_WORLD_ID_GLOBAL &&
+      origin == GetAllowedOrigin()) {
     Install();
   }
 }
@@ -63,8 +89,9 @@ void SyncEncryptionKeysExtension::Install() {
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context =
       render_frame()->GetWebFrame()->MainWorldScriptContext();
-  if (context.IsEmpty())
+  if (context.IsEmpty()) {
     return;
+  }
 
   v8::Context::Scope context_scope(context);
 
@@ -86,9 +113,35 @@ void SyncEncryptionKeysExtension::Install() {
 void SyncEncryptionKeysExtension::SetSyncEncryptionKeys(gin::Arguments* args) {
   DCHECK(render_frame());
 
+  // This function as exposed to the web has the following signature:
+  //   setSyncEncryptionKeys(callback, gaia_id, encryption_keys,
+  //                         last_key_version)
+  //
+  // Where:
+  //   callback: Allows caller to get notified upon completion.
+  //   gaia_id: String representing the user's server-provided ID.
+  //   encryption_keys: Array where each element is an ArrayBuffer representing
+  //                    an encryption key (binary blob).
+  //   last_key_version: Key version corresponding to the last key in
+  //                     |encryption_keys|.
+
   v8::HandleScope handle_scope(args->isolate());
 
-  std::vector<std::string> encryption_keys;
+  v8::Local<v8::Function> callback;
+  if (!args->GetNext(&callback)) {
+    DLOG(ERROR) << "No callback";
+    args->ThrowError();
+    return;
+  }
+
+  std::string gaia_id;
+  if (!args->GetNext(&gaia_id)) {
+    DLOG(ERROR) << "No account ID";
+    args->ThrowError();
+    return;
+  }
+
+  std::vector<v8::Local<v8::ArrayBuffer>> encryption_keys;
   if (!args->GetNext(&encryption_keys)) {
     DLOG(ERROR) << "Not array of strings";
     args->ThrowError();
@@ -101,16 +154,9 @@ void SyncEncryptionKeysExtension::SetSyncEncryptionKeys(gin::Arguments* args) {
     return;
   }
 
-  std::string account_id;
-  if (!args->GetNext(&account_id)) {
-    DLOG(ERROR) << "No account ID";
-    args->ThrowError();
-    return;
-  }
-
-  v8::Local<v8::Function> callback;
-  if (!args->GetNext(&callback)) {
-    DLOG(ERROR) << "No callback";
+  int last_key_version = 0;
+  if (!args->GetNext(&last_key_version)) {
+    DLOG(ERROR) << "No version provided";
     args->ThrowError();
     return;
   }
@@ -118,16 +164,22 @@ void SyncEncryptionKeysExtension::SetSyncEncryptionKeys(gin::Arguments* args) {
   auto global_callback =
       std::make_unique<v8::Global<v8::Function>>(args->isolate(), callback);
 
-  // TODO(crbug.com/1000146): Pass along the encryption keys to the browser
-  // process.
-  NOTIMPLEMENTED();
-  RunCompletionCallback(std::move(global_callback));
+  if (!remote_.is_bound()) {
+    render_frame()->GetRemoteAssociatedInterfaces()->GetInterface(&remote_);
+  }
+
+  remote_->SetEncryptionKeys(
+      gaia_id, EncryptionKeysAsBytes(encryption_keys), last_key_version,
+      base::BindOnce(&SyncEncryptionKeysExtension::RunCompletionCallback,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::move(global_callback)));
 }
 
 void SyncEncryptionKeysExtension::RunCompletionCallback(
     std::unique_ptr<v8::Global<v8::Function>> callback) {
-  if (!render_frame())
+  if (!render_frame()) {
     return;
+  }
 
   v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);

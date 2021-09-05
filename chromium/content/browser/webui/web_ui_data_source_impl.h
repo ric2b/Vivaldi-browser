@@ -20,7 +20,6 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "ui/base/template_expressions.h"
 
 namespace content {
 
@@ -54,22 +53,19 @@ class CONTENT_EXPORT WebUIDataSourceImpl : public URLDataSourceImpl,
   void EnableReplaceI18nInJS() override;
   std::string GetSource() override;
 
-  // URLDataSourceImpl:
-  const ui::TemplateReplacements* GetReplacements() const override;
-
   // Add the locale to the load time data defaults. May be called repeatedly.
   void EnsureLoadTimeDataDefaultsAdded();
 
   bool IsWebUIDataSourceImpl() const override;
+  void AddFrameAncestor(const GURL& frame_ancestor) override;
 
  protected:
   explicit WebUIDataSourceImpl(const std::string& source_name);
   ~WebUIDataSourceImpl() override;
 
   // Completes a request by sending our dictionary of localized strings.
-  void SendLocalizedStringsAsJSON(
-      const URLDataSource::GotDataCallback& callback,
-      bool from_js_module);
+  void SendLocalizedStringsAsJSON(URLDataSource::GotDataCallback callback,
+                                  bool from_js_module);
 
   // Protected for testing.
   virtual const base::DictionaryValue* GetLocalizedStrings() const;
@@ -83,9 +79,9 @@ class CONTENT_EXPORT WebUIDataSourceImpl : public URLDataSourceImpl,
   // Methods that match URLDataSource which are called by
   // InternalDataSource.
   std::string GetMimeType(const std::string& path) const;
-  void StartDataRequest(const std::string& path,
+  void StartDataRequest(const GURL& url,
                         const WebContents::Getter& wc_getter,
-                        const URLDataSource::GotDataCallback& callback);
+                        URLDataSource::GotDataCallback callback);
 
   int PathToIdrOrDefault(const std::string& path) const;
 
@@ -127,6 +123,7 @@ class CONTENT_EXPORT WebUIDataSourceImpl : public URLDataSourceImpl,
   bool add_load_time_data_defaults_ = true;
   bool replace_existing_source_ = true;
   bool should_replace_i18n_in_js_ = false;
+  std::set<GURL> frame_ancestors_;
 
   DISALLOW_COPY_AND_ASSIGN(WebUIDataSourceImpl);
 };

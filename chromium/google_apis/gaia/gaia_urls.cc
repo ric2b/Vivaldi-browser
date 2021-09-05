@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
+#include "build/build_config.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "google_apis/google_api_keys.h"
 #include "url/url_canon.h"
@@ -30,6 +31,17 @@ const char kEmbeddedSetupWindowsUrlSuffix[] = "embedded/setup/windows";
 // signs in to Chrome. Note that Gaia will pass this client specified parameter
 // to all URLs that are loaded as part of thi sign-in flow.
 const char kSigninChromeSyncDice[] = "signin/chrome/sync?ssp=1";
+
+#if defined(OS_ANDROID)
+const char kSigninChromeSyncKeysUrl[] = "encryption/unlock/android";
+#elif defined(OS_IOS)
+const char kSigninChromeSyncKeysUrl[] = "encryption/unlock/ios";
+#elif defined(OS_CHROMEOS)
+const char kSigninChromeSyncKeysUrl[] = "encryption/unlock/chromeos";
+#else
+const char kSigninChromeSyncKeysUrl[] = "encryption/unlock/desktop";
+#endif
+
 const char kServiceLoginAuthUrlSuffix[] = "ServiceLoginAuth";
 const char kServiceLogoutUrlSuffix[] = "Logout";
 const char kContinueUrlForLogoutSuffix[] = "chrome/blank.html";
@@ -44,6 +56,7 @@ const char kOAuthRevokeTokenUrlSuffix[] = "AuthSubRevokeToken";
 const char kListAccountsSuffix[] = "ListAccounts?json=standard";
 const char kEmbeddedSigninSuffix[] = "embedded/setup/chrome/usermenu";
 const char kAddAccountSuffix[] = "AddSession";
+const char kReauthSuffix[] = "embedded/xreauth/chrome";
 const char kGetCheckConnectionInfoSuffix[] = "GetCheckConnectionInfo";
 
 // API calls from accounts.google.com (LSO)
@@ -55,6 +68,7 @@ const char kOAuth2RevokeUrlSuffix[] = "o/oauth2/revoke";
 const char kOAuth2TokenUrlSuffix[] = "oauth2/v4/token";
 const char kOAuth2TokenInfoUrlSuffix[] = "oauth2/v2/tokeninfo";
 const char kOAuthUserInfoUrlSuffix[] = "oauth2/v1/userinfo";
+const char kReAuthApiUrlSuffix[] = "reauth/v1beta/users/";
 
 // API calls from oauthaccountmanager.googleapis.com
 const char kOAuth2IssueTokenUrlSuffix[] = "v1/issuetoken";
@@ -75,9 +89,12 @@ GURL GetURLSwitchValueWithDefault(const char* switch_value,
   std::string string_value;
   GetSwitchValueWithDefault(switch_value, default_value, &string_value);
   const GURL result(string_value);
-  DCHECK(result.is_valid()) << "Invalid URL \"" << string_value
-                            << "\" for switch \"" << switch_value << "\"";
-  return result;
+  if (result.is_valid()) {
+    return result;
+  }
+  LOG(ERROR) << "Ignoring invalid URL \"" << string_value << "\" for switch \""
+             << switch_value << "\"";
+  return GURL(default_value);
 }
 
 
@@ -119,6 +136,7 @@ GaiaUrls::GaiaUrls() {
   embedded_setup_windows_url_ =
       gaia_url_.Resolve(kEmbeddedSetupWindowsUrlSuffix);
   signin_chrome_sync_dice_ = gaia_url_.Resolve(kSigninChromeSyncDice);
+  signin_chrome_sync_keys_url_ = gaia_url_.Resolve(kSigninChromeSyncKeysUrl);
   service_login_auth_url_ = gaia_url_.Resolve(kServiceLoginAuthUrlSuffix);
   service_logout_url_ = gaia_url_.Resolve(kServiceLogoutUrlSuffix);
   continue_url_for_logout_ = gaia_url_.Resolve(kContinueUrlForLogoutSuffix);
@@ -134,6 +152,7 @@ GaiaUrls::GaiaUrls() {
   list_accounts_url_ = gaia_url_.Resolve(kListAccountsSuffix);
   embedded_signin_url_ = gaia_url_.Resolve(kEmbeddedSigninSuffix);
   add_account_url_ = gaia_url_.Resolve(kAddAccountSuffix);
+  reauth_url_ = gaia_url_.Resolve(kReauthSuffix);
   get_check_connection_info_url_ =
       gaia_url_.Resolve(kGetCheckConnectionInfoSuffix);
 
@@ -148,6 +167,7 @@ GaiaUrls::GaiaUrls() {
       google_apis_origin_url.Resolve(kOAuth2TokenInfoUrlSuffix);
   oauth_user_info_url_ =
       google_apis_origin_url.Resolve(kOAuthUserInfoUrlSuffix);
+  reauth_api_url_ = google_apis_origin_url.Resolve(kReAuthApiUrlSuffix);
 
   // URLs from oauthaccountmanager.googleapis.com/v1/issuetoken
   oauth2_issue_token_url_ =
@@ -194,6 +214,10 @@ const GURL& GaiaUrls::embedded_setup_windows_url() const {
 
 const GURL& GaiaUrls::signin_chrome_sync_dice() const {
   return signin_chrome_sync_dice_;
+}
+
+const GURL& GaiaUrls::signin_chrome_sync_keys_url() const {
+  return signin_chrome_sync_keys_url_;
 }
 
 const GURL& GaiaUrls::service_login_auth_url() const {
@@ -252,6 +276,10 @@ const GURL& GaiaUrls::add_account_url() const {
   return add_account_url_;
 }
 
+const GURL& GaiaUrls::reauth_url() const {
+  return reauth_url_;
+}
+
 const std::string& GaiaUrls::oauth2_chrome_client_id() const {
   return oauth2_chrome_client_id_;
 }
@@ -278,6 +306,10 @@ const GURL& GaiaUrls::oauth2_token_info_url() const {
 
 const GURL& GaiaUrls::oauth2_revoke_url() const {
   return oauth2_revoke_url_;
+}
+
+const GURL& GaiaUrls::reauth_api_url() const {
+  return reauth_api_url_;
 }
 
 const GURL& GaiaUrls::gaia_login_form_realm() const {

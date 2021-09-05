@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/workers/threaded_worklet_messaging_proxy.h"
 
 #include "base/single_thread_task_runner.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_cache_options.h"
@@ -50,28 +51,28 @@ void ThreadedWorkletMessagingProxy::Initialize(
   // LayoutWorklet and PaintWorklet.
   const String global_scope_name = g_empty_string;
 
-  Document* document = To<Document>(GetExecutionContext());
+  Document* document = Document::From(GetExecutionContext());
   ContentSecurityPolicy* csp = document->GetContentSecurityPolicy();
   DCHECK(csp);
 
   auto global_scope_creation_params =
       std::make_unique<GlobalScopeCreationParams>(
-          document->Url(), mojom::ScriptType::kModule,
-          OffMainThreadWorkerScriptFetchOption::kEnabled, global_scope_name,
+          document->Url(), mojom::blink::ScriptType::kModule, global_scope_name,
           document->UserAgent(),
+          document->GetFrame()->Client()->UserAgentMetadata(),
           document->GetFrame()->Client()->CreateWorkerFetchContext(),
           csp->Headers(), document->GetReferrerPolicy(),
           document->GetSecurityOrigin(), document->IsSecureContext(),
           document->GetHttpsState(), worker_clients,
           document->GetFrame()->Client()->CreateWorkerContentSettingsClient(),
-          document->AddressSpace(),
-          OriginTrialContext::GetTokens(document).get(),
+          document->GetSecurityContext().AddressSpace(),
+          OriginTrialContext::GetTokens(document->ToExecutionContext()).get(),
           base::UnguessableToken::Create(),
           std::make_unique<WorkerSettings>(document->GetSettings()),
           kV8CacheOptionsDefault, module_responses_map,
-          service_manager::mojom::blink::InterfaceProviderPtrInfo(),
-          mojo::NullRemote(), BeginFrameProviderParams(),
-          nullptr /* parent_feature_policy */, document->GetAgentClusterID());
+          mojo::NullRemote() /* browser_interface_broker */,
+          BeginFrameProviderParams(), nullptr /* parent_feature_policy */,
+          document->ToExecutionContext()->GetAgentClusterID());
 
   // Worklets share the pre-initialized backing thread so that we don't have to
   // specify the backing thread startup data.
@@ -79,7 +80,7 @@ void ThreadedWorkletMessagingProxy::Initialize(
                          thread_startup_data);
 }
 
-void ThreadedWorkletMessagingProxy::Trace(blink::Visitor* visitor) {
+void ThreadedWorkletMessagingProxy::Trace(Visitor* visitor) {
   ThreadedMessagingProxyBase::Trace(visitor);
 }
 

@@ -10,6 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/branding_buildflags.h"
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
 #include "chrome/browser/chromeos/login/screen_manager.h"
 #include "chrome/browser/chromeos/login/screens/network_error.h"
@@ -41,6 +42,16 @@ constexpr const base::TimeDelta kShowDelay =
 }  // anonymous namespace
 
 // static
+std::string UpdateScreen::GetResultString(Result result) {
+  switch (result) {
+    case Result::UPDATE_NOT_REQUIRED:
+      return "UpdateNotRequired";
+    case Result::UPDATE_ERROR:
+      return "UpdateError";
+  }
+}
+
+// static
 UpdateScreen* UpdateScreen::Get(ScreenManager* manager) {
   return static_cast<UpdateScreen*>(manager->GetScreen(UpdateView::kScreenId));
 }
@@ -48,7 +59,7 @@ UpdateScreen* UpdateScreen::Get(ScreenManager* manager) {
 UpdateScreen::UpdateScreen(UpdateView* view,
                            ErrorScreen* error_screen,
                            const ScreenExitCallback& exit_callback)
-    : BaseScreen(UpdateView::kScreenId),
+    : BaseScreen(UpdateView::kScreenId, OobeScreenPriority::DEFAULT),
       view_(view),
       error_screen_(error_screen),
       exit_callback_(exit_callback),
@@ -69,8 +80,8 @@ void UpdateScreen::OnViewDestroyed(UpdateView* view) {
     view_ = nullptr;
 }
 
-void UpdateScreen::Show() {
-#if !defined(OFFICIAL_BUILD)
+void UpdateScreen::ShowImpl() {
+#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
   if (view_) {
     view_->SetCancelUpdateShortcutEnabled(true);
   }
@@ -84,7 +95,7 @@ void UpdateScreen::Show() {
   version_updater_->StartNetworkCheck();
 }
 
-void UpdateScreen::Hide() {
+void UpdateScreen::HideImpl() {
   show_timer_.Stop();
   if (view_)
     view_->Hide();
@@ -92,12 +103,13 @@ void UpdateScreen::Hide() {
 }
 
 void UpdateScreen::OnUserAction(const std::string& action_id) {
-  bool is_official_build = false;
-#if defined(OFFICIAL_BUILD)
-  is_official_build = true;
+  bool is_chrome_branded_build = false;
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  is_chrome_branded_build = true;
 #endif
 
-  if (!is_official_build && action_id == kUserActionCancelUpdateShortcut) {
+  if (!is_chrome_branded_build &&
+      action_id == kUserActionCancelUpdateShortcut) {
     // Skip update UI, usually used only in debug builds/tests.
     VLOG(1) << "Forced update cancel";
     ExitUpdate(Result::UPDATE_NOT_REQUIRED);

@@ -11,7 +11,7 @@
 #include "base/sequence_checker.h"
 #include "content/common/content_export.h"
 #include "services/network/public/cpp/resource_request.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -40,7 +40,9 @@ class CONTENT_EXPORT AppCacheRequest {
   const std::string& GetMethod() const { return request_.method; }
 
   // Used for cookie policy.
-  const GURL& GetSiteForCookies() const { return request_.site_for_cookies; }
+  net::SiteForCookies GetSiteForCookies() const {
+    return request_.site_for_cookies;
+  }
 
   // The referrer for this request.
   const GURL GetReferrer() const { return request_.referrer; }
@@ -70,7 +72,7 @@ class CONTENT_EXPORT AppCacheRequest {
   void UpdateWithRedirectInfo(const net::RedirectInfo& redirect_info);
 
   void set_request(const network::ResourceRequest& request);
-  void set_response(const network::ResourceResponseHead& response);
+  void set_response(network::mojom::URLResponseHeadPtr response);
 
   base::WeakPtr<AppCacheRequest> GetWeakPtr();
 
@@ -80,15 +82,15 @@ class CONTENT_EXPORT AppCacheRequest {
 
  protected:
   friend class AppCacheRequestHandler;
-  // Enables the AppCacheJob to call GetResourceRequest().
-  friend class AppCacheJob;
+  // Enables the AppCacheURLLoader to call GetResourceRequest().
+  friend class AppCacheURLLoader;
 
   // Returns the underlying ResourceRequest.
   network::ResourceRequest* GetResourceRequest() { return &request_; }
 
  private:
   network::ResourceRequest request_;
-  network::ResourceResponseHead response_;
+  network::mojom::URLResponseHeadPtr response_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

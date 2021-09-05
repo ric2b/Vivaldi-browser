@@ -11,13 +11,13 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/net_errors.h"
 #include "net/quic/address_utils.h"
-#include "net/third_party/quiche/src/quic/platform/api/quic_clock.h"
+#include "net/third_party/quiche/src/quic/core/quic_clock.h"
 
 namespace net {
 
 QuicChromiumPacketReader::QuicChromiumPacketReader(
     DatagramClientSocket* socket,
-    quic::QuicClock* clock,
+    const quic::QuicClock* clock,
     Visitor* visitor,
     int yield_after_packets,
     quic::QuicTime::Delta yield_after_duration,
@@ -44,7 +44,7 @@ void QuicChromiumPacketReader::StartReading() {
     if (num_packets_read_ == 0)
       yield_after_ = clock_->Now() + yield_after_duration_;
 
-    DCHECK(socket_);
+    CHECK(socket_);
     read_pending_ = true;
     int rv =
         socket_->Read(read_buffer_.get(), read_buffer_->size(),
@@ -92,14 +92,17 @@ bool QuicChromiumPacketReader::ProcessReadResult(int result) {
   IPEndPoint peer_address;
   socket_->GetLocalAddress(&local_address);
   socket_->GetPeerAddress(&peer_address);
+  auto self = weak_factory_.GetWeakPtr();
+  // Notifies the visitor that |this| reader gets a new packet, which may delete
+  // |this| if |this| is a connectivity probing reader.
   return visitor_->OnPacket(packet, ToQuicSocketAddress(local_address),
-                            ToQuicSocketAddress(peer_address));
+                            ToQuicSocketAddress(peer_address)) &&
+         self;
 }
 
 void QuicChromiumPacketReader::OnReadComplete(int result) {
-  if (ProcessReadResult(result)) {
+  if (ProcessReadResult(result))
     StartReading();
-  }
 }
 
 }  // namespace net

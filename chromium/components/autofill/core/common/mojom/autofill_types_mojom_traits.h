@@ -153,6 +153,10 @@ struct StructTraits<autofill::mojom::FormFieldDataDataView,
     return r.label_source;
   }
 
+  static gfx::RectF bounds(const autofill::FormFieldData& r) {
+    return r.bounds;
+  }
+
   static bool Read(autofill::mojom::FormFieldDataDataView data,
                    autofill::FormFieldData* out);
 };
@@ -302,18 +306,23 @@ struct StructTraits<autofill::mojom::FormDataPredictionsDataView,
 };
 
 template <>
-struct StructTraits<autofill::mojom::PasswordAndRealmDataView,
-                    autofill::PasswordAndRealm> {
-  static const base::string16& password(const autofill::PasswordAndRealm& r) {
+struct StructTraits<autofill::mojom::PasswordAndMetadataDataView,
+                    autofill::PasswordAndMetadata> {
+  static const base::string16& password(
+      const autofill::PasswordAndMetadata& r) {
     return r.password;
   }
 
-  static const std::string& realm(const autofill::PasswordAndRealm& r) {
+  static const std::string& realm(const autofill::PasswordAndMetadata& r) {
     return r.realm;
   }
 
-  static bool Read(autofill::mojom::PasswordAndRealmDataView data,
-                   autofill::PasswordAndRealm* out);
+  static bool uses_account_store(const autofill::PasswordAndMetadata& r) {
+    return r.uses_account_store;
+  }
+
+  static bool Read(autofill::mojom::PasswordAndMetadataDataView data,
+                   autofill::PasswordAndMetadata* out);
 };
 
 template <>
@@ -351,7 +360,11 @@ struct StructTraits<autofill::mojom::PasswordFormFillDataDataView,
     return r.preferred_realm;
   }
 
-  static const std::map<base::string16, autofill::PasswordAndRealm>&
+  static bool uses_account_store(const autofill::PasswordFormFillData& r) {
+    return r.uses_account_store;
+  }
+
+  static const std::map<base::string16, autofill::PasswordAndMetadata>&
   additional_logins(const autofill::PasswordFormFillData& r) {
     return r.additional_logins;
   }
@@ -418,9 +431,9 @@ struct StructTraits<autofill::mojom::PasswordGenerationUIDataDataView,
     return r.text_direction;
   }
 
-  static const autofill::PasswordForm& password_form(
+  static const autofill::FormData& form_data(
       const autofill::password_generation::PasswordGenerationUIData& r) {
-    return r.password_form;
+    return r.form_data;
   }
 
   static bool Read(
@@ -511,8 +524,6 @@ struct StructTraits<autofill::mojom::PasswordFormDataView,
       const autofill::PasswordForm& r) {
     return r.confirmation_password_element;
   }
-
-  static bool preferred(const autofill::PasswordForm& r) { return r.preferred; }
 
   static const base::Time& date_created(const autofill::PasswordForm& r) {
     return r.date_created;

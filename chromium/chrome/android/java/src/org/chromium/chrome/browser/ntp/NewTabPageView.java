@@ -6,21 +6,22 @@ package org.chromium.chrome.browser.ntp;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.support.v7.widget.DefaultItemAnimator;
-import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.RecyclerView.AdapterDataObserver;
-import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
+import android.widget.FrameLayout;
+
+import androidx.annotation.VisibleForTesting;
+import androidx.recyclerview.widget.DefaultItemAnimator;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.RecyclerView.AdapterDataObserver;
+import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 
 import org.chromium.base.TraceEvent;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
-import org.chromium.chrome.browser.gesturenav.HistoryNavigationDelegateFactory;
-import org.chromium.chrome.browser.gesturenav.HistoryNavigationLayout;
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
@@ -30,15 +31,17 @@ import org.chromium.chrome.browser.suggestions.SuggestionsDependencyFactory;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
 import org.chromium.chrome.browser.suggestions.tile.TileGroup;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.ui.widget.displaystyle.UiConfig;
-import org.chromium.chrome.browser.ui.widget.displaystyle.ViewResizer;
-import org.chromium.chrome.browser.util.ViewUtils;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.tab.TabUtils;
+import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
+import org.chromium.components.browser_ui.widget.displaystyle.ViewResizer;
+import org.chromium.ui.base.ViewUtils;
 
 /**
  * The native new tab page, represented by some basic data such as title and url, and an Android
  * View that displays the page.
  */
-public class NewTabPageView extends HistoryNavigationLayout {
+public class NewTabPageView extends FrameLayout {
     private static final String TAG = "NewTabPageView";
 
     private NewTabPageRecyclerView mRecyclerView;
@@ -111,10 +114,11 @@ public class NewTabPageView extends HistoryNavigationLayout {
      * @param searchProviderIsGoogle Whether the search provider is Google.
      * @param scrollPosition The adapter scroll position to initialize to.
      * @param constructedTimeNs The timestamp at which the new tab page's construction started.
+     * @param activityLifecycleDispatcher Allows us to subscribe to lifecycle events.
      */
     public void initialize(NewTabPageManager manager, Tab tab, TileGroup.Delegate tileGroupDelegate,
             boolean searchProviderHasLogo, boolean searchProviderIsGoogle, int scrollPosition,
-            long constructedTimeNs) {
+            long constructedTimeNs, ActivityLifecycleDispatcher activityLifecycleDispatcher) {
         TraceEvent.begin(TAG + ".initialize()");
         mTab = tab;
         mManager = manager;
@@ -122,23 +126,20 @@ public class NewTabPageView extends HistoryNavigationLayout {
 
         assert manager.getSuggestionsSource() != null;
 
-        // Don't store a direct reference to the activity, because it might change later if the tab
-        // is reparented.
-        Runnable closeContextMenuCallback = () -> mTab.getActivity().closeContextMenu();
+        Runnable closeContextMenuCallback = TabUtils.getActivity(tab)::closeContextMenu;
         mContextMenuManager = new ContextMenuManager(mManager.getNavigationDelegate(),
                 mRecyclerView::setTouchEnabled, closeContextMenuCallback,
                 NewTabPage.CONTEXT_MENU_USER_ACTION_PREFIX);
         mTab.getWindowAndroid().addContextMenuCloseListener(mContextMenuManager);
-        setNavigationDelegate(HistoryNavigationDelegateFactory.create(mTab));
 
         OverviewModeBehavior overviewModeBehavior =
-                tab.getActivity() instanceof ChromeTabbedActivity
-                ? tab.getActivity().getOverviewModeBehavior()
+                ((TabImpl) tab).getActivity() instanceof ChromeTabbedActivity
+                ? ((TabImpl) tab).getActivity().getOverviewModeBehavior()
                 : null;
 
-        mNewTabPageLayout.initialize(manager, tab.getActivity(), overviewModeBehavior,
+        mNewTabPageLayout.initialize(manager, ((TabImpl) tab).getActivity(), overviewModeBehavior,
                 tileGroupDelegate, searchProviderHasLogo, searchProviderIsGoogle, mRecyclerView,
-                mContextMenuManager, mUiConfig);
+                mContextMenuManager, mUiConfig, activityLifecycleDispatcher);
 
         NewTabPageUma.trackTimeToFirstDraw(this, constructedTimeNs);
 
@@ -181,7 +182,7 @@ public class NewTabPageView extends HistoryNavigationLayout {
             }
         });
 
-        Profile profile = Profile.getLastUsedProfile();
+        Profile profile = Profile.getLastUsedRegularProfile();
         OfflinePageBridge offlinePageBridge =
                 SuggestionsDependencyFactory.getInstance().getOfflinePageBridge(profile);
 

@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/chromeos/arc/arc_app_id_provider_impl.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
@@ -24,11 +25,17 @@ class Profile;
 
 namespace arc {
 
+constexpr const char kGeneratedPropertyFilesPath[] = "/run/arc/host_generated";
+constexpr const char kGeneratedPropertyFilesPathVm[] =
+    "/run/arcvm/host_generated";
+
 class ArcAndroidManagementChecker;
 class ArcDataRemover;
 class ArcFastAppReinstallStarter;
 class ArcPaiStarter;
 class ArcTermsOfServiceNegotiator;
+class ArcUiAvailabilityReporter;
+
 enum class ProvisioningResult : int;
 
 // This class is responsible for handing stages of ARC life-cycle.
@@ -133,6 +140,12 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
     // switches to an error page by itself.
     virtual void OnArcErrorShowRequested(ArcSupportHost::Error error) {}
 
+    // Called with true when the /run/arc[vm]/host_generated/*.prop files are
+    // generated (and false when the attempt fails.) The function is called once
+    // per observer regardless of whether the attempt has already been made
+    // before the observer is added.
+    virtual void OnPropertyFilesExpanded(bool result) {}
+
    protected:
     virtual ~Observer() = default;
   };
@@ -151,6 +164,10 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // TODO(hidehiko): The name is very close to IsArcAllowedForProfile(), but
   // has different meaning. Clean this up.
   bool IsAllowed() const;
+
+  // Start expanding the property files. Note that these property files are
+  // needed to start the mini instance.
+  void ExpandPropertyFiles();
 
   // Initializes ArcSessionManager. Before this runs, Profile must be set
   // via SetProfile().
@@ -268,6 +285,25 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
     OnTermsOfServiceNegotiated(accepted);
   }
 
+  // Invokes OnExpandPropertyFiles as if the expansion is done.
+  void OnExpandPropertyFilesForTesting(bool result) {
+    OnExpandPropertyFiles(result);
+  }
+
+  void reset_property_files_expansion_result() {
+    property_files_expansion_result_.reset();
+  }
+
+  void set_property_files_source_dir_for_testing(
+      const base::FilePath& property_files_source_dir) {
+    property_files_source_dir_ = property_files_source_dir;
+  }
+
+  void set_property_files_dest_dir_for_testing(
+      const base::FilePath& property_files_dest_dir) {
+    property_files_dest_dir_ = property_files_dest_dir;
+  }
+
  private:
   // Reports statuses of OptIn flow to UMA.
   class ScopedOptInFlowTracker;
@@ -346,6 +382,9 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // chromeos::SessionManagerClient::Observer:
   void EmitLoginPromptVisibleCalled() override;
 
+  // Called when ExpandPropertyFiles is done.
+  void OnExpandPropertyFiles(bool result);
+
   std::unique_ptr<ArcSessionRunner> arc_session_runner_;
 
   // Unowned pointer. Keeps current profile.
@@ -375,6 +414,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   std::unique_ptr<ScopedOptInFlowTracker> scoped_opt_in_tracker_;
   std::unique_ptr<ArcPaiStarter> pai_starter_;
   std::unique_ptr<ArcFastAppReinstallStarter> fast_app_reinstall_starter_;
+  std::unique_ptr<ArcUiAvailabilityReporter> arc_ui_availability_reporter_;
 
   // The time when the sign in process started.
   base::TimeTicks sign_in_start_time_;
@@ -383,6 +423,10 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   base::Closure attempt_user_exit_callback_;
 
   ArcAppIdProviderImpl app_id_provider_;
+
+  base::Optional<bool> property_files_expansion_result_;
+  base::FilePath property_files_source_dir_;
+  base::FilePath property_files_dest_dir_;
 
   // Must be the last member.
   base::WeakPtrFactory<ArcSessionManager> weak_ptr_factory_{this};

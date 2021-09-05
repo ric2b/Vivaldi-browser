@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/web/modules/mediastream/remote_media_stream_track_adapter.h"
+#include "third_party/blink/renderer/modules/mediastream/remote_media_stream_track_adapter.h"
 
 #include "base/single_thread_task_runner.h"
 #include "media/base/limits.h"
-#include "third_party/blink/public/platform/modules/mediastream/media_stream_audio_source.h"
-#include "third_party/blink/public/platform/modules/webrtc/track_observer.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
-#include "third_party/blink/public/web/modules/peerconnection/media_stream_remote_video_source.h"
+#include "third_party/blink/renderer/modules/peerconnection/media_stream_remote_video_source.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/webrtc/peer_connection_remote_audio_source.h"
+#include "third_party/blink/renderer/platform/webrtc/track_observer.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
@@ -24,14 +24,10 @@ RemoteVideoTrackAdapter::RemoteVideoTrackAdapter(
   std::unique_ptr<TrackObserver> observer(
       new TrackObserver(main_thread, observed_track().get()));
   // Here, we use CrossThreadUnretained() to avoid a circular reference.
-  //
-  // TODO(crbug.com/963574): Remove the use of ConvertToBaseOnceCallback here
-  // once the file that includes remote_media_stream_track_adapter.h (namely
-  // webrtc_media_stream_track_adapter.h) is Onion souped.
-  web_initialize_ = ConvertToBaseOnceCallback(
+  web_initialize_ =
       CrossThreadBindOnce(&RemoteVideoTrackAdapter::InitializeWebVideoTrack,
                           CrossThreadUnretained(this), std::move(observer),
-                          observed_track()->enabled()));
+                          observed_track()->enabled());
 }
 
 RemoteVideoTrackAdapter::~RemoteVideoTrackAdapter() {
@@ -61,7 +57,8 @@ void RemoteVideoTrackAdapter::InitializeWebVideoTrack(
   web_track()->Source().SetCapabilities(capabilities);
 
   web_track()->SetPlatformTrack(std::make_unique<MediaStreamVideoTrack>(
-      video_source, MediaStreamVideoSource::ConstraintsCallback(), enabled));
+      video_source, MediaStreamVideoSource::ConstraintsOnceCallback(),
+      enabled));
 }
 
 RemoteAudioTrackAdapter::RemoteAudioTrackAdapter(
@@ -75,13 +72,9 @@ RemoteAudioTrackAdapter::RemoteAudioTrackAdapter(
   // TODO(tommi): Use TrackObserver instead.
   observed_track()->RegisterObserver(this);
   // Here, we use CrossThreadUnretained() to avoid a circular reference.
-  //
-  // TODO(crbug.com/963574): Remove the use of ConvertToBaseOnceCallback here
-  // once the file that includes remote_media_stream_track_adapter.h (namely
-  // webrtc_media_stream_track_adapter.h) is Onion souped.
-  web_initialize_ = ConvertToBaseOnceCallback(
+  web_initialize_ =
       CrossThreadBindOnce(&RemoteAudioTrackAdapter::InitializeWebAudioTrack,
-                          CrossThreadUnretained(this), main_thread));
+                          CrossThreadUnretained(this), main_thread);
 }
 
 RemoteAudioTrackAdapter::~RemoteAudioTrackAdapter() {

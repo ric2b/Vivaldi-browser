@@ -5,25 +5,33 @@
 package org.chromium.chrome.browser.touch_to_fill;
 
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.CREDENTIAL;
-import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.FAVICON;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.FAVICON_OR_FALLBACK;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.FORMATTED_ORIGIN;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.ON_CLICK_LISTENER;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.DISMISS_HANDLER;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.FooterProperties.BRANDING_MESSAGE_ID;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.FORMATTED_URL;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.ORIGIN_SECURE;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.HeaderProperties.SINGLE_CREDENTIAL;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ON_CLICK_MANAGE;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.SHEET_ITEMS;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.VISIBLE;
-import static org.chromium.chrome.browser.util.UrlUtilities.stripScheme;
+import static org.chromium.components.embedder_support.util.UrlUtilities.stripScheme;
 
+import android.content.Context;
 import android.text.method.PasswordTransformationMethod;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.StringRes;
+
+import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ItemType;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
+import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -46,7 +54,11 @@ class TouchToFillViewBinder {
         if (propertyKey == DISMISS_HANDLER) {
             view.setDismissHandler(model.get(DISMISS_HANDLER));
         } else if (propertyKey == VISIBLE) {
-            view.setVisible(model.get(VISIBLE));
+            boolean visibilityChangeSuccessful = view.setVisible(model.get(VISIBLE));
+            if (!visibilityChangeSuccessful && model.get(VISIBLE)) {
+                assert (model.get(DISMISS_HANDLER) != null);
+                model.get(DISMISS_HANDLER).onResult(BottomSheetController.StateChangeReason.NONE);
+            }
         } else if (propertyKey == ON_CLICK_MANAGE) {
             view.setOnManagePasswordClick(model.get(ON_CLICK_MANAGE));
         } else if (propertyKey == SHEET_ITEMS) {
@@ -77,6 +89,9 @@ class TouchToFillViewBinder {
             case ItemType.FILL_BUTTON:
                 return new TouchToFillViewHolder(parent, R.layout.touch_to_fill_fill_button,
                         TouchToFillViewBinder::bindFillButtonView);
+            case ItemType.FOOTER:
+                return new TouchToFillViewHolder(parent, R.layout.touch_to_fill_footer,
+                        TouchToFillViewBinder::bindFooterView);
         }
         assert false : "Cannot create view for ItemType: " + itemType;
         return null;
@@ -103,9 +118,13 @@ class TouchToFillViewBinder {
     private static void bindCredentialView(
             PropertyModel model, View view, PropertyKey propertyKey) {
         Credential credential = model.get(CREDENTIAL);
-        if (propertyKey == FAVICON) {
+        if (propertyKey == FAVICON_OR_FALLBACK) {
             ImageView imageView = view.findViewById(R.id.favicon);
-            imageView.setImageBitmap(model.get(FAVICON));
+            CredentialProperties.FaviconOrFallback data = model.get(FAVICON_OR_FALLBACK);
+            imageView.setImageDrawable(FaviconUtils.getIconDrawableWithoutFilter(data.mIcon,
+                    data.mUrl, data.mFallbackColor,
+                    FaviconUtils.createCircularIconGenerator(view.getResources()),
+                    view.getResources(), data.mIconSize));
         } else if (propertyKey == ON_CLICK_LISTENER) {
             view.setOnClickListener(
                     clickedView -> { model.get(ON_CLICK_LISTENER).onResult(credential); });
@@ -146,7 +165,7 @@ class TouchToFillViewBinder {
         if (propertyKey == ON_CLICK_LISTENER) {
             view.setOnClickListener(
                     clickedView -> { model.get(ON_CLICK_LISTENER).onResult(credential); });
-        } else if (propertyKey == FAVICON || propertyKey == FORMATTED_ORIGIN
+        } else if (propertyKey == FAVICON_OR_FALLBACK || propertyKey == FORMATTED_ORIGIN
                 || propertyKey == CREDENTIAL) {
             // The button appearance is static.
         } else {
@@ -161,7 +180,16 @@ class TouchToFillViewBinder {
      * @param key The {@link PropertyKey} which changed.
      */
     private static void bindHeaderView(PropertyModel model, View view, PropertyKey key) {
-        if (key == FORMATTED_URL || key == ORIGIN_SECURE) {
+        if (key == SINGLE_CREDENTIAL || key == FORMATTED_URL || key == ORIGIN_SECURE) {
+            TextView sheetTitleText = view.findViewById(R.id.touch_to_fill_sheet_title);
+            @StringRes
+            int titleStringId;
+            if (model.get(SINGLE_CREDENTIAL)) {
+                titleStringId = R.string.touch_to_fill_sheet_title_single;
+            } else {
+                titleStringId = R.string.touch_to_fill_sheet_title;
+            }
+            sheetTitleText.setText(view.getContext().getString(titleStringId));
             TextView sheetSubtitleText = view.findViewById(R.id.touch_to_fill_sheet_subtitle);
             if (model.get(ORIGIN_SECURE)) {
                 sheetSubtitleText.setText(model.get(FORMATTED_URL));
@@ -170,6 +198,23 @@ class TouchToFillViewBinder {
                         String.format(view.getContext().getString(
                                               R.string.touch_to_fill_sheet_subtitle_not_secure),
                                 model.get(FORMATTED_URL)));
+            }
+        } else {
+            assert false : "Unhandled update to property:" + key;
+        }
+    }
+
+    private static void bindFooterView(PropertyModel model, View view, PropertyKey key) {
+        if (key == BRANDING_MESSAGE_ID) {
+            TextView brandingMessage = view.findViewById(R.id.touch_to_fill_branding_message);
+            @StringRes
+            int messageId = model.get(BRANDING_MESSAGE_ID);
+            if (messageId == 0) {
+                brandingMessage.setVisibility(View.GONE);
+            } else {
+                Context context = view.getContext();
+                brandingMessage.setText(String.format(context.getString(messageId),
+                        context.getString(org.chromium.chrome.R.string.app_name)));
             }
         } else {
             assert false : "Unhandled update to property:" + key;

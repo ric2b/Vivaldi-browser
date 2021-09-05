@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/modules/speech/speech_grammar_list.h"
 #include "third_party/blink/renderer/modules/speech/speech_recognition.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
@@ -42,11 +43,6 @@ SpeechRecognitionController::SpeechRecognitionController(LocalFrame& frame)
 
 SpeechRecognitionController::~SpeechRecognitionController() {
   // FIXME: Call m_client->pageDestroyed(); once we have implemented a client.
-}
-
-SpeechRecognitionController* SpeechRecognitionController::Create(
-    LocalFrame& frame) {
-  return MakeGarbageCollected<SpeechRecognitionController>(frame);
 }
 
 void SpeechRecognitionController::Start(
@@ -70,7 +66,6 @@ void SpeechRecognitionController::Start(
   msg_params->max_hypotheses = max_alternatives;
   msg_params->continuous = continuous;
   msg_params->interim_results = interim_results;
-  msg_params->origin = GetSupplementable()->GetDocument()->GetSecurityOrigin();
   msg_params->client = std::move(session_client);
   msg_params->session_receiver = std::move(session_receiver);
 
@@ -79,7 +74,7 @@ void SpeechRecognitionController::Start(
 
 void ProvideSpeechRecognitionTo(LocalFrame& frame) {
   SpeechRecognitionController::ProvideTo(
-      frame, SpeechRecognitionController::Create(frame));
+      frame, MakeGarbageCollected<SpeechRecognitionController>(frame));
 }
 
 mojo::Remote<mojom::blink::SpeechRecognizer>&

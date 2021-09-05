@@ -18,8 +18,8 @@
 #include "components/version_info/channel.h"
 #include "content/public/common/content_features.h"
 #include "ui/events/event.h"
-#include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/event_monitor.h"
 #include "ui/views/view.h"
@@ -175,7 +175,14 @@ void FullscreenControlHost::OnMouseEvent(const ui::MouseEvent& event) {
       DCHECK_EQ(InputEntryMethod::NOT_ACTIVE, input_entry_method_);
       if (!in_mouse_cooldown_mode_ &&
           event.y() <= kShowFullscreenExitControlHeight) {
-        ShowForInputEntryMethod(InputEntryMethod::MOUSE);
+        // If the exit fullscreen prompt is being shown (say user just pressed
+        // F11 with the cursor on the top of the screen) then we suppress the
+        // fullscreen control host and just put it in cooldown mode.
+        const auto* bubble = browser_view_->exclusive_access_bubble();
+        if (bubble && bubble->IsShowing())
+          in_mouse_cooldown_mode_ = true;
+        else
+          ShowForInputEntryMethod(InputEntryMethod::MOUSE);
       } else if (in_mouse_cooldown_mode_ &&
                  event.y() >= CalculateCursorBufferHeight()) {
         in_mouse_cooldown_mode_ = false;

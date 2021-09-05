@@ -11,6 +11,7 @@
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/machine_level_user_cloud_policy_store.h"
+#include "components/policy/core/common/features.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -65,6 +66,35 @@ bool MachineLevelUserCloudPolicyManager::IsClientRegistered() {
   return client() && client()->is_registered();
 }
 
+void MachineLevelUserCloudPolicyManager::AddClientObserver(
+    CloudPolicyClient::Observer* observer) {
+  if (client())
+    client()->AddObserver(observer);
+}
+
+void MachineLevelUserCloudPolicyManager::RemoveClientObserver(
+    CloudPolicyClient::Observer* observer) {
+  if (client())
+    client()->RemoveObserver(observer);
+}
+
+void MachineLevelUserCloudPolicyManager::DisconnectAndRemovePolicy() {
+  if (external_data_manager_)
+    external_data_manager_->Disconnect();
+
+  core()->Disconnect();
+
+  // store_->Clear() will publish the updated, empty policy. The component
+  // policy service must be cleared before OnStoreLoaded() is issued, so that
+  // component policies are also empty at CheckAndPublishPolicy().
+  ClearAndDestroyComponentCloudPolicyService();
+
+  // When the |store_| is cleared, it informs the |external_data_manager_| that
+  // all external data references have been removed, causing the
+  // |external_data_manager_| to clear its cache as well.
+  store_->Clear();
+}
+
 void MachineLevelUserCloudPolicyManager::Init(SchemaRegistry* registry) {
   DVLOG(1) << "Machine level cloud policy manager initialized";
   // Call to grand-parent's Init() instead of parent's is intentional.
@@ -82,6 +112,21 @@ void MachineLevelUserCloudPolicyManager::Shutdown() {
   if (external_data_manager_)
     external_data_manager_->Disconnect();
   CloudPolicyManager::Shutdown();
+}
+
+void MachineLevelUserCloudPolicyManager::OnStoreLoaded(
+    CloudPolicyStore* cloud_policy_store) {
+  DCHECK_EQ(store(), cloud_policy_store);
+  CloudPolicyManager::OnStoreLoaded(cloud_policy_store);
+
+  if (!base::FeatureList::IsEnabled(policy::features::kCBCMServiceAccounts))
+    return;
+
+  if (store()->policy() && store()->policy()->has_service_account_identity()) {
+    std::string service_account_id =
+        store()->policy()->service_account_identity();
+    client()->UpdateServiceAccount(service_account_id);
+  }
 }
 
 }  // namespace policy

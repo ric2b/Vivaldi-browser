@@ -93,7 +93,8 @@ bool UserScriptLoader::ParseMetadataHeader(const base::StringPiece& script_text,
     if (line_end == std::string::npos)
       line_end = script_text.length() - 1;
 
-    line.set(script_text.data() + line_start, line_end - line_start);
+    line = base::StringPiece(script_text.data() + line_start,
+                             line_end - line_start);
 
     if (!in_metadata) {
       if (line.starts_with(kUserScriptBegin))
@@ -413,7 +414,7 @@ void UserScriptLoader::OnScriptsLoaded(
       content::Source<BrowserContext>(browser_context_),
       content::Details<base::ReadOnlySharedMemoryRegion>(&shared_memory_));
   for (auto& observer : observers_)
-    observer.OnScriptsLoaded(this);
+    observer.OnScriptsLoaded(this, browser_context_);
 }
 
 void UserScriptLoader::SendUpdate(

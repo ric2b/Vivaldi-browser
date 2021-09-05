@@ -24,10 +24,10 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/window_container_type.mojom-forward.h"
-#include "third_party/blink/public/common/frame/blocked_navigation_types.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/common/security/security_style.h"
 #include "third_party/blink/public/mojom/choosers/color_chooser.mojom-forward.h"
+#include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom-forward.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
@@ -44,6 +44,8 @@ class GURL;
 
 namespace base {
 class FilePath;
+template <typename T>
+class WeakPtr;
 }
 
 namespace blink {
@@ -63,6 +65,7 @@ class SiteInstance;
 class WebContentsImpl;
 struct ContextMenuParams;
 struct DropData;
+struct MediaPlayerWatchTime;
 struct NativeWebKeyboardEvent;
 struct Referrer;
 struct SecurityStyleExplanations;
@@ -173,12 +176,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void LoadingStateChanged(WebContents* source,
                                    bool to_different_document) {}
 
-  // Notifies the delegate that the page has made some progress loading.
-  // |progress| is a value between 0.0 (nothing loaded) to 1.0 (page fully
-  // loaded).
-  virtual void LoadProgressChanged(WebContents* source,
-                                   double progress) {}
-
   // Request the delegate to close this web contents, and do whatever cleanup
   // it needs to do.
   virtual void CloseContents(WebContents* source) {}
@@ -226,6 +223,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   // A message was added to the console of a frame of the page. Returning true
   // indicates that the delegate handled the message. If false is returned the
   // default logging mechanism will be used for the message.
+  // NOTE: If you only need to monitor messages added to the console, rather
+  // than change the behavior when they are added, prefer using
+  // WebContentsObserver::OnDidAddMessageToConsole().
   virtual bool DidAddMessageToConsole(
       WebContents* source,
       blink::mojom::ConsoleMessageLevel log_level,
@@ -357,8 +357,22 @@ class CONTENT_EXPORT WebContentsDelegate {
                                   const GURL& target_url,
                                   WebContents* new_contents) {}
 
-  // Notifies the embedder that a Portal WebContents was created.
+  // Notifies the embedder that a new WebContents has been created to contain
+  // the contents of a portal.
   virtual void PortalWebContentsCreated(WebContents* portal_web_contents) {}
+
+  // Notifies the embedder that an existing WebContents that it manages (e.g., a
+  // browser tab) has become the contents of a portal.
+  //
+  // During portal activation, WebContentsDelegate::ActivatePortalWebContents
+  // will be called to release the delegate's management of a WebContents.
+  // Shortly afterward, the portal will assume ownership of the contents and
+  // call this function to indicate that this is complete, passing the
+  // swapped-out contents as |portal_web_contents|.
+  //
+  // Implementations will likely want to apply changes analogous to those they
+  // would apply to a new WebContents in PortalWebContentsCreated.
+  virtual void WebContentsBecamePortal(WebContents* portal_web_contents) {}
 
   // Notification that one of the frames in the WebContents is hung. |source| is
   // the WebContents that is hung, and |render_widget_host| is the
@@ -576,8 +590,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   // used.
   virtual gfx::Size GetSizeForNewRenderView(WebContents* web_contents);
 
-  // Returns true if the WebContents is never visible.
-  virtual bool IsNeverVisible(WebContents* web_contents);
+  // Returns true if the WebContents is never user-visible, thus the renderer
+  // never needs to produce pixels for display.
+  virtual bool IsNeverComposited(WebContents* web_contents);
 
   // Askss |guest_web_contents| to perform the same. If this returns true, the
   // default behavior is suppressed.
@@ -587,17 +602,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   // default behavior is suppressed.
   virtual bool SaveFrame(const GURL& url, const Referrer& referrer);
 
-  // VB-6063:
-  // Notifies the delegate that the page has made some progress loading.
-  // |progress| is a value between 0.0 (nothing loaded) to 1.0 (page fully
-  // loaded), |loaded_bytes| is the number of bytes currently downloaded,
-  // |loaded_elements| is the loaded elements, |total_elements| is
-  // the currently discovered total number of elements.
-  virtual void ExtendedLoadProgressChanged(WebContents* source,
-                                           double progress,
-                                           double loaded_bytes,
-                                           int loaded_elements,
-                                           int total_elements) {}
   // Can be overridden by a delegate to return the security style of the
   // given |web_contents|, populating |security_style_explanations| to
   // explain why the SecurityStyle was downgraded. Returns
@@ -612,10 +616,11 @@ class CONTENT_EXPORT WebContentsDelegate {
   // |blocked_url| is the blocked navigation target, |initiator_url| is the URL
   // of the frame initiating the navigation, |reason| specifies why the
   // navigation was blocked.
-  virtual void OnDidBlockNavigation(WebContents* web_contents,
-                                    const GURL& blocked_url,
-                                    const GURL& initiator_url,
-                                    blink::NavigationBlockedReason reason) {}
+  virtual void OnDidBlockNavigation(
+      WebContents* web_contents,
+      const GURL& blocked_url,
+      const GURL& initiator_url,
+      blink::mojom::NavigationBlockedReason reason) {}
 
   // Reports that passive mixed content was found at the specified url.
   virtual void PassiveInsecureContentFound(const GURL& resource_url) {}
@@ -630,13 +635,17 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual void SetTopControlsShownRatio(WebContents* web_contents,
                                         float ratio) {}
 
-  // Requests to get browser controls info such as the height of the top/bottom
-  // controls, and whether they will shrink the Blink's view size.
-  // Note that they are not complete in the sense that there is no API to tell
-  // content to poll these values again, except part of resize. But this is not
-  // needed by embedder because it's always accompanied by view size change.
+  // Requests to get browser controls info such as the height/min height of the
+  // top/bottom controls, and whether to animate these changes to height or
+  // whether they will shrink the Blink's view size. Note that they are not
+  // complete in the sense that there is no API to tell content to poll these
+  // values again, except part of resize. But this is not needed by embedder
+  // because it's always accompanied by view size change.
   virtual int GetTopControlsHeight();
+  virtual int GetTopControlsMinHeight();
   virtual int GetBottomControlsHeight();
+  virtual int GetBottomControlsMinHeight();
+  virtual bool ShouldAnimateBrowserControlsHeightChanges();
   virtual bool DoBrowserControlsShrinkRendererSize(
       const WebContents* web_contents);
 
@@ -662,6 +671,17 @@ class CONTENT_EXPORT WebContentsDelegate {
                                          RenderFrameHost* subframe_host) const {
   }
 
+  // Requests to capture a paint preview of an out-of-process subframe for the
+  // specified WebContents. |rect| is the rectangular area where its content
+  // resides in its parent frame. |guid| is a globally unique identitier for an
+  // entire paint preview. |render_frame_host| is the render frame host of the
+  // subframe to be captured.
+  virtual void CapturePaintPreviewOfCrossProcessSubframe(
+      WebContents* web_contents,
+      const gfx::Rect& rect,
+      const base::UnguessableToken& guid,
+      RenderFrameHost* render_frame_host) {}
+
   // Notifies the Picture-in-Picture controller that there is a new player
   // entering Picture-in-Picture.
   // Returns the result of the enter request.
@@ -685,23 +705,46 @@ class CONTENT_EXPORT WebContentsDelegate {
   // Returns true if lazy loading of images and frames should be enabled.
   virtual bool ShouldAllowLazyLoad();
 
-  // Requests the delegate to replace |old_contents| with |new_contents| in the
-  // container that holds |old_contents|. If the  delegate successfully replaces
-  // |old_contents|, the return parameter passes ownership of |old_contents|.
-  // Otherwise, |new_contents| is returned.
-  // |did_finish_load| is true if WebContentsObserver::DidFinishLoad() has
-  // already been called for |new_contents|.
-  virtual std::unique_ptr<WebContents> SwapWebContents(
-      WebContents* old_contents,
-      std::unique_ptr<WebContents> new_contents,
-      bool did_start_load,
-      bool did_finish_load);
+  // Requests the delegate to replace |predecessor_contents| with
+  // |portal_contents| in the container that holds |predecessor_contents|. If
+  // the delegate successfully replaces |predecessor_contents|, the return
+  // parameter passes ownership of |predecessor_contents|. Otherwise,
+  // |portal_contents| is returned.
+  virtual std::unique_ptr<WebContents> ActivatePortalWebContents(
+      WebContents* predecessor_contents,
+      std::unique_ptr<WebContents> portal_contents);
 
   // Returns true if the widget's frame content needs to be stored before
   // eviction and displayed until a new frame is generated. If false, a white
   // solid color is displayed instead.
   virtual bool ShouldShowStaleContentOnEviction(WebContents* source);
 
+  // Determine if the frame is of a low priority.
+  virtual bool IsFrameLowPriority(const WebContents* web_contents,
+                                  const RenderFrameHost* render_frame_host);
+
+  // Returns the user-visible WebContents that is responsible for the activity
+  // in the provided WebContents. For example, this delegate may be aware that
+  // the contents is embedded in some other contents, or hosts background
+  // activity on behalf of a user-visible tab which should be used to display
+  // dialogs and similar affordances to the user.
+  //
+  // This may be distinct from the outer web contents (for example, the
+  // responsible contents may logically "own" a contents but not currently embed
+  // it for rendering).
+  //
+  // For most delegates (where the WebContents is a tab, window or other
+  // directly user-visible feature), simply returning the contents is
+  // appropriate.
+  virtual WebContents* GetResponsibleWebContents(WebContents* web_contents);
+
+  // Invoked when media playback is interrupted or completed.
+  virtual void MediaWatchTimeChanged(const MediaPlayerWatchTime& watch_time) {}
+
+  // Returns a weak ptr to the web contents delegate.
+  virtual base::WeakPtr<WebContentsDelegate> GetDelegateWeakPtr();
+
+  // Vivaldi
   void SetDownloadInformation(const content::DownloadInformation& info);
   content::DownloadInformation* GetDownloadInformation() {
     return &download_info_;

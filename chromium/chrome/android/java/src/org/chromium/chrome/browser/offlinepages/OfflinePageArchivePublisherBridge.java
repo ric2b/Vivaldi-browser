@@ -15,10 +15,11 @@ import android.os.Environment;
 import android.provider.MediaStore.MediaColumns;
 import android.text.format.DateUtils;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ContentUriUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 
@@ -156,9 +157,13 @@ public class OfflinePageArchivePublisherBridge {
             Class<?> downloadsClazz = Class.forName("android.provider.MediaStore$Downloads");
             Field externalUriField = downloadsClazz.getDeclaredField("EXTERNAL_CONTENT_URI");
             externalDownloadUri = (Uri) externalUriField.get(null);
-            Field primaryDirectoryField = MediaColumns.class.getDeclaredField("PRIMARY_DIRECTORY");
-            pendingValues.put(
-                    (String) primaryDirectoryField.get(null), Environment.DIRECTORY_DOWNLOADS);
+            Field directoryField;
+            try {
+                directoryField = MediaColumns.class.getDeclaredField("RELATIVE_PATH");
+            } catch (NoSuchFieldException e) {
+                directoryField = MediaColumns.class.getDeclaredField("PRIMARY_DIRECTORY");
+            }
+            pendingValues.put((String) directoryField.get(null), Environment.DIRECTORY_DOWNLOADS);
         } catch (Exception e) {
             Log.d(TAG, "Unable to set pending download fields.", e);
             return "";

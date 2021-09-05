@@ -5,48 +5,68 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_TABS_TAB_GROUP_EDITOR_BUBBLE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_GROUP_EDITOR_BUBBLE_VIEW_H_
 
+#include "base/optional.h"
 #include "base/strings/string16.h"
-#include "chrome/browser/ui/tabs/tab_group_id.h"
+#include "chrome/browser/ui/views/tabs/tab_group_header.h"
+#include "components/tab_groups/tab_group_color.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 
-class TabController;
+class Browser;
 
-namespace gfx {
-class Size;
-}
+namespace tab_groups {
+enum class TabGroupColorId;
+class TabGroupId;
+}  // namespace tab_groups
 
 class ColorPickerView;
+class TabGroupHeader;
 
 // A dialog for changing a tab group's visual parameters.
-//
-// TODO(crbug.com/989174): polish this UI. It is currently sufficient for
-// testing, but it is not ready to be launched.
 class TabGroupEditorBubbleView : public views::BubbleDialogDelegateView {
  public:
-  // Shows the editor for |group|. Returns an *unowned* pointer to the
+  static constexpr int TAB_GROUP_HEADER_CXMENU_NEW_TAB_IN_GROUP = 13;
+  static constexpr int TAB_GROUP_HEADER_CXMENU_UNGROUP = 14;
+  static constexpr int TAB_GROUP_HEADER_CXMENU_CLOSE_GROUP = 15;
+  static constexpr int TAB_GROUP_HEADER_CXMENU_MOVE_GROUP_TO_NEW_WINDOW = 16;
+  static constexpr int TAB_GROUP_HEADER_CXMENU_FEEDBACK = 17;
+
+  using Colors =
+      std::vector<std::pair<tab_groups::TabGroupColorId, base::string16>>;
+
+  // Shows the editor for |group|. Returns a *non-owning* pointer to the
   // bubble's widget.
-  static views::Widget* Show(views::View* anchor_view,
-                             TabController* tab_controller,
-                             TabGroupId group);
+  static views::Widget* Show(
+      const Browser* browser,
+      const tab_groups::TabGroupId& group,
+      TabGroupHeader* header_view,
+      base::Optional<gfx::Rect> anchor_rect = base::nullopt,
+      // If not provided, will be set to |header_view|.
+      views::View* anchor_view = nullptr,
+      bool stop_context_menu_propagation = false);
 
   // views::BubbleDialogDelegateView:
-  gfx::Size CalculatePreferredSize() const override;
-  base::string16 GetWindowTitle() const override;
   ui::ModalType GetModalType() const override;
-  int GetDialogButtons() const override;
+  views::View* GetInitiallyFocusedView() override;
+  gfx::Rect GetAnchorRect() const override;
 
  private:
-  TabGroupEditorBubbleView(views::View* anchor_view,
-                           TabController* tab_controller,
-                           TabGroupId group);
+  TabGroupEditorBubbleView(const Browser* browser,
+                           const tab_groups::TabGroupId& group,
+                           views::View* anchor_view,
+                           base::Optional<gfx::Rect> anchor_rect,
+                           TabGroupHeader* header_view,
+                           bool stop_context_menu_propagation);
   ~TabGroupEditorBubbleView() override;
 
   void UpdateGroup();
 
-  TabController* const tab_controller_;
-  const TabGroupId group_;
+  void OnBubbleClose();
+
+  const Browser* const browser_;
+  const tab_groups::TabGroupId group_;
 
   class TitleFieldController : public views::TextfieldController {
    public:
@@ -57,15 +77,64 @@ class TabGroupEditorBubbleView : public views::BubbleDialogDelegateView {
     // views::TextfieldController:
     void ContentsChanged(views::Textfield* sender,
                          const base::string16& new_contents) override;
+    bool HandleKeyEvent(views::Textfield* sender,
+                        const ui::KeyEvent& key_event) override;
 
    private:
     TabGroupEditorBubbleView* const parent_;
   };
 
   TitleFieldController title_field_controller_;
-  views::Textfield* title_field_;
 
+  class TitleField : public views::Textfield {
+   public:
+    explicit TitleField(bool stop_context_menu_propagation)
+        : stop_context_menu_propagation_(stop_context_menu_propagation) {}
+    ~TitleField() override = default;
+
+    // views::Textfield:
+    void ShowContextMenu(const gfx::Point& p,
+                         ui::MenuSourceType source_type) override;
+
+   private:
+    // Whether the context menu should be hidden the first time it shows.
+    // Needed because there is no easy way to stop the propagation of a
+    // ShowContextMenu event, which is sometimes used to open the bubble
+    // itself.
+    bool stop_context_menu_propagation_;
+  };
+
+  TitleField* title_field_;
+
+  class ButtonListener : public views::ButtonListener {
+   public:
+    explicit ButtonListener(const Browser* browser,
+                            tab_groups::TabGroupId group,
+                            TabGroupHeader* header_view);
+
+    // views::ButtonListener:
+    void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+
+   private:
+    const Browser* const browser_;
+    const tab_groups::TabGroupId group_;
+    TabGroupHeader* header_view_;
+  };
+
+  ButtonListener button_listener_;
+
+  Colors colors_;
   ColorPickerView* color_selector_;
+
+  // If true will use the |anchor_rect_| provided in the constructor, otherwise
+  // fall back to using the anchor view bounds.
+  const bool use_set_anchor_rect_;
+
+  // Creates the set of tab group colors to display and returns the color that
+  // is initially selected.
+  tab_groups::TabGroupColorId InitColorSet();
+
+  base::string16 title_at_opening_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TABS_TAB_GROUP_EDITOR_BUBBLE_VIEW_H_

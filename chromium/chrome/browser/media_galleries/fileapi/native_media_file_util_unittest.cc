@@ -14,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/format_macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
@@ -25,16 +26,17 @@
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
 #include "storage/browser/blob/shareable_file_reference.h"
-#include "storage/browser/fileapi/external_mount_points.h"
-#include "storage/browser/fileapi/file_system_backend.h"
-#include "storage/browser/fileapi/file_system_context.h"
-#include "storage/browser/fileapi/file_system_operation_runner.h"
-#include "storage/browser/fileapi/file_system_url.h"
-#include "storage/browser/fileapi/isolated_context.h"
-#include "storage/browser/fileapi/native_file_util.h"
+#include "storage/browser/file_system/external_mount_points.h"
+#include "storage/browser/file_system/file_system_backend.h"
+#include "storage/browser/file_system/file_system_context.h"
+#include "storage/browser/file_system/file_system_operation_runner.h"
+#include "storage/browser/file_system/file_system_url.h"
+#include "storage/browser/file_system/isolated_context.h"
+#include "storage/browser/file_system/native_file_util.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
 #include "storage/browser/test/test_file_system_options.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
 
 #define FPL(x) FILE_PATH_LITERAL(x)
 
@@ -55,10 +57,10 @@ struct FilteringTestCase {
 
 const FilteringTestCase kFilteringTestCases[] = {
     // Directory should always be visible.
-    {FPL("hoge"), true, true, false, NULL},
-    {FPL("fuga.jpg"), true, true, false, NULL},
-    {FPL("piyo.txt"), true, true, false, NULL},
-    {FPL("moga.cod"), true, true, false, NULL},
+    {FPL("hoge"), true, true, false, nullptr},
+    {FPL("fuga.jpg"), true, true, false, nullptr},
+    {FPL("piyo.txt"), true, true, false, nullptr},
+    {FPL("moga.cod"), true, true, false, nullptr},
 
     // File should be visible if it's a supported media file.
     // File without extension.
@@ -108,7 +110,7 @@ void PopulateDirectoryWithTestCases(const base::FilePath& dir,
     if (test_cases[i].is_directory) {
       ASSERT_TRUE(base::CreateDirectory(path));
     } else {
-      ASSERT_TRUE(test_cases[i].content != NULL);
+      ASSERT_TRUE(test_cases[i].content != nullptr);
       int len = strlen(test_cases[i].content);
       ASSERT_EQ(len, base::WriteFile(path, test_cases[i].content, len));
     }
@@ -119,36 +121,35 @@ void PopulateDirectoryWithTestCases(const base::FilePath& dir,
 
 class NativeMediaFileUtilTest : public testing::Test {
  public:
-  NativeMediaFileUtilTest() {}
+  NativeMediaFileUtilTest() = default;
 
   void SetUp() override {
     ASSERT_TRUE(data_dir_.CreateUniqueTempDir());
     ASSERT_TRUE(base::CreateDirectory(root_path()));
 
-    scoped_refptr<storage::SpecialStoragePolicy> storage_policy =
-        new content::MockSpecialStoragePolicy();
+    auto storage_policy =
+        base::MakeRefCounted<storage::MockSpecialStoragePolicy>();
 
     std::vector<std::unique_ptr<storage::FileSystemBackend>>
         additional_providers;
     additional_providers.push_back(
         std::make_unique<MediaFileSystemBackend>(data_dir_.GetPath()));
 
-    file_system_context_ = new storage::FileSystemContext(
+    file_system_context_ = base::MakeRefCounted<storage::FileSystemContext>(
         base::CreateSingleThreadTaskRunner({content::BrowserThread::IO}).get(),
         base::SequencedTaskRunnerHandle::Get().get(),
         storage::ExternalMountPoints::CreateRefCounted().get(),
-        storage_policy.get(), NULL, std::move(additional_providers),
+        storage_policy.get(), nullptr, std::move(additional_providers),
         std::vector<storage::URLRequestAutoMountHandler>(), data_dir_.GetPath(),
-        content::CreateAllowFileAccessOptions());
+        storage::CreateAllowFileAccessOptions());
 
     filesystem_ = isolated_context()->RegisterFileSystemForPath(
-        storage::kFileSystemTypeNativeMedia, std::string(), root_path(), NULL);
+        storage::kFileSystemTypeNativeMedia, std::string(), root_path(),
+        nullptr);
     filesystem_id_ = filesystem_.id();
   }
 
-  void TearDown() override {
-    file_system_context_ = NULL;
-  }
+  void TearDown() override { file_system_context_.reset(); }
 
  protected:
   storage::FileSystemContext* file_system_context() {
@@ -157,7 +158,7 @@ class NativeMediaFileUtilTest : public testing::Test {
 
   FileSystemURL CreateURL(const base::FilePath::CharType* test_case_path) {
     return file_system_context_->CreateCrackedFileSystemURL(
-        origin(), storage::kFileSystemTypeIsolated,
+        url::Origin::Create(origin()), storage::kFileSystemTypeIsolated,
         GetVirtualPath(test_case_path));
   }
 
@@ -278,7 +279,7 @@ TEST_F(NativeMediaFileUtilTest, CopySourceFiltering) {
     for (size_t i = 0; i < base::size(kFilteringTestCases); ++i) {
       // Always start with an empty destination directory.
       // Copying to a non-empty destination directory is an invalid operation.
-      ASSERT_TRUE(base::DeleteFile(dest_path, true));
+      ASSERT_TRUE(base::DeleteFileRecursively(dest_path));
       ASSERT_TRUE(base::CreateDirectory(dest_path));
 
       FileSystemURL root_url = CreateURL(FPL(""));
@@ -311,7 +312,7 @@ TEST_F(NativeMediaFileUtilTest, CopyDestFiltering) {
     if (loop_count == 1) {
       // Reset the test directory between the two loops to remove old
       // directories and create new ones that should pre-exist.
-      ASSERT_TRUE(base::DeleteFile(root_path(), true));
+      ASSERT_TRUE(base::DeleteFileRecursively(root_path()));
       ASSERT_TRUE(base::CreateDirectory(root_path()));
       PopulateDirectoryWithTestCases(root_path(), kFilteringTestCases,
                                      base::size(kFilteringTestCases));
@@ -381,7 +382,7 @@ TEST_F(NativeMediaFileUtilTest, MoveSourceFiltering) {
     for (size_t i = 0; i < base::size(kFilteringTestCases); ++i) {
       // Always start with an empty destination directory.
       // Moving to a non-empty destination directory is an invalid operation.
-      ASSERT_TRUE(base::DeleteFile(dest_path, true));
+      ASSERT_TRUE(base::DeleteFileRecursively(dest_path));
       ASSERT_TRUE(base::CreateDirectory(dest_path));
 
       FileSystemURL root_url = CreateURL(FPL(""));
@@ -412,7 +413,7 @@ TEST_F(NativeMediaFileUtilTest, MoveDestFiltering) {
     if (loop_count == 1) {
       // Reset the test directory between the two loops to remove old
       // directories and create new ones that should pre-exist.
-      ASSERT_TRUE(base::DeleteFile(root_path(), true));
+      ASSERT_TRUE(base::DeleteFileRecursively(root_path()));
       ASSERT_TRUE(base::CreateDirectory(root_path()));
       PopulateDirectoryWithTestCases(root_path(), kFilteringTestCases,
                                      base::size(kFilteringTestCases));

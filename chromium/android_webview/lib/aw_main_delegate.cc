@@ -29,7 +29,6 @@
 #include "base/cpu.h"
 #include "base/i18n/icu_util.h"
 #include "base/i18n/rtl.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/posix/global_descriptors.h"
 #include "base/strings/string_number_conversions.h"
@@ -57,6 +56,7 @@
 #include "gpu/ipc/gl_in_process_context.h"
 #include "media/base/media_switches.h"
 #include "media/media_buildflags.h"
+#include "services/network/public/cpp/features.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
@@ -71,13 +71,12 @@
 
 namespace android_webview {
 
-AwMainDelegate::AwMainDelegate() {}
+AwMainDelegate::AwMainDelegate() = default;
 
-AwMainDelegate::~AwMainDelegate() {}
+AwMainDelegate::~AwMainDelegate() = default;
 
 bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
-  content::SetContentClient(&content_client_);
-
+  TRACE_EVENT0("startup", "AwMainDelegate::BasicStartupComplete");
   base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
 
   // WebView uses the Android system's scrollbars and overscroll glow.
@@ -141,9 +140,6 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     ui::GestureConfiguration::GetInstance()
         ->set_fling_touchscreen_tap_suppression_enabled(false);
 
-    base::android::RegisterApkAssetWithFileDescriptorStore(
-        content::kV8NativesDataDescriptor,
-        gin::V8Initializer::GetNativesFilePath());
 #if defined(USE_V8_CONTEXT_SNAPSHOT)
     gin::V8Initializer::V8SnapshotFileType file_type =
         gin::V8Initializer::V8SnapshotFileType::kWithAdditionalContext;
@@ -184,15 +180,19 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     // WebView does not and should not support WebAuthN.
     features.DisableIfNotSet(::features::kWebAuth);
 
-    // WebView isn't compatible with OOP-D.
-    features.DisableIfNotSet(::features::kVizDisplayCompositor);
+    // Checking for command line here as FeatureList isn't initialized here yet,
+    // so we can't use FeatureList::IsEnabled. This is necessary if someone
+    // enabled feature through command line. Finch experiments will need to set
+    // all flags in trial config.
+    if (!features.IsEnabled(::features::kVizForWebView)) {
+      // Viz for WebView is required to support embedding CompositorFrameSinks
+      // which is needed for UseSurfaceLayerForVideo feature.
+      // https://crbug.com/853832
+      features.EnableIfNotSet(media::kDisableSurfaceLayerForVideo);
+    }
 
-    // WebView does not support AndroidOverlay yet for video overlays.
-    features.DisableIfNotSet(media::kUseAndroidOverlay);
-
-    // WebView doesn't support embedding CompositorFrameSinks which is needed
-    // for UseSurfaceLayerForVideo feature. https://crbug.com/853832
-    features.EnableIfNotSet(media::kDisableSurfaceLayerForVideo);
+    // WebView does not support overlay fullscreen yet for video overlays.
+    features.DisableIfNotSet(media::kOverlayFullscreenVideo);
 
     // WebView does not support EME persistent license yet, because it's not
     // clear on how user can remove persistent media licenses from UI.
@@ -206,16 +206,28 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
 
     features.DisableIfNotSet(::features::kBackgroundFetch);
 
-    features.DisableIfNotSet(::features::kAndroidSurfaceControl);
+    features.EnableIfNotSet(::features::kDisableSurfaceControlForWebview);
 
     // TODO(https://crbug.com/963653): SmsReceiver is not yet supported on
     // WebView.
     features.DisableIfNotSet(::features::kSmsReceiver);
 
+    // TODO(https://crbug.com/1012899): WebXR is not yet supported on WebView.
     features.DisableIfNotSet(::features::kWebXr);
+
+    features.DisableIfNotSet(::features::kWebXrArModule);
+
+    features.DisableIfNotSet(::features::kWebXrHitTest);
 
     // De-jelly is never supported on WebView.
     features.EnableIfNotSet(::features::kDisableDeJelly);
+
+    // COEP is not supported on WebView.
+    // See
+    // https://groups.google.com/a/chromium.org/forum/#!topic/blink-dev/XBKAGb2_7uAi.
+    features.DisableIfNotSet(network::features::kCrossOriginEmbedderPolicy);
+
+    features.DisableIfNotSet(::features::kInstalledApp);
   }
 
   android_webview::RegisterPathProvider();
@@ -244,6 +256,7 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
 }
 
 void AwMainDelegate::PreSandboxStartup() {
+  TRACE_EVENT0("startup", "AwMainDelegate::PreSandboxStartup");
 #if defined(ARCH_CPU_ARM_FAMILY)
   // Create an instance of the CPU class to parse /proc/cpuinfo and cache
   // cpu_brand info.
@@ -343,6 +356,10 @@ void AwMainDelegate::PostFieldTrialInitialization() {
 #endif
 }
 
+content::ContentClient* AwMainDelegate::CreateContentClient() {
+  return &content_client_;
+}
+
 content::ContentBrowserClient* AwMainDelegate::CreateContentBrowserClient() {
   DCHECK(!aw_feature_list_creator_);
   aw_feature_list_creator_ = std::make_unique<AwFeatureListCreator>();
@@ -360,15 +377,14 @@ gpu::SyncPointManager* GetSyncPointManager() {
 gpu::SharedImageManager* GetSharedImageManager() {
   DCHECK(GpuServiceWebView::GetInstance());
   const bool enable_shared_image =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kWebViewEnableSharedImage);
+      base::FeatureList::IsEnabled(::features::kEnableSharedImageForWebview);
   return enable_shared_image
              ? GpuServiceWebView::GetInstance()->shared_image_manager()
              : nullptr;
 }
 
 viz::VizCompositorThreadRunner* GetVizCompositorThreadRunner() {
-  return base::FeatureList::IsEnabled(features::kVizForWebView)
+  return ::features::IsUsingVizForWebView()
              ? VizCompositorThreadRunnerWebView::GetInstance()
              : nullptr;
 }

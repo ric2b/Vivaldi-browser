@@ -2,10 +2,6 @@
 
 #include "extensions/helper/vivaldi_app_helper.h"
 
-#include "chrome/browser/profiles/profile.h"
-#include "content/public/browser/browser_context.h"
-#include "extensions/api/tabs/tabs_private_api.h"
-
 namespace extensions {
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(VivaldiAppHelper)

@@ -20,10 +20,6 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
-namespace service_manager {
-class Connector;
-}  // namespace service_manager
-
 namespace chromeos {
 
 namespace multidevice_setup {
@@ -35,11 +31,14 @@ class MultiDeviceSetupClientImpl : public MultiDeviceSetupClient,
  public:
   class Factory {
    public:
-    static Factory* Get();
-    static void SetInstanceForTesting(Factory* test_factory);
+    static std::unique_ptr<MultiDeviceSetupClient> Create(
+        mojo::PendingRemote<mojom::MultiDeviceSetup> remote_setup);
+    static void SetFactoryForTesting(Factory* test_factory);
+
+   protected:
     virtual ~Factory();
-    virtual std::unique_ptr<MultiDeviceSetupClient> BuildInstance(
-        service_manager::Connector* connector);
+    virtual std::unique_ptr<MultiDeviceSetupClient> CreateInstance(
+        mojo::PendingRemote<mojom::MultiDeviceSetup> remote_setup) = 0;
 
    private:
     static Factory* test_factory_;
@@ -50,7 +49,7 @@ class MultiDeviceSetupClientImpl : public MultiDeviceSetupClient,
   // MultiDeviceSetupClient:
   void GetEligibleHostDevices(GetEligibleHostDevicesCallback callback) override;
   void SetHostDevice(
-      const std::string& host_device_id,
+      const std::string& host_instance_id_or_legacy_device_id,
       const std::string& auth_token,
       mojom::MultiDeviceSetup::SetHostDeviceCallback callback) override;
   void RemoveHostDevice() override;
@@ -81,7 +80,8 @@ class MultiDeviceSetupClientImpl : public MultiDeviceSetupClient,
  private:
   friend class MultiDeviceSetupClientImplTest;
 
-  explicit MultiDeviceSetupClientImpl(service_manager::Connector* connector);
+  explicit MultiDeviceSetupClientImpl(
+      mojo::PendingRemote<mojom::MultiDeviceSetup> remote_setup);
 
   void OnGetEligibleHostDevicesCompleted(
       GetEligibleHostDevicesCallback callback,

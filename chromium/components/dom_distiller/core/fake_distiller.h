@@ -37,13 +37,13 @@ class FakeDistiller : public Distiller {
   // TODO(yfriedman): Drop execute_callback from this and give the option of
   // "auto-distilling" or calling the provided closure.
   explicit FakeDistiller(bool execute_callback,
-                         const base::Closure& distillation_initiated_callback);
+                         base::OnceClosure distillation_initiated_callback);
   ~FakeDistiller() override;
   MOCK_METHOD0(Die, void());
 
   void DistillPage(const GURL& url,
                    std::unique_ptr<DistillerPage> distiller_page,
-                   const DistillationFinishedCallback& article_callback,
+                   DistillationFinishedCallback article_callback,
                    const DistillationUpdateCallback& page_callback) override;
 
   void RunDistillerCallback(std::unique_ptr<DistilledArticleProto> proto);
@@ -51,7 +51,7 @@ class FakeDistiller : public Distiller {
 
   GURL GetUrl() { return url_; }
 
-  DistillationFinishedCallback GetArticleCallback() {
+  const DistillationFinishedCallback& GetArticleCallback() const {
     return article_callback_;
   }
 
@@ -66,7 +66,7 @@ class FakeDistiller : public Distiller {
   DistillationUpdateCallback page_callback_;
   bool destruction_allowed_;
   // Used to notify when distillation is complete.
-  base::Closure distillation_initiated_callback_;
+  base::OnceClosure distillation_initiated_callback_;
 };
 
 }  // namespace test

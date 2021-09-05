@@ -16,6 +16,7 @@
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -41,7 +42,8 @@
 #include "ui/events/devices/x11/device_list_cache_x11.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
-#include "ui/events/platform/platform_event_source.h"
+#include "ui/events/keyboard_hook.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/x/events_x_utils.h"
 #include "ui/events/x/x11_window_event_manager.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -55,31 +57,12 @@
 #include "ui/views/widget/desktop_aura/desktop_drag_drop_client_aurax11.h"
 #include "ui/views/widget/desktop_aura/desktop_native_cursor_manager.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
-#include "ui/views/widget/desktop_aura/desktop_window_tree_host_observer_x11.h"
-#include "ui/views/widget/desktop_aura/x11_desktop_handler.h"
 #include "ui/views/widget/desktop_aura/x11_desktop_window_move_client.h"
 #include "ui/views/window/native_frame_view.h"
 #include "ui/wm/core/compound_event_filter.h"
 #include "ui/wm/core/window_util.h"
 
-#if BUILDFLAG(USE_ATK)
-#include "ui/accessibility/platform/atk_util_auralinux.h"
-#endif
-
 namespace views {
-
-namespace {
-
-bool ShouldDiscardKeyEvent(XEvent* xev) {
-#if BUILDFLAG(USE_ATK)
-  return ui::AtkUtilAuraLinux::HandleKeyEvent(xev) ==
-         ui::DiscardAtkKeyEvent::Discard;
-#else
-  return false;
-#endif
-}
-
-}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // DesktopWindowTreeHostX11, public:
@@ -94,16 +77,6 @@ DesktopWindowTreeHostX11::~DesktopWindowTreeHostX11() {
 
   // ~DWTHPlatform notifies the DestkopNativeWidgetAura about destruction and
   // also destroyes the dispatcher.
-}
-
-void DesktopWindowTreeHostX11::AddObserver(
-    DesktopWindowTreeHostObserverX11* observer) {
-  observer_list_.AddObserver(observer);
-}
-
-void DesktopWindowTreeHostX11::RemoveObserver(
-    DesktopWindowTreeHostObserverX11* observer) {
-  observer_list_.RemoveObserver(observer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -123,10 +96,6 @@ void DesktopWindowTreeHostX11::Init(const Widget::InitParams& params) {
 
 void DesktopWindowTreeHostX11::OnNativeWidgetCreated(
     const Widget::InitParams& params) {
-  // Ensure that the X11DesktopHandler exists so that it tracks create/destroy
-  // notify events.
-  X11DesktopHandler::get();
-
   x11_window_move_client_ = std::make_unique<X11DesktopWindowMoveClient>();
   wm::SetWindowMoveClient(window(), x11_window_move_client_.get());
 
@@ -148,7 +117,7 @@ Widget::MoveLoopResult DesktopWindowTreeHostX11::RunMoveLoop(
     Widget::MoveLoopSource source,
     Widget::MoveLoopEscapeBehavior escape_behavior) {
   wm::WindowMoveSource window_move_source =
-      source == Widget::MOVE_LOOP_SOURCE_MOUSE ? wm::WINDOW_MOVE_SOURCE_MOUSE
+      source == Widget::MoveLoopSource::kMouse ? wm::WINDOW_MOVE_SOURCE_MOUSE
                                                : wm::WINDOW_MOVE_SOURCE_TOUCH;
   if (x11_window_move_client_->RunMoveLoop(GetContentWindow(), drag_offset,
                                            window_move_source) ==
@@ -164,16 +133,6 @@ void DesktopWindowTreeHostX11::EndMoveLoop() {
 
 ////////////////////////////////////////////////////////////////////////////////
 // DesktopWindowTreeHostX11 implementation:
-
-void DesktopWindowTreeHostX11::OnXWindowMapped() {
-  for (DesktopWindowTreeHostObserverX11& observer : observer_list_)
-    observer.OnWindowMapped(GetXWindow()->window());
-}
-
-void DesktopWindowTreeHostX11::OnXWindowUnmapped() {
-  for (DesktopWindowTreeHostObserverX11& observer : observer_list_)
-    observer.OnWindowUnmapped(GetXWindow()->window());
-}
 
 void DesktopWindowTreeHostX11::OnXWindowSelectionEvent(XEvent* xev) {
   DCHECK(xev);
@@ -198,32 +157,6 @@ void DesktopWindowTreeHostX11::OnXWindowDragDropEvent(XEvent* xev) {
     drag_drop_client_->OnXdndFinished(xev->xclient);
   } else if (message_type == gfx::GetAtom("XdndDrop")) {
     drag_drop_client_->OnXdndDrop(xev->xclient);
-  }
-}
-
-void DesktopWindowTreeHostX11::OnXWindowRawKeyEvent(XEvent* xev) {
-  switch (xev->type) {
-    case KeyPress:
-      if (!ShouldDiscardKeyEvent(xev)) {
-        ui::KeyEvent keydown_event(xev);
-        DesktopWindowTreeHostLinux::DispatchEvent(&keydown_event);
-      }
-      break;
-    case KeyRelease:
-
-      // There is no way to deactivate a window in X11 so ignore input if
-      // window is supposed to be 'inactive'.
-      if (!IsActive() && !HasCapture())
-        break;
-
-      if (!ShouldDiscardKeyEvent(xev)) {
-        ui::KeyEvent keyup_event(xev);
-        DesktopWindowTreeHostLinux::DispatchEvent(&keyup_event);
-      }
-      break;
-    default:
-      NOTREACHED() << xev->type;
-      break;
   }
 }
 

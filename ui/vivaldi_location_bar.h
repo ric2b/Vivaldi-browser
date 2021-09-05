@@ -20,7 +20,7 @@ for the most part it's empty.
 */
 class VivaldiLocationBar : public LocationBar {
  public:
-  VivaldiLocationBar(Profile* profile);
+  VivaldiLocationBar();
   ~VivaldiLocationBar() override;
 
   // The details necessary to open the user's desired omnibox match.
@@ -31,7 +31,7 @@ class VivaldiLocationBar : public LocationBar {
   void AcceptInput(base::TimeTicks match_selection_timestamp) override {}
   void FocusLocation(bool select_all) override {}
   void FocusSearch() override {}
-  void UpdateContentSettingsIcons() override {}
+  void UpdateContentSettingsIcons() override;
 
   base::TimeTicks GetMatchSelectionTimestamp() const override;
 
@@ -45,8 +45,14 @@ class VivaldiLocationBar : public LocationBar {
   // Returns a pointer to the testing interface.
   LocationBarTesting* GetLocationBarForTesting() override;
 
+  void SetBrowser(Browser* browser) {browser_ = browser;}
+
  protected:
   DISALLOW_COPY_AND_ASSIGN(VivaldiLocationBar);
+
+ private:
+  //Profile* profile_ = nullptr;
+  Browser* browser_ = nullptr;
 };
 
 #endif  // UI_VIVALDI_LOCATION_BAR_H_

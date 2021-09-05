@@ -11,8 +11,8 @@
 #include "content/public/renderer/render_view.h"
 #include "content/shell/renderer/web_test/blink_test_runner.h"
 #include "content/shell/renderer/web_test/web_test_render_thread_observer.h"
-#include "content/shell/test_runner/web_test_interfaces.h"
-#include "content/shell/test_runner/web_test_runner.h"
+#include "content/shell/test_runner/test_interfaces.h"
+#include "content/shell/test_runner/test_runner.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
@@ -25,10 +25,10 @@ namespace content {
 WebTestRenderFrameObserver::WebTestRenderFrameObserver(
     RenderFrame* render_frame)
     : RenderFrameObserver(render_frame) {
-  test_runner::WebTestRunner* test_runner =
+  test_runner::TestRunner* test_runner =
       WebTestRenderThreadObserver::GetInstance()
           ->test_interfaces()
-          ->TestRunner();
+          ->GetTestRunner();
   render_frame->GetWebFrame()->SetContentSettingsClient(
       test_runner->GetWebContentSettings());
   render_frame->GetWebFrame()->SetTextCheckClient(
@@ -41,16 +41,9 @@ WebTestRenderFrameObserver::WebTestRenderFrameObserver(
 WebTestRenderFrameObserver::~WebTestRenderFrameObserver() = default;
 
 void WebTestRenderFrameObserver::BindReceiver(
-    mojo::PendingAssociatedReceiver<mojom::WebTestControl> receiver) {
+    mojo::PendingAssociatedReceiver<mojom::BlinkTestControl> receiver) {
   receiver_.Bind(std::move(receiver),
                  blink::scheduler::GetSingleThreadTaskRunnerForTesting());
-}
-
-void WebTestRenderFrameObserver::ReadyToCommitNavigation(
-    blink::WebDocumentLoader* document_loader) {
-  if (!render_frame()->IsMainFrame())
-    return;
-  focus_on_next_commit_ = true;
 }
 
 void WebTestRenderFrameObserver::DidCommitProvisionalLoad(
@@ -58,19 +51,12 @@ void WebTestRenderFrameObserver::DidCommitProvisionalLoad(
     ui::PageTransition transition) {
   if (!render_frame()->IsMainFrame())
     return;
-  if (focus_on_next_commit_) {
-    focus_on_next_commit_ = false;
+  if (!is_same_document_navigation) {
     render_frame()->GetRenderView()->GetWebView()->SetFocusedFrame(
         render_frame()->GetWebFrame());
   }
   BlinkTestRunner::Get(render_frame()->GetRenderView())
       ->DidCommitNavigationInMainFrame();
-}
-
-void WebTestRenderFrameObserver::DidFailProvisionalLoad() {
-  if (!render_frame()->IsMainFrame())
-    return;
-  focus_on_next_commit_ = false;
 }
 
 void WebTestRenderFrameObserver::OnDestruct() {
@@ -92,11 +78,11 @@ void WebTestRenderFrameObserver::CompositeWithRaster(
 
 void WebTestRenderFrameObserver::DumpFrameLayout(
     DumpFrameLayoutCallback callback) {
-  std::string dump = WebTestRenderThreadObserver::GetInstance()
-                         ->test_interfaces()
-                         ->TestRunner()
-                         ->DumpLayout(render_frame()->GetWebFrame());
-  std::move(callback).Run(dump);
+  test_runner::TestInterfaces* interfaces =
+      WebTestRenderThreadObserver::GetInstance()->test_interfaces();
+  test_runner::TestRunner* test_runner = interfaces->GetTestRunner();
+  std::string dump = test_runner->DumpLayout(render_frame()->GetWebFrame());
+  std::move(callback).Run(std::move(dump));
 }
 
 void WebTestRenderFrameObserver::ReplicateTestConfiguration(
@@ -114,6 +100,27 @@ void WebTestRenderFrameObserver::SetTestConfiguration(
 void WebTestRenderFrameObserver::SetupSecondaryRenderer() {
   BlinkTestRunner::Get(render_frame()->GetRenderView())
       ->OnSetupSecondaryRenderer();
+}
+
+void WebTestRenderFrameObserver::Reset() {
+  BlinkTestRunner::Get(render_frame()->GetRenderView())->OnReset();
+}
+
+void WebTestRenderFrameObserver::TestFinishedInSecondaryRenderer() {
+  BlinkTestRunner::Get(render_frame()->GetRenderView())
+      ->OnTestFinishedInSecondaryRenderer();
+}
+
+void WebTestRenderFrameObserver::LayoutDumpCompleted(
+    const std::string& completed_layout_dump) {
+  BlinkTestRunner::Get(render_frame()->GetRenderView())
+      ->OnLayoutDumpCompleted(completed_layout_dump);
+}
+
+void WebTestRenderFrameObserver::ReplyBluetoothManualChooserEvents(
+    const std::vector<std::string>& events) {
+  BlinkTestRunner::Get(render_frame()->GetRenderView())
+      ->OnReplyBluetoothManualChooserEvents(events);
 }
 
 }  // namespace content

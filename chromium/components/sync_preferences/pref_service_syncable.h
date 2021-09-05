@@ -13,11 +13,12 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/observer_list.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/prefs/pref_value_store.h"
 #include "components/sync_preferences/pref_model_associator.h"
-#include "components/sync_preferences/synced_pref_observer.h"
+
+class PrefValueStore;
 
 namespace syncer {
 class SyncableService;
@@ -27,6 +28,7 @@ namespace sync_preferences {
 
 class PrefModelAssociatorClient;
 class PrefServiceSyncableObserver;
+class SyncedPrefObserver;
 
 // A PrefService that can be synced. Users are forced to declare
 // whether preferences are syncable or not when registering them to
@@ -53,8 +55,7 @@ class PrefServiceSyncable : public PrefService {
   // whose changes will be persisted by the returned incognito pref service.
   std::unique_ptr<PrefServiceSyncable> CreateIncognitoPrefService(
       PrefStore* incognito_extension_pref_store,
-      const std::vector<const char*>& persistent_pref_names,
-      std::unique_ptr<PrefValueStore::Delegate> delegate);
+      const std::vector<const char*>& persistent_pref_names);
 
   // Returns true if preferences state has synchronized with the remote
   // preferences. If true is returned it can be assumed the local preferences
@@ -69,10 +70,6 @@ class PrefServiceSyncable : public PrefService {
   // Returns true if priority preferences state has synchronized with the remote
   // priority preferences.
   bool IsPrioritySyncing();
-
-  // Returns true if the pref under the given name is pulled down from sync.
-  // Note this does not refer to SYNCABLE_PREF.
-  bool IsPrefSynced(const std::string& name) const;
 
   void AddObserver(PrefServiceSyncableObserver* observer);
   void RemoveObserver(PrefServiceSyncableObserver* observer);

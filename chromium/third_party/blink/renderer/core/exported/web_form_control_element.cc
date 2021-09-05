@@ -30,6 +30,7 @@
 
 #include "third_party/blink/public/web/web_form_control_element.h"
 
+#include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
@@ -60,7 +61,7 @@ WebString WebFormControlElement::FormControlType() const {
 }
 
 WebString WebFormControlElement::FormControlTypeForAutofill() const {
-  if (auto* input = ToHTMLInputElementOrNull(*private_)) {
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_)) {
     if (input->IsTextField() && input->HasBeenPasswordField())
       return input_type_names::kPassword;
   }
@@ -77,7 +78,7 @@ bool WebFormControlElement::IsAutofilled() const {
 }
 
 bool WebFormControlElement::UserHasEditedTheField() const {
-  if (auto* input = ToHTMLInputElementOrNull(*private_))
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_))
     return input->UserHasEditedTheField();
   if (auto* select_element = DynamicTo<HTMLSelectElement>(*private_))
     return select_element->UserHasEditedTheField();
@@ -85,7 +86,7 @@ bool WebFormControlElement::UserHasEditedTheField() const {
 }
 
 void WebFormControlElement::SetUserHasEditedTheFieldForTest() {
-  if (auto* input = ToHTMLInputElementOrNull(*private_))
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_))
     input->SetUserHasEditedTheFieldForTest();
 }
 
@@ -106,9 +107,9 @@ WebString WebFormControlElement::NameForAutofill() const {
 }
 
 bool WebFormControlElement::AutoComplete() const {
-  if (auto* input = ToHTMLInputElementOrNull(*private_))
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_))
     return input->ShouldAutocomplete();
-  if (auto* textarea = ToHTMLTextAreaElementOrNull(*private_))
+  if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*private_))
     return textarea->ShouldAutocomplete();
   if (auto* select = DynamicTo<HTMLSelectElement>(*private_))
     return select->ShouldAutocomplete();
@@ -116,12 +117,12 @@ bool WebFormControlElement::AutoComplete() const {
 }
 
 void WebFormControlElement::SetValue(const WebString& value, bool send_events) {
-  if (auto* input = ToHTMLInputElementOrNull(*private_)) {
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_)) {
     input->setValue(value,
                     send_events
                         ? TextFieldEventBehavior::kDispatchInputAndChangeEvent
                         : TextFieldEventBehavior::kDispatchNoEvent);
-  } else if (auto* textarea = ToHTMLTextAreaElementOrNull(*private_)) {
+  } else if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*private_)) {
     textarea->setValue(
         value, send_events
                    ? TextFieldEventBehavior::kDispatchInputAndChangeEvent
@@ -131,39 +132,41 @@ void WebFormControlElement::SetValue(const WebString& value, bool send_events) {
   }
 }
 
+void WebFormControlElement::DispatchFocusEvent() {
+  Unwrap<Element>()->DispatchFocusEvent(
+      nullptr, mojom::blink::FocusType::kForward, nullptr);
+}
+
+void WebFormControlElement::DispatchBlurEvent() {
+  Unwrap<Element>()->DispatchBlurEvent(
+      nullptr, mojom::blink::FocusType::kForward, nullptr);
+}
+
 void WebFormControlElement::SetAutofillValue(const WebString& value) {
   // The input and change events will be sent in setValue.
-  if (IsHTMLInputElement(*private_) || IsHTMLTextAreaElement(*private_)) {
-    if (!Focused()) {
-      Unwrap<Element>()->DispatchFocusEvent(nullptr, kWebFocusTypeForward,
-                                            nullptr);
-    }
+  if (IsA<HTMLInputElement>(*private_) || IsA<HTMLTextAreaElement>(*private_)) {
+    if (!Focused())
+      DispatchFocusEvent();
     Unwrap<Element>()->DispatchScopedEvent(
         *Event::CreateBubble(event_type_names::kKeydown));
     Unwrap<TextControlElement>()->SetAutofillValue(value);
     Unwrap<Element>()->DispatchScopedEvent(
         *Event::CreateBubble(event_type_names::kKeyup));
-    if (!Focused()) {
-      Unwrap<Element>()->DispatchBlurEvent(nullptr, kWebFocusTypeForward,
-                                           nullptr);
-    }
+    if (!Focused())
+      DispatchBlurEvent();
   } else if (auto* select = DynamicTo<HTMLSelectElement>(*private_)) {
-    if (!Focused()) {
-      Unwrap<Element>()->DispatchFocusEvent(nullptr, kWebFocusTypeForward,
-                                            nullptr);
-    }
+    if (!Focused())
+      DispatchFocusEvent();
     select->setValue(value, true);
-    if (!Focused()) {
-      Unwrap<Element>()->DispatchBlurEvent(nullptr, kWebFocusTypeForward,
-                                           nullptr);
-    }
+    if (!Focused())
+      DispatchBlurEvent();
   }
 }
 
 WebString WebFormControlElement::Value() const {
-  if (auto* input = ToHTMLInputElementOrNull(*private_))
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_))
     return input->value();
-  if (auto* textarea = ToHTMLTextAreaElementOrNull(*private_))
+  if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*private_))
     return textarea->value();
   if (auto* select = DynamicTo<HTMLSelectElement>(*private_))
     return select->value();
@@ -171,18 +174,19 @@ WebString WebFormControlElement::Value() const {
 }
 
 void WebFormControlElement::SetSuggestedValue(const WebString& value) {
-  if (auto* input = ToHTMLInputElementOrNull(*private_)) {
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_)) {
     input->SetSuggestedValue(value);
-  } else if (auto* textarea = ToHTMLTextAreaElementOrNull(*private_)) {
+  } else if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*private_)) {
     textarea->SetSuggestedValue(value);
-  } else if (auto* select = DynamicTo<HTMLSelectElement>(*private_))
+  } else if (auto* select = DynamicTo<HTMLSelectElement>(*private_)) {
     select->SetSuggestedValue(value);
+  }
 }
 
 WebString WebFormControlElement::SuggestedValue() const {
-  if (auto* input = ToHTMLInputElementOrNull(*private_))
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_))
     return input->SuggestedValue();
-  if (auto* textarea = ToHTMLTextAreaElementOrNull(*private_))
+  if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*private_))
     return textarea->SuggestedValue();
   if (auto* select = DynamicTo<HTMLSelectElement>(*private_))
     return select->SuggestedValue();
@@ -190,32 +194,32 @@ WebString WebFormControlElement::SuggestedValue() const {
 }
 
 WebString WebFormControlElement::EditingValue() const {
-  if (auto* input = ToHTMLInputElementOrNull(*private_))
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_))
     return input->InnerEditorValue();
-  if (auto* textarea = ToHTMLTextAreaElementOrNull(*private_))
+  if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*private_))
     return textarea->InnerEditorValue();
   return WebString();
 }
 
 void WebFormControlElement::SetSelectionRange(int start, int end) {
-  if (auto* input = ToHTMLInputElementOrNull(*private_))
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_))
     input->SetSelectionRange(start, end);
-  if (auto* textarea = ToHTMLTextAreaElementOrNull(*private_))
+  if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*private_))
     textarea->SetSelectionRange(start, end);
 }
 
 int WebFormControlElement::SelectionStart() const {
-  if (auto* input = ToHTMLInputElementOrNull(*private_))
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_))
     return input->selectionStart();
-  if (auto* textarea = ToHTMLTextAreaElementOrNull(*private_))
+  if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*private_))
     return textarea->selectionStart();
   return 0;
 }
 
 int WebFormControlElement::SelectionEnd() const {
-  if (auto* input = ToHTMLInputElementOrNull(*private_))
+  if (auto* input = DynamicTo<HTMLInputElement>(*private_))
     return input->selectionEnd();
-  if (auto* textarea = ToHTMLTextAreaElementOrNull(*private_))
+  if (auto* textarea = DynamicTo<HTMLTextAreaElement>(*private_))
     return textarea->selectionEnd();
   return 0;
 }

@@ -51,6 +51,35 @@
         "type": "function",
         "description": "Removes the update notifier from autorun and attempts to terminate it.",
         "parameters": []
+      },
+      {
+        "name": "getAutoInstallUpdates",
+        "type": "function",
+        "description": "Checks whether we automatically install updates",
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "type": "boolean",
+                "name": "result"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setAutoInstallUpdates",
+        "type": "function",
+        "description": "Change automatically install updates setting",
+        "parameters": [
+          {
+            "name": "autoinstall",
+            "type": "boolean",
+            "description": "Indicates whether we want to automatically install updates."
+          }
+        ]
       }
     ],
     "events": [

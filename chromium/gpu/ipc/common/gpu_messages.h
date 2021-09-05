@@ -13,7 +13,6 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/shared_memory.h"
 #include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
@@ -42,6 +41,7 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/gfx/swap_result.h"
+#include "ui/gl/gpu_preference.h"
 #include "url/ipc/url_param_traits.h"
 
 #if defined(OS_MACOSX)
@@ -296,7 +296,8 @@ IPC_MESSAGE_ROUTED1(GpuCommandBufferMsg_ConsoleMsg,
                     GPUCommandBufferConsoleMessage /* msg */)
 
 // Sent by the GPU process to notify the renderer process of a GPU switch.
-IPC_MESSAGE_ROUTED0(GpuCommandBufferMsg_GpuSwitched)
+IPC_MESSAGE_ROUTED1(GpuCommandBufferMsg_GpuSwitched,
+                    gl::GpuPreference /* active_gpu_heuristic */)
 
 // Register an existing shared memory transfer buffer. The id that can be
 // used to identify the transfer buffer from a command buffer.

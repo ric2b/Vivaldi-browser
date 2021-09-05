@@ -6,7 +6,9 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <numeric>
+#include <utility>
 
 #include "base/i18n/rtl.h"
 #include "base/strings/string_split.h"
@@ -19,7 +21,6 @@
 #include "ui/views/border.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/controls/link.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
@@ -45,8 +46,8 @@ constexpr int kDefaultMessageWidth = 400;
 // 0085          ; B # Cc       <control-0085>
 // 2029          ; B # Zp       PARAGRAPH SEPARATOR
 bool IsParagraphSeparator(base::char16 c) {
-  return ( c == 0x000A || c == 0x000D || c == 0x001C || c == 0x001D ||
-           c == 0x001E || c == 0x0085 || c == 0x2029);
+  return (c == 0x000A || c == 0x000D || c == 0x001C || c == 0x001D ||
+          c == 0x001E || c == 0x0085 || c == 0x2029);
 }
 
 // Splits |text| into a vector of paragraphs.
@@ -118,26 +119,16 @@ void MessageBoxView::SetCheckBoxSelected(bool selected) {
 }
 
 void MessageBoxView::SetLink(const base::string16& text,
-                             LinkListener* listener) {
-  size_t child_count = children().size();
-  if (text.empty()) {
-    DCHECK(!listener);
-    delete link_;
-    link_ = nullptr;
-  } else {
-    DCHECK(listener);
-    if (!link_) {
-      // See the comment above in SetCheckBoxLabel();
-      SetLayoutManager(nullptr);
-      link_ = AddChildView(std::make_unique<Link>(text));
-      link_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    } else {
-      link_->SetText(text);
-    }
-    link_->set_listener(listener);
-  }
-  if (child_count != children().size())
-    ResetLayoutManager();
+                             Link::ClickedCallback callback) {
+  DCHECK(!text.empty());
+  DCHECK(!callback.is_null());
+  DCHECK(!link_);
+  // See the comment in SetCheckBoxLabel();
+  SetLayoutManager(nullptr);
+  link_ = AddChildView(std::make_unique<Link>(text));
+  link_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  link_->set_callback(std::move(callback));
+  ResetLayoutManager();
 }
 
 void MessageBoxView::GetAccessibleNodeData(ui::AXNodeData* node_data) {

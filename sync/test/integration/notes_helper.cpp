@@ -16,9 +16,9 @@ using vivaldi::NotesModelFactory;
 
 namespace {
 
-// Does a deep comparison of Notes_Node fields in |model_a| and |model_b|.
+// Does a deep comparison of NoteNode fields in |model_a| and |model_b|.
 // Returns true if they are all equal.
-bool NodesMatch(const Notes_Node* node_a, const Notes_Node* node_b) {
+bool NodesMatch(const NoteNode* node_a, const NoteNode* node_b) {
   if (node_a == NULL || node_b == NULL)
     return node_a == node_b;
   if (node_a->is_folder() != node_b->is_folder()) {
@@ -67,17 +67,17 @@ bool NodesMatch(const Notes_Node* node_a, const Notes_Node* node_b) {
 // Checks if the hierarchies in |model_a| and |model_b| are equivalent in
 // terms of the data model and favicon. Returns true if they both match.
 // Note: Some peripheral fields like creation times are allowed to mismatch.
-bool NotesModelsMatch(Notes_Model* model_a, Notes_Model* model_b) {
+bool NotesModelsMatch(NotesModel* model_a, NotesModel* model_b) {
   bool ret_val = true;
-  ui::TreeNodeIterator<const Notes_Node> iterator_a(model_a->root_node());
-  ui::TreeNodeIterator<const Notes_Node> iterator_b(model_b->root_node());
+  ui::TreeNodeIterator<const NoteNode> iterator_a(model_a->root_node());
+  ui::TreeNodeIterator<const NoteNode> iterator_b(model_b->root_node());
   while (iterator_a.has_next()) {
-    const Notes_Node* node_a = iterator_a.Next();
+    const NoteNode* node_a = iterator_a.Next();
     if (!iterator_b.has_next()) {
       LOG(ERROR) << "Models do not match.";
       return false;
     }
-    const Notes_Node* node_b = iterator_b.Next();
+    const NoteNode* node_b = iterator_b.Next();
     ret_val = ret_val && NodesMatch(node_a, node_b);
   }
   ret_val = ret_val && (!iterator_b.has_next());
@@ -86,12 +86,12 @@ bool NotesModelsMatch(Notes_Model* model_a, Notes_Model* model_b) {
 
 // Finds the node in the verifier notes model that corresponds to
 // |foreign_node| in |foreign_model| and stores its address in |result|.
-void FindNodeInVerifier(Notes_Model* foreign_model,
-                        const Notes_Node* foreign_node,
-                        const Notes_Node** result) {
+void FindNodeInVerifier(NotesModel* foreign_model,
+                        const NoteNode* foreign_node,
+                        const NoteNode** result) {
   // Climb the tree.
   std::stack<size_t> path;
-  const Notes_Node* walker = foreign_node;
+  const NoteNode* walker = foreign_node;
   while (walker != foreign_model->root_node()) {
     path.push(walker->parent()->GetIndexOf(walker));
     walker = walker->parent();
@@ -116,41 +116,41 @@ void FindNodeInVerifier(Notes_Model* foreign_model,
 
 namespace notes_helper {
 
-Notes_Model* GetNotesModel(int index) {
+NotesModel* GetNotesModel(int index) {
   return NotesModelFactory::GetForBrowserContext(
       sync_datatype_helper::test()->GetProfile(index));
 }
 
-const Notes_Node* GetNotesTopNode(int index) {
+const NoteNode* GetNotesTopNode(int index) {
   return GetNotesModel(index)->main_node();
 }
 
-Notes_Model* GetVerifierNotesModel() {
+NotesModel* GetVerifierNotesModel() {
   return NotesModelFactory::GetForBrowserContext(
       sync_datatype_helper::test()->verifier());
 }
 
-const Notes_Node* AddNote(int profile,
+const NoteNode* AddNote(int profile,
                           const std::string& content,
                           const GURL& url) {
   return AddNote(profile, GetNotesTopNode(profile), 0, content, "", url);
 }
 
-const Notes_Node* AddNote(int profile,
+const NoteNode* AddNote(int profile,
                           const std::string& content,
                           const std::string& title,
                           const GURL& url) {
   return AddNote(profile, GetNotesTopNode(profile), 0, content, title, url);
 }
 
-const Notes_Node* AddNote(int profile,
+const NoteNode* AddNote(int profile,
                           int index,
                           const std::string& content,
                           const GURL& url) {
   return AddNote(profile, GetNotesTopNode(profile), index, content, "", url);
 }
 
-const Notes_Node* AddNote(int profile,
+const NoteNode* AddNote(int profile,
                           int index,
                           const std::string& content,
                           const std::string& title,
@@ -158,36 +158,36 @@ const Notes_Node* AddNote(int profile,
   return AddNote(profile, GetNotesTopNode(profile), index, content, title, url);
 }
 
-const Notes_Node* AddNote(int profile,
-                          const Notes_Node* parent,
+const NoteNode* AddNote(int profile,
+                          const NoteNode* parent,
                           int index,
                           const std::string& content,
                           const GURL& url) {
   return AddNote(profile, parent, index, content, "", url);
 }
 
-const Notes_Node* AddNote(int profile,
-                          const Notes_Node* parent,
+const NoteNode* AddNote(int profile,
+                          const NoteNode* parent,
                           int index,
                           const std::string& content,
                           const std::string& title,
                           const GURL& url) {
-  Notes_Model* model = GetNotesModel(profile);
+  NotesModel* model = GetNotesModel(profile);
   if (GetNotesNodeByID(model, parent->id()) != parent) {
     LOG(ERROR) << "Node " << parent->GetTitle() << " does not belong to "
                << "Profile " << profile;
     return NULL;
   }
-  const Notes_Node* result = model->AddNote(
+  const NoteNode* result = model->AddNote(
       parent, index, base::UTF8ToUTF16(title), url, base::UTF8ToUTF16(content));
   if (!result) {
     LOG(ERROR) << "Could not add notes " << title << " to Profile " << profile;
     return NULL;
   }
   if (sync_datatype_helper::test()->use_verifier()) {
-    const Notes_Node* v_parent = NULL;
+    const NoteNode* v_parent = NULL;
     FindNodeInVerifier(model, parent, &v_parent);
-    const Notes_Node* v_node = GetVerifierNotesModel()->AddNote(
+    const NoteNode* v_node = GetVerifierNotesModel()->AddNote(
         v_parent, index, base::UTF8ToUTF16(title), url,
         base::UTF8ToUTF16(content));
     if (!v_node) {
@@ -199,19 +199,19 @@ const Notes_Node* AddNote(int profile,
   return result;
 }
 
-const Notes_Node* AddFolder(int profile, const std::string& title) {
+const NoteNode* AddFolder(int profile, const std::string& title) {
   return AddFolder(profile, GetNotesTopNode(profile), 0, title);
 }
 
-const Notes_Node* AddFolder(int profile, int index, const std::string& title) {
+const NoteNode* AddFolder(int profile, int index, const std::string& title) {
   return AddFolder(profile, GetNotesTopNode(profile), index, title);
 }
 
-const Notes_Node* AddFolder(int profile,
-                            const Notes_Node* parent,
+const NoteNode* AddFolder(int profile,
+                            const NoteNode* parent,
                             int index,
                             const std::string& title) {
-  Notes_Model* model = GetNotesModel(profile);
+  NotesModel* model = GetNotesModel(profile);
   EXPECT_TRUE(model);
   EXPECT_TRUE(parent);
   if (GetNotesNodeByID(model, parent->id()) != parent) {
@@ -219,7 +219,7 @@ const Notes_Node* AddFolder(int profile,
                << "Profile " << profile;
     return NULL;
   }
-  const Notes_Node* result =
+  const NoteNode* result =
       model->AddFolder(parent, index, base::UTF8ToUTF16(title));
   EXPECT_TRUE(result);
   if (!result) {
@@ -228,10 +228,10 @@ const Notes_Node* AddFolder(int profile,
   }
   EXPECT_TRUE(result->parent() == parent);
   if (sync_datatype_helper::test()->use_verifier()) {
-    const Notes_Node* v_parent = NULL;
+    const NoteNode* v_parent = NULL;
     FindNodeInVerifier(model, parent, &v_parent);
     DCHECK(v_parent);
-    const Notes_Node* v_node = GetVerifierNotesModel()->AddFolder(
+    const NoteNode* v_node = GetVerifierNotesModel()->AddFolder(
         v_parent, index, base::UTF8ToUTF16(title));
     if (!v_node) {
       LOG(ERROR) << "Could not add folder " << title << " to the verifier";
@@ -243,14 +243,14 @@ const Notes_Node* AddFolder(int profile,
 }
 
 void SetTitle(int profile,
-              const Notes_Node* node,
+              const NoteNode* node,
               const std::string& new_title) {
-  Notes_Model* model = GetNotesModel(profile);
+  NotesModel* model = GetNotesModel(profile);
   ASSERT_EQ(GetNotesNodeByID(model, node->id()), node)
       << "Node " << node->GetTitle() << " does not belong to "
       << "Profile " << profile;
   if (sync_datatype_helper::test()->use_verifier()) {
-    const Notes_Node* v_node = NULL;
+    const NoteNode* v_node = NULL;
     FindNodeInVerifier(model, node, &v_node);
     GetVerifierNotesModel()->SetTitle(v_node, base::UTF8ToUTF16(new_title));
   }
@@ -258,31 +258,31 @@ void SetTitle(int profile,
 }
 
 void SetContent(int profile,
-                const Notes_Node* node,
+                const NoteNode* node,
                 const std::string& new_content) {
-  Notes_Model* model = GetNotesModel(profile);
+  NotesModel* model = GetNotesModel(profile);
   ASSERT_EQ(GetNotesNodeByID(model, node->id()), node)
       << "Node " << node->GetTitle() << " does not belong to "
       << "Profile " << profile;
   if (sync_datatype_helper::test()->use_verifier()) {
-    const Notes_Node* v_node = NULL;
+    const NoteNode* v_node = NULL;
     FindNodeInVerifier(model, node, &v_node);
     GetVerifierNotesModel()->SetContent(v_node, base::UTF8ToUTF16(new_content));
   }
   model->SetContent(node, base::UTF8ToUTF16(new_content));
 }
 
-const Notes_Node* SetURL(int profile,
-                         const Notes_Node* node,
+const NoteNode* SetURL(int profile,
+                         const NoteNode* node,
                          const GURL& new_url) {
-  Notes_Model* model = GetNotesModel(profile);
+  NotesModel* model = GetNotesModel(profile);
   if (GetNotesNodeByID(model, node->id()) != node) {
     LOG(ERROR) << "Node " << node->GetTitle() << " does not belong to "
                << "Profile " << profile;
     return NULL;
   }
   if (sync_datatype_helper::test()->use_verifier()) {
-    const Notes_Node* v_node = NULL;
+    const NoteNode* v_node = NULL;
     FindNodeInVerifier(model, node, &v_node);
     if (v_node->is_note())
       GetVerifierNotesModel()->SetURL(v_node, new_url);
@@ -293,16 +293,16 @@ const Notes_Node* SetURL(int profile,
 }
 
 void Move(int profile,
-          const Notes_Node* node,
-          const Notes_Node* new_parent,
+          const NoteNode* node,
+          const NoteNode* new_parent,
           int index) {
-  Notes_Model* model = GetNotesModel(profile);
+  NotesModel* model = GetNotesModel(profile);
   ASSERT_EQ(GetNotesNodeByID(model, node->id()), node)
       << "Node " << node->GetTitle() << " does not belong to "
       << "Profile " << profile;
   if (sync_datatype_helper::test()->use_verifier()) {
-    const Notes_Node* v_new_parent = NULL;
-    const Notes_Node* v_node = NULL;
+    const NoteNode* v_new_parent = NULL;
+    const NoteNode* v_node = NULL;
     FindNodeInVerifier(model, new_parent, &v_new_parent);
     FindNodeInVerifier(model, node, &v_node);
     GetVerifierNotesModel()->Move(v_node, v_new_parent, index);
@@ -310,13 +310,13 @@ void Move(int profile,
   model->Move(node, new_parent, index);
 }
 
-void Remove(int profile, const Notes_Node* parent, int index) {
-  Notes_Model* model = GetNotesModel(profile);
+void Remove(int profile, const NoteNode* parent, int index) {
+  NotesModel* model = GetNotesModel(profile);
   ASSERT_EQ(GetNotesNodeByID(model, parent->id()), parent)
       << "Node " << parent->GetTitle() << " does not belong to "
       << "Profile " << profile;
   if (sync_datatype_helper::test()->use_verifier()) {
-    const Notes_Node* v_parent = NULL;
+    const NoteNode* v_parent = NULL;
     FindNodeInVerifier(model, parent, &v_parent);
     ASSERT_TRUE(NodesMatch(parent->children()[index].get(),
                            v_parent->children()[index].get()));
@@ -327,7 +327,7 @@ void Remove(int profile, const Notes_Node* parent, int index) {
 
 void RemoveAll(int profile) {
   if (sync_datatype_helper::test()->use_verifier()) {
-    const Notes_Node* root_node = GetVerifierNotesModel()->root_node();
+    const NoteNode* root_node = GetVerifierNotesModel()->root_node();
     for (auto& it_root : root_node->children()) {
       for (int j = it_root->children().size() - 1; j >= 0; --j) {
         GetVerifierNotesModel()->Remove(it_root->children()[j].get());
@@ -337,20 +337,20 @@ void RemoveAll(int profile) {
   GetNotesModel(profile)->RemoveAllUserNotes();
 }
 
-void SortChildren(int profile, const Notes_Node* parent) {
-  Notes_Model* model = GetNotesModel(profile);
+void SortChildren(int profile, const NoteNode* parent) {
+  NotesModel* model = GetNotesModel(profile);
   ASSERT_EQ(GetNotesNodeByID(model, parent->id()), parent)
       << "Node " << parent->GetTitle() << " does not belong to "
       << "Profile " << profile;
   if (sync_datatype_helper::test()->use_verifier()) {
-    const Notes_Node* v_parent = NULL;
+    const NoteNode* v_parent = NULL;
     FindNodeInVerifier(model, parent, &v_parent);
     GetVerifierNotesModel()->SortChildren(v_parent);
   }
   model->SortChildren(parent);
 }
 
-void ReverseChildOrder(int profile, const Notes_Node* parent) {
+void ReverseChildOrder(int profile, const NoteNode* parent) {
   ASSERT_EQ(GetNotesNodeByID(GetNotesModel(profile), parent->id()), parent)
       << "Node " << parent->GetTitle() << " does not belong to "
       << "Profile " << profile;
@@ -403,8 +403,7 @@ class AllModelsMatchChecker : public MultiClientStatusChangeChecker {
   AllModelsMatchChecker();
   ~AllModelsMatchChecker() override;
 
-  bool IsExitConditionSatisfied() override;
-  std::string GetDebugMessage() const override;
+  bool IsExitConditionSatisfied(std::ostream* os) override;
 };
 
 AllModelsMatchChecker::AllModelsMatchChecker()
@@ -413,12 +412,8 @@ AllModelsMatchChecker::AllModelsMatchChecker()
 
 AllModelsMatchChecker::~AllModelsMatchChecker() {}
 
-bool AllModelsMatchChecker::IsExitConditionSatisfied() {
+bool AllModelsMatchChecker::IsExitConditionSatisfied(std::ostream* os) {
   return AllModelsMatch();
-}
-
-std::string AllModelsMatchChecker::GetDebugMessage() const {
-  return "Waiting for matching models";
 }
 
 }  //  namespace
@@ -430,16 +425,16 @@ bool AwaitAllModelsMatch() {
 }
 
 bool ContainsDuplicateNotes(int profile) {
-  ui::TreeNodeIterator<const Notes_Node> iterator(
+  ui::TreeNodeIterator<const NoteNode> iterator(
       GetNotesModel(profile)->root_node());
   while (iterator.has_next()) {
-    const Notes_Node* node = iterator.Next();
+    const NoteNode* node = iterator.Next();
     if (node->is_folder())
       continue;
-    std::vector<const Notes_Node*> nodes;
+    std::vector<const NoteNode*> nodes;
     GetNotesModel(profile)->GetNodesByURL(node->GetURL(), &nodes);
     EXPECT_GE(nodes.size(), 1ul);
-    for (std::vector<const Notes_Node*>::const_iterator it = nodes.begin();
+    for (std::vector<const NoteNode*>::const_iterator it = nodes.begin();
          it != nodes.end(); ++it) {
       if (node->id() != (*it)->id() && node->parent() == (*it)->parent() &&
           node->GetURL() == (*it)->GetURL() &&
@@ -453,13 +448,13 @@ bool ContainsDuplicateNotes(int profile) {
 }
 
 bool HasNodeWithURL(int profile, const GURL& url) {
-  std::vector<const Notes_Node*> nodes;
+  std::vector<const NoteNode*> nodes;
   GetNotesModel(profile)->GetNodesByURL(url, &nodes);
   return !nodes.empty();
 }
 
-const Notes_Node* GetUniqueNodeByURL(int profile, const GURL& url) {
-  std::vector<const Notes_Node*> nodes;
+const NoteNode* GetUniqueNodeByURL(int profile, const GURL& url) {
+  std::vector<const NoteNode*> nodes;
   GetNotesModel(profile)->GetNodesByURL(url, &nodes);
   EXPECT_EQ(1U, nodes.size());
   if (nodes.empty())
@@ -469,14 +464,14 @@ const Notes_Node* GetUniqueNodeByURL(int profile, const GURL& url) {
 
 int CountNotesWithContentMatching(int profile, const std::string& content) {
   auto utf16_content = base::UTF8ToUTF16(content);
-  ui::TreeNodeIterator<const Notes_Node> iterator(
+  ui::TreeNodeIterator<const NoteNode> iterator(
       GetNotesModel(profile)->root_node());
   // Walk through the model tree looking for notes nodes of node type
   // note whose content match |content|.
   int count = 0;
   while (iterator.has_next()) {
-    const Notes_Node* node = iterator.Next();
-    if ((node->type() == Notes_Node::NOTE) &&
+    const NoteNode* node = iterator.Next();
+    if ((node->type() == NoteNode::NOTE) &&
         (node->GetContent() == utf16_content))
       ++count;
   }
@@ -485,14 +480,14 @@ int CountNotesWithContentMatching(int profile, const std::string& content) {
 
 int CountFoldersWithTitlesMatching(int profile, const std::string& title) {
   auto utf16_title = base::UTF8ToUTF16(title);
-  ui::TreeNodeIterator<const Notes_Node> iterator(
+  ui::TreeNodeIterator<const NoteNode> iterator(
       GetNotesModel(profile)->root_node());
   // Walk through the model tree looking for notes nodes of node type
   // folder whose titles match |title|.
   int count = 0;
   while (iterator.has_next()) {
-    const Notes_Node* node = iterator.Next();
-    if ((node->type() == Notes_Node::FOLDER) &&
+    const NoteNode* node = iterator.Next();
+    if ((node->type() == NoteNode::FOLDER) &&
         (node->GetTitle() == utf16_title))
       ++count;
   }

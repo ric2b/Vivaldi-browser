@@ -4,6 +4,10 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_DARK;
+import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_LIGHT;
+import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_SYSTEM;
+
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doNothing;
@@ -12,14 +16,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_DARK;
-import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_LIGHT;
-import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_SYSTEM;
-
 import android.content.Intent;
-import android.support.v7.app.AppCompatDelegate;
 
-import org.junit.After;
+import androidx.appcompat.app.AppCompatDelegate;
+import androidx.browser.customtabs.CustomTabsIntent;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -34,9 +35,6 @@ import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.night_mode.PowerSavingModeMonitor;
 import org.chromium.chrome.browser.night_mode.SystemNightModeMonitor;
-import org.chromium.chrome.browser.util.FeatureUtilities;
-
-import androidx.browser.customtabs.CustomTabsIntent;
 
 /**
  * Tests for {@link CustomTabNightModeStateController}.
@@ -68,12 +66,6 @@ public class CustomTabNightModeStateControllerTest {
                 mPowerSavingObserverCaptor.capture());
         mNightModeController = new CustomTabNightModeStateController(mActivityLifecycleDispatcher,
                 mSystemNightModeMonitor, mPowerSavingModeMonitor);
-        FeatureUtilities.setNightModeForCustomTabsAvailableForTesting(true);
-    }
-
-    @After
-    public void tearDown() {
-        FeatureUtilities.setNightModeForCustomTabsAvailableForTesting(false);
     }
 
     @Test

@@ -77,7 +77,8 @@ class P2PQuicPacketWriter : public quic::QuicPacketWriter,
     }
 
     P2PQuicPacketTransport::QuicPacket packet;
-    packet.packet_number = connection_->packet_generator().packet_number().ToUint64();
+    packet.packet_number =
+        connection_->packet_creator().packet_number().ToUint64();
     packet.buffer = buffer;
     packet.buf_len = buf_len;
     int bytes_written = packet_transport_->WritePacket(packet);
@@ -170,7 +171,7 @@ std::unique_ptr<quic::QuicConnection> CreateQuicConnection(
 // A dummy helper for a server crypto stream that accepts all client hellos
 // and generates a random connection ID.
 class DummyCryptoServerStreamHelper
-    : public quic::QuicCryptoServerStream::Helper {
+    : public quic::QuicCryptoServerStreamBase::Helper {
  public:
   explicit DummyCryptoServerStreamHelper(quic::QuicRandom* random) {}
 
@@ -218,10 +219,8 @@ std::unique_ptr<P2PQuicTransportImpl> P2PQuicTransportImpl::Create(
   // TODO(shampson): Consider setting larger initial flow control window sizes
   // so that the default limit doesn't cause initial undersending.
   quic::QuicConfig quic_config;
-  quic_config.SetMaxIncomingBidirectionalStreamsToSend(
-      kMaxIncomingDynamicStreams);
-  quic_config.SetMaxIncomingUnidirectionalStreamsToSend(
-      kMaxIncomingDynamicStreams);
+  quic_config.SetMaxBidirectionalStreamsToSend(kMaxIncomingDynamicStreams);
+  quic_config.SetMaxUnidirectionalStreamsToSend(kMaxIncomingDynamicStreams);
   // The handshake network timeouts are configured to large values to prevent
   // the QUIC connection from being closed on a slow connection. This can occur
   // if signaling is slow and one side begins the handshake early.
@@ -528,12 +527,13 @@ void P2PQuicTransportImpl::InitializeCryptoStream() {
   }
 }
 
-void P2PQuicTransportImpl::OnCryptoHandshakeEvent(CryptoHandshakeEvent event) {
+void P2PQuicTransportImpl::SetDefaultEncryptionLevel(
+    quic::EncryptionLevel level) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  QuicSession::OnCryptoHandshakeEvent(event);
-  if (event == HANDSHAKE_CONFIRMED) {
+  QuicSession::SetDefaultEncryptionLevel(level);
+  if (level == quic::ENCRYPTION_FORWARD_SECURE) {
     DCHECK(IsEncryptionEstablished());
-    DCHECK(IsCryptoHandshakeConfirmed());
+    DCHECK(OneRttKeysAvailable());
     P2PQuicNegotiatedParams negotiated_params;
     // The guaranteed largest message payload will not change throughout the
     // connection.
@@ -545,6 +545,23 @@ void P2PQuicTransportImpl::OnCryptoHandshakeEvent(CryptoHandshakeEvent event) {
     }
     delegate_->OnConnected(negotiated_params);
   }
+}
+
+void P2PQuicTransportImpl::OnOneRttKeysAvailable() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  QuicSession::OnOneRttKeysAvailable();
+  DCHECK(IsEncryptionEstablished());
+  DCHECK(OneRttKeysAvailable());
+  P2PQuicNegotiatedParams negotiated_params;
+  // The guaranteed largest message payload will not change throughout the
+  // connection.
+  uint16_t max_datagram_length =
+      quic::QuicSession::GetGuaranteedLargestMessagePayload();
+  if (max_datagram_length > 0) {
+    // Datagrams are supported in this case.
+    negotiated_params.set_max_datagram_length(max_datagram_length);
+  }
+  delegate_->OnConnected(negotiated_params);
 }
 
 void P2PQuicTransportImpl::OnCanWrite() {
@@ -562,7 +579,8 @@ void P2PQuicTransportImpl::OnCanWrite() {
   QuicSession::OnCanWrite();
 }
 
-void P2PQuicTransportImpl::OnMessageReceived(quic::QuicStringPiece message) {
+void P2PQuicTransportImpl::OnMessageReceived(
+    quiche::QuicheStringPiece message) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   // This will never overflow because of the datagram size limit.
   Vector<uint8_t> datagram(static_cast<wtf_size_t>(message.size()));

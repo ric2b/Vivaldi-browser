@@ -24,6 +24,9 @@
 #include "base/command_line.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/search_box/search_box_constants.h"
+#include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animation_element.h"
+#include "ui/compositor/layer_animator.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
@@ -36,22 +39,13 @@ namespace ash {
 
 namespace {
 
-// Suggestion chip container top margin (from the search box view).
-constexpr int kSuggestionChipContainerTopMarginForSmallScreens = 8;
+// The apps container height at which suggestion chips container margin from the
+// search box should be reduced to preserve available vertical space.
+constexpr int kDenseSuggestionChipsTopMarginThreshold = 600;
 
-// The ratio of allowed bounds for apps grid view to its maximum margin.
-constexpr int kAppsGridMarginRatio = 16;
-constexpr int kAppsGridMarginRatioForSmallWidth = 12;
-
-// The width threshold under which kAppsGridMarginRatioForSmallWidth should be
-// used to calculate apps grid horizontal margins.
-constexpr int kAppsGridMarginSmallWidthThreshold = 600;
-
-// The minimum margin of apps grid view.
-constexpr int kAppsGridMinimumMargin = 8;
-
-// The horizontal spacing between apps grid view and page switcher.
-constexpr int kAppsGridPageSwitcherSpacing = 8;
+// Suggestion chip container top margin (from the search box view) when apps
+// container height is below |kDenseSuggestionChipsTopMarginThreshold|.
+constexpr int kDenseSuggestionChipContainerTopMargin = 8;
 
 // The range of app list transition progress in which the suggestion chips'
 // opacity changes from 0 to 1.
@@ -61,54 +55,33 @@ constexpr float kSuggestionChipOpacityEndProgress = 1;
 // The app list transition progress value for fullscreen state.
 constexpr float kAppListFullscreenProgressValue = 2.0;
 
-// Returns ideal horizontal padding for apps container with provided contents
-// bounds.
-int GetContainerHorizontalPaddingForBounds(const gfx::Rect& bounds) {
-  const int horizontal_margin_ratio =
-      (app_list_features::IsScalableAppListEnabled() &&
-       bounds.width() <= kAppsGridMarginSmallWidthThreshold)
-          ? kAppsGridMarginRatioForSmallWidth
-          : kAppsGridMarginRatio;
-  return bounds.width() / horizontal_margin_ratio;
-}
-
 }  // namespace
-
-// static
-int AppsContainerView::GetMinimumGridHorizontalMargin() {
-  // If ScalableAppList feature is enabled, there is no extra horizontal margin
-  // between grid view and the page switcher.
-  return kAppsGridPageSwitcherSpacing +
-         PageSwitcher::kMaxButtonRadiusForRootGrid * 2 +
-         (app_list_features::IsScalableAppListEnabled()
-              ? 0
-              : kAppsGridMinimumMargin);
-}
 
 AppsContainerView::AppsContainerView(ContentsView* contents_view,
                                      AppListModel* model)
     : contents_view_(contents_view) {
   SetPaintToLayer(ui::LAYER_NOT_DRAWN);
 
-  suggestion_chip_container_view_ =
-      new SuggestionChipContainerView(contents_view);
-  AddChildView(suggestion_chip_container_view_);
+  suggestion_chip_container_view_ = AddChildView(
+      std::make_unique<SuggestionChipContainerView>(contents_view));
 
-  apps_grid_view_ = new AppsGridView(contents_view_, nullptr);
-  AddChildView(apps_grid_view_);
+  apps_grid_view_ =
+      AddChildView(std::make_unique<AppsGridView>(contents_view_, nullptr));
 
   // Page switcher should be initialized after AppsGridView.
-  page_switcher_ =
-      new PageSwitcher(apps_grid_view_->pagination_model(), true /* vertical */,
-                       contents_view_->app_list_view()->is_tablet_mode());
-  AddChildView(page_switcher_);
+  auto page_switcher = std::make_unique<PageSwitcher>(
+      apps_grid_view_->pagination_model(), true /* vertical */,
+      contents_view_->app_list_view()->is_tablet_mode());
+  page_switcher_ = AddChildView(std::move(page_switcher));
 
-  app_list_folder_view_ = new AppListFolderView(this, model, contents_view_);
+  auto app_list_folder_view =
+      std::make_unique<AppListFolderView>(this, model, contents_view_);
   // The folder view is initially hidden.
-  app_list_folder_view_->SetVisible(false);
-  folder_background_view_ = new FolderBackgroundView(app_list_folder_view_);
-  AddChildView(folder_background_view_);
-  AddChildView(app_list_folder_view_);
+  app_list_folder_view->SetVisible(false);
+  auto folder_background_view =
+      std::make_unique<FolderBackgroundView>(app_list_folder_view.get());
+  folder_background_view_ = AddChildView(std::move(folder_background_view));
+  app_list_folder_view_ = AddChildView(std::move(app_list_folder_view));
 
   apps_grid_view_->SetModel(model);
   apps_grid_view_->SetItemList(model->top_level_item_list());
@@ -186,30 +159,68 @@ void AppsContainerView::ReparentDragEnded() {
   show_state_ = AppsContainerView::SHOW_APPS;
 }
 
-void AppsContainerView::UpdateControlVisibility(
-    ash::AppListViewState app_list_state,
-    bool is_in_drag) {
-  if (app_list_state == ash::AppListViewState::kClosed)
+void AppsContainerView::UpdateControlVisibility(AppListViewState app_list_state,
+                                                bool is_in_drag) {
+  if (app_list_state == AppListViewState::kClosed)
     return;
 
   set_can_process_events_within_subtree(
-      app_list_state == ash::AppListViewState::kFullscreenAllApps ||
-      app_list_state == ash::AppListViewState::kPeeking);
+      app_list_state == AppListViewState::kFullscreenAllApps ||
+      app_list_state == AppListViewState::kPeeking);
 
   apps_grid_view_->UpdateControlVisibility(app_list_state, is_in_drag);
   page_switcher_->SetVisible(
-      is_in_drag ||
-      app_list_state == ash::AppListViewState::kFullscreenAllApps ||
+      is_in_drag || app_list_state == AppListViewState::kFullscreenAllApps ||
       (app_list_features::IsScalableAppListEnabled() &&
-       app_list_state == ash::AppListViewState::kFullscreenSearch));
+       app_list_state == AppListViewState::kFullscreenSearch));
 
   // Ignore button press during dragging to avoid app list item views' opacity
   // being set to wrong value.
   page_switcher_->set_ignore_button_press(is_in_drag);
 
   suggestion_chip_container_view_->SetVisible(
-      app_list_state == ash::AppListViewState::kFullscreenAllApps ||
-      app_list_state == ash::AppListViewState::kPeeking || is_in_drag);
+      app_list_state == AppListViewState::kFullscreenAllApps ||
+      app_list_state == AppListViewState::kPeeking || is_in_drag);
+}
+
+void AppsContainerView::AnimateOpacity(float current_progress,
+                                       AppListViewState target_view_state,
+                                       const OpacityAnimator& animator) {
+  const bool target_suggestion_chip_visibility =
+      target_view_state == AppListViewState::kFullscreenAllApps ||
+      target_view_state == AppListViewState::kPeeking;
+  animator.Run(suggestion_chip_container_view_,
+               target_suggestion_chip_visibility);
+
+  if (!apps_grid_view_->layer()->GetAnimator()->IsAnimatingProperty(
+          ui::LayerAnimationElement::OPACITY)) {
+    apps_grid_view_->UpdateOpacity(true /*restore_opacity*/);
+    apps_grid_view_->layer()->SetOpacity(current_progress > 1.0f ? 1.0f : 0.0f);
+  }
+
+  const bool target_grid_visibility =
+      target_view_state == AppListViewState::kFullscreenAllApps ||
+      target_view_state == AppListViewState::kFullscreenSearch;
+  animator.Run(apps_grid_view_, target_grid_visibility);
+
+  animator.Run(page_switcher_, target_grid_visibility);
+}
+
+void AppsContainerView::AnimateYPosition(AppListViewState target_view_state,
+                                         const TransformAnimator& animator) {
+  const int target_suggestion_chip_y = GetExpectedSuggestionChipY(
+      AppListView::GetTransitionProgressForState(target_view_state));
+
+  suggestion_chip_container_view_->SetY(target_suggestion_chip_y);
+  animator.Run(suggestion_chip_container_view_);
+
+  apps_grid_view_->SetY(suggestion_chip_container_view_->y() +
+                        chip_grid_y_distance_);
+  animator.Run(apps_grid_view_);
+
+  page_switcher_->SetY(suggestion_chip_container_view_->y() +
+                       chip_grid_y_distance_);
+  animator.Run(page_switcher_);
 }
 
 void AppsContainerView::UpdateYPositionAndOpacity(float progress,
@@ -250,6 +261,14 @@ void AppsContainerView::UpdateYPositionAndOpacity(float progress,
                         chip_grid_y_distance_);
   page_switcher_->SetY(suggestion_chip_container_view_->y() +
                        chip_grid_y_distance_);
+
+  // If app list is in drag, reset transforms that might started animating in
+  // AnimateYPosition().
+  if (app_list_view->is_in_drag()) {
+    suggestion_chip_container_view_->layer()->SetTransform(gfx::Transform());
+    apps_grid_view_->layer()->SetTransform(gfx::Transform());
+    page_switcher_->layer()->SetTransform(gfx::Transform());
+  }
 }
 
 void AppsContainerView::OnTabletModeChanged(bool started) {
@@ -264,82 +283,81 @@ void AppsContainerView::Layout() {
   if (rect.IsEmpty())
     return;
 
+  // Layout suggestion chips.
+  gfx::Rect chip_container_rect = rect;
+  chip_container_rect.set_y(GetExpectedSuggestionChipY(
+      contents_view_->app_list_view()->GetAppListTransitionProgress(
+          AppListView::kProgressFlagNone)));
+  chip_container_rect.set_height(
+      GetAppListConfig().suggestion_chip_container_height());
+  if (app_list_features::IsScalableAppListEnabled()) {
+    chip_container_rect.Inset(GetAppListConfig().GetIdealHorizontalMargin(rect),
+                              0);
+  }
+  suggestion_chip_container_view_->SetBoundsRect(chip_container_rect);
+
+  // Leave the same available bounds for the apps grid view in both
+  // fullscreen and peeking state to avoid resizing the view during
+  // animation and dragging, which is an expensive operation.
+  rect.set_y(chip_container_rect.bottom());
+  rect.set_height(rect.height() -
+                  GetExpectedSuggestionChipY(kAppListFullscreenProgressValue) -
+                  chip_container_rect.height());
+
+  const int page_switcher_width = page_switcher_->GetPreferredSize().width();
+  // With scalable app list feature enabled, the margins are calculated from
+  // the edge of the apps container, instead of container bounds inset by
+  // page switcher area.
+  if (!app_list_features::IsScalableAppListEnabled()) {
+    rect.Inset(GetAppListConfig().GetMinGridHorizontalPadding(), 0);
+  }
+
+  const GridLayout grid_layout = CalculateGridLayout();
+  apps_grid_view_->SetLayout(grid_layout.columns, grid_layout.rows);
+
+  // Layout apps grid.
+  gfx::Rect grid_rect = rect;
+
+  if (app_list_features::IsScalableAppListEnabled()) {
+    const gfx::Insets grid_insets = apps_grid_view_->GetInsets();
+    const gfx::Insets margins = CalculateMarginsForAvailableBounds(
+        GetContentsBounds(),
+        contents_view_->GetSearchBoxSize(AppListState::kStateApps),
+        true /*for_full_container_bounds*/);
+    grid_rect.Inset(
+        margins.left(),
+        GetAppListConfig().grid_fadeout_zone_height() - grid_insets.top(),
+        margins.right(), margins.bottom());
+    // The grid rect insets are added to calculated margins. Given that the
+    // grid bounds rect should include insets, they have to be removed from
+    // added margins.
+    grid_rect.Inset(-grid_insets.left(), 0, -grid_insets.right(),
+                    -grid_insets.bottom());
+  } else {
+    grid_rect.Inset(CalculateMarginsForAvailableBounds(
+        rect, gfx::Size(), false /*for_full_container_bounds*/));
+    // The grid rect insets are added to calculated margins. Given that the
+    // grid bounds rect should include insets, they have to be removed from
+    // the added margins.
+    grid_rect.Inset(-apps_grid_view_->GetInsets());
+  }
+
+  apps_grid_view_->SetBoundsRect(grid_rect);
+
+  // Record the distance of y position between suggestion chip container
+  // and apps grid view to avoid duplicate calculation of apps grid view's
+  // y position during dragging.
+  chip_grid_y_distance_ =
+      apps_grid_view_->y() - suggestion_chip_container_view_->y();
+
+  // Layout page switcher.
+  page_switcher_->SetBoundsRect(gfx::Rect(
+      grid_rect.right() + GetAppListConfig().grid_to_page_switcher_margin(),
+      grid_rect.y(), page_switcher_width, grid_rect.height()));
+
   switch (show_state_) {
-    case SHOW_APPS: {
-      // Layout suggestion chips.
-      gfx::Rect chip_container_rect = rect;
-      chip_container_rect.set_y(GetExpectedSuggestionChipY(
-          contents_view_->app_list_view()->GetAppListTransitionProgress(
-              AppListView::kProgressFlagNone)));
-      chip_container_rect.set_height(
-          GetAppListConfig().suggestion_chip_container_height());
-      if (app_list_features::IsScalableAppListEnabled()) {
-        chip_container_rect.Inset(GetContainerHorizontalPaddingForBounds(rect),
-                                  0);
-      }
-      suggestion_chip_container_view_->SetBoundsRect(chip_container_rect);
-
-      // Leave the same available bounds for the apps grid view in both
-      // fullscreen and peeking state to avoid resizing the view during
-      // animation and dragging, which is an expensive operation.
-      rect.set_y(chip_container_rect.bottom());
-      rect.set_height(
-          rect.height() -
-          GetExpectedSuggestionChipY(kAppListFullscreenProgressValue) -
-          chip_container_rect.height());
-
-      const int page_switcher_width =
-          page_switcher_->GetPreferredSize().width();
-      // With scalable app list feature enabled, the margins are calculated from
-      // the edge of the apps container, instead of container bounds inset by
-      // page switcher area.
-      if (!app_list_features::IsScalableAppListEnabled())
-        rect.Inset(kAppsGridPageSwitcherSpacing + page_switcher_width, 0);
-
-      const GridLayout grid_layout = CalculateGridLayout();
-      apps_grid_view_->SetLayout(grid_layout.columns, grid_layout.rows);
-
-      // Layout apps grid.
-      gfx::Rect grid_rect = rect;
-
-      if (app_list_features::IsScalableAppListEnabled()) {
-        const gfx::Insets grid_insets = apps_grid_view_->GetInsets();
-        const gfx::Insets margins = CalculateMarginsForAvailableBounds(
-            GetContentsBounds(),
-            contents_view_->GetSearchBoxSize(ash::AppListState::kStateApps),
-            true /*for_full_container_bounds*/);
-        grid_rect.Inset(
-            margins.left(),
-            GetAppListConfig().grid_fadeout_zone_height() - grid_insets.top(),
-            margins.right(), margins.bottom());
-        // The grid rect insets are added to calculated margins. Given that the
-        // grid bounds rect should include insets, they have to be removed from
-        // added margins.
-        grid_rect.Inset(-grid_insets.left(), 0, -grid_insets.right(),
-                        -grid_insets.bottom());
-      } else {
-        grid_rect.Inset(CalculateMarginsForAvailableBounds(
-            rect, gfx::Size(), false /*for_full_container_bounds*/));
-        // The grid rect insets are added to calculated margins. Given that the
-        // grid bounds rect should include insets, they have to be removed from
-        // the added margins.
-        grid_rect.Inset(-apps_grid_view_->GetInsets());
-      }
-
-      apps_grid_view_->SetBoundsRect(grid_rect);
-
-      // Record the distance of y position between suggestion chip container
-      // and apps grid view to avoid duplicate calculation of apps grid view's
-      // y position during dragging.
-      chip_grid_y_distance_ =
-          apps_grid_view_->y() - suggestion_chip_container_view_->y();
-
-      // Layout page switcher.
-      page_switcher_->SetBoundsRect(
-          gfx::Rect(grid_rect.right() + kAppsGridPageSwitcherSpacing,
-                    grid_rect.y(), page_switcher_width, grid_rect.height()));
+    case SHOW_APPS:
       break;
-    }
     case SHOW_ACTIVE_FOLDER: {
       folder_background_view_->SetBoundsRect(rect);
       app_list_folder_view_->SetBoundsRect(
@@ -414,8 +432,7 @@ views::View* AppsContainerView::GetFirstFocusableView() {
       this, GetWidget(), false /* reverse */, false /* dont_loop */);
 }
 
-gfx::Rect AppsContainerView::GetPageBoundsForState(
-    ash::AppListState state) const {
+gfx::Rect AppsContainerView::GetPageBoundsForState(AppListState state) const {
   return contents_view_->GetContentsBounds();
 }
 
@@ -473,22 +490,21 @@ const gfx::Insets& AppsContainerView::CalculateMarginsForAvailableBounds(
   };
 
   const int ideal_vertical_margin =
-      available_bounds.height() / kAppsGridMarginRatio;
+      GetAppListConfig().GetIdealVerticalMargin(available_bounds);
   const int vertical_margin =
       calculate_margin(ideal_vertical_margin, available_height,
                        min_grid_size.height(), max_grid_size.height());
 
   const int ideal_horizontal_margin =
-      GetContainerHorizontalPaddingForBounds(available_bounds);
+      GetAppListConfig().GetIdealHorizontalMargin(available_bounds);
   const int horizontal_margin =
       calculate_margin(ideal_horizontal_margin, available_bounds.width(),
                        min_grid_size.width(), max_grid_size.width());
 
   const int min_horizontal_margin =
       app_list_features::IsScalableAppListEnabled()
-          ? kAppsGridPageSwitcherSpacing +
-                page_switcher_->GetPreferredSize().width()
-          : kAppsGridMinimumMargin;
+          ? GetAppListConfig().GetMinGridHorizontalPadding()
+          : 0;
 
   cached_container_margins_.margins = gfx::Insets(
       std::max(vertical_margin, GetAppListConfig().grid_fadeout_zone_height()),
@@ -501,12 +517,33 @@ const gfx::Insets& AppsContainerView::CalculateMarginsForAvailableBounds(
   return cached_container_margins_.margins;
 }
 
+void AppsContainerView::OnAppListConfigUpdated() {
+  // Invalidate the cached container margins - app list config change generally
+  // changes preferred apps grid margins, which can influence the container
+  // margins.
+  cached_container_margins_ = CachedContainerMargins();
+
+  apps_grid_view()->OnAppListConfigUpdated();
+  app_list_folder_view()->items_grid_view()->OnAppListConfigUpdated();
+}
+
 void AppsContainerView::UpdateSuggestionChips() {
   suggestion_chip_container_view_->SetResults(
       contents_view_->GetAppListMainView()
           ->view_delegate()
           ->GetSearchModel()
           ->results());
+}
+
+base::ScopedClosureRunner AppsContainerView::DisableSuggestionChipsBlur() {
+  ++suggestion_chips_blur_disabler_count_;
+
+  if (suggestion_chips_blur_disabler_count_ == 1)
+    suggestion_chip_container_view_->SetBlurDisabled(true);
+
+  return base::ScopedClosureRunner(
+      base::BindOnce(&AppsContainerView::OnSuggestionChipsBlurDisablerReleased,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 const AppListConfig& AppsContainerView::GetAppListConfig() const {
@@ -529,6 +566,7 @@ void AppsContainerView::SetShowState(ShowState show_state,
       page_switcher_->set_can_process_events_within_subtree(true);
       folder_background_view_->SetVisible(false);
       apps_grid_view_->ResetForShowApps();
+      app_list_folder_view_->ResetItemsGridForClose();
       if (show_apps_with_animation)
         app_list_folder_view_->ScheduleShowHideAnimation(false, false);
       else
@@ -565,11 +603,11 @@ int AppsContainerView::GetSuggestionChipContainerTopMargin(
   // For small screen sizes in fullscreen state, reduce the margin between the
   // search box and suggestion chips to reclaim as much of the vertical space as
   // possible.
-  if (GetContentsBounds().height() < kAppsGridMarginSmallWidthThreshold &&
+  if (GetContentsBounds().height() < kDenseSuggestionChipsTopMarginThreshold &&
       !app_list_features::IsScalableAppListEnabled() && progress > 1.0) {
     return gfx::Tween::IntValueBetween(
         progress - 1, GetAppListConfig().suggestion_chip_container_top_margin(),
-        kSuggestionChipContainerTopMarginForSmallScreens);
+        kDenseSuggestionChipContainerTopMargin);
   }
   return GetAppListConfig().suggestion_chip_container_top_margin();
 }
@@ -577,7 +615,7 @@ int AppsContainerView::GetSuggestionChipContainerTopMargin(
 int AppsContainerView::GetExpectedSuggestionChipY(float progress) {
   const gfx::Rect search_box_bounds =
       contents_view_->GetSearchBoxExpectedBoundsForProgress(
-          ash::AppListState::kStateApps, progress);
+          AppListState::kStateApps, progress);
   return search_box_bounds.bottom() +
          GetSuggestionChipContainerTopMargin(progress);
 }
@@ -601,6 +639,14 @@ AppsContainerView::GridLayout AppsContainerView::CalculateGridLayout() const {
     result.rows = config.preferred_rows();
   }
   return result;
+}
+
+void AppsContainerView::OnSuggestionChipsBlurDisablerReleased() {
+  DCHECK_GT(suggestion_chips_blur_disabler_count_, 0u);
+  --suggestion_chips_blur_disabler_count_;
+
+  if (suggestion_chips_blur_disabler_count_ == 0)
+    suggestion_chip_container_view_->SetBlurDisabled(false);
 }
 
 }  // namespace ash

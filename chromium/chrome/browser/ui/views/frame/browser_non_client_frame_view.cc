@@ -10,6 +10,7 @@
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/themes/custom_theme_supplier.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_types.h"
@@ -46,7 +47,10 @@ BrowserNonClientFrameView::BrowserNonClientFrameView(BrowserFrame* frame,
     g_browser_process->profile_manager()->
         GetProfileAttributesStorage().AddObserver(this);
   }
-  MaybeObserveTabstrip();
+  if (browser_view_->tabstrip()) {
+    DCHECK(!tab_strip_observer_.IsObserving(browser_view_->tabstrip()));
+    tab_strip_observer_.Add(browser_view_->tabstrip());
+  }
 }
 
 BrowserNonClientFrameView::~BrowserNonClientFrameView() {
@@ -58,7 +62,6 @@ BrowserNonClientFrameView::~BrowserNonClientFrameView() {
 }
 
 void BrowserNonClientFrameView::OnBrowserViewInitViewsComplete() {
-  MaybeObserveTabstrip();
   UpdateMinimumSize();
 }
 
@@ -141,29 +144,16 @@ SkColor BrowserNonClientFrameView::GetCaptionColor(
 
 SkColor BrowserNonClientFrameView::GetFrameColor(
     BrowserFrameActiveState active_state) const {
-  ThemeProperties::OverwritableByUserThemeProperty color_id;
-
-  color_id = ShouldPaintAsActive(active_state)
-                 ? ThemeProperties::COLOR_FRAME
-                 : ThemeProperties::COLOR_FRAME_INACTIVE;
-
-  if (frame_->ShouldUseTheme())
-    return GetThemeProviderForProfile()->GetColor(color_id);
-
-  web_app::AppBrowserController* app_controller =
-      browser_view_->browser()->app_controller();
-  if (app_controller && app_controller->GetThemeColor())
-    return *app_controller->GetThemeColor();
-
-  return ThemeProperties::GetDefaultColor(color_id,
-                                          browser_view_->IsIncognito());
+  return GetFrameThemeProvider()->GetColor(
+      ShouldPaintAsActive(active_state)
+          ? ThemeProperties::COLOR_FRAME_ACTIVE
+          : ThemeProperties::COLOR_FRAME_INACTIVE);
 }
 
 void BrowserNonClientFrameView::UpdateFrameColor() {
   // Only web-app windows support dynamic frame colors set by HTML meta tags.
-  if (!web_app_frame_toolbar_)
-    return;
-  web_app_frame_toolbar_->UpdateCaptionColors();
+  if (web_app_frame_toolbar_)
+    web_app_frame_toolbar_->UpdateCaptionColors();
   SchedulePaint();
 }
 
@@ -174,8 +164,8 @@ SkColor BrowserNonClientFrameView::GetToolbarTopSeparatorColor() const {
           : ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR_INACTIVE;
   // The vertical tab separator might show through the stroke if the stroke
   // color is translucent.  To prevent this, always use an opaque stroke color.
-  return color_utils::GetResultingPaintColor(GetThemeOrDefaultColor(color_id),
-                                             GetFrameColor());
+  return color_utils::GetResultingPaintColor(
+      GetFrameThemeProvider()->GetColor(color_id), GetFrameColor());
 }
 
 base::Optional<int> BrowserNonClientFrameView::GetCustomBackgroundId(
@@ -251,7 +241,7 @@ bool BrowserNonClientFrameView::ShouldPaintAsActive(
 
 gfx::ImageSkia BrowserNonClientFrameView::GetFrameImage(
     BrowserFrameActiveState active_state) const {
-  const ui::ThemeProvider* tp = GetThemeProviderForProfile();
+  const ui::ThemeProvider* tp = GetFrameThemeProvider();
   const int frame_image_id = ShouldPaintAsActive(active_state)
                                  ? IDR_THEME_FRAME
                                  : IDR_THEME_FRAME_INACTIVE;
@@ -266,7 +256,7 @@ gfx::ImageSkia BrowserNonClientFrameView::GetFrameOverlayImage(
   if (browser_view_->IsIncognito() || !browser_view_->IsBrowserTypeNormal())
     return gfx::ImageSkia();
 
-  const ui::ThemeProvider* tp = GetThemeProviderForProfile();
+  const ui::ThemeProvider* tp = GetFrameThemeProvider();
   const int frame_overlay_image_id = ShouldPaintAsActive(active_state)
                                          ? IDR_THEME_FRAME_OVERLAY
                                          : IDR_THEME_FRAME_OVERLAY_INACTIVE;
@@ -385,26 +375,10 @@ int BrowserNonClientFrameView::GetSystemMenuY() const {
 }
 #endif
 
-void BrowserNonClientFrameView::MaybeObserveTabstrip() {
-  if (browser_view_->tabstrip()) {
-    DCHECK(!tab_strip_observer_.IsObserving(browser_view_->tabstrip()));
-    tab_strip_observer_.Add(browser_view_->tabstrip());
-  }
-}
-
-const ui::ThemeProvider*
-BrowserNonClientFrameView::GetThemeProviderForProfile() const {
-  // Because the frame's accessor reads the ThemeProvider from the profile and
-  // not the widget, it can be called even before we're in a view hierarchy.
+const ui::ThemeProvider* BrowserNonClientFrameView::GetFrameThemeProvider()
+    const {
+  // The |frame_| theme provider is obtained from the profile rather than the
+  // widget. This is done this way because it can happen prior to being inserted
+  // into the view hierarchy.
   return frame_->GetThemeProvider();
-}
-
-SkColor BrowserNonClientFrameView::GetThemeOrDefaultColor(int color_id) const {
-  // During shutdown, there may no longer be a widget, and thus no theme
-  // provider.
-  const auto* theme_provider = GetThemeProvider();
-  return frame_->ShouldUseTheme() && theme_provider
-             ? theme_provider->GetColor(color_id)
-             : ThemeProperties::GetDefaultColor(color_id,
-                                                browser_view_->IsIncognito());
 }

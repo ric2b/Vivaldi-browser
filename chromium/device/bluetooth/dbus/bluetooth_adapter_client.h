@@ -106,6 +106,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterClient : public BluezDBusClient {
     // Local Device ID information in Linux kernel modalias format. Read-only.
     dbus::Property<std::string> modalias;
 
+    // Flag to enable usage of kernel suspend notifier.
+    // TODO(b/149795111): Remove once feature is default behavior in stable.
+    dbus::Property<bool> use_kernel_suspend_notifier;
+
     Properties(dbus::ObjectProxy* object_proxy,
                const std::string& interface_name,
                const PropertyChangedCallback& callback);
@@ -147,14 +151,14 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterClient : public BluezDBusClient {
   virtual Properties* GetProperties(const dbus::ObjectPath& object_path) = 0;
 
   // Callback used to send back the handle of a created service record.
-  using ServiceRecordCallback = base::Callback<void(uint32_t)>;
+  using ServiceRecordCallback = base::OnceCallback<void(uint32_t)>;
 
   // The ErrorCallback is used by adapter methods to indicate failure.
   // It receives two arguments: the name of the error in |error_name| and
   // an optional message in |error_message|.
-  typedef base::OnceCallback<void(const std::string& error_name,
-                                  const std::string& error_message)>
-      ErrorCallback;
+  using ErrorCallback =
+      base::OnceCallback<void(const std::string& error_name,
+                              const std::string& error_message)>;
 
   // Callback used by adapter methods to indicate that a response was
   // received with an optional Error in case an error occurred.
@@ -166,7 +170,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterClient : public BluezDBusClient {
                               ResponseCallback callback) = 0;
   // DEPRECATED: Use StartDiscovery() above.
   void StartDiscovery(const dbus::ObjectPath& object_path,
-                      const base::Closure& callback,
+                      base::OnceClosure callback,
                       ErrorCallback error_callback);
 
   // Cancels any previous device discovery on the adapter with object path
@@ -175,17 +179,17 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterClient : public BluezDBusClient {
                              ResponseCallback callback) = 0;
   // DEPRECATED: Use StopDiscovery() above.
   void StopDiscovery(const dbus::ObjectPath& object_path,
-                     const base::Closure& callback,
+                     base::OnceClosure callback,
                      ErrorCallback error_callback);
 
   // Pauses all discovery sessions.
   virtual void PauseDiscovery(const dbus::ObjectPath& object_path,
-                              const base::Closure& callback,
+                              base::OnceClosure callback,
                               ErrorCallback error_callback) = 0;
 
   // Unpauses all discovery sessions.
   virtual void UnpauseDiscovery(const dbus::ObjectPath& object_path,
-                                const base::Closure& callback,
+                                base::OnceClosure callback,
                                 ErrorCallback error_callback) = 0;
 
   // Removes from the adapter with object path |object_path| the remote
@@ -193,7 +197,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterClient : public BluezDBusClient {
   // and discards any pairing information.
   virtual void RemoveDevice(const dbus::ObjectPath& object_path,
                             const dbus::ObjectPath& device_path,
-                            const base::Closure& callback,
+                            base::OnceClosure callback,
                             ErrorCallback error_callback) = 0;
 
   // Sets the device discovery filter on the adapter with object path
@@ -204,27 +208,22 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterClient : public BluezDBusClient {
   // will be started right after call to StartDiscovery.
   virtual void SetDiscoveryFilter(const dbus::ObjectPath& object_path,
                                   const DiscoveryFilter& discovery_filter,
-                                  const base::Closure& callback,
+                                  base::OnceClosure callback,
                                   ErrorCallback error_callback) = 0;
 
   // Creates the service record |record| on the adapter with the object path
   // |object_path|.
   virtual void CreateServiceRecord(const dbus::ObjectPath& object_path,
                                    const BluetoothServiceRecordBlueZ& record,
-                                   const ServiceRecordCallback& callback,
+                                   ServiceRecordCallback callback,
                                    ErrorCallback error_callback) = 0;
 
   // Removes the service record with the uuid |uuid| on the adapter with the
   // object path |object_path|.
   virtual void RemoveServiceRecord(const dbus::ObjectPath& object_path,
                                    uint32_t handle,
-                                   const base::Closure& callback,
+                                   base::OnceClosure callback,
                                    ErrorCallback error_callback) = 0;
-
-  virtual void SetLongTermKeys(
-      const dbus::ObjectPath& object_path,
-      const std::vector<std::vector<uint8_t>>& long_term_keys,
-      ErrorCallback error_callback) = 0;
 
   // Creates the instance.
   static BluetoothAdapterClient* Create();

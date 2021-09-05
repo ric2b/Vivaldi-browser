@@ -39,8 +39,12 @@ void FakeCryptAuthFeatureStatusSetter::SetFeatureStatus(
     FeatureStatusChange status_change,
     base::OnceClosure success_callback,
     base::OnceCallback<void(NetworkRequestError)> error_callback) {
-  requests_.emplace(device_id, feature, status_change,
-                    std::move(success_callback), std::move(error_callback));
+  requests_.emplace_back(device_id, feature, status_change,
+                         std::move(success_callback),
+                         std::move(error_callback));
+
+  if (delegate_)
+    delegate_->OnSetFeatureStatusCalled();
 }
 
 FakeCryptAuthFeatureStatusSetterFactory::
@@ -50,7 +54,7 @@ FakeCryptAuthFeatureStatusSetterFactory::
     ~FakeCryptAuthFeatureStatusSetterFactory() = default;
 
 std::unique_ptr<CryptAuthFeatureStatusSetter>
-FakeCryptAuthFeatureStatusSetterFactory::BuildInstance(
+FakeCryptAuthFeatureStatusSetterFactory::CreateInstance(
     ClientAppMetadataProvider* client_app_metadata_provider,
     CryptAuthClientFactory* client_factory,
     CryptAuthGCMManager* gcm_manager,

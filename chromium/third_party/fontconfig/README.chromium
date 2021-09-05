@@ -1,6 +1,6 @@
 Name: fontconfig
 URL: http://www.freedesktop.org/wiki/Software/fontconfig/
-Version: 65087ac7ce4cc5f2109967c1380b474955dcb590
+Version: 452be8125f0e2a18a7dfef469e05d19374d36307
 License: MIT
 License File: src/COPYING
 Security Critical: yes

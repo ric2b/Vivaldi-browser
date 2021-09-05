@@ -27,19 +27,18 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 
-import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.metrics.RecordHistogramJni;
+import org.chromium.base.metrics.test.DisableHistogramsRule;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.omnibox.geo.VisibleNetworks.VisibleCell;
 import org.chromium.chrome.browser.omnibox.geo.VisibleNetworks.VisibleWifi;
-import org.chromium.chrome.browser.preferences.website.ContentSettingValues;
-import org.chromium.chrome.browser.preferences.website.WebsitePreferenceBridge;
-import org.chromium.chrome.browser.preferences.website.WebsitePreferenceBridgeJni;
+import org.chromium.chrome.browser.site_settings.ContentSettingValues;
+import org.chromium.chrome.browser.site_settings.WebsitePreferenceBridge;
+import org.chromium.chrome.browser.site_settings.WebsitePreferenceBridgeJni;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.UrlUtilities;
-import org.chromium.chrome.browser.util.UrlUtilitiesJni;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.embedder_support.util.UrlUtilitiesJni;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -100,8 +99,8 @@ public class GeolocationHeaderUnitTest {
     @Rule
     public JniMocker mocker = new JniMocker();
 
-    @Mock
-    RecordHistogram.Natives mRecordHistogramJniMock;
+    @Rule
+    public DisableHistogramsRule mDisableHistogramsRule = new DisableHistogramsRule();
 
     @Mock
     UrlUtilities.Natives mUrlUtilitiesJniMock;
@@ -115,7 +114,6 @@ public class GeolocationHeaderUnitTest {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        mocker.mock(RecordHistogramJni.TEST_HOOKS, mRecordHistogramJniMock);
         mocker.mock(UrlUtilitiesJni.TEST_HOOKS, mUrlUtilitiesJniMock);
         mocker.mock(WebsitePreferenceBridgeJni.TEST_HOOKS, mWebsitePreferenceBridgeJniMock);
         GeolocationTracker.setLocationAgeForTesting(null);

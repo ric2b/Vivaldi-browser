@@ -5,6 +5,7 @@
 import("//build/util/branding.gni")
 import("//components/vector_icons/vector_icons.gni")
 import("//device/vr/buildflags/buildflags.gni")
+import("//ui/webui/webui_features.gni")
 
 aggregate_vector_icons("chrome_vector_icons") {
   icon_directory = "."
@@ -14,22 +15,18 @@ aggregate_vector_icons("chrome_vector_icons") {
     "account_child.icon",
     "account_child_circle.icon",
     "add.icon",
-    "ads.icon",
     "apps.icon",
-    "autofill/webauthn_offer_dialog_header.icon",
-    "autofill/webauthn_offer_dialog_header_dark.icon",
-    "blocked_badge.icon",
+    "autofill/webauthn_dialog_header.icon",
+    "autofill/webauthn_dialog_header_dark.icon",
     "blocked_redirect.icon",
-    "bluetooth.icon",
     "browser_tools.icon",
-    "browser_tools_animated.icon",
     "browser_tools_error.icon",
     "browser_tools_update.icon",
     "caret_down.icon",
     "caret_up.icon",
-    "certificate.icon",
+    "click_to_call_illustration.icon",
+    "click_to_call_illustration_dark.icon",
     "close_all.icon",
-    "code.icon",
 
     # Alternative squarer content_paste icon optimised for display at 18x18dip.
     # Currently only used in the Page Info bubble.
@@ -39,17 +36,13 @@ aggregate_vector_icons("chrome_vector_icons") {
     "browser_tools_touch.icon",
     "browser_tools_update_touch.icon",
     "cast_for_education.icon",
-    "content_paste.icon",
-    "cookie.icon",
     "copy.icon",
     "crashed_tab.icon",
     "credit_card.icon",
     "default_touch_favicon.icon",
     "default_touch_favicon_mask.icon",
     "eol.icon",
-    "extension.icon",
     "extension_crashed.icon",
-    "file_download.icon",
     "file_download_shelf.icon",
     "fingerprint.icon",
     "forward_arrow_touch.icon",
@@ -64,7 +57,6 @@ aggregate_vector_icons("chrome_vector_icons") {
     "input.icon",
     "key.icon",
     "laptop.icon",
-    "launch.icon",
     "media_toolbar_button.icon",
     "media_toolbar_button_touch.icon",
     "mixed_content.icon",
@@ -75,27 +67,22 @@ aggregate_vector_icons("chrome_vector_icons") {
     "navigate_stop_touch.icon",
     "nfc.icon",
     "overflow_chevron.icon",
-    "page_info_content_paste.icon",
     "paintbrush.icon",
-    "password_check_warning.icon",
-    "password_check_warning_dark.icon",
-    "photo.icon",
     "photo_camera.icon",
     "picture_in_picture_control_background.icon",
     "picture_in_picture_alt.icon",
     "qrcode_generator.icon",
     "reader_mode.icon",
+    "reader_mode_disabled.icon",
     "reload_touch.icon",
     "remove.icon",
     "remove_box.icon",
     "resize_handle.icon",
     "sad_tab.icon",
-    "save_original_file.icon",
     "security.icon",
     "send_tab_to_self.icon",
     "eye_crossed.icon",
     "eye.icon",
-    "sensors.icon",
     "signin_button_drop_down_arrow.icon",
     "sign_out.icon",
     "smartphone.icon",
@@ -103,7 +90,6 @@ aggregate_vector_icons("chrome_vector_icons") {
     "speaker_group.icon",
     "supervisor_account.icon",
     "supervisor_account_circle.icon",
-    "sync.icon",
     "sync_circle.icon",
     "sync_error_circle.icon",
     "sync_paused.icon",
@@ -117,6 +103,7 @@ aggregate_vector_icons("chrome_vector_icons") {
     "tab_audio_rounded.icon",
     "tab_bluetooth_connected.icon",
     "tab_close_normal.icon",
+    "tab_group.icon",
     "tab_media_capturing.icon",
     "tab_media_capturing_with_arrow.icon",
     "tab_media_recording.icon",
@@ -129,8 +116,6 @@ aggregate_vector_icons("chrome_vector_icons") {
     "user_account_avatar.icon",
     "user_menu_guest.icon",
     "user_menu_right_arrow.icon",
-    "volume_up.icon",
-    "vr_headset.icon",
     "warning_badge.icon",
     "web.icon",
     "webauthn/webauthn_ble.icon",
@@ -145,6 +130,8 @@ aggregate_vector_icons("chrome_vector_icons") {
     "webauthn/webauthn_error_bluetooth.icon",
     "webauthn/webauthn_error_bluetooth_dark.icon",
     "webauthn/webauthn_error_dark.icon",
+    "webauthn/webauthn_fingerprint.icon",
+    "webauthn/webauthn_fingerprint_dark.icon",
     "webauthn/webauthn_permission.icon",
     "webauthn/webauthn_permission_dark.icon",
     "webauthn/webauthn_phone.icon",
@@ -167,10 +154,16 @@ aggregate_vector_icons("chrome_vector_icons") {
 
   if (is_win) {
     icons += [
+      "back_arrow_windows.icon",
+      "back_arrow_windows_touch.icon",
       "inactive_toast_arrow.icon",
       "inactive_toast_close.icon",
       "inactive_toast_logo.icon",
+      "navigate_stop_windows.icon",
+      "navigate_stop_windows_touch.icon",
       "open_in_phone.icon",
+      "reload_windows.icon",
+      "reload_windows_touch.icon",
     ]
   }
 
@@ -205,11 +198,19 @@ aggregate_vector_icons("chrome_vector_icons") {
     icons += [ "open_in_browser.icon" ]
   }
 
+  if (enable_webui_tab_strip) {
+    icons += [ "new_tab_toolbar_button.icon" ]
+  }
+
   if (is_chrome_branded) {
     icons += [
       "google_chrome/google_g_logo.icon",
       "google_chrome/google_pay_logo.icon",
     ]
+  }
+
+  if (is_chrome_branded && is_chromeos) {
+    icons += [ "google_chrome/assistant.icon" ]
   }
 }
 

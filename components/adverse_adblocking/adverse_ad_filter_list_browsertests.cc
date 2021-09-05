@@ -35,9 +35,8 @@
 #include "chrome/test/base/ui_test_utils.h"
 
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
-#include "components/adverse_adblocking/vivaldi_content_browser_client.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
-#include "components/security_interstitials/content/unsafe_resource.h"
+#include "components/security_interstitials/core/unsafe_resource.h"
 #include "components/subresource_filter/content/browser/async_document_subresource_filter.h"
 #include "components/subresource_filter/content/browser/async_document_subresource_filter_test_utils.h"
 #include "components/subresource_filter/content/browser/ruleset_service.h"
@@ -63,6 +62,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
+#include "extraparts/vivaldi_content_browser_client.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"

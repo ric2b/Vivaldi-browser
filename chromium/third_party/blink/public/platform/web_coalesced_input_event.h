@@ -5,9 +5,9 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_COALESCED_INPUT_EVENT_H_
 #define THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_COALESCED_INPUT_EVENT_H_
 
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_pointer_event.h"
 #include "third_party/blink/public/platform/web_common.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_pointer_event.h"
 #include "third_party/blink/public/platform/web_vector.h"
 
 #include <memory>
@@ -42,12 +42,7 @@ class BLINK_PLATFORM_EXPORT WebCoalescedInputEvent {
   WebVector<const WebInputEvent*> GetPredictedEventsPointers() const;
 
  private:
-  struct BLINK_PLATFORM_EXPORT WebInputEventDeleter {
-    void operator()(blink::WebInputEvent*) const;
-  };
-
-  using WebScopedInputEvent =
-      std::unique_ptr<WebInputEvent, WebInputEventDeleter>;
+  using WebScopedInputEvent = std::unique_ptr<WebInputEvent>;
 
   WebScopedInputEvent MakeWebScopedInputEvent(const blink::WebInputEvent&);
 

@@ -580,14 +580,14 @@ class FileManager extends cr.EventTarget {
         this.ui_.listContainer.table, this.directoryModel_);
 
     this.quickViewModel_ = new QuickViewModel();
-    const fileListSelectionModel = /** @type {!cr.ui.ListSelectionModel} */ (
+    const fileListSelectionModel = /** @type {!FileListSelectionModel} */ (
         this.directoryModel_.getFileListSelection());
     this.quickViewUma_ =
         new QuickViewUma(assert(this.volumeManager_), assert(this.dialogType));
     const metadataBoxController = new MetadataBoxController(
         this.metadataModel_, this.quickViewModel_, this.fileMetadataFormatter_);
     this.quickViewController_ = new QuickViewController(
-        assert(this.metadataModel_), assert(this.selectionHandler_),
+        this, assert(this.metadataModel_), assert(this.selectionHandler_),
         assert(this.ui_.listContainer), assert(this.ui_.selectionMenuButton),
         assert(this.quickViewModel_), assert(this.taskController_),
         fileListSelectionModel, assert(this.quickViewUma_),
@@ -661,6 +661,11 @@ class FileManager extends cr.EventTarget {
     // TODO(hirono): Move the following block to the UI part.
     for (const button of this.dialogDom_.querySelectorAll('button[command]')) {
       CommandButton.decorate(button);
+    }
+    // Hook up the cr-button commands.
+    for (const crButton of this.dialogDom_.querySelectorAll(
+             'cr-button[command]')) {
+      CommandButton.decorate(crButton);
     }
 
     for (const input of this.getDomInputs_()) {
@@ -748,6 +753,7 @@ class FileManager extends cr.EventTarget {
    * @return {!Promise<void>}
    */
   async initializeUI(dialogDom) {
+    console.warn('Files app starting up');
     this.dialogDom_ = dialogDom;
     this.document_ = this.dialogDom_.ownerDocument;
 
@@ -757,6 +763,13 @@ class FileManager extends cr.EventTarget {
     metrics.recordInterval('Load.InitDocuments');
 
     metrics.startInterval('Load.InitUI');
+    if (util.isFilesNg()) {
+      this.document_.documentElement.classList.add('files-ng');
+      this.dialogDom_.classList.add('files-ng');
+    } else {
+      this.document_.documentElement.classList.remove('files-ng');
+      this.dialogDom_.classList.remove('files-ng');
+    }
     this.initEssentialUI_();
     this.initAdditionalUI_();
     await this.initSettingsPromise_;
@@ -878,6 +891,17 @@ class FileManager extends cr.EventTarget {
     this.thumbnailModel_ = new ThumbnailModel(this.metadataModel_);
     this.providersModel_ = new ProvidersModel(this.volumeManager_);
     this.fileFilter_ = new FileFilter(this.metadataModel_);
+
+    // Set the files-ng class for dialog header styling.
+    const dialogHeader = queryRequiredElement('.dialog-header');
+    if (util.isFilesNg()) {
+      dialogHeader.classList.add('files-ng');
+      // Move the dialog header to the side of the splitter above the list view.
+      const dialogMain = queryRequiredElement('.dialog-main');
+      dialogMain.insertBefore(dialogHeader, dialogMain.firstChild);
+    } else {
+      dialogHeader.classList.remove('files-ng');
+    }
 
     // Create the root view of FileManager.
     assert(this.dialogDom_);
@@ -1397,8 +1421,8 @@ class FileManager extends cr.EventTarget {
       directoryEntry, opt_selectionEntry, opt_suggestedName) {
     // Open the directory, and select the selection (if passed).
     const promise = (async () => {
+      console.warn('Files app has started');
       if (directoryEntry) {
-        const entryDescription = util.entryDebugString(directoryEntry);
         await new Promise(resolve => {
           this.directoryModel_.changeDirectoryEntry(
               assert(directoryEntry), resolve);
@@ -1477,12 +1501,10 @@ class FileManager extends cr.EventTarget {
     // The native implementation of the Files app creates snapshot files for
     // non-native files. But it does not work for folders (e.g., dialog for
     // loading unpacked extensions).
-    if ((allowedPaths === AllowedPaths.NATIVE_PATH ||
-         allowedPaths === AllowedPaths.NATIVE_OR_DRIVE_PATH) &&
+    if (allowedPaths === AllowedPaths.NATIVE_PATH &&
         !DialogType.isFolderDialog(this.launchParams_.type)) {
       if (this.launchParams_.type == DialogType.SELECT_SAVEAS_FILE) {
-        // Only drive can create snapshot files for saving.
-        allowedPaths = AllowedPaths.NATIVE_OR_DRIVE_PATH;
+        allowedPaths = AllowedPaths.NATIVE_PATH;
       } else {
         allowedPaths = AllowedPaths.ANY_PATH;
       }
@@ -1499,9 +1521,6 @@ class FileManager extends cr.EventTarget {
     const allowedPaths = this.getAllowedPaths_();
     if (allowedPaths == AllowedPaths.NATIVE_PATH) {
       return chrome.fileManagerPrivate.SourceRestriction.NATIVE_SOURCE;
-    }
-    if (allowedPaths == AllowedPaths.NATIVE_OR_DRIVE_PATH) {
-      return chrome.fileManagerPrivate.SourceRestriction.NATIVE_OR_DRIVE_SOURCE;
     }
     return chrome.fileManagerPrivate.SourceRestriction.ANY_SOURCE;
   }

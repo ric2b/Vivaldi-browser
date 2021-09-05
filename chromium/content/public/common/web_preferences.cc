@@ -98,7 +98,6 @@ WebPreferences::WebPreferences()
       flash_stage3d_baseline_enabled(false),
       privileged_webgl_extensions_enabled(false),
       webgl_errors_to_console_enabled(true),
-      mock_scrollbars_enabled(false),
       hide_scrollbars(false),
       accelerated_2d_canvas_enabled(false),
       antialiased_2d_canvas_disabled(false),
@@ -165,7 +164,6 @@ WebPreferences::WebPreferences()
 #endif
       spatial_navigation_enabled(false),
       caret_browsing_enabled(false),
-      use_solid_color_scrollbars(false),
       navigate_on_drag_drop(true),
       v8_cache_options(blink::mojom::V8CacheOptions::kDefault),
       record_whole_document(false),
@@ -173,6 +171,7 @@ WebPreferences::WebPreferences()
       accelerated_video_decode_enabled(false),
       animation_policy(IMAGE_ANIMATION_POLICY_ALLOWED),
       user_gesture_required_for_presentation(true),
+      text_tracks_enabled(false),
       text_track_margin_percentage(0.0f),
       immersive_mode_enabled(false),
 #if defined(OS_ANDROID) || defined(OS_MACOSX)
@@ -203,12 +202,12 @@ WebPreferences::WebPreferences()
       spellcheck_enabled_by_default(true),
       video_fullscreen_orientation_lock_enabled(false),
       video_rotate_to_fullscreen_enabled(false),
-      video_fullscreen_detection_enabled(false),
       embedded_media_experience_enabled(false),
       css_hex_alpha_color_enabled(true),
       scroll_top_left_interop_enabled(true),
       disable_features_depending_on_viz(false),
       disable_accelerated_small_canvases(false),
+      reenable_web_components_v0(false),
 #endif  // defined(OS_ANDROID)
 #if defined(OS_ANDROID)
       default_minimum_page_scale_factor(0.25f),
@@ -230,7 +229,8 @@ WebPreferences::WebPreferences()
       picture_in_picture_enabled(true),
       translate_service_available(false),
       network_quality_estimator_web_holdback(
-          net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN) {
+          net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN),
+      allow_mixed_content_upgrades(true) {
   standard_font_family_map[kCommonScript] =
       base::ASCIIToUTF16("Times New Roman");
   fixed_font_family_map[kCommonScript] = base::ASCIIToUTF16("Courier New");

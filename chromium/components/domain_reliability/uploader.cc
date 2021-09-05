@@ -32,7 +32,7 @@ class UploadUserData : public base::SupportsUserData::Data {
  public:
   static net::URLFetcher::CreateDataCallback CreateCreateDataCallback(
       int depth) {
-    return base::Bind(&UploadUserData::CreateUploadUserData, depth);
+    return base::BindRepeating(&UploadUserData::CreateUploadUserData, depth);
   }
 
   static const void* const kUserDataKey;
@@ -75,7 +75,7 @@ class DomainReliabilityUploaderImpl
       const std::string& report_json,
       int max_upload_depth,
       const GURL& upload_url,
-      const DomainReliabilityUploader::UploadCallback& callback) override {
+      DomainReliabilityUploader::UploadCallback callback) override {
     DVLOG(1) << "Uploading report to " << upload_url;
     DVLOG(2) << "Report JSON: " << report_json;
 
@@ -86,7 +86,7 @@ class DomainReliabilityUploaderImpl
       DVLOG(1) << "Discarding report instead of uploading.";
       UploadResult result;
       result.status = UploadResult::SUCCESS;
-      callback.Run(result);
+      std::move(callback).Run(result);
       return;
     }
 
@@ -128,7 +128,7 @@ class DomainReliabilityUploaderImpl
         UploadUserData::CreateCreateDataCallback(max_upload_depth + 1));
     fetcher->Start();
 
-    uploads_[fetcher] = {std::move(owned_fetcher), callback};
+    uploads_[fetcher] = {std::move(owned_fetcher), std::move(callback)};
   }
 
   void SetDiscardUploads(bool discard_uploads) override {
@@ -172,16 +172,12 @@ class DomainReliabilityUploaderImpl
              << ", response code " << http_response_code << ", retry after "
              << retry_after;
 
-    base::UmaHistogramSparse("DomainReliability.UploadResponseCode",
-                             http_response_code);
-    base::UmaHistogramSparse("DomainReliability.UploadNetError", -net_error);
-
     UploadResult result;
     GetUploadResultFromResponseDetails(net_error,
                                        http_response_code,
                                        retry_after,
                                        &result);
-    callback_it->second.second.Run(result);
+    std::move(callback_it->second.second).Run(result);
 
     uploads_.erase(callback_it);
   }

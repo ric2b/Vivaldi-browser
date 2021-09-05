@@ -22,7 +22,7 @@
 #import "ios/chrome/browser/ui/signin_interaction/public/signin_presenter.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/ui/table_view/table_view_model.h"
-#import "ios/chrome/common/colors/UIColor+cr_semantic_colors.h"
+#import "ios/chrome/common/ui/colors/UIColor+cr_semantic_colors.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -52,7 +52,7 @@ const int kMaxBookmarksSearchResults = 50;
 @property(nonatomic, strong) BookmarkHomeSharedState* sharedState;
 
 // The browser state for this mediator.
-@property(nonatomic, assign) ios::ChromeBrowserState* browserState;
+@property(nonatomic, assign) ChromeBrowserState* browserState;
 
 // The controller managing the display of the promo cell and the promo view
 // controller.
@@ -67,7 +67,7 @@ const int kMaxBookmarksSearchResults = 50;
 @synthesize sharedState = _sharedState;
 
 - (instancetype)initWithSharedState:(BookmarkHomeSharedState*)sharedState
-                       browserState:(ios::ChromeBrowserState*)browserState {
+                       browserState:(ChromeBrowserState*)browserState {
   if ((self = [super init])) {
     _sharedState = sharedState;
     _browserState = browserState;

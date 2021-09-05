@@ -73,15 +73,6 @@ std::unique_ptr<JSONObject> ObjectForSkRect(const SkRect& rect) {
   return rect_item;
 }
 
-std::unique_ptr<JSONObject> ObjectForSkIRect(const SkIRect& rect) {
-  auto rect_item = std::make_unique<JSONObject>();
-  rect_item->SetDouble("left", rect.left());
-  rect_item->SetDouble("top", rect.top());
-  rect_item->SetDouble("right", rect.right());
-  rect_item->SetDouble("bottom", rect.bottom());
-  return rect_item;
-}
-
 String PointModeName(SkCanvas::PointMode mode) {
   switch (mode) {
     case SkCanvas::kPoints_PointMode:
@@ -169,15 +160,15 @@ std::unique_ptr<JSONObject> ObjectForSkRRect(const SkRRect& rrect) {
   return rrect_item;
 }
 
-String FillTypeName(SkPath::FillType type) {
+String FillTypeName(SkPathFillType type) {
   switch (type) {
-    case SkPath::kWinding_FillType:
+    case SkPathFillType::kWinding:
       return "Winding";
-    case SkPath::kEvenOdd_FillType:
+    case SkPathFillType::kEvenOdd:
       return "EvenOdd";
-    case SkPath::kInverseWinding_FillType:
+    case SkPathFillType::kInverseWinding:
       return "InverseWinding";
-    case SkPath::kInverseEvenOdd_FillType:
+    case SkPathFillType::kInverseEvenOdd:
       return "InverseEvenOdd";
     default:
       NOTREACHED();
@@ -185,13 +176,13 @@ String FillTypeName(SkPath::FillType type) {
   };
 }
 
-String ConvexityName(SkPath::Convexity convexity) {
+String ConvexityName(SkPathConvexityType convexity) {
   switch (convexity) {
-    case SkPath::kUnknown_Convexity:
+    case SkPathConvexityType::kUnknown:
       return "Unknown";
-    case SkPath::kConvex_Convexity:
+    case SkPathConvexityType::kConvex:
       return "Convex";
-    case SkPath::kConcave_Convexity:
+    case SkPathConvexityType::kConcave:
       return "Concave";
     default:
       NOTREACHED();
@@ -224,13 +215,13 @@ VerbParams SegmentParams(SkPath::Verb verb) {
 std::unique_ptr<JSONObject> ObjectForSkPath(const SkPath& path) {
   auto path_item = std::make_unique<JSONObject>();
   path_item->SetString("fillType", FillTypeName(path.getFillType()));
-  path_item->SetString("convexity", ConvexityName(path.getConvexity()));
+  path_item->SetString("convexity", ConvexityName(path.getConvexityType()));
   path_item->SetBoolean("isRect", path.isRect(nullptr));
   SkPath::Iter iter(path, false);
   SkPoint points[4];
   auto path_points_array = std::make_unique<JSONArray>();
-  for (SkPath::Verb verb = iter.next(points, false); verb != SkPath::kDone_Verb;
-       verb = iter.next(points, false)) {
+  for (SkPath::Verb verb = iter.next(points); verb != SkPath::kDone_Verb;
+       verb = iter.next(points)) {
     VerbParams verb_params = SegmentParams(verb);
     auto path_point_item = std::make_unique<JSONObject>();
     path_point_item->SetString("verb", verb_params.name);
@@ -248,57 +239,6 @@ std::unique_ptr<JSONObject> ObjectForSkPath(const SkPath& path) {
   return path_item;
 }
 
-String ColorTypeName(SkColorType color_type) {
-  switch (color_type) {
-    case kUnknown_SkColorType:
-      return "None";
-    case kAlpha_8_SkColorType:
-      return "A8";
-    case kRGB_565_SkColorType:
-      return "RGB565";
-    case kARGB_4444_SkColorType:
-      return "ARGB4444";
-    case kN32_SkColorType:
-      return "ARGB8888";
-    default:
-      NOTREACHED();
-      return "?";
-  };
-}
-
-std::unique_ptr<JSONObject> ObjectForBitmapData(const SkBitmap& bitmap) {
-  Vector<unsigned char> output;
-
-  SkPixmap src;
-  bool peekResult = bitmap.peekPixels(&src);
-  DCHECK(peekResult);
-
-  SkPngEncoder::Options options;
-  options.fFilterFlags = SkPngEncoder::FilterFlag::kSub;
-  options.fZLibLevel = 3;
-  if (!ImageEncoder::Encode(&output, src, options)) {
-    return nullptr;
-  }
-
-  auto data_item = std::make_unique<JSONObject>();
-  data_item->SetString("base64", Base64Encode(output));
-  data_item->SetString("mimeType", "image/png");
-  return data_item;
-}
-
-std::unique_ptr<JSONObject> ObjectForSkBitmap(const SkBitmap& bitmap) {
-  auto bitmap_item = std::make_unique<JSONObject>();
-  bitmap_item->SetInteger("width", bitmap.width());
-  bitmap_item->SetInteger("height", bitmap.height());
-  bitmap_item->SetString("config", ColorTypeName(bitmap.colorType()));
-  bitmap_item->SetBoolean("opaque", bitmap.isOpaque());
-  bitmap_item->SetBoolean("immutable", bitmap.isImmutable());
-  bitmap_item->SetBoolean("volatile", bitmap.isVolatile());
-  bitmap_item->SetInteger("genID", bitmap.getGenerationID());
-  bitmap_item->SetObject("data", ObjectForBitmapData(bitmap));
-  return bitmap_item;
-}
-
 std::unique_ptr<JSONObject> ObjectForSkImage(const SkImage* image) {
   auto image_item = std::make_unique<JSONObject>();
   image_item->SetInteger("width", image->width());
@@ -313,6 +253,14 @@ std::unique_ptr<JSONArray> ArrayForSkMatrix(const SkMatrix& matrix) {
   for (int i = 0; i < 9; ++i)
     matrix_array->PushDouble(matrix[i]);
   return matrix_array;
+}
+
+std::unique_ptr<JSONArray> ArrayForSkScalars(size_t count,
+                                             const SkScalar array[]) {
+  auto points_array_item = std::make_unique<JSONArray>();
+  for (size_t i = 0; i < count; ++i)
+    points_array_item->PushDouble(array[i]);
+  return points_array_item;
 }
 
 std::unique_ptr<JSONObject> ObjectForSkShader(const SkShader& shader) {
@@ -520,51 +468,6 @@ void LoggingCanvas::onDrawPath(const SkPath& path, const SkPaint& paint) {
   this->SkCanvas::onDrawPath(path, paint);
 }
 
-void LoggingCanvas::onDrawBitmap(const SkBitmap& bitmap,
-                                 SkScalar left,
-                                 SkScalar top,
-                                 const SkPaint* paint) {
-  AutoLogger logger(this);
-  JSONObject* params = logger.LogItemWithParams("drawBitmap");
-  params->SetDouble("left", left);
-  params->SetDouble("top", top);
-  params->SetObject("bitmap", ObjectForSkBitmap(bitmap));
-  if (paint)
-    params->SetObject("paint", ObjectForSkPaint(*paint));
-  this->SkCanvas::onDrawBitmap(bitmap, left, top, paint);
-}
-
-void LoggingCanvas::onDrawBitmapRect(const SkBitmap& bitmap,
-                                     const SkRect* src,
-                                     const SkRect& dst,
-                                     const SkPaint* paint,
-                                     SrcRectConstraint constraint) {
-  AutoLogger logger(this);
-  JSONObject* params = logger.LogItemWithParams("drawBitmapRectToRect");
-  params->SetObject("bitmap", ObjectForSkBitmap(bitmap));
-  if (src)
-    params->SetObject("src", ObjectForSkRect(*src));
-  params->SetObject("dst", ObjectForSkRect(dst));
-  if (paint)
-    params->SetObject("paint", ObjectForSkPaint(*paint));
-  params->SetInteger("flags", constraint);
-  this->SkCanvas::onDrawBitmapRect(bitmap, src, dst, paint, constraint);
-}
-
-void LoggingCanvas::onDrawBitmapNine(const SkBitmap& bitmap,
-                                     const SkIRect& center,
-                                     const SkRect& dst,
-                                     const SkPaint* paint) {
-  AutoLogger logger(this);
-  JSONObject* params = logger.LogItemWithParams("drawBitmapNine");
-  params->SetObject("bitmap", ObjectForSkBitmap(bitmap));
-  params->SetObject("center", ObjectForSkIRect(center));
-  params->SetObject("dst", ObjectForSkRect(dst));
-  if (paint)
-    params->SetObject("paint", ObjectForSkPaint(*paint));
-  this->SkCanvas::onDrawBitmapNine(bitmap, center, dst, paint);
-}
-
 void LoggingCanvas::onDrawImage(const SkImage* image,
                                 SkScalar left,
                                 SkScalar top,
@@ -677,7 +580,12 @@ void LoggingCanvas::didSetMatrix(const SkMatrix& matrix) {
   AutoLogger logger(this);
   JSONObject* params = logger.LogItemWithParams("setMatrix");
   params->SetArray("matrix", ArrayForSkMatrix(matrix));
-  this->SkCanvas::didSetMatrix(matrix);
+}
+
+void LoggingCanvas::didConcat44(const SkScalar m[16]) {
+  AutoLogger logger(this);
+  JSONObject* params = logger.LogItemWithParams("concat44");
+  params->SetArray("matrix44", ArrayForSkScalars(16, m));
 }
 
 void LoggingCanvas::didConcat(const SkMatrix& matrix) {
@@ -701,7 +609,20 @@ void LoggingCanvas::didConcat(const SkMatrix& matrix) {
       params = logger.LogItemWithParams("concat");
       params->SetArray("matrix", ArrayForSkMatrix(matrix));
   }
-  this->SkCanvas::didConcat(matrix);
+}
+
+void LoggingCanvas::didScale(SkScalar x, SkScalar y) {
+  AutoLogger logger(this);
+  JSONObject* params = logger.LogItemWithParams("scale");
+  params->SetDouble("scaleX", x);
+  params->SetDouble("scaleY", y);
+}
+
+void LoggingCanvas::didTranslate(SkScalar x, SkScalar y) {
+  AutoLogger logger(this);
+  JSONObject* params = logger.LogItemWithParams("translate");
+  params->SetDouble("dx", x);
+  params->SetDouble("dy", y);
 }
 
 void LoggingCanvas::willSave() {

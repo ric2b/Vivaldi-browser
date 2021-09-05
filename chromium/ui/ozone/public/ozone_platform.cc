@@ -82,10 +82,6 @@ IPC::MessageFilter* OzonePlatform::GetGpuMessageFilter() {
   return nullptr;
 }
 
-std::unique_ptr<PlatformScreen> OzonePlatform::CreateScreen() {
-  return nullptr;
-}
-
 PlatformClipboard* OzonePlatform::GetPlatformClipboard() {
   // Platforms that support system clipboard must override this method.
   return nullptr;
@@ -112,7 +108,7 @@ OzonePlatform::GetInitializedHostProperties() {
   return host_properties;
 }
 
-void OzonePlatform::AddInterfaces(service_manager::BinderRegistry* registry) {}
+void OzonePlatform::AddInterfaces(mojo::BinderMap* binders) {}
 
 void OzonePlatform::AfterSandboxEntry() {
   // This should not be called in single-process mode.

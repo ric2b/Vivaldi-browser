@@ -166,16 +166,17 @@ There are other arguments specific to other test types (script tests, JUnit
 tests, instrumentation tests, CTS tests); consult the generator script and
 test_suites.pyl for more details and examples.
 
+### Compound test suites
 #### Composition test suites
 
-One level of grouping of test suites is supported: composition test suites. A
+One level of grouping of test suites is composition test suites. A
 composition test suite is an array whose contents must all be names of
 individual test suites. Composition test suites *may not* refer to other
-composition test suites. This restriction is by design. First, adding multiple
-levels of indirection would make it more difficult to figure out which bots run
-which tests. Second, having only one minimal grouping construct motivates
-authors to simplify the configurations of tests on the bots and reduce the
-number of test suites.
+composition or matrix compound test suites. This restriction is by design.
+First, adding multiple levels of indirection would make it more difficult to
+figure out which bots run which tests. Second, having only one minimal grouping
+construct motivates authors to simplify the configurations of tests on the bots
+and reduce the number of test suites.
 
 An example of a composition test suite:
 
@@ -195,6 +196,122 @@ An example of a composition test suite:
 
 A bot referring to `linux_gtests` will run both `base_unittests` and
 `x11_unittests`.
+
+#### Matrix compound test suites
+
+Another level of grouping of basic test suites is the matrix compound test
+suite. A matrix compound test suite is a dictionary, composed of references to
+basic test suites (key) and configurations (value). Matrix compound test suites
+have the same restrictions as composition test suites, in that they *cannot*
+reference other composition or matrix test suites. Configurations defined for
+a basic test suite in a matrix test suite are applied to each tests for the
+referenced basic test suite. "variants" is the only supported key via matrix
+compound suites at this time.
+
+##### Variants
+
+“variants” is a top-level group introduced into matrix compound suites designed
+to allow targeting a test against multiple variants. Each variant supports args,
+mixins and swarming definitions. When variants are defined, args, mixins and
+swarming aren’t specified at the same level.
+
+Args, mixins, and swarming configurations that are defined by both the test
+suite and variants are merged together. Args and mixins are lists, and thus are
+appended together. Swarming configurations follow the same merge process -
+dimension sets are merged via the existing dictionary merge behavior, and other
+keys are appended.
+
+**identifier** is a required key for each variant. The identifier is used to
+make the test name unique. Each test generated from the resulting .json file
+is identified uniquely by name, thus, the identifier is appended to the test
+name in the format: "test_name" + "_" + "identifier"
+
+For example, iOS requires running a test suite against multiple devices. If we
+have the following basic test suite:
+
+```
+'ios_eg2_tests': {
+  'basic_unittests': {
+    'args': [
+      '--some-arg',
+    ]
+  }
+}
+```
+
+and a matrix compound suite with this variants definition:
+
+```
+'matrix_compound_test': {
+  'ios_eg2_tests': {
+    'variants': [
+      {
+        'args': [
+          '--platform',
+          'iPhone X',
+          '--version',
+          '13.3'
+        ],
+        'identifier': 'iPhone_X_13.3',
+      },
+      {
+        'identifier': 'device_iPhone_X_13.3',
+        'swarming': {
+          'dimension_sets': [
+            {
+              'os': 'iOS-iPhone10,3'
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+we can expect the following output:
+
+
+```
+{
+  'args': [
+    '--some-arg',
+    '--platform',
+    'iPhone X',
+    '--version',
+    '13.3'
+  ],
+  'merge': {
+    'args': [],
+    'script': 'some/merge/script.py'
+  }
+  'name': 'basic_unittests_iPhone_X_13.3',
+  'test': 'basic_unittests'
+},
+{
+  'args': [
+    '--some-arg'
+  ],
+  'merge': {
+    'args': [],
+    'script': 'some/merge/script.py',
+  },
+  'name': 'basic_unittests_device_iPhone_X_13.3',
+  'swarming': {
+    'dimension_sets': [
+      {
+        'os': 'iOS-iPhone10,3'
+      }
+    ]
+  },
+  'test': 'basic_unittests'
+}
+```
+
+Due to limitations of the merging algorithm, merging dimension sets fail when
+there are more dimension sets defined in the matrix test suite than the basic
+test suite. On failure, the user is notified of an error merging list key
+dimension sets.
 
 ### Waterfalls
 

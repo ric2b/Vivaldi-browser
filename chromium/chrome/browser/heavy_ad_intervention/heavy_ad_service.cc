@@ -10,6 +10,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
 #include "chrome/browser/heavy_ad_intervention/heavy_ad_blocklist.h"
 #include "chrome/common/chrome_constants.h"
@@ -20,8 +21,8 @@
 
 // Whether an opt out store should be used or not.
 bool HeavyAdOptOutStoreDisabled() {
-  return base::GetFieldTrialParamByFeatureAsBool(features::kHeavyAdBlocklist,
-                                                 "OptOutStoreDisabled", false);
+  return base::GetFieldTrialParamByFeatureAsBool(
+      features::kHeavyAdPrivacyMitigations, "OptOutStoreDisabled", false);
 }
 
 HeavyAdService::HeavyAdService() {
@@ -35,15 +36,15 @@ HeavyAdService::~HeavyAdService() {
 void HeavyAdService::Initialize(const base::FilePath& profile_path) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (!base::FeatureList::IsEnabled(features::kHeavyAdBlocklist))
+  if (!base::FeatureList::IsEnabled(features::kHeavyAdPrivacyMitigations))
     return;
 
   std::unique_ptr<blacklist::OptOutStoreSQL> opt_out_store;
   if (!HeavyAdOptOutStoreDisabled()) {
     // Get the background thread to run SQLite on.
     scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-        base::CreateSequencedTaskRunner({base::ThreadPool(), base::MayBlock(),
-                                         base::TaskPriority::BEST_EFFORT});
+        base::ThreadPool::CreateSequencedTaskRunner(
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT});
 
     opt_out_store = std::make_unique<blacklist::OptOutStoreSQL>(
         base::CreateSingleThreadTaskRunner({content::BrowserThread::UI}),
@@ -53,4 +54,15 @@ void HeavyAdService::Initialize(const base::FilePath& profile_path) {
 
   heavy_ad_blocklist_ = std::make_unique<HeavyAdBlocklist>(
       std::move(opt_out_store), base::DefaultClock::GetInstance(), this);
+}
+
+void HeavyAdService::InitializeOffTheRecord() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (!base::FeatureList::IsEnabled(features::kHeavyAdPrivacyMitigations))
+    return;
+
+  // Providing a null out_out_store which sets up the blocklist in-memory only.
+  heavy_ad_blocklist_ = std::make_unique<HeavyAdBlocklist>(
+      nullptr /* opt_out_store */, base::DefaultClock::GetInstance(), this);
 }

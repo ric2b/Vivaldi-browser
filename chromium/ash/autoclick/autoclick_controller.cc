@@ -59,7 +59,7 @@ views::Widget::InitParams CreateAutoclickOverlayWidgetParams(
   params.accept_events = false;
   params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.parent =
       Shell::GetContainer(root_window, kShellWindowId_OverlayContainer);
   return params;
@@ -514,10 +514,8 @@ void AutoclickController::UpdateRingSize() {
 
 void AutoclickController::InitializeScrollLocation() {
   // Sets the scroll location to the center of the root window.
-  scroll_location_ = ash::Shell::Get()
-                         ->GetPrimaryRootWindow()
-                         ->GetBoundsInScreen()
-                         .CenterPoint();
+  scroll_location_ =
+      Shell::Get()->GetPrimaryRootWindow()->GetBoundsInScreen().CenterPoint();
   is_initial_scroll_location_ = true;
   Shell::Get()
       ->accessibility_controller()

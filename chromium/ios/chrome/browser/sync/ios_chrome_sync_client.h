@@ -13,12 +13,10 @@
 #include "base/single_thread_task_runner.h"
 #include "components/browser_sync/browser_sync_client.h"
 
+class ChromeBrowserState;
+
 namespace autofill {
 class AutofillWebDataService;
-}
-
-namespace ios {
-class ChromeBrowserState;
 }
 
 namespace password_manager {
@@ -31,11 +29,12 @@ class ProfileSyncComponentsFactoryImpl;
 
 class IOSChromeSyncClient : public browser_sync::BrowserSyncClient {
  public:
-  explicit IOSChromeSyncClient(ios::ChromeBrowserState* browser_state);
+  explicit IOSChromeSyncClient(ChromeBrowserState* browser_state);
   ~IOSChromeSyncClient() override;
 
   // BrowserSyncClient implementation.
   PrefService* GetPrefService() override;
+  signin::IdentityManager* GetIdentityManager() override;
   base::FilePath GetLocalSyncBackendFolder() override;
   syncer::ModelTypeStoreService* GetModelTypeStoreService() override;
   syncer::DeviceInfoSyncService* GetDeviceInfoSyncService() override;
@@ -62,13 +61,15 @@ class IOSChromeSyncClient : public browser_sync::BrowserSyncClient {
   syncer::SyncTypePreferenceProvider* GetPreferenceProvider() override;
 
  private:
-  ios::ChromeBrowserState* const browser_state_;
+  ChromeBrowserState* const browser_state_;
 
   // The sync api component factory in use by this client.
   // TODO(crbug.com/915154): Revert to SyncApiComponentFactory once common
   // controller creation is moved elsewhere.
   std::unique_ptr<browser_sync::ProfileSyncComponentsFactoryImpl>
       component_factory_;
+
+  std::unique_ptr<syncer::TrustedVaultClient> trusted_vault_client_;
 
   // Members that must be fetched on the UI thread but accessed on their
   // respective backend threads.

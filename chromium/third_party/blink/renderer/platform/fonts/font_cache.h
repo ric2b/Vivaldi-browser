@@ -58,6 +58,10 @@
 #include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
+#if defined(OS_LINUX)
+#include "ui/gfx/font_fallback_linux.h"
+#endif
+
 #if defined(OS_WIN)
 #include "third_party/blink/public/mojom/dwrite_font_proxy/dwrite_font_proxy.mojom-blink.h"
 #include "third_party/blink/renderer/platform/fonts/win/fallback_family_style_cache_win.h"
@@ -86,21 +90,24 @@ enum class AlternateFontName {
   kLastResort
 };
 
+struct FontEnumerationEntry {
+  String postscript_name;
+  String full_name;
+  String family;
+};
+
 typedef HashMap<unsigned,
                 std::unique_ptr<FontPlatformData>,
                 WTF::IntHash<unsigned>,
                 WTF::UnsignedWithZeroKeyHashTraits<unsigned>>
     SizedFontPlatformDataSet;
-typedef HashMap<FontCacheKey,
-                SizedFontPlatformDataSet,
-                FontCacheKeyHash,
-                FontCacheKeyTraits>
-    FontPlatformDataCache;
+typedef HashMap<FontCacheKey, SizedFontPlatformDataSet> FontPlatformDataCache;
 typedef HashMap<FallbackListCompositeKey,
                 std::unique_ptr<ShapeCache>,
                 FallbackListCompositeKeyHash,
                 FallbackListCompositeKeyTraits>
     FallbackListShaperCache;
+typedef std::vector<FontEnumerationEntry> FontEnumerationCache;
 
 class PLATFORM_EXPORT FontCache {
   friend class FontCachePurgePreventer;
@@ -238,17 +245,9 @@ class PLATFORM_EXPORT FontCache {
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_LINUX)
-  struct PlatformFallbackFont {
-    String name;
-    std::string filename;
-    int fontconfig_interface_id;
-    int ttc_index;
-    bool is_bold;
-    bool is_italic;
-  };
-  static void GetFontForCharacter(UChar32,
+  static bool GetFontForCharacter(UChar32,
                                   const char* preferred_locale,
-                                  PlatformFallbackFont*);
+                                  gfx::FallbackFontData*);
 #endif  // defined(OS_LINUX)
 
   scoped_refptr<SimpleFontData> FontDataFromFontPlatformData(
@@ -256,7 +255,13 @@ class PLATFORM_EXPORT FontCache {
       ShouldRetain = kRetain,
       bool subpixel_ascent_descent = false);
 
+  const std::vector<FontEnumerationEntry>& EnumerateAvailableFonts();
+  size_t EnumerationCacheSizeForTesting() {
+    return font_enumeration_cache_.size();
+  }
+
   void InvalidateShapeCache();
+  void InvalidateEnumerationCache();
 
   static void CrashWithFontInfo(const FontDescription*);
 
@@ -316,6 +321,7 @@ class PLATFORM_EXPORT FontCache {
       const FontDescription&,
       const FontFaceCreationParams&,
       float font_size);
+  std::vector<FontEnumerationEntry> EnumeratePlatformAvailableFonts();
 
   sk_sp<SkTypeface> CreateTypeface(const FontDescription&,
                                    const FontFaceCreationParams&,
@@ -370,6 +376,9 @@ class PLATFORM_EXPORT FontCache {
   FontPlatformDataCache font_platform_data_cache_;
   FallbackListShaperCache fallback_list_shaper_cache_;
   FontDataCache font_data_cache_;
+  // TODO(https://crbug.com/1061625): Move to the browser process for better
+  // resource utilization.
+  FontEnumerationCache font_enumeration_cache_;
 
   void PurgePlatformFontDataCache();
   void PurgeFallbackListShaperCache();

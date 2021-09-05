@@ -31,11 +31,11 @@ import static org.chromium.chrome.test.util.browser.suggestions.ContentSuggestio
 import static org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.registerCategory;
 
 import android.content.res.Resources;
-import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.RecyclerView.AdapterDataObserver;
 import android.view.View;
 
 import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.RecyclerView.AdapterDataObserver;
 
 import org.junit.After;
 import org.junit.Before;
@@ -54,12 +54,13 @@ import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.shadows.ShadowResources;
 
 import org.chromium.base.Callback;
+import org.chromium.base.metrics.test.DisableHistogramsRule;
 import org.chromium.base.task.test.CustomShadowAsyncTask;
 import org.chromium.base.task.test.ShadowPostTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder.PartialBindCallback;
 import org.chromium.chrome.browser.ntp.cards.SignInPromo.SigninObserver;
@@ -68,16 +69,17 @@ import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.signin.SigninManager;
+import org.chromium.chrome.browser.signin.SigninPreferencesManager;
 import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
 import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsEventReporter;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
-import org.chromium.chrome.test.support.DisableHistogramsRule;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
@@ -337,9 +339,9 @@ public class NewTabPageAdapterTest {
     @After
     public void tearDown() {
         CardsVariationParameters.setTestVariationParams(null);
-        ChromePreferenceManager.getInstance().writeBoolean(
-                ChromePreferenceManager.NTP_SIGNIN_PROMO_DISMISSED, false);
-        ChromePreferenceManager.getInstance().clearNewTabPageSigninPromoSuppressionPeriodStart();
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.SIGNIN_PROMO_NTP_PROMO_DISMISSED, false);
+        SigninPreferencesManager.getInstance().clearNewTabPageSigninPromoSuppressionPeriodStart();
         PrefServiceBridge.setInstanceForTesting(null);
         ShadowPostTask.reset();
         ShadowChromeFeatureList.reset();
@@ -1001,7 +1003,7 @@ public class NewTabPageAdapterTest {
         useArticleCategory();
 
         // Suppress promo.
-        ChromePreferenceManager.getInstance().setNewTabPageSigninPromoSuppressionPeriodStart(
+        SigninPreferencesManager.getInstance().setNewTabPageSigninPromoSuppressionPeriodStart(
                 System.currentTimeMillis());
 
         resetUiDelegate();
@@ -1017,8 +1019,8 @@ public class NewTabPageAdapterTest {
         useArticleCategory();
 
         // Suppress promo.
-        ChromePreferenceManager preferenceManager = ChromePreferenceManager.getInstance();
-        preferenceManager.setNewTabPageSigninPromoSuppressionPeriodStart(
+        SigninPreferencesManager preferencesManager = SigninPreferencesManager.getInstance();
+        preferencesManager.setNewTabPageSigninPromoSuppressionPeriodStart(
                 System.currentTimeMillis() - SignInPromo.SUPPRESSION_PERIOD_MS);
 
         resetUiDelegate();
@@ -1026,7 +1028,7 @@ public class NewTabPageAdapterTest {
         assertTrue(isSignInPromoVisible());
 
         // SignInPromo should clear shared preference when suppression period ends.
-        assertEquals(0, preferenceManager.getNewTabPageSigninPromoSuppressionPeriodStart());
+        assertEquals(0, preferencesManager.getNewTabPageSigninPromoSuppressionPeriodStart());
     }
 
     @Test
@@ -1040,8 +1042,8 @@ public class NewTabPageAdapterTest {
 
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
         when(mMockIdentityManager.hasPrimaryAccount()).thenReturn(false);
-        ChromePreferenceManager.getInstance().writeBoolean(
-                ChromePreferenceManager.NTP_SIGNIN_PROMO_DISMISSED, false);
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.SIGNIN_PROMO_NTP_PROMO_DISMISSED, false);
         useArticleCategory();
 
         final int signInPromoPosition = mAdapter.getFirstPositionForType(ItemViewType.PROMO);
@@ -1052,8 +1054,8 @@ public class NewTabPageAdapterTest {
 
         verify(itemDismissedCallback).onResult(anyString());
         assertFalse(isSignInPromoVisible());
-        assertTrue(ChromePreferenceManager.getInstance().readBoolean(
-                ChromePreferenceManager.NTP_SIGNIN_PROMO_DISMISSED, false));
+        assertTrue(SharedPreferencesManager.getInstance().readBoolean(
+                ChromePreferenceKeys.SIGNIN_PROMO_NTP_PROMO_DISMISSED, false));
         reloadNtp();
         assertFalse(isSignInPromoVisible());
     }

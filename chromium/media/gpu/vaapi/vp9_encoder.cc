@@ -5,8 +5,7 @@
 #include "media/gpu/vaapi/vp9_encoder.h"
 
 #include "base/bits.h"
-
-#define DVLOGF(level) DVLOG(level) << __func__ << "(): "
+#include "media/gpu/macros.h"
 
 namespace media {
 
@@ -34,8 +33,7 @@ VP9Encoder::EncodeParams::EncodeParams()
       cpb_window_size_ms(kCPBWindowSizeMs),
       cpb_size_bits(0),
       initial_qp(kDefaultQP),
-      min_qp(kMinQP),
-      max_qp(kMaxQP),
+      scaling_settings(kMinQP, kMaxQP),
       error_resilient_mode(false) {}
 
 void VP9Encoder::Reset() {
@@ -98,6 +96,12 @@ size_t VP9Encoder::GetMaxNumOfRefFrames() const {
   return kVp9NumRefFrames;
 }
 
+ScalingSettings VP9Encoder::GetScalingSettings() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  return current_params_.scaling_settings;
+}
+
 bool VP9Encoder::PrepareEncodeJob(EncodeJob* encode_job) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -142,6 +146,8 @@ bool VP9Encoder::UpdateRates(const VideoBitrateAllocation& bitrate_allocation,
       current_params_.framerate == framerate) {
     return true;
   }
+  VLOGF(2) << "New bitrate: " << bitrate_allocation.GetSumBps()
+           << ", New framerate: " << framerate;
 
   current_params_.bitrate_allocation = bitrate_allocation;
   current_params_.framerate = framerate;

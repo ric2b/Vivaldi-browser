@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/core/svg/svg_enumeration.h"
 #include "third_party/blink/renderer/core/svg/svg_parsing_error.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
@@ -47,7 +48,7 @@ class SVGMarkerOrientEnumeration final
   ~SVGMarkerOrientEnumeration() override;
 
   void Add(SVGPropertyBase*, SVGElement*) override;
-  void CalculateAnimatedValue(SVGAnimationElement*,
+  void CalculateAnimatedValue(const SVGAnimateElement&,
                               float,
                               unsigned,
                               SVGPropertyBase*,
@@ -56,7 +57,7 @@ class SVGMarkerOrientEnumeration final
                               SVGElement*) override;
   float CalculateDistance(SVGPropertyBase*, SVGElement*) override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   void NotifyChange() override;
@@ -118,7 +119,7 @@ class SVGAngle final : public SVGPropertyHelper<SVGAngle> {
   SVGParsingError SetValueAsString(const String&);
 
   void Add(SVGPropertyBase*, SVGElement*) override;
-  void CalculateAnimatedValue(SVGAnimationElement*,
+  void CalculateAnimatedValue(const SVGAnimateElement&,
                               float percentage,
                               unsigned repeat_count,
                               SVGPropertyBase* from,
@@ -130,7 +131,7 @@ class SVGAngle final : public SVGPropertyHelper<SVGAngle> {
 
   static AnimatedPropertyType ClassType() { return kAnimatedAngle; }
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   void Assign(const SVGAngle&);
@@ -140,7 +141,12 @@ class SVGAngle final : public SVGPropertyHelper<SVGAngle> {
   Member<SVGMarkerOrientEnumeration> orient_type_;
 };
 
-DEFINE_SVG_PROPERTY_TYPE_CASTS(SVGAngle);
+template <>
+struct DowncastTraits<SVGAngle> {
+  static bool AllowFrom(const SVGPropertyBase& value) {
+    return value.GetType() == SVGAngle::ClassType();
+  }
+};
 
 }  // namespace blink
 

@@ -11,6 +11,7 @@
 
 #include "calendar/calendar_type.h"
 #include "calendar/event_type.h"
+#include "calendar/notification_type.h"
 
 namespace calendar {
 
@@ -47,6 +48,12 @@ class CalendarBackendNotifier {
 
   // Sends notification that |event type| was deleted
   virtual void NotifyEventTypeDeleted(const EventTypeRow& row) = 0;
+
+  // Sends notification that notification was changed, deleted or created
+  virtual void NotifyNotificationChanged(const NotificationRow& row) = 0;
+
+  // Sends notification that the calendar datamodel has changed
+  virtual void NotifyCalendarChanged() = 0;
 };
 
 }  // namespace calendar

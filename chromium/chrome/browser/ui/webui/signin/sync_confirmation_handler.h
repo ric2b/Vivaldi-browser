@@ -11,7 +11,6 @@
 #include "base/macros.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
-#include "components/consent_auditor/consent_auditor.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
@@ -23,6 +22,9 @@ namespace signin {
 class IdentityManager;
 }
 
+// WebUI message handler for the sync confirmation dialog. IdentityManager calls
+// in this class use signin::ConsentLevel::kNotRequired because the user hasn't
+// consented to sync yet.
 class SyncConfirmationHandler : public content::WebUIMessageHandler,
                                 public signin::IdentityManager::Observer,
                                 public BrowserListObserver {
@@ -30,7 +32,7 @@ class SyncConfirmationHandler : public content::WebUIMessageHandler,
   // Creates a SyncConfirmationHandler for the |browser|. All strings in the
   // corresponding Web UI should be represented in |string_to_grd_id_map| and
   // mapped to their GRD IDs.
-  explicit SyncConfirmationHandler(
+  SyncConfirmationHandler(
       Browser* browser,
       const std::unordered_map<std::string, int>& string_to_grd_id_map);
   ~SyncConfirmationHandler() override;
@@ -97,7 +99,7 @@ class SyncConfirmationHandler : public content::WebUIMessageHandler,
   Browser* browser_;
 
   // Records whether the user clicked on Undo, Ok, or Settings.
-  bool did_user_explicitly_interact;
+  bool did_user_explicitly_interact_ = false;
 
   // Mapping between strings displayed in the UI corresponding to this handler
   // and their respective GRD IDs.

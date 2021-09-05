@@ -28,7 +28,7 @@ class CORE_EXPORT LinkHighlight final : public GarbageCollected<LinkHighlight> {
   explicit LinkHighlight(Page&);
   virtual ~LinkHighlight();
 
-  virtual void Trace(blink::Visitor*);
+  virtual void Trace(Visitor*);
 
   void ResetForPageNavigation();
 
@@ -43,7 +43,8 @@ class CORE_EXPORT LinkHighlight final : public GarbageCollected<LinkHighlight> {
     return impl_ && NeedsHighlightEffectInternal(object);
   }
 
-  void UpdatePrePaint();
+  void UpdateBeforePrePaint();
+  void UpdateAfterPrePaint();
   void Paint(GraphicsContext&) const;
 
  private:

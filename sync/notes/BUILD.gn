@@ -1,0 +1,34 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+
+static_library("sync_notes") {
+  sources = [
+    "note_local_changes_builder.cc",
+    "note_local_changes_builder.h",
+    "note_model_merger.cc",
+    "note_model_merger.h",
+    "note_model_type_processor.cc",
+    "note_model_type_processor.h",
+    "note_remote_updates_handler.cc",
+    "note_remote_updates_handler.h",
+    "note_specifics_conversions.cc",
+    "note_specifics_conversions.h",
+    "note_sync_service.cc",
+    "note_sync_service.h",
+    "notes_model_observer_impl.cc",
+    "notes_model_observer_impl.h",
+    "synced_note_tracker.cc",
+    "synced_note_tracker.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/bookmarks/browser",
+    "//components/keyed_service/core:core",
+    "//components/sync",
+    "//ui/base",
+  ]
+}

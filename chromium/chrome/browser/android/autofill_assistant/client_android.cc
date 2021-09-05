@@ -18,9 +18,10 @@
 #include "base/task/post_task.h"
 #include "base/time/default_tick_clock.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AutofillAssistantClient_jni.h"
-#include "chrome/browser/android/chrome_feature_list.h"
+#include "chrome/android/features/autofill_assistant/jni_headers/AutofillAssistantDirectActionImpl_jni.h"
 #include "chrome/browser/autofill/android/personal_data_manager_android.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -30,6 +31,9 @@
 #include "components/autofill_assistant/browser/controller.h"
 #include "components/autofill_assistant/browser/features.h"
 #include "components/autofill_assistant/browser/website_login_fetcher_impl.h"
+#include "components/password_manager/content/browser/content_password_manager_driver.h"
+#include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
+#include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/version_info/channel.h"
@@ -128,8 +132,10 @@ bool ClientAndroid::Start(JNIEnv* env,
                           const JavaParamRef<jobject>& jcaller,
                           const JavaParamRef<jstring>& jinitial_url,
                           const JavaParamRef<jstring>& jexperiment_ids,
-                          const JavaParamRef<jobjectArray>& parameter_names,
-                          const JavaParamRef<jobjectArray>& parameter_values,
+                          const JavaParamRef<jstring>& jcaller_account,
+                          const JavaParamRef<jobjectArray>& jparameter_names,
+                          const JavaParamRef<jobjectArray>& jparameter_values,
+                          jboolean jis_cct,
                           const JavaParamRef<jobject>& jonboarding_coordinator,
                           jboolean jonboarding_shown,
                           jlong jservice) {
@@ -149,12 +155,31 @@ bool ClientAndroid::Start(JNIEnv* env,
     AttachUI(jonboarding_coordinator);
   }
 
-  std::unique_ptr<TriggerContextImpl> trigger_context = CreateTriggerContext(
-      env, jexperiment_ids, parameter_names, parameter_values);
-  trigger_context->SetCCT(true);
-  trigger_context->SetOnboardingShown(jonboarding_shown);
-
   GURL initial_url(base::android::ConvertJavaStringToUTF8(env, jinitial_url));
+  auto trigger_context = CreateTriggerContext(
+      env, jexperiment_ids, jparameter_names, jparameter_values);
+  trigger_context->SetCCT(jis_cct);
+  trigger_context->SetOnboardingShown(jonboarding_shown);
+  if (jcaller_account) {
+    trigger_context->SetCallerAccountHash(
+        base::android::ConvertJavaStringToUTF8(env, jcaller_account));
+  }
+
+  if (VLOG_IS_ON(2)) {
+    std::string experiment_ids =
+        base::android::ConvertJavaStringToUTF8(env, jexperiment_ids);
+    std::map<std::string, std::string> parameters;
+    FillStringMapFromJava(env, jparameter_names, jparameter_values,
+                          &parameters);
+
+    DVLOG(2) << "Starting autofill assistant with parameters:";
+    DVLOG(2) << "\tinitial_url: " << initial_url;
+    DVLOG(2) << "\texperiment_ids: " << experiment_ids;
+    DVLOG(2) << "\tparameters:";
+    for (const auto& param : parameters) {
+      DVLOG(2) << "\t\t" << param.first << ": " << param.second;
+    }
+  }
   return controller_->Start(initial_url, std::move(trigger_context));
 }
 
@@ -174,6 +199,11 @@ void ClientAndroid::TransferUITo(
   auto ui_ptr = std::move(ui_controller_android_);
   // From this point on, the UIController, in ui_ptr, is either transferred or
   // deleted.
+
+  GetPasswordManagerClient()
+      ->GetPasswordManager()
+      ->set_autofill_assistance_mode(
+          password_manager::AutofillAssistantMode::kNotRunning);
 
   if (!jother_web_contents)
     return;
@@ -211,28 +241,40 @@ void ClientAndroid::OnAccessToken(JNIEnv* env,
   }
 }
 
-void ClientAndroid::ListDirectActions(
+void ClientAndroid::FetchWebsiteActions(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jcaller,
     const base::android::JavaParamRef<jstring>& jexperiment_ids,
-    const base::android::JavaParamRef<jobjectArray>& jargument_names,
-    const base::android::JavaParamRef<jobjectArray>& jargument_values,
+    const base::android::JavaParamRef<jobjectArray>& jparameter_names,
+    const base::android::JavaParamRef<jobjectArray>& jparameter_values,
     const base::android::JavaParamRef<jobject>& jcallback) {
   if (!controller_)
     CreateController(nullptr);
 
   base::android::ScopedJavaGlobalRef<jobject> scoped_jcallback(env, jcallback);
   controller_->Track(
-      CreateTriggerContext(env, jexperiment_ids, jargument_names,
-                           jargument_values),
-      base::BindOnce(&ClientAndroid::OnListDirectActions,
+      CreateTriggerContext(env, jexperiment_ids, jparameter_names,
+                           jparameter_values),
+      base::BindOnce(&ClientAndroid::OnFetchWebsiteActions,
                      weak_ptr_factory_.GetWeakPtr(), scoped_jcallback));
 }
 
-void ClientAndroid::OnListDirectActions(
-    const base::android::JavaRef<jobject>& jcallback) {
+bool ClientAndroid::HasRunFirstCheck(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jcaller) const {
+  return controller_ != nullptr && controller_->HasRunFirstCheck();
+}
+
+base::android::ScopedJavaLocalRef<jobjectArray>
+ClientAndroid::GetDirectActionsAsJavaArrayOfStrings(JNIEnv* env) const {
   // Using a set here helps remove duplicates.
   std::set<std::string> names;
+
+  if (!controller_) {
+    return base::android::ToJavaArrayOfStrings(
+        env, std::vector<std::string>(names.begin(), names.end()));
+  }
+
   for (const UserAction& user_action : controller_->GetUserActions()) {
     if (!user_action.enabled())
       continue;
@@ -246,11 +288,74 @@ void ClientAndroid::OnListDirectActions(
   if (ui_controller_android_)
     names.insert(kCancelActionName);
 
+  return base::android::ToJavaArrayOfStrings(
+      env, std::vector<std::string>(names.begin(), names.end()));
+}
+
+base::android::ScopedJavaLocalRef<jobject>
+ClientAndroid::ToJavaAutofillAssistantDirectAction(
+    JNIEnv* env,
+    const DirectAction& direct_action) const {
+  std::set<std::string> names;
+  for (const std::string& name : direct_action.names)
+    names.insert(name);
+  auto jnames = base::android::ToJavaArrayOfStrings(
+      env, std::vector<std::string>(names.begin(), names.end()));
+
+  std::vector<std::string> required_arguments;
+  for (const std::string& arg : direct_action.required_arguments)
+    required_arguments.emplace_back(arg);
+  auto jrequired_arguments =
+      base::android::ToJavaArrayOfStrings(env, required_arguments);
+
+  std::vector<std::string> optional_arguments;
+  for (const std::string& arg : direct_action.optional_arguments)
+    optional_arguments.emplace_back(arg);
+  auto joptional_arguments =
+      base::android::ToJavaArrayOfStrings(env, std::move(optional_arguments));
+
+  return Java_AutofillAssistantDirectActionImpl_Constructor(
+      env, jnames, jrequired_arguments, joptional_arguments);
+}
+
+base::android::ScopedJavaLocalRef<jobjectArray> ClientAndroid::GetDirectActions(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jcaller) {
+  DCHECK(controller_ != nullptr);
+  size_t actions_count = 0;
+  for (const UserAction& user_action : controller_->GetUserActions()) {
+    if (!user_action.enabled())
+      continue;
+    ++actions_count;
+  }
+
+  // Prepare the java array to hold the direct actions.
+  base::android::ScopedJavaLocalRef<jclass> directaction_array_class =
+      base::android::GetClass(env,
+                              "org/chromium/chrome/browser/autofill_assistant/"
+                              "AutofillAssistantDirectActionImpl");
+
+  jobjectArray joa = env->NewObjectArray(
+      actions_count, directaction_array_class.obj(), nullptr);
+  jni_generator::CheckException(env);
+
+  actions_count = 0;
+  for (const UserAction& user_action : controller_->GetUserActions()) {
+    if (!user_action.enabled())
+      continue;
+
+    auto jdirect_action =
+        ToJavaAutofillAssistantDirectAction(env, user_action.direct_action());
+    env->SetObjectArrayElement(joa, actions_count++, jdirect_action.obj());
+  }
+  return base::android::ScopedJavaLocalRef<jobjectArray>(env, joa);
+}
+
+void ClientAndroid::OnFetchWebsiteActions(
+    const base::android::JavaRef<jobject>& jcallback) {
   JNIEnv* env = AttachCurrentThread();
-  Java_AutofillAssistantClient_sendDirectActionList(
-      env, java_object_, jcallback,
-      base::android::ToJavaArrayOfStrings(
-          env, std::vector<std::string>(names.begin(), names.end())));
+  Java_AutofillAssistantClient_onFetchWebsiteActions(
+      env, java_object_, jcallback, controller_ != nullptr);
 }
 
 bool ClientAndroid::PerformDirectAction(
@@ -258,17 +363,18 @@ bool ClientAndroid::PerformDirectAction(
     const base::android::JavaParamRef<jobject>& jcaller,
     const base::android::JavaParamRef<jstring>& jaction_name,
     const base::android::JavaParamRef<jstring>& jexperiment_ids,
-    const base::android::JavaParamRef<jobjectArray>& jargument_names,
-    const base::android::JavaParamRef<jobjectArray>& jargument_values,
+    const base::android::JavaParamRef<jobjectArray>& jparameter_names,
+    const base::android::JavaParamRef<jobjectArray>& jparameter_values,
     const base::android::JavaParamRef<jobject>& jonboarding_coordinator) {
   std::string action_name =
       base::android::ConvertJavaStringToUTF8(env, jaction_name);
 
   int action_index = FindDirectAction(action_name);
 
-  std::unique_ptr<TriggerContextImpl> trigger_context = CreateTriggerContext(
-      env, jexperiment_ids, jargument_names, jargument_values);
+  auto trigger_context = CreateTriggerContext(
+      env, jexperiment_ids, jparameter_names, jparameter_values);
   trigger_context->SetDirectAction(true);
+
   // Cancel through the UI if it is up. This allows the user to undo. This is
   // always available, even if no action was found and action_index == -1.
   if (action_name == kCancelActionName && ui_controller_android_) {
@@ -291,7 +397,7 @@ bool ClientAndroid::PerformDirectAction(
 
 int ClientAndroid::FindDirectAction(const std::string& action_name) {
   // It's too late to create a controller. This should have been done in
-  // ListDirectActions.
+  // FetchWebsiteActions.
   if (!controller_)
     return -1;
 
@@ -333,13 +439,18 @@ void ClientAndroid::AttachUI(
 
     ui_controller_android_->Attach(web_contents_, this, controller_.get());
   }
+
+  GetPasswordManagerClient()
+      ->GetPasswordManager()
+      ->set_autofill_assistance_mode(
+          password_manager::AutofillAssistantMode::kManuallyCuratedScript);
 }
 
 void ClientAndroid::DestroyUI() {
   ui_controller_android_.reset();
 }
 
-std::string ClientAndroid::GetApiKey() {
+std::string ClientAndroid::GetApiKey() const {
   std::string api_key;
   if (google_apis::IsGoogleChromeAPIKeyUsed()) {
     api_key = chrome::GetChannel() == version_info::Channel::STABLE
@@ -354,7 +465,7 @@ std::string ClientAndroid::GetApiKey() {
   return api_key;
 }
 
-std::string ClientAndroid::GetAccountEmailAddress() {
+std::string ClientAndroid::GetAccountEmailAddress() const {
   JNIEnv* env = AttachCurrentThread();
   return base::android::ConvertJavaStringToUTF8(
       Java_AutofillAssistantClient_getAccountEmailAddress(env, java_object_));
@@ -364,36 +475,78 @@ AccessTokenFetcher* ClientAndroid::GetAccessTokenFetcher() {
   return this;
 }
 
-autofill::PersonalDataManager* ClientAndroid::GetPersonalDataManager() {
+autofill::PersonalDataManager* ClientAndroid::GetPersonalDataManager() const {
   return autofill::PersonalDataManagerFactory::GetForProfile(
       ProfileManager::GetLastUsedProfile());
 }
 
-WebsiteLoginFetcher* ClientAndroid::GetWebsiteLoginFetcher() {
+password_manager::PasswordManagerClient*
+ClientAndroid::GetPasswordManagerClient() const {
+  if (!password_manager_client_) {
+    password_manager_client_ =
+        ChromePasswordManagerClient::FromWebContents(web_contents_);
+  }
+  return password_manager_client_;
+}
+
+WebsiteLoginFetcher* ClientAndroid::GetWebsiteLoginFetcher() const {
   if (!website_login_fetcher_) {
-    website_login_fetcher_ = std::make_unique<WebsiteLoginFetcherImpl>(
-        ChromePasswordManagerClient::FromWebContents(web_contents_));
+    auto* client = GetPasswordManagerClient();
+    auto* factory =
+        password_manager::ContentPasswordManagerDriverFactory::FromWebContents(
+            web_contents_);
+    // TODO(crbug.com/1043132): Add support for non-main frames. If another
+    // frame has a different origin than the main frame, passwords-related
+    // features may not work.
+    auto* driver = factory->GetDriverForFrame(web_contents_->GetMainFrame());
+    website_login_fetcher_ =
+        std::make_unique<WebsiteLoginFetcherImpl>(client, driver);
   }
   return website_login_fetcher_.get();
 }
 
-std::string ClientAndroid::GetServerUrl() {
+std::string ClientAndroid::GetServerUrl() const {
   return server_url_;
 }
 
-std::string ClientAndroid::GetLocale() {
+std::string ClientAndroid::GetLocale() const {
   return base::android::GetDefaultLocaleString();
 }
 
-std::string ClientAndroid::GetCountryCode() {
+std::string ClientAndroid::GetCountryCode() const {
   return base::android::ConvertJavaStringToUTF8(
       Java_AutofillAssistantClient_getCountryCode(AttachCurrentThread(),
                                                   java_object_));
 }
 
+DeviceContext ClientAndroid::GetDeviceContext() const {
+  DeviceContext context;
+  Version version;
+  version.sdk_int = Java_AutofillAssistantClient_getSdkInt(
+      AttachCurrentThread(), java_object_);
+
+  context.version = version;
+  context.manufacturer = base::android::ConvertJavaStringToUTF8(
+      Java_AutofillAssistantClient_getDeviceManufacturer(AttachCurrentThread(),
+                                                         java_object_));
+  context.model = base::android::ConvertJavaStringToUTF8(
+      Java_AutofillAssistantClient_getDeviceModel(AttachCurrentThread(),
+                                                  java_object_));
+  return context;
+}
+
+content::WebContents* ClientAndroid::GetWebContents() const {
+  return web_contents_;
+}
+
 void ClientAndroid::Shutdown(Metrics::DropOutReason reason) {
   if (!controller_)
     return;
+
+  GetPasswordManagerClient()
+      ->GetPasswordManager()
+      ->set_autofill_assistance_mode(
+          password_manager::AutofillAssistantMode::kNotRunning);
 
   if (ui_controller_android_ && ui_controller_android_->IsAttached())
     DestroyUI();

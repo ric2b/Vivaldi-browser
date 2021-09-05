@@ -24,6 +24,8 @@ enum PermissionName {
   IDLE_DETECTION,
   PERIODIC_BACKGROUND_SYNC,
   WAKE_LOCK,
+  NFC,
+  STORAGE_ACCESS,
 };
 
 // This is similar to WakeLockType in modules/wake_lock/wake_lock.idl.
@@ -40,6 +42,7 @@ struct MidiPermissionDescriptor {
 
 struct ClipboardPermissionDescriptor {
   bool allowWithoutGesture;
+  bool allowWithoutSanitization;
 };
 
 struct WakeLockPermissionDescriptor {

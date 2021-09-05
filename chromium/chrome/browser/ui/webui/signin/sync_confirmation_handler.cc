@@ -14,6 +14,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/signin_view_controller_delegate.h"
@@ -24,19 +25,22 @@
 #include "components/consent_auditor/consent_auditor.h"
 #include "components/signin/public/base/avatar_icon_util.h"
 #include "components/signin/public/identity_manager/account_info.h"
-#include "components/unified_consent/feature.h"
+#include "components/signin/public/identity_manager/consent_level.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "url/gurl.h"
 
+using signin::ConsentLevel;
+
+namespace {
 const int kProfileImageSize = 128;
+}  // namespace
 
 SyncConfirmationHandler::SyncConfirmationHandler(
     Browser* browser,
     const std::unordered_map<std::string, int>& string_to_grd_id_map)
     : profile_(browser->profile()),
       browser_(browser),
-      did_user_explicitly_interact(false),
       string_to_grd_id_map_(string_to_grd_id_map),
       identity_manager_(IdentityManagerFactory::GetForProfile(profile_)) {
   DCHECK(profile_);
@@ -50,7 +54,7 @@ SyncConfirmationHandler::~SyncConfirmationHandler() {
 
   // Abort signin and prevent sync from starting if none of the actions on the
   // sync confirmation dialog are taken by the user.
-  if (!did_user_explicitly_interact) {
+  if (!did_user_explicitly_interact_) {
     HandleUndo(nullptr);
     base::RecordAction(base::UserMetricsAction("Signin_Abort_Signin"));
   }
@@ -83,29 +87,29 @@ void SyncConfirmationHandler::RegisterMessages() {
 }
 
 void SyncConfirmationHandler::HandleConfirm(const base::ListValue* args) {
-  did_user_explicitly_interact = true;
+  did_user_explicitly_interact_ = true;
   RecordConsent(args);
   CloseModalSigninWindow(LoginUIService::SYNC_WITH_DEFAULT_SETTINGS);
 }
 
 void SyncConfirmationHandler::HandleGoToSettings(const base::ListValue* args) {
-  DCHECK(profile_->IsSyncAllowed());
-  did_user_explicitly_interact = true;
+  DCHECK(ProfileSyncServiceFactory::IsSyncAllowed(profile_));
+  did_user_explicitly_interact_ = true;
   RecordConsent(args);
   CloseModalSigninWindow(LoginUIService::CONFIGURE_SYNC_FIRST);
 }
 
 void SyncConfirmationHandler::HandleUndo(const base::ListValue* args) {
-  did_user_explicitly_interact = true;
+  did_user_explicitly_interact_ = true;
   CloseModalSigninWindow(LoginUIService::ABORT_SIGNIN);
 }
 
 void SyncConfirmationHandler::HandleAccountImageRequest(
     const base::ListValue* args) {
-  DCHECK(profile_->IsSyncAllowed());
+  DCHECK(ProfileSyncServiceFactory::IsSyncAllowed(profile_));
   base::Optional<AccountInfo> primary_account_info =
       identity_manager_->FindExtendedAccountInfoForAccountWithRefreshToken(
-          identity_manager_->GetPrimaryAccountInfo());
+          identity_manager_->GetPrimaryAccountInfo(ConsentLevel::kNotRequired));
 
   // Fire the "account-image-changed" listener from |SetUserImageURL()|.
   // Note: If the account info is not available yet in the
@@ -117,8 +121,7 @@ void SyncConfirmationHandler::HandleAccountImageRequest(
 
 void SyncConfirmationHandler::RecordConsent(const base::ListValue* args) {
   CHECK_EQ(2U, args->GetSize());
-  base::span<const base::Value> consent_description =
-      args->GetList()[0].GetList();
+  base::Value::ConstListView consent_description = args->GetList()[0].GetList();
   const std::string& consent_confirmation = args->GetList()[1].GetString();
 
   // The strings returned by the WebUI are not free-form, they must belong into
@@ -148,12 +151,13 @@ void SyncConfirmationHandler::RecordConsent(const base::ListValue* args) {
 
   consent_auditor::ConsentAuditor* consent_auditor =
       ConsentAuditorFactory::GetForProfile(profile_);
-  consent_auditor->RecordSyncConsent(identity_manager_->GetPrimaryAccountId(),
-                                     sync_consent);
+  consent_auditor->RecordSyncConsent(
+      identity_manager_->GetPrimaryAccountId(ConsentLevel::kNotRequired),
+      sync_consent);
 }
 
 void SyncConfirmationHandler::SetUserImageURL(const std::string& picture_url) {
-  if (!profile_->IsSyncAllowed()) {
+  if (!ProfileSyncServiceFactory::IsSyncAllowed(profile_)) {
     // The sync disabled confirmation handler does not present the user image.
     // Avoid updating the image URL in this case.
     return;
@@ -181,8 +185,10 @@ void SyncConfirmationHandler::OnExtendedAccountInfoUpdated(
   if (!info.IsValid())
     return;
 
-  if (info.account_id != identity_manager_->GetPrimaryAccountId())
+  if (info.account_id !=
+      identity_manager_->GetPrimaryAccountId(ConsentLevel::kNotRequired)) {
     return;
+  }
 
   identity_manager_->RemoveObserver(this);
   SetUserImageURL(info.picture_url);
@@ -218,7 +224,7 @@ void SyncConfirmationHandler::HandleInitializedWithSize(
 
   base::Optional<AccountInfo> primary_account_info =
       identity_manager_->FindExtendedAccountInfoForAccountWithRefreshToken(
-          identity_manager_->GetPrimaryAccountInfo());
+          identity_manager_->GetPrimaryAccountInfo(ConsentLevel::kNotRequired));
   if (!primary_account_info) {
     // No account is signed in, so there is nothing to be displayed in the sync
     // confirmation dialog.

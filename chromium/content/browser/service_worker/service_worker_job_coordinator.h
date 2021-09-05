@@ -28,9 +28,14 @@ class CONTENT_EXPORT ServiceWorkerJobCoordinator {
 
   void Register(const GURL& script_url,
                 const blink::mojom::ServiceWorkerRegistrationOptions& options,
+                blink::mojom::FetchClientSettingsObjectPtr
+                    outside_fetch_client_settings_object,
                 ServiceWorkerRegisterJob::RegistrationCallback callback);
 
+  // If |is_immediate| is true, unregister clears the active worker from the
+  // registration without waiting for the controlled clients to unload.
   void Unregister(const GURL& scope,
+                  bool is_immediate,
                   ServiceWorkerUnregisterJob::UnregistrationCallback callback);
 
   void Update(ServiceWorkerRegistration* registration, bool force_bypass_cache);
@@ -38,6 +43,8 @@ class CONTENT_EXPORT ServiceWorkerJobCoordinator {
   void Update(ServiceWorkerRegistration* registration,
               bool force_bypass_cache,
               bool skip_script_comparison,
+              blink::mojom::FetchClientSettingsObjectPtr
+                  outside_fetch_client_settings_object,
               ServiceWorkerRegisterJob::RegistrationCallback callback);
 
   // Calls ServiceWorkerRegisterJobBase::Abort() on the specified jobs (all jobs

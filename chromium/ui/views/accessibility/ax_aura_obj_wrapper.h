@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
-#include "base/macros.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/views_export.h"
 
@@ -35,8 +34,7 @@ class VIEWS_EXPORT AXAuraObjWrapper {
 
   // Traversal and serialization.
   virtual AXAuraObjWrapper* GetParent() = 0;
-  virtual void GetChildren(
-      std::vector<AXAuraObjWrapper*>* out_children) = 0;
+  virtual void GetChildren(std::vector<AXAuraObjWrapper*>* out_children) = 0;
   virtual void Serialize(ui::AXNodeData* out_node_data) = 0;
   virtual int32_t GetUniqueId() const = 0;
 

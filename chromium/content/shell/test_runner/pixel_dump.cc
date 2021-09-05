@@ -16,18 +16,19 @@
 #include "base/trace_event/trace_event.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/skia_paint_canvas.h"
-#include "content/shell/common/web_test/web_test_utils.h"
+#include "content/public/renderer/render_frame.h"
 #include "content/shell/test_runner/web_test_runtime_flags.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "printing/metafile_skia.h"
 #include "printing/print_settings.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "skia/ext/platform_canvas.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/clipboard/clipboard.mojom.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_image.h"
-#include "third_party/blink/public/platform/web_point.h"
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame.h"
@@ -45,8 +46,7 @@ void CapturePixelsForPrinting(
     blink::WebLocalFrame* web_frame,
     base::OnceCallback<void(const SkBitmap&)> callback) {
   auto* frame_widget = web_frame->LocalRoot()->FrameWidget();
-  frame_widget->UpdateAllLifecyclePhases(
-      blink::WebWidget::LifecycleUpdateReason::kTest);
+  frame_widget->UpdateAllLifecyclePhases(blink::DocumentUpdateReason::kTest);
 
   blink::WebSize page_size_in_pixels = frame_widget->Size();
 
@@ -92,13 +92,15 @@ void CopyImageAtAndCapturePixels(
     int y,
     base::OnceCallback<void(const SkBitmap&)> callback) {
   mojo::Remote<blink::mojom::ClipboardHost> clipboard;
-  blink::Platform::Current()->GetBrowserInterfaceBrokerProxy()->GetInterface(
+  content::RenderFrame* render_frame =
+      content::RenderFrame::FromWebFrame(web_frame);
+  render_frame->GetBrowserInterfaceBroker()->GetInterface(
       clipboard.BindNewPipeAndPassReceiver());
 
   uint64_t sequence_number_before = 0;
   clipboard->GetSequenceNumber(ui::ClipboardBuffer::kCopyPaste,
                                &sequence_number_before);
-  web_frame->CopyImageAt(blink::WebPoint(x, y));
+  web_frame->CopyImageAtForTesting(gfx::Point(x, y));
   uint64_t sequence_number_after = 0;
   while (sequence_number_before == sequence_number_after) {
     clipboard->GetSequenceNumber(ui::ClipboardBuffer::kCopyPaste,

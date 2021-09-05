@@ -29,9 +29,9 @@
 #include "content/public/common/content_client.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
-#include "storage/browser/fileapi/external_mount_points.h"
+#include "storage/browser/file_system/external_mount_points.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
-#include "storage/common/fileapi/file_system_types.h"
+#include "storage/common/file_system/file_system_types.h"
 #else
 #include "content/public/test/browser_task_environment.h"
 #endif
@@ -58,7 +58,8 @@ class PlatformUtilTestContentBrowserClient : public ChromeContentBrowserClient {
     // New FileSystemBackend that uses our MockSpecialStoragePolicy.
     additional_backends->push_back(
         std::make_unique<chromeos::FileSystemBackend>(
-            nullptr, nullptr, nullptr, nullptr, nullptr, external_mount_points,
+            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+            external_mount_points,
             storage::ExternalMountPoints::GetSystemInstance()));
   }
 };

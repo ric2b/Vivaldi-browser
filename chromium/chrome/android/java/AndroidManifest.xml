@@ -60,6 +60,7 @@ by a child template that "extends" this file.
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.USE_CREDENTIALS"/>
+    <uses-permission-sdk-23 android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission-sdk-23 android:name="android.permission.USE_FINGERPRINT"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
@@ -138,9 +139,8 @@ by a child template that "extends" this file.
         android:largeHeap="false"
         android:manageSpaceActivity="org.vivaldi.browser.preferences.VivaldiManageSpaceActivity"
         android:supportsRtl="true"
-        {% if (use_zygote|default(false) == 'true') %}
         android:zygotePreloadName="org.chromium.content.app.ZygotePreload"
-        {% endif %}
+        android:requestLegacyExternalStorage="true"
         {% if backup_key is defined %}
         android:allowBackup="true"
         android:backupAgent="org.chromium.chrome.browser.ChromeBackupAgent"
@@ -184,21 +184,6 @@ by a child template that "extends" this file.
         <!-- ARCore APK integration -->
         <!-- This tag indicates that this application optionally uses ARCore. -->
         <meta-data android:name="com.google.ar.core" android:value="optional" />
-        <!-- This value must match value present in ARCore SDK's .aar -->
-        <!-- TODO(https://crbug.com/917406): modify build scripts to
-             automatically pull this value in - the problem exists because in
-             bundle mode, the ARCore SDK is packaged into AR module and
-             the module installation will not automatically bring in DFM's
-             manifest entries. -->
-        <meta-data android:name="com.google.ar.core.min_apk_version"
-            android:value="190531000"/>
-        <activity
-            android:name="com.google.ar.core.InstallActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:launchMode="singleTop"
-            android:theme="@android:style/Theme.Material.Light.Dialog.Alert" />
         {% endif %}
 
         <!-- Cast support -->
@@ -303,7 +288,7 @@ by a child template that "extends" this file.
                 {{ self.mhtml_view_intent_shared_filter_body() }}
                 <data android:mimeType="*/*"/>
             </intent-filter>
-            <!-- Bundled HTTP Exchanges (.wbn) support -->
+            <!-- Web Bundles (.wbn) support -->
             {% if channel in ['dev', 'canary', 'default'] %}
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -619,33 +604,27 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
-        <activity android:name="org.chromium.chrome.browser.preferences.Preferences"
+        <activity android:name="org.chromium.chrome.browser.settings.SettingsActivity"
             android:theme="@style/Theme.Vivaldi.Preferences"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
-            android:label="@string/preferences"
+            android:label="@string/settings"
             android:exported="false">
         </activity>
         <!-- Not used by Vivaldi
-        <activity android:name="org.chromium.chrome.browser.preferences.website.ManageSpaceActivity"
-            android:theme="@style/Theme.Chromium.Preferences.ManageSpace"
+        <activity android:name="org.chromium.chrome.browser.site_settings.ManageSpaceActivity"
+            android:theme="@style/Theme.Chromium.Settings.ManageSpace"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:label="@string/storage_management_activity_label"
             android:exported="false">
         </activity>
-        -->
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkActivity"
             android:theme="@style/Theme.Chromium.Activity.Fullscreen"
             android:exported="false"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
+        < -->
         <!-- <- Vivaldi -->
-         <activity android:name="org.vivaldi.browser.notes.NotesActivity"
-            android:theme="@style/Theme.Chromium.Activity.Fullscreen"
-            android:exported="false"
-            android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
-        </activity>
         <activity android:name="org.vivaldi.browser.notes.NoteEditActivity"
             android:theme="@style/NoteEditActivityTheme"
             android:windowSoftInputMode="stateVisible|adjustResize"
@@ -672,7 +651,7 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity android:name="org.vivaldi.browser.preferences.VivaldiManageSpaceActivity"
-            android:theme="@style/Theme.Chromium.Preferences.ManageSpace"
+            android:theme="@style/Theme.Chromium.Settings.ManageSpace"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:label="@string/storage_management_activity_label"
             android:exported="false">
@@ -682,9 +661,22 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
+        <activity android:name="org.vivaldi.browser.preferences.AdsAndTrackerPreference"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false">
+        </activity>
+        <activity android:name="org.vivaldi.browser.preferences.AutofillDomainEditor"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false">
+        </activity>
+        <activity android:name="org.vivaldi.browser.preferences.ManageBlockingLevelPreference"
+        android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+        android:exported="false">
+        </activity>
         <!-- Vivaldi -> -->
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkAddActivity"
-            android:theme="@style/Theme.Chromium.DialogWhenLarge"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:excludeFromRecents="true"
             android:windowSoftInputMode="stateHidden"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
             <intent-filter>
@@ -692,6 +684,7 @@ by a child template that "extends" this file.
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <!-- Not used by vivaldi >
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkEditActivity"
             android:theme="@style/Theme.Chromium.DialogWhenLarge"
             android:windowSoftInputMode="stateHidden"
@@ -704,6 +697,7 @@ by a child template that "extends" this file.
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
+        < -->
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkFolderSelectActivity"
             android:theme="@style/Theme.Chromium.DialogWhenLarge"
             android:windowSoftInputMode="stateAlwaysHidden"
@@ -713,20 +707,24 @@ by a child template that "extends" this file.
         </activity>
 
         <!-- Activities for downloads. -->
+        <!-- Not used by Vivaldi
         <activity android:name="org.chromium.chrome.browser.download.DownloadActivity"
             android:theme="@style/Theme.Chromium.Activity.Fullscreen"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
+        < -->
 
         <!-- Activities for history. -->
+        <!-- Not used by Vivaldi
         <activity android:name="org.chromium.chrome.browser.history.HistoryActivity"
             android:theme="@style/Theme.Chromium.Activity.Fullscreen"
             android:windowSoftInputMode="stateAlwaysHidden|adjustResize"
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
+        < -->
 
         <!-- <- Vivaldi activities -->
         <activity android:name="org.vivaldi.browser.speeddial.SpeedDialAddEditFolderActivity"
@@ -934,6 +932,23 @@ by a child template that "extends" this file.
             android:exported="true"
             android:noHistory="true"
             android:theme="@style/Theme.Chromium.Activity.TranslucentNoAnimations"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize" >
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+          </activity>
+
+          <activity
+            android:name="org.chromium.chrome.browser.share.qrcode.QrCodeShareActivity"
+            android:icon="@drawable/ic_launcher"
+            android:label="@string/qr_code_share_icon_label"
+            android:enabled="false"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize" >
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -1180,18 +1195,22 @@ by a child template that "extends" this file.
             android:permission="android.permission.BIND_JOB_SERVICE"/>
 
         <!-- Background Task Scheduler job service -->
-        <service android:name="org.chromium.components.background_task_scheduler.BackgroundTaskJobService"
+        <service android:name="org.chromium.components.background_task_scheduler.internal.BackgroundTaskJobService"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE"/>
 
         <!-- Background Task Scheduler GCM task service -->
-        <service android:name="org.chromium.components.background_task_scheduler.BackgroundTaskGcmTaskService"
+        <service android:name="org.chromium.components.background_task_scheduler.internal.BackgroundTaskGcmTaskService"
             android:permission="com.google.android.gms.permission.BIND_NETWORK_TASK_SERVICE"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.google.android.gms.gcm.ACTION_TASK_READY" />
             </intent-filter>
         </service>
+
+        <!-- Background Task Scheduler alarm receiver -->
+        <receiver android:name="org.chromium.components.background_task_scheduler.internal.BackgroundTaskBroadcastReceiver"
+            android:exported="false" />
 
         <!-- GcmTaskService implementation to wake Chrome on scheduled events -->
         <service android:name="org.chromium.chrome.browser.ChromeBackgroundService"
@@ -1215,6 +1234,7 @@ by a child template that "extends" this file.
               <category android:name="androidx.browser.customtabs.category.NavBarColorCustomization"/>
               <category android:name="androidx.browser.customtabs.category.ColorSchemeCustomization"/>
               <category android:name="androidx.browser.trusted.category.WebShareTargetV2"/>
+              <category android:name="androidx.browser.trusted.category.ImmersiveMode"/>
             </intent-filter>
         </service>
         <service android:name="androidx.browser.customtabs.PostMessageService" />
@@ -1246,7 +1266,7 @@ by a child template that "extends" this file.
             android:permission="{{ manifest_package }}.permission.CHILD_SERVICE"
             android:isolatedProcess="true"
             android:exported="{{sandboxed_service_exported|default(false)}}"
-            {% if (use_zygote|default(false) == 'true') %}
+            {% if (i == 0) %}
             android:useAppZygote="true"
             {% endif %}
             {% if (sandboxed_service_exported|default(false)) == 'true' %}
@@ -1272,17 +1292,20 @@ android:value="true" />
             android:exported="false" />
         {% endfor %}
 
+        <receiver android:name="org.chromium.chrome.browser.announcement.AnnouncementNotificationManager$Receiver"
+            android:exported="false"/>
+
         <receiver android:name="org.chromium.chrome.browser.notifications.NotificationIntentInterceptor$Receiver"
             android:exported="false"/>
 
         <receiver android:name="org.chromium.chrome.browser.notifications.scheduler.DisplayAgent$Receiver"
             android:exported="false"/>
 
-        <receiver android:name="org.chromium.chrome.browser.send_tab_to_self.NotificationManager$TapReceiver"
+        <receiver android:name="org.chromium.chrome.browser.send_tab_to_self.NotificationManager$SendTabToSelfNotificationReceiver"
             android:exported="false"/>
-        <receiver android:name="org.chromium.chrome.browser.send_tab_to_self.NotificationManager$DeleteReceiver"
-            android:exported="false"/>
-        <receiver android:name="org.chromium.chrome.browser.send_tab_to_self.NotificationManager$TimeoutReceiver"
+
+        <!-- Save image notification receiver -->
+        <receiver android:name="org.chromium.chrome.browser.share.SaveImageNotificationManager$TapReceiver"
             android:exported="false"/>
 
         <receiver android:name="org.chromium.chrome.browser.sharing.click_to_call.ClickToCallMessageHandler$TapReceiver"

@@ -5,18 +5,30 @@
 #include "chrome/browser/ui/views/crostini/crostini_ansible_software_config_view.h"
 
 #include "base/bind_helpers.h"
+#include "chrome/browser/chromeos/crostini/ansible/ansible_management_service.h"
+#include "chrome/browser/chromeos/crostini/ansible/ansible_management_test_helper.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/crostini/crostini_browser_test_util.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
+#include "content/public/browser/network_service_instance.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/views/window/dialog_client_view.h"
+#include "ui/chromeos/devicetype_utils.h"
 
 class CrostiniAnsibleSoftwareConfigViewBrowserTest
     : public CrostiniDialogBrowserTest {
  public:
   CrostiniAnsibleSoftwareConfigViewBrowserTest()
-      : CrostiniDialogBrowserTest(true /*register_termina*/) {}
+      : CrostiniDialogBrowserTest(true /*register_termina*/),
+        container_id_(crostini::kCrostiniDefaultVmName,
+                      crostini::kCrostiniDefaultContainerName),
+        network_connection_tracker_(
+            network::TestNetworkConnectionTracker::CreateInstance()) {
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kCrostiniAnsibleInfrastructure);
+  }
 
   // CrostiniDialogBrowserTest:
   void ShowUi(const std::string& name) override {
@@ -28,6 +40,21 @@ class CrostiniAnsibleSoftwareConfigViewBrowserTest
   }
 
  protected:
+  void SetUpOnMainThread() override {
+    // NetworkConnectionTracker should be reset first.
+    content::SetNetworkConnectionTrackerForTesting(nullptr);
+    content::SetNetworkConnectionTrackerForTesting(
+        network_connection_tracker_.get());
+
+    test_helper_ = std::make_unique<crostini::AnsibleManagementTestHelper>(
+        browser()->profile());
+    test_helper_->SetUpAnsiblePlaybookPreference();
+  }
+
+  void SetConnectionType(network::mojom::ConnectionType type) {
+    network_connection_tracker_->SetConnectionType(type);
+  }
+
   // A new Widget was created in ShowUi() or since the last VerifyUi().
   bool HasView() { return VerifyUi() && ActiveView() != nullptr; }
 
@@ -37,39 +64,68 @@ class CrostiniAnsibleSoftwareConfigViewBrowserTest
     return !VerifyUi() && ActiveView() == nullptr;
   }
 
-  bool IsDefaultDialog() { return !HasAcceptButton() && HasDefaultStrings(); }
-
-  bool IsErrorDialog() { return HasAcceptButton() && HasErrorStrings(); }
-
- private:
-  bool HasAcceptButton() {
-    return ActiveView()->GetDialogClientView()->ok_button() != nullptr;
+  bool IsDefaultDialog() {
+    return !HasAcceptButton() && !HasCancelButton() && HasDefaultStrings();
   }
 
+  bool IsErrorDialog() {
+    return HasAcceptButton() && !HasCancelButton() && HasErrorStrings();
+  }
+
+  bool IsErrorOfflineDialog() {
+    return HasAcceptButton() && HasCancelButton() && HasErrorOfflineStrings();
+  }
+
+  crostini::AnsibleManagementService* ansible_management_service() {
+    return crostini::AnsibleManagementService::GetForProfile(
+        browser()->profile());
+  }
+
+  crostini::ContainerId container_id_;
+
+ private:
+  bool HasAcceptButton() { return ActiveView()->GetOkButton() != nullptr; }
+  bool HasCancelButton() { return ActiveView()->GetCancelButton() != nullptr; }
+
   bool HasDefaultStrings() {
-    return (ActiveView()->GetWindowTitle().compare(l10n_util::GetStringUTF16(
-                IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_LABEL)) == 0) &&
-           (ActiveView()->GetSubtextLabelStringForTesting().compare(
-                l10n_util::GetStringUTF16(
-                    IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_SUBTEXT)) == 0);
+    return ActiveView()->GetWindowTitle() ==
+               l10n_util::GetStringUTF16(
+                   IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_LABEL) &&
+           ActiveView()->GetSubtextLabelStringForTesting() ==
+               l10n_util::GetStringUTF16(
+                   IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_SUBTEXT);
   }
 
   bool HasErrorStrings() {
-    return (ActiveView()->GetWindowTitle().compare(l10n_util::GetStringUTF16(
-                IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_LABEL)) == 0) &&
-           (ActiveView()->GetSubtextLabelStringForTesting().compare(
-                l10n_util::GetStringUTF16(
-                    IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_SUBTEXT)) == 0);
+    return ActiveView()->GetWindowTitle() ==
+               l10n_util::GetStringUTF16(
+                   IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_LABEL) &&
+           ActiveView()->GetSubtextLabelStringForTesting() ==
+               l10n_util::GetStringUTF16(
+                   IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_SUBTEXT);
   }
+
+  bool HasErrorOfflineStrings() {
+    return ActiveView()->GetWindowTitle() ==
+               l10n_util::GetStringFUTF16(
+                   IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_OFFLINE_LABEL,
+                   ui::GetChromeOSDeviceName()) &&
+           ActiveView()->GetSubtextLabelStringForTesting() ==
+               l10n_util::GetStringUTF16(
+                   IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_OFFLINE_SUBTEXT);
+  }
+
+  std::unique_ptr<network::TestNetworkConnectionTracker>
+      network_connection_tracker_;
+  std::unique_ptr<crostini::AnsibleManagementTestHelper> test_helper_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-// Test if dialog is actually launched.
 IN_PROC_BROWSER_TEST_F(CrostiniAnsibleSoftwareConfigViewBrowserTest,
                        InvokeUi_default) {
   ShowAndVerifyUi();
 }
 
-// Test if dialog behaviour is correct during a successful flow.
 IN_PROC_BROWSER_TEST_F(CrostiniAnsibleSoftwareConfigViewBrowserTest,
                        SuccessfulFlow) {
   ShowUi("default");
@@ -77,13 +133,11 @@ IN_PROC_BROWSER_TEST_F(CrostiniAnsibleSoftwareConfigViewBrowserTest,
   EXPECT_TRUE(HasView());
   EXPECT_TRUE(IsDefaultDialog());
 
-  ActiveView()->OnApplicationStarted();
-  ActiveView()->OnApplicationFinished();
+  ActiveView()->OnAnsibleSoftwareConfigurationFinished(true);
 
   EXPECT_TRUE(HasNoView());
 }
 
-// Test if dialog behaviour is correct during an unsuccessful flow.
 IN_PROC_BROWSER_TEST_F(CrostiniAnsibleSoftwareConfigViewBrowserTest,
                        UnsuccessfulFlow) {
   ShowUi("default");
@@ -91,7 +145,127 @@ IN_PROC_BROWSER_TEST_F(CrostiniAnsibleSoftwareConfigViewBrowserTest,
   EXPECT_TRUE(HasView());
   EXPECT_TRUE(IsDefaultDialog());
 
-  ActiveView()->OnError();
+  ActiveView()->OnAnsibleSoftwareConfigurationFinished(false);
+
+  EXPECT_NE(nullptr, ActiveView());
+  EXPECT_TRUE(IsErrorDialog());
+}
+
+IN_PROC_BROWSER_TEST_F(CrostiniAnsibleSoftwareConfigViewBrowserTest,
+                       UnsuccessfulFlow_Offline) {
+  SetConnectionType(network::mojom::ConnectionType::CONNECTION_NONE);
+
+  ShowUi("default");
+
+  EXPECT_TRUE(HasView());
+  EXPECT_TRUE(IsDefaultDialog());
+
+  ActiveView()->OnAnsibleSoftwareConfigurationFinished(false);
+
+  EXPECT_NE(nullptr, ActiveView());
+  EXPECT_TRUE(IsErrorOfflineDialog());
+}
+
+IN_PROC_BROWSER_TEST_F(CrostiniAnsibleSoftwareConfigViewBrowserTest,
+                       UnsuccessfulFlow_Offline_CanRetry) {
+  SetConnectionType(network::mojom::ConnectionType::CONNECTION_NONE);
+
+  ShowUi("default");
+
+  EXPECT_TRUE(HasView());
+  EXPECT_TRUE(IsDefaultDialog());
+
+  ActiveView()->OnAnsibleSoftwareConfigurationFinished(false);
+
+  EXPECT_NE(nullptr, ActiveView());
+  EXPECT_TRUE(IsErrorOfflineDialog());
+
+  // Retry button clicked.
+  ActiveView()->AcceptDialog();
+
+  EXPECT_NE(nullptr, ActiveView());
+  EXPECT_TRUE(IsDefaultDialog());
+}
+
+IN_PROC_BROWSER_TEST_F(CrostiniAnsibleSoftwareConfigViewBrowserTest,
+                       UnsuccessfulFlow_Offline_Cancel) {
+  SetConnectionType(network::mojom::ConnectionType::CONNECTION_NONE);
+
+  ShowUi("default");
+
+  EXPECT_TRUE(HasView());
+  EXPECT_TRUE(IsDefaultDialog());
+
+  ActiveView()->OnAnsibleSoftwareConfigurationFinished(false);
+
+  EXPECT_NE(nullptr, ActiveView());
+  EXPECT_TRUE(IsErrorOfflineDialog());
+
+  // Cancel button clicked.
+  ActiveView()->CancelDialog();
+
+  EXPECT_TRUE(HasNoView());
+}
+
+IN_PROC_BROWSER_TEST_F(CrostiniAnsibleSoftwareConfigViewBrowserTest,
+                       AnsibleConfigFlow_Successful) {
+  ansible_management_service()->ConfigureDefaultContainer(base::DoNothing());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(HasView());
+  EXPECT_TRUE(IsDefaultDialog());
+
+  ansible_management_service()->OnInstallLinuxPackageProgress(
+      container_id_, crostini::InstallLinuxPackageProgressStatus::SUCCEEDED,
+      100, /*error_message=*/{});
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_NE(nullptr, ActiveView());
+
+  ansible_management_service()->OnApplyAnsiblePlaybookProgress(
+      vm_tools::cicerone::ApplyAnsiblePlaybookProgressSignal::SUCCEEDED,
+      /*failure_details=*/"");
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(HasNoView());
+}
+
+IN_PROC_BROWSER_TEST_F(CrostiniAnsibleSoftwareConfigViewBrowserTest,
+                       AnsibleConfigFlow_InstallationFailed) {
+  ansible_management_service()->ConfigureDefaultContainer(base::DoNothing());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(HasView());
+  EXPECT_TRUE(IsDefaultDialog());
+
+  ansible_management_service()->OnInstallLinuxPackageProgress(
+      container_id_, crostini::InstallLinuxPackageProgressStatus::FAILED, 0,
+      /*error_message=*/{});
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_NE(nullptr, ActiveView());
+  EXPECT_TRUE(IsErrorDialog());
+}
+
+IN_PROC_BROWSER_TEST_F(CrostiniAnsibleSoftwareConfigViewBrowserTest,
+                       AnsibleConfigFlow_ApplicationFailed) {
+  ansible_management_service()->ConfigureDefaultContainer(base::DoNothing());
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(HasView());
+  EXPECT_TRUE(IsDefaultDialog());
+
+  ansible_management_service()->OnInstallLinuxPackageProgress(
+      container_id_, crostini::InstallLinuxPackageProgressStatus::SUCCEEDED,
+      100, /*error_message=*/{});
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_NE(nullptr, ActiveView());
+
+  ansible_management_service()->OnApplyAnsiblePlaybookProgress(
+      vm_tools::cicerone::ApplyAnsiblePlaybookProgressSignal::FAILED,
+      /*failure_details=*/"");
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_NE(nullptr, ActiveView());
   EXPECT_TRUE(IsErrorDialog());

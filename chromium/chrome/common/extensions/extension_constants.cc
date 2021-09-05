@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/common/extensions/extension_constants.h"
+
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "chrome/common/extensions/extension_constants.h"
+#include "extensions/common/constants.h"
 
 namespace extension_urls {
 
@@ -43,7 +45,6 @@ const char kCroshBuiltinAppId[] = "nkoccljplnhpfnfiajclkommnmllphnl";
 const char kTextEditorAppId[] = "mmfbcljfglbokpmkimbfghdkjmjhdgbg";
 const char kInAppPaymentsSupportAppId[] = "nmmhkkegccagdldgiimedpiccmgmieda";
 const char kMediaRouterStableExtensionId[] = "pkedcjkdefgpdelpbcmbmeomcjbeemfm";
-const char kCloudReportingExtensionId[] = "oempjldejiginopiohodkdoklcjklbaa";
 
 const char* const kBuiltInFirstPartyExtensionIds[] = {
     kCalculatorAppId,
@@ -71,19 +72,17 @@ const char* const kBuiltInFirstPartyExtensionIds[] = {
     kTextEditorAppId,
     kInAppPaymentsSupportAppId,
     kMediaRouterStableExtensionId,
-    kCloudReportingExtensionId,
 #if defined(OS_CHROMEOS)
     kAssessmentAssistantExtensionId,
     kAutoclickExtensionId,
     kSelectToSpeakExtensionId,
     kSwitchAccessExtensionId,
+    kFilesManagerAppId,
     kFirstRunDialogId,
     kEspeakSpeechSynthesisExtensionId,
     kGoogleSpeechSynthesisExtensionId,
     kWallpaperManagerId,
     kZipArchiverExtensionId,
-    kChromeCameraAppId,
-    kChromeCameraAppDevId,
 #endif        // defined(OS_CHROMEOS)
     nullptr,  // Null-terminated array.
 };
@@ -92,12 +91,20 @@ const char* const kBuiltInFirstPartyExtensionIds[] = {
 const char kAssessmentAssistantExtensionId[] =
     "gndmhdcefbhlchkhipcnnbkcmicncehk";
 const char kAutoclickExtensionId[] = "egfdjlfmgnehecnclamagfafdccgfndp";
-const char kAutoclickExtensionPath[] = "chromeos/autoclick";
-const char kChromeVoxExtensionPath[] = "chromeos/chromevox";
+const char kAutoclickExtensionPath[] = "chromeos/accessibility/autoclick";
+const char kChromeVoxExtensionPath[] = "chromeos/accessibility";
+const char kChromeVoxManifestFilename[] = "chromevox_manifest.json";
+const char kChromeVoxGuestManifestFilename[] = "chromevox_manifest_guest.json";
 const char kSelectToSpeakExtensionId[] = "klbcgckkldhdhonijdbnhhaiedfkllef";
-const char kSelectToSpeakExtensionPath[] = "chromeos/select_to_speak";
+const char kSelectToSpeakExtensionPath[] = "chromeos/accessibility";
+const char kSelectToSpeakManifestFilename[] = "select_to_speak_manifest.json";
+const char kSelectToSpeakGuestManifestFilename[] =
+    "select_to_speak_manifest_guest.json";
 const char kSwitchAccessExtensionId[] = "pmehocpgjmkenlokgjfkaichfjdhpeol";
-const char kSwitchAccessExtensionPath[] = "chromeos/switch_access";
+const char kSwitchAccessExtensionPath[] = "chromeos/accessibility";
+const char kSwitchAccessManifestFilename[] = "switch_access_manifest.json";
+const char kSwitchAccessGuestManifestFilename[] =
+    "switch_access_manifest_guest.json";
 const char kGuestManifestFilename[] = "manifest_guest.json";
 const char kConnectivityDiagnosticsPath[] =
     "/usr/share/chromeos-assets/connectivity_diagnostics";
@@ -115,10 +122,7 @@ const char kGoogleSpeechSynthesisExtensionId[] =
 const char kWallpaperManagerId[] = "obklkkbkpaoaejdabbfldmcfplpdgolj";
 const char kZipArchiverExtensionId[] = "dmboannefpncccogfdikhmhpmdnddgoe";
 const char kZipArchiverExtensionPath[] = "chromeos/zip_archiver";
-const char kChromeCameraAppId[] = "hfhhnacclhffhdffklopdkcgdhifgngh";
-const char kChromeCameraAppDevId[] = "flgnmkgjffmkephdokeeliiopbjaafpm";
-const char kChromeCameraAppPath[] = "chromeos/camera";
-
+const char kCameraAppPath[] = "chromeos/camera";
 #endif  // defined(CHROME_OS)
 
 const char kAppStateNotInstalled[] = "not_installed";
@@ -129,4 +133,5 @@ const char kAppStateCannotRun[] = "cannot_run";
 const char kAppStateReadyToRun[] = "ready_to_run";
 
 const char kMediaFileSystemPathPart[] = "_";
+const char kExtensionRequestTimestamp[] = "timestamp";
 }  // namespace extension_misc

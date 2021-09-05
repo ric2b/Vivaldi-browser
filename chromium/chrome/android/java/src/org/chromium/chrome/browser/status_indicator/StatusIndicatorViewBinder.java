@@ -4,11 +4,13 @@
 
 package org.chromium.chrome.browser.status_indicator;
 
+import android.content.res.ColorStateList;
 import android.view.View;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ui.widget.ViewResourceFrameLayout;
+import org.chromium.components.browser_ui.widget.ViewResourceFrameLayout;
+import org.chromium.components.browser_ui.widget.text.TextViewWithCompoundDrawables;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -45,10 +47,24 @@ class StatusIndicatorViewBinder {
             assert view.sceneLayer != null;
             view.sceneLayer.setIsVisible(
                     model.get(StatusIndicatorProperties.COMPOSITED_VIEW_VISIBLE));
-        } else if (StatusIndicatorProperties.ANDROID_VIEW_VISIBLE == propertyKey) {
+        } else if (StatusIndicatorProperties.ANDROID_VIEW_VISIBILITY == propertyKey) {
             view.javaViewRoot.setVisibility(
-                    model.get(StatusIndicatorProperties.ANDROID_VIEW_VISIBLE) ? View.VISIBLE
-                                                                              : View.GONE);
+                    model.get(StatusIndicatorProperties.ANDROID_VIEW_VISIBILITY));
+        } else if (StatusIndicatorProperties.BACKGROUND_COLOR == propertyKey) {
+            view.javaViewRoot.setBackgroundColor(
+                    model.get(StatusIndicatorProperties.BACKGROUND_COLOR));
+        } else if (StatusIndicatorProperties.TEXT_ALPHA == propertyKey) {
+            final View text = view.javaViewRoot.findViewById(R.id.status_text);
+            text.setAlpha(model.get(StatusIndicatorProperties.TEXT_ALPHA));
+        } else if (StatusIndicatorProperties.TEXT_COLOR == propertyKey) {
+            final TextView text = view.javaViewRoot.findViewById(R.id.status_text);
+            text.setTextColor(model.get(StatusIndicatorProperties.TEXT_COLOR));
+        } else if (StatusIndicatorProperties.ICON_TINT == propertyKey) {
+            final TextViewWithCompoundDrawables text =
+                    view.javaViewRoot.findViewById(R.id.status_text);
+            final ColorStateList tint =
+                    ColorStateList.valueOf(model.get(StatusIndicatorProperties.ICON_TINT));
+            text.setDrawableTintColor(tint);
         } else {
             assert false : "Unhandled property detected in StatusIndicatorViewBinder!";
         }

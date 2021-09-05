@@ -120,7 +120,7 @@ StyleImage* CSSImageSetValue::CacheImage(
     options.initiator_info.name = parser_mode_ == kUASheetMode
                                       ? fetch_initiator_type_names::kUacss
                                       : fetch_initiator_type_names::kCSS;
-    FetchParameters params(resource_request, options);
+    FetchParameters params(std::move(resource_request), options);
 
     if (cross_origin != kCrossOriginAttributeNotSet) {
       params.SetCrossOriginAccessControl(document.GetSecurityOrigin(),
@@ -174,7 +174,7 @@ bool CSSImageSetValue::HasFailedOrCanceledSubresources() const {
   return true;
 }
 
-void CSSImageSetValue::TraceAfterDispatch(blink::Visitor* visitor) {
+void CSSImageSetValue::TraceAfterDispatch(blink::Visitor* visitor) const {
   visitor->Trace(cached_image_);
   CSSValueList::TraceAfterDispatch(visitor);
 }

@@ -41,7 +41,7 @@ DummyModulator::DummyModulator()
 
 DummyModulator::~DummyModulator() = default;
 
-void DummyModulator::Trace(blink::Visitor* visitor) {
+void DummyModulator::Trace(Visitor* visitor) {
   visitor->Trace(resolver_);
   Modulator::Trace(visitor);
 }
@@ -63,16 +63,6 @@ bool DummyModulator::ImportMapsEnabled() const {
   return false;
 }
 
-bool DummyModulator::BuiltInModuleInfraEnabled() const {
-  return false;
-}
-
-bool DummyModulator::BuiltInModuleEnabled(blink::layered_api::Module) const {
-  return false;
-}
-
-void DummyModulator::BuiltInModuleUseCount(blink::layered_api::Module) const {}
-
 ModuleRecordResolver* DummyModulator::GetModuleRecordResolver() {
   return resolver_.Get();
 }
@@ -85,6 +75,7 @@ base::SingleThreadTaskRunner* DummyModulator::TaskRunner() {
 void DummyModulator::FetchTree(const KURL&,
                                ResourceFetcher*,
                                mojom::RequestContextType,
+                               network::mojom::RequestDestination,
                                const ScriptFetchOptions&,
                                ModuleScriptCustomFetchType,
                                ModuleTreeClient*) {
@@ -99,10 +90,12 @@ void DummyModulator::FetchSingle(const ModuleScriptFetchRequest&,
   NOTREACHED();
 }
 
-void DummyModulator::FetchDescendantsForInlineScript(ModuleScript*,
-                                                     ResourceFetcher*,
-                                                     mojom::RequestContextType,
-                                                     ModuleTreeClient*) {
+void DummyModulator::FetchDescendantsForInlineScript(
+    ModuleScript*,
+    ResourceFetcher*,
+    mojom::RequestContextType,
+    network::mojom::RequestDestination,
+    ModuleTreeClient*) {
   NOTREACHED();
 }
 
@@ -181,7 +174,8 @@ ScriptValue DummyModulator::ExecuteModule(ModuleScript*, CaptureEvalErrorFlag) {
 }
 
 ModuleScriptFetcher* DummyModulator::CreateModuleScriptFetcher(
-    ModuleScriptCustomFetchType) {
+    ModuleScriptCustomFetchType,
+    util::PassKey<ModuleScriptLoader> pass_key) {
   NOTREACHED();
   return nullptr;
 }

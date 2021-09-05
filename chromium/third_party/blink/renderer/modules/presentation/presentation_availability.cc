@@ -33,8 +33,8 @@ PresentationAvailability::PresentationAvailability(
     ExecutionContext* execution_context,
     const WTF::Vector<KURL>& urls,
     bool value)
-    : ContextLifecycleStateObserver(execution_context),
-      PageVisibilityObserver(To<Document>(execution_context)->GetPage()),
+    : ExecutionContextLifecycleStateObserver(execution_context),
+      PageVisibilityObserver(Document::From(execution_context)->GetPage()),
       urls_(urls),
       value_(value),
       state_(State::kActive) {
@@ -48,7 +48,7 @@ const AtomicString& PresentationAvailability::InterfaceName() const {
 }
 
 ExecutionContext* PresentationAvailability::GetExecutionContext() const {
-  return ContextLifecycleStateObserver::GetExecutionContext();
+  return ExecutionContextLifecycleStateObserver::GetExecutionContext();
 }
 
 void PresentationAvailability::AddedEventListener(
@@ -84,7 +84,7 @@ void PresentationAvailability::ContextLifecycleStateChanged(
     SetState(State::kSuspended);
 }
 
-void PresentationAvailability::ContextDestroyed(ExecutionContext*) {
+void PresentationAvailability::ContextDestroyed() {
   SetState(State::kInactive);
 }
 
@@ -106,7 +106,7 @@ void PresentationAvailability::UpdateListening() {
     return;
 
   if (state_ == State::kActive &&
-      (To<Document>(GetExecutionContext())->IsPageVisible()))
+      (Document::From(GetExecutionContext())->IsPageVisible()))
     controller->GetAvailabilityState()->AddObserver(this);
   else
     controller->GetAvailabilityState()->RemoveObserver(this);
@@ -120,10 +120,10 @@ bool PresentationAvailability::value() const {
   return value_;
 }
 
-void PresentationAvailability::Trace(blink::Visitor* visitor) {
+void PresentationAvailability::Trace(Visitor* visitor) {
   EventTargetWithInlineData::Trace(visitor);
   PageVisibilityObserver::Trace(visitor);
-  ContextLifecycleStateObserver::Trace(visitor);
+  ExecutionContextLifecycleStateObserver::Trace(visitor);
 }
 
 }  // namespace blink

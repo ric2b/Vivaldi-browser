@@ -10,25 +10,25 @@
 #include "third_party/blink/public/mojom/keyboard_lock/keyboard_lock.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/keyboard/keyboard_layout_map.h"
 
 namespace blink {
 
+class ExceptionState;
 class ScriptPromiseResolver;
 
 class KeyboardLayout final : public GarbageCollected<KeyboardLayout>,
-                             public ContextLifecycleObserver {
+                             public ExecutionContextClient {
   USING_GARBAGE_COLLECTED_MIXIN(KeyboardLayout);
 
  public:
   explicit KeyboardLayout(ExecutionContext*);
   virtual ~KeyboardLayout() = default;
 
-  ScriptPromise GetKeyboardLayoutMap(ScriptState*);
+  ScriptPromise GetKeyboardLayoutMap(ScriptState*, ExceptionState&);
 
-  // ContextLifecycleObserver override.
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   // Returns true if the local frame is attached to the renderer.

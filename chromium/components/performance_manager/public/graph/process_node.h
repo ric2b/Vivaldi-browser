@@ -9,6 +9,7 @@
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/process/process.h"
+#include "base/task/task_traits.h"
 #include "components/performance_manager/public/graph/node.h"
 
 namespace base {
@@ -36,7 +37,7 @@ class RenderProcessHostProxy;
 // it.
 class ProcessNode : public Node {
  public:
-  using FrameNodeVisitor = base::Callback<bool(const FrameNode*)>;
+  using FrameNodeVisitor = base::RepeatingCallback<bool(const FrameNode*)>;
   using Observer = ProcessNodeObserver;
   class ObserverDefaultImpl;
 
@@ -81,14 +82,6 @@ class ProcessNode : public Node {
   // of usage). See ProcessNodeObserver::OnMainThreadTaskLoadIsLow.
   virtual bool GetMainThreadTaskLoadIsLow() const = 0;
 
-  // Returns the current renderer process CPU usage. A value of 1.0 can mean 1
-  // core at 100%, or 2 cores at 50% each, for example.
-  virtual double GetCpuUsage() const = 0;
-
-  // Returns the cumulative CPU usage of the renderer process over its entire
-  // lifetime, expressed as CPU seconds.
-  virtual base::TimeDelta GetCumulativeCpuUsage() const = 0;
-
   // Returns the most recently measured private memory footprint of the process.
   // This is roughly private, anonymous, non-discardable, resident or swapped
   // memory in kilobytes. For more details, see https://goo.gl/3kPb9S.
@@ -101,6 +94,9 @@ class ProcessNode : public Node {
   // Returns a proxy to the RenderProcessHost associated with this node. The
   // proxy may only be dereferenced on the UI thread.
   virtual const RenderProcessHostProxy& GetRenderProcessHostProxy() const = 0;
+
+  // Returns the current priority of the process.
+  virtual base::TaskPriority GetPriority() const = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ProcessNode);
@@ -135,6 +131,10 @@ class ProcessNodeObserver {
   // Invoked when the |main_thread_task_load_is_low| property changes.
   virtual void OnMainThreadTaskLoadIsLow(const ProcessNode* process_node) = 0;
 
+  // Invoked when the process priority changes.
+  virtual void OnPriorityChanged(const ProcessNode* process_node,
+                                 base::TaskPriority previous_value) = 0;
+
   // Events with no property changes.
 
   // Fired when all frames in a process have transitioned to being frozen.
@@ -159,6 +159,8 @@ class ProcessNode::ObserverDefaultImpl : public ProcessNodeObserver {
   void OnExpectedTaskQueueingDurationSample(
       const ProcessNode* process_node) override {}
   void OnMainThreadTaskLoadIsLow(const ProcessNode* process_node) override {}
+  void OnPriorityChanged(const ProcessNode* process_node,
+                         base::TaskPriority previous_value) override {}
   void OnAllFramesInProcessFrozen(const ProcessNode* process_node) override {}
 
  private:

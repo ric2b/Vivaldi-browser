@@ -11,9 +11,6 @@ Polymer({
 
   behaviors: [
     settings.RouteObserverBehavior, I18nBehavior, WebUIListenerBehavior,
-    // <if expr="chromeos">
-    CrPngBehavior, LockStateBehavior,
-    // </if>
   ],
 
   properties: {
@@ -25,7 +22,6 @@ Polymer({
       notify: true,
     },
 
-    // <if expr="not chromeos">
     /**
      * This flag is used to conditionally show a set of new sign-in UIs to the
      * profiles that have been migrated to be consistent with the web sign-ins.
@@ -33,25 +29,10 @@ Polymer({
      * this should be removed, and UIs hidden behind it should become default.
      * @private
      */
-    diceEnabled_: {
+    signinAllowed_: {
       type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('diceEnabled');
-      },
-    },
-    // </if>
-
-    /**
-     * This flag is used to conditionally show a set of sync UIs to the
-     * profiles that have been migrated to have a unified consent flow.
-     * TODO(tangltom): In the future when all profiles are completely migrated,
-     * this should be removed, and UIs hidden behind it should become default.
-     * @private
-     */
-    unifiedConsentEnabled_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('unifiedConsentEnabled');
+      value() {
+        return loadTimeData.getBoolean('signinAllowed');
       },
     },
 
@@ -97,13 +78,9 @@ Polymer({
      */
     isProfileActionable_: {
       type: Boolean,
-      value: function() {
+      value() {
         if (!cr.isChromeOS) {
           // Opens profile manager.
-          return true;
-        }
-        if (loadTimeData.getBoolean('showOSSettings')) {
-          // Pre-SplitSettings opens change picture.
           return true;
         }
         // Post-SplitSettings links out to account manager if it is available.
@@ -117,40 +94,6 @@ Polymer({
      * @private
      */
     profileName_: String,
-
-    // <if expr="chromeos">
-    /** @private {string} */
-    profileRowIconClass_: {
-      type: String,
-      value: function() {
-        if (loadTimeData.getBoolean('showOSSettings')) {
-          // Pre-SplitSettings links internally to the change picture subpage.
-          return 'subpage-arrow';
-        } else {
-          // Post-SplitSettings links externally to account manager. If account
-          // manager isn't available the icon will be hidden.
-          return 'icon-external';
-        }
-      },
-      readOnly: true,
-    },
-
-    /** @private {string} */
-    profileRowIconAriaLabel_: {
-      type: String,
-      value: function() {
-        if (loadTimeData.getBoolean('showOSSettings')) {
-          // Pre-SplitSettings.
-          return this.i18n('changePictureTitle');
-        } else {
-          // Post-SplitSettings. If account manager isn't available the icon
-          // will be hidden so the label doesn't matter.
-          return this.i18n('accountManagerSubMenuLabel');
-        }
-      },
-      readOnly: true,
-    },
-    // </if>
 
     // <if expr="not chromeos">
     /** @private {boolean} */
@@ -171,74 +114,20 @@ Polymer({
     /** @private */
     showSignoutDialog_: Boolean,
 
-    // <if expr="chromeos">
-    /**
-     * True if fingerprint settings should be displayed on this machine.
-     * @private
-     */
-    fingerprintUnlockEnabled_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('fingerprintUnlockEnabled');
-      },
-      readOnly: true,
-    },
-
-    /** @private */
-    showParentalControls_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.valueExists('showParentalControls') &&
-            loadTimeData.getBoolean('showParentalControls');
-      },
-    },
-    // </if>
-
     /** @private {!Map<string, string>} */
     focusConfig_: {
       type: Object,
-      value: function() {
+      value() {
         const map = new Map();
         if (settings.routes.SYNC) {
-          map.set(
-              settings.routes.SYNC.path,
-              loadTimeData.getBoolean('unifiedConsentEnabled') ?
-                  '#sync-setup' :
-                  '#sync-status .subpage-arrow');
+          map.set(settings.routes.SYNC.path, '#sync-setup');
         }
         // <if expr="not chromeos">
         if (settings.routes.MANAGE_PROFILE) {
           map.set(
               settings.routes.MANAGE_PROFILE.path,
-              loadTimeData.getBoolean('diceEnabled') ?
-                  '#edit-profile .subpage-arrow' :
-                  '#picture-subpage-trigger .subpage-arrow');
-        }
-        // </if>
-        // <if expr="chromeos">
-        if (settings.routes.CHANGE_PICTURE) {
-          map.set(
-              settings.routes.CHANGE_PICTURE.path,
-              '#picture-subpage-trigger .subpage-arrow');
-        }
-        if (settings.routes.LOCK_SCREEN) {
-          map.set(
-              settings.routes.LOCK_SCREEN.path, '#lock-screen-subpage-trigger');
-        }
-        if (settings.routes.ACCOUNTS) {
-          map.set(
-              settings.routes.ACCOUNTS.path,
-              '#manage-other-people-subpage-trigger');
-        }
-        if (settings.routes.ACCOUNT_MANAGER) {
-          map.set(
-              settings.routes.ACCOUNT_MANAGER.path,
-              '#account-manager-subpage-trigger');
-        }
-        if (settings.routes.KERBEROS_ACCOUNTS) {
-          map.set(
-              settings.routes.KERBEROS_ACCOUNTS.path,
-              '#kerberos-accounts-subpage-trigger');
+              this.signinAllowed_ ? '#edit-profile .subpage-arrow' :
+                                    '#picture-subpage-trigger .subpage-arrow');
         }
         // </if>
         return map;
@@ -250,11 +139,10 @@ Polymer({
   syncBrowserProxy_: null,
 
   /** @override */
-  attached: function() {
+  attached() {
     let useProfileNameAndIcon = true;
     // <if expr="chromeos">
-    if (!loadTimeData.getBoolean('showOSSettings') &&
-        loadTimeData.getBoolean('isAccountManagerEnabled')) {
+    if (loadTimeData.getBoolean('isAccountManagerEnabled')) {
       // If this is SplitSettings and we have the Google Account manager,
       // prefer the GAIA name and icon.
       useProfileNameAndIcon = false;
@@ -264,8 +152,10 @@ Polymer({
     }
     // </if>
     if (useProfileNameAndIcon) {
-      settings.ProfileInfoBrowserProxyImpl.getInstance().getProfileInfo().then(
-          this.handleProfileInfo_.bind(this));
+      /** @type {!settings.ProfileInfoBrowserProxy} */ (
+          settings.ProfileInfoBrowserProxyImpl.getInstance())
+          .getProfileInfo()
+          .then(this.handleProfileInfo_.bind(this));
       this.addWebUIListener(
           'profile-info-changed', this.handleProfileInfo_.bind(this));
     }
@@ -290,16 +180,18 @@ Polymer({
   },
 
   /** @protected */
-  currentRouteChanged: function() {
+  currentRouteChanged() {
     this.showImportDataDialog_ =
-        settings.getCurrentRoute() == settings.routes.IMPORT_DATA;
+        settings.Router.getInstance().getCurrentRoute() ==
+        settings.routes.IMPORT_DATA;
 
-    if (settings.getCurrentRoute() == settings.routes.SIGN_OUT) {
+    if (settings.Router.getInstance().getCurrentRoute() ==
+        settings.routes.SIGN_OUT) {
       // If the sync status has not been fetched yet, optimistically display
       // the sign-out dialog. There is another check when the sync status is
       // fetched. The dialog will be closed when the user is not signed in.
       if (this.syncStatus && !this.syncStatus.signedIn) {
-        settings.navigateToPreviousRoute();
+        settings.Router.getInstance().navigateToPreviousRoute();
       } else {
         this.showSignoutDialog_ = true;
       }
@@ -310,29 +202,16 @@ Polymer({
    * @return {!Element}
    * @private
    */
-  getEditPersonAssocControl_: function() {
-    return this.diceEnabled_ ? assert(this.$$('#edit-profile')) :
-                               assert(this.$$('#picture-subpage-trigger'));
+  getEditPersonAssocControl_() {
+    return this.signinAllowed_ ? assert(this.$$('#edit-profile')) :
+                                 assert(this.$$('#picture-subpage-trigger'));
   },
-
-  // <if expr="chromeos">
-  /** @private */
-  getPasswordState_: function(hasPin, enableScreenLock) {
-    if (!enableScreenLock) {
-      return this.i18n('lockScreenNone');
-    }
-    if (hasPin) {
-      return this.i18n('lockScreenPinOrPassword');
-    }
-    return this.i18n('lockScreenPasswordOnly');
-  },
-  // </if>
 
   /**
    * @return {string}
    * @private
    */
-  getSyncAndGoogleServicesSubtext_: function() {
+  getSyncAndGoogleServicesSubtext_() {
     if (this.syncStatus && this.syncStatus.hasError &&
         this.syncStatus.statusText) {
       return this.syncStatus.statusText;
@@ -345,7 +224,7 @@ Polymer({
    * @private
    * @param {!settings.ProfileInfo} info
    */
-  handleProfileInfo_: function(info) {
+  handleProfileInfo_(info) {
     this.profileName_ = info.name;
     /**
      * Extract first frame from image by creating a single frame PNG using
@@ -353,8 +232,7 @@ Polymer({
      */
     // <if expr="chromeos">
     if (info.iconUrl.startsWith('data:image/png;base64')) {
-      this.profileIconUrl_ =
-          CrPngBehavior.convertImageSequenceToPng([info.iconUrl]);
+      this.profileIconUrl_ = cr.png.convertImageSequenceToPng([info.iconUrl]);
       return;
     }
     // </if>
@@ -388,12 +266,12 @@ Polymer({
    * @param {?settings.SyncStatus} syncStatus
    * @private
    */
-  handleSyncStatus_: function(syncStatus) {
+  handleSyncStatus_(syncStatus) {
     // Sign-in impressions should be recorded only if the sign-in promo is
     // shown. They should be recorder only once, the first time
     // |this.syncStatus| is set.
-    const shouldRecordSigninImpression =
-        !this.syncStatus && syncStatus && this.showSignin_(syncStatus);
+    const shouldRecordSigninImpression = !this.syncStatus && syncStatus &&
+        this.signinAllowed_ && !syncStatus.signedIn;
 
     this.syncStatus = syncStatus;
 
@@ -408,7 +286,7 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  computeShouldShowGoogleAccount_: function() {
+  computeShouldShowGoogleAccount_() {
     if (this.storedAccounts === undefined || this.syncStatus === undefined) {
       return false;
     }
@@ -419,151 +297,53 @@ Polymer({
   // </if>
 
   /** @private */
-  onProfileTap_: function() {
+  onProfileTap_() {
     // <if expr="chromeos">
-    if (loadTimeData.getBoolean('showOSSettings')) {
-      // Pre-SplitSettings.
-      settings.navigateTo(settings.routes.CHANGE_PICTURE);
-    } else if (loadTimeData.getBoolean('isAccountManagerEnabled')) {
+    if (loadTimeData.getBoolean('isAccountManagerEnabled')) {
       // Post-SplitSettings. The browser C++ code loads OS settings in a window.
       // Don't use window.open() because that creates an extra empty tab.
       window.location.href = 'chrome://os-settings/accountManager';
     }
     // </if>
     // <if expr="not chromeos">
-    settings.navigateTo(settings.routes.MANAGE_PROFILE);
+    settings.Router.getInstance().navigateTo(settings.routes.MANAGE_PROFILE);
     // </if>
   },
 
   /** @private */
-  onSigninTap_: function() {
-    this.syncBrowserProxy_.startSignIn();
-  },
-
-  /** @private */
-  onDisconnectDialogClosed_: function(e) {
+  onDisconnectDialogClosed_(e) {
     this.showSignoutDialog_ = false;
-    // <if expr="not chromeos">
-    if (!this.diceEnabled_) {
-      // If DICE-enabled, this button won't exist here.
-      cr.ui.focusWithoutInk(assert(this.$$('#disconnectButton')));
-    }
-    // </if>
 
-    // <if expr="chromeos">
-    cr.ui.focusWithoutInk(assert(this.$$('#disconnectButton')));
-    // </if>
-
-    if (settings.getCurrentRoute() == settings.routes.SIGN_OUT) {
-      settings.navigateToPreviousRoute();
+    if (settings.Router.getInstance().getCurrentRoute() ==
+        settings.routes.SIGN_OUT) {
+      settings.Router.getInstance().navigateToPreviousRoute();
     }
   },
 
   /** @private */
-  onDisconnectTap_: function() {
-    settings.navigateTo(settings.routes.SIGN_OUT);
+  onSyncTap_() {
+    // Users can go to sync subpage regardless of sync status.
+    settings.Router.getInstance().navigateTo(settings.routes.SYNC);
   },
-
-  /** @private */
-  onSyncTap_: function() {
-    // When unified-consent is enabled, users can go to sync subpage regardless
-    // of sync status.
-    if (this.unifiedConsentEnabled_) {
-      settings.navigateTo(settings.routes.SYNC);
-      return;
-    }
-
-    // TODO(crbug.com/862983): Remove this code once UnifiedConsent is rolled
-    // out to 100%.
-    assert(this.syncStatus.signedIn);
-    assert(this.syncStatus.syncSystemEnabled);
-
-    if (!this.isSyncStatusActionable_(this.syncStatus)) {
-      return;
-    }
-
-    switch (this.syncStatus.statusAction) {
-      case settings.StatusAction.REAUTHENTICATE:
-        this.syncBrowserProxy_.startSignIn();
-        break;
-      case settings.StatusAction.SIGNOUT_AND_SIGNIN:
-        // <if expr="chromeos">
-        this.syncBrowserProxy_.attemptUserExit();
-        // </if>
-        // <if expr="not chromeos">
-        if (this.syncStatus.domain) {
-          settings.navigateTo(settings.routes.SIGN_OUT);
-        } else {
-          // Silently sign the user out without deleting their profile and
-          // prompt them to sign back in.
-          this.syncBrowserProxy_.signOut(false);
-          this.syncBrowserProxy_.startSignIn();
-        }
-        // </if>
-        break;
-      case settings.StatusAction.UPGRADE_CLIENT:
-        settings.navigateTo(settings.routes.ABOUT);
-        break;
-      case settings.StatusAction.ENTER_PASSPHRASE:
-      case settings.StatusAction.CONFIRM_SYNC_SETTINGS:
-      case settings.StatusAction.NO_ACTION:
-      default:
-        settings.navigateTo(settings.routes.SYNC);
-    }
-  },
-
-  // <if expr="chromeos">
-  /**
-   * @param {!Event} e
-   * @private
-   */
-  onConfigureLockTap_: function(e) {
-    // Navigating to the lock screen will always open the password prompt
-    // dialog, so prevent the end of the tap event to focus what is underneath
-    // it, which takes focus from the dialog.
-    e.preventDefault();
-    settings.navigateTo(settings.routes.LOCK_SCREEN);
-  },
-
-  /**
-   * @param {!Event} e
-   * @private
-   */
-  onAccountManagerTap_: function(e) {
-    settings.navigateTo(settings.routes.ACCOUNT_MANAGER);
-  },
-
-  /**
-   * @param {!Event} e
-   * @private
-   */
-  onKerberosAccountsTap_: function(e) {
-    settings.navigateTo(settings.routes.KERBEROS_ACCOUNTS);
-  },
-
-  /** @private */
-  onManageOtherPeople_: function() {
-    settings.navigateTo(settings.routes.ACCOUNTS);
-  },
-  // </if>
 
   // <if expr="not chromeos">
   /** @private */
-  onImportDataTap_: function() {
-    settings.navigateTo(settings.routes.IMPORT_DATA);
+  onImportDataTap_() {
+    settings.Router.getInstance().navigateTo(settings.routes.IMPORT_DATA);
   },
 
   /** @private */
-  onImportDataDialogClosed_: function() {
-    settings.navigateToPreviousRoute();
+  onImportDataDialogClosed_() {
+    settings.Router.getInstance().navigateToPreviousRoute();
     cr.ui.focusWithoutInk(assert(this.$.importDataDialogTrigger));
   },
+  // </if>
 
   /**
    * Open URL for managing your Google Account.
    * @private
    */
-  openGoogleAccount_: function() {
+  openGoogleAccount_() {
     settings.OpenWindowProxyImpl.getInstance().openURL(
         loadTimeData.getString('googleAccountUrl'));
     chrome.metricsPrivate.recordUserAction('ManageGoogleAccount_Clicked');
@@ -573,98 +353,16 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  shouldShowSyncAccountControl_: function() {
+  shouldShowSyncAccountControl_() {
     if (this.syncStatus == undefined) {
       return false;
     }
-
-    return this.diceEnabled_ && !!this.syncStatus.syncSystemEnabled &&
-        !!this.syncStatus.signinAllowed;
-  },
-  // </if>
-
-  /**
-   * @private
-   * @param {?settings.SyncStatus} syncStatus
-   * @return {boolean}
-   */
-  isPreUnifiedConsentAdvancedSyncSettingsVisible_: function(syncStatus) {
-    return !!syncStatus && !!syncStatus.signedIn &&
-        !!syncStatus.syncSystemEnabled && !this.unifiedConsentEnabled_;
-  },
-
-  /**
-   * @private
-   * @param {?settings.SyncStatus} syncStatus
-   * @return {boolean}
-   */
-  isAdvancedSyncSettingsSearchable_: function(syncStatus) {
-    return this.isPreUnifiedConsentAdvancedSyncSettingsVisible_(syncStatus) ||
-        !!this.unifiedConsentEnabled_;
-  },
-
-  /**
-   * @private
-   * @return {Element|null}
-   */
-  getAdvancedSyncSettingsAssociatedControl_: function() {
-    return this.unifiedConsentEnabled_ ? this.$$('#sync-setup') :
-                                         this.$$('#sync-status');
-  },
-
-  /**
-   * @private
-   * @param {?settings.SyncStatus} syncStatus
-   * @return {boolean} Whether an action can be taken with the sync status. sync
-   *     status is actionable if sync is not managed and if there is a sync
-   *     error, there is an action associated with it.
-   */
-  isSyncStatusActionable_: function(syncStatus) {
-    return !!syncStatus && !syncStatus.managed &&
-        (!syncStatus.hasError ||
-         syncStatus.statusAction != settings.StatusAction.NO_ACTION);
-  },
-
-  /**
-   * @private
-   * @param {?settings.SyncStatus} syncStatus
-   * @return {string}
-   */
-  getSyncIcon_: function(syncStatus) {
-    if (!syncStatus) {
-      return '';
+    // <if expr="chromeos">
+    if (!loadTimeData.getBoolean('splitSyncConsent')) {
+      return false;
     }
-
-    let syncIcon = 'cr:sync';
-
-    if (syncStatus.hasError) {
-      syncIcon = 'settings:sync-problem';
-    }
-
-    // Override the icon to the disabled icon if sync is managed.
-    if (syncStatus.managed ||
-        syncStatus.statusAction == settings.StatusAction.REAUTHENTICATE) {
-      syncIcon = 'settings:sync-disabled';
-    }
-
-    return syncIcon;
-  },
-
-  /**
-   * @private
-   * @param {?settings.SyncStatus} syncStatus
-   * @return {string} The class name for the sync status row.
-   */
-  getSyncStatusClass_: function(syncStatus) {
-    if (syncStatus && syncStatus.hasError) {
-      // Most of the time re-authenticate states are caused by intentional user
-      // action, so they will be displayed differently as other errors.
-      return syncStatus.statusAction == settings.StatusAction.REAUTHENTICATE ?
-          'auth-error' :
-          'sync-error';
-    }
-
-    return 'no-error';
+    // </if>
+    return !!this.syncStatus.syncSystemEnabled && this.signinAllowed_;
   },
 
   /**
@@ -672,28 +370,7 @@ Polymer({
    * @return {string} A CSS image-set for multiple scale factors.
    * @private
    */
-  getIconImageSet_: function(iconUrl) {
+  getIconImageSet_(iconUrl) {
     return cr.icon.getImage(iconUrl);
-  },
-
-  /**
-   * @param {!settings.SyncStatus} syncStatus
-   * @return {boolean} Whether to show the "Sign in to Chrome" button.
-   * @private
-   */
-  showSignin_: function(syncStatus) {
-    return !!syncStatus.signinAllowed && !syncStatus.signedIn;
-  },
-
-  /**
-   * Looks up the translation id, which depends on PIN login support.
-   * @param {boolean} hasPinLogin
-   * @private
-   */
-  selectLockScreenTitleString(hasPinLogin) {
-    if (hasPinLogin) {
-      return this.i18n('lockScreenTitleLoginLock');
-    }
-    return this.i18n('lockScreenTitleLock');
   },
 });

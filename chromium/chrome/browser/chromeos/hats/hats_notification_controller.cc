@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -26,6 +27,7 @@
 #include "chromeos/network/network_state.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -72,10 +74,6 @@ bool IsNewDevice() {
          kHatsNewDeviceThreshold;
 }
 
-bool IsGoogleUser(std::string username) {
-  return username.find("@google.com") != std::string::npos;
-}
-
 // Returns true if the |kForceHappinessTrackingSystem| flag is enabled.
 bool IsTestingEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -93,9 +91,8 @@ HatsNotificationController::HatsNotificationController(Profile* profile)
     : profile_(profile) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&IsNewDevice),
       base::BindOnce(&HatsNotificationController::Initialize,
                      weak_pointer_factory_.GetWeakPtr()));
@@ -145,11 +142,14 @@ bool HatsNotificationController::ShouldShowSurveyToProfile(Profile* profile) {
                                           ->IsEnterpriseManaged();
 
   // Do not show survey if this is a non dogfood enterprise enrolled device.
-  if (is_enterprise_enrolled && !IsGoogleUser(profile->GetProfileUserName()))
+  if (is_enterprise_enrolled &&
+      !gaia::IsGoogleInternalAccountEmail(profile->GetProfileUserName()))
     return false;
 
   // In an enterprise enrolled device, the user can never be the owner, hence
   // only check for ownership on a non enrolled device.
+  // TODO(crbug/1060436): Remove the IsOwnerProfile() check so that HaTS is
+  // enabled for all users, not just device owners.
   if (!is_enterprise_enrolled && !ProfileHelper::IsOwnerProfile(profile))
     return false;
 
@@ -158,9 +158,10 @@ bool HatsNotificationController::ShouldShowSurveyToProfile(Profile* profile) {
   if (!hats_finch_helper.IsDeviceSelectedForCurrentCycle())
     return false;
 
-  base::TimeDelta threshold_time = IsGoogleUser(profile->GetProfileUserName())
-                                       ? kHatsGooglerThreshold
-                                       : kHatsThreshold;
+  base::TimeDelta threshold_time =
+      gaia::IsGoogleInternalAccountEmail(profile->GetProfileUserName())
+          ? kHatsGooglerThreshold
+          : kHatsThreshold;
   // Do not show survey to user if user has interacted with HaTS within the past
   // |threshold_time| time delta.
   if (DidShowSurveyToProfileRecently(profile, threshold_time))
@@ -177,7 +178,8 @@ void HatsNotificationController::Click(
   UpdateLastInteractionTime();
 
   // The dialog deletes itself on close.
-  HatsDialog::CreateAndShow(IsGoogleUser(profile_->GetProfileUserName()));
+  HatsDialog::CreateAndShow(
+      gaia::IsGoogleInternalAccountEmail(profile_->GetProfileUserName()));
 
   // Remove the notification.
   network_portal_detector::GetInstance()->RemoveObserver(this);

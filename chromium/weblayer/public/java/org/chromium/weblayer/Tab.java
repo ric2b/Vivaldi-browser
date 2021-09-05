@@ -15,24 +15,24 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import org.chromium.weblayer_private.interfaces.APICallException;
-import org.chromium.weblayer_private.interfaces.IDownloadCallbackClient;
 import org.chromium.weblayer_private.interfaces.IErrorPageCallbackClient;
 import org.chromium.weblayer_private.interfaces.IFullscreenCallbackClient;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
 import org.chromium.weblayer_private.interfaces.ITab;
 import org.chromium.weblayer_private.interfaces.ITabClient;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
+import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Represents a single tab in a browser. More specifically, owns a NavigationController, and allows
  * configuring state of the tab, such as delegates and callbacks.
  */
-public final class Tab {
+public class Tab {
     /** The top level key of the JSON object returned by executeScript(). */
     public static final String SCRIPT_RESULT_KEY = "result";
 
@@ -40,15 +40,24 @@ public final class Tab {
     private static final Map<Integer, Tab> sTabMap = new HashMap<Integer, Tab>();
 
     private final ITab mImpl;
-    private FullscreenCallbackClientImpl mFullscreenCallbackClient;
     private final NavigationController mNavigationController;
+    private final FindInPageController mFindInPageController;
     private final ObserverList<TabCallback> mCallbacks;
     private Browser mBrowser;
-    private DownloadCallbackClientImpl mDownloadCallbackClient;
-    private ErrorPageCallbackClientImpl mErrorPageCallbackClient;
+    private Profile.DownloadCallbackClientImpl mDownloadCallbackClient;
+    private FullscreenCallbackClientImpl mFullscreenCallbackClient;
     private NewTabCallback mNewTabCallback;
     // Id from the remote side.
     private final int mId;
+
+    // Constructor for test mocking.
+    protected Tab() {
+        mImpl = null;
+        mNavigationController = null;
+        mFindInPageController = null;
+        mCallbacks = null;
+        mId = 0;
+    }
 
     Tab(ITab impl, Browser browser) {
         mImpl = impl;
@@ -62,6 +71,7 @@ public final class Tab {
 
         mCallbacks = new ObserverList<TabCallback>();
         mNavigationController = NavigationController.create(mImpl);
+        mFindInPageController = new FindInPageController(mImpl);
         registerTab(this);
     }
 
@@ -79,8 +89,8 @@ public final class Tab {
         return sTabMap.get(id);
     }
 
-    static List<Tab> getTabsInBrowser(Browser browser) {
-        List<Tab> tabs = new ArrayList<Tab>();
+    static Set<Tab> getTabsInBrowser(Browser browser) {
+        Set<Tab> tabs = new HashSet<Tab>();
         for (Tab tab : sTabMap.values()) {
             if (tab.getBrowser() == browser) tabs.add(tab);
         }
@@ -101,11 +111,14 @@ public final class Tab {
         return mBrowser;
     }
 
+    /**
+     * Deprecated. Use Profile.setDownloadCallback instead.
+     */
     public void setDownloadCallback(@Nullable DownloadCallback callback) {
         ThreadCheck.ensureOnUiThread();
         try {
             if (callback != null) {
-                mDownloadCallbackClient = new DownloadCallbackClientImpl(callback);
+                mDownloadCallbackClient = new Profile.DownloadCallbackClientImpl(callback);
                 mImpl.setDownloadCallbackClient(mDownloadCallbackClient);
             } else {
                 mDownloadCallbackClient = null;
@@ -119,13 +132,8 @@ public final class Tab {
     public void setErrorPageCallback(@Nullable ErrorPageCallback callback) {
         ThreadCheck.ensureOnUiThread();
         try {
-            if (callback != null) {
-                mErrorPageCallbackClient = new ErrorPageCallbackClientImpl(callback);
-                mImpl.setErrorPageCallbackClient(mErrorPageCallbackClient);
-            } else {
-                mErrorPageCallbackClient = null;
-                mImpl.setErrorPageCallbackClient(null);
-            }
+            mImpl.setErrorPageCallbackClient(
+                    callback == null ? null : new ErrorPageCallbackClientImpl(callback));
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
@@ -144,12 +152,6 @@ public final class Tab {
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
-    }
-
-    @Nullable
-    public DownloadCallback getDownloadCallback() {
-        ThreadCheck.ensureOnUiThread();
-        return mDownloadCallbackClient != null ? mDownloadCallbackClient.getCallback() : null;
     }
 
     /**
@@ -185,6 +187,56 @@ public final class Tab {
         }
     }
 
+    /**
+     * Runs the beforeunload handler for the main frame or any sub frame, if necessary; otherwise,
+     * asynchronously closes the tab.
+     *
+     * If there is a beforeunload handler a dialog is shown to the user which will allow them to
+     * choose whether to proceed with closing the tab. The closure will be notified via {@link
+     * NewTabCallback#onCloseTab}. The tab will not close if the user chooses to cancel the action.
+     * If there is no beforeunload handler, the tab closure will be asynchronous (but immediate) and
+     * will be notified in the same way.
+     *
+     * To close the tab synchronously without running beforeunload, use {@link Browser#destroyTab}.
+     *
+     * @since 82
+     */
+    public void dispatchBeforeUnloadAndClose() {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 82) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            mImpl.dispatchBeforeUnloadAndClose();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Dismisses one active transient UI, if any.
+     *
+     * This is useful, for example, to handle presses on the system back button. UI such as tab
+     * modal dialogs, text selection popups and fullscreen will be dismissed. At most one piece of
+     * UI will be dismissed, but this distinction isn't very meaningful in practice since only one
+     * such kind of UI would tend to be active at a time.
+     *
+     * @return true if some piece of UI was dismissed, or false if nothing happened.
+     *
+     * @since 82
+     */
+    public boolean dismissTransientUi() {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 82) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mImpl.dismissTransientUi();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
     public void setNewTabCallback(@Nullable NewTabCallback callback) {
         ThreadCheck.ensureOnUiThread();
         mNewTabCallback = callback;
@@ -207,6 +259,12 @@ public final class Tab {
         return mNavigationController;
     }
 
+    @NonNull
+    public FindInPageController getFindInPageController() {
+        ThreadCheck.ensureOnUiThread();
+        return mFindInPageController;
+    }
+
     public void registerTabCallback(@Nullable TabCallback callback) {
         ThreadCheck.ensureOnUiThread();
         mCallbacks.addObserver(callback);
@@ -221,9 +279,29 @@ public final class Tab {
         return mImpl;
     }
 
+    /**
+     * Returns a unique id that persists across restarts.
+     *
+     * @return the unique id.
+     * @since 82
+     */
+    @NonNull
+    public String getGuid() {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 82) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mImpl.getGuid();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
     private final class TabClientImpl extends ITabClient.Stub {
         @Override
         public void visibleUriChanged(String uriString) {
+            StrictModeWorkaround.apply();
             Uri uri = Uri.parse(uriString);
             for (TabCallback callback : mCallbacks) {
                 callback.onVisibleUriChanged(uri);
@@ -232,6 +310,7 @@ public final class Tab {
 
         @Override
         public void onNewTab(int tabId, int mode) {
+            StrictModeWorkaround.apply();
             // This should only be hit if setNewTabCallback() has been called with a non-null
             // value.
             assert mNewTabCallback != null;
@@ -244,6 +323,7 @@ public final class Tab {
 
         @Override
         public void onCloseTab() {
+            StrictModeWorkaround.apply();
             // This should only be hit if setNewTabCallback() has been called with a non-null
             // value.
             assert mNewTabCallback != null;
@@ -252,28 +332,44 @@ public final class Tab {
 
         @Override
         public void onRenderProcessGone() {
+            StrictModeWorkaround.apply();
             for (TabCallback callback : mCallbacks) {
                 callback.onRenderProcessGone();
             }
         }
-    }
 
-    private static final class DownloadCallbackClientImpl extends IDownloadCallbackClient.Stub {
-        private final DownloadCallback mCallback;
-
-        DownloadCallbackClientImpl(DownloadCallback callback) {
-            mCallback = callback;
-        }
-
-        public DownloadCallback getCallback() {
-            return mCallback;
+        @Override
+        public void showContextMenu(IObjectWrapper pageUrl, IObjectWrapper linkUrl,
+                IObjectWrapper linkText, IObjectWrapper titleOrAltText, IObjectWrapper srcUrl) {
+            StrictModeWorkaround.apply();
+            String pageUrlString = ObjectWrapper.unwrap(pageUrl, String.class);
+            String linkUrlString = ObjectWrapper.unwrap(linkUrl, String.class);
+            String srcUrlString = ObjectWrapper.unwrap(srcUrl, String.class);
+            ContextMenuParams params = new ContextMenuParams(Uri.parse(pageUrlString),
+                    linkUrlString != null ? Uri.parse(linkUrlString) : null,
+                    ObjectWrapper.unwrap(linkText, String.class),
+                    ObjectWrapper.unwrap(titleOrAltText, String.class),
+                    srcUrlString != null ? Uri.parse(srcUrlString) : null);
+            for (TabCallback callback : mCallbacks) {
+                callback.showContextMenu(params);
+            }
         }
 
         @Override
-        public boolean interceptDownload(String uriString, String userAgent,
-                String contentDisposition, String mimetype, long contentLength) {
-            return mCallback.onInterceptDownload(
-                    Uri.parse(uriString), userAgent, contentDisposition, mimetype, contentLength);
+        public void onTabModalStateChanged(boolean isTabModalShowing) {
+            StrictModeWorkaround.apply();
+            for (TabCallback callback : mCallbacks) {
+                callback.onTabModalStateChanged(isTabModalShowing);
+            }
+        }
+
+        @Override
+        public void onTitleUpdated(IObjectWrapper title) {
+            StrictModeWorkaround.apply();
+            String titleString = ObjectWrapper.unwrap(title, String.class);
+            for (TabCallback callback : mCallbacks) {
+                callback.onTitleUpdated(titleString);
+            }
         }
     }
 
@@ -290,6 +386,7 @@ public final class Tab {
 
         @Override
         public boolean onBackToSafety() {
+            StrictModeWorkaround.apply();
             return mCallback.onBackToSafety();
         }
     }
@@ -307,6 +404,7 @@ public final class Tab {
 
         @Override
         public void enterFullscreen(IObjectWrapper exitFullscreenWrapper) {
+            StrictModeWorkaround.apply();
             ValueCallback<Void> exitFullscreenCallback = (ValueCallback<Void>) ObjectWrapper.unwrap(
                     exitFullscreenWrapper, ValueCallback.class);
             mCallback.onEnterFullscreen(() -> exitFullscreenCallback.onReceiveValue(null));
@@ -314,6 +412,7 @@ public final class Tab {
 
         @Override
         public void exitFullscreen() {
+            StrictModeWorkaround.apply();
             mCallback.onExitFullscreen();
         }
     }

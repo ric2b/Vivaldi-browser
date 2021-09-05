@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "v8/include/v8.h"
 
@@ -49,7 +50,7 @@ class SecurityOrigin;
 class LocalWindowProxy final : public WindowProxy {
  public:
   LocalWindowProxy(v8::Isolate*, LocalFrame&, scoped_refptr<DOMWrapperWorld>);
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   v8::Local<v8::Context> ContextIfInitialized() const {
     return script_state_ ? script_state_->GetContext()
@@ -107,11 +108,12 @@ class LocalWindowProxy final : public WindowProxy {
   Member<ScriptState> script_state_;
 };
 
-DEFINE_TYPE_CASTS(LocalWindowProxy,
-                  WindowProxy,
-                  windowProxy,
-                  windowProxy->IsLocal(),
-                  windowProxy.IsLocal());
+template <>
+struct DowncastTraits<LocalWindowProxy> {
+  static bool AllowFrom(const WindowProxy& windowProxy) {
+    return windowProxy.IsLocal();
+  }
+};
 
 }  // namespace blink
 

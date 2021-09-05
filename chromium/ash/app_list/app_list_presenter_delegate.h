@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include "ash/app_list/app_list_export.h"
+#include "base/scoped_observer.h"
 
 namespace aura {
 class Window;
@@ -49,6 +50,9 @@ class APP_LIST_EXPORT AppListPresenterDelegate {
   // Returns whether the on-screen keyboard is shown.
   virtual bool GetOnScreenKeyboardShown() = 0;
 
+  // Returns the container parent of the given window.
+  virtual aura::Window* GetContainerForWindow(aura::Window* window) = 0;
+
   // Returns the root Window for the given display id. If there is no display
   // for |display_id| null is returned.
   virtual aura::Window* GetRootWindowForDisplayId(int64_t display_id) = 0;
@@ -60,7 +64,7 @@ class APP_LIST_EXPORT AppListPresenterDelegate {
   virtual void OnVisibilityWillChange(bool visible, int64_t display_id) = 0;
 
   // Whether the AppList is visible.
-  virtual bool IsVisible() = 0;
+  virtual bool IsVisible(const base::Optional<int64_t>& display_id) = 0;
 };
 
 }  // namespace ash

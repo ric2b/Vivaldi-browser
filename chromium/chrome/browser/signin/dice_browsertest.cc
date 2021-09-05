@@ -23,6 +23,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/extensions/api/identity/web_auth_flow.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_internal.h"
 #include "chrome/browser/profiles/profile.h"
@@ -116,12 +117,11 @@ class BlockedHttpResponse : public net::test_server::BasicHttpResponse {
       base::OnceCallback<void(base::OnceClosure)> callback)
       : callback_(std::move(callback)) {}
 
-  void SendResponse(
-      const net::test_server::SendBytesCallback& send,
-      const net::test_server::SendCompleteCallback& done) override {
+  void SendResponse(const net::test_server::SendBytesCallback& send,
+                    net::test_server::SendCompleteCallback done) override {
     // Called on the IO thread to unblock the response.
     base::OnceClosure unblock_io_thread =
-        base::BindOnce(send, ToResponseString(), done);
+        base::BindOnce(send, ToResponseString(), std::move(done));
     // Unblock the response from any thread by posting a task to the IO thread.
     base::OnceClosure unblock_any_thread =
         base::BindOnce(base::IgnoreResult(&base::TaskRunner::PostTask),
@@ -366,14 +366,14 @@ class DiceBrowserTest : public InProcessBrowserTest,
 
   // Returns the account ID associated with |main_email_| and its associated
   // gaia ID.
-  std::string GetMainAccountID() {
+  CoreAccountId GetMainAccountID() {
     return GetIdentityManager()->PickAccountIdForAccount(
         signin::GetTestGaiaIdForEmail(main_email_), main_email_);
   }
 
   // Returns the account ID associated with kSecondaryEmail and its associated
   // gaia ID.
-  std::string GetSecondaryAccountID() {
+  CoreAccountId GetSecondaryAccountID() {
     return GetIdentityManager()->PickAccountIdForAccount(
         signin::GetTestGaiaIdForEmail(kSecondaryEmail), kSecondaryEmail);
   }
@@ -780,6 +780,46 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, MAYBE_NoDiceFromWebUI) {
   WaitForReconcilorUnblockedCount(0);
 }
 
+IN_PROC_BROWSER_TEST_F(DiceBrowserTest, DiceExtensionConsent) {
+  // Signin from extension consent flow.
+  class DummyDelegate : public extensions::WebAuthFlow::Delegate {
+   public:
+    void OnAuthFlowFailure(extensions::WebAuthFlow::Failure failure) override {}
+    ~DummyDelegate() override = default;
+  };
+
+  DummyDelegate delegate;
+  auto web_auth_flow = std::make_unique<extensions::WebAuthFlow>(
+      &delegate, browser()->profile(), https_server_.GetURL(kSigninURL),
+      extensions::WebAuthFlow::INTERACTIVE);
+  web_auth_flow->Start();
+
+  // Check that the token was requested and added to the token service.
+  SendRefreshTokenResponse();
+  EXPECT_TRUE(
+      GetIdentityManager()->HasAccountWithRefreshToken(GetMainAccountID()));
+
+  // Check that the Dice request header was sent.
+  std::string client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
+  EXPECT_EQ(base::StringPrintf("version=%s,client_id=%s,device_id=%s,"
+                               "signin_mode=all_accounts,"
+                               "signout_mode=show_confirmation",
+                               signin::kDiceProtocolVersion, client_id.c_str(),
+                               GetDeviceId().c_str()),
+            dice_request_header_);
+
+  // Sync should not be enabled.
+  EXPECT_TRUE(GetIdentityManager()->GetPrimaryAccountId().empty());
+
+  EXPECT_EQ(1, reconcilor_blocked_count_);
+  WaitForReconcilorUnblockedCount(1);
+  EXPECT_EQ(1, reconcilor_started_count_);
+
+  // Delete the web auth flow (uses DeleteSoon).
+  web_auth_flow.release()->DetachDelegateAndDelete();
+  base::RunLoop().RunUntilIdle();
+}
+
 // Tests that Sync is enabled if the ENABLE_SYNC response is received after the
 // refresh token.
 IN_PROC_BROWSER_TEST_F(DiceBrowserTest, EnableSyncAfterToken) {
@@ -787,7 +827,7 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, EnableSyncAfterToken) {
 
   // Signin using the Chrome Sync endpoint.
   browser()->signin_view_controller()->ShowSignin(
-      profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN, browser(),
+      profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN,
       signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
 
   // Receive token.
@@ -824,7 +864,7 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, EnableSyncAfterToken) {
   ntp_url_observer.Wait();
 
   // Dismiss the Sync confirmation UI.
-  EXPECT_TRUE(login_ui_test_utils::DismissSyncConfirmationDialog(
+  EXPECT_TRUE(login_ui_test_utils::ConfirmSyncConfirmationDialog(
       browser(), base::TimeDelta::FromSeconds(30)));
 }
 
@@ -839,7 +879,7 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, EnableSyncBeforeToken) {
 
   // Signin using the Chrome Sync endpoint.
   browser()->signin_view_controller()->ShowSignin(
-      profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN, browser(),
+      profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN,
       signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS);
 
   // Receive ENABLE_SYNC.
@@ -878,7 +918,7 @@ IN_PROC_BROWSER_TEST_F(DiceBrowserTest, EnableSyncBeforeToken) {
   ntp_url_observer.Wait();
 
   // Dismiss the Sync confirmation UI.
-  EXPECT_TRUE(login_ui_test_utils::DismissSyncConfirmationDialog(
+  EXPECT_TRUE(login_ui_test_utils::ConfirmSyncConfirmationDialog(
       browser(), base::TimeDelta::FromSeconds(30)));
 }
 

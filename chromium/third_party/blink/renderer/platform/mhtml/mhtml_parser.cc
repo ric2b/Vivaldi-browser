@@ -124,7 +124,7 @@ class MIMEHeader final : public GarbageCollected<MIMEHeader> {
   String EndOfPartBoundary() const { return end_of_part_boundary_; }
   String EndOfDocumentBoundary() const { return end_of_document_boundary_; }
 
-  void Trace(blink::Visitor* visitor) {}
+  void Trace(Visitor* visitor) {}
 
  private:
   static Encoding ParseContentTransferEncoding(const String&);
@@ -234,7 +234,7 @@ MIMEHeader* MIMEHeader::ParseHeader(SharedBufferChunkReader* buffer) {
 
 MIMEHeader::Encoding MIMEHeader::ParseContentTransferEncoding(
     const String& text) {
-  String encoding = text.StripWhiteSpace().DeprecatedLower();
+  String encoding = text.StripWhiteSpace().LowerASCII();
   if (encoding == "base64")
     return Encoding::kBase64;
   if (encoding == "quoted-printable")

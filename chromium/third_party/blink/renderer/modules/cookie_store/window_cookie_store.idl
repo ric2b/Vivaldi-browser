@@ -5,8 +5,8 @@
 // https://github.com/WICG/async-cookies-api/blob/gh-pages/explainer.md
 
 [
-    RuntimeEnabled=CookieStore,
-    ImplementedAs=WindowCookieStore,
+    RuntimeEnabled=CookieStoreDocument,
+    ImplementedAs=GlobalCookieStore,
     SecureContext
 ] partial interface Window {
     [Replaceable, SameObject] readonly attribute CookieStore cookieStore;

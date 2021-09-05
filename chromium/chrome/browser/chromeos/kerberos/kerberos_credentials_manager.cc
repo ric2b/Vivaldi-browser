@@ -36,8 +36,6 @@ namespace chromeos {
 
 namespace {
 
-KerberosCredentialsManager* g_instance = nullptr;
-
 // Account keys for the kerberos.accounts pref.
 constexpr char kPrincipal[] = "principal";
 constexpr char kPassword[] = "password";
@@ -51,12 +49,23 @@ constexpr char kLoginEmail[] = "LOGIN_EMAIL";
 // Password placeholder.
 constexpr char kLoginPasswordPlaceholder[] = "${PASSWORD}";
 
-// Default encryption with strong encryption.
+// Default config with strong encryption.
 constexpr char kDefaultKerberosConfig[] = R"([libdefaults]
   default_tgs_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
   default_tkt_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
   permitted_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
   forwardable = true)";
+
+// Backoff policy used to control managed accounts addition retries.
+const net::BackoffEntry::Policy kBackoffPolicyForManagedAccounts = {
+    0,               // Number of initial errors to ignore without backoff.
+    1 * 1000,        // Initial delay for backoff in ms: 1 second.
+    2,               // Factor to multiply for exponential backoff.
+    0,               // Fuzzing percentage.
+    10 * 60 * 1000,  // Maximum time to delay requests in ms: 10 minutes.
+    -1,              // Don't discard entry even if unused.
+    false            // Don't use initial delay unless the last was an error.
+};
 
 // If |principal_name| is "UsEr@realm.com", sets |principal_name| to
 // "user@REALM.COM". Returns false if the given name has no @ or one of the
@@ -93,6 +102,13 @@ void LogError(const char* function_name, kerberos::ErrorType error) {
 // Returns true if |error| is |ERROR_NONE|.
 bool Succeeded(kerberos::ErrorType error) {
   return error == kerberos::ERROR_NONE;
+}
+
+bool ShouldRetry(kerberos::ErrorType error) {
+  // The error types that should trigger a managed accounts addition retry.
+  return error == kerberos::ERROR_NETWORK_PROBLEM ||
+         error == kerberos::ERROR_CONTACTING_KDC_FAILED ||
+         error == kerberos::ERROR_IN_PROGRESS;
 }
 
 }  // namespace
@@ -278,12 +294,10 @@ KerberosCredentialsManager::KerberosCredentialsManager(PrefService* local_state,
                                                        Profile* primary_profile)
     : local_state_(local_state),
       primary_profile_(primary_profile),
-      kerberos_files_handler_(
+      kerberos_files_handler_(std::make_unique<KerberosFilesHandler>(
           base::BindRepeating(&KerberosCredentialsManager::GetKerberosFiles,
-                              base::Unretained(this))) {
-  DCHECK(!g_instance);
-  g_instance = this;
-
+                              base::Unretained(this)))),
+      backoff_entry_for_managed_accounts_(&kBackoffPolicyForManagedAccounts) {
   DCHECK(primary_profile_);
   const user_manager::User* primary_user =
       chromeos::ProfileHelper::Get()->GetUserByProfile(primary_profile);
@@ -331,7 +345,7 @@ KerberosCredentialsManager::KerberosCredentialsManager(PrefService* local_state,
   pref_change_registrar_->Add(
       prefs::kKerberosAccounts,
       base::BindRepeating(&KerberosCredentialsManager::UpdateAccountsFromPref,
-                          weak_factory_.GetWeakPtr()));
+                          weak_factory_.GetWeakPtr(), false /* is_retry */));
 
   // Update accounts if policy is already available or start observing.
   policy_service_ =
@@ -340,7 +354,7 @@ KerberosCredentialsManager::KerberosCredentialsManager(PrefService* local_state,
       policy_service_->IsInitializationComplete(policy::POLICY_DOMAIN_CHROME);
   VLOG(1) << "Policy service initialized at startup: " << policy_initialized;
   if (policy_initialized)
-    UpdateAccountsFromPref();
+    UpdateAccountsFromPref(false /* is_retry */);
   else
     policy_service_->AddObserver(policy::POLICY_DOMAIN_CHROME, this);
 
@@ -355,14 +369,6 @@ KerberosCredentialsManager::KerberosCredentialsManager(PrefService* local_state,
 
 KerberosCredentialsManager::~KerberosCredentialsManager() {
   policy_service_->RemoveObserver(policy::POLICY_DOMAIN_CHROME, this);
-  DCHECK(g_instance);
-  g_instance = nullptr;
-}
-
-// static
-KerberosCredentialsManager& KerberosCredentialsManager::Get() {
-  DCHECK(g_instance);
-  return *g_instance;
 }
 
 // static
@@ -393,7 +399,7 @@ const char* KerberosCredentialsManager::GetDefaultKerberosConfig() {
   return kDefaultKerberosConfig;
 }
 
-bool KerberosCredentialsManager::IsKerberosEnabled() {
+bool KerberosCredentialsManager::IsKerberosEnabled() const {
   return local_state_->GetBoolean(prefs::kKerberosEnabled);
 }
 
@@ -411,7 +417,7 @@ void KerberosCredentialsManager::OnPolicyServiceInitialized(
   if (policy_service_->IsInitializationComplete(policy::POLICY_DOMAIN_CHROME)) {
     VLOG(1) << "Policy service initialized";
     policy_service_->RemoveObserver(policy::POLICY_DOMAIN_CHROME, this);
-    UpdateAccountsFromPref();
+    UpdateAccountsFromPref(false /* is_retry */);
   }
 }
 
@@ -467,14 +473,39 @@ void KerberosCredentialsManager::OnAddAccountRunnerDone(
       SetActivePrincipalName(updated_principal);
     else if (GetActivePrincipalName() == updated_principal)
       GetKerberosFiles();
+  }
 
-    // Bring the merry news to the observers, but only if there is no
-    // outstanding query, so we don't spam observers.
-    if (add_account_runners_.empty())
-      NotifyAccountsChanged();
+  // Bring the merry news to the observers, but only if there is no outstanding
+  // query, so we don't spam observers. We want to notify observers even if the
+  // additions result in error, because the account might actually have been
+  // added, in case of a managed account.
+  if (add_account_runners_.empty())
+    NotifyAccountsChanged();
+
+  if (is_managed) {
+    OnAddManagedAccountRunnerDone(error);
   }
 
   std::move(callback).Run(error);
+}
+
+void KerberosCredentialsManager::OnAddManagedAccountRunnerDone(
+    kerberos::ErrorType error) {
+  if (!managed_accounts_retry_timer_.IsRunning() && ShouldRetry(error)) {
+    backoff_entry_for_managed_accounts_.InformOfRequest(false);
+
+    if (backoff_entry_for_managed_accounts_.failure_count() <
+        kMaxFailureCountForManagedAccounts) {
+      managed_accounts_retry_timer_.Start(
+          FROM_HERE, backoff_entry_for_managed_accounts_.GetTimeUntilRelease(),
+          base::BindOnce(&KerberosCredentialsManager::UpdateAccountsFromPref,
+                         weak_factory_.GetWeakPtr(), true /* is_retry */));
+    }
+  }
+
+  if (add_managed_account_callback_for_testing_) {
+    add_managed_account_callback_for_testing_.Run(error);
+  }
 }
 
 void KerberosCredentialsManager::RemoveAccount(std::string principal_name,
@@ -498,7 +529,7 @@ void KerberosCredentialsManager::OnRemoveAccount(
   if (Succeeded(response.error())) {
     // Reassign active principal if it got deleted.
     if (GetActivePrincipalName() == principal_name)
-      ValidateActivePrincipal();
+      ValidateActivePrincipal(response.accounts());
 
     // Express our condolence to the observers.
     NotifyAccountsChanged();
@@ -530,7 +561,7 @@ void KerberosCredentialsManager::OnClearAccounts(
         case kerberos::CLEAR_ONLY_MANAGED_ACCOUNTS:
         case kerberos::CLEAR_ONLY_UNMANAGED_ACCOUNTS:
           // Check if the active account was wiped and if so, replace it.
-          ValidateActivePrincipal();
+          ValidateActivePrincipal(response.accounts());
           break;
 
         case kerberos::CLEAR_ONLY_UNMANAGED_REMEMBERED_PASSWORDS:
@@ -558,7 +589,7 @@ void KerberosCredentialsManager::OnListAccounts(
     const kerberos::ListAccountsResponse& response) {
   LogError("ListAccounts", response.error());
   // Lazily validate principal here while we're at it.
-  DoValidateActivePrincipal(response);
+  ValidateActivePrincipal(response.accounts());
   std::move(callback).Run(response);
 }
 
@@ -670,10 +701,10 @@ void KerberosCredentialsManager::OnGetKerberosFiles(
   // ticket. In that case, the files must go.
   if (response.files().has_krb5cc()) {
     DCHECK(response.files().has_krb5conf());
-    kerberos_files_handler_.SetFiles(response.files().krb5cc(),
-                                     response.files().krb5conf());
+    kerberos_files_handler_->SetFiles(response.files().krb5cc(),
+                                      response.files().krb5conf());
   } else {
-    kerberos_files_handler_.DeleteFiles();
+    kerberos_files_handler_->DeleteFiles();
   }
 }
 
@@ -722,28 +753,21 @@ void KerberosCredentialsManager::SetActivePrincipalName(
 
 void KerberosCredentialsManager::ClearActivePrincipalName() {
   primary_profile_->GetPrefs()->ClearPref(prefs::kKerberosActivePrincipalName);
-  kerberos_files_handler_.DeleteFiles();
+  kerberos_files_handler_->DeleteFiles();
 }
 
-void KerberosCredentialsManager::ValidateActivePrincipal() {
-  kerberos::ListAccountsRequest request;
-  KerberosClient::Get()->ListAccounts(
-      request,
-      base::BindOnce(&KerberosCredentialsManager::DoValidateActivePrincipal,
-                     weak_factory_.GetWeakPtr()));
-}
-
-void KerberosCredentialsManager::DoValidateActivePrincipal(
-    const kerberos::ListAccountsResponse& response) {
+void KerberosCredentialsManager::ValidateActivePrincipal(
+    const RepeatedAccountField& accounts) {
   const std::string& active_principal = GetActivePrincipalName();
   bool found = false;
-  for (int n = 0; n < response.accounts_size() && !found; ++n)
-    found |= response.accounts(n).principal_name() == active_principal;
+
+  for (const kerberos::Account& account : accounts)
+    found |= account.principal_name() == active_principal;
 
   if (!found) {
     VLOG(1) << "Active principal got removed. Restoring.";
-    if (response.accounts_size() > 0)
-      SetActivePrincipalName(response.accounts(0).principal_name());
+    if (accounts.size() > 0)
+      SetActivePrincipalName(accounts.Get(0).principal_name());
     else
       ClearActivePrincipalName();
   }
@@ -753,7 +777,7 @@ void KerberosCredentialsManager::UpdateEnabledFromPref() {
   if (IsKerberosEnabled()) {
     // Kerberos got enabled, re-populate managed accounts.
     VLOG(1) << "Kerberos got enabled, populating managed accounts";
-    UpdateAccountsFromPref();
+    UpdateAccountsFromPref(false /* is_retry */);
     return;
   }
 
@@ -788,7 +812,14 @@ void KerberosCredentialsManager::UpdateAddAccountsAllowedFromPref() {
                               EmptyResultCallback()));
 }
 
-void KerberosCredentialsManager::UpdateAccountsFromPref() {
+void KerberosCredentialsManager::UpdateAccountsFromPref(bool is_retry) {
+  if (is_retry) {
+    VLOG(1) << "Retrying to update KerberosAccounts from Prefs";
+  } else {
+    // Refreshing backoff entry, since this call was triggered by prefs change.
+    backoff_entry_for_managed_accounts_.Reset();
+  }
+
   if (!IsKerberosEnabled()) {
     VLOG(1) << "Kerberos disabled";
     NotifyRequiresLoginPassword(false);
@@ -902,6 +933,22 @@ void KerberosCredentialsManager::OnTicketExpiryNotificationClick(
 
   // Close last! |principal_name| is owned by the notification.
   kerberos_ticket_expiry_notification::Close(primary_profile_);
+}
+
+base::RepeatingClosure
+KerberosCredentialsManager::GetGetKerberosFilesCallbackForTesting() {
+  return base::BindRepeating(&KerberosCredentialsManager::GetKerberosFiles,
+                             base::Unretained(this));
+}
+
+void KerberosCredentialsManager::SetKerberosFilesHandlerForTesting(
+    std::unique_ptr<KerberosFilesHandler> kerberos_files_handler) {
+  kerberos_files_handler_ = std::move(kerberos_files_handler);
+}
+
+void KerberosCredentialsManager::SetAddManagedAccountCallbackForTesting(
+    base::RepeatingCallback<void(kerberos::ErrorType)> callback) {
+  add_managed_account_callback_for_testing_ = std::move(callback);
 }
 
 }  // namespace chromeos

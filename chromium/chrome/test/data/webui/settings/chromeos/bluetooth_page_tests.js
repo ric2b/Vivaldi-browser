@@ -25,7 +25,7 @@ function getFakePrefs() {
  *     devices.
  */
 function generateFakeDevices(numPairedDevices, numUnpairedDevices) {
-  let devices = [];
+  const devices = [];
   for (let i = 0; i < numPairedDevices + numUnpairedDevices; ++i) {
     devices.push({
       address: '00:00:00:00:01:' + i.toString().padStart(2, '0'),
@@ -47,7 +47,7 @@ suite('Bluetooth', function() {
   let bluetoothPrivateApi;
 
   /** @type {!chrome.bluetooth.Device} */
-  let fakeUnpairedDevice1 = {
+  const fakeUnpairedDevice1 = {
     address: '00:00:00:00:00:01',
     name: 'FakeUnpairedDevice1',
     paired: false,
@@ -55,7 +55,7 @@ suite('Bluetooth', function() {
   };
 
   /** @type {!chrome.bluetooth.Device} */
-  let fakeUnpairedDevice2 = {
+  const fakeUnpairedDevice2 = {
     address: '00:00:00:00:00:02',
     name: 'FakeUnpairedDevice2',
     paired: false,
@@ -63,7 +63,7 @@ suite('Bluetooth', function() {
   };
 
   /** @type {!chrome.bluetooth.Device} */
-  let fakeUnpairedDevice3 = {
+  const fakeUnpairedDevice3 = {
     address: '00:00:00:00:00:03',
     name: 'FakeUnpairedDevice3',
     paired: false,
@@ -71,7 +71,7 @@ suite('Bluetooth', function() {
   };
 
   /** @type {!chrome.bluetooth.Device} */
-  let fakePairedDevice1 = {
+  const fakePairedDevice1 = {
     address: '10:00:00:00:00:01',
     name: 'FakePairedDevice1',
     paired: true,
@@ -79,7 +79,7 @@ suite('Bluetooth', function() {
   };
 
   /** @type {!chrome.bluetooth.Device} */
-  let fakePairedDevice2 = {
+  const fakePairedDevice2 = {
     address: '10:00:00:00:00:02',
     name: 'FakePairedDevice2',
     paired: true,
@@ -87,7 +87,7 @@ suite('Bluetooth', function() {
   };
 
   /** @type {!chrome.bluetooth.Device} */
-  let fakePairedDevice3 = {
+  const fakePairedDevice3 = {
     address: '10:00:00:00:00:03',
     name: 'FakePairedDevice3',
     paired: true,
@@ -405,7 +405,7 @@ suite('Bluetooth', function() {
         assertFalse(subpage.$.noPairedDevices.hidden);
 
         // Update the one in the middle.
-        let updatedDevice = Object.assign({}, fakeUnpairedDevice2);
+        const updatedDevice = Object.assign({}, fakeUnpairedDevice2);
         updatedDevice.name = 'Updated Name';
         bluetoothApi.simulateDeviceUpdatedForTest(updatedDevice);
 
@@ -500,7 +500,7 @@ suite('Bluetooth', function() {
         assertTrue(subpage.$.noPairedDevices.hidden);
 
         // Update the one in the middle.
-        let updatedDevice = Object.assign({}, fakePairedDevice2);
+        const updatedDevice = Object.assign({}, fakePairedDevice2);
         updatedDevice.name = 'Updated Name';
         bluetoothApi.simulateDeviceUpdatedForTest(updatedDevice);
 
@@ -532,7 +532,7 @@ suite('Bluetooth', function() {
         assertFalse(subpage.$.noPairedDevices.hidden);
 
         // Mark the device as paired.
-        let nowPairedDevice = Object.assign({}, fakeUnpairedDevice1);
+        const nowPairedDevice = Object.assign({}, fakeUnpairedDevice1);
         nowPairedDevice.paired = true;
         bluetoothApi.simulateDeviceUpdatedForTest(nowPairedDevice);
 
@@ -563,7 +563,7 @@ suite('Bluetooth', function() {
         assertTrue(subpage.$.noPairedDevices.hidden);
 
         // Mark the device as not paired.
-        let nowUnpairedDevice = Object.assign({}, fakePairedDevice1);
+        const nowUnpairedDevice = Object.assign({}, fakePairedDevice1);
         nowUnpairedDevice.paired = false;
         bluetoothApi.simulateDeviceUpdatedForTest(nowUnpairedDevice);
 
@@ -611,25 +611,27 @@ suite('Bluetooth', function() {
         assertFalse(pairedDevices[1].device.connected);
       });
 
-      test('Unpaired and paired devices: many devices added', async function() {
-        bluetoothApi.simulateDevicesAddedForTest(generateFakeDevices(5, 15));
+      test.skip(
+          'Unpaired and paired devices: many devices added', async function() {
+            bluetoothApi.simulateDevicesAddedForTest(
+                generateFakeDevices(5, 15));
 
-        await waitForListUpdateTimeout();
+            await waitForListUpdateTimeout();
 
-        assertEquals(20, deviceList().length);
-        assertEquals(15, unpairedDeviceList().length);
-        assertEquals(5, pairedDeviceList().length);
-        assertTrue(subpage.$.noUnpairedDevices.hidden);
-        assertTrue(subpage.$.noPairedDevices.hidden);
+            assertEquals(20, deviceList().length);
+            assertEquals(15, unpairedDeviceList().length);
+            assertEquals(5, pairedDeviceList().length);
+            assertTrue(subpage.$.noUnpairedDevices.hidden);
+            assertTrue(subpage.$.noPairedDevices.hidden);
 
-        const unpairedDevices = unpairedDeviceIronList.querySelectorAll(
-            'bluetooth-device-list-item');
-        assertEquals(15, unpairedDevices.length);
+            const unpairedDevices = unpairedDeviceIronList.querySelectorAll(
+                'bluetooth-device-list-item');
+            assertEquals(15, unpairedDevices.length);
 
-        const pairedDevices =
-            pairedDeviceIronList.querySelectorAll('bluetooth-device-list-item');
-        assertEquals(5, pairedDevices.length);
-      });
+            const pairedDevices = pairedDeviceIronList.querySelectorAll(
+                'bluetooth-device-list-item');
+            assertEquals(5, pairedDevices.length);
+          });
     });
   });
 });

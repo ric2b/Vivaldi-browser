@@ -8,7 +8,6 @@
 
 #include "base/strings/string16.h"
 #include "content/public/browser/native_web_keyboard_event.h"
-#include "third_party/blink/public/platform/web_float_point.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 
@@ -39,16 +38,6 @@ ui::KeyboardCode GetFunctionKey(std::string token);
 ui::Accelerator ParseShortcut(const std::string& accelerator,
                               bool should_parse_media_keys);
 
-// Helper class for setting and resetting a bookmark upgrade flag.
-class SetPartnerUpgrade {
- public:
-  SetPartnerUpgrade(content::BrowserContext* context, bool active);
-  ~SetPartnerUpgrade();
- private:
-  void Set(bool active);
-  content::BrowserContext* context_;
-};
-
 // Find first available Vivaldi browser.
 Browser* FindVivaldiBrowser();
 
@@ -62,14 +51,13 @@ double MilliSecondsFromTime(const base::Time& time);
 // Return time from milliseconds
 base::Time GetTime(double ms_from_epoch);
 
-blink::WebFloatPoint FromUICoordinates(content::WebContents* web_contents,
-                                       blink::WebFloatPoint p);
+gfx::PointF FromUICoordinates(content::WebContents* web_contents,
+                              const gfx::PointF &p);
 
 void FromUICoordinates(content::WebContents* web_contents,
                        gfx::RectF* rect);
 
-blink::WebFloatPoint ToUICoordinates(content::WebContents* web_contents,
-                                     blink::WebFloatPoint p);
+gfx::PointF ToUICoordinates(content::WebContents* web_contents, const gfx::PointF &p);
 
 base::string16 KeyCodeToName(ui::KeyboardCode key_code);
 

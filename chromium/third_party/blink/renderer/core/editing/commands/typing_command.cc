@@ -55,6 +55,7 @@
 #include "third_party/blink/renderer/core/html/html_br_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
@@ -200,11 +201,13 @@ void TypingCommand::DeleteSelection(Document& document, Options options) {
     return;
   }
 
-  TypingCommand::Create(document, kDeleteSelection, "", options)->Apply();
+  MakeGarbageCollected<TypingCommand>(document, kDeleteSelection, "", options)
+      ->Apply();
 }
 
-void TypingCommand::DeleteSelectionIfRange(const VisibleSelection& selection,
-                                           EditingState* editing_state) {
+void TypingCommand::DeleteSelectionIfRange(
+    const SelectionForUndoStep& selection,
+    EditingState* editing_state) {
   if (!selection.IsRange())
     return;
   // Although the 'selection' to delete is indeed a Range, it may have been
@@ -212,7 +215,7 @@ void TypingCommand::DeleteSelectionIfRange(const VisibleSelection& selection,
   // the table structure is deleted as well.
   bool expand_for_special = EndingSelection().IsRange();
   ApplyCommandToComposite(
-      DeleteSelectionCommand::Create(
+      MakeGarbageCollected<DeleteSelectionCommand>(
           selection, DeleteSelectionOptions::Builder()
                          .SetSmartDelete(smart_delete_)
                          .SetMergeBlocksAfterDelete(true)
@@ -243,7 +246,8 @@ void TypingCommand::DeleteKeyPressed(Document& document,
     }
   }
 
-  TypingCommand::Create(document, kDeleteKey, "", options, granularity)
+  MakeGarbageCollected<TypingCommand>(document, kDeleteKey, "", options,
+                                      granularity)
       ->Apply();
 }
 
@@ -265,7 +269,8 @@ void TypingCommand::ForwardDeleteKeyPressed(Document& document,
     }
   }
 
-  TypingCommand::Create(document, kForwardDeleteKey, "", options, granularity)
+  MakeGarbageCollected<TypingCommand>(document, kForwardDeleteKey, "", options,
+                                      granularity)
       ->Apply();
 }
 
@@ -312,7 +317,7 @@ void TypingCommand::AdjustSelectionAfterIncrementalInsertion(
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited. see http://crbug.com/590369 for more details.
-  frame->GetDocument()->UpdateStyleAndLayout();
+  frame->GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   Element* element = frame->Selection()
                          .ComputeVisibleSelectionInDOMTreeDeprecated()
@@ -379,7 +384,7 @@ void TypingCommand::InsertText(
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited. see http://crbug.com/590369 for more details.
-  document.UpdateStyleAndLayout();
+  document.UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   const PlainTextRange selection_offsets =
       GetSelectionOffsets(selection_for_insertion.AsSelection());
@@ -414,8 +419,9 @@ void TypingCommand::InsertText(
     return;
   }
 
-  TypingCommand* command = TypingCommand::Create(
-      document, kInsertText, new_text, options, composition_type);
+  TypingCommand* command = MakeGarbageCollected<TypingCommand>(
+      document, kInsertText, new_text, options, TextGranularity::kCharacter,
+      composition_type);
   bool change_selection = selection_for_insertion != current_selection;
   if (change_selection) {
     const SelectionForUndoStep& selection_for_insertion_as_undo_step =
@@ -451,7 +457,8 @@ bool TypingCommand::InsertLineBreak(Document& document) {
     return !editing_state.IsAborted();
   }
 
-  return TypingCommand::Create(document, kInsertLineBreak, "", 0)->Apply();
+  return MakeGarbageCollected<TypingCommand>(document, kInsertLineBreak, "", 0)
+      ->Apply();
 }
 
 bool TypingCommand::InsertParagraphSeparatorInQuotedContent(
@@ -465,8 +472,8 @@ bool TypingCommand::InsertParagraphSeparatorInQuotedContent(
     return !editing_state.IsAborted();
   }
 
-  return TypingCommand::Create(document,
-                               kInsertParagraphSeparatorInQuotedContent)
+  return MakeGarbageCollected<TypingCommand>(
+             document, kInsertParagraphSeparatorInQuotedContent)
       ->Apply();
 }
 
@@ -479,7 +486,8 @@ bool TypingCommand::InsertParagraphSeparator(Document& document) {
     return !editing_state.IsAborted();
   }
 
-  return TypingCommand::Create(document, kInsertParagraphSeparator, "", 0)
+  return MakeGarbageCollected<TypingCommand>(document,
+                                             kInsertParagraphSeparator, "", 0)
       ->Apply();
 }
 
@@ -656,7 +664,7 @@ void TypingCommand::InsertTextRunWithoutNewlines(const String& text,
                                                  EditingState* editing_state) {
   CompositeEditCommand* command;
   if (IsIncrementalInsertion()) {
-    command = InsertIncrementalTextCommand::Create(
+    command = MakeGarbageCollected<InsertIncrementalTextCommand>(
         GetDocument(), text,
         composition_type_ == kTextCompositionNone
             ? InsertIncrementalTextCommand::
@@ -778,8 +786,8 @@ void TypingCommand::DeleteKeyPressed(TextGranularity granularity,
     return;
 
   if (EndingSelection().IsRange()) {
-    DeleteKeyPressedInternal(EndingVisibleSelection(), EndingSelection(),
-                             kill_ring, editing_state);
+    DeleteKeyPressedInternal(EndingSelection(), EndingSelection(), kill_ring,
+                             editing_state);
     return;
   }
 
@@ -799,7 +807,7 @@ void TypingCommand::DeleteKeyPressed(TextGranularity granularity,
     TypingAddedToOpenCommand(kDeleteKey);
 
   smart_delete_ = false;
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   SelectionModifier selection_modifier(*frame, EndingSelection().AsSelection());
   selection_modifier.SetSelectionIsDirectional(SelectionIsDirectional());
@@ -887,7 +895,7 @@ void TypingCommand::DeleteKeyPressed(TextGranularity granularity,
   if (!StartingSelection().IsRange() ||
       selection_to_delete.Base() != StartingSelection().Start()) {
     DeleteKeyPressedInternal(
-        selection_to_delete,
+        SelectionForUndoStep::From(selection_to_delete.AsSelection()),
         SelectionForUndoStep::From(selection_to_delete.AsSelection()),
         kill_ring, editing_state);
     return;
@@ -901,12 +909,13 @@ void TypingCommand::DeleteKeyPressed(TextGranularity granularity,
               CreateVisiblePosition(selection_to_delete.Extent())
                   .DeepEquivalent())
           .Build();
-  DeleteKeyPressedInternal(selection_to_delete, selection_after_undo, kill_ring,
-                           editing_state);
+  DeleteKeyPressedInternal(
+      SelectionForUndoStep::From(selection_to_delete.AsSelection()),
+      selection_after_undo, kill_ring, editing_state);
 }
 
 void TypingCommand::DeleteKeyPressedInternal(
-    const VisibleSelection& selection_to_delete,
+    const SelectionForUndoStep& selection_to_delete,
     const SelectionForUndoStep& selection_after_undo,
     bool kill_ring,
     EditingState* editing_state) {
@@ -920,9 +929,10 @@ void TypingCommand::DeleteKeyPressedInternal(
   LocalFrame* frame = GetDocument().GetFrame();
   DCHECK(frame);
 
-  if (kill_ring)
-    frame->GetEditor().AddToKillRing(
-        selection_to_delete.ToNormalizedEphemeralRange());
+  if (kill_ring) {
+    frame->GetEditor().AddToKillRing(CreateVisibleSelection(selection_to_delete)
+                                         .ToNormalizedEphemeralRange());
+  }
   // On Mac, make undo select everything that has been deleted, unless an undo
   // will undo more than just this deletion.
   // FIXME: This behaves like TextEdit except for the case where you open with
@@ -962,7 +972,7 @@ void TypingCommand::ForwardDeleteKeyPressed(TextGranularity granularity,
     return;
 
   if (EndingSelection().IsRange()) {
-    ForwardDeleteKeyPressedInternal(EndingVisibleSelection(), EndingSelection(),
+    ForwardDeleteKeyPressedInternal(EndingSelection(), EndingSelection(),
                                     kill_ring, editing_state);
     return;
   }
@@ -973,7 +983,7 @@ void TypingCommand::ForwardDeleteKeyPressed(TextGranularity granularity,
   }
 
   smart_delete_ = false;
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   // Handle delete at beginning-of-block case.
   // Do nothing in the case that the caret is at the start of a
@@ -1034,7 +1044,7 @@ void TypingCommand::ForwardDeleteKeyPressed(TextGranularity granularity,
       MostBackwardCaretPosition(selection_to_delete.Base()) !=
           StartingSelection().Start()) {
     ForwardDeleteKeyPressedInternal(
-        selection_to_delete,
+        SelectionForUndoStep::From(selection_to_delete.AsSelection()),
         SelectionForUndoStep::From(selection_to_delete.AsSelection()),
         kill_ring, editing_state);
     return;
@@ -1047,12 +1057,13 @@ void TypingCommand::ForwardDeleteKeyPressed(TextGranularity granularity,
               ComputeExtentForForwardDeleteUndo(selection_to_delete,
                                                 StartingSelection().End()))
           .Build();
-  ForwardDeleteKeyPressedInternal(selection_to_delete, selection_after_undo,
-                                  kill_ring, editing_state);
+  ForwardDeleteKeyPressedInternal(
+      SelectionForUndoStep::From(selection_to_delete.AsSelection()),
+      selection_after_undo, kill_ring, editing_state);
 }
 
 void TypingCommand::ForwardDeleteKeyPressedInternal(
-    const VisibleSelection& selection_to_delete,
+    const SelectionForUndoStep& selection_to_delete,
     const SelectionForUndoStep& selection_after_undo,
     bool kill_ring,
     EditingState* editing_state) {
@@ -1066,9 +1077,10 @@ void TypingCommand::ForwardDeleteKeyPressedInternal(
   LocalFrame* frame = GetDocument().GetFrame();
   DCHECK(frame);
 
-  if (kill_ring)
-    frame->GetEditor().AddToKillRing(
-        selection_to_delete.ToNormalizedEphemeralRange());
+  if (kill_ring) {
+    frame->GetEditor().AddToKillRing(CreateVisibleSelection(selection_to_delete)
+                                         .ToNormalizedEphemeralRange());
+  }
   // Make undo select what was deleted on Mac alone
   if (frame->GetEditor().Behavior().ShouldUndoOfDeleteSelectText())
     SetStartingSelection(selection_after_undo);

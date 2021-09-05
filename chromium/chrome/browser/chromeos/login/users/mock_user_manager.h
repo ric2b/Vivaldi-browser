@@ -63,6 +63,7 @@ class MockUserManager : public ChromeUserManager {
   MOCK_CONST_METHOD0(IsLoggedInAsSupervisedUser, bool(void));
   MOCK_CONST_METHOD0(IsLoggedInAsKioskApp, bool(void));
   MOCK_CONST_METHOD0(IsLoggedInAsArcKioskApp, bool(void));
+  MOCK_CONST_METHOD0(IsLoggedInAsWebKioskApp, bool(void));
   MOCK_CONST_METHOD0(IsLoggedInAsStub, bool(void));
   MOCK_CONST_METHOD0(IsSessionStarted, bool(void));
   MOCK_CONST_METHOD1(IsUserNonCryptohomeDataEphemeral, bool(const AccountId&));
@@ -110,6 +111,7 @@ class MockUserManager : public ChromeUserManager {
   MOCK_METHOD0(DemoAccountLoggedIn, void(void));
   MOCK_METHOD1(KioskAppLoggedIn, void(user_manager::User*));
   MOCK_METHOD1(ArcKioskAppLoggedIn, void(user_manager::User*));
+  MOCK_METHOD1(WebKioskAppLoggedIn, void(user_manager::User*));
   MOCK_METHOD1(PublicAccountUserLoggedIn, void(user_manager::User*));
   MOCK_METHOD1(SupervisedUserLoggedIn, void(const AccountId&));
   MOCK_METHOD1(OnUserRemoved, void(const AccountId&));
@@ -129,6 +131,9 @@ class MockUserManager : public ChromeUserManager {
   const user_manager::User* GetActiveUser() const override;
   user_manager::User* GetActiveUser() override;
   const user_manager::User* GetPrimaryUser() const override;
+
+  // We can't mock it as easily.
+  bool IsLoggedInAsAnyKioskApp() const override;
 
   // ChromeUserManager overrides:
   MultiProfileUserController* GetMultiProfileUserController() override;
@@ -171,6 +176,9 @@ class MockUserManager : public ChromeUserManager {
   // created by this MockUserManager remain valid. The added User is not
   // affiliated with the domain, that owns the device.
   void AddUser(const AccountId& account_id);
+
+  // Allows to add SAML user
+  void AddPublicAccountWithSAML(const AccountId& account_id);
 
   // The same as AddUser, but allows specifying affiliation with the domain,
   // that owns the device and user type.

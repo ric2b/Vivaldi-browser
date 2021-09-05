@@ -54,34 +54,34 @@ AXPlatformNodeTextChildProviderWin* AXPlatformNodeTextChildProviderWin::Create(
 void AXPlatformNodeTextChildProviderWin::CreateIUnknown(
     AXPlatformNodeWin* owner,
     IUnknown** unknown) {
-  CComPtr<AXPlatformNodeTextChildProviderWin> text_child_provider(
-      Create(owner));
+  Microsoft::WRL::ComPtr<AXPlatformNodeTextChildProviderWin>
+      text_child_provider(Create(owner));
   if (text_child_provider)
     *unknown = text_child_provider.Detach();
 }
 
-STDMETHODIMP AXPlatformNodeTextChildProviderWin::get_TextContainer(
+HRESULT AXPlatformNodeTextChildProviderWin::get_TextContainer(
     IRawElementProviderSimple** result) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTCHILD_GET_TEXTCONTAINER);
   UIA_VALIDATE_TEXTCHILDPROVIDER_CALL();
 
   *result = nullptr;
 
-  AXPlatformNodeWin* container = GetTextContainer(owner_);
+  AXPlatformNodeWin* container = GetTextContainer(owner_.Get());
   if (container)
     container->QueryInterface(IID_PPV_ARGS(result));
 
   return S_OK;
 }
 
-STDMETHODIMP AXPlatformNodeTextChildProviderWin::get_TextRange(
+HRESULT AXPlatformNodeTextChildProviderWin::get_TextRange(
     ITextRangeProvider** result) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTCHILD_GET_TEXTRANGE);
   UIA_VALIDATE_TEXTCHILDPROVIDER_CALL();
 
   *result = nullptr;
 
-  AXPlatformNodeWin* container = GetTextContainer(owner_);
+  AXPlatformNodeWin* container = GetTextContainer(owner_.Get());
   if (container && container->IsDescendant(owner())) {
     *result =
         AXPlatformNodeTextProviderWin::GetRangeFromChild(container, owner());
@@ -103,7 +103,7 @@ AXPlatformNodeWin* AXPlatformNodeTextChildProviderWin::GetTextContainer(
 }
 
 AXPlatformNodeWin* AXPlatformNodeTextChildProviderWin::owner() const {
-  return owner_;
+  return owner_.Get();
 }
 
 }  // namespace ui

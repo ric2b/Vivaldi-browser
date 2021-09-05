@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/buildflags_paint_preview.gni")
 import("//build/config/features.gni")
 import("//build/config/jumbo.gni")
 import("//chrome/common/features.gni")
@@ -45,15 +46,16 @@ jumbo_static_library("renderer") {
   sources = [
     "benchmarking_extension.cc",
     "benchmarking_extension.h",
+    "browser_exposed_renderer_interfaces.cc",
+    "browser_exposed_renderer_interfaces.h",
     "chrome_content_renderer_client.cc",
     "chrome_content_renderer_client.h",
-    "chrome_content_renderer_client_receiver_bindings.cc",
     "chrome_render_frame_observer.cc",
     "chrome_render_frame_observer.h",
     "chrome_render_thread_observer.cc",
     "chrome_render_thread_observer.h",
-    "content_settings_observer.cc",
-    "content_settings_observer.h",
+    "content_settings_agent_impl.cc",
+    "content_settings_agent_impl.h",
     "custom_menu_commands.h",
     "instant_restricted_id_cache.h",
     "loadtimes_extension_bindings.cc",
@@ -62,8 +64,12 @@ jumbo_static_library("renderer") {
     "media/chrome_key_systems.h",
     "media/chrome_key_systems_provider.cc",
     "media/chrome_key_systems_provider.h",
+    "media/chrome_speech_recognition_client.cc",
+    "media/chrome_speech_recognition_client.h",
     "media/flash_embed_rewrite.cc",
     "media/flash_embed_rewrite.h",
+    "media/media_feeds.cc",
+    "media/media_feeds.h",
     "media/webrtc_logging_agent_impl.cc",
     "media/webrtc_logging_agent_impl.h",
     "net/net_error_helper.cc",
@@ -80,10 +86,6 @@ jumbo_static_library("renderer") {
     "plugins/pdf_plugin_placeholder.h",
     "plugins/plugin_uma.cc",
     "plugins/plugin_uma.h",
-    "prerender/prerender_dispatcher.cc",
-    "prerender/prerender_dispatcher.h",
-    "prerender/prerender_extra_data.cc",
-    "prerender/prerender_extra_data.h",
     "prerender/prerender_helper.cc",
     "prerender/prerender_helper.h",
     "prerender/prerenderer_client.cc",
@@ -92,8 +94,8 @@ jumbo_static_library("renderer") {
     "previews/resource_loading_hints_agent.h",
     "sandbox_status_extension_android.cc",
     "sandbox_status_extension_android.h",
-    "subresource_redirect/subresource_redirect_experiments.cc",
-    "subresource_redirect/subresource_redirect_experiments.h",
+    "subresource_redirect/subresource_redirect_hints_agent.cc",
+    "subresource_redirect/subresource_redirect_hints_agent.h",
     "subresource_redirect/subresource_redirect_params.cc",
     "subresource_redirect/subresource_redirect_params.h",
     "subresource_redirect/subresource_redirect_url_loader_throttle.cc",
@@ -138,24 +140,22 @@ jumbo_static_library("renderer") {
     "//components/content_capture/renderer",
     "//components/contextual_search/content:renderer",
     "//components/data_reduction_proxy/content/common",
-    "//components/data_reduction_proxy/content/renderer",
     "//components/data_reduction_proxy/core/common",
     "//components/dom_distiller/content/renderer",
     "//components/network_hints/renderer",
     "//components/omnibox/common",
     "//components/page_image_annotation/content/renderer",
     "//components/page_load_metrics/renderer",
+    "//components/paint_preview/buildflags",
     "//components/plugins/renderer",
-    "//components/rappor/public/mojom",
     "//components/resources:components_resources",
     "//components/safe_browsing:buildflags",
-    "//components/safe_browsing/common:interfaces",
-    "//components/safe_browsing/renderer:throttles",
+    "//components/safe_browsing/content/renderer:throttles",
+    "//components/safe_browsing/core/common:interfaces",
     "//components/security_interstitials/content/renderer:security_interstitial_page_controller",
     "//components/security_interstitials/core:",
     "//components/security_interstitials/core/common/mojom:",
     "//components/spellcheck:buildflags",
-    "//components/startup_metric_utils/common:interfaces",
     "//components/subresource_filter/content/renderer",
     "//components/translate/content/renderer",
     "//components/translate/core/common",
@@ -189,9 +189,7 @@ jumbo_static_library("renderer") {
     "//v8",
   ]
 
-  data_deps = [
-    "//tools/v8_context_snapshot",
-  ]
+  data_deps = [ "//tools/v8_context_snapshot" ]
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
@@ -249,8 +247,8 @@ jumbo_static_library("renderer") {
 
   if (safe_browsing_mode != 0) {
     deps += [
-      "//components/safe_browsing/common",
-      "//components/safe_browsing/renderer",
+      "//components/safe_browsing/content/renderer",
+      "//components/safe_browsing/core/common",
     ]
     if (safe_browsing_mode == 1) {
       sources += [
@@ -275,7 +273,7 @@ jumbo_static_library("renderer") {
       ]
       deps += [
         "//chrome/common/safe_browsing:proto",
-        "//components/safe_browsing:csd_proto",
+        "//components/safe_browsing/core:csd_proto",
         "//third_party/smhasher:murmurhash3",
       ]
     }
@@ -346,9 +344,7 @@ jumbo_static_library("renderer") {
       "//media/cast:sender",
       "//services/network/public/cpp",
     ]
-    public_deps = [
-      "//ipc",
-    ]
+    public_deps = [ "//ipc" ]
   }
   if (enable_extensions) {
     sources += [
@@ -377,6 +373,10 @@ jumbo_static_library("renderer") {
     }
   }
 
+  if (enable_paint_preview) {
+    deps += [ "//components/paint_preview/renderer" ]
+  }
+
   if (is_win) {
     deps += [ "//third_party/wtl" ]
   }
@@ -390,6 +390,13 @@ jumbo_static_library("renderer") {
       "extensions/platform_keys_natives.cc",
       "extensions/platform_keys_natives.h",
     ]
+    if (use_cups) {
+      configs += [ "//printing:cups" ]
+      sources += [
+        "extensions/printing_hooks_delegate.cc",
+        "extensions/printing_hooks_delegate.h",
+      ]
+    }
   }
 
   if (!is_android) {

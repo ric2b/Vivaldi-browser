@@ -29,7 +29,7 @@
 #include "third_party/blink/renderer/core/frame/location.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/binding_security.h"
-#include "third_party/blink/renderer/bindings/core/v8/usv_string_or_trusted_url.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/dom_window.h"
@@ -37,7 +37,6 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
-#include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
 #include "third_party/blink/renderer/core/url/dom_url_utils_read_only.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_dom_activity_logger.h"
@@ -50,13 +49,17 @@ Location::Location(DOMWindow* dom_window)
     : dom_window_(dom_window),
       fragment_directive_(MakeGarbageCollected<FragmentDirective>()) {}
 
-void Location::Trace(blink::Visitor* visitor) {
+void Location::Trace(Visitor* visitor) {
   visitor->Trace(dom_window_);
   visitor->Trace(fragment_directive_);
   ScriptWrappable::Trace(visitor);
 }
 
 inline const KURL& Location::Url() const {
+  const KURL& web_bundle_claimed_url = GetDocument()->WebBundleClaimedUrl();
+  if (web_bundle_claimed_url.IsValid()) {
+    return web_bundle_claimed_url;
+  }
   const KURL& url = GetDocument()->Url();
   if (!url.IsValid()) {
     // Use "about:blank" while the page is still loading (before we have a
@@ -67,8 +70,8 @@ inline const KURL& Location::Url() const {
   return url;
 }
 
-void Location::href(USVStringOrTrustedURL& result) const {
-  result.SetUSVString(Url().StrippedForUseAsHref());
+String Location::href() const {
+  return Url().StrippedForUseAsHref();
 }
 
 String Location::protocol() const {
@@ -116,10 +119,7 @@ DOMStringList* Location::ancestorOrigins() const {
 }
 
 String Location::toString() const {
-  USVStringOrTrustedURL result;
-  href(result);
-  DCHECK(result.IsUSVString());
-  return result.GetAsUSVString();
+  return href();
 }
 
 String Location::hash() const {
@@ -127,17 +127,11 @@ String Location::hash() const {
 }
 
 void Location::setHref(v8::Isolate* isolate,
-                       const USVStringOrTrustedURL& string_or_url,
+                       const String& url_string,
                        ExceptionState& exception_state) {
   LocalDOMWindow* incumbent_window = IncumbentDOMWindow(isolate);
   LocalDOMWindow* entered_window = EnteredDOMWindow(isolate);
-
-  const String& url = GetStringFromTrustedURL(
-      string_or_url, incumbent_window->document(), exception_state);
-  if (exception_state.HadException())
-    return;
-
-  SetLocation(url, incumbent_window, entered_window, &exception_state);
+  SetLocation(url_string, incumbent_window, entered_window, &exception_state);
 }
 
 void Location::setProtocol(v8::Isolate* isolate,
@@ -219,31 +213,19 @@ void Location::setHash(v8::Isolate* isolate,
 }
 
 void Location::assign(v8::Isolate* isolate,
-                      const USVStringOrTrustedURL& string_or_url,
+                      const String& url_string,
                       ExceptionState& exception_state) {
   LocalDOMWindow* incumbent_window = IncumbentDOMWindow(isolate);
   LocalDOMWindow* entered_window = EnteredDOMWindow(isolate);
-
-  const String& url = GetStringFromTrustedURL(
-      string_or_url, incumbent_window->document(), exception_state);
-  if (exception_state.HadException())
-    return;
-
-  SetLocation(url, incumbent_window, entered_window, &exception_state);
+  SetLocation(url_string, incumbent_window, entered_window, &exception_state);
 }
 
 void Location::replace(v8::Isolate* isolate,
-                       const USVStringOrTrustedURL& string_or_url,
+                       const String& url_string,
                        ExceptionState& exception_state) {
   LocalDOMWindow* incumbent_window = IncumbentDOMWindow(isolate);
   LocalDOMWindow* entered_window = EnteredDOMWindow(isolate);
-
-  const String& url = GetStringFromTrustedURL(
-      string_or_url, incumbent_window->document(), exception_state);
-  if (exception_state.HadException())
-    return;
-
-  SetLocation(url, incumbent_window, entered_window, &exception_state,
+  SetLocation(url_string, incumbent_window, entered_window, &exception_state,
               SetLocationPolicy::kReplaceThisFrame);
 }
 

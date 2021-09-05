@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/task/post_task.h"
 #include "content/browser/push_messaging/push_messaging_manager.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/public/browser/browser_context.h"
@@ -19,7 +18,7 @@ namespace content {
 namespace {
 
 void CallStringCallbackFromIO(
-    const PushMessagingService::StringCallback& callback,
+    PushMessagingService::StringCallback callback,
     const std::vector<std::string>& data,
     blink::ServiceWorkerStatusCode service_worker_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -31,25 +30,26 @@ void CallStringCallbackFromIO(
     DCHECK_EQ(1u, data.size());
     result = data[0];
   }
-  base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(callback, result, success, not_found));
+  GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), result, success, not_found));
 }
 
 void CallClosureFromIO(base::OnceClosure callback,
                        blink::ServiceWorkerStatusCode status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  base::PostTask(FROM_HERE, {BrowserThread::UI}, std::move(callback));
+  GetUIThreadTaskRunner({})->PostTask(FROM_HERE, std::move(callback));
 }
 
 void GetUserDataOnIO(
     scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_wrapper,
     int64_t service_worker_registration_id,
     const std::string& key,
-    const PushMessagingService::StringCallback& callback) {
+    PushMessagingService::StringCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   service_worker_context_wrapper->GetRegistrationUserData(
       service_worker_registration_id, {key},
-      base::BindOnce(&CallStringCallbackFromIO, callback));
+      base::BindOnce(&CallStringCallbackFromIO, std::move(callback)));
 }
 
 void ClearPushSubscriptionIdOnIO(
@@ -93,14 +93,14 @@ scoped_refptr<ServiceWorkerContextWrapper> GetServiceWorkerContext(
 void PushMessagingService::GetSenderId(BrowserContext* browser_context,
                                        const GURL& origin,
                                        int64_t service_worker_registration_id,
-                                       const StringCallback& callback) {
+                                       StringCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&GetUserDataOnIO,
                      GetServiceWorkerContext(browser_context, origin),
                      service_worker_registration_id,
-                     kPushSenderIdServiceWorkerKey, callback));
+                     kPushSenderIdServiceWorkerKey, std::move(callback)));
 }
 
 // static
@@ -110,8 +110,8 @@ void PushMessagingService::ClearPushSubscriptionId(
     int64_t service_worker_registration_id,
     base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&ClearPushSubscriptionIdOnIO,
                      GetServiceWorkerContext(browser_context, origin),
                      service_worker_registration_id, std::move(callback)));
@@ -124,14 +124,14 @@ void PushMessagingService::StorePushSubscriptionForTesting(
     int64_t service_worker_registration_id,
     const std::string& subscription_id,
     const std::string& sender_id,
-    const base::Closure& callback) {
+    base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  base::PostTask(
-      FROM_HERE, {BrowserThread::IO},
+  GetIOThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(&StorePushSubscriptionOnIOForTesting,
                      GetServiceWorkerContext(browser_context, origin),
                      service_worker_registration_id, origin, subscription_id,
-                     sender_id, callback));
+                     sender_id, std::move(callback)));
 }
 
 }  // namespace content

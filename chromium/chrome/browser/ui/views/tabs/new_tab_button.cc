@@ -20,8 +20,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/buildflags.h"
 #include "components/variations/variations_associated_data.h"
-#include "ui/base/default_theme_provider.h"
-#include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/pointer/touch_ui_controller.h"
+#include "ui/base/theme_provider.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
@@ -282,7 +282,7 @@ void NewTabButton::PaintPlusIcon(gfx::Canvas* canvas) const {
   constexpr int kStrokeWidth = 2;
   flags.setStrokeWidth(kStrokeWidth);
 
-  const int radius = ui::MaterialDesignController::touch_ui() ? 7 : 6;
+  const int radius = ui::TouchUiController::Get()->touch_ui() ? 7 : 6;
   const int offset = GetCornerRadius() - radius;
   // The cap will be added outside the end of the stroke; inset to compensate.
   constexpr int kCapRadius = kStrokeWidth / 2;
@@ -323,8 +323,8 @@ SkPath NewTabButton::GetBorderPath(const gfx::Point& origin,
     const float diameter = radius * 2;
     path.rLineTo(diameter, 0);
     path.rLineTo(0, scaled_origin.y() + radius);
-    path.rArcTo(radius, radius, 0, SkPath::kSmall_ArcSize,
-                SkPath::kCW_Direction, -diameter, 0);
+    path.rArcTo(radius, radius, 0, SkPath::kSmall_ArcSize, SkPathDirection::kCW,
+                -diameter, 0);
     path.close();
   } else {
     path.addCircle(scaled_origin.x() + radius, scaled_origin.y() + radius,

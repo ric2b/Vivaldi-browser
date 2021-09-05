@@ -121,29 +121,32 @@ void FakeKerberosClient::AddAccount(const kerberos::AddAccountRequest& request,
   if (it != accounts_.end()) {
     it->is_managed |= request.is_managed();
     PostResponse(std::move(callback), kerberos::ERROR_DUPLICATE_PRINCIPAL_NAME,
-                 mTaskDelay);
+                 task_delay_);
     return;
   }
 
   AccountData data(request.principal_name());
   data.is_managed = request.is_managed();
   accounts_.push_back(data);
-  PostResponse(std::move(callback), kerberos::ERROR_NONE, mTaskDelay);
+  PostResponse(std::move(callback), kerberos::ERROR_NONE, task_delay_);
 }
 
 void FakeKerberosClient::RemoveAccount(
     const kerberos::RemoveAccountRequest& request,
     RemoveAccountCallback callback) {
   MaybeRecordFunctionCallForTesting(__FUNCTION__);
+  kerberos::RemoveAccountResponse response;
   auto it = std::find(accounts_.begin(), accounts_.end(),
                       AccountData(request.principal_name()));
   if (it == accounts_.end()) {
-    PostResponse(std::move(callback), kerberos::ERROR_UNKNOWN_PRINCIPAL_NAME,
-                 mTaskDelay);
-    return;
+    response.set_error(kerberos::ERROR_UNKNOWN_PRINCIPAL_NAME);
+  } else {
+    accounts_.erase(it);
+    response.set_error(kerberos::ERROR_NONE);
   }
-  accounts_.erase(it);
-  PostResponse(std::move(callback), kerberos::ERROR_NONE, mTaskDelay);
+
+  MapAccountData(response.mutable_accounts());
+  PostProtoResponse(std::move(callback), response, task_delay_);
 }
 
 void FakeKerberosClient::ClearAccounts(
@@ -177,7 +180,10 @@ void FakeKerberosClient::ClearAccounts(
     }
   }
 
-  PostResponse(std::move(callback), kerberos::ERROR_NONE, mTaskDelay);
+  kerberos::ClearAccountsResponse response;
+  MapAccountData(response.mutable_accounts());
+  response.set_error(kerberos::ERROR_NONE);
+  PostProtoResponse(std::move(callback), response, task_delay_);
 }
 
 void FakeKerberosClient::ListAccounts(
@@ -185,20 +191,9 @@ void FakeKerberosClient::ListAccounts(
     ListAccountsCallback callback) {
   MaybeRecordFunctionCallForTesting(__FUNCTION__);
   kerberos::ListAccountsResponse response;
-  for (const AccountData& data : accounts_) {
-    kerberos::Account* account = response.add_accounts();
-    account->set_principal_name(data.principal_name);
-    account->set_krb5conf(data.krb5conf);
-    account->set_tgt_validity_seconds(data.has_tgt ? kTgtValidity.InSeconds()
-                                                   : 0);
-    account->set_tgt_renewal_seconds(data.has_tgt ? kTgtRenewal.InSeconds()
-                                                  : 0);
-    account->set_is_managed(data.is_managed);
-    account->set_password_was_remembered(!data.password.empty());
-    account->set_use_login_password(data.use_login_password);
-  }
+  MapAccountData(response.mutable_accounts());
   response.set_error(kerberos::ERROR_NONE);
-  PostProtoResponse(std::move(callback), response, mTaskDelay);
+  PostProtoResponse(std::move(callback), response, task_delay_);
 }
 
 void FakeKerberosClient::SetConfig(const kerberos::SetConfigRequest& request,
@@ -207,19 +202,19 @@ void FakeKerberosClient::SetConfig(const kerberos::SetConfigRequest& request,
   AccountData* data = GetAccountData(request.principal_name());
   if (!data) {
     PostResponse(std::move(callback), kerberos::ERROR_UNKNOWN_PRINCIPAL_NAME,
-                 mTaskDelay);
+                 task_delay_);
     return;
   }
 
   kerberos::ConfigErrorInfo error_info =
       ValidateConfigLines(request.krb5conf());
   if (error_info.code() != kerberos::CONFIG_ERROR_NONE) {
-    PostResponse(std::move(callback), kerberos::ERROR_BAD_CONFIG, mTaskDelay);
+    PostResponse(std::move(callback), kerberos::ERROR_BAD_CONFIG, task_delay_);
     return;
   }
 
   data->krb5conf = request.krb5conf();
-  PostResponse(std::move(callback), kerberos::ERROR_NONE, mTaskDelay);
+  PostResponse(std::move(callback), kerberos::ERROR_NONE, task_delay_);
 }
 
 void FakeKerberosClient::ValidateConfig(
@@ -234,7 +229,7 @@ void FakeKerberosClient::ValidateConfig(
                          ? kerberos::ERROR_BAD_CONFIG
                          : kerberos::ERROR_NONE);
   *response.mutable_error_info() = std::move(error_info);
-  PostProtoResponse(std::move(callback), response, mTaskDelay);
+  PostProtoResponse(std::move(callback), response, task_delay_);
 }
 
 void FakeKerberosClient::AcquireKerberosTgt(
@@ -245,7 +240,7 @@ void FakeKerberosClient::AcquireKerberosTgt(
   AccountData* data = GetAccountData(request.principal_name());
   if (!data) {
     PostResponse(std::move(callback), kerberos::ERROR_UNKNOWN_PRINCIPAL_NAME,
-                 mTaskDelay);
+                 task_delay_);
     return;
   }
 
@@ -276,13 +271,21 @@ void FakeKerberosClient::AcquireKerberosTgt(
 
   // Reject empty passwords.
   if (password.empty()) {
-    PostResponse(std::move(callback), kerberos::ERROR_BAD_PASSWORD, mTaskDelay);
+    PostResponse(std::move(callback), kerberos::ERROR_BAD_PASSWORD,
+                 task_delay_);
+    return;
+  }
+
+  if (simulated_number_of_network_failures_ > 0) {
+    simulated_number_of_network_failures_--;
+    PostResponse(std::move(callback), kerberos::ERROR_NETWORK_PROBLEM,
+                 task_delay_);
     return;
   }
 
   // It worked! Magic!
   data->has_tgt = true;
-  PostResponse(std::move(callback), kerberos::ERROR_NONE, mTaskDelay);
+  PostResponse(std::move(callback), kerberos::ERROR_NONE, task_delay_);
 }
 
 void FakeKerberosClient::GetKerberosFiles(
@@ -292,7 +295,7 @@ void FakeKerberosClient::GetKerberosFiles(
   AccountData* data = GetAccountData(request.principal_name());
   if (!data) {
     PostResponse(std::move(callback), kerberos::ERROR_UNKNOWN_PRINCIPAL_NAME,
-                 mTaskDelay);
+                 task_delay_);
     return;
   }
 
@@ -302,7 +305,7 @@ void FakeKerberosClient::GetKerberosFiles(
     response.mutable_files()->set_krb5conf("Fake Kerberos configuration");
   }
   response.set_error(kerberos::ERROR_NONE);
-  PostProtoResponse(std::move(callback), response, mTaskDelay);
+  PostProtoResponse(std::move(callback), response, task_delay_);
 }
 
 void FakeKerberosClient::ConnectToKerberosFileChangedSignal(
@@ -320,7 +323,7 @@ void FakeKerberosClient::ConnectToKerberosTicketExpiringSignal(
 }
 
 void FakeKerberosClient::SetTaskDelay(base::TimeDelta delay) {
-  mTaskDelay = delay;
+  task_delay_ = delay;
 }
 
 void FakeKerberosClient::StartRecordingFunctionCalls() {
@@ -334,6 +337,15 @@ std::string FakeKerberosClient::StopRecordingAndGetRecordedFunctionCalls() {
   recorded_function_calls_->swap(result);
   recorded_function_calls_.reset();
   return result;
+}
+
+std::size_t FakeKerberosClient::GetNumberOfAccounts() const {
+  return accounts_.size();
+}
+
+void FakeKerberosClient::SetSimulatedNumberOfNetworkFailures(
+    int number_of_failures) {
+  simulated_number_of_network_failures_ = number_of_failures;
 }
 
 void FakeKerberosClient::MaybeRecordFunctionCallForTesting(
@@ -371,6 +383,21 @@ bool FakeKerberosClient::AccountData::operator==(
 bool FakeKerberosClient::AccountData::operator!=(
     const AccountData& other) const {
   return !(*this == other);
+}
+
+void FakeKerberosClient::MapAccountData(RepeatedAccountField* accounts) {
+  for (const AccountData& data : accounts_) {
+    kerberos::Account* account = accounts->Add();
+    account->set_principal_name(data.principal_name);
+    account->set_krb5conf(data.krb5conf);
+    account->set_tgt_validity_seconds(data.has_tgt ? kTgtValidity.InSeconds()
+                                                   : 0);
+    account->set_tgt_renewal_seconds(data.has_tgt ? kTgtRenewal.InSeconds()
+                                                  : 0);
+    account->set_is_managed(data.is_managed);
+    account->set_password_was_remembered(!data.password.empty());
+    account->set_use_login_password(data.use_login_password);
+  }
 }
 
 // static

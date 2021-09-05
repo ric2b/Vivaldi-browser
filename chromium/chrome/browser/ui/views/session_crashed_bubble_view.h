@@ -31,10 +31,13 @@ class SessionCrashedBubbleView : public SessionCrashedBubble,
 
   // Creates and shows the session crashed bubble, with |uma_opted_in_already|
   // indicating whether the user has already opted-in to UMA. It will be called
-  // by Show. It takes ownership of |browser_observer|.
-  static void ShowForReal(
-      std::unique_ptr<BrowserRemovalObserver> browser_observer,
-      bool uma_opted_in_already);
+  // by ShowIfNotOffTheRecordProfile. It takes ownership of |browser_observer|.
+  static void Show(std::unique_ptr<BrowserRemovalObserver> browser_observer,
+                   bool uma_opted_in_already);
+
+ protected:
+  // views::BubbleDialogDelegateView:
+  ax::mojom::Role GetAccessibleWindowRole() override;
 
  private:
   friend class SessionCrashedBubbleViewTest;
@@ -50,10 +53,6 @@ class SessionCrashedBubbleView : public SessionCrashedBubble,
   bool ShouldShowWindowTitle() const override;
   bool ShouldShowCloseButton() const override;
   void OnWidgetDestroying(views::Widget* widget) override;
-  bool Accept() override;
-  bool Cancel() override;
-  bool Close() override;
-  int GetDialogButtons() const override;
 
   // views::BubbleDialogDelegateView methods.
   void Init() override;

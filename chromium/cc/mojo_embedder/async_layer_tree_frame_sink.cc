@@ -14,7 +14,6 @@
 #include "base/trace_event/trace_event.h"
 #include "cc/base/histograms.h"
 #include "cc/trees/layer_tree_frame_sink_client.h"
-#include "components/viz/client/hit_test_data_provider.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/hit_test/hit_test_region_list.h"
@@ -82,7 +81,6 @@ AsyncLayerTreeFrameSink::AsyncLayerTreeFrameSink(
                          std::move(worker_context_provider),
                          std::move(params->compositor_task_runner),
                          params->gpu_memory_buffer_manager),
-      hit_test_data_provider_(std::move(params->hit_test_data_provider)),
       synthetic_begin_frame_source_(
           std::move(params->synthetic_begin_frame_source)),
       pipes_(std::move(params->pipes)),
@@ -93,10 +91,6 @@ AsyncLayerTreeFrameSink::AsyncLayerTreeFrameSink(
       submit_begin_frame_histogram_(GetHistogramNamed(
           "GraphicsPipeline.%s.SubmitCompositorFrameAfterBeginFrame",
           params->client_name)) {
-  // We should not create hit test data provider if we want to use cc layer tree
-  // to generated data.
-  if (features::IsVizHitTestingSurfaceLayerEnabled())
-    DCHECK(!params->hit_test_data_provider);
   DETACH_FROM_THREAD(thread_checker_);
 }
 
@@ -166,8 +160,7 @@ void AsyncLayerTreeFrameSink::SubmitCompositorFrame(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(compositor_frame_sink_ptr_);
   DCHECK(frame.metadata.begin_frame_ack.has_damage);
-  DCHECK_LE(viz::BeginFrameArgs::kStartingFrameNumber,
-            frame.metadata.begin_frame_ack.sequence_number);
+  DCHECK(frame.metadata.begin_frame_ack.frame_id.IsSequenceValid());
 
   // It's possible to request an immediate composite from cc which will bypass
   // BeginFrame. In that case, we cannot collect full graphics pipeline data.
@@ -186,11 +179,8 @@ void AsyncLayerTreeFrameSink::SubmitCompositorFrame(
               frame.size_in_pixels().width());
   }
 
-  base::Optional<viz::HitTestRegionList> hit_test_region_list;
-  if (hit_test_data_provider_)
-    hit_test_region_list = hit_test_data_provider_->GetHitTestData(frame);
-  else
-    hit_test_region_list = client_->BuildHitTestData();
+  base::Optional<viz::HitTestRegionList> hit_test_region_list =
+      client_->BuildHitTestData();
 
   if (show_hit_test_borders && hit_test_region_list)
     hit_test_region_list->flags |= viz::HitTestRegionFlags::kHitTestDebug;
@@ -256,12 +246,16 @@ void AsyncLayerTreeFrameSink::DidNotProduceFrame(
     const viz::BeginFrameAck& ack) {
   DCHECK(compositor_frame_sink_ptr_);
   DCHECK(!ack.has_damage);
-  DCHECK_LE(viz::BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
+  DCHECK(ack.frame_id.IsSequenceValid());
 
   // TODO(yiyix): Remove duplicated calls of DidNotProduceFrame from the same
   // BeginFrames. https://crbug.com/881949
   auto it = pipeline_reporting_frame_times_.find(ack.trace_id);
   if (it != pipeline_reporting_frame_times_.end()) {
+    TRACE_EVENT_WITH_FLOW1("viz,benchmark", "Graphics.Pipeline",
+                           TRACE_ID_GLOBAL(ack.trace_id),
+                           TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
+                           "step", "DidNotProduceFrame");
     compositor_frame_sink_ptr_->DidNotProduceFrame(ack);
     pipeline_reporting_frame_times_.erase(it);
   }
@@ -345,6 +339,13 @@ void AsyncLayerTreeFrameSink::ReclaimResources(
 
 void AsyncLayerTreeFrameSink::OnNeedsBeginFrames(bool needs_begin_frames) {
   DCHECK(compositor_frame_sink_ptr_);
+  if (needs_begin_frames_ != needs_begin_frames) {
+    if (needs_begin_frames_) {
+      TRACE_EVENT_ASYNC_END0("cc,benchmark", "NeedsBeginFrames", this);
+    } else {
+      TRACE_EVENT_ASYNC_BEGIN0("cc,benchmark", "NeedsBeginFrames", this);
+    }
+  }
   needs_begin_frames_ = needs_begin_frames;
   compositor_frame_sink_ptr_->SetNeedsBeginFrame(needs_begin_frames);
 }

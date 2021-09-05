@@ -2,6 +2,23 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="nl">
 <translation id="3830627370375585318">Sta Vivaldi toe via je firewall- of antivirusinstellingen het netwerk te gebruiken.</translation>
+<translation id="4200102020577305737">Ga naar het Vivaldi-menu &gt;
+<ph name="SETTINGS_TITLE" />
+&gt;
+<ph name="ADVANCED_TITLE" />
+&gt;
+<ph name="PROXIES_TITLE" />
+&gt;
+LAN Instellingen
+en schakel 'Proxyserver gebruiken' uit.</translation>
+<translation id="4932161901409251843">Ga naar het Vivaldi-menu &gt;
+<ph name="SETTINGS_TITLE" />
+&gt;
+<ph name="ADVANCED_TITLE" />
+&gt;
+<ph name="PROXIES_TITLE" />
+&gt;
+          en zorg ervoor dat de configuratie is ingesteld op 'geen proxy' of 'direct'.</translation>
 <translation id="5248344925342018662">Je bekijkt een beveiligde Vivaldi-pagina</translation>
 <translation id="7023871570427738255">Ga naar
           het Vivaldi-menu &gt;

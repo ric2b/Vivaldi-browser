@@ -12,12 +12,10 @@
 #import "base/ios/block_types.h"
 #import "ios/chrome/browser/ui/authentication/authentication_flow_performer_delegate.h"
 
+class Browser;
 @protocol BrowsingDataCommands;
-@class ChromeIdentity;
-
-namespace ios {
 class ChromeBrowserState;
-}  // namespace ios
+@class ChromeIdentity;
 
 // Performs the sign-in steps and user interactions as part of the sign-in flow.
 @interface AuthenticationFlowPerformer : NSObject
@@ -33,42 +31,42 @@ class ChromeBrowserState;
 - (void)cancelAndDismiss;
 
 // Starts sync for |browserState|.
-- (void)commitSyncForBrowserState:(ios::ChromeBrowserState*)browserState;
+- (void)commitSyncForBrowserState:(ChromeBrowserState*)browserState;
 
 // Fetches the managed status for |identity|.
-- (void)fetchManagedStatus:(ios::ChromeBrowserState*)browserState
+- (void)fetchManagedStatus:(ChromeBrowserState*)browserState
                forIdentity:(ChromeIdentity*)identity;
 
 // Signs |identity| with |hostedDomain| into |browserState|.
 - (void)signInIdentity:(ChromeIdentity*)identity
       withHostedDomain:(NSString*)hostedDomain
-        toBrowserState:(ios::ChromeBrowserState*)browserState;
+        toBrowserState:(ChromeBrowserState*)browserState;
 
 // Signs out of |browserState| and sends |didSignOut| to the delegate when
 // complete.
-- (void)signOutBrowserState:(ios::ChromeBrowserState*)browserState;
+- (void)signOutBrowserState:(ChromeBrowserState*)browserState;
 
 // Immediately signs out |browserState| without waiting for dependent services.
-- (void)signOutImmediatelyFromBrowserState:
-    (ios::ChromeBrowserState*)browserState;
+- (void)signOutImmediatelyFromBrowserState:(ChromeBrowserState*)browserState;
 
 // Asks the user whether to clear or merge their previous identity's data with
 // that of |identity| or cancel sign-in, sending |didChooseClearDataPolicy:|
 // or |didChooseCancel| to the delegate when complete according to the user
 // action.
 - (void)promptMergeCaseForIdentity:(ChromeIdentity*)identity
-                      browserState:(ios::ChromeBrowserState*)browserState
+                           browser:(Browser*)browser
                     viewController:(UIViewController*)viewController;
 
-// Clears browsing data from |browserState| and sends |didClearData| to the
-// delegate when complete.
-- (void)clearData:(ios::ChromeBrowserState*)browserState
-       dispatcher:(id<BrowsingDataCommands>)dispatcher;
+// Clears browsing data from the bowser state assoiciated with |browser|, using
+// |handler| to perform the removal. When removal is comeplete, the delegate is
+// informed (via -didClearData).
+- (void)clearDataFromBrowser:(Browser*)browser
+              commandHandler:(id<BrowsingDataCommands>)handler;
 
 // Determines whether the user must decide what to do with |identity|'s browsing
 // data before signing into |browserState|.
 - (BOOL)shouldHandleMergeCaseForIdentity:(ChromeIdentity*)identity
-                            browserState:(ios::ChromeBrowserState*)browserState;
+                            browserState:(ChromeBrowserState*)browserState;
 
 // Shows a confirmation dialog for signing in to an account managed by
 // |hostedDomain|.

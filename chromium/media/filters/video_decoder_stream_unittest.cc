@@ -27,6 +27,7 @@
 #endif
 
 using ::base::test::RunCallback;
+using ::base::test::RunOnceCallback;
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::Assign;
@@ -43,6 +44,7 @@ namespace media {
 
 const int kNumConfigs = 4;
 const int kNumBuffersInOneConfig = 5;
+constexpr base::TimeDelta kPrepareDelay = base::TimeDelta::FromMilliseconds(5);
 
 static std::string GetDecoderName(int i) {
   return std::string("VideoDecoder") + base::NumberToString(i);
@@ -103,7 +105,7 @@ class VideoDecoderStreamTest
       // Decryptor can only decrypt (not decrypt-and-decode) so that
       // DecryptingDemuxerStream will be used.
       EXPECT_CALL(*decryptor_, InitializeVideoDecoder(_, _))
-          .WillRepeatedly(RunCallback<1>(false));
+          .WillRepeatedly(RunOnceCallback<1>(false));
       EXPECT_CALL(*decryptor_, Decrypt(_, _, _))
           .WillRepeatedly(Invoke(this, &VideoDecoderStreamTest::Decrypt));
     }
@@ -118,6 +120,7 @@ class VideoDecoderStreamTest
     // Covering most MediaLog messages for now.
     // TODO(wolenetz/xhwang): Fix tests to have better MediaLog checking.
     EXPECT_MEDIA_LOG(HasSubstr("video")).Times(AnyNumber());
+    EXPECT_MEDIA_LOG(HasSubstr("Video")).Times(AnyNumber());
     EXPECT_MEDIA_LOG(HasSubstr("decryptor")).Times(AnyNumber());
   }
 
@@ -139,6 +142,15 @@ class VideoDecoderStreamTest
   void PrepareFrame(scoped_refptr<VideoFrame> frame,
                     VideoDecoderStream::OutputReadyCB output_ready_cb) {
     // Simulate some delay in return of the output.
+    task_environment_.GetMainThreadTaskRunner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(output_ready_cb), std::move(frame)));
+  }
+
+  void PrepareFrameWithDelay(
+      scoped_refptr<VideoFrame> frame,
+      VideoDecoderStream::OutputReadyCB output_ready_cb) {
+    task_environment_.FastForwardBy(kPrepareDelay);
     task_environment_.GetMainThreadTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(std::move(output_ready_cb), std::move(frame)));
@@ -286,10 +298,10 @@ class VideoDecoderStreamTest
   // but removes the DecryptConfig to make the buffer unencrypted.
   void Decrypt(Decryptor::StreamType stream_type,
                scoped_refptr<DecoderBuffer> encrypted,
-               const Decryptor::DecryptCB& decrypt_cb) {
+               Decryptor::DecryptCB decrypt_cb) {
     DCHECK(encrypted->decrypt_config());
     if (has_no_key_) {
-      decrypt_cb.Run(Decryptor::kNoKey, NULL);
+      std::move(decrypt_cb).Run(Decryptor::kNoKey, nullptr);
       return;
     }
 
@@ -300,11 +312,11 @@ class VideoDecoderStreamTest
       decrypted->set_is_key_frame(true);
     decrypted->set_timestamp(encrypted->timestamp());
     decrypted->set_duration(encrypted->duration());
-    decrypt_cb.Run(Decryptor::kSuccess, decrypted);
+    std::move(decrypt_cb).Run(Decryptor::kSuccess, decrypted);
   }
 
   // Callback for VideoDecoderStream::Read().
-  void FrameReady(VideoDecoderStream::Status status,
+  void FrameReady(VideoDecoderStream::ReadStatus status,
                   scoped_refptr<VideoFrame> frame) {
     DCHECK(pending_read_);
     frame_read_ = frame;
@@ -328,7 +340,7 @@ class VideoDecoderStreamTest
   }
 
   void ReadOneFrame() {
-    frame_read_ = NULL;
+    frame_read_ = nullptr;
     pending_read_ = true;
     video_decoder_stream_->Read(base::BindOnce(
         &VideoDecoderStreamTest::FrameReady, base::Unretained(this)));
@@ -463,7 +475,8 @@ class VideoDecoderStreamTest
     SatisfyPendingCallback(DECODER_REINIT);
   }
 
-  base::test::SingleThreadTaskEnvironment task_environment_;
+  base::test::SingleThreadTaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
 
   StrictMock<MockMediaLog> media_log_;
   std::unique_ptr<VideoDecoderStream> video_decoder_stream_;
@@ -494,7 +507,7 @@ class VideoDecoderStreamTest
   bool pending_stop_;
   int num_decoded_bytes_unreported_;
   scoped_refptr<VideoFrame> frame_read_;
-  VideoDecoderStream::Status last_read_status_;
+  VideoDecoderStream::ReadStatus last_read_status_;
 
   // Decryptor has no key to decrypt a frame.
   bool has_no_key_;
@@ -569,6 +582,56 @@ TEST_P(VideoDecoderStreamTest, Read_AfterReset) {
   Read();
   Reset();
   Read();
+}
+
+TEST_P(VideoDecoderStreamTest, Read_ProperMetadata) {
+  // For testing simplicity, omit parallel decode tests with a delay in frames.
+  if (GetParam().parallel_decoding > 1 && GetParam().decoding_delay > 0)
+    return;
+
+  if (GetParam().has_prepare) {
+    // Override the basic PrepareFrame() for a version that moves the MockTime
+    // by kPrepareDelay. This simulates real work done (e.g. YUV conversion).
+    video_decoder_stream_->SetPrepareCB(
+        base::BindRepeating(&VideoDecoderStreamTest::PrepareFrameWithDelay,
+                            base::Unretained(this)));
+  }
+
+  constexpr base::TimeDelta kDecodeDelay =
+      base::TimeDelta::FromMilliseconds(10);
+
+  Initialize();
+
+  // Simulate time elapsed by the decoder.
+  EnterPendingState(DECODER_DECODE);
+  task_environment_.FastForwardBy(kDecodeDelay);
+
+  SatisfyPendingCallback(DECODER_DECODE);
+
+  EXPECT_TRUE(frame_read_);
+
+  auto* metadata = frame_read_->metadata();
+
+  // Verify the decoding metadata is accurate.
+  base::TimeTicks decode_start;
+  EXPECT_TRUE(metadata->GetTimeTicks(VideoFrameMetadata::DECODE_BEGIN_TIME,
+                                     &decode_start));
+
+  base::TimeTicks decode_end;
+  EXPECT_TRUE(
+      metadata->GetTimeTicks(VideoFrameMetadata::DECODE_END_TIME, &decode_end));
+
+  EXPECT_EQ(decode_end - decode_start, kDecodeDelay);
+
+  // Verify the processing metadata is accurate.
+  const base::TimeDelta expected_processing_time =
+      GetParam().has_prepare ? (kDecodeDelay + kPrepareDelay) : kDecodeDelay;
+
+  base::TimeDelta processing_time;
+  EXPECT_TRUE(metadata->GetTimeDelta(VideoFrameMetadata::PROCESSING_TIME,
+                                     &processing_time));
+
+  EXPECT_EQ(processing_time, expected_processing_time);
 }
 
 TEST_P(VideoDecoderStreamTest, Read_BlockedDemuxer) {

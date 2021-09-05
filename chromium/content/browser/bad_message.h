@@ -144,7 +144,7 @@ enum BadMessageReason {
   BDH_INVALID_REFCOUNT_OPERATION = 117,
   BDH_INVALID_URL_OPERATION = 118,
   OBSOLETE_IDBDH_INVALID_ORIGIN = 119,
-  RFH_FAIL_PROVISIONAL_LOAD_NO_HANDLE = 120,
+  OBSOLETE_RFH_FAIL_PROVISIONAL_LOAD_NO_HANDLE = 120,
   OBSOLETE_RFH_FAIL_PROVISIONAL_LOAD_NO_ERROR = 121,
   NI_IN_PAGE_NAVIGATION = 122,
   RPH_MOJO_PROCESS_ERROR = 123,
@@ -236,7 +236,7 @@ enum BadMessageReason {
   RFH_CHILD_FRAME_NEEDS_OWNER_ELEMENT_TYPE = 208,
   OBSOLETE_RFH_INVALID_WEB_REPORTING_CRASH_ID = 209,
   RFH_DETACH_MAIN_FRAME = 210,
-  RFH_DOCUMENT_INTERFACE_BROKER_MISSING = 211,
+  RFH_BROWSER_INTERFACE_BROKER_MISSING = 211,
   RFPH_POST_MESSAGE_INVALID_SOURCE_ORIGIN = 212,
   INVALID_INITIATOR_ORIGIN = 213,
   RFHI_BEGIN_NAVIGATION_MISSING_INITIATOR_ORIGIN = 214,
@@ -246,6 +246,13 @@ enum BadMessageReason {
   MDDH_INVALID_STREAM_SELECTION_INFO = 218,
   REGISTER_PROTOCOL_HANDLER_INVALID_URL = 219,
   NC_SAME_DOCUMENT_POST_COMMIT_ERROR = 220,
+  RFH_INVALID_WEB_UI_CONTROLLER = 221,
+  RFPH_ADVANCE_FOCUS_INTO_PORTAL = 222,
+  RFH_UNEXPECTED_EMBEDDING_TOKEN = 223,
+  RFH_MISSING_EMBEDDING_TOKEN = 224,
+  RFH_BAD_DOCUMENT_POLICY_HEADER = 225,
+  RFMF_INVALID_PLUGIN_EMBEDDER_ORIGIN = 226,
+  RFH_INVALID_CALL_FROM_NOT_MAIN_FRAME = 227,
 
   // Please add new elements here. The naming convention is abbreviated class
   // name (e.g. RenderFrameHost becomes RFH) plus a unique description of the
@@ -268,14 +275,8 @@ CONTENT_EXPORT void ReceivedBadMessage(int render_process_id,
 // for the |reason|, and terminates the process for |filter|.
 void ReceivedBadMessage(BrowserMessageFilter* filter, BadMessageReason reason);
 
-// Returns a crash key named "mojo-message-error" for storing Mojo error
-// messages.
-base::debug::CrashKeyString* GetMojoErrorCrashKey();
-
 // Site isolation. These keys help debug renderer kills such as
 // https://crbug.com/773140.
-// Returns a key named "killed_process_origin_lock".
-base::debug::CrashKeyString* GetKilledProcessOriginLockKey();
 // Retuns a key named "requested_site_url".
 base::debug::CrashKeyString* GetRequestedSiteURLKey();
 

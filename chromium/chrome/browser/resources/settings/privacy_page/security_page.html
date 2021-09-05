@@ -1,0 +1,221 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/cr_elements/cr_icon_button/cr_icon_button.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_radio_group/cr_radio_group.html">
+<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_indicator_behavior.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_link_row/cr_link_row.html">
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/html/cr/ui/focus_without_ink.html">
+<link rel="import" href="collapse_radio_button.html">
+<link rel="import" href="disable_safebrowsing_dialog.html">
+<link rel="import" href="passwords_leak_detection_toggle.html">
+<link rel="import" href="privacy_page_browser_proxy.html">
+<link rel="import" href="safe_browsing_browser_proxy.html">
+<link rel="import" href="secure_dns.html">
+<link rel="import" href="../controls/settings_toggle_button.html">
+<link rel="import" href="../i18n_setup.html">
+<link rel="import" href="../icons.html">
+<link rel="import" href="../metrics_browser_proxy.html">
+<link rel="import" href="../people_page/sync_browser_proxy.html">
+<link rel="import" href="../prefs/prefs.html">
+<link rel="import" href="../prefs/prefs_behavior.html">
+<link rel="import" href="../route.html">
+<link rel="import" href="../router.html">
+<link rel="import" href="../settings_shared_css.html">
+
+<dom-module id="settings-security-page">
+  <template>
+    <style include="settings-shared">
+      img {
+        width: 100%;
+      }
+
+      .block {
+        display: block;
+      }
+
+      .bullet-line {
+        align-items: center;
+        display: flex;
+        min-height: var(--settings-row-min-height);
+      }
+
+      .bullet-line.three-line {
+        min-height: var(--settings-row-three-line-min-height);
+      }
+
+      .bullet-line > div {
+        padding-inline-start: var(--cr-radio-button-size);
+      }
+
+      settings-collapse-radio-button {
+        --settings-collapse-toggle-min-height:
+            var(--settings-row-three-line-min-height);
+      }
+
+      settings-collapse-radio-button:not(:first-of-type) {
+        --settings-collapse-separator-line: var(--cr-separator-line);
+      }
+
+      settings-collapse-radio-button[hidden] + settings-collapse-radio-button {
+          --settings-collapse-separator-line: 0;
+      }
+
+      settings-collapse-radio-button .bullet-line:last-child {
+        padding-bottom: 12px;
+      }
+
+      settings-passwords-leak-detection-toggle,
+      settings-toggle-button:not([disabled]) {
+        pointer-events: all;
+      }
+
+      #safeBrowsingReportingToggle {
+        padding-inline-end: 0;
+        padding-inline-start: 0;
+      }
+
+      #safeBrowsingEnhanced .bullet-line:last-of-type {
+        padding-bottom: 12px;
+      }
+    </style>
+    <picture>
+      <source
+          srcset="chrome://settings/images/safe_browsing_banner_dark.svg"
+          media="(prefers-color-scheme: dark">
+      <img id="banner" alt=""
+          src="chrome://settings/images/safe_browsing_banner.svg">
+    </picture>
+    <div class="settings-box block first">
+      <h2>$i18n{safeBrowsingSectionLabel}</h2>
+      <cr-radio-group id="safeBrowsingRadio"
+          selected="[[selectSafeBrowsingRadio_]]"
+          selectable-elements="cr-radio-button, settings-collapse-radio-button"
+          on-selected-changed="onSafeBrowsingRadioChange_">
+        <settings-collapse-radio-button name="[[safeBrowsingEnum_.ENHANCED]]"
+            id="safeBrowsingEnhanced"
+            label="$i18n{safeBrowsingEnhanced}"
+            sub-label="$i18n{safeBrowsingEnhancedDesc}"
+            hidden="[[!safeBrowsingEnhancedEnabled_]]"
+            disabled="[[safeBrowsingRadioManagedState_.enhanced.disabled]]"
+            policy-indicator-type=
+                "[[safeBrowsingRadioManagedState_.enhanced.indicator]]">
+          <div slot="collapse">
+            <div class="bullet-line">
+              <iron-icon icon="cr:security"></iron-icon>
+              <div class="secondary">
+                $i18n{safeBrowsingEnhancedBulOne}
+              </div>
+            </div>
+            <div class="bullet-line">
+              <iron-icon icon="settings20:googleg"></iron-icon>
+              <div class="secondary">
+                $i18n{safeBrowsingEnhancedBulTwo}
+              </div>
+            </div>
+            <div class="bullet-line">
+              <iron-icon icon="settings:public"></iron-icon>
+              <div class="secondary">
+                $i18n{safeBrowsingEnhancedBulThree}
+              </div>
+            </div>
+            <div class="bullet-line">
+              <iron-icon icon="settings20:vpn-key"></iron-icon>
+              <div class="secondary">
+                $i18n{safeBrowsingEnhancedBulFour}
+              </div>
+            </div>
+            <div class="bullet-line three-line last-collapse-item">
+              <iron-icon icon="settings20:data"></iron-icon>
+              <div class="secondary">
+                $i18n{safeBrowsingEnhancedBulFive}
+              </div>
+            </div>
+          </div>
+        </settings-collapse-radio-button>
+        <settings-collapse-radio-button name="[[safeBrowsingEnum_.STANDARD]]"
+            id="safeBrowsingStandard"
+            label="$i18n{safeBrowsingStandard}"
+            sub-label="$i18n{safeBrowsingStandardDesc}"
+            info-opened="{{infoOpened_}}"
+            disabled="[[safeBrowsingRadioManagedState_.standard.disabled]]"
+            policy-indicator-type=
+                "[[safeBrowsingRadioManagedState_.standard.indicator]]">
+          <div slot="collapse">
+            <div class="bullet-line">
+              <iron-icon icon="cr:security"></iron-icon>
+              <div class="secondary">
+                  $i18n{safeBrowsingStandardBulOne}
+              </div>
+            </div>
+            <div class="bullet-line three-line">
+              <iron-icon icon="settings20:data"></iron-icon>
+              <div class="secondary">
+                  $i18n{safeBrowsingStandardBulTwo}
+              </div>
+            </div>
+          </div>
+          <div slot="noSelectionCollapse">
+            <settings-toggle-button id="safeBrowsingReportingToggle"
+                pref="{{prefs.safebrowsing.scout_reporting_enabled}}"
+                class="first"
+                label="$i18n{safeBrowsingStandardReportingLabel}"
+                sub-label="$i18n{safeBrowsingEnableExtendedReportingDesc}"
+                disabled="[[
+                    getDisabledExtendedSafeBrowsing_(prefs.safebrowsing.*)]]">
+            </settings-toggle-button>
+            <settings-passwords-leak-detection-toggle id="passwordsLeakToggle"
+                class="collapsable"
+                prefs="{{prefs}}"
+                sync-status="[[syncStatus]]">
+            </settings-passwords-leak-detection-toggle>
+          </div>
+        </settings-collapse-radio-button>
+        <settings-collapse-radio-button name="[[safeBrowsingEnum_.DISABLED]]"
+            id="safeBrowsingDisabled" no-collapse
+            label="$i18n{safeBrowsingNone}"
+            sub-label="$i18n{safeBrowsingNoneDesc}"
+            disabled="[[safeBrowsingRadioManagedState_.disabled.disabled]]"
+            policy-indicator-type=
+                "[[safeBrowsingRadioManagedState_.disabled.indicator]]">
+        </settings-collapse-radio-button>
+      </cr-radio-group>
+    </div>
+    <div class="settings-box first line-only">
+      <h2>$i18n{securityPageAdvancedSectionLabel}</h2>
+    </div>
+    <template is="dom-if" if="[[showSecureDnsSetting_]]">
+      <settings-secure-dns prefs="{{prefs}}"></settings-secure-dns>
+    </template>
+    <template is="dom-if" if="[[enableSecurityKeysSubpage_]]">
+        <cr-link-row id="security-keys-subpage-trigger"
+          class="hr"
+          label="$i18n{securityKeysTitle}"
+          sub-label="$i18n{securityKeysDesc}"
+          on-click="onSecurityKeysClick_"></cr-link-row>
+    </template>
+<if expr="use_nss_certs or is_win or is_macosx">
+    <cr-link-row id="manageCertificates"
+        class="hr"
+<if expr="not use_nss_certs">
+        external
+</if>
+        label="$i18n{manageCertificates}"
+        sub-label="$i18n{manageCertificatesDescription}"
+        on-click="onManageCertificatesClick_"></cr-link-row>
+</if>
+    <cr-link-row id="advanced-protection-program-link"
+        class="hr"
+        label="$i18n{advancedProtectionProgramTitle}"
+        sub-label="$i18n{advancedProtectionProgramDesc}"
+        on-click="onAdvancedProtectionProgramLinkClick_"
+        external>
+    </cr-link-row>
+    <template is="dom-if" if="[[showDisableSafebrowsingDialog_]]" restamp>
+      <settings-disable-safebrowsing-dialog prefs="{{prefs}}"
+          on-close="onDisableSafebrowsingDialogClose_">
+      </settings-disable-safebrowsing-dialog>
+    </template>
+  </template>
+  <script src="security_page.js"></script>
+</dom-module>

@@ -13,8 +13,10 @@ import androidx.annotation.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.TabSwitcherDrawable;
-import org.chromium.ui.widget.ChromeImageButton;
+import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 import org.chromium.ui.widget.Toast;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * A button displaying the number of open tabs. Clicking the button toggles the tab switcher view.
@@ -22,8 +24,8 @@ import org.chromium.ui.widget.Toast;
  *                    toolbar.
  */
 public class ToggleTabStackButton
-        extends ChromeImageButton implements TabCountProvider.TabCountObserver,
-                                             View.OnClickListener, View.OnLongClickListener {
+        extends ListMenuButton implements TabCountProvider.TabCountObserver, View.OnClickListener,
+                                          View.OnLongClickListener {
     private TabSwitcherDrawable mTabSwitcherButtonDrawable;
     private TabSwitcherDrawable mTabSwitcherButtonDrawableLight;
     private TabCountProvider mTabCountProvider;
@@ -38,10 +40,19 @@ public class ToggleTabStackButton
     public void onFinishInflate() {
         super.onFinishInflate();
 
+        if (ChromeApplication.isVivaldi()) {
+            mTabSwitcherButtonDrawable =
+                    TabSwitcherDrawable.createTabSwitcherDrawableForTopToolBar(getContext(),
+                            false);
+            mTabSwitcherButtonDrawableLight =
+                    TabSwitcherDrawable.createTabSwitcherDrawableForTopToolBar(getContext(),
+                            true);
+        } else {
         mTabSwitcherButtonDrawable =
                 TabSwitcherDrawable.createTabSwitcherDrawable(getContext(), false);
         mTabSwitcherButtonDrawableLight =
                 TabSwitcherDrawable.createTabSwitcherDrawable(getContext(), true);
+        }
         setImageDrawable(mTabSwitcherButtonDrawable);
         setOnClickListener(this);
         setOnLongClickListener(this);

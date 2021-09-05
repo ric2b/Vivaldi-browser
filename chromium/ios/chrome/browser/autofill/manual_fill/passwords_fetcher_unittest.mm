@@ -85,7 +85,6 @@ class PasswordFetcherTest : public PlatformTest {
     form.password_value = base::ASCIIToUTF16("test");
     form.submit_element = base::ASCIIToUTF16("signIn");
     form.signon_realm = "http://www.example.com/";
-    form.preferred = false;
     form.scheme = autofill::PasswordForm::Scheme::kHtml;
     form.blacklisted_by_user = false;
     return form;
@@ -105,15 +104,14 @@ class PasswordFetcherTest : public PlatformTest {
     form->password_value = base::ASCIIToUTF16("test");
     form->submit_element = base::ASCIIToUTF16("signIn");
     form->signon_realm = "http://www.example2.com/";
-    form->preferred = false;
     form->scheme = autofill::PasswordForm::Scheme::kHtml;
     form->blacklisted_by_user = false;
     GetPasswordStore()->AddLogin(*std::move(form));
   }
 
-  // Creates and adds a blacklisted site form to never offer to save
+  // Creates and adds a blocked site form to never offer to save
   // user's password to those sites.
-  void AddBlacklistedForm() {
+  void AddBlockedForm() {
     auto form = std::make_unique<autofill::PasswordForm>();
     form->origin = GURL("http://www.secret.com/login");
     form->action = GURL("http://www.secret.com/action");
@@ -123,7 +121,6 @@ class PasswordFetcherTest : public PlatformTest {
     form->password_value = base::ASCIIToUTF16("cantsay");
     form->submit_element = base::ASCIIToUTF16("signIn");
     form->signon_realm = "http://www.secret.test/";
-    form->preferred = false;
     form->scheme = autofill::PasswordForm::Scheme::kHtml;
     form->blacklisted_by_user = true;
     GetPasswordStore()->AddLogin(*std::move(form));
@@ -190,10 +187,10 @@ TEST_F(PasswordFetcherTest, ReturnsTwoPasswords) {
   EXPECT_TRUE(passwordFetcher);
 }
 
-// Tests PasswordFetcher ignores blacklisted passwords.
-TEST_F(PasswordFetcherTest, IgnoresBlacklisted) {
+// Tests PasswordFetcher ignores blocked passwords.
+TEST_F(PasswordFetcherTest, IgnoresBlocked) {
   AddSavedForm1();
-  AddBlacklistedForm();
+  AddBlockedForm();
   TestPasswordFetcherDelegate* passwordFetcherDelegate =
       [[TestPasswordFetcherDelegate alloc] init];
   auto passwordStore = IOSChromePasswordStoreFactory::GetForBrowserState(

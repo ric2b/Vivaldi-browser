@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "media/base/bind_to_current_loop.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -17,9 +18,9 @@
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_sink.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
-#include "third_party/blink/public/web/modules/mediastream/video_track_adapter_settings.h"
 #include "third_party/blink/public/web/web_heap.h"
 #include "third_party/blink/renderer/modules/mediastream/mock_mojo_media_stream_dispatcher_host.h"
+#include "third_party/blink/renderer/modules/mediastream/video_track_adapter_settings.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/testing/io_task_runner_testing_platform_support.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
@@ -70,15 +71,15 @@ class FakeMediaStreamVideoSink : public MediaStreamVideoSink {
  public:
   FakeMediaStreamVideoSink(base::TimeTicks* capture_time,
                            media::VideoFrameMetadata* metadata,
-                           base::Closure got_frame_cb)
+                           base::OnceClosure got_frame_cb)
       : capture_time_(capture_time),
         metadata_(metadata),
-        got_frame_cb_(got_frame_cb) {}
+        got_frame_cb_(std::move(got_frame_cb)) {}
 
   void ConnectToTrack(const WebMediaStreamTrack& track) {
     MediaStreamVideoSink::ConnectToTrack(
         track,
-        ConvertToBaseCallback(
+        ConvertToBaseRepeatingCallback(
             CrossThreadBindRepeating(&FakeMediaStreamVideoSink::OnVideoFrame,
                                      WTF::CrossThreadUnretained(this))),
         true);
@@ -97,7 +98,7 @@ class FakeMediaStreamVideoSink : public MediaStreamVideoSink {
  private:
   base::TimeTicks* const capture_time_;
   media::VideoFrameMetadata* const metadata_;
-  base::Closure got_frame_cb_;
+  base::OnceClosure got_frame_cb_;
 };
 
 }  // namespace
@@ -110,8 +111,8 @@ class MediaStreamVideoCapturerSourceTest : public testing::Test {
     EXPECT_CALL(*delegate_, GetPreferredFormats());
     source_ = new MediaStreamVideoCapturerSource(
         /*LocalFrame =*/nullptr,
-        WTF::BindRepeating(&MediaStreamVideoCapturerSourceTest::OnSourceStopped,
-                           WTF::Unretained(this)),
+        WTF::Bind(&MediaStreamVideoCapturerSourceTest::OnSourceStopped,
+                  WTF::Unretained(this)),
         std::move(delegate));
     source_->SetMediaStreamDispatcherHostForTesting(
         mock_dispatcher_host_.CreatePendingRemoteAndBind());
@@ -144,9 +145,8 @@ class MediaStreamVideoCapturerSourceTest : public testing::Test {
     return MediaStreamVideoTrack::CreateVideoTrack(
         source_, adapter_settings, noise_reduction, is_screencast,
         min_frame_rate,
-        WTF::BindRepeating(
-            &MediaStreamVideoCapturerSourceTest::OnConstraintsApplied,
-            base::Unretained(this)),
+        WTF::Bind(&MediaStreamVideoCapturerSourceTest::OnConstraintsApplied,
+                  base::Unretained(this)),
         enabled);
   }
 

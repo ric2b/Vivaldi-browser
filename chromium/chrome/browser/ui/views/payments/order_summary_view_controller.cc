@@ -143,7 +143,10 @@ std::unique_ptr<views::Button>
 OrderSummaryViewController::CreatePrimaryButton() {
   std::unique_ptr<views::Button> button(
       views::MdTextButton::CreateSecondaryUiBlueButton(
-          this, l10n_util::GetStringUTF16(IDS_PAYMENTS_PAY_BUTTON)));
+          this, state()->selected_app() && state()->selected_app()->type() !=
+                                               PaymentApp::Type::AUTOFILL
+                    ? l10n_util::GetStringUTF16(IDS_PAYMENTS_CONTINUE_BUTTON)
+                    : l10n_util::GetStringUTF16(IDS_PAYMENTS_PAY_BUTTON)));
   button->set_tag(static_cast<int>(PaymentRequestCommonTags::PAY_BUTTON_TAG));
   button->SetID(static_cast<int>(DialogViewID::PAY_BUTTON));
   pay_button_ = button.get();
@@ -173,8 +176,7 @@ void OrderSummaryViewController::FillContentView(views::View* content_view) {
       DialogViewID::ORDER_SUMMARY_LINE_ITEM_1,
       DialogViewID::ORDER_SUMMARY_LINE_ITEM_2,
       DialogViewID::ORDER_SUMMARY_LINE_ITEM_3};
-  const auto& display_items =
-      spec()->GetDisplayItems(state()->selected_instrument());
+  const auto& display_items = spec()->GetDisplayItems(state()->selected_app());
   for (size_t i = 0; i < display_items.size(); i++) {
     DialogViewID view_id =
         i < line_items.size() ? line_items[i] : DialogViewID::VIEW_ID_NONE;
@@ -194,19 +196,17 @@ void OrderSummaryViewController::FillContentView(views::View* content_view) {
   base::string16 total_label_value = l10n_util::GetStringFUTF16(
       IDS_PAYMENT_REQUEST_ORDER_SUMMARY_SHEET_TOTAL_FORMAT,
       base::UTF8ToUTF16(
-          spec()->GetTotal(state()->selected_instrument())->amount->currency),
+          spec()->GetTotal(state()->selected_app())->amount->currency),
       spec()->GetFormattedCurrencyAmount(
-          spec()->GetTotal(state()->selected_instrument())->amount));
+          spec()->GetTotal(state()->selected_app())->amount));
 
   content_view->AddChildView(
       CreateLineItemView(
+          base::UTF8ToUTF16(spec()->GetTotal(state()->selected_app())->label),
           base::UTF8ToUTF16(
-              spec()->GetTotal(state()->selected_instrument())->label),
-          base::UTF8ToUTF16(spec()
-                                ->GetTotal(state()->selected_instrument())
-                                ->amount->currency),
+              spec()->GetTotal(state()->selected_app())->amount->currency),
           spec()->GetFormattedCurrencyAmount(
-              spec()->GetTotal(state()->selected_instrument())->amount),
+              spec()->GetTotal(state()->selected_app())->amount),
           true, DialogViewID::ORDER_SUMMARY_TOTAL_CURRENCY_LABEL,
           DialogViewID::ORDER_SUMMARY_TOTAL_AMOUNT_LABEL)
           .release());

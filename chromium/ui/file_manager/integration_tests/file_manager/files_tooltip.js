@@ -9,7 +9,7 @@
   const tooltipQueryVisible = 'files-tooltip[visible=true]';
   const searchButton = '#search-button[has-tooltip]';
   const viewButton = '#view-button[has-tooltip]';
-  const breadcrumbs = '#breadcrumb-path-0';
+  const fileList = '#file-list';
   const cancelButton = '#cancel-selection-button[has-tooltip]';
 
   /**
@@ -40,9 +40,9 @@
         await remoteCall.waitForElement(appId, [tooltipQueryVisible, '#label']);
     chrome.test.assertEq('Switch to thumbnail view', label.text);
 
-    // Focus a button without tooltip.
+    // Focus an element without tooltip.
     chrome.test.assertTrue(
-        await remoteCall.callRemoteTestUtil('focus', appId, [breadcrumbs]));
+        await remoteCall.callRemoteTestUtil('focus', appId, [fileList]));
 
     // The tooltip should be hidden.
     tooltip = await remoteCall.waitForElement(appId, tooltipQueryHidden);
@@ -112,7 +112,7 @@
 
     // The tooltip should be visible.
     tooltip = await remoteCall.waitForElement(appId, tooltipQueryVisible);
-    let label =
+    const label =
         await remoteCall.waitForElement(appId, [tooltipQueryVisible, '#label']);
     chrome.test.assertEq('Search', label.text);
 
@@ -122,5 +122,29 @@
 
     // The tooltip should be hidden.
     tooltip = await remoteCall.waitForElement(appId, tooltipQueryHidden);
+  };
+
+  /**
+   * Tests that the tooltip should hide when the window resizes.
+   */
+  testcase.filesTooltipHidesOnWindowResize = async () => {
+    const appId = await setupAndWaitUntilReady(
+        RootPath.DOWNLOADS, [ENTRIES.beautiful], []);
+
+    // The tooltip should be hidden.
+    await remoteCall.waitForElement(appId, tooltipQueryHidden);
+
+    // Focus a button with tooltip.
+    chrome.test.assertTrue(
+        await remoteCall.callRemoteTestUtil('focus', appId, [searchButton]));
+
+    // The tooltip should be visible.
+    await remoteCall.waitForElement(appId, tooltipQueryVisible);
+
+    // Resize the window.
+    await remoteCall.callRemoteTestUtil('resizeWindow', appId, [1200, 1200]);
+
+    // The tooltip should be hidden.
+    await remoteCall.waitForElement(appId, tooltipQueryHidden);
   };
 })();

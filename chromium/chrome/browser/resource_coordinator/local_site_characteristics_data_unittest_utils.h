@@ -14,6 +14,8 @@
 #include "chrome/browser/resource_coordinator/local_site_characteristics_data_store_factory.h"
 #include "chrome/browser/resource_coordinator/local_site_characteristics_database.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "components/performance_manager/embedder/performance_manager_registry.h"
+#include "components/performance_manager/performance_manager_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace content {
@@ -90,7 +92,14 @@ class NoopLocalSiteCharacteristicsDatabase
 // Site Characteristics Database is initialized.
 class ChromeTestHarnessWithLocalDB : public ChromeRenderViewHostTestHarness {
  public:
-  ChromeTestHarnessWithLocalDB();
+  // Construct a ChromeTestHarnessWithLocalDB with zero or more arguments
+  // passed to ChromeRenderViewHostTestHarness.
+  template <typename... TaskEnvironmentTraits>
+  explicit ChromeTestHarnessWithLocalDB(TaskEnvironmentTraits&&... traits)
+      : ChromeRenderViewHostTestHarness(
+            std::forward<TaskEnvironmentTraits>(traits)...) {
+  }
+
   ~ChromeTestHarnessWithLocalDB() override;
 
  protected:
@@ -98,9 +107,9 @@ class ChromeTestHarnessWithLocalDB : public ChromeRenderViewHostTestHarness {
   void TearDown() override;
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<performance_manager::PerformanceManagerImpl>
       performance_manager_;
+  std::unique_ptr<performance_manager::PerformanceManagerRegistry> registry_;
 };
 
 }  // namespace testing

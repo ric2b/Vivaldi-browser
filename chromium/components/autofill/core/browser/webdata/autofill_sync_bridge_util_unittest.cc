@@ -9,6 +9,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
 #include "components/autofill/core/browser/payments/payments_customer_data.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/browser/webdata/autofill_sync_bridge_test_util.h"
@@ -45,12 +46,11 @@ class TestAutofillTable : public AutofillTable {
   DISALLOW_COPY_AND_ASSIGN(TestAutofillTable);
 };
 
-std::unique_ptr<EntityData> SpecificsToEntity(
-    const sync_pb::AutofillWalletSpecifics& specifics,
-    const std::string& client_tag) {
-  auto data = std::make_unique<syncer::EntityData>();
-  *data->specifics.mutable_autofill_wallet() = specifics;
-  data->client_tag_hash = syncer::ClientTagHash::FromUnhashed(
+EntityData SpecificsToEntity(const sync_pb::AutofillWalletSpecifics& specifics,
+                             const std::string& client_tag) {
+  syncer::EntityData data;
+  *data.specifics.mutable_autofill_wallet() = specifics;
+  data.client_tag_hash = syncer::ClientTagHash::FromUnhashed(
       syncer::AUTOFILL_WALLET_DATA, client_tag);
   return data;
 }
@@ -66,39 +66,63 @@ class AutofillSyncBridgeUtilTest : public testing::Test {
 
 // Tests that PopulateWalletTypesFromSyncData behaves as expected.
 TEST_F(AutofillSyncBridgeUtilTest, PopulateWalletTypesFromSyncData) {
-  // Add an address and a card that has its billing address id set to the
-  // address' id.
+  // Add an address first.
   syncer::EntityChangeList entity_data;
   std::string address_id("address1");
   entity_data.push_back(EntityChange::CreateAdd(
       address_id,
       SpecificsToEntity(CreateAutofillWalletSpecificsForAddress(address_id),
                         /*client_tag=*/"address-address1")));
+  // Add the first card that has its billing address id set to the address's id.
+  // No nickname is set.
   entity_data.push_back(EntityChange::CreateAdd(
-      "card1",
+      "card_with_billing_address_id",
       SpecificsToEntity(CreateAutofillWalletSpecificsForCard(
-                            /*id=*/"card1", /*billing_address_id=*/address_id),
+                            /*id=*/"card_with_billing_address_id",
+                            /*billing_address_id=*/address_id),
                         /*client_tag=*/"card-card1")));
+  // Add the second card that has nickname.
+  std::string nickname("Grocery card");
+  entity_data.push_back(EntityChange::CreateAdd(
+      "card_with_nickname",
+      SpecificsToEntity(CreateAutofillWalletSpecificsForCard(
+                            /*id=*/"card_with_nickname",
+                            /*billing_address_id=*/"", /*nickname=*/nickname),
+                        /*client_tag=*/"card-card2")));
   entity_data.push_back(EntityChange::CreateAdd(
       "deadbeef",
       SpecificsToEntity(CreateAutofillWalletSpecificsForPaymentsCustomerData(
                             /*specifics_id=*/"deadbeef"),
                         /*client_tag=*/"customer-deadbeef")));
+  entity_data.push_back(EntityChange::CreateAdd(
+      "data1", SpecificsToEntity(
+                   CreateAutofillWalletSpecificsForCreditCardCloudTokenData(
+                       /*specifics_id=*/"data1"),
+                   /*client_tag=*/"token-data1")));
 
   std::vector<CreditCard> wallet_cards;
   std::vector<AutofillProfile> wallet_addresses;
   std::vector<PaymentsCustomerData> customer_data;
+  std::vector<CreditCardCloudTokenData> cloud_token_data;
   PopulateWalletTypesFromSyncData(entity_data, &wallet_cards, &wallet_addresses,
-                                  &customer_data);
+                                  &customer_data, &cloud_token_data);
 
-  ASSERT_EQ(1U, wallet_cards.size());
+  ASSERT_EQ(2U, wallet_cards.size());
   ASSERT_EQ(1U, wallet_addresses.size());
 
   EXPECT_EQ("deadbeef", customer_data.back().customer_id);
 
-  // Make sure the card's billing address id is equal to the address' server id.
+  EXPECT_EQ("data1", cloud_token_data.back().instrument_token);
+
+  // Make sure the first card's billing address id is equal to the address'
+  // server id.
   EXPECT_EQ(wallet_addresses.back().server_id(),
-            wallet_cards.back().billing_address_id());
+            wallet_cards.front().billing_address_id());
+  // The first card's nickname is empty.
+  EXPECT_TRUE(wallet_cards.front().nickname().empty());
+
+  // Make sure the second card's nickname is correctly populated from sync data.
+  EXPECT_EQ(base::UTF8ToUTF16(nickname), wallet_cards.back().nickname());
 }
 
 // Verify that the billing address id from the card saved on disk is kept if it

@@ -45,12 +45,6 @@ class MediaRemotingDialogView : public views::BubbleDialogDelegateView {
   // views::WidgetDelegate:
   base::string16 GetWindowTitle() const override;
 
-  // views::DialogDelegate:
-  int GetDialogButtons() const override;
-  bool Accept() override;
-  bool Cancel() override;
-  bool Close() override;
-
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
 

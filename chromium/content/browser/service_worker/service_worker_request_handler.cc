@@ -8,7 +8,7 @@
 
 #include "base/macros.h"
 #include "content/browser/frame_host/navigation_request_info.h"
-#include "content/browser/service_worker/service_worker_navigation_handle.h"
+#include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/service_worker/service_worker_navigation_loader_interceptor.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/public/common/origin_util.h"
@@ -35,7 +35,7 @@ bool SchemeMaySupportRedirectingToHTTPS(const GURL& url) {
 std::unique_ptr<NavigationLoaderInterceptor>
 ServiceWorkerRequestHandler::CreateForNavigation(
     const GURL& url,
-    base::WeakPtr<ServiceWorkerNavigationHandle> navigation_handle,
+    base::WeakPtr<ServiceWorkerMainResourceHandle> navigation_handle,
     const NavigationRequestInfo& request_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -47,8 +47,9 @@ ServiceWorkerRequestHandler::CreateForNavigation(
   }
 
   ServiceWorkerNavigationLoaderInterceptorParams params;
-  params.resource_type = request_info.is_main_frame ? ResourceType::kMainFrame
-                                                    : ResourceType::kSubFrame;
+  params.resource_type = request_info.is_main_frame
+                             ? blink::mojom::ResourceType::kMainFrame
+                             : blink::mojom::ResourceType::kSubFrame;
   params.skip_service_worker = request_info.begin_params->skip_service_worker;
   params.is_main_frame = request_info.is_main_frame;
   params.are_ancestors_secure = request_info.are_ancestors_secure;
@@ -63,13 +64,13 @@ std::unique_ptr<NavigationLoaderInterceptor>
 ServiceWorkerRequestHandler::CreateForWorker(
     const network::ResourceRequest& resource_request,
     int process_id,
-    base::WeakPtr<ServiceWorkerNavigationHandle> navigation_handle) {
+    base::WeakPtr<ServiceWorkerMainResourceHandle> navigation_handle) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   auto resource_type =
-      static_cast<ResourceType>(resource_request.resource_type);
-  DCHECK(resource_type == ResourceType::kWorker ||
-         resource_type == ResourceType::kSharedWorker)
+      static_cast<blink::mojom::ResourceType>(resource_request.resource_type);
+  DCHECK(resource_type == blink::mojom::ResourceType::kWorker ||
+         resource_type == blink::mojom::ResourceType::kSharedWorker)
       << resource_request.resource_type;
 
   // Create the handler even for insecure HTTP since it's used in the

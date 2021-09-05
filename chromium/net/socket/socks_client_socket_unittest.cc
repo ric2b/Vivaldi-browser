@@ -94,8 +94,8 @@ std::unique_ptr<SOCKSClientSocket> SOCKSClientSocketTest::BuildMockSocket(
   // non-owning pointer to it.
   tcp_sock_ = socket.get();
   return std::make_unique<SOCKSClientSocket>(
-      std::move(socket), HostPortPair(hostname, port), DEFAULT_PRIORITY,
-      host_resolver, false /* disable_secure_dns */,
+      std::move(socket), HostPortPair(hostname, port), NetworkIsolationKey(),
+      DEFAULT_PRIORITY, host_resolver, false /* disable_secure_dns */,
       TRAFFIC_ANNOTATION_FOR_TESTS);
 }
 
@@ -113,7 +113,7 @@ TEST_F(SOCKSClientSocketTest, CompleteHandshake) {
     MockRead data_reads[] = {
         MockRead(ASYNC, kSOCKS4OkReply, kSOCKS4OkReplyLength),
         MockRead(ASYNC, payload_read.data(), payload_read.size())};
-    TestNetLog log;
+    RecordingTestNetLog log;
 
     user_sock_ = BuildMockSocket(data_reads, data_writes, host_resolver_.get(),
                                  "localhost", 80, &log);
@@ -232,7 +232,7 @@ TEST_F(SOCKSClientSocketTest, HandshakeFailures) {
                   kSOCKS4OkRequestLocalHostPort80Length)};
     MockRead data_reads[] = {
         MockRead(SYNCHRONOUS, test.fail_reply, base::size(test.fail_reply))};
-    TestNetLog log;
+    RecordingTestNetLog log;
 
     user_sock_ = BuildMockSocket(data_reads, data_writes, host_resolver_.get(),
                                  "localhost", 80, &log);
@@ -265,7 +265,7 @@ TEST_F(SOCKSClientSocketTest, PartialServerReads) {
   MockRead data_reads[] = {
       MockRead(ASYNC, kSOCKSPartialReply1, base::size(kSOCKSPartialReply1)),
       MockRead(ASYNC, kSOCKSPartialReply2, base::size(kSOCKSPartialReply2))};
-  TestNetLog log;
+  RecordingTestNetLog log;
 
   user_sock_ = BuildMockSocket(data_reads, data_writes, host_resolver_.get(),
                                "localhost", 80, &log);
@@ -299,7 +299,7 @@ TEST_F(SOCKSClientSocketTest, PartialClientWrites) {
   };
   MockRead data_reads[] = {
       MockRead(ASYNC, kSOCKS4OkReply, kSOCKS4OkReplyLength)};
-  TestNetLog log;
+  RecordingTestNetLog log;
 
   user_sock_ = BuildMockSocket(data_reads, data_writes, host_resolver_.get(),
                                "localhost", 80, &log);
@@ -326,7 +326,7 @@ TEST_F(SOCKSClientSocketTest, FailedSocketRead) {
       MockRead(ASYNC, kSOCKS4OkReply, kSOCKS4OkReplyLength - 2),
       // close connection unexpectedly
       MockRead(SYNCHRONOUS, 0)};
-  TestNetLog log;
+  RecordingTestNetLog log;
 
   user_sock_ = BuildMockSocket(data_reads, data_writes, host_resolver_.get(),
                                "localhost", 80, &log);
@@ -349,9 +349,9 @@ TEST_F(SOCKSClientSocketTest, FailedSocketRead) {
 TEST_F(SOCKSClientSocketTest, FailedDNS) {
   const char hostname[] = "unresolved.ipv4.address";
 
-  host_resolver_->rules()->AddSimulatedFailure(hostname);
+  host_resolver_->rules()->AddSimulatedTimeoutFailure(hostname);
 
-  TestNetLog log;
+  RecordingTestNetLog log;
 
   user_sock_ = BuildMockSocket(base::span<MockRead>(), base::span<MockWrite>(),
                                host_resolver_.get(), hostname, 80, &log);
@@ -364,6 +364,8 @@ TEST_F(SOCKSClientSocketTest, FailedDNS) {
 
   rv = callback_.WaitForResult();
   EXPECT_THAT(rv, IsError(ERR_NAME_NOT_RESOLVED));
+  EXPECT_THAT(user_sock_->GetResolveErrorInfo().error,
+              IsError(ERR_DNS_TIMED_OUT));
   EXPECT_FALSE(user_sock_->IsConnected());
   entries = log.GetEntries();
   EXPECT_TRUE(LogContainsEndEvent(entries, -1, NetLogEventType::SOCKS_CONNECT));
@@ -425,7 +427,7 @@ TEST_F(SOCKSClientSocketTest, NoIPv6RealResolver) {
 
 TEST_F(SOCKSClientSocketTest, Tag) {
   StaticSocketDataProvider data;
-  TestNetLog log;
+  RecordingTestNetLog log;
   MockTaggingStreamSocket* tagging_sock =
       new MockTaggingStreamSocket(std::unique_ptr<StreamSocket>(
           new MockTCPClientSocket(address_list_, &log, &data)));
@@ -435,8 +437,9 @@ TEST_F(SOCKSClientSocketTest, Tag) {
   // non-owning pointer to it.
   MockHostResolver host_resolver;
   SOCKSClientSocket socket(std::unique_ptr<StreamSocket>(tagging_sock),
-                           HostPortPair("localhost", 80), DEFAULT_PRIORITY,
-                           &host_resolver, false /* disable_secure_dns */,
+                           HostPortPair("localhost", 80), NetworkIsolationKey(),
+                           DEFAULT_PRIORITY, &host_resolver,
+                           false /* disable_secure_dns */,
                            TRAFFIC_ANNOTATION_FOR_TESTS);
 
   EXPECT_EQ(tagging_sock->tag(), SocketTag());
@@ -450,12 +453,12 @@ TEST_F(SOCKSClientSocketTest, Tag) {
 TEST_F(SOCKSClientSocketTest, SetDisableSecureDns) {
   for (bool disable_secure_dns : {false, true}) {
     StaticSocketDataProvider data;
-    TestNetLog log;
+    RecordingTestNetLog log;
     MockHostResolver host_resolver;
     SOCKSClientSocket socket(
         std::make_unique<MockTCPClientSocket>(address_list_, &log, &data),
-        HostPortPair("localhost", 80), DEFAULT_PRIORITY, &host_resolver,
-        disable_secure_dns, TRAFFIC_ANNOTATION_FOR_TESTS);
+        HostPortPair("localhost", 80), NetworkIsolationKey(), DEFAULT_PRIORITY,
+        &host_resolver, disable_secure_dns, TRAFFIC_ANNOTATION_FOR_TESTS);
 
     EXPECT_EQ(ERR_IO_PENDING, socket.Connect(callback_.callback()));
     EXPECT_EQ(disable_secure_dns,

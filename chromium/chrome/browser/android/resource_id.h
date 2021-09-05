@@ -29,62 +29,27 @@ LINK_RESOURCE_ID(0, 0)
 LINK_RESOURCE_ID(IDR_INFOBAR_AUTOFILL_CC, R.drawable.infobar_autofill_cc)
 
 // Android only infobars.
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_ACCESSIBILITY_EVENTS,
-                    R.drawable.infobar_accessibility_events)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_BLOCKED_POPUPS,
                     R.drawable.infobar_blocked_popups)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_CLIPBOARD,
-                    R.drawable.infobar_clipboard)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_FOLDER, R.drawable.ic_folder_blue_24dp)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_FROZEN_TAB, R.drawable.infobar_restore)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_GEOLOCATION,
-                    R.drawable.infobar_geolocation)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_LITE_MODE, R.drawable.preview_pin_round)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_MEDIA_STREAM_CAMERA,
-                    R.drawable.infobar_camera)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_MEDIA_STREAM_MIC,
-                    R.drawable.infobar_microphone)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_MEDIA_STREAM_SCREEN,
                     R.drawable.infobar_screen_share)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_MIDI, R.drawable.infobar_midi)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_MULTIPLE_DOWNLOADS,
                     R.drawable.infobar_downloading)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_NOTIFICATIONS,
-                    R.drawable.infobar_desktop_notifications)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_NOTIFICATIONS_OFF,
                     R.drawable.permission_push_notification_off)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_PREVIEWS,
                     R.drawable.infobar_chrome)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_PROTECTED_MEDIA_IDENTIFIER,
-                    R.drawable.infobar_protected_media_identifier)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_SAFETYTIP_SHIELD,
                     R.drawable.safetytip_shield)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_SAVE_PASSWORD,
                     R.drawable.ic_vpn_key_blue)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_TRANSLATE, R.drawable.infobar_translate)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_WARNING, R.drawable.infobar_warning)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_PHONE_ICON,
                     R.drawable.smartphone_black_24dp)
 LINK_RESOURCE_ID(IDR_AUTOFILL_GOOGLE_PAY_WITH_DIVIDER,
                  R.drawable.google_pay_with_divider)
-
-// PageInfoUI images, used in ConnectionInfoPopup
-// Good:
-DECLARE_RESOURCE_ID(IDR_PAGEINFO_GOOD, R.drawable.pageinfo_good)
-// Warnings:
-DECLARE_RESOURCE_ID(IDR_PAGEINFO_WARNING_MINOR, R.drawable.pageinfo_warning)
-// Bad:
-DECLARE_RESOURCE_ID(IDR_PAGEINFO_BAD, R.drawable.pageinfo_bad)
-// Should never occur, use warning just in case:
-// Enterprise managed: ChromeOS only.
-DECLARE_RESOURCE_ID(IDR_PAGEINFO_ENTERPRISE_MANAGED,
-                    R.drawable.pageinfo_warning)
-// Info: Only shown on chrome:// urls, which don't show the connection info
-// popup.
-DECLARE_RESOURCE_ID(IDR_PAGEINFO_INFO, R.drawable.pageinfo_warning)
-// Major warning: Used on insecure pages, which don't show the connection info
-// popup.
-DECLARE_RESOURCE_ID(IDR_PAGEINFO_WARNING_MAJOR, R.drawable.pageinfo_warning)
 
 // Autofill popup and keyboard accessory images.
 // We use Android's |VectorDrawableCompat| for the following images that are

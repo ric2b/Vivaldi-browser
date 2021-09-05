@@ -30,8 +30,9 @@
 #include "third_party/blink/renderer/modules/webaudio/audio_node.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_output.h"
 #include "third_party/blink/renderer/platform/audio/audio_utilities.h"
+#include "third_party/blink/renderer/platform/audio/vector_math.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
-#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 
 namespace blink {
@@ -283,6 +284,13 @@ void AudioParamHandler::CalculateFinalValues(float* values,
       // Sum, with unity-gain.
       summing_bus_->SumFrom(*connection_bus);
     }
+
+    // Clamp the values now to the nominal range
+    float min_value = MinValue();
+    float max_value = MaxValue();
+
+    vector_math::Vclip(values, 1, &min_value, &max_value, values, 1,
+                       number_of_values);
   }
 }
 
@@ -347,7 +355,7 @@ AudioParam::~AudioParam() {
   }
 }
 
-void AudioParam::Trace(blink::Visitor* visitor) {
+void AudioParam::Trace(Visitor* visitor) {
   visitor->Trace(context_);
   InspectorHelperMixin::Trace(visitor);
   ScriptWrappable::Trace(visitor);
@@ -359,13 +367,14 @@ float AudioParam::value() const {
 
 void AudioParam::WarnIfOutsideRange(const String& param_method, float value) {
   if (value < minValue() || value > maxValue()) {
-    Context()->GetExecutionContext()->AddConsoleMessage(ConsoleMessage::Create(
-        mojom::ConsoleMessageSource::kJavaScript,
-        mojom::ConsoleMessageLevel::kWarning,
-        Handler().GetParamName() + "." + param_method + " " +
-            String::Number(value) + " outside nominal range [" +
-            String::Number(minValue()) + ", " + String::Number(maxValue()) +
-            "]; value will be clamped."));
+    Context()->GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::ConsoleMessageSource::kJavaScript,
+            mojom::ConsoleMessageLevel::kWarning,
+            Handler().GetParamName() + "." + param_method + " " +
+                String::Number(value) + " outside nominal range [" +
+                String::Number(minValue()) + ", " + String::Number(maxValue()) +
+                "]; value will be clamped."));
   }
 }
 

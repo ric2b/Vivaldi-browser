@@ -5,6 +5,7 @@
 #ifndef CHROME_COMMON_GOOGLE_URL_LOADER_THROTTLE_H_
 #define CHROME_COMMON_GOOGLE_URL_LOADER_THROTTLE_H_
 
+#include "build/build_config.h"
 #include "chrome/common/renderer_configuration.mojom.h"
 #include "extensions/buildflags/buildflags.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
@@ -16,8 +17,11 @@ class GoogleURLLoaderThrottle
     : public blink::URLLoaderThrottle,
       public base::SupportsWeakPtr<GoogleURLLoaderThrottle> {
  public:
-  GoogleURLLoaderThrottle(bool is_off_the_record,
-                          chrome::mojom::DynamicParams dynamic_params);
+  GoogleURLLoaderThrottle(
+#if defined(OS_ANDROID)
+      const std::string& client_data_header,
+#endif
+      chrome::mojom::DynamicParams dynamic_params);
   ~GoogleURLLoaderThrottle() override;
 
  private:
@@ -26,17 +30,19 @@ class GoogleURLLoaderThrottle
   void WillStartRequest(network::ResourceRequest* request,
                         bool* defer) override;
   void WillRedirectRequest(net::RedirectInfo* redirect_info,
-                           const network::ResourceResponseHead& response_head,
+                           const network::mojom::URLResponseHead& response_head,
                            bool* defer,
                            std::vector<std::string>* to_be_removed_headers,
                            net::HttpRequestHeaders* modified_headers) override;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   void WillProcessResponse(const GURL& response_url,
-                           network::ResourceResponseHead* response_head,
+                           network::mojom::URLResponseHead* response_head,
                            bool* defer) override;
 #endif
 
-  bool is_off_the_record_;
+#if defined(OS_ANDROID)
+  std::string client_data_header_;
+#endif
   const chrome::mojom::DynamicParams dynamic_params_;
 };
 

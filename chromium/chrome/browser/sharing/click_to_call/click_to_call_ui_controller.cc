@@ -8,13 +8,14 @@
 
 #include "base/callback.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_utils.h"
 #include "chrome/browser/sharing/sharing_constants.h"
 #include "chrome/browser/sharing/sharing_dialog.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/grit/theme_resources.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
@@ -27,6 +28,10 @@ using SharingMessage = chrome_browser_sharing::SharingMessage;
 // static
 ClickToCallUiController* ClickToCallUiController::GetOrCreateFromWebContents(
     content::WebContents* web_contents) {
+  // Use active WebContents if available.
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  if (browser)
+    web_contents = browser->tab_strip_model()->GetActiveWebContents();
   ClickToCallUiController::CreateForWebContents(web_contents);
   return ClickToCallUiController::FromWebContents(web_contents);
 }
@@ -58,7 +63,7 @@ void ClickToCallUiController::OnDeviceSelected(
                     /*has_devices=*/true, /*has_apps=*/false,
                     SharingClickToCallSelection::kDevice);
 
-  SendNumberToDevice(device, phone_number);
+  SendNumberToDevice(device, phone_number, entry_point);
 }
 
 void ClickToCallUiController::OnDialogClosed(SharingDialog* dialog) {
@@ -89,7 +94,7 @@ PageActionIconType ClickToCallUiController::GetIconType() {
 
 sync_pb::SharingSpecificFields::EnabledFeatures
 ClickToCallUiController::GetRequiredFeature() {
-  return sync_pb::SharingSpecificFields::CLICK_TO_CALL;
+  return sync_pb::SharingSpecificFields::CLICK_TO_CALL_V2;
 }
 
 void ClickToCallUiController::DoUpdateApps(UpdateAppsCallback callback) {
@@ -113,12 +118,14 @@ void ClickToCallUiController::OnDeviceChosen(const syncer::DeviceInfo& device) {
   if (ukm_recorder_)
     std::move(ukm_recorder_).Run(SharingClickToCallSelection::kDevice);
 
-  SendNumberToDevice(device, GetUnescapedURLContent(phone_url_));
+  SendNumberToDevice(device, GetUnescapedURLContent(phone_url_),
+                     SharingClickToCallEntryPoint::kLeftClickLink);
 }
 
 void ClickToCallUiController::SendNumberToDevice(
     const syncer::DeviceInfo& device,
-    const std::string& phone_number) {
+    const std::string& phone_number,
+    SharingClickToCallEntryPoint entry_point) {
   SharingMessage sharing_message;
   sharing_message.mutable_click_to_call_message()->set_phone_number(
       phone_number);
@@ -162,23 +169,20 @@ SharingFeatureName ClickToCallUiController::GetFeatureMetricsPrefix() const {
   return SharingFeatureName::kClickToCall;
 }
 
-void ClickToCallUiController::OnHelpTextClicked(SharingDialogType dialog_type) {
-  LogClickToCallHelpTextClicked(dialog_type);
-  SharingUiController::OnHelpTextClicked(dialog_type);
-}
-
 SharingDialogData ClickToCallUiController::CreateDialogData(
     SharingDialogType dialog_type) {
   SharingDialogData data = SharingUiController::CreateDialogData(dialog_type);
 
   // Do not add the header image for error dialogs.
   if (dialog_type != SharingDialogType::kErrorDialog) {
-    data.header_image_light = IDR_CLICK_TO_CALL_ILLUSTRATION_LIGHT;
-    data.header_image_dark = IDR_CLICK_TO_CALL_ILLUSTRATION_DARK;
+    data.header_icons = SharingDialogData::HeaderIcons(
+        &kClickToCallIllustrationIcon, &kClickToCallIllustrationDarkIcon);
   }
 
   data.help_text_id =
       IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_HELP_TEXT_NO_DEVICES;
+  data.help_text_origin_id =
+      IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_HELP_TEXT_NO_DEVICES_ORIGIN;
   data.help_link_text_id =
       IDS_BROWSER_SHARING_CLICK_TO_CALL_DIALOG_TROUBLESHOOT_LINK;
   data.origin_text_id =

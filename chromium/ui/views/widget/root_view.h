@@ -5,6 +5,7 @@
 #ifndef UI_VIEWS_WIDGET_ROOT_VIEW_H_
 #define UI_VIEWS_WIDGET_ROOT_VIEW_H_
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -20,7 +21,7 @@ namespace views {
 namespace test {
 class ViewTargeterTest;
 class WidgetTest;
-}
+}  // namespace test
 
 class RootViewTargeter;
 class Widget;
@@ -28,24 +29,25 @@ class Widget;
 // This is a views-internal API and should not be used externally.
 // Widget exposes this object as a View*.
 namespace internal {
+class AnnounceTextView;
 class PreEventDispatchHandler;
 
 ////////////////////////////////////////////////////////////////////////////////
 // RootView class
 //
-//  The RootView is the root of a View hierarchy. A RootView is attached to a
-//  Widget. The Widget is responsible for receiving events from the host
-//  environment, converting them to views-compatible events and then forwarding
-//  them to the RootView for propagation into the View hierarchy.
+// The RootView is the root of a View hierarchy. A RootView is attached to a
+// Widget. The Widget is responsible for receiving events from the host
+// environment, converting them to views-compatible events and then forwarding
+// them to the RootView for propagation into the View hierarchy.
 //
-//  A RootView can have only one child, called its "Contents View" which is
-//  sized to fill the bounds of the RootView (and hence the client area of the
-//  Widget). Call SetContentsView() after the associated Widget has been
-//  initialized to attach the contents view to the RootView.
-//  TODO(beng): Enforce no other callers to AddChildView/tree functions by
-//              overriding those methods as private here.
-//  TODO(beng): Clean up API further, make Widget a friend.
-//  TODO(sky): We don't really want to export this class.
+// A RootView can have only one child, called its "Contents View" which is
+// sized to fill the bounds of the RootView (and hence the client area of the
+// Widget). Call SetContentsView() after the associated Widget has been
+// initialized to attach the contents view to the RootView.
+// TODO(beng): Enforce no other callers to AddChildView/tree functions by
+//             overriding those methods as private here.
+// TODO(beng): Clean up API further, make Widget a friend.
+// TODO(sky): We don't really want to export this class.
 //
 class VIEWS_EXPORT RootView : public View,
                               public ViewTargeterDelegate,
@@ -92,18 +94,23 @@ class VIEWS_EXPORT RootView : public View,
   void DeviceScaleFactorChanged(float old_device_scale_factor,
                                 float new_device_scale_factor);
 
-  // Overridden from FocusTraversable:
+  // Accessibility -------------------------------------------------------------
+
+  // Make an announcement through the screen reader, if present.
+  void AnnounceText(const base::string16& text);
+
+  // FocusTraversable:
   FocusSearch* GetFocusSearch() override;
   FocusTraversable* GetFocusTraversableParent() override;
   View* GetFocusTraversableParentView() override;
 
-  // Overridden from ui::EventProcessor:
+  // ui::EventProcessor:
   ui::EventTarget* GetRootForEvent(ui::Event* event) override;
   ui::EventTargeter* GetDefaultEventTargeter() override;
   void OnEventProcessingStarted(ui::Event* event) override;
   void OnEventProcessingFinished(ui::Event* event) override;
 
-  // Overridden from View:
+  // View:
   const Widget* GetWidget() const override;
   Widget* GetWidget() override;
   bool IsDrawn() const override;
@@ -119,7 +126,7 @@ class VIEWS_EXPORT RootView : public View,
   void UpdateParentLayer() override;
 
  protected:
-  // Overridden from View:
+  // View:
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
   void VisibilityChanged(View* starting_from, bool is_visible) override;
@@ -159,7 +166,7 @@ class VIEWS_EXPORT RootView : public View,
       View* view,
       View* sibling) WARN_UNUSED_RESULT;
 
-  // Overridden from ui::EventDispatcherDelegate:
+  // ui::EventDispatcherDelegate:
   bool CanDispatchToTarget(ui::EventTarget* target) override;
   ui::EventDispatchDetails PreDispatchEvent(ui::EventTarget* target,
                                             ui::Event* event) override;
@@ -232,6 +239,12 @@ class VIEWS_EXPORT RootView : public View,
 
   // Tracks drag state for a view.
   View::DragInfo drag_info_;
+
+  // Accessibility -------------------------------------------------------------
+
+  // Hidden view used to make announcements to the screen reader via an alert or
+  // live region update.
+  AnnounceTextView* announce_view_ = nullptr;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(RootView);
 };

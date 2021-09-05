@@ -168,7 +168,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedAppTest, CrossProcessClientRedirect) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), base_url.Resolve("non_app/main.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   WebContents* tab0 = browser()->tab_strip_model()->GetWebContentsAt(1);
 
@@ -214,11 +214,11 @@ IN_PROC_BROWSER_TEST_F(IsolatedAppTest, CookieIsolation) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), base_url.Resolve("app2/main.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), base_url.Resolve("non_app/main.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   ASSERT_EQ(3, browser()->tab_strip_model()->count());
 
@@ -307,11 +307,11 @@ IN_PROC_BROWSER_TEST_F(IsolatedAppTest, DISABLED_NoCookieIsolationWithoutApp) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), base_url.Resolve("app2/main.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), base_url.Resolve("non_app/main.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   ASSERT_EQ(3, browser()->tab_strip_model()->count());
 
@@ -395,7 +395,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedAppTest, MAYBE_SubresourceCookieIsolation) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), base_url.Resolve("app1/main.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   WebContents* tab1 = browser()->tab_strip_model()->GetWebContentsAt(1);
   ASSERT_TRUE(GetInstalledApp(tab1));
 
@@ -426,7 +426,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedAppTest, MAYBE_SubresourceCookieIsolation) {
   // Also create a non-app tab to ensure no new cookies were set in that jar.
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), root_url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   WebContents* tab2 = browser()->tab_strip_model()->GetWebContentsAt(2);
   EXPECT_FALSE(HasCookie(tab2, "nonAppMedia=1"));
   EXPECT_FALSE(HasCookie(tab2, "app1Media=1"));
@@ -467,7 +467,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedAppTest, MAYBE_IsolatedAppProcessModel) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), base_url.Resolve("app1/main.html"),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   // For the third tab, use window.open to keep it in process with an opener.
   OpenWindow(browser()->tab_strip_model()->GetWebContentsAt(0),
              base_url.Resolve("app1/main.html"), true, true, nullptr);

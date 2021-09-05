@@ -8,6 +8,8 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
+#include "chrome/browser/ui/cookie_controls/cookie_controls_service.h"
+#include "components/page_info/android/cookie_controls_status.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "content/public/browser/web_contents.h"
 
@@ -20,28 +22,16 @@ class CookieSettings;
 }
 
 class CookieControlsView;
-
-// A controller for CookieControlsIconView and CookieControlsBubbleView.
 class CookieControlsController {
  public:
-  enum class Status {
-    kUninitialized,
-    // Cookie blocking is enabled.
-    kEnabled,
-    // Cookie blocking is disabled.
-    kDisabled,
-    // Cookie blocking is enabled in general but was disabled for this site.
-    kDisabledForSite,
-  };
-
   explicit CookieControlsController(content::WebContents* web_contents);
   ~CookieControlsController();
 
   // Called when the web_contents has changed.
   void Update(content::WebContents* web_contents);
 
-  // Called when CookieControlsBubbleView is closing.
-  void OnBubbleUiClosing(content::WebContents* web_contents);
+  // Called when CookieControlsView is closing.
+  void OnUiClosing();
 
   // Called when the user clicks on the button to enable/disable cookie
   // blocking.
@@ -71,8 +61,9 @@ class CookieControlsController {
     DISALLOW_COPY_AND_ASSIGN(TabObserver);
   };
 
-  // Determine the CookieControlsController::Status based on |web_contents|.
-  Status GetStatus(content::WebContents* web_contents);
+  // Determine the CookieControlsStatus based on |web_contents|.
+  std::pair<CookieControlsStatus, CookieControlsEnforcement> GetStatus(
+      content::WebContents* web_contents);
 
   // Updates the blocked cookie count of |icon_|.
   void PresentBlockedCookieCounter();
@@ -88,6 +79,7 @@ class CookieControlsController {
 
   std::unique_ptr<TabObserver> tab_observer_;
   scoped_refptr<content_settings::CookieSettings> cookie_settings_;
+  scoped_refptr<content_settings::CookieSettings> regular_cookie_settings_;
   PrefChangeRegistrar pref_change_registrar_;
 
   bool should_reload_ = false;

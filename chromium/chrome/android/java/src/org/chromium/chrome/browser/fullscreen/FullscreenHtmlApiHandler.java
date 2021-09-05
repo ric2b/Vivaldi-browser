@@ -9,10 +9,8 @@ import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
 import static android.view.View.SYSTEM_UI_FLAG_LOW_PROFILE;
 
 import android.app.Activity;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
-import android.support.v4.util.ObjectsCompat;
 import android.view.Gravity;
 import android.view.View;
 import android.view.View.OnLayoutChangeListener;
@@ -20,10 +18,14 @@ import android.view.Window;
 import android.view.WindowManager;
 
 import androidx.annotation.Nullable;
+import androidx.core.util.ObjectsCompat;
 
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.widget.Toast;
 
@@ -47,6 +49,7 @@ public class FullscreenHtmlApiHandler {
     private final Window mWindow;
     private final Handler mHandler;
     private final FullscreenHtmlApiDelegate mDelegate;
+    private final ObservableSupplierImpl<Boolean> mPersistentModeSupplier;
 
     // We need to cache WebContents/ContentView since we are setting fullscreen UI state on
     // the WebContents's container view, and a Tab can change to have null web contents/
@@ -56,7 +59,6 @@ public class FullscreenHtmlApiHandler {
     @Nullable
     private View mContentViewInFullscreen;
     @Nullable private Tab mTabInFullscreen;
-    private boolean mIsPersistentMode;
     private FullscreenOptions mFullscreenOptions;
 
     // Toast at the top of the screen that is shown when user enters fullscreen for the
@@ -158,7 +160,7 @@ public class FullscreenHtmlApiHandler {
                     // Change this assert to simply ignoring the message to work around
                     // https://crbug/365638
                     // TODO(aberent): Fix bug
-                    // assert mIsPersistentMode : "Calling after we exited fullscreen";
+                    // assert getPersistentFullscreenMode() : "Calling after we exited fullscreen";
                     if (!fullscreenHtmlApiHandler.getPersistentFullscreenMode()) return;
 
                     if ((systemUiVisibility & SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) == 0) {
@@ -187,6 +189,9 @@ public class FullscreenHtmlApiHandler {
         mWindow = window;
         mDelegate = delegate;
         mHandler = new FullscreenHandler(this);
+
+        mPersistentModeSupplier = new ObservableSupplierImpl<>();
+        mPersistentModeSupplier.set(false);
     }
 
     /**
@@ -196,11 +201,11 @@ public class FullscreenHtmlApiHandler {
      * @param options Options to choose mode of fullscreen.
      */
     public void enterPersistentFullscreenMode(FullscreenOptions options) {
-        if (mIsPersistentMode && ObjectsCompat.equals(mFullscreenOptions, options)) {
+        if (getPersistentFullscreenMode() && ObjectsCompat.equals(mFullscreenOptions, options)) {
             return;
         }
 
-        mIsPersistentMode = true;
+        mPersistentModeSupplier.set(true);
         mDelegate.onEnterFullscreen(options);
     }
 
@@ -209,9 +214,9 @@ public class FullscreenHtmlApiHandler {
      * if they have been hidden.
      */
     public void exitPersistentFullscreenMode() {
-        if (!mIsPersistentMode) return;
+        if (!getPersistentFullscreenMode()) return;
 
-        mIsPersistentMode = false;
+        mPersistentModeSupplier.set(false);
 
         if (mWebContentsInFullscreen != null && mTabInFullscreen != null) {
             exitFullscreen(mWebContentsInFullscreen, mContentViewInFullscreen, mTabInFullscreen);
@@ -231,7 +236,15 @@ public class FullscreenHtmlApiHandler {
      * @see #setPersistentFullscreenMode(boolean)
      */
     public boolean getPersistentFullscreenMode() {
-        return mIsPersistentMode;
+        return mPersistentModeSupplier.get();
+    }
+
+    /**
+     * @return An observable supplier that determines whether the app is in persistent fullscreen
+     *         mode.
+     */
+    public ObservableSupplier<Boolean> getPersistentFullscreenModeSupplier() {
+        return mPersistentModeSupplier;
     }
 
     private void exitFullscreen(WebContents webContents, View contentView, Tab tab) {
@@ -240,15 +253,9 @@ public class FullscreenHtmlApiHandler {
         mHandler.removeMessages(MSG_ID_CLEAR_LAYOUT_FULLSCREEN_FLAG);
 
         int systemUiVisibility = contentView.getSystemUiVisibility();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            systemUiVisibility &= ~SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
-            systemUiVisibility = applyExitFullscreenUIFlags(systemUiVisibility);
-            clearWindowFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
-        } else {
-            systemUiVisibility &= ~SYSTEM_UI_FLAG_LOW_PROFILE;
-            mWindow.addFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
-            mWindow.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        }
+        systemUiVisibility &= ~SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+        systemUiVisibility = applyExitFullscreenUIFlags(systemUiVisibility);
+        clearWindowFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         contentView.setSystemUiVisibility(systemUiVisibility);
         if (mFullscreenOnLayoutChangeListener != null) {
             contentView.removeOnLayoutChangeListener(mFullscreenOnLayoutChangeListener);
@@ -278,35 +285,29 @@ public class FullscreenHtmlApiHandler {
         mFullscreenOptions = options;
         final View contentView = tab.getContentView();
         int systemUiVisibility = contentView.getSystemUiVisibility();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-            if ((systemUiVisibility & SYSTEM_UI_FLAG_FULLSCREEN) == SYSTEM_UI_FLAG_FULLSCREEN) {
-                // Already in full screen mode; just changed options. Mask off old
-                // ones and apply new ones.
-                systemUiVisibility = applyExitFullscreenUIFlags(systemUiVisibility);
-                systemUiVisibility = applyEnterFullscreenUIFlags(systemUiVisibility);
-            } else if ((systemUiVisibility & SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
-                    == SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) {
-                systemUiVisibility = applyEnterFullscreenUIFlags(systemUiVisibility);
-            } else {
-                Activity activity = tab.getActivity();
-                boolean isMultiWindow = MultiWindowUtils.getInstance().isLegacyMultiWindow(activity)
-                        || MultiWindowUtils.getInstance().isInMultiWindowMode(activity);
-
-                // To avoid a double layout that is caused by the system when just hiding
-                // the status bar set the status bar as translucent immediately. This cause
-                // it not to take up space so the layout is stable. (See crbug.com/935015). Do
-                // not do this in multi-window mode since that mode forces the status bar
-                // to always be visible.
-                if (mFullscreenOptions != null && mFullscreenOptions.showNavigationBar()
-                        && !isMultiWindow) {
-                    setWindowFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
-                }
-                systemUiVisibility |= SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
-            }
+        if ((systemUiVisibility & SYSTEM_UI_FLAG_FULLSCREEN) == SYSTEM_UI_FLAG_FULLSCREEN) {
+            // Already in full screen mode; just changed options. Mask off old
+            // ones and apply new ones.
+            systemUiVisibility = applyExitFullscreenUIFlags(systemUiVisibility);
+            systemUiVisibility = applyEnterFullscreenUIFlags(systemUiVisibility);
+        } else if ((systemUiVisibility & SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
+                == SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) {
+            systemUiVisibility = applyEnterFullscreenUIFlags(systemUiVisibility);
         } else {
-            systemUiVisibility |= SYSTEM_UI_FLAG_LOW_PROFILE;
-            mWindow.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-            mWindow.clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
+            Activity activity = TabUtils.getActivity(tab);
+            boolean isMultiWindow = MultiWindowUtils.getInstance().isLegacyMultiWindow(activity)
+                    || MultiWindowUtils.getInstance().isInMultiWindowMode(activity);
+
+            // To avoid a double layout that is caused by the system when just hiding
+            // the status bar set the status bar as translucent immediately. This cause
+            // it not to take up space so the layout is stable. (See crbug.com/935015). Do
+            // not do this in multi-window mode since that mode forces the status bar
+            // to always be visible.
+            if (mFullscreenOptions != null && mFullscreenOptions.showNavigationBar()
+                    && !isMultiWindow) {
+                setWindowFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
+            }
+            systemUiVisibility |= SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
         }
         if (mFullscreenOnLayoutChangeListener != null) {
             contentView.removeOnLayoutChangeListener(mFullscreenOnLayoutChangeListener);
@@ -319,11 +320,9 @@ public class FullscreenHtmlApiHandler {
                 // SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN does not always trigger a view-level layout
                 // with an updated height.  To work around this, do not check for an increased
                 // height and always just trigger the next step of the fullscreen initialization.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
-                    // Posting the message to set the fullscreen flag because setting it
-                    // directly in the onLayoutChange would have no effect.
-                    mHandler.sendEmptyMessage(MSG_ID_SET_FULLSCREEN_SYSTEM_UI_FLAGS);
-                }
+                // Posting the message to set the fullscreen flag because setting it directly in the
+                // onLayoutChange would have no effect.
+                mHandler.sendEmptyMessage(MSG_ID_SET_FULLSCREEN_SYSTEM_UI_FLAGS);
 
                 if ((bottom - top) <= (oldBottom - oldTop)) return;
                 if (mDelegate.shouldShowNotificationToast()) {
@@ -349,9 +348,7 @@ public class FullscreenHtmlApiHandler {
      */
     private void showNotificationToast() {
         if (mNotificationToast == null) {
-            int resId = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT)
-                    ? R.string.immersive_fullscreen_api_notification
-                    : R.string.fullscreen_api_notification;
+            int resId = R.string.immersive_fullscreen_api_notification;
             mNotificationToast = Toast.makeText(
                     mWindow.getContext(), resId, Toast.LENGTH_LONG);
             mNotificationToast.setGravity(Gravity.TOP | Gravity.CENTER, 0, 0);
@@ -374,9 +371,7 @@ public class FullscreenHtmlApiHandler {
      * @see View#getSystemUiVisibility()
      */
     public void onContentViewSystemUiVisibilityChange(int visibility) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR2) return;
-
-        if (mTabInFullscreen == null || !mIsPersistentMode) return;
+        if (mTabInFullscreen == null || !getPersistentFullscreenMode()) return;
         mHandler.sendEmptyMessageDelayed(
                 MSG_ID_SET_FULLSCREEN_SYSTEM_UI_FLAGS, ANDROID_CONTROLS_SHOW_DURATION_MS);
     }
@@ -387,11 +382,10 @@ public class FullscreenHtmlApiHandler {
      */
     public void onWindowFocusChanged(boolean hasWindowFocus) {
         if (!hasWindowFocus) hideNotificationToast();
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.JELLY_BEAN_MR2) return;
 
         mHandler.removeMessages(MSG_ID_SET_FULLSCREEN_SYSTEM_UI_FLAGS);
         mHandler.removeMessages(MSG_ID_CLEAR_LAYOUT_FULLSCREEN_FLAG);
-        if (mTabInFullscreen == null || !mIsPersistentMode || !hasWindowFocus) return;
+        if (mTabInFullscreen == null || !getPersistentFullscreenMode() || !hasWindowFocus) return;
         mHandler.sendEmptyMessageDelayed(
                 MSG_ID_SET_FULLSCREEN_SYSTEM_UI_FLAGS, ANDROID_CONTROLS_SHOW_DURATION_MS);
     }
@@ -404,15 +398,11 @@ public class FullscreenHtmlApiHandler {
         boolean showNavigationBar =
                 mFullscreenOptions != null ? mFullscreenOptions.showNavigationBar() : false;
         int flags = SYSTEM_UI_FLAG_FULLSCREEN;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            flags |= View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
-        }
+        flags |= View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
         if (!showNavigationBar) {
             flags |= SYSTEM_UI_FLAG_LOW_PROFILE;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                flags |= View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
-                flags |= View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
-            }
+            flags |= View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+            flags |= View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
         }
         return flags | systemUiVisibility;
     }
@@ -424,11 +414,9 @@ public class FullscreenHtmlApiHandler {
      */
     private static int applyExitFullscreenUIFlags(int systemUiVisibility) {
         int maskOffFlags = SYSTEM_UI_FLAG_LOW_PROFILE | SYSTEM_UI_FLAG_FULLSCREEN;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            maskOffFlags |= View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
-            maskOffFlags |= View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
-            maskOffFlags |= View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
-        }
+        maskOffFlags |= View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+        maskOffFlags |= View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+        maskOffFlags |= View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
         return systemUiVisibility & ~maskOffFlags;
     }
 

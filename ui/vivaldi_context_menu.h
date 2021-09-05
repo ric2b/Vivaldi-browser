@@ -9,6 +9,8 @@
 #include "browser/menus/bookmark_sorter.h"
 #include "browser/menus/bookmark_support.h"
 #include "extensions/schema/bookmark_context_menu.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/views/widget/widget.h"
 
 class Browser;
 
@@ -18,7 +20,6 @@ class WebContents;
 
 namespace gfx {
 class Image;
-class Rect;
 }
 
 namespace ui {
@@ -85,10 +86,21 @@ struct BookmarkMenuContainerEntry {
   bool folder_group;
   // Size and position of main menu element that opens menu.
   gfx::Rect rect;
+  // Offset into menu for where to start adding bookmark elements.
+  unsigned int menu_index;
+  // Add a separator after bottom edge (if any).
+  bool tweak_separator;
 };
 
 // Used by main menu bar and bookmark bar context menu
 struct BookmarkMenuContainer {
+  // Position of extra items wrt the bookmarks.
+  enum Edge {
+    Above = 0,
+    Below,
+    Off
+  };
+
   class Delegate {
    public:
     virtual void OnHover(const std::string& url) {}
@@ -108,6 +120,8 @@ struct BookmarkMenuContainer {
   vivaldi::BookmarkSorter::SortOrder sort_order;
   // All folders that can be opnend
   std::vector<BookmarkMenuContainerEntry> siblings;
+  // Where extra items (like 'Add Active Tab') be shown wrt the list.
+  Edge edge;
   // Delegate that will execute commands
   Delegate* delegate;
 };
@@ -153,8 +167,6 @@ class VivaldiMenu {
     static gfx::NativeView GetActiveNativeViewFromWebContents(
       content::WebContents* web_contents);
     static views::Widget* GetTopLevelWidgetFromWebContents(
-      content::WebContents* web_contents);
-    static Browser* GetBrowserFromWebContents(
       content::WebContents* web_contents);
 };
 

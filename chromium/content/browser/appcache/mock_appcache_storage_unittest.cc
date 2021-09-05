@@ -9,7 +9,7 @@
 #include "base/test/task_environment.h"
 #include "content/browser/appcache/appcache.h"
 #include "content/browser/appcache/appcache_group.h"
-#include "content/browser/appcache/appcache_response.h"
+#include "content/browser/appcache/appcache_response_info.h"
 #include "content/browser/appcache/appcache_storage.h"
 #include "content/browser/appcache/mock_appcache_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -476,17 +476,16 @@ TEST_F(MockAppCacheStorageTest, BasicFindMainFallbackResponse) {
   const GURL kManifestUrl("http://blah/manifest");
   const int64_t kResponseId1 = 1;
   const int64_t kResponseId2 = 2;
+  const base::Time token_expires;
 
   AppCacheManifest manifest;
-  manifest.fallback_namespaces.push_back(
-      AppCacheNamespace(APPCACHE_FALLBACK_NAMESPACE, kFallbackNamespaceUrl1,
-                kFallbackEntryUrl1, false));
-  manifest.fallback_namespaces.push_back(
-      AppCacheNamespace(APPCACHE_FALLBACK_NAMESPACE, kFallbackNamespaceUrl2,
-                kFallbackEntryUrl2, false));
+  manifest.fallback_namespaces.push_back(AppCacheNamespace(
+      APPCACHE_FALLBACK_NAMESPACE, kFallbackNamespaceUrl1, kFallbackEntryUrl1));
+  manifest.fallback_namespaces.push_back(AppCacheNamespace(
+      APPCACHE_FALLBACK_NAMESPACE, kFallbackNamespaceUrl2, kFallbackEntryUrl2));
 
   auto cache = base::MakeRefCounted<AppCache>(service.storage(), kCacheId);
-  cache->InitializeWithManifest(&manifest);
+  cache->InitializeWithManifest(&manifest, token_expires);
   cache->AddEntry(kFallbackEntryUrl1,
                   AppCacheEntry(AppCacheEntry::FALLBACK, kResponseId1));
   cache->AddEntry(kFallbackEntryUrl2,
@@ -589,13 +588,13 @@ TEST_F(MockAppCacheStorageTest, FindMainResponseExclusions) {
   const GURL kManifestUrl("http://blah/manifest");
   const GURL kOnlineNamespaceUrl("http://blah/online_namespace");
   const int64_t kResponseId = 1;
+  const base::Time token_expires;
 
   AppCacheManifest manifest;
-  manifest.online_whitelist_namespaces.push_back(
-      AppCacheNamespace(APPCACHE_NETWORK_NAMESPACE, kOnlineNamespaceUrl,
-                GURL(), false));
+  manifest.online_whitelist_namespaces.push_back(AppCacheNamespace(
+      APPCACHE_NETWORK_NAMESPACE, kOnlineNamespaceUrl, GURL()));
   auto cache = base::MakeRefCounted<AppCache>(service.storage(), kCacheId);
-  cache->InitializeWithManifest(&manifest);
+  cache->InitializeWithManifest(&manifest, token_expires);
   cache->AddEntry(
       kEntryUrl,
       AppCacheEntry(AppCacheEntry::EXPLICIT | AppCacheEntry::FOREIGN,

@@ -9,10 +9,12 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/task/post_task.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/storage_partition_impl.h"
+#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/child_process_host.h"
@@ -25,7 +27,8 @@ ServiceWorkerProcessManager::ServiceWorkerProcessManager(
     : browser_context_(browser_context),
       storage_partition_(nullptr),
       process_id_for_test_(ChildProcessHost::kInvalidUniqueID),
-      new_process_id_for_test_(ChildProcessHost::kInvalidUniqueID) {
+      new_process_id_for_test_(ChildProcessHost::kInvalidUniqueID),
+      force_new_process_for_test_(false) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(browser_context);
   weak_this_ = weak_this_factory_.GetWeakPtr();
@@ -85,6 +88,9 @@ ServiceWorkerProcessManager::AllocateWorkerProcess(
     AllocatedProcessInfo* out_info) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
+  if (force_new_process_for_test_)
+    can_use_existing_process = false;
+
   out_info->process_id = ChildProcessHost::kInvalidUniqueID;
   out_info->start_situation = ServiceWorkerMetrics::StartSituation::UNKNOWN;
 
@@ -108,16 +114,16 @@ ServiceWorkerProcessManager::AllocateWorkerProcess(
   // Create a SiteInstance to get the renderer process from. Use the site URL
   // from the StoragePartition in case this StoragePartition is for guests
   // (e.g., <webview>).
-  bool use_url_from_storage_partition =
+  const bool is_guest =
       storage_partition_ &&
-      !storage_partition_->site_for_service_worker().is_empty();
+      !storage_partition_->site_for_guest_service_worker().is_empty();
+  const GURL service_worker_url =
+      is_guest ? storage_partition_->site_for_guest_service_worker()
+               : script_url;
   scoped_refptr<SiteInstanceImpl> site_instance =
       SiteInstanceImpl::CreateForServiceWorker(
-          browser_context_,
-          use_url_from_storage_partition
-              ? storage_partition_->site_for_service_worker()
-              : script_url,
-          can_use_existing_process);
+          browser_context_, service_worker_url, can_use_existing_process,
+          is_guest);
 
   // Get the process from the SiteInstance.
   RenderProcessHost* rph = site_instance->GetProcess();
@@ -196,7 +202,6 @@ namespace std {
 // thread.
 void default_delete<content::ServiceWorkerProcessManager>::operator()(
     content::ServiceWorkerProcessManager* ptr) const {
-  content::BrowserThread::DeleteSoon(
-      content::BrowserThread::UI, FROM_HERE, ptr);
+  base::DeleteSoon(FROM_HERE, {content::BrowserThread::UI}, ptr);
 }
 }  // namespace std

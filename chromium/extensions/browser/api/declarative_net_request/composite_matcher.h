@@ -15,29 +15,34 @@
 #include "extensions/browser/api/declarative_net_request/ruleset_matcher.h"
 #include "extensions/common/permissions/permissions_data.h"
 
+namespace content {
+class RenderFrameHost;
+}  // namespace content
+
 namespace extensions {
 namespace declarative_net_request {
+
+struct RequestAction;
 
 // Per extension instance which manages the different rulesets for an extension
 // while respecting their priorities.
 class CompositeMatcher {
  public:
-  struct RedirectActionInfo {
-    RedirectActionInfo(base::Optional<RequestAction> action, bool notify);
-    ~RedirectActionInfo();
-    RedirectActionInfo(RedirectActionInfo&& other);
-    RedirectActionInfo& operator=(RedirectActionInfo&& other);
+  struct ActionInfo {
+    ActionInfo(base::Optional<RequestAction> action, bool notify);
+    ~ActionInfo();
+    ActionInfo(ActionInfo&& other);
+    ActionInfo& operator=(ActionInfo&& other);
 
-    // The action to be taken for this request. If specified, the action type
-    // must be |REDIRECT|.
+    // The action to be taken for this request.
     base::Optional<RequestAction> action;
 
     // Whether the extension should be notified that the request was unable to
     // be redirected as the extension lacks the appropriate host permission for
-    // the request.
+    // the request. Can only be true for redirect actions.
     bool notify_request_withheld = false;
 
-    DISALLOW_COPY_AND_ASSIGN(RedirectActionInfo);
+    DISALLOW_COPY_AND_ASSIGN(ActionInfo);
   };
 
   using MatcherList = std::vector<std::unique_ptr<RulesetMatcher>>;
@@ -50,35 +55,32 @@ class CompositeMatcher {
   // corresponding ID is already present, updates the matcher.
   void AddOrUpdateRuleset(std::unique_ptr<RulesetMatcher> new_matcher);
 
-  // Returns a RequestAction if the network request specified by |params| should
-  // be blocked.
-  base::Optional<RequestAction> GetBlockOrCollapseAction(
-      const RequestParams& params) const;
-
-  // Returns a RedirectActionInfo struct containing a RequestAction if the
-  // request is to be redirected, and whether the extension should be notified
-  // if its access to the request is withheld.
-  RedirectActionInfo GetRedirectAction(
+  // Returns a RequestAction for the network request specified by |params|, or
+  // base::nullopt if there is no matching rule.
+  ActionInfo GetBeforeRequestAction(
       const RequestParams& params,
       PermissionsData::PageAccess page_access) const;
 
   // Returns the bitmask of headers to remove from the request corresponding to
   // rules matched from this extension. The bitmask corresponds to
-  // RemoveHeadersMask type. |ignored_mask| denotes the current mask of headers
-  // to be skipped for evaluation and is excluded in the return value.
-  uint8_t GetRemoveHeadersMask(const RequestParams& params,
-                               uint8_t ignored_mask) const;
+  // RemoveHeadersMask type. |excluded_remove_headers_mask| denotes the current
+  // mask of headers to be skipped for evaluation and is excluded in the return
+  // value.
+  uint8_t GetRemoveHeadersMask(
+      const RequestParams& params,
+      uint8_t excluded_remove_headers_mask,
+      std::vector<RequestAction>* remove_headers_actions) const;
 
   // Returns whether this modifies "extraHeaders".
   bool HasAnyExtraHeadersMatcher() const;
 
+  void OnRenderFrameCreated(content::RenderFrameHost* host);
+  void OnRenderFrameDeleted(content::RenderFrameHost* host);
+  void OnDidFinishNavigation(content::RenderFrameHost* host);
+
  private:
   bool ComputeHasAnyExtraHeadersMatcher() const;
 
-  // Sorts |matchers_| in descending order of priority.
-  void SortMatchersByPriority();
-
-  // Sorted by priority in descending order.
   MatcherList matchers_;
 
   // Denotes the cached return value for |HasAnyExtraHeadersMatcher|. Care must

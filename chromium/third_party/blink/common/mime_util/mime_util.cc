@@ -5,6 +5,7 @@
 #include "third_party/blink/public/common/mime_util/mime_util.h"
 
 #include <stddef.h>
+#include <unordered_set>
 
 #include "base/lazy_instance.h"
 #include "base/stl_util.h"
@@ -80,8 +81,12 @@ static const char* const kUnsupportedTextTypes[] = {
     "text/csv",
     "text/tab-separated-values",
     "text/tsv",
-    "text/ofx",                         // http://crbug.com/162238
-    "text/vnd.sun.j2me.app-descriptor"  // http://crbug.com/176450
+    "text/ofx",                          // https://crbug.com/162238
+    "text/vnd.sun.j2me.app-descriptor",  // https://crbug.com/176450
+    "text/x-ms-iqy",                     // https://crbug.com/1054863
+    "text/x-ms-odc",                     // https://crbug.com/1054863
+    "text/x-ms-rqy",                     // https://crbug.com/1054863
+    "text/x-ms-contact"                  // https://crbug.com/1054863
 };
 
 // Note:
@@ -107,6 +112,7 @@ class MimeUtil {
   bool IsSupportedNonImageMimeType(const std::string& mime_type) const;
   bool IsUnsupportedTextMimeType(const std::string& mime_type) const;
   bool IsSupportedJavascriptMimeType(const std::string& mime_type) const;
+  bool IsJSONMimeType(const std::string&) const;
 
   bool IsSupportedMimeType(const std::string& mime_type) const;
 
@@ -166,6 +172,14 @@ bool MimeUtil::IsSupportedJavascriptMimeType(
   return javascript_types_.find(mime_type) != javascript_types_.end();
 }
 
+// TODO(sasebree): Allow non-application `*/*+json` MIME types.
+// https://mimesniff.spec.whatwg.org/#json-mime-type
+bool MimeUtil::IsJSONMimeType(const std::string& mime_type) const {
+  return net::MatchesMimeType("application/json", mime_type) ||
+         net::MatchesMimeType("text/json", mime_type) ||
+         net::MatchesMimeType("application/*+json", mime_type);
+}
+
 bool MimeUtil::IsSupportedMimeType(const std::string& mime_type) const {
   return (base::StartsWith(mime_type, "image/",
                            base::CompareCase::INSENSITIVE_ASCII) &&
@@ -193,6 +207,10 @@ bool IsUnsupportedTextMimeType(const std::string& mime_type) {
 
 bool IsSupportedJavascriptMimeType(const std::string& mime_type) {
   return g_mime_util.Get().IsSupportedJavascriptMimeType(mime_type);
+}
+
+bool IsJSONMimeType(const std::string& mime_type) {
+  return g_mime_util.Get().IsJSONMimeType(mime_type);
 }
 
 bool IsSupportedMimeType(const std::string& mime_type) {

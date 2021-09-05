@@ -25,7 +25,6 @@
 #include "net/cert/cert_verifier.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_auth_handler_factory.h"
-#include "net/http/http_auth_preferences.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_response_info.h"
 #include "net/http/http_server_properties.h"
@@ -54,6 +53,7 @@ class CTPolicyEnforcer;
 class HashValue;
 class HostPortPair;
 class HostResolver;
+class QuicContext;
 class HttpUserAgentSettings;
 class NetLogWithSource;
 class SpdySessionKey;
@@ -218,6 +218,7 @@ struct SpdySessionDependencies {
   std::unique_ptr<MockClientSocketFactory> socket_factory;
   std::unique_ptr<HttpAuthHandlerFactory> http_auth_handler_factory;
   std::unique_ptr<HttpServerProperties> http_server_properties;
+  std::unique_ptr<QuicContext> quic_context;
 #if BUILDFLAG(ENABLE_REPORTING)
   std::unique_ptr<ReportingService> reporting_service;
   std::unique_ptr<NetworkErrorLoggingService> network_error_logging_service;
@@ -237,7 +238,7 @@ struct SpdySessionDependencies {
   NetLog* net_log;
   bool disable_idle_sockets_close_on_memory_pressure;
   bool enable_early_data;
-  HttpAuthPreferences::DefaultCredentials allow_default_credentials;
+  bool key_auth_cache_server_entries_by_network_isolation_key;
 };
 
 class SpdyURLRequestContext : public URLRequestContext {

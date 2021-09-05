@@ -10,6 +10,8 @@ import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
 
+import org.chromium.chrome.browser.tab.TabImpl;
+
 /** A ThemeColorProvider for the current tab's theming. */
 public class TabThemeColorProvider extends ThemeColorProvider {
     /** The {@link sActivityTabTabObserver} used to know when the active tab color changed. */
@@ -27,6 +29,10 @@ public class TabThemeColorProvider extends ThemeColorProvider {
             @Override
             public void onObservingDifferentTab(Tab tab) {
                 if (tab == null) return;
+
+                // Note(david@vivaldi.com): Avoid colour blinking while restoring tab.
+                if (tab.isBeingRestored() || ((TabImpl) tab).isHidden()) return;
+
                 updatePrimaryColor(TabThemeColorHelper.getColor(tab), false);
             }
 

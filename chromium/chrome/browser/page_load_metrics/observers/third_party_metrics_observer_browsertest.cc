@@ -3,10 +3,12 @@
 // found in the LICENSE file.
 
 #include "base/test/metrics/histogram_tester.h"
+#include "chrome/browser/page_load_metrics/observers/third_party_metrics_observer.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "components/page_load_metrics/browser/page_load_metrics_test_waiter.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -17,13 +19,60 @@
 namespace {
 
 const char kReadCookieHistogram[] =
-    "PageLoad.Clients.ThirdParty.Origins.CookieRead";
+    "PageLoad.Clients.ThirdParty.Origins.CookieRead2";
 const char kWriteCookieHistogram[] =
-    "PageLoad.Clients.ThirdParty.Origins.CookieWrite";
+    "PageLoad.Clients.ThirdParty.Origins.CookieWrite2";
 const char kAccessLocalStorageHistogram[] =
-    "PageLoad.Clients.ThirdParty.Origins.LocalStorageAccess";
+    "PageLoad.Clients.ThirdParty.Origins.LocalStorageAccess2";
 const char kAccessSessionStorageHistogram[] =
-    "PageLoad.Clients.ThirdParty.Origins.SessionStorageAccess";
+    "PageLoad.Clients.ThirdParty.Origins.SessionStorageAccess2";
+const char kSubframeFCPHistogram[] =
+    "PageLoad.Clients.ThirdParty.Frames.NavigationToFirstContentfulPaint3";
+
+void InvokeStorageAccessOnFrame(content::RenderFrameHost* frame,
+                                blink::mojom::WebFeature storage_feature) {
+  switch (storage_feature) {
+    case blink::mojom::WebFeature::kThirdPartyLocalStorage:
+      EXPECT_TRUE(content::ExecJs(frame, "window.localStorage"));
+      break;
+    case blink::mojom::WebFeature::kThirdPartySessionStorage:
+      EXPECT_TRUE(content::ExecJs(frame, "window.sessionStorage"));
+      break;
+    // TODO(crbug/1061448): Add browsertest for FileSystem access through
+    // FileSystemDirectoryHandle.
+    case blink::mojom::WebFeature::kThirdPartyFileSystem:
+      EXPECT_EQ(true, content::EvalJs(
+                          frame,
+                          "new Promise((resolve) => { "
+                          " window.webkitRequestFileSystem(window.TEMPORARY,"
+                          " 5*1024, () => resolve(true),"
+                          " () => resolve(false));"
+                          "});"));
+      break;
+    case blink::mojom::WebFeature::kThirdPartyIndexedDb:
+      EXPECT_EQ(true,
+                content::EvalJs(
+                    frame,
+                    "new Promise((resolve) => {"
+                    " var request = window.indexedDB.open(\"testdb\", 3); "
+                    " request.onsuccess = () => resolve(true);"
+                    " request.onerror = () => resolve(false);"
+                    "});"));
+      break;
+    case blink::mojom::WebFeature::kThirdPartyCacheStorage:
+      EXPECT_EQ(true, content::EvalJs(
+                          frame,
+                          "new Promise((resolve) => {"
+                          " caches.open(\"testcache\").then("
+                          " () => resolve(true)).catch(() => resolve(false))"
+                          "});"));
+      break;
+    default:
+      // Only invoke storage access for web features associated with a third
+      // party storage access type.
+      NOTREACHED();
+  }
+}
 
 class ThirdPartyMetricsObserverBrowserTest : public InProcessBrowserTest {
  protected:
@@ -52,6 +101,33 @@ class ThirdPartyMetricsObserverBrowserTest : public InProcessBrowserTest {
     ui_test_utils::NavigateToURL(browser(), main_url);
   }
 
+  void NavigateToPageWithFrameAndWaitForFrame(
+      const std::string& host,
+      page_load_metrics::PageLoadMetricsTestWaiter* waiter) {
+    GURL main_url(https_server()->GetURL(host, "/iframe.html"));
+
+    waiter->AddSubframeNavigationExpectation();
+    NavigateToPageWithFrame(host);
+    waiter->Wait();
+  }
+
+  void NavigateFrameAndWaitForFCP(
+      const std::string& host,
+      const std::string& path,
+      page_load_metrics::PageLoadMetricsTestWaiter* waiter) {
+    // Waiting for the frame to navigate ensures that any previous RFHs for this
+    // frame have been deleted and therefore won't pollute any future frame
+    // expectations (such as FCP).
+    waiter->AddSubframeNavigationExpectation();
+    NavigateFrameTo(host, path);
+    waiter->Wait();
+
+    waiter->AddSubFrameExpectation(
+        page_load_metrics::PageLoadMetricsTestWaiter::TimingField::
+            kFirstContentfulPaint);
+    waiter->Wait();
+  }
+
   void NavigateFrameTo(const std::string& host, const std::string& path) {
     GURL page = https_server()->GetURL(host, path);
     NavigateFrameToUrl(page);
@@ -74,6 +150,53 @@ class ThirdPartyMetricsObserverBrowserTest : public InProcessBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(ThirdPartyMetricsObserverBrowserTest);
 };
 
+IN_PROC_BROWSER_TEST_F(ThirdPartyMetricsObserverBrowserTest,
+                       OneFirstPartyFrame_NoTimingRecorded) {
+  base::HistogramTester histogram_tester;
+  page_load_metrics::PageLoadMetricsTestWaiter waiter(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  NavigateToPageWithFrameAndWaitForFrame("a.com", &waiter);
+
+  // Navigate the frame to a first-party.
+  NavigateFrameAndWaitForFCP("a.com", "/select.html", &waiter);
+  histogram_tester.ExpectTotalCount(kSubframeFCPHistogram, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(ThirdPartyMetricsObserverBrowserTest,
+                       OneThirdPartyFrame_OneTimingRecorded) {
+  base::HistogramTester histogram_tester;
+
+  page_load_metrics::PageLoadMetricsTestWaiter waiter(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  NavigateToPageWithFrameAndWaitForFrame("a.com", &waiter);
+
+  // Navigate the frame to a third-party.
+  NavigateFrameAndWaitForFCP("b.com", "/select.html", &waiter);
+  histogram_tester.ExpectTotalCount(kSubframeFCPHistogram, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(ThirdPartyMetricsObserverBrowserTest,
+                       ThreeThirdPartyFrames_ThreeTimingsRecorded) {
+  base::HistogramTester histogram_tester;
+
+  page_load_metrics::PageLoadMetricsTestWaiter waiter(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  NavigateToPageWithFrameAndWaitForFrame("a.com", &waiter);
+
+  // Navigate the frame to a third-party.
+  NavigateFrameAndWaitForFCP("b.com", "/select.html", &waiter);
+
+  // Navigate the frame to a different third-party.
+  NavigateFrameAndWaitForFCP("c.com", "/select.html", &waiter);
+
+  // Navigate the frame to a repeat third-party.
+  NavigateFrameAndWaitForFCP("b.com", "/select.html", &waiter);
+
+  // Navigate the frame to first-party.
+  NavigateFrameAndWaitForFCP("a.com", "/select.html", &waiter);
+  histogram_tester.ExpectTotalCount(kSubframeFCPHistogram, 3);
+}
+
 IN_PROC_BROWSER_TEST_F(ThirdPartyMetricsObserverBrowserTest, NoStorageEvent) {
   base::HistogramTester histogram_tester;
   NavigateToPageWithFrame("a.com");
@@ -83,6 +206,21 @@ IN_PROC_BROWSER_TEST_F(ThirdPartyMetricsObserverBrowserTest, NoStorageEvent) {
   histogram_tester.ExpectUniqueSample(kWriteCookieHistogram, 0, 1);
   histogram_tester.ExpectUniqueSample(kAccessLocalStorageHistogram, 0, 1);
   histogram_tester.ExpectUniqueSample(kAccessSessionStorageHistogram, 0, 1);
+  histogram_tester.ExpectBucketCount(
+      "Blink.UseCounter.Features",
+      blink::mojom::WebFeature::kThirdPartyLocalStorage, 0);
+  histogram_tester.ExpectBucketCount(
+      "Blink.UseCounter.Features",
+      blink::mojom::WebFeature::kThirdPartySessionStorage, 0);
+  histogram_tester.ExpectBucketCount(
+      "Blink.UseCounter.Features",
+      blink::mojom::WebFeature::kThirdPartyFileSystem, 0);
+  histogram_tester.ExpectBucketCount(
+      "Blink.UseCounter.Features",
+      blink::mojom::WebFeature::kThirdPartyIndexedDb, 0);
+  histogram_tester.ExpectBucketCount(
+      "Blink.UseCounter.Features",
+      blink::mojom::WebFeature::kThirdPartyCacheStorage, 0);
 }
 
 IN_PROC_BROWSER_TEST_F(ThirdPartyMetricsObserverBrowserTest,
@@ -294,8 +432,52 @@ IN_PROC_BROWSER_TEST_P(ThirdPartyDomStorageAccessMetricsObserverBrowserTest,
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     ThirdPartyDomStorageAccessMetricsObserverBrowserTest,
     ::testing::Values(false, true));
+
+IN_PROC_BROWSER_TEST_F(ThirdPartyMetricsObserverBrowserTest,
+                       FirstPartyStorageAccess_UseCounterNotRecorded) {
+  std::vector<blink::mojom::WebFeature> test_cases = {
+      blink::mojom::WebFeature::kThirdPartyLocalStorage,
+      blink::mojom::WebFeature::kThirdPartySessionStorage,
+      blink::mojom::WebFeature::kThirdPartyFileSystem,
+      blink::mojom::WebFeature::kThirdPartyIndexedDb,
+      blink::mojom::WebFeature::kThirdPartyCacheStorage};
+
+  for (const auto& test_case : test_cases) {
+    base::HistogramTester histogram_tester;
+    NavigateToPageWithFrame("a.com");
+    NavigateFrameTo("a.com", "/empty.html");
+    InvokeStorageAccessOnFrame(ChildFrameAt(web_contents()->GetMainFrame(), 0),
+                               test_case);
+    NavigateToUntrackedUrl();
+
+    histogram_tester.ExpectBucketCount("Blink.UseCounter.Features", test_case,
+                                       0);
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(ThirdPartyMetricsObserverBrowserTest,
+                       ThirdPartyStorageAccess_UseCounterRecorded) {
+  std::vector<blink::mojom::WebFeature> test_cases = {
+      blink::mojom::WebFeature::kThirdPartyLocalStorage,
+      blink::mojom::WebFeature::kThirdPartySessionStorage,
+      blink::mojom::WebFeature::kThirdPartyFileSystem,
+      blink::mojom::WebFeature::kThirdPartyIndexedDb,
+      blink::mojom::WebFeature::kThirdPartyCacheStorage};
+
+  for (const auto& test_case : test_cases) {
+    base::HistogramTester histogram_tester;
+    NavigateToPageWithFrame("a.com");
+    NavigateFrameTo("b.com", "/empty.html");
+    InvokeStorageAccessOnFrame(ChildFrameAt(web_contents()->GetMainFrame(), 0),
+                               test_case);
+    NavigateToUntrackedUrl();
+
+    histogram_tester.ExpectBucketCount("Blink.UseCounter.Features", test_case,
+                                       1);
+  }
+}
 
 }  // namespace

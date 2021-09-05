@@ -7,6 +7,9 @@ package org.chromium.chrome.browser.tabmodel;
 import org.chromium.base.ObserverList;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.content_public.browser.LoadUrlParams;
 
 import java.util.ArrayList;
@@ -33,6 +36,7 @@ public abstract class TabModelSelectorBase implements TabModelSelector {
     private final ObserverList<TabModelSelectorObserver> mObservers = new ObserverList<>();
     private boolean mTabStateInitialized;
     private boolean mStartIncognito;
+    private boolean mReparentingInProgress;
 
     private final TabCreatorManager mTabCreatorManager;
 
@@ -53,9 +57,10 @@ public abstract class TabModelSelectorBase implements TabModelSelector {
 
         TabModelObserver tabModelObserver = new EmptyTabModelObserver() {
             @Override
-            public void didAddTab(Tab tab, @TabLaunchType int type) {
+            public void didAddTab(
+                    Tab tab, @TabLaunchType int type, @TabCreationState int creationState) {
                 notifyChanged();
-                notifyNewTabCreated(tab);
+                notifyNewTabCreated(tab, creationState);
             }
 
             @Override
@@ -273,14 +278,25 @@ public abstract class TabModelSelectorBase implements TabModelSelector {
     /**
      * Notifies all the listeners that a new tab has been created.
      * @param tab The tab that has been created.
+     * @param creationSTate How the tab was created.
      */
-    private void notifyNewTabCreated(Tab tab) {
+    private void notifyNewTabCreated(Tab tab, @TabCreationState int creationState) {
         for (TabModelSelectorObserver listener : mObservers) {
-            listener.onNewTabCreated(tab);
+            listener.onNewTabCreated(tab, creationState);
         }
     }
 
     protected TabCreatorManager getTabCreatorManager() {
         return mTabCreatorManager;
+    }
+
+    @Override
+    public void enterReparentingMode() {
+        mReparentingInProgress = true;
+    }
+
+    /** @see TabModelDelegate#isReparentingInProgress */
+    protected boolean isReparentingInProgress() {
+        return mReparentingInProgress;
     }
 }

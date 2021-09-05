@@ -36,6 +36,7 @@
 namespace blink {
 
 class AXObjectCacheImpl;
+class AXSVGRoot;
 class Element;
 class HTMLLabelElement;
 class Node;
@@ -44,7 +45,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
  public:
   AXNodeObject(Node*, AXObjectCacheImpl&);
   ~AXNodeObject() override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  protected:
   bool children_dirty_;
@@ -59,6 +60,9 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
       IgnoredReasons* = nullptr) const;
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
   const AXObject* InheritsPresentationalRoleFrom() const override;
+  ax::mojom::Role DetermineTableSectionRole() const;
+  ax::mojom::Role DetermineTableCellRole() const;
+  ax::mojom::Role DetermineTableRowRole() const;
   ax::mojom::Role DetermineAccessibilityRole() override;
   virtual ax::mojom::Role NativeRoleIgnoringAria() const;
   void AlterSliderOrSpinButtonValue(bool increase);
@@ -76,7 +80,8 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   Element* MouseButtonListener() const;
   bool IsNativeCheckboxOrRadio() const;
   void SetNode(Node*);
-  AXObject* CorrespondingControlForLabelElement() const;
+  AXObject* CorrespondingControlAXObjectForLabelElement() const;
+  AXObject* CorrespondingLabelAXObject() const;
   HTMLLabelElement* LabelElementContainer() const;
 
   //
@@ -85,8 +90,8 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
 
   void Init() override;
   void Detach() override;
-  bool IsDetached() const override { return !node_; }
-  bool IsAXNodeObject() const final { return true; }
+  bool IsDetached() const override;
+  bool IsAXNodeObject() const final;
 
   // Check object role or purpose.
   bool IsAnchor() const final;
@@ -94,7 +99,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsMultiline() const override;
   bool IsEditable() const override { return IsNativeTextControl(); }
   bool ComputeIsEditableRoot() const override;
-  bool IsEmbeddedObject() const final;
   bool IsFieldset() const final;
   bool IsHeading() const final;
   bool IsHovered() const final;
@@ -158,6 +162,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
 
   // ARIA attributes.
   ax::mojom::Role AriaRoleAttribute() const final;
+  bool HasAriaAttribute() const override;
 
   // AX name calculation.
   String GetName(ax::mojom::NameFrom&,
@@ -193,11 +198,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   AXObject* RawFirstChild() const override;
   AXObject* RawNextSibling() const override;
   void AddChildren() override;
-  virtual void AddListMarker() {}
-  virtual void AddInlineTextBoxChildren(bool force) {}
-  virtual void AddImageMapChildren() {}
-  virtual void AddHiddenChildren() {}
-  virtual void AddPopupChildren() {}
 
   bool CanHaveChildren() const override;
   void AddChild(AXObject*);
@@ -233,6 +233,17 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   void ComputeAriaOwnsChildren(
       HeapVector<Member<AXObject>>& owned_children) const;
 
+  // Inline text boxes.
+  void LoadInlineTextBoxes() override;
+
+  // SVG.
+  bool IsSVGImage() const { return RemoteSVGRootElement(); }
+  AXSVGRoot* RemoteSVGRootElement() const;
+
+  virtual LayoutBoxModelObject* GetLayoutBoxModelObject() const {
+    return nullptr;
+  }
+
   FRIEND_TEST_ALL_PREFIXES(AccessibilityTest, SetNeedsToUpdateChildren);
   FRIEND_TEST_ALL_PREFIXES(AccessibilityTest, UpdateChildrenIfNecessary);
 
@@ -249,6 +260,16 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
                                bool* found_text_alternative) const;
   bool IsDescendantOfElementType(HashSet<QualifiedName>& tag_names) const;
   String PlaceholderFromNativeAttribute() const;
+
+  void AddInlineTextBoxChildren(bool force);
+  void AddImageMapChildren();
+  void AddHiddenChildren();
+  void AddPopupChildren();
+  void AddRemoteSVGChildren();
+  void AddTableChildren();
+  void AddValidationMessageChild();
+  // For some nodes, only LayoutBuilderTraversal visits the necessary children.
+  bool ShouldUseLayoutBuilderTraversal() const;
 
   DISALLOW_COPY_AND_ASSIGN(AXNodeObject);
 };

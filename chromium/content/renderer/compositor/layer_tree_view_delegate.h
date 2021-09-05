@@ -16,6 +16,7 @@ namespace cc {
 class LayerTreeFrameSink;
 struct BeginMainFrameMetrics;
 struct ElementId;
+class RenderFrameMetadataObserver;
 }  // namespace cc
 
 namespace content {
@@ -24,8 +25,9 @@ namespace content {
 // transport compositing information across processes.
 class LayerTreeViewDelegate {
  public:
-  using LayerTreeFrameSinkCallback =
-      base::OnceCallback<void(std::unique_ptr<cc::LayerTreeFrameSink>)>;
+  using LayerTreeFrameSinkCallback = base::OnceCallback<void(
+      std::unique_ptr<cc::LayerTreeFrameSink>,
+      std::unique_ptr<cc::RenderFrameMetadataObserver>)>;
 
   // Report viewport related properties during a commit from the compositor
   // thread.
@@ -68,7 +70,9 @@ class LayerTreeViewDelegate {
   virtual void WillCommitCompositorFrame() = 0;
 
   // Notifies about a compositor frame commit operation having finished.
-  virtual void DidCommitCompositorFrame() = 0;
+  // The commit_start_time is the time that the impl thread started processing
+  // the commit.
+  virtual void DidCommitCompositorFrame(base::TimeTicks commit_start_time) = 0;
 
   // Called by the compositor when page scale animation completed.
   virtual void DidCompletePageScaleAnimation() = 0;
@@ -79,10 +83,12 @@ class LayerTreeViewDelegate {
   // RecordEndOfFrameMetrics as soon as the total frame time becomes known for
   // a given frame. For example, ProxyMain::BeginMainFrame calls
   // RecordStartOfFrameMetrics just be WillBeginCompositorFrame() and
-  // RecordEndOfFrameMetrics immediately before aborting or committing a frame
-  // (at the same time Tracing measurements are taken).
+  // RecordEndOfFrameMetrics immediately before aborting or completing the
+  // BeginMainFrame method.
   virtual void RecordStartOfFrameMetrics() = 0;
-  virtual void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time) = 0;
+  virtual void RecordEndOfFrameMetrics(
+      base::TimeTicks frame_begin_time,
+      cc::ActiveFrameSequenceTrackers trackers) = 0;
   // Return metrics information for the stages of BeginMainFrame. This is
   // ultimately implemented by Blink's LocalFrameUKMAggregator. It must be a
   // distinct call from the FrameMetrics above because the BeginMainFrameMetrics

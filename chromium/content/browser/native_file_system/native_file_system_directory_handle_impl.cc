@@ -12,9 +12,9 @@
 #include "content/browser/native_file_system/native_file_system_transfer_token_impl.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/escape.h"
-#include "storage/browser/fileapi/file_system_context.h"
-#include "storage/browser/fileapi/file_system_operation_runner.h"
-#include "storage/common/fileapi/file_system_util.h"
+#include "storage/browser/file_system/file_system_context.h"
+#include "storage/browser/file_system/file_system_operation_runner.h"
+#include "storage/common/file_system/file_system_util.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_error.mojom.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_file_handle.mojom.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_transfer_token.mojom.h"
@@ -48,11 +48,6 @@ bool IsCurrentOrParentDirectory(const std::string& name) {
 }
 
 }  // namespace
-
-struct NativeFileSystemDirectoryHandleImpl::ReadDirectoryState {
-  GetEntriesCallback callback;
-  std::vector<NativeFileSystemEntryPtr> entries;
-};
 
 NativeFileSystemDirectoryHandleImpl::NativeFileSystemDirectoryHandleImpl(
     NativeFileSystemManagerImpl* manager,
@@ -174,15 +169,25 @@ void NativeFileSystemDirectoryHandleImpl::GetDirectory(
 }
 
 void NativeFileSystemDirectoryHandleImpl::GetEntries(
-    GetEntriesCallback callback) {
+    mojo::PendingRemote<blink::mojom::NativeFileSystemDirectoryEntriesListener>
+        pending_listener) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  std::unique_ptr<
+      mojo::Remote<blink::mojom::NativeFileSystemDirectoryEntriesListener>,
+      base::OnTaskRunnerDeleter>
+      listener(
+          new mojo::Remote<
+              blink::mojom::NativeFileSystemDirectoryEntriesListener>(
+              std::move(pending_listener)),
+          base::OnTaskRunnerDeleter(base::SequencedTaskRunnerHandle::Get()));
+  listener->reset_on_disconnect();
 
   DoFileSystemOperation(
       FROM_HERE, &FileSystemOperationRunner::ReadDirectory,
       base::BindRepeating(
           &NativeFileSystemDirectoryHandleImpl::DidReadDirectory,
-          weak_factory_.GetWeakPtr(),
-          base::Owned(new ReadDirectoryState{std::move(callback)})),
+          weak_factory_.GetWeakPtr(), base::Owned(std::move(listener))),
       url());
 }
 
@@ -208,6 +213,78 @@ void NativeFileSystemDirectoryHandleImpl::RemoveEntry(
             NativeFileSystemStatus::kPermissionDenied));
       }),
       std::move(callback));
+}
+void NativeFileSystemDirectoryHandleImpl::Resolve(
+    mojo::PendingRemote<blink::mojom::NativeFileSystemTransferToken>
+        possible_child,
+    ResolveCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  manager()->ResolveTransferToken(
+      std::move(possible_child),
+      base::BindOnce(&NativeFileSystemDirectoryHandleImpl::ResolveImpl,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void NativeFileSystemDirectoryHandleImpl::ResolveImpl(
+    ResolveCallback callback,
+    NativeFileSystemTransferTokenImpl* possible_child) {
+  if (!possible_child) {
+    std::move(callback).Run(
+        native_file_system_error::FromStatus(
+            blink::mojom::NativeFileSystemStatus::kOperationFailed),
+        base::nullopt);
+    return;
+  }
+
+  const storage::FileSystemURL& parent_url = url();
+  const storage::FileSystemURL& child_url = possible_child->url();
+
+  // If two URLs are of a different type they are definitely not related.
+  if (parent_url.type() != child_url.type()) {
+    std::move(callback).Run(native_file_system_error::Ok(), base::nullopt);
+    return;
+  }
+
+  // Otherwise compare path.
+  const base::FilePath& parent_path = parent_url.path();
+  const base::FilePath& child_path = child_url.path();
+
+  // Same path, so return empty array if child is also a directory.
+  if (parent_path == child_path) {
+    std::move(callback).Run(
+        native_file_system_error::Ok(),
+        possible_child->type() ==
+                NativeFileSystemTransferTokenImpl::HandleType::kDirectory
+            ? base::make_optional(std::vector<std::string>())
+            : base::nullopt);
+    return;
+  }
+
+  // Now figure out relative path, if any.
+  base::FilePath relative_path;
+  if (parent_path.empty()) {
+    // The root of a sandboxed file system will have an empty path. In that
+    // case the child path is already the relative path.
+    relative_path = child_path;
+  } else if (!parent_path.AppendRelativePath(child_path, &relative_path)) {
+    std::move(callback).Run(native_file_system_error::Ok(), base::nullopt);
+    return;
+  }
+
+  std::vector<base::FilePath::StringType> components;
+  relative_path.GetComponents(&components);
+#if defined(OS_WIN)
+  std::vector<std::string> result;
+  result.reserve(components.size());
+  for (const auto& component : components) {
+    result.push_back(base::UTF16ToUTF8(component));
+  }
+  std::move(callback).Run(native_file_system_error::Ok(), std::move(result));
+#else
+  std::move(callback).Run(native_file_system_error::Ok(),
+                          std::move(components));
+#endif
 }
 
 void NativeFileSystemDirectoryHandleImpl::Transfer(
@@ -284,19 +361,24 @@ void NativeFileSystemDirectoryHandleImpl::DidGetDirectory(
 }
 
 void NativeFileSystemDirectoryHandleImpl::DidReadDirectory(
-    ReadDirectoryState* state,
+    mojo::Remote<blink::mojom::NativeFileSystemDirectoryEntriesListener>*
+        listener,
     base::File::Error result,
     std::vector<filesystem::mojom::DirectoryEntry> file_list,
-    bool has_more) {
+    bool has_more_entries) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  if (!*listener)
+    return;
+
   if (result != base::File::FILE_OK) {
-    DCHECK(!has_more);
-    std::move(state->callback)
-        .Run(native_file_system_error::FromFileError(result), {});
+    DCHECK(!has_more_entries);
+    (*listener)->DidReadDirectory(
+        native_file_system_error::FromFileError(result), {}, false);
     return;
   }
 
+  std::vector<NativeFileSystemEntryPtr> entries;
   for (const auto& entry : file_list) {
     std::string basename = storage::FilePathToString(entry.name);
 
@@ -308,17 +390,12 @@ void NativeFileSystemDirectoryHandleImpl::DidReadDirectory(
     // |basename|.
     CHECK_EQ(get_child_url_result->status, NativeFileSystemStatus::kOk);
 
-    state->entries.push_back(
+    entries.push_back(
         CreateEntry(basename, child_url,
                     entry.type == filesystem::mojom::FsFileType::DIRECTORY));
   }
-
-  // TODO(mek): Change API so we can stream back entries as they come in, rather
-  // than waiting till we have retrieved them all.
-  if (!has_more) {
-    std::move(state->callback)
-        .Run(native_file_system_error::Ok(), std::move(state->entries));
-  }
+  (*listener)->DidReadDirectory(native_file_system_error::Ok(),
+                                std::move(entries), has_more_entries);
 }
 
 void NativeFileSystemDirectoryHandleImpl::RemoveEntryImpl(

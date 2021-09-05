@@ -4,14 +4,15 @@
 
 #include "third_party/blink/renderer/core/fetch/global_fetch.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/v8_request_init.h"
 #include "third_party/blink/renderer/core/fetch/fetch_manager.h"
 #include "third_party/blink/renderer/core/fetch/request.h"
-#include "third_party/blink/renderer/core/fetch/request_init.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 
@@ -53,7 +54,7 @@ class GlobalFetchImpl final : public GarbageCollected<GlobalFetchImpl<T>>,
   }
 
   explicit GlobalFetchImpl(ExecutionContext* execution_context)
-      : fetch_manager_(FetchManager::Create(execution_context)) {}
+      : fetch_manager_(MakeGarbageCollected<FetchManager>(execution_context)) {}
 
   ScriptPromise Fetch(ScriptState* script_state,
                       const RequestInfo& input,
@@ -87,7 +88,7 @@ class GlobalFetchImpl final : public GarbageCollected<GlobalFetchImpl<T>>,
     return promise;
   }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(fetch_manager_);
     ScopedFetcher::Trace(visitor);
     Supplement<T>::Trace(visitor);
@@ -117,7 +118,7 @@ GlobalFetch::ScopedFetcher* GlobalFetch::ScopedFetcher::From(
                                                   worker.GetExecutionContext());
 }
 
-void GlobalFetch::ScopedFetcher::Trace(blink::Visitor* visitor) {}
+void GlobalFetch::ScopedFetcher::Trace(Visitor* visitor) {}
 
 ScriptPromise GlobalFetch::fetch(ScriptState* script_state,
                                  LocalDOMWindow& window,

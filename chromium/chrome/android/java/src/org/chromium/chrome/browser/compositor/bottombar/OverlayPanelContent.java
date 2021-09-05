@@ -10,7 +10,8 @@ import android.view.View.MeasureSpec;
 import android.view.ViewGroup;
 import android.view.ViewGroup.MarginLayoutParams;
 
-import org.chromium.base.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -18,10 +19,11 @@ import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.WebContentsFactory;
 import org.chromium.chrome.browser.content.ContentUtils;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
-import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler;
+import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
 import org.chromium.components.embedder_support.view.ContentView;
+import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.components.navigation_interception.InterceptNavigationDelegate;
 import org.chromium.components.navigation_interception.NavigationParams;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -141,7 +143,7 @@ public class OverlayPanelContent {
         public InterceptNavigationDelegateImpl() {
             Tab tab = mActivity.getActivityTab();
             mExternalNavHandler = (tab != null && tab.getWebContents() != null)
-                    ? new ExternalNavigationHandler(tab)
+                    ? new ExternalNavigationHandler(new ExternalNavigationDelegateImpl(tab))
                     : null;
         }
 
@@ -193,11 +195,6 @@ public class OverlayPanelContent {
             }
 
             @Override
-            public void onLoadProgressChanged(int progress) {
-                mProgressObserver.onProgressBarUpdated(progress);
-            }
-
-            @Override
             public void visibleSSLStateChanged() {
                 mContentDelegate.onSSLStateUpdated();
             }
@@ -221,6 +218,12 @@ public class OverlayPanelContent {
             public void openNewTab(String url, String extraHeaders, ResourceRequestBody postData,
                     int disposition, boolean isRendererInitiated) {
                 mContentDelegate.onOpenNewTabRequested(url);
+            }
+
+            @Override
+            public boolean shouldCreateWebContents(String targetUrl) {
+                mContentDelegate.onOpenNewTabRequested(targetUrl);
+                return false;
             }
 
             @Override
@@ -267,11 +270,19 @@ public class OverlayPanelContent {
     }
 
     /**
+     * Whether we should reuse any existing WebContents instead of deleting and recreating.
+     * @param reuse {@code true} if we want to reuse the WebContents.
+     */
+    public void setReuseWebContents(boolean reuse) {
+        mShouldReuseWebContents = reuse;
+    }
+
+    /**
      * Call this when a loadUrl request has failed to notify the panel that the WebContents can
      * be reused.  See crbug.com/682953 for details.
      */
     void onLoadUrlFailed() {
-        mShouldReuseWebContents = true;
+        setReuseWebContents(true);
     }
 
     /**
@@ -340,6 +351,11 @@ public class OverlayPanelContent {
                     @Override
                     public void didStartLoading(String url) {
                         mContentDelegate.onContentLoadStarted(url);
+                    }
+
+                    @Override
+                    public void loadProgressChanged(float progress) {
+                        mProgressObserver.onProgressBarUpdated(progress);
                     }
 
                     @Override

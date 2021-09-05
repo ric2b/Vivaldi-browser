@@ -54,7 +54,6 @@ class OverlayPanelLayer : public Layer {
                      float bar_text_opacity,
                      bool bar_border_visible,
                      float bar_border_height,
-                     bool bar_shadow_visible,
                      int icon_tint,
                      int drag_handlebar_tint,
                      float icon_opacity,
@@ -66,7 +65,7 @@ class OverlayPanelLayer : public Layer {
                       float progress_bar_position_y,
                       float progress_bar_height,
                       float progress_bar_opacity,
-                      int progress_bar_completion,
+                      float progress_bar_completion,
                       float panel_width);
 
   scoped_refptr<cc::Layer> layer() override;

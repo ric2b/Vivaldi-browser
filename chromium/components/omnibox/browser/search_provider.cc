@@ -468,10 +468,12 @@ void SearchProvider::ClearAllResults() {
 void SearchProvider::UpdateMatchContentsClass(
     const base::string16& input_text,
     SearchSuggestionParser::Results* results) {
+  const base::string16& trimmed_input =
+      base::CollapseWhitespace(input_text, false);
   for (auto& suggest_result : results->suggest_results)
-    suggest_result.ClassifyMatchContents(false, input_text);
+    suggest_result.ClassifyMatchContents(false, trimmed_input);
   for (auto& navigation_result : results->navigation_results)
-    navigation_result.CalculateAndClassifyMatchContents(false, input_text);
+    navigation_result.CalculateAndClassifyMatchContents(false, trimmed_input);
 }
 
 void SearchProvider::SortResults(bool is_keyword,
@@ -686,6 +688,8 @@ void SearchProvider::DoHistoryQuery(bool minimal_changes) {
 }
 
 base::TimeDelta SearchProvider::GetSuggestQueryDelay() const {
+  // TODO(manukh): Reuse AutocompleteProviderDebouncer which duplicates all
+  //  this logic and would avoid polling field trial params repeatedly.
   bool from_last_keystroke;
   int polling_delay_ms;
   OmniboxFieldTrial::GetSuggestPollingStrategy(&from_last_keystroke,
@@ -1614,8 +1618,8 @@ void SearchProvider::PrefetchImages(SearchSuggestionParser::Results* results) {
     prefetch_limit--;
 
     const auto& image_url = suggestion.image_url();
-    if (!image_url.empty())
-      prefetch_image_urls.push_back(GURL(image_url));
+    if (!image_url.is_empty())
+      prefetch_image_urls.push_back(image_url);
 
     if (suggestion.answer())
       suggestion.answer()->AddImageURLsTo(&prefetch_image_urls);

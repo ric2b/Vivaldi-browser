@@ -283,7 +283,7 @@ TEST(VideoFrame, WrapVideoFrame) {
     frame = media::VideoFrame::WrapVideoFrame(
         wrapped_frame, wrapped_frame->format(), visible_rect, natural_size);
     wrapped_frame->AddDestructionObserver(
-        base::Bind(&FrameNoLongerNeededCallback, &done_callback_was_run));
+        base::BindOnce(&FrameNoLongerNeededCallback, &done_callback_was_run));
     EXPECT_EQ(wrapped_frame->coded_size(), frame->coded_size());
     EXPECT_EQ(wrapped_frame->data(media::VideoFrame::kYPlane),
               frame->data(media::VideoFrame::kYPlane));
@@ -309,7 +309,7 @@ TEST(VideoFrame, WrapVideoFrame) {
 
   // Verify that |wrapped_frame| outlives |frame|.
   EXPECT_FALSE(done_callback_was_run);
-  frame = NULL;
+  frame.reset();
   EXPECT_TRUE(done_callback_was_run);
 }
 
@@ -346,33 +346,6 @@ TEST(VideoFrame, WrapSharedMemory) {
       media::PIXEL_FORMAT_Y16, coded_size, visible_rect, visible_rect.size(),
       mapping.GetMemoryAsSpan<uint8_t>().data(), kDataSize, timestamp);
   frame->BackWithSharedMemory(&region);
-
-  EXPECT_EQ(frame->coded_size(), coded_size);
-  EXPECT_EQ(frame->visible_rect(), visible_rect);
-  EXPECT_EQ(frame->timestamp(), timestamp);
-  EXPECT_EQ(frame->data(media::VideoFrame::kYPlane)[0], 0xff);
-}
-
-// Create a frame that wraps shared memory with an offset.
-TEST(VideoFrame, WrapUnsafeSharedMemoryWithOffset) {
-  const size_t kOffset = 64;
-  const size_t kDataSize = 2 * 256 * 256;
-  base::UnsafeSharedMemoryRegion region =
-      base::UnsafeSharedMemoryRegion::Create(kDataSize + kOffset);
-  ASSERT_TRUE(region.IsValid());
-  base::WritableSharedMemoryMapping mapping = region.Map();
-  ASSERT_TRUE(mapping.IsValid());
-  gfx::Size coded_size(256, 256);
-  gfx::Rect visible_rect(coded_size);
-  CreateTestY16Frame(
-      coded_size, visible_rect,
-      mapping.GetMemoryAsSpan<uint8_t>().subspan(kOffset).data());
-  auto timestamp = base::TimeDelta::FromMilliseconds(1);
-  auto frame = VideoFrame::WrapExternalData(
-      media::PIXEL_FORMAT_Y16, coded_size, visible_rect, visible_rect.size(),
-      mapping.GetMemoryAsSpan<uint8_t>().subspan(kOffset).data(), kDataSize,
-      timestamp);
-  frame->BackWithSharedMemory(&region, kOffset);
 
   EXPECT_EQ(frame->coded_size(), coded_size);
   EXPECT_EQ(frame->visible_rect(), visible_rect);
@@ -492,7 +465,7 @@ TEST(VideoFrame, TextureNoLongerNeededCallbackIsCalled) {
         gpu::MailboxHolder(gpu::Mailbox::Generate(), gpu::SyncToken(), 5)};
     scoped_refptr<VideoFrame> frame = VideoFrame::WrapNativeTextures(
         PIXEL_FORMAT_ARGB, holders,
-        base::Bind(&TextureCallback, &called_sync_token),
+        base::BindOnce(&TextureCallback, &called_sync_token),
         gfx::Size(10, 10),   // coded_size
         gfx::Rect(10, 10),   // visible_rect
         gfx::Size(10, 10),   // natural_size
@@ -536,7 +509,7 @@ TEST(VideoFrame,
     };
     scoped_refptr<VideoFrame> frame = VideoFrame::WrapNativeTextures(
         PIXEL_FORMAT_I420, holders,
-        base::Bind(&TextureCallback, &called_sync_token),
+        base::BindOnce(&TextureCallback, &called_sync_token),
         gfx::Size(10, 10),   // coded_size
         gfx::Rect(10, 10),   // visible_rect
         gfx::Size(10, 10),   // natural_size
@@ -630,6 +603,7 @@ TEST(VideoFrame, AllocationSize_OddSize) {
         EXPECT_EQ(72u, VideoFrame::AllocationSize(format, size))
             << VideoPixelFormatToString(format);
         break;
+      case PIXEL_FORMAT_UYVY:
       case PIXEL_FORMAT_YUY2:
       case PIXEL_FORMAT_I422:
         EXPECT_EQ(48u, VideoFrame::AllocationSize(format, size))
@@ -708,29 +682,44 @@ TEST(VideoFrameMetadata, SetAndThenGetAllKeysForAllTypes) {
     metadata.Clear();
 
     EXPECT_FALSE(metadata.HasKey(key));
-    metadata.SetTimeDelta(key, base::TimeDelta::FromInternalValue(42 + i));
+    base::TimeDelta reference_delta = base::TimeDelta::FromMilliseconds(42 + i);
+    metadata.SetTimeDelta(key, reference_delta);
     EXPECT_TRUE(metadata.HasKey(key));
     base::TimeDelta delta_value;
     EXPECT_TRUE(metadata.GetTimeDelta(key, &delta_value));
-    EXPECT_EQ(base::TimeDelta::FromInternalValue(42 + i), delta_value);
+    EXPECT_EQ(reference_delta, delta_value);
     metadata.Clear();
 
     EXPECT_FALSE(metadata.HasKey(key));
-    metadata.SetTimeTicks(key, base::TimeTicks::FromInternalValue(~(0LL) + i));
+    base::TimeTicks reference_ticks =
+        base::TimeTicks() + base::TimeDelta::FromMilliseconds(1234 + i);
+    metadata.SetTimeTicks(key, reference_ticks);
     EXPECT_TRUE(metadata.HasKey(key));
     base::TimeTicks ticks_value;
     EXPECT_TRUE(metadata.GetTimeTicks(key, &ticks_value));
-    EXPECT_EQ(base::TimeTicks::FromInternalValue(~(0LL) + i), ticks_value);
+    EXPECT_EQ(reference_ticks, ticks_value);
     metadata.Clear();
 
     EXPECT_FALSE(metadata.HasKey(key));
-    metadata.SetValue(key, std::make_unique<base::Value>());
+    gfx::Rect reference_rect = gfx::Rect(3, 5, 240, 360);
+    metadata.SetRect(key, reference_rect);
     EXPECT_TRUE(metadata.HasKey(key));
-    const base::Value* const null_value = metadata.GetValue(key);
-    EXPECT_TRUE(null_value);
-    EXPECT_EQ(base::Value::Type::NONE, null_value->type());
+    gfx::Rect rect_value;
+    EXPECT_TRUE(metadata.GetRect(key, &rect_value));
+    EXPECT_EQ(reference_rect, rect_value);
     metadata.Clear();
   }
+
+  // The Get/SetRotation methods only accept ROTATION as a key.
+  auto rot_key = VideoFrameMetadata::Key::ROTATION;
+  EXPECT_FALSE(metadata.HasKey(rot_key));
+  VideoRotation reference_rot = VideoRotation::VIDEO_ROTATION_270;
+  metadata.SetRotation(rot_key, reference_rot);
+  EXPECT_TRUE(metadata.HasKey(rot_key));
+  VideoRotation rot_value;
+  EXPECT_TRUE(metadata.GetRotation(rot_key, &rot_value));
+  EXPECT_EQ(reference_rot, rot_value);
+  metadata.Clear();
 }
 
 TEST(VideoFrameMetadata, PassMetadataViaIntermediary) {
@@ -742,6 +731,16 @@ TEST(VideoFrameMetadata, PassMetadataViaIntermediary) {
 
   VideoFrameMetadata result;
   result.MergeMetadataFrom(&expected);
+
+  for (int i = 0; i < VideoFrameMetadata::NUM_KEYS; ++i) {
+    const VideoFrameMetadata::Key key = static_cast<VideoFrameMetadata::Key>(i);
+    int value = -1;
+    EXPECT_TRUE(result.GetInteger(key, &value));
+    EXPECT_EQ(i, value);
+  }
+
+  result.Clear();
+  result.MergeInternalValuesFrom(expected.GetInternalValues());
 
   for (int i = 0; i < VideoFrameMetadata::NUM_KEYS; ++i) {
     const VideoFrameMetadata::Key key = static_cast<VideoFrameMetadata::Key>(i);

@@ -9,6 +9,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_cache_query_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_image_resource.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/fetch/request.h"
@@ -16,10 +18,9 @@
 #include "third_party/blink/renderer/modules/background_fetch/background_fetch_bridge.h"
 #include "third_party/blink/renderer/modules/background_fetch/background_fetch_record.h"
 #include "third_party/blink/renderer/modules/cache_storage/cache.h"
-#include "third_party/blink/renderer/modules/cache_storage/cache_query_options.h"
 #include "third_party/blink/renderer/modules/event_target_modules_names.h"
-#include "third_party/blink/renderer/modules/manifest/image_resource.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/heap_allocator.h"
@@ -210,12 +211,11 @@ ScriptPromise BackgroundFetchRegistration::MatchImpl(
                         result_ == mojom::BackgroundFetchResult::UNSET);
 
   if (!records_available_) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kInvalidStateError,
-            "The records associated with this background fetch are no longer "
-            "available."));
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "The records associated with this background fetch are no longer "
+        "available.");
+    return ScriptPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);

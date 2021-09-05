@@ -1,17 +1,23 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="nl">
+<translation id="1195447618553298278">Onbekende fout</translation>
+<translation id="1468664791493211953">Aanbiedingen</translation>
 <translation id="1482734542997480527"><ph name="ENROLLMENT_DOMAIN" /> beheert dit apparaat en kan je activiteit mogelijk bekijken.</translation>
+<translation id="150962533380566081">Ongeldige pukcode.</translation>
 <translation id="1510238584712386396">Launcher</translation>
+<translation id="159973520823200404">Discover</translation>
 <translation id="1734367976349034509">Dit apparaat wordt beheerd door een onderneming</translation>
+<translation id="1905710495812624430">Maximumaantal toegestane pogingen overschreden.</translation>
 <translation id="1930797645656624981">Invoermethodeservice voor Chrome OS</translation>
 <translation id="1979103255016296513">Wachtwoord moet dringend worden gewijzigd</translation>
 <translation id="2049639323467105390">Dit apparaat wordt beheerd door <ph name="DOMAIN" />.</translation>
-<translation id="2083960536266308407">Niets gevonden op het scherm</translation>
 <translation id="2338501278241028356">Schakel Bluetooth in om apparaten in de buurt te vinden</translation>
+<translation id="2375079107209812402">Nog <ph name="ATTEMPTS_LEFT" /> pogingen</translation>
 <translation id="2805756323405976993">Apps</translation>
 <translation id="2872961005593481000">Afsluiten</translation>
 <translation id="3008341117444806826">VERNIEUWEN</translation>
+<translation id="3820172043799983114">Ongeldige pincode.</translation>
 <translation id="3838338534323494292">Nieuw wachtwoord</translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> beheert dit apparaat en heeft toegang tot alle gebruikersactiviteit, waaronder bezochte webpagina's, wachtwoorden en e-mails.</translation>
 <translation id="4227825898293920515">Wachtwoord verloopt over <ph name="TIME" /></translation>
@@ -35,7 +41,9 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="7658239707568436148">Annuleren</translation>
 <translation id="7690294790491645610">Nieuw wachtwoord bevestigen</translation>
 <translation id="808894953321890993">Wachtwoord wijzigen</translation>
+<translation id="8208861521865154048">Speciale voordelen</translation>
 <translation id="8747900814994928677">Wijziging bevestigen</translation>
+<translation id="89415009803968170"><ph name="ERROR_MESSAGE" /> Nog <ph name="ATTEMPTS_LEFT" /> pogingen</translation>
 <translation id="910415269708673980">Ticket voor <ph name="PRINCIPAL_NAME" /> vernieuwen</translation>
 <translation id="9111102763498581341">Ontgrendelen</translation>
 </translationbundle>

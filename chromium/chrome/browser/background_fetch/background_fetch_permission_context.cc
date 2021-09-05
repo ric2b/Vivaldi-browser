@@ -12,9 +12,9 @@
 #include "content/public/browser/web_contents.h"
 
 BackgroundFetchPermissionContext::BackgroundFetchPermissionContext(
-    Profile* profile)
-    : PermissionContextBase(profile,
-                            CONTENT_SETTINGS_TYPE_BACKGROUND_FETCH,
+    content::BrowserContext* browser_context)
+    : PermissionContextBase(browser_context,
+                            ContentSettingsType::BACKGROUND_FETCH,
                             blink::mojom::FeaturePolicyFeature::kNotFound) {}
 
 bool BackgroundFetchPermissionContext::IsRestrictedToSecureOrigins() const {
@@ -51,24 +51,24 @@ ContentSetting BackgroundFetchPermissionContext::GetPermissionStatusInternal(
   // from a worker context, or it's not a top level frame. In either case, use
   // content settings.
   auto* host_content_settings_map =
-      HostContentSettingsMapFactory::GetForProfile(profile());
+      HostContentSettingsMapFactory::GetForProfile(browser_context());
   DCHECK(host_content_settings_map);
 
   // The set of valid settings for automatic downloads is defined as
   // {CONTENT_SETTING_ALLOW, CONTENT_SETTING_ASK, CONTENT_SETTING_BLOCK}.
   return host_content_settings_map->GetContentSetting(
       requesting_origin, requesting_origin,
-      CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
+      ContentSettingsType::AUTOMATIC_DOWNLOADS,
       std::string() /* resource_identifier */);
 }
 
 void BackgroundFetchPermissionContext::DecidePermission(
     content::WebContents* web_contents,
-    const PermissionRequestID& id,
+    const permissions::PermissionRequestID& id,
     const GURL& requesting_origin,
     const GURL& embedding_origin,
     bool user_gesture,
-    BrowserPermissionCallback callback) {
+    permissions::BrowserPermissionCallback callback) {
   // The user should never be prompted to authorize Background Fetch
   // from BackgroundFetchPermissionContext.
   // BackgroundFetchDelegateImpl invokes CanDownload() on DownloadRequestLimiter
@@ -77,14 +77,14 @@ void BackgroundFetchPermissionContext::DecidePermission(
 }
 
 void BackgroundFetchPermissionContext::NotifyPermissionSet(
-    const PermissionRequestID& id,
+    const permissions::PermissionRequestID& id,
     const GURL& requesting_origin,
     const GURL& embedding_origin,
-    BrowserPermissionCallback callback,
+    permissions::BrowserPermissionCallback callback,
     bool persist,
     ContentSetting content_setting) {
   DCHECK(!persist);
-  PermissionContextBase::NotifyPermissionSet(
+  permissions::PermissionContextBase::NotifyPermissionSet(
       id, requesting_origin, embedding_origin, std::move(callback), persist,
       content_setting);
 }

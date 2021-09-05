@@ -14,6 +14,7 @@
 #include "chrome/browser/chromeos/login/demo_mode/demo_app_launcher.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
+#include "chrome/browser/chromeos/login/web_kiosk_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/system/device_disabling_manager.h"
@@ -83,8 +84,7 @@ void LoginDisplayHostCommon::StartUserAdding(
   OnStartUserAdding();
 }
 
-void LoginDisplayHostCommon::StartSignInScreen(
-    const LoginScreenContext& context) {
+void LoginDisplayHostCommon::StartSignInScreen() {
   PrewarmAuthentication();
 
   const user_manager::UserList& users =
@@ -106,7 +106,7 @@ void LoginDisplayHostCommon::StartSignInScreen(
       kPolicyServiceInitializationDelayMilliseconds);
 
   // Run UI-specific logic.
-  OnStartSignInScreen(context);
+  OnStartSignInScreen();
 
   // Enable status area after starting sign-in screen, as it may depend on the
   // UI being visible.
@@ -171,7 +171,39 @@ void LoginDisplayHostCommon::StartArcKiosk(const AccountId& account_id) {
       std::make_unique<ArcKioskController>(this, GetOobeUI());
   arc_kiosk_controller_->StartArcKiosk(account_id);
 
-  OnStartArcKiosk();
+  OnStartAppLaunch();
+}
+
+void LoginDisplayHostCommon::StartWebKiosk(const AccountId& account_id) {
+  SetStatusAreaVisible(false);
+
+  // Wait for the |CrosSettings| to become either trusted or permanently
+  // untrusted.
+  const CrosSettingsProvider::TrustedStatus status =
+      CrosSettings::Get()->PrepareTrustedValues(
+          base::Bind(&LoginDisplayHostCommon::StartWebKiosk,
+                     weak_factory_.GetWeakPtr(), account_id));
+  if (status == CrosSettingsProvider::TEMPORARILY_UNTRUSTED)
+    return;
+
+  if (status == CrosSettingsProvider::PERMANENTLY_UNTRUSTED) {
+    // If the |CrosSettings| are permanently untrusted, refuse to launch a
+    // single-app kiosk mode session.
+    LOG(ERROR) << "Login >> Refusing to launch single-app kiosk mode.";
+    SetStatusAreaVisible(true);
+    return;
+  }
+
+  if (system::DeviceDisablingManager::IsDeviceDisabledDuringNormalOperation()) {
+    // If the device is disabled, bail out. A device disabled screen will be
+    // shown by the DeviceDisablingManager.
+    return;
+  }
+  OnStartAppLaunch();
+
+  web_kiosk_controller_ =
+      std::make_unique<WebKioskController>(this, GetOobeUI());
+  web_kiosk_controller_->StartWebKiosk(account_id);
 }
 
 void LoginDisplayHostCommon::CompleteLogin(const UserContext& user_context) {

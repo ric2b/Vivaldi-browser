@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/i18n/case_conversion.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -67,9 +68,9 @@ void LocalHistoryZeroSuggestProvider::Start(const AutocompleteInput& input,
   done_ = true;
   matches_.clear();
 
-  // Allow local history query suggestions only when the user is unauthenticated
-  // and is not in an off-the-record context.
-  if (client_->IsAuthenticated() || client_->IsOffTheRecord())
+  // Allow local history query suggestions only when the user is not in an
+  // off-the-record context.
+  if (client_->IsOffTheRecord())
     return;
 
   // Allow local history query suggestions only when the omnibox is empty and is
@@ -101,6 +102,8 @@ void LocalHistoryZeroSuggestProvider::Start(const AutocompleteInput& input,
 
 void LocalHistoryZeroSuggestProvider::DeleteMatch(
     const AutocompleteMatch& match) {
+  SCOPED_UMA_HISTOGRAM_TIMER("Omnibox.LocalHistoryZeroSuggest.SyncDeleteTime");
+
   history::HistoryService* history_service = client_->GetHistoryService();
   if (!history_service)
     return;
@@ -138,7 +141,8 @@ void LocalHistoryZeroSuggestProvider::DeleteMatch(
   history_service->QueryHistory(
       base::ASCIIToUTF16(google_search_url), opts,
       base::BindOnce(&LocalHistoryZeroSuggestProvider::OnHistoryQueryResults,
-                     weak_ptr_factory_.GetWeakPtr(), match.contents),
+                     weak_ptr_factory_.GetWeakPtr(), match.contents,
+                     base::TimeTicks::Now()),
       &history_task_tracker_);
 
   // Immediately update the list of matches to reflect the match was deleted.
@@ -152,7 +156,7 @@ LocalHistoryZeroSuggestProvider::LocalHistoryZeroSuggestProvider(
     AutocompleteProviderListener* listener)
     : AutocompleteProvider(
           AutocompleteProvider::TYPE_ZERO_SUGGEST_LOCAL_HISTORY),
-      max_matches_(AutocompleteResult::GetMaxMatches(/*is_zero_suggest=*/true)),
+      max_matches_(AutocompleteResult::GetMaxMatches()),
       client_(client),
       listener_(listener) {}
 
@@ -189,8 +193,10 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
   std::set<base::string16> seen_suggestions_set;
 
   int relevance = kLocalHistoryZeroSuggestRelevance;
+  size_t search_terms_seen_count = 0;
   for (const auto& result : results) {
-    // Discard the result if it is fresh enough.
+    search_terms_seen_count++;
+    // Discard the result if it is not fresh enough.
     if (result.time < history::AutocompleteAgeThreshold())
       continue;
 
@@ -222,11 +228,18 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
       break;
   }
 
+  UMA_HISTOGRAM_COUNTS_1000(
+      "Omnibox.LocalHistoryZeroSuggest.SearchTermsSeenCount",
+      search_terms_seen_count);
+  UMA_HISTOGRAM_COUNTS_1000("Omnibox.LocalHistoryZeroSuggest.MaxMatchesCount",
+                            max_matches_);
+
   listener_->OnProviderUpdate(true);
 }
 
 void LocalHistoryZeroSuggestProvider::OnHistoryQueryResults(
     const base::string16& suggestion,
+    const base::TimeTicks& query_time,
     history::QueryResults results) {
   history::HistoryService* history_service = client_->GetHistoryService();
   if (!history_service)
@@ -247,4 +260,7 @@ void LocalHistoryZeroSuggestProvider::OnHistoryQueryResults(
       urls_to_delete.push_back(result.url());
   }
   history_service->DeleteURLs(urls_to_delete);
+
+  UMA_HISTOGRAM_TIMES("Omnibox.LocalHistoryZeroSuggest.AsyncDeleteTime",
+                      base::TimeTicks::Now() - query_time);
 }

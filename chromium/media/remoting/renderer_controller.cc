@@ -100,15 +100,15 @@ MediaObserverClient::ReasonToSwitchToLocal GetSwitchReason(
 }  // namespace
 
 RendererController::RendererController(
-    mojom::RemotingSourceRequest source_request,
-    mojom::RemoterPtr remoter)
+    mojo::PendingReceiver<mojom::RemotingSource> source_receiver,
+    mojo::PendingRemote<mojom::Remoter> remoter)
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING_RPC)
     : rpc_broker_(base::BindRepeating(&RendererController::SendMessageToSink,
                                       base::Unretained(this))),
 #else
     :
 #endif
-      binding_(this, std::move(source_request)),
+      receiver_(this, std::move(source_receiver)),
       remoter_(std::move(remoter)),
       clock_(base::DefaultTickClock::GetInstance()) {
   DCHECK(remoter_);
@@ -226,25 +226,24 @@ void RendererController::StartDataPipe(
   if (!audio && !video) {
     LOG(ERROR) << "No audio nor video to establish data pipe";
     std::move(done_callback)
-        .Run(mojom::RemotingDataStreamSenderPtrInfo(),
-             mojom::RemotingDataStreamSenderPtrInfo(),
+        .Run(mojo::NullRemote(), mojo::NullRemote(),
              mojo::ScopedDataPipeProducerHandle(),
              mojo::ScopedDataPipeProducerHandle());
     return;
   }
-  mojom::RemotingDataStreamSenderPtr audio_stream_sender;
-  mojom::RemotingDataStreamSenderPtr video_stream_sender;
-  remoter_->StartDataStreams(audio ? std::move(audio_data_pipe->consumer_handle)
-                                   : mojo::ScopedDataPipeConsumerHandle(),
-                             video ? std::move(video_data_pipe->consumer_handle)
-                                   : mojo::ScopedDataPipeConsumerHandle(),
-                             audio ? mojo::MakeRequest(&audio_stream_sender)
-                                   : mojom::RemotingDataStreamSenderRequest(),
-                             video ? mojo::MakeRequest(&video_stream_sender)
-                                   : mojom::RemotingDataStreamSenderRequest());
+  mojo::PendingRemote<mojom::RemotingDataStreamSender> audio_stream_sender;
+  mojo::PendingRemote<mojom::RemotingDataStreamSender> video_stream_sender;
+  remoter_->StartDataStreams(
+      audio ? std::move(audio_data_pipe->consumer_handle)
+            : mojo::ScopedDataPipeConsumerHandle(),
+      video ? std::move(video_data_pipe->consumer_handle)
+            : mojo::ScopedDataPipeConsumerHandle(),
+      audio ? audio_stream_sender.InitWithNewPipeAndPassReceiver()
+            : mojo::NullReceiver(),
+      video ? video_stream_sender.InitWithNewPipeAndPassReceiver()
+            : mojo::NullReceiver());
   std::move(done_callback)
-      .Run(audio_stream_sender.PassInterface(),
-           video_stream_sender.PassInterface(),
+      .Run(std::move(audio_stream_sender), std::move(video_stream_sender),
            audio ? std::move(audio_data_pipe->producer_handle)
                  : mojo::ScopedDataPipeProducerHandle(),
            video ? std::move(video_data_pipe->producer_handle)
@@ -428,8 +427,6 @@ void RendererController::UpdateAndMaybeSwitch(StartTrigger start_trigger,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   bool should_be_remoting = CanBeRemoting();
-  if (client_)
-    client_->ActivateViewportIntersectionMonitoring(should_be_remoting);
 
   // Being the dominant visible content is the signal that starts remote
   // rendering.
@@ -473,9 +470,9 @@ void RendererController::WaitForStabilityBeforeStart(
 
   delayed_start_stability_timer_.Start(
       FROM_HERE, kDelayedStart,
-      base::BindRepeating(&RendererController::OnDelayedStartTimerFired,
-                          base::Unretained(this), start_trigger,
-                          client_->DecodedFrameCount(), clock_->NowTicks()));
+      base::BindOnce(&RendererController::OnDelayedStartTimerFired,
+                     base::Unretained(this), start_trigger,
+                     client_->DecodedFrameCount(), clock_->NowTicks()));
 }
 
 void RendererController::CancelDelayedStart() {
@@ -541,8 +538,6 @@ void RendererController::SetClient(MediaObserverClient* client) {
     }
     return;
   }
-
-  client_->ActivateViewportIntersectionMonitoring(CanBeRemoting());
 }
 
 bool RendererController::HasVideoCapability(

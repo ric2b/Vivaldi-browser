@@ -7,17 +7,24 @@ package org.chromium.chrome.browser.webapps;
 import android.content.Intent;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
+import android.content.res.XmlResourceParser;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Browser;
+
+import androidx.browser.trusted.sharing.ShareData;
 
 import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.android.XmlResourceParserImpl;
 import org.robolectric.annotation.Config;
+import org.robolectric.res.ResourceTable;
+import org.robolectric.util.ReflectionHelpers;
+import org.w3c.dom.Document;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.ShortcutHelper;
@@ -28,9 +35,13 @@ import org.chromium.webapk.lib.common.WebApkMetaDataKeys;
 import org.chromium.webapk.lib.common.splash.SplashLayout;
 import org.chromium.webapk.test.WebApkTestHelper;
 
+import java.io.ByteArrayInputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 
 /**
  * Tests WebApkInfo.
@@ -54,12 +65,36 @@ public class WebApkInfoTest {
     private static final String MANIFEST_URL = "https://www.google.com/alphabet.json";
     private static final String ICON_URL = "https://www.google.com/scope/worm.png";
     private static final String ICON_MURMUR2_HASH = "5";
+    private static final int PRIMARY_ICON_ID = 12;
+    private static final int PRIMARY_MASKABLE_ICON_ID = 14;
     private static final int SOURCE = ShortcutSource.NOTIFICATION;
 
     /** Fakes the Resources object, allowing lookup of String value. */
     private static class FakeResources extends Resources {
         private final Map<String, Integer> mStringIdMap;
         private final Map<Integer, String> mIdValueMap;
+        private String mShortcutsXmlContents;
+
+        private class MockXmlResourceParserImpl extends XmlResourceParserImpl {
+            String mPackageName;
+
+            public MockXmlResourceParserImpl(Document document, String fileName, String packageName,
+                    String applicationPackageName, ResourceTable resourceTable) {
+                super(document, fileName, packageName, applicationPackageName, resourceTable);
+                mPackageName = packageName;
+            }
+
+            @Override
+            public int getAttributeResourceValue(
+                    String namespace, String attribute, int defaultValue) {
+                // Remove the trailing '@'.
+                String attributeValue = getAttributeValue(namespace, attribute).substring(1);
+                if (mStringIdMap.containsKey(attributeValue)) {
+                    return mStringIdMap.get(attributeValue);
+                }
+                return defaultValue;
+            }
+        }
 
         // Do not warn about deprecated call to Resources(); the documentation says code is not
         // supposed to create its own Resources object, but we are using it to fake out the
@@ -91,9 +126,33 @@ public class WebApkInfoTest {
             return Integer.parseInt(getString(id));
         }
 
+        @Override
+        public XmlResourceParser getXml(int id) {
+            try {
+                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+                factory.setNamespaceAware(true);
+                factory.setIgnoringComments(true);
+                factory.setIgnoringElementContentWhitespace(true);
+                DocumentBuilder documentBuilder = factory.newDocumentBuilder();
+                Document document = documentBuilder.parse(
+                        new ByteArrayInputStream(mShortcutsXmlContents.getBytes()));
+
+                return new MockXmlResourceParserImpl(
+                        document, "file", WEBAPK_PACKAGE_NAME, WEBAPK_PACKAGE_NAME, null);
+            } catch (Exception e) {
+                Assert.fail("Failed to create XmlResourceParser");
+                return null;
+            }
+        }
+
+        void setShortcutsXmlContent(String content) {
+            mShortcutsXmlContents = content;
+        }
+
         public void addStringForTesting(
                 String name, String defType, String defPackage, int identifier, String value) {
             String key = getKey(name, defType, defPackage);
+
             mStringIdMap.put(key, identifier);
             mIdValueMap.put(identifier, value);
         }
@@ -119,6 +178,10 @@ public class WebApkInfoTest {
 
     @Test
     public void testSanity() {
+        // Test guidelines:
+        // - Stubbing out native calls in this test likely means that there is a bug.
+        // - For every WebApkInfo boolean there should be a test which tests both values.
+
         Bundle bundle = new Bundle();
         bundle.putString(WebApkMetaDataKeys.SCOPE, SCOPE);
         bundle.putString(WebApkMetaDataKeys.NAME, NAME);
@@ -132,6 +195,8 @@ public class WebApkInfoTest {
         bundle.putString(WebApkMetaDataKeys.START_URL, START_URL);
         bundle.putString(WebApkMetaDataKeys.ICON_URLS_AND_ICON_MURMUR2_HASHES,
                 ICON_URL + " " + ICON_MURMUR2_HASH);
+        bundle.putInt(WebApkMetaDataKeys.ICON_ID, PRIMARY_ICON_ID);
+        bundle.putInt(WebApkMetaDataKeys.MASKABLE_ICON_ID, PRIMARY_MASKABLE_ICON_ID);
 
         Bundle shareActivityBundle = new Bundle();
         shareActivityBundle.putString(WebApkMetaDataKeys.SHARE_ACTION, "action0");
@@ -164,8 +229,8 @@ public class WebApkInfoTest {
         Assert.assertEquals(SHORT_NAME, info.shortName());
         Assert.assertEquals(WebDisplayMode.MINIMAL_UI, info.displayMode());
         Assert.assertEquals(ScreenOrientationValues.PORTRAIT, info.orientation());
-        Assert.assertTrue(info.hasValidThemeColor());
-        Assert.assertEquals(1L, info.themeColor());
+        Assert.assertTrue(info.hasValidToolbarColor());
+        Assert.assertEquals(1L, info.toolbarColor());
         Assert.assertTrue(info.hasValidBackgroundColor());
         Assert.assertEquals(2L, info.backgroundColor());
         Assert.assertEquals(WEBAPK_PACKAGE_NAME, info.webApkPackageName());
@@ -182,8 +247,8 @@ public class WebApkInfoTest {
         Assert.assertEquals(
                 (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M), info.isSplashProvidedByWebApk());
 
-        Assert.assertEquals(null, info.icon().bitmap());
-        Assert.assertEquals(null, info.badgeIcon().bitmap());
+        Assert.assertEquals(PRIMARY_MASKABLE_ICON_ID, info.icon().resourceIdForTesting());
+        Assert.assertEquals(true, info.isIconAdaptive());
         Assert.assertEquals(null, info.splashIcon().bitmap());
 
         WebApkInfo.ShareTarget shareTarget = info.shareTarget();
@@ -196,6 +261,45 @@ public class WebApkInfoTest {
         Assert.assertEquals(new String[] {"name1", "name2"}, shareTarget.getFileNames());
         Assert.assertEquals(new String[][] {{"text/plain"}, {"image/png", "image/jpeg"}},
                 shareTarget.getFileAccepts());
+    }
+
+    /**
+     * Test that {@link WebApkInfo#create()} ignores the maskable icon on pre-Android-O
+     * Android OSes.
+     */
+    @Test
+    public void testOsVersionDoesNotSupportAdaptive() {
+        ReflectionHelpers.setStaticField(Build.VERSION.class, "SDK_INT", Build.VERSION_CODES.N);
+
+        Bundle bundle = new Bundle();
+        bundle.putInt(WebApkMetaDataKeys.ICON_ID, PRIMARY_ICON_ID);
+        bundle.putInt(WebApkMetaDataKeys.MASKABLE_ICON_ID, PRIMARY_MASKABLE_ICON_ID);
+        bundle.putString(WebApkMetaDataKeys.START_URL, START_URL);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
+
+        Intent intent = createMinimalWebApkIntent(WEBAPK_PACKAGE_NAME, START_URL);
+        WebApkInfo info = WebApkInfo.create(intent);
+        Assert.assertEquals(PRIMARY_ICON_ID, info.icon().resourceIdForTesting());
+        Assert.assertEquals(false, info.isIconAdaptive());
+    }
+
+    /**
+     * Test that {@link WebApkInfo#create()} selects {@link WebApkMetaDataKeys.ICON_ID} if no
+     * maskable icon is provided and that the icon is tagged as non-maskable.
+     */
+    @Test
+    public void testNoMaskableIcon() {
+        Bundle bundle = new Bundle();
+        bundle.putInt(WebApkMetaDataKeys.ICON_ID, PRIMARY_ICON_ID);
+        bundle.putString(WebApkMetaDataKeys.START_URL, START_URL);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
+
+        Intent intent = createMinimalWebApkIntent(WEBAPK_PACKAGE_NAME, START_URL);
+        WebApkInfo info = WebApkInfo.create(intent);
+        Assert.assertEquals(PRIMARY_ICON_ID, info.icon().resourceIdForTesting());
+        Assert.assertEquals(false, info.isIconAdaptive());
     }
 
     /**
@@ -371,10 +475,11 @@ public class WebApkInfoTest {
         String name = "WebAPK name";
         String shortName = "WebAPK short name";
         FakeResources res = new FakeResources();
-        res.addStringForTesting(WebApkIntentDataProvider.RESOURCE_NAME,
-                WebApkIntentDataProvider.RESOURCE_STRING_TYPE, WEBAPK_PACKAGE_NAME, 1, name);
-        res.addStringForTesting(WebApkIntentDataProvider.RESOURCE_SHORT_NAME,
-                WebApkIntentDataProvider.RESOURCE_STRING_TYPE, WEBAPK_PACKAGE_NAME, 2, shortName);
+        res.addStringForTesting(WebApkIntentDataProviderFactory.RESOURCE_NAME,
+                WebApkIntentDataProviderFactory.RESOURCE_STRING_TYPE, WEBAPK_PACKAGE_NAME, 1, name);
+        res.addStringForTesting(WebApkIntentDataProviderFactory.RESOURCE_SHORT_NAME,
+                WebApkIntentDataProviderFactory.RESOURCE_STRING_TYPE, WEBAPK_PACKAGE_NAME, 2,
+                shortName);
         WebApkTestHelper.setResource(WEBAPK_PACKAGE_NAME, res);
 
         Intent intent = createMinimalWebApkIntent(WEBAPK_PACKAGE_NAME, START_URL);
@@ -523,7 +628,7 @@ public class WebApkInfoTest {
     }
 
     /**
-     * Tests building {@link WebApkInfo.ShareData} when {@link Intent.EXTRA_STREAM} has a Uri value.
+     * Tests building {@link ShareData} when {@link Intent.EXTRA_STREAM} has a Uri value.
      */
     @Test
     public void testShareDataUriString() {
@@ -543,14 +648,14 @@ public class WebApkInfoTest {
         intent.putExtra(Intent.EXTRA_STREAM, sharedFileUri);
 
         WebApkInfo info = WebApkInfo.create(intent);
-        WebApkInfo.ShareData shareData = info.shareData();
+        ShareData shareData = info.shareData();
         Assert.assertNotNull(shareData);
-        Assert.assertNotNull(shareData.files);
-        Assert.assertThat(shareData.files, Matchers.contains(sharedFileUri));
+        Assert.assertNotNull(shareData.uris);
+        Assert.assertThat(shareData.uris, Matchers.contains(sharedFileUri));
     }
 
     /**
-     * Tests building {@link WebApkInfo.ShareData} when {@link Intent.EXTRA_STREAM} has an ArrayList
+     * Tests building {@link ShareData} when {@link Intent.EXTRA_STREAM} has an ArrayList
      * value.
      */
     @Test
@@ -573,10 +678,10 @@ public class WebApkInfoTest {
         intent.putExtra(Intent.EXTRA_STREAM, uris);
 
         WebApkInfo info = WebApkInfo.create(intent);
-        WebApkInfo.ShareData shareData = info.shareData();
+        ShareData shareData = info.shareData();
         Assert.assertNotNull(shareData);
-        Assert.assertNotNull(shareData.files);
-        Assert.assertThat(shareData.files, Matchers.contains(sharedFileUri));
+        Assert.assertNotNull(shareData.uris);
+        Assert.assertThat(shareData.uris, Matchers.contains(sharedFileUri));
     }
 
     /**
@@ -630,5 +735,98 @@ public class WebApkInfoTest {
         WebApkInfo info = WebApkInfo.create(intent);
         Assert.assertEquals(
                 defaultBackgroundColorInWebApk, info.backgroundColorFallbackToDefault());
+    }
+
+    /**
+     * Test that shortcut items are properly parsed.
+     */
+    @Test
+    public void testShortcutItemsFromWebApkStrings() {
+        Bundle bundle = new Bundle();
+        bundle.putString(WebApkMetaDataKeys.START_URL, START_URL);
+        WebApkTestHelper.registerWebApkWithMetaData(
+                WEBAPK_PACKAGE_NAME, bundle, null /* shareTargetMetaData */);
+
+        FakeResources res = new FakeResources();
+        res.addStringForTesting(WebApkIntentDataProviderFactory.RESOURCE_SHORTCUTS,
+                WebApkIntentDataProviderFactory.RESOURCE_XML_TYPE, WEBAPK_PACKAGE_NAME, 1, null);
+        res.addStringForTesting("shortcut_1_short_name",
+                WebApkIntentDataProviderFactory.RESOURCE_STRING_TYPE, WEBAPK_PACKAGE_NAME, 2,
+                "short name1");
+        res.addStringForTesting("shortcut_1_name",
+                WebApkIntentDataProviderFactory.RESOURCE_STRING_TYPE, WEBAPK_PACKAGE_NAME, 3,
+                "name1");
+        res.addStringForTesting("shortcut_2_short_name",
+                WebApkIntentDataProviderFactory.RESOURCE_STRING_TYPE, WEBAPK_PACKAGE_NAME, 4,
+                "short name2");
+        res.addStringForTesting("shortcut_2_name",
+                WebApkIntentDataProviderFactory.RESOURCE_STRING_TYPE, WEBAPK_PACKAGE_NAME, 5,
+                "name2");
+        WebApkTestHelper.setResource(WEBAPK_PACKAGE_NAME, res);
+
+        Intent intent = createMinimalWebApkIntent(WEBAPK_PACKAGE_NAME, START_URL);
+
+        // No shortcuts case.
+        res.setShortcutsXmlContent(
+                "<shortcuts xmlns:android='http://schemas.android.com/apk/res/android'/>");
+        WebApkInfo info = WebApkInfo.create(intent);
+        Assert.assertEquals(info.shortcutItems().size(), 0);
+
+        // One shortcut case.
+        String oneShortcut =
+                "<shortcuts xmlns:android='http://schemas.android.com/apk/res/android'>"
+                + "  <shortcut"
+                + "    android:shortcutId='shortcut_1'"
+                + "    android:icon='@drawable/shortcut_1_icon'"
+                + "    iconUrl='https://example.com/icon1.png'"
+                + "    iconHash='1234'"
+                + "    android:shortcutShortLabel='@string/shortcut_1_short_name'"
+                + "    android:shortcutLongLabel='@string/shortcut_1_name'>"
+                + "      <intent android:data='https://example.com/launch1' />"
+                + "  </shortcut>"
+                + "</shortcuts>";
+
+        res.setShortcutsXmlContent(oneShortcut);
+        info = WebApkInfo.create(intent);
+        Assert.assertEquals(info.shortcutItems().size(), 1);
+        WebApkExtras.ShortcutItem item = info.shortcutItems().get(0);
+        Assert.assertEquals(item.name, "name1");
+        Assert.assertEquals(item.shortName, "short name1");
+        Assert.assertEquals(item.launchUrl, "https://example.com/launch1");
+        Assert.assertEquals(item.iconUrl, "https://example.com/icon1.png");
+        Assert.assertEquals(item.iconHash, "1234");
+
+        // Multiple shortcuts case.
+        String twoShortcuts =
+                "<shortcuts xmlns:android='http://schemas.android.com/apk/res/android'>"
+                + "  <shortcut"
+                + "    android:shortcutId='shortcut_1'"
+                + "    android:icon='@drawable/shortcut_1_icon'"
+                + "    iconUrl='https://example.con/icon1.png'"
+                + "    iconHash='1234'"
+                + "    android:shortcutShortLabel='@string/shortcut_1_short_name'"
+                + "    android:shortcutLongLabel='@string/shortcut_1_name'>"
+                + "      <intent android:data='https://example.com/launch1' />"
+                + "  </shortcut>"
+                + "  <shortcut"
+                + "    android:shortcutId='shortcut_2'"
+                + "    android:icon='@drawable/shortcut_2_icon'"
+                + "    iconUrl='https://example.com/icon2.png'"
+                + "    iconHash='2345'"
+                + "    android:shortcutShortLabel='@string/shortcut_2_short_name'"
+                + "    android:shortcutLongLabel='@string/shortcut_2_name'>"
+                + "      <intent android:data='https://example.com/launch2' />"
+                + "  </shortcut>"
+                + "</shortcuts>";
+
+        res.setShortcutsXmlContent(twoShortcuts);
+        info = WebApkInfo.create(intent);
+        Assert.assertEquals(info.shortcutItems().size(), 2);
+        item = info.shortcutItems().get(1);
+        Assert.assertEquals(item.name, "name2");
+        Assert.assertEquals(item.shortName, "short name2");
+        Assert.assertEquals(item.launchUrl, "https://example.com/launch2");
+        Assert.assertEquals(item.iconUrl, "https://example.com/icon2.png");
+        Assert.assertEquals(item.iconHash, "2345");
     }
 }

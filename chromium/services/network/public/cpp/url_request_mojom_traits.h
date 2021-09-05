@@ -17,13 +17,17 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 #include "net/base/request_priority.h"
+#include "net/url_request/url_request_job.h"
 #include "services/network/public/cpp/data_element.h"
 #include "services/network/public/cpp/network_isolation_key_mojom_traits.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/cpp/site_for_cookies_mojom_traits.h"
 #include "services/network/public/mojom/chunked_data_pipe_getter.mojom.h"
 #include "services/network/public/mojom/data_pipe_getter.mojom.h"
+#include "services/network/public/mojom/trust_tokens.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom-shared.h"
+#include "url/mojom/url_gurl_mojom_traits.h"
 
 namespace mojo {
 
@@ -58,6 +62,14 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
       const network::ResourceRequest::TrustedParams& trusted_params) {
     return trusted_params.update_network_isolation_key_on_redirect;
   }
+  static bool disable_secure_dns(
+      const network::ResourceRequest::TrustedParams& trusted_params) {
+    return trusted_params.disable_secure_dns;
+  }
+  static bool has_user_activation(
+      const network::ResourceRequest::TrustedParams& trusted_params) {
+    return trusted_params.has_user_activation;
+  }
 
   static bool Read(network::mojom::TrustedUrlRequestParamsDataView data,
                    network::ResourceRequest::TrustedParams* out);
@@ -72,7 +84,8 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   static const GURL& url(const network::ResourceRequest& request) {
     return request.url;
   }
-  static const GURL& site_for_cookies(const network::ResourceRequest& request) {
+  static const net::SiteForCookies& site_for_cookies(
+      const network::ResourceRequest& request) {
     return request.site_for_cookies;
   }
   static bool attach_same_site_cookies(
@@ -159,6 +172,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
       const network::ResourceRequest& request) {
     return request.fetch_request_context_type;
   }
+  static network::mojom::RequestDestination destination(
+      const network::ResourceRequest& request) {
+    return request.destination;
+  }
   static const scoped_refptr<network::ResourceRequestBody>& request_body(
       const network::ResourceRequest& request) {
     return request.request_body;
@@ -211,10 +228,6 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
       const network::ResourceRequest& request) {
     return request.custom_proxy_post_cache_headers;
   }
-  static bool custom_proxy_use_alternate_proxy_list(
-      const network::ResourceRequest& request) {
-    return request.custom_proxy_use_alternate_proxy_list;
-  }
   static const base::Optional<base::UnguessableToken>& fetch_window_id(
       const network::ResourceRequest& request) {
     return request.fetch_window_id;
@@ -237,6 +250,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
   static const base::Optional<base::UnguessableToken>& recursive_prefetch_token(
       const network::ResourceRequest& request) {
     return request.recursive_prefetch_token;
+  }
+  static const network::mojom::TrustTokenParamsPtr& trust_token_params(
+      const network::ResourceRequest& request) {
+    return request.trust_token_params.as_ptr();
   }
 
   static bool Read(network::mojom::URLRequestDataView data,

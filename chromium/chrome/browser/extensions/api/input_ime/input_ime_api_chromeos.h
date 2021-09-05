@@ -114,6 +114,26 @@ class InputImeHideInputViewFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
+class InputMethodPrivateFinishComposingTextFunction : public ExtensionFunction {
+ public:
+  InputMethodPrivateFinishComposingTextFunction(
+      const InputMethodPrivateFinishComposingTextFunction&) = delete;
+  InputMethodPrivateFinishComposingTextFunction& operator=(
+      const InputMethodPrivateFinishComposingTextFunction&) = delete;
+
+  InputMethodPrivateFinishComposingTextFunction() = default;
+
+ protected:
+  ~InputMethodPrivateFinishComposingTextFunction() override = default;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+ private:
+  DECLARE_EXTENSION_FUNCTION("inputMethodPrivate.finishComposingText",
+                             INPUTMETHODPRIVATE_FINISHCOMPOSINGTEXT)
+};
+
 class InputMethodPrivateNotifyImeMenuItemActivatedFunction
     : public ExtensionFunction {
  public:
@@ -157,7 +177,8 @@ class InputImeEventRouter : public InputImeEventRouterBase {
 
   chromeos::InputMethodEngine* GetEngine(const std::string& extension_id);
   input_method::InputMethodEngineBase* GetEngineIfActive(
-      const std::string& extension_id) override;
+      const std::string& extension_id,
+      std::string* error) override;
 
   std::string GetUnloadedExtensionId() const {
     return unloaded_component_extension_id_;

@@ -24,35 +24,48 @@ message LinkDataProto {
   required string url = 2;
 }
 
-// A paint preview of a single frame.
-// NEXT_TAG = 8
-message PaintPreviewFrameProto {
-  // Serialized base::UnguessableToken.
-  required uint64 unguessable_token_high = 1;
-  required uint64 unguessable_token_low = 2;
+// A mapping from a content ID to the serialized embedding token.
+// NEXT_TAG = 4
+message ContentIdEmbeddingTokenPairProto {
+  required uint32 content_id = 1;
+  required uint64 embedding_token_low = 2;
+  required uint64 embedding_token_high = 3;
+}
 
-  // Originates in renderer as Routing ID.
-  // Converted to (Process ID || Routing ID) once processed in browser.
-  required uint64 id = 3;
+// A paint preview of a single frame.
+// NEXT_TAG = 7
+message PaintPreviewFrameProto {
+  // The embedding token for this frame to its parent. Every frame other than
+  // the main frame should have a non-zero value here.
+  required uint64 embedding_token_low = 1;
+  required uint64 embedding_token_high = 2;
 
   // Boolean indicating if the frame is the main frame.
-  required bool is_main_frame = 4;
+  required bool is_main_frame = 3;
 
   // The file path to the serialized Skia Picture.
-  optional string file_path = 5;
+  optional string file_path = 4;
 
   // A list of links within the frame.
-  repeated LinkDataProto links = 6;
+  repeated LinkDataProto links = 5;
 
-  // A map between the content IDs of subframes and the |id| field.
-  map<uint32, int64> content_id_proxy_id_map = 7;
+  // A mapping between the content IDs of subframes and the |id| field.
+  repeated ContentIdEmbeddingTokenPairProto content_id_to_embedding_tokens = 6;
+}
+
+// Metadata for the capture.
+// NEXT_TAG = 2
+message MetadataProto {
+  // URL of the root frame.
+  required string url = 1;
 }
 
 // A paint preview of the entire page.
-// NEXT_TAG = 3
+// NEXT_TAG = 4
 message PaintPreviewProto {
   // The root frame of the RenderFrame tree. This is often the main frame, but
   // may be a root node of a subtree (e.g. paint preview of an iframe).
   required PaintPreviewFrameProto root_frame = 1;
   repeated PaintPreviewFrameProto subframes = 2;
+  required MetadataProto metadata = 3;
 }

@@ -20,6 +20,14 @@
           "createDateJS": {
             "type": "number",
             "description": "Session save date in JS format."
+          },
+          "windows": {
+            "type": "number",
+            "description": "Number of windows in this session."
+          },
+          "tabs": {
+            "type": "number",
+            "description": "Number of tabs in this session."
           }
         }
       },

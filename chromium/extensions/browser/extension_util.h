@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "extensions/common/manifest.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -45,9 +46,14 @@ bool CanCrossIncognito(const extensions::Extension* extension,
 GURL GetSiteForExtensionId(const std::string& extension_id,
                            content::BrowserContext* context);
 
+// Returns the StoragePartition domain for |extension|.
+// Note: The reference returned has the same lifetime as |extension|.
+const std::string& GetPartitionDomainForExtension(const Extension* extension);
+
 content::StoragePartition* GetStoragePartitionForExtensionId(
     const std::string& extension_id,
-    content::BrowserContext* browser_context);
+    content::BrowserContext* browser_context,
+    bool can_create = true);
 
 // Maps a |file_url| to a |file_path| on the local filesystem, including
 // resources in extensions. Returns true on success. See NaClBrowserDelegate for
@@ -59,6 +65,16 @@ bool MapUrlToLocalFilePath(const ExtensionSet* extensions,
                            const GURL& file_url,
                            bool use_blocking_api,
                            base::FilePath* file_path);
+
+// Returns true if the browser can potentially withhold permissions from the
+// extension.
+bool CanWithholdPermissionsFromExtension(const Extension& extension);
+bool CanWithholdPermissionsFromExtension(const std::string& extension_id,
+                                         const Manifest::Type type,
+                                         const Manifest::Location location);
+
+// Returns a unique int id for each context.
+int GetBrowserContextId(content::BrowserContext* context);
 
 }  // namespace util
 }  // namespace extensions

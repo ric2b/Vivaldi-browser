@@ -44,8 +44,10 @@ class EventRewriterChromeOS : public ui::EventRewriter {
  public:
   enum DeviceType {
     kDeviceUnknown = 0,
-    kDeviceAppleKeyboard,
-    kDeviceExternalNonAppleKeyboard,
+    kDeviceInternalKeyboard,
+    kDeviceExternalAppleKeyboard,
+    kDeviceExternalChromeOsKeyboard,
+    kDeviceExternalGenericKeyboard,
     kDeviceExternalUnknown,
     kDeviceHotrodRemote,
     kDeviceVirtualCoreKeyboard,  // X-server generated events.
@@ -61,10 +63,11 @@ class EventRewriterChromeOS : public ui::EventRewriter {
     kKbdTopRowLayout2 = 2,
     // Keyboard layout and handling for Wilco.
     kKbdTopRowLayoutWilco = 3,
+    kKbdTopRowLayoutDrallion = 4,
 
     kKbdTopRowLayoutDefault = kKbdTopRowLayout1,
     kKbdTopRowLayoutMin = kKbdTopRowLayout1,
-    kKbdTopRowLayoutMax = kKbdTopRowLayoutWilco
+    kKbdTopRowLayoutMax = kKbdTopRowLayoutDrallion
   };
 
   // Things that keyboard-related rewriter phases can change about an Event.
@@ -118,22 +121,24 @@ class EventRewriterChromeOS : public ui::EventRewriter {
   // nullptr (for testing without ash), in which case sticky key operations
   // don't happen.
   EventRewriterChromeOS(Delegate* delegate,
-                        ui::EventRewriter* sticky_keys_controller);
+                        ui::EventRewriter* sticky_keys_controller,
+                        bool privacy_screen_supported);
   ~EventRewriterChromeOS() override;
-
-  static DeviceType GetDeviceType(const ui::InputDevice& keyboard_device);
 
   // Calls KeyboardDeviceAddedInternal.
   void KeyboardDeviceAddedForTesting(
       int device_id,
       const std::string& device_name,
-      KeyboardTopRowLayout layout = kKbdTopRowLayoutDefault,
-      InputDeviceType device_type = INPUT_DEVICE_UNKNOWN);
+      const std::string& layout_string = std::string(),
+      InputDeviceType device_type = INPUT_DEVICE_INTERNAL);
+
+  // Reset the internal rewriter state so that next set of tests can be ran on
+  // the same rewriter, if needed.
+  void ResetStateForTesting();
 
   // Calls RewriteMouseEvent().
-  void RewriteMouseButtonEventForTesting(
-      const ui::MouseEvent& event,
-      std::unique_ptr<ui::Event>* rewritten_event);
+  void RewriteMouseButtonEventForTesting(const ui::MouseEvent& event,
+                                         const Continuation continuation);
 
   void set_last_keyboard_device_id_for_testing(int device_id) {
     last_keyboard_device_id_ = device_id;
@@ -143,13 +148,14 @@ class EventRewriterChromeOS : public ui::EventRewriter {
     ime_keyboard_for_testing_ = ime_keyboard;
   }
 
+  void set_privacy_screen_for_testing(bool supported) {
+    privacy_screen_supported_ = supported;
+  }
+
   // EventRewriter overrides:
-  ui::EventRewriteStatus RewriteEvent(
+  ui::EventDispatchDetails RewriteEvent(
       const ui::Event& event,
-      std::unique_ptr<ui::Event>* rewritten_event) override;
-  ui::EventRewriteStatus NextDispatchEvent(
-      const ui::Event& last_event,
-      std::unique_ptr<ui::Event>* new_event) override;
+      const Continuation continuation) override;
 
   // Generate a new key event from an original key event and the replacement
   // state determined by a key rewriter.
@@ -158,17 +164,19 @@ class EventRewriterChromeOS : public ui::EventRewriter {
       const MutableKeyState& state,
       std::unique_ptr<ui::Event>* rewritten_event);
 
-  // Given the file path of a keyboard device, returns true if we get back
-  // the layout type of the top row keys without getting an error. Type
-  // value is stored in |out_layout|.
-  static bool GetKeyboardTopRowLayout(const base::FilePath& device_path,
-                                      KeyboardTopRowLayout* out_layout)
-      WARN_UNUSED_RESULT;
+  // Given a keyboard device, returns its type.
+  static DeviceType GetDeviceType(const ui::InputDevice& keyboard_device);
 
-  // Given the file path of a keyboard device, returns true if we get back
-  // the Assistant key property without getting an error. Property value
-  // is stored in |has_assistant_key|.
-  static bool HasAssistantKeyOnKeyboard(const base::FilePath& device_path,
+  // Given a keyboard device, returns its top row layout. Will return default
+  // kKbdTopRowLayoutDefault if the device is not tagged with a specific
+  // layout, or when failing to retrieve device layout from udev.
+  static KeyboardTopRowLayout GetKeyboardTopRowLayout(
+      const ui::InputDevice& keyboard_device);
+
+  // Given a keyboard device, returns true if we get back the Assistant key
+  // property without getting an error. Property value is stored in
+  // |has_assistant_key|.
+  static bool HasAssistantKeyOnKeyboard(const ui::InputDevice& keyboard_device,
                                         bool* has_assistant_key);
 
   // Part of rewrite phases below. This method is public only so that
@@ -190,8 +198,8 @@ class EventRewriterChromeOS : public ui::EventRewriter {
   bool ForceTopRowAsFunctionKeys() const;
 
   // Adds a device to |device_id_to_info_| only if no failure occurs in
-  // retrieving the top row layout from udev, and returns the device type of
-  // this keyboard even if it wasn't stored in |device_id_to_info_|.
+  // identifying the keyboard, and returns the device type of this keyboard
+  // even if it wasn't stored in |device_id_to_info_|.
   DeviceType KeyboardDeviceAdded(int device_id);
 
   // Inserts a new entry to |device_id_to_info_|.
@@ -223,39 +231,45 @@ class EventRewriterChromeOS : public ui::EventRewriter {
   ui::EventRewriteStatus RewriteKeyEvent(
       const ui::KeyEvent& key_event,
       std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus RewriteMouseButtonEvent(
+  ui::EventDispatchDetails RewriteMouseButtonEvent(
       const ui::MouseEvent& mouse_event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus RewriteMouseWheelEvent(
+      const Continuation continuation);
+  ui::EventDispatchDetails RewriteMouseWheelEvent(
       const ui::MouseWheelEvent& mouse_event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus RewriteTouchEvent(
-      const ui::TouchEvent& touch_event,
-      std::unique_ptr<ui::Event>* rewritten_event);
-  ui::EventRewriteStatus RewriteScrollEvent(
+      const Continuation continuation);
+  ui::EventDispatchDetails RewriteTouchEvent(const ui::TouchEvent& touch_event,
+                                             const Continuation continuation);
+  ui::EventDispatchDetails RewriteScrollEvent(
       const ui::ScrollEvent& scroll_event,
-      std::unique_ptr<ui::Event>* rewritten_event);
+      const Continuation continuation);
 
   // Rewriter phases. These can inspect the original |event|, but operate using
   // the current |state|, which may have been modified by previous phases.
   void RewriteNumPadKeys(const ui::KeyEvent& event, MutableKeyState* state);
   void RewriteExtendedKeys(const ui::KeyEvent& event, MutableKeyState* state);
   void RewriteFunctionKeys(const ui::KeyEvent& event, MutableKeyState* state);
-  void RewriteLocatedEvent(const ui::Event& event, int* flags);
+  int RewriteLocatedEvent(const ui::Event& event);
   int RewriteModifierClick(const ui::MouseEvent& event, int* flags);
 
   // Handle Fn/Action key remapping for Wilco keyboard layout.
   bool RewriteTopRowKeysForLayoutWilco(
       const ui::KeyEvent& key_event,
       bool search_is_pressed,
-      ui::EventRewriterChromeOS::MutableKeyState* state);
+      ui::EventRewriterChromeOS::MutableKeyState* state,
+      KeyboardTopRowLayout layout);
 
   // Take the keys being pressed into consideration, in contrast to
   // RewriteKeyEvent which computes the rewritten event and event rewrite
   // status in stateless way.
-  void RewriteKeyEventInContext(const ui::KeyEvent& event,
-                                std::unique_ptr<ui::Event>* rewritten_event,
-                                ui::EventRewriteStatus* status);
+  ui::EventDispatchDetails RewriteKeyEventInContext(
+      const ui::KeyEvent& event,
+      std::unique_ptr<ui::Event> rewritten_event,
+      ui::EventRewriteStatus status,
+      const Continuation continuation);
+
+  ui::EventDispatchDetails SendStickyKeysReleaseEvents(
+      std::unique_ptr<ui::Event> rewritten_event,
+      const Continuation continuation);
 
   // A set of device IDs whose press event has been rewritten.
   // This is to ensure that press and release events are rewritten consistently.
@@ -276,12 +290,13 @@ class EventRewriterChromeOS : public ui::EventRewriter {
   // element and the second element are identical.
   std::list<std::pair<MutableKeyState, MutableKeyState>> pressed_key_states_;
 
-  // Store key events when there are more than one key events to be dispatched.
-  std::vector<std::unique_ptr<ui::KeyEvent>> dispatched_key_events_;
-
   // The sticky keys controller is not owned here;
   // at time of writing it is a singleton in ash::Shell.
   ui::EventRewriter* const sticky_keys_controller_;
+
+  // Some drallion devices have digital privacy screens and a corresponding
+  // privacy screen toggle key in the top row.
+  bool privacy_screen_supported_;
 
   // Some keyboard layouts have 'latching' keys, which either apply
   // a modifier while held down (like normal modifiers), or, if no

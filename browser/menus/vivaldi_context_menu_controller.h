@@ -55,6 +55,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
 
   ContextMenuController(Delegate* delegate,
                         content::WebContents* web_contents,
+                        content::WebContents* window_web_contents,
                         std::unique_ptr<Params> params);
   ~ContextMenuController() override;
 
@@ -91,6 +92,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
 
   Delegate* delegate_;
   content::WebContents* web_contents_;  // Not owned by us.
+  content::WebContents* window_web_contents_;
   Browser* browser_;
   std::unique_ptr<Params> params_;
 

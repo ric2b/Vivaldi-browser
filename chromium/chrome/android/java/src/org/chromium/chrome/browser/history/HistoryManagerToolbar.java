@@ -10,11 +10,13 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 
-import org.chromium.base.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.widget.selection.SelectableListToolbar;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar;
 
 import java.util.List;
 
@@ -83,7 +85,6 @@ public class HistoryManagerToolbar extends SelectableListToolbar<HistoryItem> {
 
     @Override
     public void setSearchEnabled(boolean searchEnabled) {
-        if (ChromeApplication.isVivaldi()) return;
         super.setSearchEnabled(searchEnabled);
         updateInfoMenuItem(
                 mManager.shouldShowInfoButton(), mManager.shouldShowInfoHeaderIfAvailable());
@@ -106,12 +107,9 @@ public class HistoryManagerToolbar extends SelectableListToolbar<HistoryItem> {
         if (!PrefServiceBridge.getInstance().getBoolean(Pref.ALLOW_DELETING_BROWSER_HISTORY)) {
             getMenu().removeItem(R.id.selection_mode_delete_menu_id);
         }
-        if (!PrefServiceBridge.getInstance().isIncognitoModeEnabled()) {
+        if (!IncognitoUtils.isIncognitoModeEnabled()) {
             getMenu().removeItem(R.id.selection_mode_open_in_incognito);
         }
-        if (ChromeApplication.isVivaldi()) {
-            getMenu().removeItem(R.id.close_menu_id);
-       }
     }
 
     @VisibleForTesting

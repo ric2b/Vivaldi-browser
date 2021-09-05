@@ -27,6 +27,9 @@
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "ipc/ipc_message.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "ui/gfx/transform.h"
 
@@ -55,8 +58,10 @@ class SynchronousLayerTreeFrameSinkClient {
  public:
   virtual void DidActivatePendingTree() = 0;
   virtual void Invalidate(bool needs_draw) = 0;
-  virtual void SubmitCompositorFrame(uint32_t layer_tree_frame_sink_id,
-                                     viz::CompositorFrame frame) = 0;
+  virtual void SubmitCompositorFrame(
+      uint32_t layer_tree_frame_sink_id,
+      base::Optional<viz::CompositorFrame> frame,
+      base::Optional<viz::HitTestRegionList> hit_test_region_list) = 0;
   virtual void SetNeedsBeginFrames(bool needs_begin_frames) = 0;
   virtual void SinkDestroyed() = 0;
 
@@ -74,6 +79,7 @@ class SynchronousLayerTreeFrameSinkClient {
 // to a fixed thread when BindToClient is called.
 class SynchronousLayerTreeFrameSink
     : public cc::LayerTreeFrameSink,
+      public viz::mojom::CompositorFrameSinkClient,
       public viz::ExternalBeginFrameSourceClient {
  public:
   SynchronousLayerTreeFrameSink(
@@ -86,7 +92,11 @@ class SynchronousLayerTreeFrameSink
       uint32_t layer_tree_frame_sink_id,
       std::unique_ptr<viz::BeginFrameSource> begin_frame_source,
       SynchronousCompositorRegistry* registry,
-      scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue);
+      scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue,
+      mojo::PendingRemote<viz::mojom::CompositorFrameSink>
+          compositor_frame_sink_remote,
+      mojo::PendingReceiver<viz::mojom::CompositorFrameSinkClient>
+          client_receiver);
   ~SynchronousLayerTreeFrameSink() override;
 
   void SetSyncClient(SynchronousLayerTreeFrameSinkClient* compositor);
@@ -94,6 +104,7 @@ class SynchronousLayerTreeFrameSink
   // cc::LayerTreeFrameSink implementation.
   bool BindToClient(cc::LayerTreeFrameSinkClient* sink_client) override;
   void DetachFromClient() override;
+  void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id) override;
   void SubmitCompositorFrame(viz::CompositorFrame frame,
                              bool hit_test_data_changed,
                              bool show_hit_test_borders) override;
@@ -109,6 +120,15 @@ class SynchronousLayerTreeFrameSink
                     const gfx::Transform& transform_for_tile_priority);
   void DemandDrawSw(SkCanvas* canvas);
   void WillSkipDraw();
+
+  // viz::mojom::CompositorFrameSinkClient implementation.
+  void DidReceiveCompositorFrameAck(
+      const std::vector<viz::ReturnedResource>& resources) override;
+  void OnBeginFrame(const viz::BeginFrameArgs& args,
+                    const viz::FrameTimingDetailsMap& timing_details) override;
+  void ReclaimResources(
+      const std::vector<viz::ReturnedResource>& resources) override;
+  void OnBeginFramePausedChanged(bool paused) override;
 
   // viz::ExternalBeginFrameSourceClient overrides.
   void OnNeedsBeginFrames(bool needs_begin_frames) override;
@@ -131,8 +151,6 @@ class SynchronousLayerTreeFrameSink
   void DeliverMessages();
   bool CalledOnValidThread() const;
 
-  void CancelFallbackTick();
-  void FallbackTickFired();
 
   const int routing_id_;
   const uint32_t layer_tree_frame_sink_id_;
@@ -155,9 +173,12 @@ class SynchronousLayerTreeFrameSink
   bool did_submit_frame_ = false;
   scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue_;
 
-  base::CancelableOnceClosure fallback_tick_;
-  bool fallback_tick_pending_ = false;
-  bool fallback_tick_running_ = false;
+  mojo::PendingRemote<viz::mojom::CompositorFrameSink>
+      unbound_compositor_frame_sink_;
+  mojo::PendingReceiver<viz::mojom::CompositorFrameSinkClient> unbound_client_;
+  viz::mojom::CompositorFrameSinkPtr compositor_frame_sink_;
+  mojo::Receiver<viz::mojom::CompositorFrameSinkClient> client_receiver_{this};
+  viz::LocalSurfaceId local_surface_id_;
 
   class StubDisplayClient : public viz::DisplayClient {
     void DisplayOutputSurfaceLost() override {}
@@ -199,6 +220,11 @@ class SynchronousLayerTreeFrameSink
   gfx::Rect sw_viewport_for_current_draw_;
 
   base::ThreadChecker thread_checker_;
+
+  // Indicates that webview using viz
+  const bool viz_frame_submission_enabled_;
+  bool begin_frames_paused_ = false;
+  bool needs_begin_frames_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SynchronousLayerTreeFrameSink);
 };

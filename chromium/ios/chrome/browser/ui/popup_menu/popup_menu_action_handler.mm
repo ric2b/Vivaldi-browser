@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_action_handler.h"
 
+#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/user_metrics.h"
@@ -12,8 +13,11 @@
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/find_in_page_commands.h"
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/ui/commands/text_zoom_commands.h"
+#import "ios/chrome/browser/ui/page_info/features.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_action_handler_commands.h"
 #import "ios/chrome/browser/ui/popup_menu/public/cells/popup_menu_item.h"
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_table_view_controller.h"
@@ -72,7 +76,7 @@ using base::UserMetricsAction;
       break;
     case PopupMenuActionFindInPage:
       RecordAction(UserMetricsAction("MobileMenuFindInPage"));
-      [self.dispatcher showFindInPage];
+      [self.dispatcher openFindInPage];
       break;
     case PopupMenuActionRequestDesktop:
       RecordAction(UserMetricsAction("MobileMenuRequestDesktopSite"));
@@ -84,8 +88,13 @@ using base::UserMetricsAction;
       break;
     case PopupMenuActionSiteInformation:
       RecordAction(UserMetricsAction("MobileMenuSiteInformation"));
-      [self.dispatcher
-          showPageInfoForOriginPoint:self.baseViewController.view.center];
+      if (base::FeatureList::IsEnabled(kPageInfoRefactoring)) {
+        [self.dispatcher showPageInfo];
+      } else {
+        [self.dispatcher
+            legacyShowPageInfoForOriginPoint:self.baseViewController.view
+                                                 .center];
+      }
       break;
     case PopupMenuActionReportIssue:
       RecordAction(UserMetricsAction("MobileMenuReportAnIssue"));
@@ -99,9 +108,21 @@ using base::UserMetricsAction;
       RecordAction(UserMetricsAction("MobileMenuHelp"));
       [self.dispatcher showHelpPage];
       break;
+    case PopupMenuActionOpenDownloads:
+      RecordAction(
+          UserMetricsAction("MobileDownloadFolderUIShownFromToolsMenu"));
+      [self.dispatcher showDownloadsFolder];
+      break;
+    case PopupMenuActionTextZoom:
+      RecordAction(UserMetricsAction("MobileMenuTextZoom"));
+      [self.dispatcher openTextZoom];
+      break;
 #if !defined(NDEBUG)
     case PopupMenuActionViewSource:
       [self.dispatcher viewSource];
+      break;
+    case PopupMenuActionOpenNewWindow:
+      [self.dispatcher openNewWindow];
       break;
 #endif  // !defined(NDEBUG)
 
@@ -174,10 +195,10 @@ using base::UserMetricsAction;
       RecordAction(UserMetricsAction("MobileMenuSearchCopiedImage"));
       ClipboardRecentContent* clipboardRecentContent =
           ClipboardRecentContent::GetInstance();
-      if (base::Optional<gfx::Image> image =
-              clipboardRecentContent->GetRecentImageFromClipboard()) {
-        [self.dispatcher searchByImage:[image.value().ToUIImage() copy]];
-      }
+      clipboardRecentContent->GetRecentImageFromClipboard(
+          base::BindOnce(^(base::Optional<gfx::Image> image) {
+            [self.dispatcher searchByImage:[image.value().ToUIImage() copy]];
+          }));
       break;
     }
     default:

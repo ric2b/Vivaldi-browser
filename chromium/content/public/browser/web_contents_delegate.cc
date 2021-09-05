@@ -263,7 +263,7 @@ gfx::Size WebContentsDelegate::GetSizeForNewRenderView(
   return gfx::Size();
 }
 
-bool WebContentsDelegate::IsNeverVisible(WebContents* web_contents) {
+bool WebContentsDelegate::IsNeverComposited(WebContents* web_contents) {
   return false;
 }
 
@@ -293,8 +293,20 @@ int WebContentsDelegate::GetTopControlsHeight() {
   return 0;
 }
 
+int WebContentsDelegate::GetTopControlsMinHeight() {
+  return 0;
+}
+
 int WebContentsDelegate::GetBottomControlsHeight() {
   return 0;
+}
+
+int WebContentsDelegate::GetBottomControlsMinHeight() {
+  return 0;
+}
+
+bool WebContentsDelegate::ShouldAnimateBrowserControlsHeightChanges() {
+  return false;
 }
 
 bool WebContentsDelegate::DoBrowserControlsShrinkRendererSize(
@@ -313,16 +325,30 @@ bool WebContentsDelegate::ShouldAllowLazyLoad() {
   return true;
 }
 
-std::unique_ptr<WebContents> WebContentsDelegate::SwapWebContents(
-    WebContents* old_contents,
-    std::unique_ptr<WebContents> new_contents,
-    bool did_start_load,
-    bool did_finish_load) {
-  return new_contents;
+std::unique_ptr<WebContents> WebContentsDelegate::ActivatePortalWebContents(
+    WebContents* predecessor_contents,
+    std::unique_ptr<WebContents> portal_contents) {
+  return portal_contents;
 }
 
 bool WebContentsDelegate::ShouldShowStaleContentOnEviction(
     WebContents* source) {
   return false;
 }
+
+bool WebContentsDelegate::IsFrameLowPriority(
+    const WebContents* web_contents,
+    const RenderFrameHost* render_frame_host) {
+  return false;
+}
+
+WebContents* WebContentsDelegate::GetResponsibleWebContents(
+    WebContents* web_contents) {
+  return web_contents;
+}
+
+base::WeakPtr<WebContentsDelegate> WebContentsDelegate::GetDelegateWeakPtr() {
+  return nullptr;
+}
+
 }  // namespace content

@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
@@ -21,15 +22,17 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/browser/ui/tabs/tab_group_id.h"
+#include "chrome/browser/ui/tabs/tab_group.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/test_tab_strip_model_delegate.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/tab_groups/tab_group_color.h"
+#include "components/tab_groups/tab_group_id.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_renderer_host.h"
@@ -93,8 +96,6 @@ class MockTabStripModelObserver : public TabStripModelObserver {
     int dst_index;
     int change_reason;
     bool foreground;
-    base::Optional<TabGroupId> old_group;
-    base::Optional<TabGroupId> new_group;
     TabStripModelObserverAction action;
 
     std::string ToString() const {
@@ -105,9 +106,7 @@ class MockTabStripModelObserver : public TabStripModelObserver {
           << "\n  Source contents: " << src_contents
           << "\n  Destination contents: " << dst_contents
           << "\n  Change reason: " << change_reason
-          << "\n  Foreground: " << (foreground ? "yes" : "no")
-          << "\n  Old group: " << (old_group ? old_group->ToString() : "none")
-          << "\n  New group: " << (new_group ? new_group->ToString() : "none");
+          << "\n  Foreground: " << (foreground ? "yes" : "no");
       return oss.str();
     }
 
@@ -116,8 +115,7 @@ class MockTabStripModelObserver : public TabStripModelObserver {
              dst_contents == state.dst_contents &&
              src_index == state.src_index && dst_index == state.dst_index &&
              change_reason == state.change_reason &&
-             foreground == state.foreground && old_group == state.old_group &&
-             new_group == state.new_group && action == state.action;
+             foreground == state.foreground && action == state.action;
     }
 
    private:
@@ -212,23 +210,18 @@ class MockTabStripModelObserver : public TabStripModelObserver {
     states_.push_back(s);
   }
 
-  void PushGroupChangeState(WebContents* contents,
-                            int index,
-                            base::Optional<TabGroupId> old_group,
-                            base::Optional<TabGroupId> new_group) {
-    State s(contents, index, GROUP_CHANGED);
-    s.old_group = old_group;
-    s.new_group = new_group;
-    states_.push_back(s);
-  }
-
-  struct TabGroupVisualDataUpdate {
-    TabGroupId group;
-    TabGroupVisualData visual_data;
+  struct TabGroupUpdate {
+    int contents_update_count = 0;
+    int visuals_update_count = 0;
   };
 
-  const std::vector<TabGroupVisualDataUpdate>& visual_data_updates() const {
-    return visual_data_updates_;
+  const std::map<tab_groups::TabGroupId, TabGroupUpdate>& group_updates()
+      const {
+    return group_updates_;
+  }
+
+  const TabGroupUpdate group_update(tab_groups::TabGroupId group) {
+    return group_updates_[group];
   }
 
   // TabStripModelObserver overrides:
@@ -265,12 +258,6 @@ class MockTabStripModelObserver : public TabStripModelObserver {
         PushMoveState(move->contents, move->from_index, move->to_index);
         break;
       }
-      case TabStripModelChange::kGroupChanged: {
-        auto* group_change = change.GetGroupChange();
-        PushGroupChangeState(group_change->contents, group_change->index,
-                             group_change->old_group, group_change->new_group);
-        break;
-      }
       case TabStripModelChange::kSelectionOnly:
         break;
     }
@@ -289,12 +276,28 @@ class MockTabStripModelObserver : public TabStripModelObserver {
     }
   }
 
-  void OnTabGroupVisualDataChanged(
-      TabStripModel* tab_strip_model,
-      TabGroupId group,
-      const TabGroupVisualData* visual_data) override {
-    visual_data_updates_.push_back(
-        TabGroupVisualDataUpdate{group, *visual_data});
+  void OnTabGroupChanged(const TabGroupChange& change) override {
+    switch (change.type) {
+      case TabGroupChange::kCreated: {
+        group_updates_[change.group] = TabGroupUpdate();
+        break;
+      }
+      case TabGroupChange::kContentsChanged: {
+        group_updates_[change.group].contents_update_count++;
+        break;
+      }
+      case TabGroupChange::kVisualsChanged: {
+        group_updates_[change.group].visuals_update_count++;
+        break;
+      }
+      case TabGroupChange::kMoved: {
+        break;
+      }
+      case TabGroupChange::kClosed: {
+        group_updates_.erase(change.group);
+        break;
+      }
+    }
   }
 
   void TabChangedAt(WebContents* contents,
@@ -326,7 +329,7 @@ class MockTabStripModelObserver : public TabStripModelObserver {
 
  private:
   std::vector<State> states_;
-  std::vector<TabGroupVisualDataUpdate> visual_data_updates_;
+  std::map<tab_groups::TabGroupId, TabGroupUpdate> group_updates_;
 
   DISALLOW_COPY_AND_ASSIGN(MockTabStripModelObserver);
 };
@@ -1315,6 +1318,48 @@ TEST_F(TabStripModelTest, CommandTogglePinned) {
   EXPECT_TRUE(tabstrip.empty());
 }
 
+// Tests IsContextMenuCommandEnabled and ExecuteContextMenuCommand with
+// CommandToggleGrouped.
+TEST_F(TabStripModelTest, CommandToggleGrouped) {
+  TestTabStripModelDelegate delegate;
+  TabStripModel tabstrip(&delegate, profile());
+  EXPECT_TRUE(tabstrip.empty());
+
+  // Create three tabs, select the first two, and add the first to a group.
+  ASSERT_NO_FATAL_FAILURE(
+      PrepareTabstripForSelectionTest(&tabstrip, 3, 0, "0 1"));
+  tab_groups::TabGroupId original_group = tabstrip.AddToNewGroup({0});
+  EXPECT_TRUE(tabstrip.GetTabGroupForTab(0).has_value());
+
+  EXPECT_TRUE(tabstrip.IsContextMenuCommandEnabled(
+      0, TabStripModel::CommandToggleGrouped));
+  EXPECT_TRUE(tabstrip.IsContextMenuCommandEnabled(
+      1, TabStripModel::CommandToggleGrouped));
+  EXPECT_TRUE(tabstrip.IsContextMenuCommandEnabled(
+      2, TabStripModel::CommandToggleGrouped));
+
+  // Execute CommandToggleGrouped once. Expect both tabs to be in a new group,
+  // since they weren't already in the same group.
+  tabstrip.ExecuteContextMenuCommand(0, TabStripModel::CommandToggleGrouped);
+  EXPECT_TRUE(tabstrip.GetTabGroupForTab(0).has_value());
+  EXPECT_EQ(tabstrip.GetTabGroupForTab(0), tabstrip.GetTabGroupForTab(1));
+  EXPECT_NE(tabstrip.GetTabGroupForTab(0), original_group);
+
+  // Execute CommandToggleGrouped again. Expect both tabs to be ungrouped, since
+  // they were in the same group.
+  tabstrip.ExecuteContextMenuCommand(0, TabStripModel::CommandToggleGrouped);
+  EXPECT_FALSE(tabstrip.GetTabGroupForTab(0).has_value());
+  EXPECT_FALSE(tabstrip.GetTabGroupForTab(1).has_value());
+
+  // Execute CommandToggleGrouped again. Expect both tabs to be grouped again.
+  tabstrip.ExecuteContextMenuCommand(0, TabStripModel::CommandToggleGrouped);
+  EXPECT_TRUE(tabstrip.GetTabGroupForTab(0).has_value());
+  EXPECT_EQ(tabstrip.GetTabGroupForTab(0), tabstrip.GetTabGroupForTab(1));
+
+  tabstrip.CloseAllTabs();
+  EXPECT_TRUE(tabstrip.empty());
+}
+
 // Tests the following context menu commands:
 //  - Close Tab
 //  - Close Other Tabs
@@ -1667,6 +1712,68 @@ TEST_F(TabStripModelTest, AddWebContents_ForgetOpeners) {
   EXPECT_TRUE(tabstrip.empty());
 }
 
+// Tests whether or not a WebContents in a new tab belongs in the same tab
+// group as its opener.
+TEST_F(TabStripModelTest, AddWebContents_LinkOpensInSameGroupAsOpener) {
+  TestTabStripModelDelegate delegate;
+  TabStripModel tabstrip(&delegate, profile());
+  ASSERT_TRUE(tabstrip.empty());
+
+  // Open the home page and add the tab to a group.
+  std::unique_ptr<WebContents> homepage_contents = CreateWebContents();
+  tabstrip.AddWebContents(std::move(homepage_contents), -1,
+                          ui::PAGE_TRANSITION_AUTO_BOOKMARK,
+                          TabStripModel::ADD_ACTIVE);
+  ASSERT_EQ(1, tabstrip.count());
+  tab_groups::TabGroupId group_id = tabstrip.AddToNewGroup({0});
+  ASSERT_EQ(tabstrip.GetTabGroupForTab(0), group_id);
+
+  // Open a tab by simulating a link that opens in a new tab.
+  std::unique_ptr<WebContents> contents = CreateWebContents();
+  tabstrip.AddWebContents(std::move(contents), -1, ui::PAGE_TRANSITION_LINK,
+                          TabStripModel::ADD_ACTIVE);
+  EXPECT_EQ(2, tabstrip.count());
+  EXPECT_EQ(tabstrip.GetTabGroupForTab(1), group_id);
+
+  tabstrip.CloseAllTabs();
+  ASSERT_TRUE(tabstrip.empty());
+}
+
+// Tests that a inserting a new ungrouped tab between two tabs in the same group
+// will add that new tab to the group.
+TEST_F(TabStripModelTest, AddWebContents_UngroupedTabDoesNotBreakContinuity) {
+  TestTabStripModelDelegate delegate;
+  TabStripModel tabstrip(&delegate, profile());
+  ASSERT_TRUE(tabstrip.empty());
+
+  // Open two tabs and add them to a tab group.
+  std::unique_ptr<WebContents> contents1 = CreateWebContents();
+  tabstrip.AddWebContents(std::move(contents1), -1,
+                          ui::PAGE_TRANSITION_AUTO_BOOKMARK,
+                          TabStripModel::ADD_ACTIVE);
+  std::unique_ptr<WebContents> contents2 = CreateWebContents();
+  tabstrip.AddWebContents(std::move(contents2), -1,
+                          ui::PAGE_TRANSITION_AUTO_BOOKMARK,
+                          TabStripModel::ADD_ACTIVE);
+  ASSERT_EQ(2, tabstrip.count());
+  tab_groups::TabGroupId group_id = tabstrip.AddToNewGroup({0, 1});
+  ASSERT_EQ(tabstrip.GetTabGroupForTab(0), group_id);
+  ASSERT_EQ(tabstrip.GetTabGroupForTab(1), group_id);
+
+  // Open a new tab between the two tabs in a group and ensure the new tab is
+  // also in the group.
+  std::unique_ptr<WebContents> contents = CreateWebContents();
+  WebContents* raw_contents = contents.get();
+  tabstrip.AddWebContents(
+      std::move(contents), 1, ui::PAGE_TRANSITION_FIRST,
+      TabStripModel::ADD_ACTIVE | TabStripModel::ADD_FORCE_INDEX);
+  EXPECT_EQ(3, tabstrip.count());
+  ASSERT_EQ(1, tabstrip.GetIndexOfWebContents(raw_contents));
+  EXPECT_EQ(tabstrip.GetTabGroupForTab(1), group_id);
+
+  tabstrip.CloseAllTabs();
+  ASSERT_TRUE(tabstrip.empty());
+}
 // Added for http://b/issue?id=958960
 TEST_F(TabStripModelTest, AppendContentsReselectionTest) {
   TestTabStripModelDelegate delegate;
@@ -1877,8 +1984,6 @@ TEST_F(TabStripModelTest, NavigationForgetsOpeners) {
 // end of the tab strip, do one search, and then close the tab to get back to
 // where they were.
 TEST_F(TabStripModelTest, NavigationForgettingDoesntAffectNewTab) {
-  content::BrowserSideNavigationSetUp();
-
   TestTabStripModelDelegate delegate;
   TabStripModel strip(&delegate, profile());
 
@@ -1964,7 +2069,6 @@ TEST_F(TabStripModelTest, NavigationForgettingDoesntAffectNewTab) {
   EXPECT_EQ(raw_page_d_contents, strip.GetWebContentsAt(strip.active_index()));
 
   strip.CloseAllTabs();
-  content::BrowserSideNavigationTearDown();
 }
 
 namespace {
@@ -2849,23 +2953,6 @@ TEST_F(TabStripModelTest, AddTabToNewGroup) {
   strip.CloseAllTabs();
 }
 
-namespace {
-
-MockTabStripModelObserver::State ExpectedGroupChangeState(
-    const TabStripModel& strip,
-    int tab_index,
-    base::Optional<TabGroupId> old_group,
-    base::Optional<TabGroupId> new_group) {
-  MockTabStripModelObserver::State state(
-      strip.GetWebContentsAt(tab_index), tab_index,
-      MockTabStripModelObserver::GROUP_CHANGED);
-  state.old_group = old_group;
-  state.new_group = new_group;
-  return state;
-}
-
-}  // namespace
-
 TEST_F(TabStripModelTest, AddTabToNewGroupUpdatesObservers) {
   TestTabStripModelDelegate delegate;
   TabStripModel strip(&delegate, profile());
@@ -2874,11 +2961,9 @@ TEST_F(TabStripModelTest, AddTabToNewGroupUpdatesObservers) {
   strip.AppendWebContents(CreateWebContents(), true);
 
   observer.ClearStates();
-  strip.AddToNewGroup({0});
-  EXPECT_EQ(1, observer.GetStateCount());
-  observer.ExpectStateEquals(
-      0, ExpectedGroupChangeState(strip, 0, base::nullopt,
-                                  strip.GetTabGroupForTab(0)));
+  tab_groups::TabGroupId group = strip.AddToNewGroup({0});
+  EXPECT_EQ(1u, observer.group_updates().size());
+  EXPECT_EQ(1, observer.group_update(group).contents_update_count);
 
   strip.CloseAllTabs();
 }
@@ -2889,17 +2974,14 @@ TEST_F(TabStripModelTest, ReplacingTabGroupUpdatesObservers) {
   MockTabStripModelObserver observer;
   strip.AddObserver(&observer);
   strip.AppendWebContents(CreateWebContents(), true);
+  strip.AppendWebContents(CreateWebContents(), true);
 
   observer.ClearStates();
-  strip.AddToNewGroup({0});
-  base::Optional<TabGroupId> first_group = strip.GetTabGroupForTab(0);
-  strip.AddToNewGroup({0});
-  EXPECT_EQ(2, observer.GetStateCount());
-  observer.ExpectStateEquals(
-      0, ExpectedGroupChangeState(strip, 0, base::nullopt, first_group));
-  observer.ExpectStateEquals(
-      1, ExpectedGroupChangeState(strip, 0, first_group,
-                                  strip.GetTabGroupForTab(0)));
+  tab_groups::TabGroupId first_group = strip.AddToNewGroup({0, 1});
+  tab_groups::TabGroupId second_group = strip.AddToNewGroup({0});
+  EXPECT_EQ(2u, observer.group_updates().size());
+  EXPECT_EQ(3, observer.group_update(first_group).contents_update_count);
+  EXPECT_EQ(1, observer.group_update(second_group).contents_update_count);
 
   strip.CloseAllTabs();
 }
@@ -2909,7 +2991,8 @@ TEST_F(TabStripModelTest, AddTabToNewGroupMiddleOfExistingGroup) {
   TabStripModel strip(&delegate, profile());
   PrepareTabs(&strip, 4);
   strip.AddToNewGroup({0, 1, 2, 3});
-  base::Optional<TabGroupId> first_group = strip.GetTabGroupForTab(0);
+  base::Optional<tab_groups::TabGroupId> first_group =
+      strip.GetTabGroupForTab(0);
 
   strip.AddToNewGroup({1, 2});
 
@@ -3003,7 +3086,7 @@ TEST_F(TabStripModelTest, AddTabToExistingGroupIdempotent) {
   strip.AppendWebContents(CreateWebContents(), true);
 
   strip.AddToNewGroup({0});
-  base::Optional<TabGroupId> group = strip.GetTabGroupForTab(0);
+  base::Optional<tab_groups::TabGroupId> group = strip.GetTabGroupForTab(0);
   strip.AddToExistingGroup({0}, group.value());
 
   observer.ClearStates();
@@ -3019,7 +3102,7 @@ TEST_F(TabStripModelTest, AddTabToExistingGroup) {
   PrepareTabs(&strip, 2);
 
   strip.AddToNewGroup({0});
-  base::Optional<TabGroupId> group = strip.GetTabGroupForTab(0);
+  base::Optional<tab_groups::TabGroupId> group = strip.GetTabGroupForTab(0);
 
   strip.AddToExistingGroup({1}, group.value());
 
@@ -3036,41 +3119,39 @@ TEST_F(TabStripModelTest, AddTabToExistingGroupUpdatesObservers) {
   strip.AddObserver(&observer);
   PrepareTabs(&strip, 2);
 
-  strip.AddToNewGroup({0});
+  tab_groups::TabGroupId group = strip.AddToNewGroup({0});
   observer.ClearStates();
-  base::Optional<TabGroupId> group = strip.GetTabGroupForTab(0);
 
-  strip.AddToExistingGroup({1}, group.value());
-  EXPECT_EQ(1, observer.GetStateCount());
-  observer.ExpectStateEquals(
-      0, ExpectedGroupChangeState(strip, 1, base::nullopt, group));
+  strip.AddToExistingGroup({1}, group);
+  EXPECT_EQ(1u, observer.group_updates().size());
+  EXPECT_EQ(2, observer.group_update(group).contents_update_count);
 
   strip.CloseAllTabs();
 }
 
-TEST_F(TabStripModelTest, AddTabToExistingGroupReordersToTheRight) {
+TEST_F(TabStripModelTest, AddTabToLeftOfExistingGroupReorders) {
   TestTabStripModelDelegate delegate;
   TabStripModel strip(&delegate, profile());
-  PrepareTabs(&strip, 2);
+  PrepareTabs(&strip, 3);
 
-  strip.AddToNewGroup({1});
-  base::Optional<TabGroupId> group = strip.GetTabGroupForTab(1);
+  strip.AddToNewGroup({2});
+  base::Optional<tab_groups::TabGroupId> group = strip.GetTabGroupForTab(2);
 
   strip.AddToExistingGroup({0}, group.value());
-  EXPECT_EQ(strip.GetTabGroupForTab(0), group);
   EXPECT_EQ(strip.GetTabGroupForTab(1), group);
-  EXPECT_EQ("1 0", GetTabStripStateString(strip));
+  EXPECT_EQ(strip.GetTabGroupForTab(2), group);
+  EXPECT_EQ("1 0 2", GetTabStripStateString(strip));
 
   strip.CloseAllTabs();
 }
 
-TEST_F(TabStripModelTest, AddTabToExistingGroupReordersToTheLeft) {
+TEST_F(TabStripModelTest, AddTabToRighOfExistingGroupReorders) {
   TestTabStripModelDelegate delegate;
   TabStripModel strip(&delegate, profile());
   PrepareTabs(&strip, 3);
 
   strip.AddToNewGroup({0});
-  base::Optional<TabGroupId> group = strip.GetTabGroupForTab(0);
+  base::Optional<tab_groups::TabGroupId> group = strip.GetTabGroupForTab(0);
 
   strip.AddToExistingGroup({2}, group.value());
   EXPECT_EQ(strip.GetTabGroupForTab(0), group);
@@ -3087,14 +3168,14 @@ TEST_F(TabStripModelTest, AddTabToExistingGroupReorders) {
   PrepareTabs(&strip, 4);
 
   strip.AddToNewGroup({1});
-  base::Optional<TabGroupId> group = strip.GetTabGroupForTab(1);
+  base::Optional<tab_groups::TabGroupId> group = strip.GetTabGroupForTab(1);
 
   strip.AddToExistingGroup({0, 3}, group.value());
   EXPECT_EQ(strip.GetTabGroupForTab(0), group);
   EXPECT_EQ(strip.GetTabGroupForTab(1), group);
   EXPECT_EQ(strip.GetTabGroupForTab(2), group);
   EXPECT_FALSE(strip.GetTabGroupForTab(3).has_value());
-  EXPECT_EQ("1 0 3 2", GetTabStripStateString(strip));
+  EXPECT_EQ("0 1 3 2", GetTabStripStateString(strip));
 
   strip.CloseAllTabs();
 }
@@ -3106,12 +3187,12 @@ TEST_F(TabStripModelTest, AddTabToExistingGroupUnpins) {
 
   strip.SetTabPinned(0, true);
   strip.AddToNewGroup({1});
-  base::Optional<TabGroupId> group = strip.GetTabGroupForTab(1);
+  base::Optional<tab_groups::TabGroupId> group = strip.GetTabGroupForTab(1);
 
   strip.AddToExistingGroup({0}, group.value());
   EXPECT_FALSE(strip.IsTabPinned(0));
   EXPECT_EQ(strip.GetTabGroupForTab(0), group);
-  EXPECT_EQ("1 0", GetTabStripStateString(strip));
+  EXPECT_EQ("0 1", GetTabStripStateString(strip));
 
   strip.CloseAllTabs();
 }
@@ -3165,20 +3246,19 @@ TEST_F(TabStripModelTest, RemoveTabFromGroupUpdatesObservers) {
   strip.AddObserver(&observer);
   strip.AppendWebContents(CreateWebContents(), true);
   strip.AppendWebContents(CreateWebContents(), false);
-
-  strip.AddToNewGroup({0});
   observer.ClearStates();
-  base::Optional<TabGroupId> group = strip.GetTabGroupForTab(0);
+
+  tab_groups::TabGroupId group = strip.AddToNewGroup({0});
+  EXPECT_EQ(1u, observer.group_updates().size());
+  EXPECT_EQ(1, observer.group_update(group).contents_update_count);
 
   strip.RemoveFromGroup({0});
-  EXPECT_EQ(1, observer.GetStateCount());
-  observer.ExpectStateEquals(
-      0, ExpectedGroupChangeState(strip, 0, group, base::nullopt));
+  EXPECT_EQ(0u, observer.group_updates().size());
 
   strip.CloseAllTabs();
 }
 
-TEST_F(TabStripModelTest, RemoveTabFromGroupReorders) {
+TEST_F(TabStripModelTest, RemoveTabFromGroupMaintainsOrder) {
   TestTabStripModelDelegate delegate;
   TabStripModel strip(&delegate, profile());
   PrepareTabs(&strip, 2);
@@ -3186,9 +3266,9 @@ TEST_F(TabStripModelTest, RemoveTabFromGroupReorders) {
 
   strip.RemoveFromGroup({0});
 
-  EXPECT_FALSE(strip.GetTabGroupForTab(1).has_value());
-  EXPECT_TRUE(strip.GetTabGroupForTab(0).has_value());
-  EXPECT_EQ("1 0", GetTabStripStateString(strip));
+  EXPECT_TRUE(strip.GetTabGroupForTab(1).has_value());
+  EXPECT_FALSE(strip.GetTabGroupForTab(0).has_value());
+  EXPECT_EQ("0 1", GetTabStripStateString(strip));
 
   strip.CloseAllTabs();
 }
@@ -3205,7 +3285,8 @@ TEST_F(TabStripModelTest, RemoveTabFromGroupDoesntReorderIfNoGroup) {
   strip.CloseAllTabs();
 }
 
-TEST_F(TabStripModelTest, RemoveTabFromGroupMaintainsOrderOfSelectedTabs) {
+TEST_F(TabStripModelTest,
+       RemoveTabFromGroupMaintainsRelativeOrderOfSelectedTabs) {
   TestTabStripModelDelegate delegate;
   TabStripModel strip(&delegate, profile());
   PrepareTabs(&strip, 4);
@@ -3213,11 +3294,11 @@ TEST_F(TabStripModelTest, RemoveTabFromGroupMaintainsOrderOfSelectedTabs) {
 
   strip.RemoveFromGroup({0, 2});
 
-  EXPECT_TRUE(strip.GetTabGroupForTab(0).has_value());
+  EXPECT_FALSE(strip.GetTabGroupForTab(0).has_value());
   EXPECT_TRUE(strip.GetTabGroupForTab(1).has_value());
-  EXPECT_FALSE(strip.GetTabGroupForTab(2).has_value());
+  EXPECT_TRUE(strip.GetTabGroupForTab(2).has_value());
   EXPECT_FALSE(strip.GetTabGroupForTab(3).has_value());
-  EXPECT_EQ("1 3 0 2", GetTabStripStateString(strip));
+  EXPECT_EQ("0 1 3 2", GetTabStripStateString(strip));
 
   strip.CloseAllTabs();
 }
@@ -3231,12 +3312,12 @@ TEST_F(TabStripModelTest, RemoveTabFromGroupMixtureOfGroups) {
 
   strip.RemoveFromGroup({0, 3, 4});
 
-  EXPECT_TRUE(strip.GetTabGroupForTab(0).has_value());
-  EXPECT_FALSE(strip.GetTabGroupForTab(1).has_value());
+  EXPECT_FALSE(strip.GetTabGroupForTab(0).has_value());
+  EXPECT_TRUE(strip.GetTabGroupForTab(1).has_value());
   EXPECT_TRUE(strip.GetTabGroupForTab(2).has_value());
   EXPECT_FALSE(strip.GetTabGroupForTab(3).has_value());
   EXPECT_FALSE(strip.GetTabGroupForTab(4).has_value());
-  EXPECT_EQ("1 0 2 3 4", GetTabStripStateString(strip));
+  EXPECT_EQ("0 1 2 3 4", GetTabStripStateString(strip));
 
   strip.CloseAllTabs();
 }
@@ -3246,11 +3327,11 @@ TEST_F(TabStripModelTest, RemoveTabFromGroupDeletesGroup) {
   TabStripModel strip(&delegate, profile());
   strip.AppendWebContents(CreateWebContents(), true);
   strip.AddToNewGroup({0});
-  EXPECT_EQ(strip.ListTabGroups().size(), 1U);
+  EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 1U);
 
   strip.RemoveFromGroup({0});
 
-  EXPECT_EQ(strip.ListTabGroups().size(), 0U);
+  EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 0U);
 
   strip.CloseAllTabs();
 }
@@ -3260,12 +3341,12 @@ TEST_F(TabStripModelTest, AddToNewGroupDeletesGroup) {
   TabStripModel strip(&delegate, profile());
   strip.AppendWebContents(CreateWebContents(), true);
   strip.AddToNewGroup({0});
-  EXPECT_EQ(strip.ListTabGroups().size(), 1U);
-  base::Optional<TabGroupId> group = strip.GetTabGroupForTab(0);
+  EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 1U);
+  base::Optional<tab_groups::TabGroupId> group = strip.GetTabGroupForTab(0);
 
   strip.AddToNewGroup({0});
 
-  EXPECT_EQ(strip.ListTabGroups().size(), 1U);
+  EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 1U);
   EXPECT_NE(strip.GetTabGroupForTab(0), group);
 
   strip.CloseAllTabs();
@@ -3278,13 +3359,13 @@ TEST_F(TabStripModelTest, AddToExistingGroupDeletesGroup) {
   strip.AppendWebContents(CreateWebContents(), false);
   strip.AddToNewGroup({0});
   strip.AddToNewGroup({1});
-  EXPECT_EQ(strip.ListTabGroups().size(), 2U);
-  base::Optional<TabGroupId> group = strip.GetTabGroupForTab(1);
+  EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 2U);
+  base::Optional<tab_groups::TabGroupId> group = strip.GetTabGroupForTab(1);
 
   strip.AddToExistingGroup({1}, strip.GetTabGroupForTab(0).value());
 
-  EXPECT_EQ(strip.ListTabGroups().size(), 1U);
-  EXPECT_NE(strip.ListTabGroups()[0], group);
+  EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 1U);
+  EXPECT_NE(strip.group_model()->ListTabGroups()[0], group);
 
   strip.CloseAllTabs();
 }
@@ -3294,11 +3375,11 @@ TEST_F(TabStripModelTest, CloseTabDeletesGroup) {
   TabStripModel strip(&delegate, profile());
   strip.AppendWebContents(CreateWebContents(), true);
   strip.AddToNewGroup({0});
-  EXPECT_EQ(strip.ListTabGroups().size(), 1U);
+  EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 1U);
 
   strip.CloseWebContentsAt(0, TabStripModel::CLOSE_USER_GESTURE);
 
-  EXPECT_EQ(strip.ListTabGroups().size(), 0U);
+  EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 0U);
 }
 
 TEST_F(TabStripModelTest, CloseTabNotifiesObserversOfGroupChange) {
@@ -3307,26 +3388,14 @@ TEST_F(TabStripModelTest, CloseTabNotifiesObserversOfGroupChange) {
   TabStripModel strip(&delegate, profile());
   strip.AddObserver(&observer);
   strip.AppendWebContents(CreateWebContents(), true);
-  strip.AddToNewGroup({0});
-  base::Optional<TabGroupId> old_group = strip.GetTabGroupForTab(0);
   observer.ClearStates();
 
-  // Need to capture the reference to the web contents before it goes away.
-  const auto expected_state_change =
-      ExpectedGroupChangeState(strip, 0, old_group, base::nullopt);
+  tab_groups::TabGroupId group = strip.AddToNewGroup({0});
+  EXPECT_EQ(1u, observer.group_updates().size());
+  EXPECT_EQ(1, observer.group_update(group).contents_update_count);
 
   strip.CloseWebContentsAt(0, TabStripModel::CLOSE_USER_GESTURE);
-
-  EXPECT_GT(observer.GetStateCount(), 0);
-  int num_group_changed_notifications = 0;
-  for (int i = 0; i < observer.GetStateCount(); i++) {
-    const auto& state = observer.GetStateAt(i);
-    if (state.action == MockTabStripModelObserver::GROUP_CHANGED) {
-      observer.ExpectStateEquals(i, expected_state_change);
-      num_group_changed_notifications++;
-    }
-  }
-  EXPECT_EQ(num_group_changed_notifications, 1);
+  EXPECT_EQ(0u, observer.group_updates().size());
 }
 
 TEST_F(TabStripModelTest, InsertWebContentsAtWithGroupNotifiesObservers) {
@@ -3337,17 +3406,17 @@ TEST_F(TabStripModelTest, InsertWebContentsAtWithGroupNotifiesObservers) {
 
   strip.AppendWebContents(CreateWebContents(), true);
   strip.AppendWebContents(CreateWebContents(), false);
-  auto group_id = strip.AddToNewGroup({0, 1});
   observer.ClearStates();
 
-  strip.InsertWebContentsAt(1, CreateWebContents(), TabStripModel::ADD_NONE,
-                            group_id);
+  tab_groups::TabGroupId group = strip.AddToNewGroup({0, 1});
+  EXPECT_EQ(1u, observer.group_updates().size());
+  EXPECT_EQ(2, observer.group_update(group).contents_update_count);
 
-  EXPECT_EQ(observer.GetStateCount(), 2);
-  EXPECT_EQ(MockTabStripModelObserver::GROUP_CHANGED,
-            observer.GetStateAt(1).action);
-  observer.ExpectStateEquals(
-      1, ExpectedGroupChangeState(strip, 1, base::nullopt, group_id));
+  strip.InsertWebContentsAt(1, CreateWebContents(), TabStripModel::ADD_NONE,
+                            group);
+
+  EXPECT_EQ(1u, observer.group_updates().size());
+  EXPECT_EQ(3, observer.group_update(group).contents_update_count);
 
   strip.CloseAllTabs();
 }
@@ -3379,7 +3448,7 @@ TEST_F(TabStripModelTest, InsertWebContentsAtWithGroupGroups) {
   strip.AppendWebContents(CreateWebContentsWithID(0), true);
   strip.AppendWebContents(CreateWebContentsWithID(1), false);
   strip.AddToNewGroup({0, 1});
-  base::Optional<TabGroupId> group = strip.GetTabGroupForTab(0);
+  base::Optional<tab_groups::TabGroupId> group = strip.GetTabGroupForTab(0);
 
   strip.InsertWebContentsAt(1, CreateWebContentsWithID(2),
                             TabStripModel::ADD_NONE, group);
@@ -3415,9 +3484,9 @@ TEST_F(TabStripModelTest, NewTabWithGroupDeletedCorrectly) {
                             strip.GetTabGroupForTab(0));
 
   strip.RemoveFromGroup({1});
-  EXPECT_EQ(strip.ListTabGroups().size(), 1U);
+  EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 1U);
   strip.RemoveFromGroup({0});
-  EXPECT_EQ(strip.ListTabGroups().size(), 0U);
+  EXPECT_EQ(strip.group_model()->ListTabGroups().size(), 0U);
 
   strip.CloseAllTabs();
 }
@@ -3462,15 +3531,40 @@ TEST_F(TabStripModelTest, DiscontinuousNewTabIndexTooLow) {
   strip.CloseAllTabs();
 }
 
+TEST_F(TabStripModelTest, CreateGroupSetsVisualData) {
+  TestTabStripModelDelegate delegate;
+  TabStripModel strip(&delegate, profile());
+  tab_groups::ColorLabelMap all_colors = tab_groups::GetTabGroupColorLabelMap();
+  PrepareTabs(&strip, all_colors.size() + 1);
+
+  // Expect groups to cycle through the available color set.
+  int index = 0;
+  for (const auto& color_pair : all_colors) {
+    const tab_groups::TabGroupId group = strip.AddToNewGroup({index});
+    EXPECT_EQ(strip.group_model()->GetTabGroup(group)->visual_data()->color(),
+              color_pair.first);
+    ++index;
+  }
+
+  // Expect the last group to cycle back to the first color.
+  const tab_groups::TabGroupId group = strip.AddToNewGroup({index});
+  EXPECT_EQ(strip.group_model()->GetTabGroup(group)->visual_data()->color(),
+            all_colors.begin()->first);
+
+  strip.CloseAllTabs();
+}
+
 TEST_F(TabStripModelTest, SetVisualDataForGroup) {
   TestTabStripModelDelegate delegate;
   TabStripModel strip(&delegate, profile());
   PrepareTabs(&strip, 1);
-  const TabGroupId group = strip.AddToNewGroup({0});
+  const tab_groups::TabGroupId group = strip.AddToNewGroup({0});
 
-  const TabGroupVisualData new_data(base::ASCIIToUTF16("Foo"), SK_ColorCYAN);
-  strip.SetVisualDataForGroup(group, new_data);
-  const TabGroupVisualData* data = strip.GetVisualDataForGroup(group);
+  const tab_groups::TabGroupVisualData new_data(
+      base::ASCIIToUTF16("Foo"), tab_groups::TabGroupColorId::kCyan);
+  strip.group_model()->GetTabGroup(group)->SetVisualData(new_data);
+  const tab_groups::TabGroupVisualData* data =
+      strip.group_model()->GetTabGroup(group)->visual_data();
   EXPECT_EQ(data->title(), new_data.title());
   EXPECT_EQ(data->color(), new_data.color());
 
@@ -3483,20 +3577,21 @@ TEST_F(TabStripModelTest, VisualDataChangeNotifiesObservers) {
   MockTabStripModelObserver observer;
   strip.AddObserver(&observer);
   PrepareTabs(&strip, 1);
-  const TabGroupId group = strip.AddToNewGroup({0});
+  const tab_groups::TabGroupId group = strip.AddToNewGroup({0});
 
-  // Check that we are notified about the placeholder TabGroupVisualData.
-  ASSERT_EQ(1u, observer.visual_data_updates().size());
-  EXPECT_EQ(group, observer.visual_data_updates()[0].group);
+  // Check that we are notified about the placeholder
+  // tab_groups::TabGroupVisualData.
+  ASSERT_EQ(1u, observer.group_updates().size());
+  EXPECT_EQ(1, observer.group_update(group).contents_update_count);
 
-  const TabGroupVisualData new_data(base::ASCIIToUTF16("Foo"), SK_ColorBLUE);
-  strip.SetVisualDataForGroup(group, new_data);
+  const tab_groups::TabGroupVisualData new_data(
+      base::ASCIIToUTF16("Foo"), tab_groups::TabGroupColorId::kBlue);
+  strip.group_model()->GetTabGroup(group)->SetVisualData(new_data);
 
-  // Now check that we are notified when we change it.
-  ASSERT_EQ(2u, observer.visual_data_updates().size());
-  EXPECT_EQ(group, observer.visual_data_updates()[1].group);
-  EXPECT_EQ(new_data.title(),
-            observer.visual_data_updates()[1].visual_data.title());
+  // Now check that we are notified when we change it, once at creation
+  // and once from the explicit update.
+  ASSERT_EQ(1u, observer.group_updates().size());
+  EXPECT_EQ(2, observer.group_update(group).visuals_update_count);
 
   strip.CloseAllTabs();
 }
@@ -3728,8 +3823,8 @@ TEST_F(TabStripModelTest, MoveWebContentsAtCorrectlyRemovesGroupEntries) {
   strip.MoveWebContentsAt(0, 1, false);
   EXPECT_EQ("1 0 2", GetTabStripStateString(strip));
   EXPECT_EQ(group2, strip.GetTabGroupForTab(1));
-  const std::vector<TabGroupId> expected_groups{group2};
-  EXPECT_EQ(expected_groups, strip.ListTabGroups());
+  const std::vector<tab_groups::TabGroupId> expected_groups{group2};
+  EXPECT_EQ(expected_groups, strip.group_model()->ListTabGroups());
 
   strip.CloseAllTabs();
 }
@@ -3738,19 +3833,24 @@ TEST_F(TabStripModelTest, MoveWebContentsAtCorrectlySendsGroupChangedEvent) {
   TestTabStripModelDelegate delegate;
   TabStripModel strip(&delegate, profile());
   PrepareTabs(&strip, 3);
-  const auto group1 = strip.AddToNewGroup({0});
-  const auto group2 = strip.AddToNewGroup({1, 2});
 
   MockTabStripModelObserver observer;
   strip.AddObserver(&observer);
+
+  const tab_groups::TabGroupId group1 = strip.AddToNewGroup({0});
+  const tab_groups::TabGroupId group2 = strip.AddToNewGroup({1, 2});
+
+  EXPECT_EQ(2u, observer.group_updates().size());
+  EXPECT_EQ(1, observer.group_update(group1).contents_update_count);
+  EXPECT_EQ(2, observer.group_update(group2).contents_update_count);
 
   strip.MoveWebContentsAt(0, 1, false);
   EXPECT_EQ("1 0 2", GetTabStripStateString(strip));
   EXPECT_EQ(group2, strip.GetTabGroupForTab(1));
 
-  EXPECT_EQ(2, observer.GetStateCount());
-  observer.ExpectStateEquals(
-      1, ExpectedGroupChangeState(strip, 1, group1, group2));
+  // group1 should be deleted. group2 should have an update.
+  EXPECT_EQ(1u, observer.group_updates().size());
+  EXPECT_EQ(3, observer.group_update(group2).contents_update_count);
 
   strip.CloseAllTabs();
 }
@@ -3759,19 +3859,75 @@ TEST_F(TabStripModelTest, MoveWebContentsAtCorrectlySendsGroupClearedEvent) {
   TestTabStripModelDelegate delegate;
   TabStripModel strip(&delegate, profile());
   PrepareTabs(&strip, 3);
-  const auto group1 = strip.AddToNewGroup({0, 1});
-  strip.AddToNewGroup({2});
 
   MockTabStripModelObserver observer;
   strip.AddObserver(&observer);
+
+  const tab_groups::TabGroupId group1 = strip.AddToNewGroup({0, 1});
+  const tab_groups::TabGroupId group2 = strip.AddToNewGroup({2});
+  EXPECT_EQ(2u, observer.group_updates().size());
+  EXPECT_EQ(2, observer.group_update(group1).contents_update_count);
+  EXPECT_EQ(1, observer.group_update(group2).contents_update_count);
 
   strip.MoveWebContentsAt(0, 2, false);
   EXPECT_EQ("1 2 0", GetTabStripStateString(strip));
   EXPECT_EQ(base::nullopt, strip.GetTabGroupForTab(2));
 
-  EXPECT_EQ(3, observer.GetStateCount());
-  observer.ExpectStateEquals(
-      2, ExpectedGroupChangeState(strip, 2, group1, base::nullopt));
+  // The tab should be removed from group1 but not added to group2.
+  EXPECT_EQ(2u, observer.group_updates().size());
+  EXPECT_EQ(3, observer.group_update(group1).contents_update_count);
+  EXPECT_EQ(1, observer.group_update(group2).contents_update_count);
+
+  strip.CloseAllTabs();
+}
+
+class TabToWindowTestTabStripModelDelegate : public TestTabStripModelDelegate {
+ public:
+  bool CanMoveTabsToWindow(const std::vector<int>& indices) override {
+    for (int index : indices)
+      can_move_calls_.push_back(index);
+    return true;
+  }
+
+  void MoveTabsToNewWindow(const std::vector<int>& indices) override {
+    for (int index : indices)
+      move_calls_.push_back(index);
+  }
+
+  void MoveGroupToNewWindow(const tab_groups::TabGroupId& group) override {}
+
+  std::vector<int> can_move_calls() { return can_move_calls_; }
+  std::vector<int> move_calls() { return move_calls_; }
+
+ private:
+  std::vector<int> can_move_calls_;
+  std::vector<int> move_calls_;
+};
+
+// Sanity check to ensure that the "Move Tabs to Window" command talks to
+// the delegate correctly.
+TEST_F(TabStripModelTest, MoveTabsToNewWindow) {
+  TabToWindowTestTabStripModelDelegate delegate;
+  TabStripModel strip(&delegate, profile());
+  PrepareTabs(&strip, 3);
+
+  EXPECT_EQ(delegate.can_move_calls().size(), 0u);
+  EXPECT_EQ(delegate.move_calls().size(), 0u);
+
+  EXPECT_TRUE(strip.IsContextMenuCommandEnabled(
+      2, TabStripModel::CommandMoveTabsToNewWindow));
+
+  // ASSERT and not EXPECT since we're accessing back() later.
+  ASSERT_EQ(delegate.can_move_calls().size(), 1u);
+  EXPECT_EQ(delegate.move_calls().size(), 0u);
+  EXPECT_EQ(delegate.can_move_calls().back(), 2);
+
+  strip.ExecuteContextMenuCommand(0, TabStripModel::CommandMoveTabsToNewWindow);
+  // Whether ExecuteCommand checks if the command is valid or not is an
+  // implementation detail, so let's not be brittle.
+  EXPECT_GT(delegate.can_move_calls().size(), 0u);
+  ASSERT_EQ(delegate.move_calls().size(), 1u);
+  EXPECT_EQ(delegate.move_calls().back(), 0);
 
   strip.CloseAllTabs();
 }

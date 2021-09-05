@@ -19,6 +19,7 @@
 #include "base/optional.h"
 #include "content/browser/cache_storage/cache_storage_cache.h"
 #include "content/browser/cache_storage/cache_storage_handle.h"
+#include "content/browser/cache_storage/cache_storage_manager.h"
 #include "content/browser/cache_storage/scoped_writable_entry.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/io_buffer.h"
@@ -32,7 +33,6 @@ class SymmetricKey;
 }
 
 namespace storage {
-class BlobStorageContext;
 class QuotaManagerProxy;
 }  // namespace storage
 
@@ -69,7 +69,7 @@ class CONTENT_EXPORT LegacyCacheStorageCache : public CacheStorageCache {
       LegacyCacheStorage* cache_storage,
       scoped_refptr<base::SequencedTaskRunner> scheduler_task_runner,
       scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-      base::WeakPtr<storage::BlobStorageContext> blob_context,
+      scoped_refptr<BlobStorageContextWrapper> blob_storage_context,
       std::unique_ptr<crypto::SymmetricKey> cache_padding_key);
   static std::unique_ptr<LegacyCacheStorageCache> CreatePersistentCache(
       const url::Origin& origin,
@@ -79,7 +79,7 @@ class CONTENT_EXPORT LegacyCacheStorageCache : public CacheStorageCache {
       const base::FilePath& path,
       scoped_refptr<base::SequencedTaskRunner> scheduler_task_runner,
       scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-      base::WeakPtr<storage::BlobStorageContext> blob_context,
+      scoped_refptr<BlobStorageContextWrapper> blob_storage_context,
       int64_t cache_size,
       int64_t cache_padding,
       std::unique_ptr<crypto::SymmetricKey> cache_padding_key);
@@ -250,7 +250,7 @@ class CONTENT_EXPORT LegacyCacheStorageCache : public CacheStorageCache {
       LegacyCacheStorage* cache_storage,
       scoped_refptr<base::SequencedTaskRunner> scheduler_task_runner,
       scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
-      base::WeakPtr<storage::BlobStorageContext> blob_context,
+      scoped_refptr<BlobStorageContextWrapper> blob_storage_context,
       int64_t cache_size,
       int64_t cache_padding,
       std::unique_ptr<crypto::SymmetricKey> cache_padding_key);
@@ -264,6 +264,7 @@ class CONTENT_EXPORT LegacyCacheStorageCache : public CacheStorageCache {
   void QueryCache(blink::mojom::FetchAPIRequestPtr request,
                   blink::mojom::CacheQueryOptionsPtr options,
                   QueryTypes query_types,
+                  CacheStorageSchedulerPriority priority,
                   QueryCacheCallback callback);
   void QueryCacheDidOpenFastPath(
       std::unique_ptr<QueryCacheContext> query_cache_context,
@@ -286,6 +287,7 @@ class CONTENT_EXPORT LegacyCacheStorageCache : public CacheStorageCache {
   void MatchImpl(blink::mojom::FetchAPIRequestPtr request,
                  blink::mojom::CacheQueryOptionsPtr match_options,
                  int64_t trace_id,
+                 CacheStorageSchedulerPriority priority,
                  ResponseCallback callback);
   void MatchDidMatchAll(
       ResponseCallback callback,
@@ -296,6 +298,7 @@ class CONTENT_EXPORT LegacyCacheStorageCache : public CacheStorageCache {
   void MatchAllImpl(blink::mojom::FetchAPIRequestPtr request,
                     blink::mojom::CacheQueryOptionsPtr options,
                     int64_t trace_id,
+                    CacheStorageSchedulerPriority priority,
                     ResponsesCallback callback);
   void MatchAllDidQueryCache(
       ResponsesCallback callback,
@@ -378,8 +381,13 @@ class CONTENT_EXPORT LegacyCacheStorageCache : public CacheStorageCache {
                            int disk_cache_body_index);
   void PutDidWriteBlobToCache(std::unique_ptr<PutContext> put_context,
                               BlobToDiskCacheIDMap::KeyType blob_to_cache_key,
+                              int disk_cache_body_index,
                               ScopedWritableEntry entry,
                               bool success);
+  void PutWriteBlobToCacheComplete(std::unique_ptr<PutContext> put_context,
+                                   int disk_cache_body_index,
+                                   ScopedWritableEntry entry,
+                                   int rv);
   void PutComplete(std::unique_ptr<PutContext> put_context,
                    blink::mojom::CacheStorageError error);
 

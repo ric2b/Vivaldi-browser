@@ -23,6 +23,7 @@
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -59,6 +60,7 @@
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/verifier_formats.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -78,22 +80,24 @@ const char kTestExtensionName[] = "FooBar";
 void RequestProxyResolvingSocketFactoryOnUIThread(
     Profile* profile,
     base::WeakPtr<gcm::GCMProfileService> service,
-    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+    mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>
+        receiver) {
   if (!service)
     return;
   network::mojom::NetworkContext* network_context =
       content::BrowserContext::GetDefaultStoragePartition(profile)
           ->GetNetworkContext();
-  network_context->CreateProxyResolvingSocketFactory(std::move(request));
+  network_context->CreateProxyResolvingSocketFactory(std::move(receiver));
 }
 
 void RequestProxyResolvingSocketFactory(
     Profile* profile,
     base::WeakPtr<gcm::GCMProfileService> service,
-    network::mojom::ProxyResolvingSocketFactoryRequest request) {
+    mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>
+        receiver) {
   base::PostTask(FROM_HERE, {content::BrowserThread::UI},
                  base::BindOnce(&RequestProxyResolvingSocketFactoryOnUIThread,
-                                profile, service, std::move(request)));
+                                profile, service, std::move(receiver)));
 }
 
 }  // namespace
@@ -225,9 +229,8 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
     scoped_refptr<base::SequencedTaskRunner> io_thread =
         base::CreateSingleThreadTaskRunner({content::BrowserThread::IO});
     scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
-        base::CreateSequencedTaskRunner(
-            {base::ThreadPool(), base::MayBlock(),
-             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
+        base::ThreadPool::CreateSequencedTaskRunner(
+            {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
     return std::make_unique<gcm::GCMProfileService>(
         profile->GetPrefs(), profile->GetPath(),
         base::BindRepeating(&RequestProxyResolvingSocketFactory, profile),
@@ -372,10 +375,9 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
   void Register(const std::string& app_id,
                 const std::vector<std::string>& sender_ids) {
     GetGCMDriver()->Register(
-        app_id,
-        sender_ids,
-        base::Bind(&ExtensionGCMAppHandlerTest::RegisterCompleted,
-                   base::Unretained(this)));
+        app_id, sender_ids,
+        base::BindOnce(&ExtensionGCMAppHandlerTest::RegisterCompleted,
+                       base::Unretained(this)));
   }
 
   void RegisterCompleted(const std::string& registration_id,

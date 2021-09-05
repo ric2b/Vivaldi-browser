@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
-#include "third_party/blink/public/web/modules/peerconnection/peer_connection_dependency_factory.h"
+#include "third_party/blink/renderer/modules/peerconnection/peer_connection_dependency_factory.h"
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
 #include "third_party/webrtc/api/scoped_refptr.h"
 #include "third_party/webrtc/rtc_base/rtc_certificate.h"
@@ -18,21 +18,6 @@
 
 namespace blink {
 namespace {
-
-rtc::KeyParams WebRTCKeyParamsToKeyParams(
-    const blink::WebRTCKeyParams& key_params) {
-  switch (key_params.KeyType()) {
-    case blink::kWebRTCKeyTypeRSA:
-      return rtc::KeyParams::RSA(key_params.RsaParams().mod_length,
-                                 key_params.RsaParams().pub_exp);
-    case blink::kWebRTCKeyTypeECDSA:
-      return rtc::KeyParams::ECDSA(
-          static_cast<rtc::ECCurve>(key_params.EcCurve()));
-    default:
-      NOTREACHED();
-      return rtc::KeyParams();
-  }
-}
 
 // A certificate generation request spawned by
 // |GenerateCertificateWithOptionalExpiration|. This
@@ -50,7 +35,7 @@ class RTCCertificateGeneratorRequest
   }
 
   void GenerateCertificateAsync(
-      const blink::WebRTCKeyParams& key_params,
+      const rtc::KeyParams& key_params,
       const absl::optional<uint64_t>& expires_ms,
       blink::RTCCertificateCallback completion_callback) {
     DCHECK(main_thread_->BelongsToCurrentThread());
@@ -68,14 +53,14 @@ class RTCCertificateGeneratorRequest
   ~RTCCertificateGeneratorRequest() {}
 
   void GenerateCertificateOnWorkerThread(
-      const blink::WebRTCKeyParams key_params,
+      const rtc::KeyParams key_params,
       const absl::optional<uint64_t> expires_ms,
       blink::RTCCertificateCallback completion_callback) {
     DCHECK(worker_thread_->BelongsToCurrentThread());
 
     rtc::scoped_refptr<rtc::RTCCertificate> certificate =
-        rtc::RTCCertificateGenerator::GenerateCertificate(
-            WebRTCKeyParamsToKeyParams(key_params), expires_ms);
+        rtc::RTCCertificateGenerator::GenerateCertificate(key_params,
+                                                          expires_ms);
 
     main_thread_->PostTask(
         FROM_HERE,
@@ -98,18 +83,18 @@ class RTCCertificateGeneratorRequest
 };
 
 void GenerateCertificateWithOptionalExpiration(
-    const blink::WebRTCKeyParams& key_params,
+    const rtc::KeyParams& key_params,
     const absl::optional<uint64_t>& expires_ms,
     blink::RTCCertificateCallback completion_callback,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  DCHECK(WebRTCKeyParamsToKeyParams(key_params).IsValid());
+  DCHECK(key_params.IsValid());
   auto* pc_dependency_factory =
       blink::PeerConnectionDependencyFactory::GetInstance();
   pc_dependency_factory->EnsureInitialized();
 
   scoped_refptr<RTCCertificateGeneratorRequest> request =
       base::MakeRefCounted<RTCCertificateGeneratorRequest>(
-          task_runner, pc_dependency_factory->GetWebRtcWorkerThread());
+          task_runner, pc_dependency_factory->GetWebRtcWorkerTaskRunner());
   request->GenerateCertificateAsync(key_params, expires_ms,
                                     std::move(completion_callback));
 }
@@ -117,7 +102,7 @@ void GenerateCertificateWithOptionalExpiration(
 }  // namespace
 
 void RTCCertificateGenerator::GenerateCertificate(
-    const blink::WebRTCKeyParams& key_params,
+    const rtc::KeyParams& key_params,
     blink::RTCCertificateCallback completion_callback,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   GenerateCertificateWithOptionalExpiration(
@@ -125,7 +110,7 @@ void RTCCertificateGenerator::GenerateCertificate(
 }
 
 void RTCCertificateGenerator::GenerateCertificateWithExpiration(
-    const blink::WebRTCKeyParams& key_params,
+    const rtc::KeyParams& key_params,
     uint64_t expires_ms,
     blink::RTCCertificateCallback completion_callback,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
@@ -134,13 +119,13 @@ void RTCCertificateGenerator::GenerateCertificateWithExpiration(
 }
 
 bool RTCCertificateGenerator::IsSupportedKeyParams(
-    const blink::WebRTCKeyParams& key_params) {
-  return WebRTCKeyParamsToKeyParams(key_params).IsValid();
+    const rtc::KeyParams& key_params) {
+  return key_params.IsValid();
 }
 
 rtc::scoped_refptr<rtc::RTCCertificate> RTCCertificateGenerator::FromPEM(
-    blink::WebString pem_private_key,
-    blink::WebString pem_certificate) {
+    String pem_private_key,
+    String pem_certificate) {
   rtc::scoped_refptr<rtc::RTCCertificate> certificate =
       rtc::RTCCertificate::FromPEM(rtc::RTCCertificatePEM(
           pem_private_key.Utf8(), pem_certificate.Utf8()));

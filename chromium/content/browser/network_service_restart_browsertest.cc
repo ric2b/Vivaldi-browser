@@ -4,6 +4,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
@@ -37,10 +38,10 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/simple_url_loader_test_helper.h"
 #include "content/public/test/test_utils.h"
-#include "content/public/test/web_test_support.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_browser_context.h"
-#include "content/test/storage_partition_test_utils.h"
+#include "content/test/io_thread_shared_url_loader_factory_owner.h"
+#include "content/test/storage_partition_test_helpers.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
@@ -586,22 +587,22 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceRestartBrowserTest,
             LoadBasicRequestOnUIThread(factory.get(), GetTestURL()));
 }
 
-// Make sure the factory info returned from
+// Make sure the factory pending factory returned from
 // |StoragePartition::GetURLLoaderFactoryForBrowserProcessIOThread()| can be
 // used after crashes.
 // Flaky on Windows. https://crbug.com/840127
 #if defined(OS_WIN)
-#define MAYBE_BrowserIOFactoryInfo DISABLED_BrowserIOFactoryInfo
+#define MAYBE_BrowserIOPendingFactory DISABLED_BrowserIOPendingFactory
 #else
-#define MAYBE_BrowserIOFactoryInfo BrowserIOFactoryInfo
+#define MAYBE_BrowserIOPendingFactory BrowserIOPendingFactory
 #endif
 IN_PROC_BROWSER_TEST_F(NetworkServiceRestartBrowserTest,
-                       MAYBE_BrowserIOFactoryInfo) {
+                       MAYBE_BrowserIOPendingFactory) {
   if (IsInProcessNetworkService())
     return;
   auto* partition =
       BrowserContext::GetDefaultStoragePartition(browser_context());
-  auto shared_url_loader_factory_info =
+  auto pending_shared_url_loader_factory =
       partition->GetURLLoaderFactoryForBrowserProcessIOThread();
 
   SimulateNetworkServiceCrash();
@@ -612,7 +613,7 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceRestartBrowserTest,
       ->FlushNetworkInterfaceOnIOThreadForTesting();
 
   auto factory_owner = IOThreadSharedURLLoaderFactoryOwner::Create(
-      std::move(shared_url_loader_factory_info));
+      std::move(pending_shared_url_loader_factory));
 
   EXPECT_EQ(net::OK, factory_owner->LoadBasicRequestOnIOThread(GetTestURL()));
 }
@@ -687,7 +688,7 @@ class NetworkServiceRestartForWorkerBrowserTest
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          NetworkServiceRestartForWorkerBrowserTest,
                          ::testing::Values(false, true));
 

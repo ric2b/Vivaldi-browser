@@ -36,6 +36,7 @@ class ArcImeBridgeImpl : public ArcImeBridge, public mojom::ImeHost {
   void SendExtendSelectionAndDelete(size_t before, size_t after) override;
   void SendOnKeyboardAppearanceChanging(const gfx::Rect& new_bounds,
                                         bool is_available) override;
+  void SendSelectionRange(const gfx::Range& selection_range) override;
 
   // mojom::ImeHost overrides:
   void OnTextInputTypeChanged(ui::TextInputType type,
@@ -50,7 +51,7 @@ class ArcImeBridgeImpl : public ArcImeBridge, public mojom::ImeHost {
                                               const std::string& text_in_range,
                                               const gfx::Range& selection_range,
                                               bool screen_coordinates) override;
-  void RequestHideIme() override;
+  void RequestHideImeDeprecated() override;
 
  private:
   Delegate* const delegate_;

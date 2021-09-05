@@ -8,9 +8,10 @@
 class SearchBox extends cr.EventTarget {
   /**
    * @param {!Element} element Root element of the search box.
+   * @param {!Element} searchWrapper Wrapper element around the buttons and box.
    * @param {!Element} searchButton Search button.
    */
-  constructor(element, searchButton) {
+  constructor(element, searchWrapper, searchButton) {
     super();
 
     /**
@@ -25,6 +26,12 @@ class SearchBox extends cr.EventTarget {
      * @type {!Element}
      */
     this.element = element;
+
+    /**
+     * Search wrapper.
+     * @type {!Element}
+     */
+    this.searchWrapper = searchWrapper;
 
     /**
      * Search button.
@@ -54,6 +61,11 @@ class SearchBox extends cr.EventTarget {
      */
     this.clearButton_ = assert(element.querySelector('.clear'));
 
+    /** @private {boolean} */
+    this.isClicking_ = false;
+
+    this.collapsed = true;
+
     // Register events.
     this.inputElement.addEventListener('input', this.onInput_.bind(this));
     this.inputElement.addEventListener('keydown', this.onKeyDown_.bind(this));
@@ -72,8 +84,45 @@ class SearchBox extends cr.EventTarget {
     this.autocompleteList.handleEnterKeydown = dispatchItemSelect;
     this.autocompleteList.addEventListener('mousedown', dispatchItemSelect);
 
+    document.addEventListener('mousedown', () => {
+      if (this.collapsed) {
+        return;
+      }
+      this.isClicking_ = true;
+    }, {capture: true, passive: true});
+
+    document.addEventListener('mouseup', () => {
+      if (this.collapsed) {
+        return;
+      }
+      this.isClicking_ = false;
+      window.requestAnimationFrame(() => {
+        this.removeHidePending();
+      });
+    }, {passive: true});
+
+    this.searchWrapper.addEventListener(
+        'focusout', this.onFocusOut_.bind(this));
+
     // Append dynamically created element.
     element.parentNode.appendChild(this.autocompleteList);
+  }
+
+  /** @private {boolean} */
+  get collapsed() {
+    return this.searchWrapper.hasAttribute('collapsed');
+  }
+
+  /**
+   * @private
+   * @param {boolean} collapsed
+   */
+  set collapsed(collapsed) {
+    if (collapsed) {
+      this.searchWrapper.setAttribute('collapsed', true);
+    } else {
+      this.searchWrapper.removeAttribute('collapsed');
+    }
   }
 
   /**
@@ -94,6 +143,32 @@ class SearchBox extends cr.EventTarget {
   }
 
   /**
+   * Focus out event handler.
+   * @private
+   */
+  onFocusOut_() {
+    window.requestAnimationFrame(() => {
+      // If the focus is still within the search box don't hide the input.
+      if (document.activeElement &&
+          this.element.contains(document.activeElement)) {
+        return;
+      }
+
+      // If the focus is moved due to a user click, we don't collapse the searc
+      // box here. We wait until "mouseup" to let the mouse events be processed
+      // by the button user is clickinkg, which might change position due to the
+      // search box collapse.
+      if (this.isClicking_) {
+        return;
+      }
+
+      if (this.element.classList.contains('hide-pending')) {
+        this.removeHidePending();
+      }
+    });
+  }
+
+  /**
    * @private
    */
   onInput_() {
@@ -102,11 +177,23 @@ class SearchBox extends cr.EventTarget {
   }
 
   /**
-   * Handles a focus event of the search box.
+   * Handles a focus event of the search box <cr-input> element.
    * @private
    */
   onFocus_() {
+    // Early out if we closing the search cr-input: do not just go ahead and
+    // re-open it on focus, crbug.com/668427.
+    if (this.element.classList.contains('hide-pending')) {
+      return;
+    }
+
+    this.inputElement.addEventListener('transitionend', () => {
+      this.collapsed = false;
+    }, {once: true});
+
+    this.isClicking_ = false;
     this.element.classList.toggle('has-cursor', true);
+    this.searchWrapper.classList.toggle('has-cursor', true);
     this.autocompleteList.attachToInput(this.inputElement);
     this.updateStyles_();
     this.searchButtonToggleRipple_.activated = true;
@@ -114,16 +201,29 @@ class SearchBox extends cr.EventTarget {
   }
 
   /**
-   * Handles a blur event of the search box.
+   * Handles a blur event of the search box <cr-input> element.
    * @private
    */
   onBlur_() {
     this.element.classList.toggle('has-cursor', false);
+    this.element.classList.toggle('hide-pending', true);
+    this.searchWrapper.classList.toggle('has-cursor', false);
+    this.searchWrapper.classList.toggle('hide-pending', true);
     this.autocompleteList.detach();
     this.updateStyles_();
     this.searchButtonToggleRipple_.activated = false;
-    // When input has any text we keep it displayed with current search.
-    this.inputElement.hidden = this.inputElement.value.length == 0;
+  }
+
+  /**
+   * Handles delayed hiding of the search box (until click).
+   */
+  removeHidePending() {
+    this.inputElement.disabled = this.inputElement.value.length == 0;
+    this.element.classList.toggle('hide-pending', false);
+    this.searchWrapper.classList.toggle('hide-pending', false);
+    this.inputElement.addEventListener('transitionend', () => {
+      this.collapsed = true;
+    }, {once: true});
   }
 
   /**
@@ -140,6 +240,9 @@ class SearchBox extends cr.EventTarget {
 
     this.inputElement.tabIndex = -1;  // Focus to default element after blur.
     this.inputElement.blur();
+    this.inputElement.disabled = this.inputElement.value.length == 0;
+    this.element.classList.toggle('hide-pending', false);
+    this.searchWrapper.classList.toggle('hide-pending', false);
   }
 
   /**
@@ -172,18 +275,19 @@ class SearchBox extends cr.EventTarget {
   updateStyles_() {
     const hasText = !!this.inputElement.value;
     this.element.classList.toggle('has-text', hasText);
+    this.searchWrapper.classList.toggle('has-text', hasText);
     const hasFocusOnInput = this.element.classList.contains('has-cursor');
 
-    // See go/filesapp-tabindex for tabindexes.
-    this.inputElement.tabIndex = (hasText || hasFocusOnInput) ? 14 : -1;
-    this.searchButton.tabIndex = (hasText || hasFocusOnInput) ? -1 : 13;
+    // Focus either the search button or the input.
+    this.inputElement.tabIndex = (hasText || hasFocusOnInput) ? 0 : -1;
+    this.searchButton.tabIndex = (hasText || hasFocusOnInput) ? -1 : 0;
   }
 
   /**
    * @private
    */
   onSearchButtonClick_() {
-    this.inputElement.hidden = false;
+    this.inputElement.disabled = false;
     this.inputElement.focus();
   }
 
@@ -231,7 +335,6 @@ SearchBox.AutocompleteList =
    */
   handleSelectedSuggestion() {}
 
-
   /**
    * Change the selection by a mouse over instead of just changing the
    * color of moused over element with :hover in CSS. Here's why:
@@ -253,7 +356,6 @@ SearchBox.AutocompleteList =
   }
 };
 
-
 /**
  * ListItem element for autocomplete.
  * @private
@@ -262,7 +364,8 @@ SearchBox.AutocompleteListItem_ =
     class AutocompleteListItem_ extends cr.ui.ListItem {
   /**
    * @param {Document} document Document.
-   * @param {SearchItem|chrome.fileManagerPrivate.SearchResult} item An object
+   * @param {SearchItem|chrome.fileManagerPrivate.DriveMetadataSearchResult}
+   *     item An object
    * representing a suggestion.
    */
   constructor(document, item) {

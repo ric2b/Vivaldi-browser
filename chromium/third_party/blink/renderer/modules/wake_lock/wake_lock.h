@@ -10,7 +10,7 @@
 #include "third_party/blink/public/mojom/permissions/permission.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/page/page_visibility_observer.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_global_scope.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -26,12 +26,12 @@ class String;
 
 namespace blink {
 
-class ExecutionContext;
+class ExceptionState;
 class ScriptState;
-class WakeLockStateRecord;
+class WakeLockManager;
 
 class MODULES_EXPORT WakeLock final : public ScriptWrappable,
-                                      public ContextLifecycleObserver,
+                                      public ExecutionContextLifecycleObserver,
                                       public PageVisibilityObserver {
   USING_GARBAGE_COLLECTED_MIXIN(WakeLock);
   DEFINE_WRAPPERTYPEINFO();
@@ -40,9 +40,11 @@ class MODULES_EXPORT WakeLock final : public ScriptWrappable,
   explicit WakeLock(Document&);
   explicit WakeLock(DedicatedWorkerGlobalScope&);
 
-  ScriptPromise request(ScriptState*, const WTF::String& type);
+  ScriptPromise request(ScriptState*,
+                        const WTF::String& type,
+                        ExceptionState& exception_state);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   // While this could be part of request() itself, having it as a separate
@@ -54,8 +56,8 @@ class MODULES_EXPORT WakeLock final : public ScriptWrappable,
                                     ScriptPromiseResolver*,
                                     mojom::blink::PermissionStatus);
 
-  // ContextLifecycleObserver implementation
-  void ContextDestroyed(ExecutionContext*) override;
+  // ExecutionContextLifecycleObserver implementation
+  void ContextDestroyed() override;
 
   // PageVisibilityObserver implementation
   void PageVisibilityChanged() override;
@@ -71,7 +73,7 @@ class MODULES_EXPORT WakeLock final : public ScriptWrappable,
   // https://w3c.github.io/wake-lock/#concepts-and-state-record
   // Each platform wake lock (one per wake lock type) has an associated state
   // record per responsible document [...] internal slots.
-  Member<WakeLockStateRecord> state_records_[kWakeLockTypeCount];
+  Member<WakeLockManager> managers_[kWakeLockTypeCount];
 
   FRIEND_TEST_ALL_PREFIXES(WakeLockSentinelTest, ContextDestruction);
   FRIEND_TEST_ALL_PREFIXES(WakeLockTest, RequestWakeLockGranted);

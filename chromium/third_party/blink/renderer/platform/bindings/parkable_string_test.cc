@@ -91,7 +91,6 @@ class ParkableStringTest : public ::testing::Test {
     task_environment_.FastForwardUntilNoTasksRemain();
   }
 
-
   ParkableString CreateAndParkAll() {
     auto& manager = ParkableStringManager::Instance();
     // Checking that there are no other strings, to make sure this doesn't
@@ -194,22 +193,6 @@ TEST_F(ParkableStringTest, Simple) {
   EXPECT_EQ(copy.Impl(), parkable_abc.Impl());
 }
 
-TEST_F(ParkableStringTest, Equality) {
-  ParkableString abc(String("abc").ReleaseImpl());
-  ParkableString abc2(String("abc").ReleaseImpl());
-
-  EXPECT_NE(abc.ToString().Impl(), abc2.ToString().Impl());
-  EXPECT_TRUE(abc.Impl()->Equal(*abc2.Impl()));
-
-  // Should not crash. Unlocking poisons the string with ASAN, checks that we
-  // unpoison it correctly when calling Equal().
-  ParkableString parkable(MakeLargeString('a').ReleaseImpl());
-  parkable.Lock();
-  parkable.Unlock();
-  ParkableString parkable2(MakeLargeString('a').ReleaseImpl());
-  EXPECT_EQ(parkable.Impl(), parkable2.Impl());
-}
-
 TEST_F(ParkableStringTest, Park) {
   {
     ParkableString parkable(MakeLargeString('a').ReleaseImpl());
@@ -256,7 +239,6 @@ TEST_F(ParkableStringTest, EqualityNoUnparking) {
 
   ParkableString parkable_copy(copy.Impl());
   EXPECT_EQ(parkable_copy.Impl(), parkable.Impl());  // De-duplicated.
-  EXPECT_TRUE(parkable_copy.Impl()->Equal(*parkable.Impl()));
   EXPECT_TRUE(parkable.Impl()->is_parked());
   EXPECT_TRUE(parkable_copy.Impl()->is_parked());
 
@@ -629,6 +611,9 @@ TEST_F(ParkableStringTest, ReportMemoryDump) {
   using testing::Contains;
   using testing::Eq;
 
+  constexpr size_t kActualSize =
+      sizeof(ParkableStringImpl) + sizeof(ParkableStringImpl::ParkableMetadata);
+
   auto& manager = ParkableStringManager::Instance();
   ParkableString parkable1(MakeLargeString('a').ReleaseImpl());
   ParkableString parkable2(MakeLargeString('b').ReleaseImpl());
@@ -666,14 +651,40 @@ TEST_F(ParkableStringTest, ReportMemoryDump) {
   EXPECT_THAT(dump->entries(), Contains(Eq(ByRef(overhead))));
 
   MemoryAllocatorDump::Entry metadata("metadata_size", "bytes",
-                                      2 * sizeof(ParkableStringImpl));
+                                      2 * kActualSize);
   EXPECT_THAT(dump->entries(), Contains(Eq(ByRef(metadata))));
 
   MemoryAllocatorDump::Entry savings(
       "savings_size", "bytes",
-      2 * kStringSize -
-          (kStringSize + 2 * kCompressedSize + 2 * sizeof(ParkableStringImpl)));
+      2 * kStringSize - (kStringSize + 2 * kCompressedSize + 2 * kActualSize));
   EXPECT_THAT(dump->entries(), Contains(Eq(ByRef(savings))));
+}
+
+TEST_F(ParkableStringTest, MemoryFootprintForDump) {
+  constexpr size_t kActualSize =
+      sizeof(ParkableStringImpl) + sizeof(ParkableStringImpl::ParkableMetadata);
+
+  size_t memory_footprint;
+  ParkableString parkable1(MakeLargeString('a').ReleaseImpl());
+  ParkableString parkable2(MakeLargeString('b').ReleaseImpl());
+  ParkableString parkable3(String("short string, not parkable").ReleaseImpl());
+
+  WaitForDelayedParking();
+  parkable1.ToString();
+
+  // Compressed and uncompressed data.
+  memory_footprint = kActualSize + parkable1.Impl()->compressed_size() +
+                     parkable1.Impl()->CharactersSizeInBytes();
+  EXPECT_EQ(memory_footprint, parkable1.Impl()->MemoryFootprintForDump());
+
+  // Compressed uncompressed data only.
+  memory_footprint = kActualSize + parkable2.Impl()->compressed_size();
+  EXPECT_EQ(memory_footprint, parkable2.Impl()->MemoryFootprintForDump());
+
+  // Short string, no metadata.
+  memory_footprint =
+      sizeof(ParkableStringImpl) + parkable3.Impl()->CharactersSizeInBytes();
+  EXPECT_EQ(memory_footprint, parkable3.Impl()->MemoryFootprintForDump());
 }
 
 TEST_F(ParkableStringTest, CompressionDisabled) {
@@ -682,10 +693,10 @@ TEST_F(ParkableStringTest, CompressionDisabled) {
 
   ParkableString parkable(MakeLargeString().ReleaseImpl());
   WaitForDelayedParking();
-  EXPECT_FALSE(parkable.Impl()->is_parked());
+  EXPECT_FALSE(parkable.Impl()->may_be_parked());
 
   MemoryPressureListenerRegistry::Instance().OnPurgeMemory();
-  EXPECT_FALSE(parkable.Impl()->is_parked());
+  EXPECT_FALSE(parkable.Impl()->may_be_parked());
 }
 
 TEST_F(ParkableStringTest, Aging) {

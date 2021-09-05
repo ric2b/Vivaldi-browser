@@ -8,8 +8,6 @@
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
-#include "base/debug/alias.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -23,8 +21,10 @@
 #include "base/synchronization/lock.h"
 #include "base/threading/sequence_local_storage_slot.h"
 #include "base/trace_event/trace_event.h"
+#include "mojo/public/c/system/quota.h"
 #include "mojo/public/cpp/bindings/features.h"
 #include "mojo/public/cpp/bindings/lib/may_auto_lock.h"
+#include "mojo/public/cpp/bindings/lib/message_quota_checker.h"
 #include "mojo/public/cpp/bindings/lib/tracing_helper.h"
 #include "mojo/public/cpp/bindings/mojo_buildflags.h"
 #include "mojo/public/cpp/bindings/sync_handle_watcher.h"
@@ -54,62 +54,6 @@ bool EnableTaskPerMessage() {
   static const bool enable =
       base::FeatureList::IsEnabled(features::kTaskPerMessage);
   return enable;
-}
-
-const base::FeatureParam<int> kMojoRecordUnreadMessageCountSampleRate = {
-    &features::kMojoRecordUnreadMessageCount, "SampleRate",
-    100  // Sample 1% of Connectors by default.
-};
-
-const base::FeatureParam<int> kMojoRecordUnreadMessageCountQuotaValue = {
-    &features::kMojoRecordUnreadMessageCount, "QuotaValue",
-    100  // Use a 100 message quote by default.
-};
-
-const base::FeatureParam<int> kMojoRecordUnreadMessageCountCrashThreshold = {
-    &features::kMojoRecordUnreadMessageCount, "CrashThreshold",
-    0  // Set to zero to disable crash dumps by default.
-};
-
-int UnreadMessageCountQuota() {
-  static const bool enabled =
-      base::FeatureList::IsEnabled(features::kMojoRecordUnreadMessageCount);
-  if (!enabled)
-    return 0;
-
-  static const int sample_rate = kMojoRecordUnreadMessageCountSampleRate.Get();
-  if (base::RandInt(0, sample_rate - 1) != 0)
-    return 0;
-
-  static const int quota = kMojoRecordUnreadMessageCountQuotaValue.Get();
-  return quota;
-}
-
-// Disable inlining for this function to make sure it appears in the stack
-// trace on crash.
-NOINLINE void MaybeDumpWithoutCrashing(int quota_used) {
-  static const int crash_threshold =
-      kMojoRecordUnreadMessageCountCrashThreshold.Get();
-  if (crash_threshold == 0 || quota_used < crash_threshold)
-    return;
-
-  static bool have_crashed = false;
-  if (have_crashed)
-    return;
-
-  // Only crash once per process/per run. Note that this is slightly racy
-  // against concurrent quota overruns on multiple threads, but that's fine.
-  have_crashed = true;
-
-  // This is happening because the user of the interface implicated on the crash
-  // stack has queued up an unreasonable number of messages, namely
-  // |quota_used|.
-  base::debug::DumpWithoutCrashing();
-
-  // Defeat tail-call optimization and ensure these two variables are available
-  // on the stack.
-  base::debug::Alias(&crash_threshold);
-  base::debug::Alias(&quota_used);
 }
 
 }  // namespace
@@ -220,25 +164,14 @@ Connector::Connector(ScopedMessagePipeHandle message_pipe,
   // Even though we don't have an incoming receiver, we still want to monitor
   // the message pipe to know if is closed or encounters an error.
   WaitToReadMore();
-
-  int unread_message_count_quota = UnreadMessageCountQuota();
-  if (unread_message_count_quota != 0) {
-    // This connector has been sampled to record the max unread message count.
-    // Note that setting the quota to N results in over-counting usage by up to
-    // N/2, in addition to overcounting due to message transit delays. As result
-    // it's best to treat the resulting metric as N-granular.
-    MojoResult rv = MojoSetQuota(message_pipe_.get().value(),
-                                 MOJO_QUOTA_TYPE_UNREAD_MESSAGE_COUNT,
-                                 unread_message_count_quota, nullptr);
-    if (rv == MOJO_RESULT_OK)
-      max_unread_message_quota_used_ = 0U;
-  }
 }
 
 Connector::~Connector() {
-  if (max_unread_message_quota_used_ != MOJO_QUOTA_LIMIT_NONE) {
+  if (quota_checker_) {
+    // Clear the message pipe handle in the checker.
+    quota_checker_->SetMessagePipe(MessagePipeHandle());
     UMA_HISTOGRAM_COUNTS_1M("Mojo.Connector.MaxUnreadMessageQuotaUsed",
-                            max_unread_message_quota_used_);
+                            quota_checker_->GetMaxQuotaUsage());
   }
 
   {
@@ -289,6 +222,10 @@ void Connector::RaiseError() {
 }
 
 void Connector::SetConnectionGroup(ConnectionGroup::Ref ref) {
+  // If this Connector already belonged to a group, parent the new group to that
+  // one so that the reference is not lost.
+  if (connection_group_)
+    ref.SetParentGroup(std::move(connection_group_));
   connection_group_ = std::move(ref);
 }
 
@@ -359,12 +296,8 @@ void Connector::ResumeIncomingMethodCallProcessing() {
     if (!weak_self)
       return;
   } else {
-    for (size_t i = 0; i < dispatch_queue_.size(); ++i) {
-      task_runner_->PostTask(
-          FROM_HERE, base::BindOnce(base::IgnoreResult(
-                                        &Connector::DispatchNextMessageInQueue),
-                                    weak_self_));
-    }
+    while (num_pending_dispatch_tasks_ < dispatch_queue_.size())
+      PostDispatchNextMessageInQueue();
   }
 
   paused_ = false;
@@ -397,17 +330,9 @@ bool Connector::Accept(Message* message) {
     DCHECK(dump_result);
   }
 #endif
-  if (max_unread_message_quota_used_ != MOJO_QUOTA_LIMIT_NONE) {
-    uint64_t limit = 0;
-    uint64_t usage = 0;
-    MojoResult rv = MojoQueryQuota(message_pipe_.get().value(),
-                                   MOJO_QUOTA_TYPE_UNREAD_MESSAGE_COUNT,
-                                   nullptr, &limit, &usage);
-    if (rv == MOJO_RESULT_OK && usage > max_unread_message_quota_used_) {
-      MaybeDumpWithoutCrashing(usage);
-      max_unread_message_quota_used_ = usage;
-    }
-  }
+
+  if (quota_checker_)
+    quota_checker_->BeforeWrite();
 
   MojoResult rv =
       WriteMessageNew(message_pipe_.get(), message->TakeMojoMessage(),
@@ -460,6 +385,14 @@ void Connector::SetWatcherHeapProfilerTag(const char* tag) {
     if (handle_watcher_)
       handle_watcher_->set_heap_profiler_tag(tag);
   }
+}
+
+void Connector::SetMessageQuotaChecker(
+    scoped_refptr<internal::MessageQuotaChecker> checker) {
+  DCHECK(checker && !quota_checker_);
+
+  quota_checker_ = std::move(checker);
+  quota_checker_->SetMessagePipe(message_pipe_.get());
 }
 
 // static
@@ -524,7 +457,8 @@ void Connector::WaitToReadMore() {
   handle_watcher_->set_heap_profiler_tag(heap_profiler_tag_);
   MojoResult rv = handle_watcher_->Watch(
       message_pipe_.get(), MOJO_HANDLE_SIGNAL_READABLE,
-      base::Bind(&Connector::OnWatcherHandleReady, base::Unretained(this)));
+      base::BindRepeating(&Connector::OnWatcherHandleReady,
+                          base::Unretained(this)));
 
   if (message_pipe_.is_valid()) {
     peer_remoteness_tracker_.emplace(
@@ -619,6 +553,19 @@ bool Connector::DispatchMessage(Message message) {
   return true;
 }
 
+void Connector::PostDispatchNextMessageInQueue() {
+  DCHECK_LT(num_pending_dispatch_tasks_, dispatch_queue_.size());
+  ++num_pending_dispatch_tasks_;
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&Connector::CallDispatchNextMessageInQueue, weak_self_));
+}
+
+void Connector::CallDispatchNextMessageInQueue() {
+  --num_pending_dispatch_tasks_;
+  DispatchNextMessageInQueue();
+}
+
 bool Connector::DispatchNextMessageInQueue() {
   if (error_ || paused_)
     return false;
@@ -681,10 +628,8 @@ void Connector::ReadAllAvailableMessages() {
         return;
     } else {
       dispatch_queue_.push(std::move(message));
-      task_runner_->PostTask(
-          FROM_HERE, base::BindOnce(base::IgnoreResult(
-                                        &Connector::DispatchNextMessageInQueue),
-                                    weak_self_));
+      if (num_pending_dispatch_tasks_ < dispatch_queue_.size())
+        PostDispatchNextMessageInQueue();
     }
 
     first_message_in_batch = false;

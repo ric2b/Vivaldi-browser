@@ -6,7 +6,6 @@
 #include <wayland-server.h>
 #include <memory>
 
-#include "mojo/public/cpp/bindings/binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ime/linux/linux_input_method_context.h"
@@ -135,9 +134,9 @@ TEST_P(WaylandInputMethodContextTest, OnCommit) {
   EXPECT_TRUE(input_method_context_delegate_->was_on_commit_called());
 }
 
-INSTANTIATE_TEST_SUITE_P(XdgVersionV5Test,
+INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
                          WaylandInputMethodContextTest,
-                         ::testing::Values(kXdgShellV5));
+                         ::testing::Values(kXdgShellStable));
 INSTANTIATE_TEST_SUITE_P(XdgVersionV6Test,
                          WaylandInputMethodContextTest,
                          ::testing::Values(kXdgShellV6));

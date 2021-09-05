@@ -6,6 +6,10 @@
 
 #include <stddef.h>
 
+#include <algorithm>
+#include <memory>
+#include <utility>
+
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/events/event.h"
@@ -51,7 +55,7 @@ class PreferredSizeLabel : public Label {
 // A simple View that hosts a RenderText object.
 class MultilineExample::RenderTextView : public View {
  public:
-  RenderTextView() : render_text_(gfx::RenderText::CreateHarfBuzzInstance()) {
+  RenderTextView() : render_text_(gfx::RenderText::CreateRenderText()) {
     render_text_->SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
     render_text_->SetColor(SK_ColorBLACK);
     render_text_->SetMultiline(true);
@@ -124,7 +128,8 @@ MultilineExample::MultilineExample() : ExampleBase("Multiline RenderText") {}
 MultilineExample::~MultilineExample() = default;
 
 void MultilineExample::CreateExampleView(View* container) {
-  const base::string16 kTestString = base::WideToUTF16(L"qwerty"
+  const base::string16 kTestString = base::WideToUTF16(
+      L"qwerty"
       L"\x627\x644\x631\x626\x64A\x633\x64A\x629"
       L"asdfgh");
 
@@ -154,10 +159,10 @@ void MultilineExample::CreateExampleView(View* container) {
       container->SetLayoutManager(std::make_unique<views::GridLayout>());
 
   ColumnSet* column_set = layout->AddColumnSet(0);
-  column_set->AddColumn(GridLayout::LEADING, GridLayout::CENTER,
-      0.0f, GridLayout::USE_PREF, 0, 0);
-  column_set->AddColumn(GridLayout::FILL, GridLayout::FILL,
-      1.0f, GridLayout::FIXED, 0, 0);
+  column_set->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0.0f,
+                        GridLayout::USE_PREF, 0, 0);
+  column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, 1.0f,
+                        GridLayout::FIXED, 0, 0);
 
   layout->StartRow(0, 0);
   layout->AddView(std::make_unique<Label>(ASCIIToUTF16("gfx::RenderText:")));

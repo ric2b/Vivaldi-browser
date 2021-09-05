@@ -28,7 +28,6 @@
 #include "third_party/blink/renderer/core/editing/commands/editor_command.h"
 
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_editing_command_type.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
@@ -36,6 +35,7 @@
 #include "third_party/blink/renderer/core/dom/tag_collection.h"
 #include "third_party/blink/renderer/core/editing/commands/clipboard_commands.h"
 #include "third_party/blink/renderer/core/editing/commands/create_link_command.h"
+#include "third_party/blink/renderer/core/editing/commands/editing_command_type.h"
 #include "third_party/blink/renderer/core/editing/commands/editing_commands_utilities.h"
 #include "third_party/blink/renderer/core/editing/commands/editor_command_names.h"
 #include "third_party/blink/renderer/core/editing/commands/format_block_command.h"
@@ -77,27 +77,25 @@
 
 namespace blink {
 
-using namespace html_names;
-
 namespace {
 
 struct CommandNameEntry {
   const char* name;
-  WebEditingCommandType type;
+  EditingCommandType type;
 };
 
 const CommandNameEntry kCommandNameEntries[] = {
-#define V(name) {#name, WebEditingCommandType::k##name},
+#define V(name) {#name, EditingCommandType::k##name},
     FOR_EACH_BLINK_EDITING_COMMAND_NAME(V)
 #undef V
 };
-// Handles all commands except WebEditingCommandType::Invalid.
+// Handles all commands except EditingCommandType::Invalid.
 static_assert(
     base::size(kCommandNameEntries) + 1 ==
-        static_cast<size_t>(WebEditingCommandType::kNumberOfCommandTypes),
-    "must handle all valid WebEditingCommandType");
+        static_cast<size_t>(EditingCommandType::kNumberOfCommandTypes),
+    "must handle all valid EditingCommandType");
 
-WebEditingCommandType WebEditingCommandTypeFromCommandName(
+EditingCommandType EditingCommandTypeFromCommandName(
     const String& command_name) {
   const CommandNameEntry* result = std::lower_bound(
       std::begin(kCommandNameEntries), std::end(kCommandNameEntries),
@@ -107,17 +105,16 @@ WebEditingCommandType WebEditingCommandTypeFromCommandName(
   if (result != std::end(kCommandNameEntries) &&
       CodeUnitCompareIgnoringASCIICase(command_name, result->name) == 0)
     return result->type;
-  return WebEditingCommandType::kInvalid;
+  return EditingCommandType::kInvalid;
 }
 
 // |frame| is only used for |InsertNewline| due to how |executeInsertNewline()|
 // works.
-InputEvent::InputType InputTypeFromCommandType(
-    WebEditingCommandType command_type,
-    LocalFrame& frame) {
+InputEvent::InputType InputTypeFromCommandType(EditingCommandType command_type,
+                                               LocalFrame& frame) {
   // We only handle InputType on spec for 'beforeinput'.
   // http://w3c.github.io/editing/input-events.html
-  using CommandType = WebEditingCommandType;
+  using CommandType = EditingCommandType;
   using InputType = InputEvent::InputType;
 
   // |executeInsertNewline()| could do two things but we have no other ways to
@@ -198,7 +195,7 @@ StaticRangeVector* RangesFromCurrentSelectionOrExtendCaret(
     const LocalFrame& frame,
     SelectionModifyDirection direction,
     TextGranularity granularity) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   SelectionModifier selection_modifier(
       frame, frame.Selection().GetSelectionInDOMTree());
   selection_modifier.SetSelectionIsDirectional(
@@ -240,7 +237,7 @@ class EditorInternalCommand {
   STACK_ALLOCATED();
 
  public:
-  WebEditingCommandType command_type;
+  EditingCommandType command_type;
   bool (*execute)(LocalFrame&, Event*, EditorCommandSource, const String&);
   bool (*is_supported_from_dom)(LocalFrame*);
   bool (*is_enabled)(LocalFrame&, Event*, EditorCommandSource);
@@ -318,8 +315,9 @@ static EditingTriState SelectionListState(const FrameSelection& selection,
       // If the selected list has the different type of list as child, return
       // |FalseTriState|.
       // See http://crbug.com/385374
-      if (HasChildTags(*start_element,
-                       tag_name.Matches(kUlTag) ? kOlTag : kUlTag))
+      if (HasChildTags(*start_element, tag_name.Matches(html_names::kUlTag)
+                                           ? html_names::kOlTag
+                                           : html_names::kUlTag))
         return EditingTriState::kFalse;
       return EditingTriState::kTrue;
     }
@@ -363,12 +361,12 @@ static bool ExecuteDefaultParagraphSeparator(LocalFrame& frame,
                                              Event*,
                                              EditorCommandSource,
                                              const String& value) {
-  if (DeprecatedEqualIgnoringCase(value, "div")) {
+  if (EqualIgnoringASCIICase(value, "div")) {
     frame.GetEditor().SetDefaultParagraphSeparator(
         EditorParagraphSeparator::kIsDiv);
     return true;
   }
-  if (DeprecatedEqualIgnoringCase(value, "p")) {
+  if (EqualIgnoringASCIICase(value, "p")) {
     frame.GetEditor().SetDefaultParagraphSeparator(
         EditorParagraphSeparator::kIsP);
   }
@@ -382,7 +380,7 @@ static void PerformDelete(LocalFrame& frame) {
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
   // |SelectedRange| requires clean layout for visible selection normalization.
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   frame.GetEditor().AddToKillRing(frame.GetEditor().SelectedRange());
   // TODO(editing-dev): |Editor::performDelete()| has no direction.
@@ -573,7 +571,7 @@ static bool ExecuteDeleteToMark(LocalFrame& frame,
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   frame.GetEditor().SetMark();
   return true;
 }
@@ -615,7 +613,8 @@ static bool ExecuteFormatBlock(LocalFrame& frame,
   if (!Document::ParseQualifiedName(AtomicString(tag_name), prefix, local_name,
                                     IGNORE_EXCEPTION_FOR_TESTING))
     return false;
-  QualifiedName qualified_tag_name(prefix, local_name, xhtmlNamespaceURI);
+  QualifiedName qualified_tag_name(prefix, local_name,
+                                   html_names::xhtmlNamespaceURI);
 
   DCHECK(frame.GetDocument());
   auto* command = MakeGarbageCollected<FormatBlockCommand>(*frame.GetDocument(),
@@ -755,7 +754,8 @@ static bool ExecuteScrollPageBackward(LocalFrame& frame,
                                       EditorCommandSource,
                                       const String&) {
   return frame.GetEventHandler().BubblingScroll(
-      kScrollBlockDirectionBackward, ScrollGranularity::kScrollByPage);
+      mojom::blink::ScrollDirection::kScrollBlockDirectionBackward,
+      ScrollGranularity::kScrollByPage);
 }
 
 static bool ExecuteScrollPageForward(LocalFrame& frame,
@@ -763,7 +763,8 @@ static bool ExecuteScrollPageForward(LocalFrame& frame,
                                      EditorCommandSource,
                                      const String&) {
   return frame.GetEventHandler().BubblingScroll(
-      kScrollBlockDirectionForward, ScrollGranularity::kScrollByPage);
+      mojom::blink::ScrollDirection::kScrollBlockDirectionForward,
+      ScrollGranularity::kScrollByPage);
 }
 
 static bool ExecuteScrollLineUp(LocalFrame& frame,
@@ -771,7 +772,8 @@ static bool ExecuteScrollLineUp(LocalFrame& frame,
                                 EditorCommandSource,
                                 const String&) {
   return frame.GetEventHandler().BubblingScroll(
-      kScrollUpIgnoringWritingMode, ScrollGranularity::kScrollByLine);
+      mojom::blink::ScrollDirection::kScrollUpIgnoringWritingMode,
+      ScrollGranularity::kScrollByLine);
 }
 
 static bool ExecuteScrollLineDown(LocalFrame& frame,
@@ -779,7 +781,8 @@ static bool ExecuteScrollLineDown(LocalFrame& frame,
                                   EditorCommandSource,
                                   const String&) {
   return frame.GetEventHandler().BubblingScroll(
-      kScrollDownIgnoringWritingMode, ScrollGranularity::kScrollByLine);
+      mojom::blink::ScrollDirection::kScrollDownIgnoringWritingMode,
+      ScrollGranularity::kScrollByLine);
 }
 
 static bool ExecuteScrollToBeginningOfDocument(LocalFrame& frame,
@@ -787,7 +790,8 @@ static bool ExecuteScrollToBeginningOfDocument(LocalFrame& frame,
                                                EditorCommandSource,
                                                const String&) {
   return frame.GetEventHandler().BubblingScroll(
-      kScrollBlockDirectionBackward, ScrollGranularity::kScrollByDocument);
+      mojom::blink::ScrollDirection::kScrollBlockDirectionBackward,
+      ScrollGranularity::kScrollByDocument);
 }
 
 static bool ExecuteScrollToEndOfDocument(LocalFrame& frame,
@@ -795,7 +799,8 @@ static bool ExecuteScrollToEndOfDocument(LocalFrame& frame,
                                          EditorCommandSource,
                                          const String&) {
   return frame.GetEventHandler().BubblingScroll(
-      kScrollBlockDirectionForward, ScrollGranularity::kScrollByDocument);
+      mojom::blink::ScrollDirection::kScrollBlockDirectionForward,
+      ScrollGranularity::kScrollByDocument);
 }
 
 static bool ExecuteSelectAll(LocalFrame& frame,
@@ -894,7 +899,7 @@ static bool ExecuteTranspose(LocalFrame& frame,
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  document->UpdateStyleAndLayout();
+  document->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   const EphemeralRange& range = ComputeRangeForTranspose(frame);
   if (range.IsNull())
@@ -920,7 +925,7 @@ static bool ExecuteTranspose(LocalFrame& frame,
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  document->UpdateStyleAndLayout();
+  document->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   // 'beforeinput' event handler may change selection, we need to re-calculate
   // range.
@@ -988,7 +993,7 @@ static bool ExecuteYank(LocalFrame& frame,
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited. see http://crbug.com/590369 for more details.
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   frame.GetEditor().InsertTextWithoutSendingTextEvent(
       yank_string, false, nullptr, InputEvent::InputType::kInsertFromYank);
@@ -1013,7 +1018,7 @@ static bool ExecuteYankAndSelect(LocalFrame& frame,
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited. see http://crbug.com/590369 for more details.
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   frame.GetEditor().InsertTextWithoutSendingTextEvent(
       frame.GetEditor().GetKillRing().Yank(), true, nullptr,
@@ -1041,7 +1046,7 @@ static bool Enabled(LocalFrame&, Event*, EditorCommandSource) {
 static bool EnabledVisibleSelection(LocalFrame& frame,
                                     Event* event,
                                     EditorCommandSource source) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   if (source == EditorCommandSource::kMenuOrKeyBinding &&
       !frame.Selection().SelectionHasFocus())
@@ -1052,15 +1057,14 @@ static bool EnabledVisibleSelection(LocalFrame& frame,
   const VisibleSelection& selection =
       CreateVisibleSelection(frame.GetEditor().SelectionForCommand(event));
   return (selection.IsCaret() &&
-          (selection.IsContentEditable() ||
-           frame.GetSettings()->GetCaretBrowsingEnabled())) ||
+          (selection.IsContentEditable() || frame.IsCaretBrowsingEnabled())) ||
          selection.IsRange();
 }
 
 static bool EnabledVisibleSelectionAndMark(LocalFrame& frame,
                                            Event* event,
                                            EditorCommandSource source) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   if (source == EditorCommandSource::kMenuOrKeyBinding &&
       !frame.Selection().SelectionHasFocus())
@@ -1069,8 +1073,7 @@ static bool EnabledVisibleSelectionAndMark(LocalFrame& frame,
   const VisibleSelection& selection =
       CreateVisibleSelection(frame.GetEditor().SelectionForCommand(event));
   return ((selection.IsCaret() &&
-           (selection.IsContentEditable() ||
-            frame.GetSettings()->GetCaretBrowsingEnabled())) ||
+           (selection.IsContentEditable() || frame.IsCaretBrowsingEnabled())) ||
           selection.IsRange()) &&
          !frame.GetEditor().Mark().IsNone();
 }
@@ -1078,7 +1081,7 @@ static bool EnabledVisibleSelectionAndMark(LocalFrame& frame,
 static bool EnableCaretInEditableText(LocalFrame& frame,
                                       Event* event,
                                       EditorCommandSource source) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   if (source == EditorCommandSource::kMenuOrKeyBinding &&
       !frame.Selection().SelectionHasFocus())
@@ -1091,7 +1094,7 @@ static bool EnableCaretInEditableText(LocalFrame& frame,
 static bool EnabledInEditableText(LocalFrame& frame,
                                   Event* event,
                                   EditorCommandSource source) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   if (source == EditorCommandSource::kMenuOrKeyBinding &&
       !frame.Selection().SelectionHasFocus())
     return false;
@@ -1104,7 +1107,7 @@ static bool EnabledInEditableText(LocalFrame& frame,
 static bool EnabledInEditableTextOrCaretBrowsing(LocalFrame& frame,
                                                  Event* event,
                                                  EditorCommandSource source) {
-  return frame.GetSettings()->GetCaretBrowsingEnabled() ||
+  return frame.IsCaretBrowsingEnabled() ||
          EnabledInEditableText(frame, event, source);
 }
 
@@ -1127,7 +1130,7 @@ static bool EnabledDelete(LocalFrame& frame,
 static bool EnabledInRichlyEditableText(LocalFrame& frame,
                                         Event*,
                                         EditorCommandSource source) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   if (source == EditorCommandSource::kMenuOrKeyBinding &&
       !frame.Selection().SelectionHasFocus())
     return false;
@@ -1140,7 +1143,7 @@ static bool EnabledInRichlyEditableText(LocalFrame& frame,
 static bool EnabledRangeInEditableText(LocalFrame& frame,
                                        Event*,
                                        EditorCommandSource source) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   if (source == EditorCommandSource::kMenuOrKeyBinding &&
       !frame.Selection().SelectionHasFocus())
     return false;
@@ -1155,7 +1158,7 @@ static bool EnabledRangeInEditableText(LocalFrame& frame,
 static bool EnabledRangeInRichlyEditableText(LocalFrame& frame,
                                              Event*,
                                              EditorCommandSource source) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   if (source == EditorCommandSource::kMenuOrKeyBinding &&
       !frame.Selection().SelectionHasFocus())
     return false;
@@ -1175,7 +1178,7 @@ static bool EnabledUndo(LocalFrame& frame, Event*, EditorCommandSource) {
 static bool EnabledUnselect(LocalFrame& frame,
                             Event* event,
                             EditorCommandSource) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   // The term "visible" here includes a caret in editable text or a range in any
   // text.
@@ -1190,7 +1193,7 @@ static bool EnabledSelectAll(LocalFrame& frame,
                              EditorCommandSource source) {
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   const VisibleSelection& selection =
       frame.Selection().ComputeVisibleSelectionInDOMTree();
   if (selection.IsNone())
@@ -1223,11 +1226,11 @@ static EditingTriState StateNone(LocalFrame&, Event*) {
 }
 
 EditingTriState StateOrderedList(LocalFrame& frame, Event*) {
-  return SelectionListState(frame.Selection(), kOlTag);
+  return SelectionListState(frame.Selection(), html_names::kOlTag);
 }
 
 static EditingTriState StateUnorderedList(LocalFrame& frame, Event*) {
-  return SelectionListState(frame.Selection(), kUlTag);
+  return SelectionListState(frame.Selection(), html_names::kUlTag);
 }
 
 static EditingTriState StateJustifyCenter(LocalFrame& frame, Event*) {
@@ -1270,9 +1273,9 @@ static String ValueDefaultParagraphSeparator(const EditorInternalCommand&,
                                              Event*) {
   switch (frame.GetEditor().DefaultParagraphSeparator()) {
     case EditorParagraphSeparator::kIsDiv:
-      return kDivTag.LocalName();
+      return html_names::kDivTag.LocalName();
     case EditorParagraphSeparator::kIsP:
-      return kPTag.LocalName();
+      return html_names::kPTag.LocalName();
   }
 
   NOTREACHED();
@@ -1306,525 +1309,518 @@ static bool CanNotExecuteWhenDisabled(LocalFrame&, EditorCommandSource) {
 static const EditorInternalCommand* InternalCommand(
     const String& command_name) {
   static const EditorInternalCommand kEditorCommands[] = {
-      // Lists all commands in blink::WebEditingCommandType.
+      // Lists all commands in blink::EditingCommandType.
       // Must be ordered by |commandType| for index lookup.
       // Covered by unit tests in editing_command_test.cc
-      {WebEditingCommandType::kAlignJustified, ExecuteJustifyFull,
+      {EditingCommandType::kAlignJustified, ExecuteJustifyFull,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kAlignLeft, ExecuteJustifyLeft,
+      {EditingCommandType::kAlignLeft, ExecuteJustifyLeft,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kAlignRight, ExecuteJustifyRight,
+      {EditingCommandType::kAlignRight, ExecuteJustifyRight,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kBackColor, StyleCommands::ExecuteBackColor,
+      {EditingCommandType::kBackColor, StyleCommands::ExecuteBackColor,
        Supported, EnabledInRichlyEditableText, StateNone,
        StyleCommands::ValueBackColor, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
       // FIXME: remove BackwardDelete when Safari for Windows stops using it.
-      {WebEditingCommandType::kBackwardDelete, ExecuteDeleteBackward,
+      {EditingCommandType::kBackwardDelete, ExecuteDeleteBackward,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kBold, StyleCommands::ExecuteToggleBold,
-       Supported, EnabledInRichlyEditableText, StyleCommands::StateBold,
-       ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kCopy, ClipboardCommands::ExecuteCopy, Supported,
+      {EditingCommandType::kBold, StyleCommands::ExecuteToggleBold, Supported,
+       EnabledInRichlyEditableText, StyleCommands::StateBold, ValueStateOrNull,
+       kNotTextInsertion, CanNotExecuteWhenDisabled},
+      {EditingCommandType::kCopy, ClipboardCommands::ExecuteCopy, Supported,
        ClipboardCommands::EnabledCopy, StateNone, ValueStateOrNull,
        kNotTextInsertion, ClipboardCommands::CanWriteClipboard},
-      {WebEditingCommandType::kCreateLink, ExecuteCreateLink, Supported,
+      {EditingCommandType::kCreateLink, ExecuteCreateLink, Supported,
        EnabledInRichlyEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kCut, ClipboardCommands::ExecuteCut, Supported,
+      {EditingCommandType::kCut, ClipboardCommands::ExecuteCut, Supported,
        ClipboardCommands::EnabledCut, StateNone, ValueStateOrNull,
        kNotTextInsertion, ClipboardCommands::CanWriteClipboard},
-      {WebEditingCommandType::kDefaultParagraphSeparator,
+      {EditingCommandType::kDefaultParagraphSeparator,
        ExecuteDefaultParagraphSeparator, Supported, Enabled, StateNone,
        ValueDefaultParagraphSeparator, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kDelete, ExecuteDelete, Supported, EnabledDelete,
+      {EditingCommandType::kDelete, ExecuteDelete, Supported, EnabledDelete,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kDeleteBackward, ExecuteDeleteBackward,
+      {EditingCommandType::kDeleteBackward, ExecuteDeleteBackward,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kDeleteBackwardByDecomposingPreviousCharacter,
+      {EditingCommandType::kDeleteBackwardByDecomposingPreviousCharacter,
        ExecuteDeleteBackwardByDecomposingPreviousCharacter,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kDeleteForward, ExecuteDeleteForward,
+      {EditingCommandType::kDeleteForward, ExecuteDeleteForward,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kDeleteToBeginningOfLine,
+      {EditingCommandType::kDeleteToBeginningOfLine,
        ExecuteDeleteToBeginningOfLine, SupportedFromMenuOrKeyBinding,
        EnabledInEditableText, StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kDeleteToBeginningOfParagraph,
+      {EditingCommandType::kDeleteToBeginningOfParagraph,
        ExecuteDeleteToBeginningOfParagraph, SupportedFromMenuOrKeyBinding,
        EnabledInEditableText, StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kDeleteToEndOfLine, ExecuteDeleteToEndOfLine,
+      {EditingCommandType::kDeleteToEndOfLine, ExecuteDeleteToEndOfLine,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kDeleteToEndOfParagraph,
+      {EditingCommandType::kDeleteToEndOfParagraph,
        ExecuteDeleteToEndOfParagraph, SupportedFromMenuOrKeyBinding,
        EnabledInEditableText, StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kDeleteToMark, ExecuteDeleteToMark,
+      {EditingCommandType::kDeleteToMark, ExecuteDeleteToMark,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kDeleteWordBackward, ExecuteDeleteWordBackward,
+      {EditingCommandType::kDeleteWordBackward, ExecuteDeleteWordBackward,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kDeleteWordForward, ExecuteDeleteWordForward,
+      {EditingCommandType::kDeleteWordForward, ExecuteDeleteWordForward,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kFindString, ExecuteFindString, Supported,
-       Enabled, StateNone, ValueStateOrNull, kNotTextInsertion,
+      {EditingCommandType::kFindString, ExecuteFindString, Supported, Enabled,
+       StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kFontName, StyleCommands::ExecuteFontName,
+      {EditingCommandType::kFontName, StyleCommands::ExecuteFontName, Supported,
+       EnabledInRichlyEditableText, StateNone, StyleCommands::ValueFontName,
+       kNotTextInsertion, CanNotExecuteWhenDisabled},
+      {EditingCommandType::kFontSize, StyleCommands::ExecuteFontSize, Supported,
+       EnabledInRichlyEditableText, StateNone, StyleCommands::ValueFontSize,
+       kNotTextInsertion, CanNotExecuteWhenDisabled},
+      {EditingCommandType::kFontSizeDelta, StyleCommands::ExecuteFontSizeDelta,
        Supported, EnabledInRichlyEditableText, StateNone,
-       StyleCommands::ValueFontName, kNotTextInsertion,
-       CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kFontSize, StyleCommands::ExecuteFontSize,
-       Supported, EnabledInRichlyEditableText, StateNone,
-       StyleCommands::ValueFontSize, kNotTextInsertion,
-       CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kFontSizeDelta,
-       StyleCommands::ExecuteFontSizeDelta, Supported,
-       EnabledInRichlyEditableText, StateNone,
        StyleCommands::ValueFontSizeDelta, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kForeColor, StyleCommands::ExecuteForeColor,
+      {EditingCommandType::kForeColor, StyleCommands::ExecuteForeColor,
        Supported, EnabledInRichlyEditableText, StateNone,
        StyleCommands::ValueForeColor, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kFormatBlock, ExecuteFormatBlock, Supported,
+      {EditingCommandType::kFormatBlock, ExecuteFormatBlock, Supported,
        EnabledInRichlyEditableText, StateNone, ValueFormatBlock,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kForwardDelete, ExecuteForwardDelete, Supported,
+      {EditingCommandType::kForwardDelete, ExecuteForwardDelete, Supported,
        EnabledInEditableText, StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kHiliteColor, StyleCommands::ExecuteBackColor,
+      {EditingCommandType::kHiliteColor, StyleCommands::ExecuteBackColor,
        Supported, EnabledInRichlyEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kIgnoreSpelling, ExecuteIgnoreSpelling,
+      {EditingCommandType::kIgnoreSpelling, ExecuteIgnoreSpelling,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kIndent, ExecuteIndent, Supported,
+      {EditingCommandType::kIndent, ExecuteIndent, Supported,
        EnabledInRichlyEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertBacktab,
-       InsertCommands::ExecuteInsertBacktab, SupportedFromMenuOrKeyBinding,
-       EnabledInEditableText, StateNone, ValueStateOrNull, kIsTextInsertion,
-       CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertHTML, InsertCommands::ExecuteInsertHTML,
+      {EditingCommandType::kInsertBacktab, InsertCommands::ExecuteInsertBacktab,
+       SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
+       ValueStateOrNull, kIsTextInsertion, CanNotExecuteWhenDisabled},
+      {EditingCommandType::kInsertHTML, InsertCommands::ExecuteInsertHTML,
        Supported, EnabledInEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertHorizontalRule,
+      {EditingCommandType::kInsertHorizontalRule,
        InsertCommands::ExecuteInsertHorizontalRule, Supported,
        EnabledInRichlyEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertImage, InsertCommands::ExecuteInsertImage,
+      {EditingCommandType::kInsertImage, InsertCommands::ExecuteInsertImage,
        Supported, EnabledInRichlyEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertLineBreak,
+      {EditingCommandType::kInsertLineBreak,
        InsertCommands::ExecuteInsertLineBreak, Supported, EnabledInEditableText,
        StateNone, ValueStateOrNull, kIsTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertNewline,
-       InsertCommands::ExecuteInsertNewline, SupportedFromMenuOrKeyBinding,
-       EnabledInEditableText, StateNone, ValueStateOrNull, kIsTextInsertion,
-       CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertNewlineInQuotedContent,
+      {EditingCommandType::kInsertNewline, InsertCommands::ExecuteInsertNewline,
+       SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
+       ValueStateOrNull, kIsTextInsertion, CanNotExecuteWhenDisabled},
+      {EditingCommandType::kInsertNewlineInQuotedContent,
        InsertCommands::ExecuteInsertNewlineInQuotedContent, Supported,
        EnabledInRichlyEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertOrderedList,
+      {EditingCommandType::kInsertOrderedList,
        InsertCommands::ExecuteInsertOrderedList, Supported,
        EnabledInRichlyEditableText, StateOrderedList, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertParagraph,
+      {EditingCommandType::kInsertParagraph,
        InsertCommands::ExecuteInsertParagraph, Supported, EnabledInEditableText,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertTab, InsertCommands::ExecuteInsertTab,
+      {EditingCommandType::kInsertTab, InsertCommands::ExecuteInsertTab,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kIsTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertText, InsertCommands::ExecuteInsertText,
+      {EditingCommandType::kInsertText, InsertCommands::ExecuteInsertText,
        Supported, EnabledInEditableText, StateNone, ValueStateOrNull,
        kIsTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kInsertUnorderedList,
+      {EditingCommandType::kInsertUnorderedList,
        InsertCommands::ExecuteInsertUnorderedList, Supported,
        EnabledInRichlyEditableText, StateUnorderedList, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kItalic, StyleCommands::ExecuteToggleItalic,
+      {EditingCommandType::kItalic, StyleCommands::ExecuteToggleItalic,
        Supported, EnabledInRichlyEditableText, StyleCommands::StateItalic,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kJustifyCenter, ExecuteJustifyCenter, Supported,
+      {EditingCommandType::kJustifyCenter, ExecuteJustifyCenter, Supported,
        EnabledInRichlyEditableText, StateJustifyCenter, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kJustifyFull, ExecuteJustifyFull, Supported,
+      {EditingCommandType::kJustifyFull, ExecuteJustifyFull, Supported,
        EnabledInRichlyEditableText, StateJustifyFull, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kJustifyLeft, ExecuteJustifyLeft, Supported,
+      {EditingCommandType::kJustifyLeft, ExecuteJustifyLeft, Supported,
        EnabledInRichlyEditableText, StateJustifyLeft, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kJustifyNone, ExecuteJustifyLeft, Supported,
+      {EditingCommandType::kJustifyNone, ExecuteJustifyLeft, Supported,
        EnabledInRichlyEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kJustifyRight, ExecuteJustifyRight, Supported,
+      {EditingCommandType::kJustifyRight, ExecuteJustifyRight, Supported,
        EnabledInRichlyEditableText, StateJustifyRight, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMakeTextWritingDirectionLeftToRight,
+      {EditingCommandType::kMakeTextWritingDirectionLeftToRight,
        StyleCommands::ExecuteMakeTextWritingDirectionLeftToRight,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText,
        StyleCommands::StateTextWritingDirectionLeftToRight, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMakeTextWritingDirectionNatural,
+      {EditingCommandType::kMakeTextWritingDirectionNatural,
        StyleCommands::ExecuteMakeTextWritingDirectionNatural,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText,
        StyleCommands::StateTextWritingDirectionNatural, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMakeTextWritingDirectionRightToLeft,
+      {EditingCommandType::kMakeTextWritingDirectionRightToLeft,
        StyleCommands::ExecuteMakeTextWritingDirectionRightToLeft,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText,
        StyleCommands::StateTextWritingDirectionRightToLeft, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveBackward, MoveCommands::ExecuteMoveBackward,
+      {EditingCommandType::kMoveBackward, MoveCommands::ExecuteMoveBackward,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveBackwardAndModifySelection,
+      {EditingCommandType::kMoveBackwardAndModifySelection,
        MoveCommands::ExecuteMoveBackwardAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveDown, MoveCommands::ExecuteMoveDown,
+      {EditingCommandType::kMoveDown, MoveCommands::ExecuteMoveDown,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveDownAndModifySelection,
+      {EditingCommandType::kMoveDownAndModifySelection,
        MoveCommands::ExecuteMoveDownAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveForward, MoveCommands::ExecuteMoveForward,
+      {EditingCommandType::kMoveForward, MoveCommands::ExecuteMoveForward,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveForwardAndModifySelection,
+      {EditingCommandType::kMoveForwardAndModifySelection,
        MoveCommands::ExecuteMoveForwardAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveLeft, MoveCommands::ExecuteMoveLeft,
+      {EditingCommandType::kMoveLeft, MoveCommands::ExecuteMoveLeft,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveLeftAndModifySelection,
+      {EditingCommandType::kMoveLeftAndModifySelection,
        MoveCommands::ExecuteMoveLeftAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMovePageDown, MoveCommands::ExecuteMovePageDown,
+      {EditingCommandType::kMovePageDown, MoveCommands::ExecuteMovePageDown,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMovePageDownAndModifySelection,
+      {EditingCommandType::kMovePageDownAndModifySelection,
        MoveCommands::ExecuteMovePageDownAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMovePageUp, MoveCommands::ExecuteMovePageUp,
+      {EditingCommandType::kMovePageUp, MoveCommands::ExecuteMovePageUp,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMovePageUpAndModifySelection,
+      {EditingCommandType::kMovePageUpAndModifySelection,
        MoveCommands::ExecuteMovePageUpAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveParagraphBackward,
+      {EditingCommandType::kMoveParagraphBackward,
        MoveCommands::ExecuteMoveParagraphBackward,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveParagraphBackwardAndModifySelection,
+      {EditingCommandType::kMoveParagraphBackwardAndModifySelection,
        MoveCommands::ExecuteMoveParagraphBackwardAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveParagraphForward,
+      {EditingCommandType::kMoveParagraphForward,
        MoveCommands::ExecuteMoveParagraphForward, SupportedFromMenuOrKeyBinding,
        EnabledInEditableTextOrCaretBrowsing, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveParagraphForwardAndModifySelection,
+      {EditingCommandType::kMoveParagraphForwardAndModifySelection,
        MoveCommands::ExecuteMoveParagraphForwardAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveRight, MoveCommands::ExecuteMoveRight,
+      {EditingCommandType::kMoveRight, MoveCommands::ExecuteMoveRight,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveRightAndModifySelection,
+      {EditingCommandType::kMoveRightAndModifySelection,
        MoveCommands::ExecuteMoveRightAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToBeginningOfDocument,
+      {EditingCommandType::kMoveToBeginningOfDocument,
        MoveCommands::ExecuteMoveToBeginningOfDocument,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToBeginningOfDocumentAndModifySelection,
+      {EditingCommandType::kMoveToBeginningOfDocumentAndModifySelection,
        MoveCommands::ExecuteMoveToBeginningOfDocumentAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToBeginningOfLine,
+      {EditingCommandType::kMoveToBeginningOfLine,
        MoveCommands::ExecuteMoveToBeginningOfLine,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToBeginningOfLineAndModifySelection,
+      {EditingCommandType::kMoveToBeginningOfLineAndModifySelection,
        MoveCommands::ExecuteMoveToBeginningOfLineAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToBeginningOfParagraph,
+      {EditingCommandType::kMoveToBeginningOfParagraph,
        MoveCommands::ExecuteMoveToBeginningOfParagraph,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToBeginningOfParagraphAndModifySelection,
+      {EditingCommandType::kMoveToBeginningOfParagraphAndModifySelection,
        MoveCommands::ExecuteMoveToBeginningOfParagraphAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToBeginningOfSentence,
+      {EditingCommandType::kMoveToBeginningOfSentence,
        MoveCommands::ExecuteMoveToBeginningOfSentence,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToBeginningOfSentenceAndModifySelection,
+      {EditingCommandType::kMoveToBeginningOfSentenceAndModifySelection,
        MoveCommands::ExecuteMoveToBeginningOfSentenceAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToEndOfDocument,
+      {EditingCommandType::kMoveToEndOfDocument,
        MoveCommands::ExecuteMoveToEndOfDocument, SupportedFromMenuOrKeyBinding,
        EnabledInEditableTextOrCaretBrowsing, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToEndOfDocumentAndModifySelection,
+      {EditingCommandType::kMoveToEndOfDocumentAndModifySelection,
        MoveCommands::ExecuteMoveToEndOfDocumentAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToEndOfLine,
+      {EditingCommandType::kMoveToEndOfLine,
        MoveCommands::ExecuteMoveToEndOfLine, SupportedFromMenuOrKeyBinding,
        EnabledInEditableTextOrCaretBrowsing, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToEndOfLineAndModifySelection,
+      {EditingCommandType::kMoveToEndOfLineAndModifySelection,
        MoveCommands::ExecuteMoveToEndOfLineAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToEndOfParagraph,
+      {EditingCommandType::kMoveToEndOfParagraph,
        MoveCommands::ExecuteMoveToEndOfParagraph, SupportedFromMenuOrKeyBinding,
        EnabledInEditableTextOrCaretBrowsing, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToEndOfParagraphAndModifySelection,
+      {EditingCommandType::kMoveToEndOfParagraphAndModifySelection,
        MoveCommands::ExecuteMoveToEndOfParagraphAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToEndOfSentence,
+      {EditingCommandType::kMoveToEndOfSentence,
        MoveCommands::ExecuteMoveToEndOfSentence, SupportedFromMenuOrKeyBinding,
        EnabledInEditableTextOrCaretBrowsing, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToEndOfSentenceAndModifySelection,
+      {EditingCommandType::kMoveToEndOfSentenceAndModifySelection,
        MoveCommands::ExecuteMoveToEndOfSentenceAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToLeftEndOfLine,
+      {EditingCommandType::kMoveToLeftEndOfLine,
        MoveCommands::ExecuteMoveToLeftEndOfLine, SupportedFromMenuOrKeyBinding,
        EnabledInEditableTextOrCaretBrowsing, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToLeftEndOfLineAndModifySelection,
+      {EditingCommandType::kMoveToLeftEndOfLineAndModifySelection,
        MoveCommands::ExecuteMoveToLeftEndOfLineAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToRightEndOfLine,
+      {EditingCommandType::kMoveToRightEndOfLine,
        MoveCommands::ExecuteMoveToRightEndOfLine, SupportedFromMenuOrKeyBinding,
        EnabledInEditableTextOrCaretBrowsing, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveToRightEndOfLineAndModifySelection,
+      {EditingCommandType::kMoveToRightEndOfLineAndModifySelection,
        MoveCommands::ExecuteMoveToRightEndOfLineAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveUp, MoveCommands::ExecuteMoveUp,
+      {EditingCommandType::kMoveUp, MoveCommands::ExecuteMoveUp,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveUpAndModifySelection,
+      {EditingCommandType::kMoveUpAndModifySelection,
        MoveCommands::ExecuteMoveUpAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveWordBackward,
+      {EditingCommandType::kMoveWordBackward,
        MoveCommands::ExecuteMoveWordBackward, SupportedFromMenuOrKeyBinding,
        EnabledInEditableTextOrCaretBrowsing, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveWordBackwardAndModifySelection,
+      {EditingCommandType::kMoveWordBackwardAndModifySelection,
        MoveCommands::ExecuteMoveWordBackwardAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveWordForward,
+      {EditingCommandType::kMoveWordForward,
        MoveCommands::ExecuteMoveWordForward, SupportedFromMenuOrKeyBinding,
        EnabledInEditableTextOrCaretBrowsing, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveWordForwardAndModifySelection,
+      {EditingCommandType::kMoveWordForwardAndModifySelection,
        MoveCommands::ExecuteMoveWordForwardAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveWordLeft, MoveCommands::ExecuteMoveWordLeft,
+      {EditingCommandType::kMoveWordLeft, MoveCommands::ExecuteMoveWordLeft,
        SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveWordLeftAndModifySelection,
+      {EditingCommandType::kMoveWordLeftAndModifySelection,
        MoveCommands::ExecuteMoveWordLeftAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveWordRight,
-       MoveCommands::ExecuteMoveWordRight, SupportedFromMenuOrKeyBinding,
-       EnabledInEditableTextOrCaretBrowsing, StateNone, ValueStateOrNull,
-       kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kMoveWordRightAndModifySelection,
+      {EditingCommandType::kMoveWordRight, MoveCommands::ExecuteMoveWordRight,
+       SupportedFromMenuOrKeyBinding, EnabledInEditableTextOrCaretBrowsing,
+       StateNone, ValueStateOrNull, kNotTextInsertion,
+       CanNotExecuteWhenDisabled},
+      {EditingCommandType::kMoveWordRightAndModifySelection,
        MoveCommands::ExecuteMoveWordRightAndModifySelection,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kOutdent, ExecuteOutdent, Supported,
+      {EditingCommandType::kOutdent, ExecuteOutdent, Supported,
        EnabledInRichlyEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kOverWrite, ExecuteToggleOverwrite,
+      {EditingCommandType::kOverWrite, ExecuteToggleOverwrite,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kPaste, ClipboardCommands::ExecutePaste,
+      {EditingCommandType::kPaste, ClipboardCommands::ExecutePaste,
        ClipboardCommands::PasteSupported, ClipboardCommands::EnabledPaste,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        ClipboardCommands::CanReadClipboard},
-      {WebEditingCommandType::kPasteAndMatchStyle,
+      {EditingCommandType::kPasteAndMatchStyle,
        ClipboardCommands::ExecutePasteAndMatchStyle, Supported,
        ClipboardCommands::EnabledPaste, StateNone, ValueStateOrNull,
        kNotTextInsertion, ClipboardCommands::CanReadClipboard},
-      {WebEditingCommandType::kPasteGlobalSelection,
+      {EditingCommandType::kPasteGlobalSelection,
        ClipboardCommands::ExecutePasteGlobalSelection,
        SupportedFromMenuOrKeyBinding, ClipboardCommands::EnabledPaste,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        ClipboardCommands::CanReadClipboard},
-      {WebEditingCommandType::kPrint, ExecutePrint, Supported, Enabled,
+      {EditingCommandType::kPrint, ExecutePrint, Supported, Enabled, StateNone,
+       ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
+      {EditingCommandType::kRedo, ExecuteRedo, Supported, EnabledRedo,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kRedo, ExecuteRedo, Supported, EnabledRedo,
-       StateNone, ValueStateOrNull, kNotTextInsertion,
-       CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kRemoveFormat, ExecuteRemoveFormat, Supported,
+      {EditingCommandType::kRemoveFormat, ExecuteRemoveFormat, Supported,
        EnabledRangeInEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kScrollPageBackward, ExecuteScrollPageBackward,
+      {EditingCommandType::kScrollPageBackward, ExecuteScrollPageBackward,
        SupportedFromMenuOrKeyBinding, Enabled, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kScrollPageForward, ExecuteScrollPageForward,
+      {EditingCommandType::kScrollPageForward, ExecuteScrollPageForward,
        SupportedFromMenuOrKeyBinding, Enabled, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kScrollLineUp, ExecuteScrollLineUp,
+      {EditingCommandType::kScrollLineUp, ExecuteScrollLineUp,
        SupportedFromMenuOrKeyBinding, Enabled, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kScrollLineDown, ExecuteScrollLineDown,
+      {EditingCommandType::kScrollLineDown, ExecuteScrollLineDown,
        SupportedFromMenuOrKeyBinding, Enabled, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kScrollToBeginningOfDocument,
+      {EditingCommandType::kScrollToBeginningOfDocument,
        ExecuteScrollToBeginningOfDocument, SupportedFromMenuOrKeyBinding,
        Enabled, StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kScrollToEndOfDocument,
-       ExecuteScrollToEndOfDocument, SupportedFromMenuOrKeyBinding, Enabled,
-       StateNone, ValueStateOrNull, kNotTextInsertion,
-       CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kSelectAll, ExecuteSelectAll, Supported,
+      {EditingCommandType::kScrollToEndOfDocument, ExecuteScrollToEndOfDocument,
+       SupportedFromMenuOrKeyBinding, Enabled, StateNone, ValueStateOrNull,
+       kNotTextInsertion, CanNotExecuteWhenDisabled},
+      {EditingCommandType::kSelectAll, ExecuteSelectAll, Supported,
        EnabledSelectAll, StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kSelectLine, ExecuteSelectLine,
+      {EditingCommandType::kSelectLine, ExecuteSelectLine,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kSelectParagraph, ExecuteSelectParagraph,
+      {EditingCommandType::kSelectParagraph, ExecuteSelectParagraph,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kSelectSentence, ExecuteSelectSentence,
+      {EditingCommandType::kSelectSentence, ExecuteSelectSentence,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kSelectToMark, ExecuteSelectToMark,
+      {EditingCommandType::kSelectToMark, ExecuteSelectToMark,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelectionAndMark, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kSelectWord, ExecuteSelectWord,
+      {EditingCommandType::kSelectWord, ExecuteSelectWord,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kSetMark, ExecuteSetMark,
+      {EditingCommandType::kSetMark, ExecuteSetMark,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelection, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kStrikethrough,
-       StyleCommands::ExecuteStrikethrough, Supported,
-       EnabledInRichlyEditableText, StyleCommands::StateStrikethrough,
-       ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kStyleWithCSS, StyleCommands::ExecuteStyleWithCSS,
+      {EditingCommandType::kStrikethrough, StyleCommands::ExecuteStrikethrough,
+       Supported, EnabledInRichlyEditableText,
+       StyleCommands::StateStrikethrough, ValueStateOrNull, kNotTextInsertion,
+       CanNotExecuteWhenDisabled},
+      {EditingCommandType::kStyleWithCSS, StyleCommands::ExecuteStyleWithCSS,
        Supported, Enabled, StyleCommands::StateStyleWithCSS, ValueEmpty,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kSubscript, StyleCommands::ExecuteSubscript,
+      {EditingCommandType::kSubscript, StyleCommands::ExecuteSubscript,
        Supported, EnabledInRichlyEditableText, StyleCommands::StateSubscript,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kSuperscript, StyleCommands::ExecuteSuperscript,
+      {EditingCommandType::kSuperscript, StyleCommands::ExecuteSuperscript,
        Supported, EnabledInRichlyEditableText, StyleCommands::StateSuperscript,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kSwapWithMark, ExecuteSwapWithMark,
+      {EditingCommandType::kSwapWithMark, ExecuteSwapWithMark,
        SupportedFromMenuOrKeyBinding, EnabledVisibleSelectionAndMark, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kToggleBold, StyleCommands::ExecuteToggleBold,
+      {EditingCommandType::kToggleBold, StyleCommands::ExecuteToggleBold,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText,
        StyleCommands::StateBold, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kToggleItalic, StyleCommands::ExecuteToggleItalic,
+      {EditingCommandType::kToggleItalic, StyleCommands::ExecuteToggleItalic,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText,
        StyleCommands::StateItalic, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kToggleUnderline, StyleCommands::ExecuteUnderline,
+      {EditingCommandType::kToggleUnderline, StyleCommands::ExecuteUnderline,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText,
        StyleCommands::StateUnderline, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kTranspose, ExecuteTranspose, Supported,
+      {EditingCommandType::kTranspose, ExecuteTranspose, Supported,
        EnableCaretInEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kUnderline, StyleCommands::ExecuteUnderline,
+      {EditingCommandType::kUnderline, StyleCommands::ExecuteUnderline,
        Supported, EnabledInRichlyEditableText, StyleCommands::StateUnderline,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kUndo, ExecuteUndo, Supported, EnabledUndo,
+      {EditingCommandType::kUndo, ExecuteUndo, Supported, EnabledUndo,
        StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kUnlink, ExecuteUnlink, Supported,
+      {EditingCommandType::kUnlink, ExecuteUnlink, Supported,
        EnabledRangeInRichlyEditableText, StateNone, ValueStateOrNull,
        kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kUnscript, StyleCommands::ExecuteUnscript,
+      {EditingCommandType::kUnscript, StyleCommands::ExecuteUnscript,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kUnselect, ExecuteUnselect, Supported,
+      {EditingCommandType::kUnselect, ExecuteUnselect, Supported,
        EnabledUnselect, StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kUseCSS, StyleCommands::ExecuteUseCSS, Supported,
+      {EditingCommandType::kUseCSS, StyleCommands::ExecuteUseCSS, Supported,
        Enabled, StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kYank, ExecuteYank, SupportedFromMenuOrKeyBinding,
+      {EditingCommandType::kYank, ExecuteYank, SupportedFromMenuOrKeyBinding,
        EnabledInEditableText, StateNone, ValueStateOrNull, kNotTextInsertion,
        CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kYankAndSelect, ExecuteYankAndSelect,
+      {EditingCommandType::kYankAndSelect, ExecuteYankAndSelect,
        SupportedFromMenuOrKeyBinding, EnabledInEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
-      {WebEditingCommandType::kAlignCenter, ExecuteJustifyCenter,
+      {EditingCommandType::kAlignCenter, ExecuteJustifyCenter,
        SupportedFromMenuOrKeyBinding, EnabledInRichlyEditableText, StateNone,
        ValueStateOrNull, kNotTextInsertion, CanNotExecuteWhenDisabled},
   };
-  // Handles all commands except WebEditingCommandType::Invalid.
+  // Handles all commands except EditingCommandType::Invalid.
   static_assert(
       base::size(kEditorCommands) + 1 ==
-          static_cast<size_t>(WebEditingCommandType::kNumberOfCommandTypes),
-      "must handle all valid WebEditingCommandType");
+          static_cast<size_t>(EditingCommandType::kNumberOfCommandTypes),
+      "must handle all valid EditingCommandType");
 
-  WebEditingCommandType command_type =
-      WebEditingCommandTypeFromCommandName(command_name);
-  if (command_type == WebEditingCommandType::kInvalid)
+  EditingCommandType command_type =
+      EditingCommandTypeFromCommandName(command_name);
+  if (command_type == EditingCommandType::kInvalid)
     return nullptr;
 
   int command_index = static_cast<int>(command_type) - 1;
@@ -1863,7 +1859,8 @@ bool Editor::ExecuteCommand(const String& command_name) {
   if (command_name == "AdvanceToNextMisspelling") {
     // TODO(editing-dev): Use of UpdateStyleAndLayout
     // needs to be audited. see http://crbug.com/590369 for more details.
-    GetFrame().GetDocument()->UpdateStyleAndLayout();
+    GetFrame().GetDocument()->UpdateStyleAndLayout(
+        DocumentUpdateReason::kEditing);
 
     // We need to pass false here or else the currently selected word will never
     // be skipped.
@@ -1874,7 +1871,8 @@ bool Editor::ExecuteCommand(const String& command_name) {
     // TODO(editing-dev): Use of UpdateStyleAndLayout
     // needs to be audited.
     // see http://crbug.com/590369 for more details.
-    GetFrame().GetDocument()->UpdateStyleAndLayout();
+    GetFrame().GetDocument()->UpdateStyleAndLayout(
+        DocumentUpdateReason::kEditing);
 
     GetSpellChecker().ShowSpellingGuessPanel();
     return true;
@@ -1888,18 +1886,21 @@ bool Editor::ExecuteCommand(const String& command_name, const String& value) {
   DCHECK(GetFrame().GetDocument()->IsActive());
   if (!CanEdit() && command_name == "moveToBeginningOfDocument") {
     return GetFrame().GetEventHandler().BubblingScroll(
-        kScrollUpIgnoringWritingMode, ScrollGranularity::kScrollByDocument);
+        mojom::blink::ScrollDirection::kScrollUpIgnoringWritingMode,
+        ScrollGranularity::kScrollByDocument);
   }
 
   if (!CanEdit() && command_name == "moveToEndOfDocument") {
     return GetFrame().GetEventHandler().BubblingScroll(
-        kScrollDownIgnoringWritingMode, ScrollGranularity::kScrollByDocument);
+        mojom::blink::ScrollDirection::kScrollDownIgnoringWritingMode,
+        ScrollGranularity::kScrollByDocument);
   }
 
   if (command_name == "ToggleSpellPanel") {
     // TODO(editing-dev): Use of UpdateStyleAndLayout
     // needs to be audited. see http://crbug.com/590369 for more details.
-    GetFrame().GetDocument()->UpdateStyleAndLayout();
+    GetFrame().GetDocument()->UpdateStyleAndLayout(
+        DocumentUpdateReason::kEditing);
 
     GetSpellChecker().ShowSpellingGuessPanel();
     return true;
@@ -1913,7 +1914,9 @@ bool Editor::IsCommandEnabled(const String& command_name) const {
 }
 
 EditorCommand::EditorCommand()
-    : command_(nullptr), source_(EditorCommandSource::kMenuOrKeyBinding) {}
+    : command_(nullptr),
+      source_(EditorCommandSource::kMenuOrKeyBinding),
+      frame_(nullptr) {}
 
 EditorCommand::EditorCommand(const EditorInternalCommand* command,
                              EditorCommandSource source,
@@ -1950,7 +1953,8 @@ bool EditorCommand::Execute(const String& parameter,
     }
   }
 
-  GetFrame().GetDocument()->UpdateStyleAndLayout();
+  GetFrame().GetDocument()->UpdateStyleAndLayout(
+      DocumentUpdateReason::kEditing);
   DEFINE_STATIC_LOCAL(SparseHistogram, command_histogram,
                       ("WebCore.Editing.Commands"));
   command_histogram.Sample(static_cast<int>(command_->command_type));
@@ -1974,7 +1978,7 @@ bool EditorCommand::IsSupported() const {
     case EditorCommandSource::kMenuOrKeyBinding:
       return true;
     case EditorCommandSource::kDOM:
-      return command_->is_supported_from_dom(frame_.Get());
+      return command_->is_supported_from_dom(frame_);
   }
   NOTREACHED();
   return false;
@@ -2012,33 +2016,33 @@ const StaticRangeVector* EditorCommand::GetTargetRanges() const {
     return nullptr;
 
   switch (command_->command_type) {
-    case WebEditingCommandType::kDelete:
-    case WebEditingCommandType::kDeleteBackward:
+    case EditingCommandType::kDelete:
+    case EditingCommandType::kDeleteBackward:
       return RangesFromCurrentSelectionOrExtendCaret(
           *frame_, SelectionModifyDirection::kBackward,
           TextGranularity::kCharacter);
-    case WebEditingCommandType::kDeleteForward:
+    case EditingCommandType::kDeleteForward:
       return RangesFromCurrentSelectionOrExtendCaret(
           *frame_, SelectionModifyDirection::kForward,
           TextGranularity::kCharacter);
-    case WebEditingCommandType::kDeleteToBeginningOfLine:
+    case EditingCommandType::kDeleteToBeginningOfLine:
       return RangesFromCurrentSelectionOrExtendCaret(
           *frame_, SelectionModifyDirection::kBackward, TextGranularity::kLine);
-    case WebEditingCommandType::kDeleteToBeginningOfParagraph:
+    case EditingCommandType::kDeleteToBeginningOfParagraph:
       return RangesFromCurrentSelectionOrExtendCaret(
           *frame_, SelectionModifyDirection::kBackward,
           TextGranularity::kParagraph);
-    case WebEditingCommandType::kDeleteToEndOfLine:
+    case EditingCommandType::kDeleteToEndOfLine:
       return RangesFromCurrentSelectionOrExtendCaret(
           *frame_, SelectionModifyDirection::kForward, TextGranularity::kLine);
-    case WebEditingCommandType::kDeleteToEndOfParagraph:
+    case EditingCommandType::kDeleteToEndOfParagraph:
       return RangesFromCurrentSelectionOrExtendCaret(
           *frame_, SelectionModifyDirection::kForward,
           TextGranularity::kParagraph);
-    case WebEditingCommandType::kDeleteWordBackward:
+    case EditingCommandType::kDeleteWordBackward:
       return RangesFromCurrentSelectionOrExtendCaret(
           *frame_, SelectionModifyDirection::kBackward, TextGranularity::kWord);
-    case WebEditingCommandType::kDeleteWordForward:
+    case EditingCommandType::kDeleteWordForward:
       return RangesFromCurrentSelectionOrExtendCaret(
           *frame_, SelectionModifyDirection::kForward, TextGranularity::kWord);
     default:

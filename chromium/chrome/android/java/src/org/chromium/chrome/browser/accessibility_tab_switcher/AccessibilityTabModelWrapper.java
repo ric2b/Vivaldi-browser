@@ -6,19 +6,22 @@ package org.chromium.chrome.browser.accessibility_tab_switcher;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
-import android.support.design.widget.TabLayout;
-import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 
+import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.content.res.AppCompatResources;
+
+import com.google.android.material.tabs.TabLayout;
+
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.accessibility_tab_switcher.AccessibilityTabModelAdapter.AccessibilityTabModelAdapterListener;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
@@ -54,7 +57,7 @@ public class AccessibilityTabModelWrapper extends LinearLayout {
                 }
 
                 @Override
-                public void onNewTabCreated(Tab tab) {
+                public void onNewTabCreated(Tab tab, @TabCreationState int creationState) {
                     getAdapter().notifyDataSetChanged();
                 }
             };
@@ -62,19 +65,6 @@ public class AccessibilityTabModelWrapper extends LinearLayout {
     // TODO(bauerb): Use View#isAttachedToWindow() as soon as we are guaranteed
     // to run against API version 19.
     private boolean mIsAttachedToWindow;
-
-    private class ButtonOnClickListener implements View.OnClickListener {
-        private final boolean mIncognito;
-
-        public ButtonOnClickListener(boolean incognito) {
-            mIncognito = incognito;
-        }
-
-        @Override
-        public void onClick(View v) {
-            setSelectedModel(mIncognito);
-        }
-    }
 
     public AccessibilityTabModelWrapper(Context context) {
         super(context);
@@ -95,8 +85,8 @@ public class AccessibilityTabModelWrapper extends LinearLayout {
      *                 parent.
      */
     public void setup(AccessibilityTabModelAdapterListener listener) {
-        mTabIconDarkColor =
-                AppCompatResources.getColorStateList(getContext(), R.color.standard_mode_tint);
+        mTabIconDarkColor = AppCompatResources.getColorStateList(
+                getContext(), R.color.default_icon_color_tint_list);
         mTabIconSelectedDarkColor =
                 AppCompatResources.getColorStateList(getContext(), R.color.light_active_color);
         mTabIconLightColor =
@@ -171,8 +161,8 @@ public class AccessibilityTabModelWrapper extends LinearLayout {
 
         updateVisibilityForLayoutOrStackButton();
         if (incognitoSelected) {
-            setBackgroundColor(ApiCompatibilityUtils.getColor(
-                    getResources(), R.color.incognito_modern_primary_color));
+            setBackgroundColor(
+                    ApiCompatibilityUtils.getColor(getResources(), R.color.default_bg_color_dark));
             mStackButtonWrapper.setSelectedTabIndicatorColor(
                     mTabIconSelectedLightColor.getDefaultColor());
             ApiCompatibilityUtils.setImageTintList(mStandardButtonIcon, mTabIconLightColor);
@@ -180,7 +170,7 @@ public class AccessibilityTabModelWrapper extends LinearLayout {
                     mIncognitoButtonIcon, mTabIconSelectedLightColor);
         } else {
             setBackgroundColor(
-                    ApiCompatibilityUtils.getColor(getResources(), R.color.modern_primary_color));
+                    ApiCompatibilityUtils.getColor(getResources(), R.color.default_bg_color));
             mStackButtonWrapper.setSelectedTabIndicatorColor(
                     mTabIconSelectedDarkColor.getDefaultColor());
             ApiCompatibilityUtils.setImageTintList(mStandardButtonIcon, mTabIconSelectedDarkColor);

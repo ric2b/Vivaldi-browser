@@ -7,11 +7,13 @@
 #include <memory>
 
 #include "base/values.h"
+#include "build/branding_buildflags.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screens/update_screen.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/login/localized_values_builder.h"
+#include "ui/chromeos/devicetype_utils.h"
 
 namespace chromeos {
 
@@ -82,7 +84,8 @@ void UpdateScreenHandler::SetCancelUpdateShortcutEnabled(bool value) {
 void UpdateScreenHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
   builder->Add("checkingForUpdatesMsg", IDS_CHECKING_FOR_UPDATE_MSG);
-  builder->Add("installingUpdateDesc", IDS_UPDATE_MSG);
+  builder->AddF("installingUpdateDesc", IDS_UPDATE_MSG,
+                ui::GetChromeOSDeviceName());
   builder->Add("updateCompeletedMsg", IDS_UPDATE_COMPLETED);
   builder->Add("updateScreenAccessibleTitle",
                IDS_UPDATE_SCREEN_ACCESSIBLE_TITLE);
@@ -95,7 +98,7 @@ void UpdateScreenHandler::DeclareLocalizedValues(
                IDS_DOWNLOADING_TIME_LEFT_STATUS_MINUTES);
   builder->Add("downloadingTimeLeftSmall", IDS_DOWNLOADING_TIME_LEFT_SMALL);
 
-#if !defined(OFFICIAL_BUILD)
+#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
   builder->Add("cancelUpdateHint", IDS_UPDATE_CANCEL);
   builder->Add("cancelledUpdateMessage", IDS_UPDATE_CANCELLED);
 #else

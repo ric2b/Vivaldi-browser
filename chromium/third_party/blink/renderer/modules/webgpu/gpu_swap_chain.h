@@ -25,13 +25,11 @@ class GPUSwapChain : public ScriptWrappable,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static GPUSwapChain* Create(GPUCanvasContext* context,
-                              const GPUSwapChainDescriptor* descriptor);
   explicit GPUSwapChain(GPUCanvasContext* context,
                         const GPUSwapChainDescriptor* descriptor);
   ~GPUSwapChain() override;
 
-  void Trace(blink::Visitor* visitor) override;
+  void Trace(Visitor* visitor) override;
 
   void Neuter();
   cc::Layer* CcLayer();
@@ -49,7 +47,7 @@ class GPUSwapChain : public ScriptWrappable,
 
   Member<GPUDevice> device_;
   Member<GPUCanvasContext> context_;
-  DawnTextureUsage usage_;
+  WGPUTextureUsage usage_;
 
   Member<GPUTexture> texture_;
 };

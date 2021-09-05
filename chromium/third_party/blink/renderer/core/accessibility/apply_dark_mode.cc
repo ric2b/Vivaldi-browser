@@ -39,17 +39,10 @@ bool HasLightBackground(const LayoutView& root) {
          kBrightnessThreshold;
 }
 
-bool IsDarkModeEnabled(const Settings& frame_settings) {
-  static bool isDarkModeEnabledByFeatureFlag =
-      features::kForceDarkInversionMethodParam.Get() !=
-      ForceDarkInversionMethod::kUseBlinkSettings;
-  return isDarkModeEnabledByFeatureFlag || frame_settings.GetDarkModeEnabled();
-}
-
 DarkModeInversionAlgorithm GetMode(const Settings& frame_settings) {
   switch (features::kForceDarkInversionMethodParam.Get()) {
     case ForceDarkInversionMethod::kUseBlinkSettings:
-      return frame_settings.GetDarkModeInversionAlgorithm();
+      return frame_settings.GetForceDarkModeInversionAlgorithm();
     case ForceDarkInversionMethod::kCielabBased:
       return DarkModeInversionAlgorithm::kInvertLightnessLAB;
     case ForceDarkInversionMethod::kHslBased:
@@ -62,7 +55,7 @@ DarkModeInversionAlgorithm GetMode(const Settings& frame_settings) {
 DarkModeImagePolicy GetImagePolicy(const Settings& frame_settings) {
   switch (features::kForceDarkImageBehaviorParam.Get()) {
     case ForceDarkImageBehavior::kUseBlinkSettings:
-      return frame_settings.GetDarkModeImagePolicy();
+      return frame_settings.GetForceDarkModeImagePolicy();
     case ForceDarkImageBehavior::kInvertNone:
       return DarkModeImagePolicy::kFilterNone;
     case ForceDarkImageBehavior::kInvertSelectively:
@@ -74,8 +67,9 @@ int GetTextBrightnessThreshold(const Settings& frame_settings) {
   const int flag_value = base::GetFieldTrialParamByFeatureAsInt(
       features::kForceWebContentsDarkMode,
       features::kForceDarkTextLightnessThresholdParam.name, -1);
-  return flag_value >= 0 ? flag_value
-                         : frame_settings.GetDarkModeTextBrightnessThreshold();
+  return flag_value >= 0
+             ? flag_value
+             : frame_settings.GetForceDarkModeTextBrightnessThreshold();
 }
 
 int GetBackgroundBrightnessThreshold(const Settings& frame_settings) {
@@ -84,7 +78,7 @@ int GetBackgroundBrightnessThreshold(const Settings& frame_settings) {
       features::kForceDarkBackgroundLightnessThresholdParam.name, -1);
   return flag_value >= 0
              ? flag_value
-             : frame_settings.GetDarkModeBackgroundBrightnessThreshold();
+             : frame_settings.GetForceDarkModeBackgroundBrightnessThreshold();
 }
 
 DarkModeSettings GetEnabledSettings(const Settings& frame_settings) {
@@ -96,24 +90,16 @@ DarkModeSettings GetEnabledSettings(const Settings& frame_settings) {
   settings.background_brightness_threshold =
       GetBackgroundBrightnessThreshold(frame_settings);
 
-  settings.grayscale = frame_settings.GetDarkModeGrayscale();
-  settings.contrast = frame_settings.GetDarkModeContrast();
-  settings.image_grayscale_percent = frame_settings.GetDarkModeImageGrayscale();
+  settings.grayscale = frame_settings.GetForceDarkModeGrayscale();
+  settings.contrast = frame_settings.GetForceDarkModeContrast();
+  settings.image_grayscale_percent =
+      frame_settings.GetForceDarkModeImageGrayscale();
   return settings;
 }
 
-// In theory it should be sufficient for the disabled settings to set mode to
-// kOff (or to just return the default struct) without also setting
-// image_policy. However, this causes images to be inverted unexpectedly in
-// some cases (such as when toggling between the site's light and dark theme
-// on arstechnica.com).
-//
-// TODO(gilmanmh): Investigate unexpected image inversion behavior when
-// image_policy not set to kFilterNone.
 DarkModeSettings GetDisabledSettings() {
   DarkModeSettings settings;
   settings.mode = DarkModeInversionAlgorithm::kOff;
-  settings.image_policy = DarkModeImagePolicy::kFilterNone;
   return settings;
 }
 
@@ -121,9 +107,9 @@ DarkModeSettings GetDisabledSettings() {
 
 DarkModeSettings BuildDarkModeSettings(const Settings& frame_settings,
                                        const LayoutView& root) {
-  if (IsDarkModeEnabled(frame_settings) &&
-      ShouldApplyDarkModeFilterToPage(frame_settings.GetDarkModePagePolicy(),
-                                      root)) {
+  if (frame_settings.GetForceDarkModeEnabled() &&
+      ShouldApplyDarkModeFilterToPage(
+          frame_settings.GetForceDarkModePagePolicy(), root)) {
     return GetEnabledSettings(frame_settings);
   }
   return GetDisabledSettings();

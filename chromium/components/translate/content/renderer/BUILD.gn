@@ -6,8 +6,8 @@ import("//build/config/features.gni")
 
 static_library("renderer") {
   sources = [
-    "translate_helper.cc",
-    "translate_helper.h",
+    "translate_agent.cc",
+    "translate_agent.h",
   ]
 
   deps = [
@@ -23,16 +23,12 @@ static_library("renderer") {
     "//v8",
   ]
 
-  public_deps = [
-    "//third_party/blink/public:blink_headers",
-  ]
+  public_deps = [ "//third_party/blink/public:blink_headers" ]
 }
 
 source_set("unit_tests") {
   testonly = true
-  sources = [
-    "translate_helper_unittest.cc",
-  ]
+  sources = [ "translate_agent_unittest.cc" ]
   deps = [
     ":renderer",
     "//base",

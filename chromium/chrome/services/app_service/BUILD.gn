@@ -10,10 +10,12 @@ source_set("lib") {
 
   deps = [
     "//base",
+    "//components/prefs",
     "//mojo/public/cpp/bindings",
   ]
 
   public_deps = [
+    "//chrome/services/app_service/public/cpp:preferred_apps",
     "//chrome/services/app_service/public/mojom",
   ]
 }
@@ -21,12 +23,12 @@ source_set("lib") {
 source_set("unit_tests") {
   testonly = true
 
-  sources = [
-    "app_service_impl_unittest.cc",
-  ]
+  sources = [ "app_service_impl_unittest.cc" ]
 
   deps = [
     ":lib",
+    "//chrome/services/app_service/public/cpp:intents",
+    "//chrome/services/app_service/public/cpp:preferred_apps",
     "//testing/gtest",
   ]
 }

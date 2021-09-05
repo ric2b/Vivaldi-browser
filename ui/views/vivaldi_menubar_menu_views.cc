@@ -5,6 +5,7 @@
 #include "ui/views/vivaldi_menubar_menu_views.h"
 
 #include "browser/menus/vivaldi_menubar.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -40,7 +41,7 @@ VivaldiMenubarMenuViews::VivaldiMenubarMenuViews(
     MenubarMenuParams& params,
     int id)
     : web_contents_(web_contents) {
-  Browser* browser = GetBrowserFromWebContents(web_contents_);
+  Browser* browser = vivaldi::FindBrowserForEmbedderWebContents(web_contents_);
   if (browser) {
     menubar_.reset(new Menubar(browser,
         params, views::MenuRunner::SHOULD_SHOW_MNEMONICS));

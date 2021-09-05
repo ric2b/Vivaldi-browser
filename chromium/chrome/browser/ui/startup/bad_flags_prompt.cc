@@ -24,7 +24,6 @@
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/infobars/core/infobar_delegate.h"
 #include "components/infobars/core/simple_alert_infobar_delegate.h"
-#include "components/invalidation/impl/invalidation_switches.h"
 #include "components/nacl/common/buildflags.h"
 #include "components/nacl/common/nacl_switches.h"
 #include "components/network_session_configurator/common/network_switches.h"
@@ -39,11 +38,12 @@
 #include "media/media_buildflags.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "services/service_manager/sandbox/switches.h"
+#include "third_party/blink/public/common/features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/android/chrome_feature_list.h"
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #else
 #include "chrome/browser/ui/browser.h"
 #endif  // OS_ANDROID
@@ -78,7 +78,6 @@ static const char* kBadFlags[] = {
     // These flags undermine HTTPS / connection security.
     switches::kDisableWebRtcEncryption,
     switches::kIgnoreCertificateErrors,
-    invalidation::switches::kSyncAllowInsecureXmppConnection,
 
     // These flags change the URLs that handle PII.
     switches::kGaiaUrl,
@@ -134,16 +133,18 @@ static const char* kBadFlags[] = {
     // be possible to read GPU data for other Chromium processes.
     switches::kEnableUnsafeWebGPU,
 
-    // A flag to support local file based BundledExchanges loading, only for
-    // testing purpose.
-    switches::kTrustableBundledExchangesFileUrl,
+    // A flag to support local file based WebBundle loading, only for testing
+    // purpose.
+    switches::kTrustableWebBundleFileUrl,
 };
 #endif  // OS_ANDROID
 
 // Dangerous feature flags in about:flags for which to display a warning that
 // "stability and security will suffer".
 static const base::Feature* kBadFeatureFlagsInAboutFlags[] = {
+    &blink::features::kRawClipboard,
     &features::kAllowSignedHTTPExchangeCertsWithoutExtension,
+    &features::kWebBundlesFromNetwork,
 #if defined(OS_ANDROID)
     &chrome::android::kCommandLineOnNonRooted,
 #endif  // OS_ANDROID

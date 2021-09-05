@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/i18n/rtl.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -19,10 +20,9 @@
 #include "content/public/common/input_event_ack_state.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_sender.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/web/web_text_direction.h"
 #include "ui/surface/transport_dib.h"
 
 namespace blink {
@@ -35,6 +35,7 @@ class Point;
 }
 
 namespace ui {
+class Cursor;
 class LatencyInfo;
 }
 
@@ -43,8 +44,6 @@ class FrameSinkId;
 }
 
 namespace content {
-
-struct CursorInfo;
 class RenderProcessHost;
 class RenderWidgetHostIterator;
 class RenderWidgetHostObserver;
@@ -144,7 +143,8 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   // In this scenario, we receive a menu event only once and we should update
   // the text direction immediately when a user chooses a menu item. So, we
   // should call both functions at once as listed in the following snippet.
-  //   void RenderViewHost::SetTextDirection(WebTextDirection direction) {
+  //   void RenderViewHost::SetTextDirection(
+  //       base::i18n::TextDirection direction) {
   //     UpdateTextDirection(direction);
   //     NotifyTextDirection();
   //   }
@@ -170,7 +170,7 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   // NotifyTextDirection(). (We may receive keydown events even after we
   // canceled updating the text direction because of auto-repeat.)
   // Note: we cannot undo this change for compatibility with Firefox and IE.
-  virtual void UpdateTextDirection(blink::WebTextDirection direction) = 0;
+  virtual void UpdateTextDirection(base::i18n::TextDirection direction) = 0;
   virtual void NotifyTextDirection() = 0;
 
   virtual void Focus() = 0;
@@ -220,15 +220,16 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   // only for test code.
 
   // Add/remove a callback that can handle key presses without requiring focus.
-  typedef base::Callback<bool(const NativeWebKeyboardEvent&)>
-      KeyPressEventCallback;
+  using KeyPressEventCallback =
+      base::RepeatingCallback<bool(const NativeWebKeyboardEvent&)>;
   virtual void AddKeyPressEventCallback(
       const KeyPressEventCallback& callback) = 0;
   virtual void RemoveKeyPressEventCallback(
       const KeyPressEventCallback& callback) = 0;
 
   // Add/remove a callback that can handle all kinds of mouse events.
-  typedef base::Callback<bool(const blink::WebMouseEvent&)> MouseEventCallback;
+  using MouseEventCallback =
+      base::RepeatingCallback<bool(const blink::WebMouseEvent&)>;
   virtual void AddMouseEventCallback(const MouseEventCallback& callback) = 0;
   virtual void RemoveMouseEventCallback(const MouseEventCallback& callback) = 0;
 
@@ -241,10 +242,20 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
     virtual void OnInputEventAck(InputEventAckSource source,
                                  InputEventAckState state,
                                  const blink::WebInputEvent&) {}
-    // Key events are not triggered through InputEvent on Android.
-    // This function is triggered by IME commitText.
+
 #if defined(OS_ANDROID)
+    // Not all key events are triggered through InputEvent on Android.
+    // InputEvents are only triggered when user typed in through number bar on
+    // Android keyboard. This function is triggered when text is committed in
+    // input form.
     virtual void OnImeTextCommittedEvent(const base::string16& text_str) {}
+    // This function is triggered when composing text is updated. Note that
+    // text_str contains all text that is currently under composition rather
+    // than updated text only.
+    virtual void OnImeSetComposingTextEvent(const base::string16& text_str) {}
+    // This function is triggered when composing text is filled into the input
+    // form.
+    virtual void OnImeFinishComposingTextEvent() {}
 #endif
   };
 
@@ -253,11 +264,9 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   virtual void RemoveInputEventObserver(InputEventObserver* observer) = 0;
 
 #if defined(OS_ANDROID)
-  // Add/remove an Ime text committed event observer.
-  virtual void AddImeTextCommittedEventObserver(
-      RenderWidgetHost::InputEventObserver* observer) = 0;
-  virtual void RemoveImeTextCommittedEventObserver(
-      InputEventObserver* observer) = 0;
+  // Add/remove an Ime input event observer.
+  virtual void AddImeInputEventObserver(InputEventObserver* observer) = 0;
+  virtual void RemoveImeInputEventObserver(InputEventObserver* observer) = 0;
 #endif
 
   // Add and remove observers for widget host events. The order in which
@@ -308,7 +317,7 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   virtual void FilterDropData(DropData* drop_data) {}
 
   // Sets cursor to a specified one when it is over this widget.
-  virtual void SetCursor(const CursorInfo& cursor_info) {}
+  virtual void SetCursor(const ui::Cursor& cursor) {}
 };
 
 }  // namespace content

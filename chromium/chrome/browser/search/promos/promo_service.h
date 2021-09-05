@@ -9,14 +9,14 @@
 
 #include "base/observer_list.h"
 #include "base/optional.h"
-#include "base/values.h"
 #include "chrome/browser/search/promos/promo_data.h"
 #include "chrome/browser/search/promos/promo_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_registry_simple.h"
+#include "services/data_decoder/public/cpp/data_decoder.h"
 
 class GURL;
-class PrefService;
+class Profile;
 
 namespace network {
 class SimpleURLLoader;
@@ -49,7 +49,7 @@ class PromoService : public KeyedService {
 
   PromoService(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      PrefService* pref_service);
+      Profile* profile);
   ~PromoService() override;
 
   // KeyedService implementation.
@@ -80,14 +80,17 @@ class PromoService : public KeyedService {
 
  private:
   void OnLoadDone(std::unique_ptr<std::string> response_body);
-  void OnJsonParsed(base::Value value);
-  void OnJsonParseFailed(const std::string& message);
+  void OnJsonParsed(data_decoder::DataDecoder::ValueOrError result);
 
   void NotifyObservers();
 
   // Clears any expired blocklist entries and determines whether |promo_id| has
   // been blocked by the user.
   bool IsBlockedAfterClearingExpired(const std::string& promo_id) const;
+
+  // Updates |promo_data_| with the extensions checkup tool promo
+  // information.
+  void ServeExtensionCheckupPromo();
 
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   std::unique_ptr<network::SimpleURLLoader> simple_loader_;
@@ -97,7 +100,7 @@ class PromoService : public KeyedService {
   base::Optional<PromoData> promo_data_;
   Status promo_status_;
 
-  PrefService* pref_service_;
+  Profile* profile_;
 
   base::WeakPtrFactory<PromoService> weak_ptr_factory_{this};
 };

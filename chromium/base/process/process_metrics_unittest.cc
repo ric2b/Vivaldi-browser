@@ -431,10 +431,8 @@ TEST(SystemMetrics2Test, GetSystemMemoryInfo) {
 #if defined(OS_LINUX) || defined(OS_ANDROID)
   EXPECT_GT(info.buffers, 0);
   EXPECT_GT(info.cached, 0);
-  EXPECT_GT(info.active_anon, 0);
-  EXPECT_GT(info.inactive_anon, 0);
-  EXPECT_GT(info.active_file, 0);
-  EXPECT_GT(info.inactive_file, 0);
+  EXPECT_GT(info.active_anon + info.inactive_anon, 0);
+  EXPECT_GT(info.active_file + info.inactive_file, 0);
 #endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
   // All the values should be less than the total amount of memory.

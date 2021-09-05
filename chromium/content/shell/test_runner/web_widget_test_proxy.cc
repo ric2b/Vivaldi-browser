@@ -5,13 +5,11 @@
 #include "content/shell/test_runner/web_widget_test_proxy.h"
 
 #include "content/renderer/compositor/compositor_dependencies.h"
-#include "content/renderer/compositor/layer_tree_view.h"
 #include "content/renderer/input/widget_input_handler_manager.h"
 #include "content/shell/test_runner/test_interfaces.h"
 #include "content/shell/test_runner/test_runner.h"
 #include "content/shell/test_runner/test_runner_for_specific_view.h"
 #include "content/shell/test_runner/web_test_delegate.h"
-#include "content/shell/test_runner/web_test_interfaces.h"
 #include "content/shell/test_runner/web_view_test_proxy.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame.h"
@@ -23,12 +21,13 @@ namespace test_runner {
 
 WebWidgetTestProxy::~WebWidgetTestProxy() = default;
 
-void WebWidgetTestProxy::BeginMainFrame(base::TimeTicks frame_time) {
-  // This must happen before we run BeginMainFrame() in the base class, which
-  // will change states. TestFinished() wants to grab the current state.
+void WebWidgetTestProxy::WillBeginCompositorFrame() {
+  // WillBeginCompositorFrame occurs before we run BeginMainFrame() in the base
+  // class, which will change states. TestFinished() wants to grab the current
+  // state.
   GetTestRunner()->FinishTestIfReady();
 
-  RenderWidget::BeginMainFrame(frame_time);
+  RenderWidget::WillBeginCompositorFrame();
 }
 
 void WebWidgetTestProxy::RequestDecode(
@@ -90,7 +89,10 @@ void WebWidgetTestProxy::ScheduleAnimationInternal(bool do_raster) {
   }
 }
 
-bool WebWidgetTestProxy::RequestPointerLock(blink::WebLocalFrame*, bool) {
+bool WebWidgetTestProxy::RequestPointerLock(
+    blink::WebLocalFrame*,
+    blink::WebWidgetClient::PointerLockCallback,
+    bool) {
   return GetViewTestRunner()->RequestPointerLock();
 }
 
@@ -103,7 +105,7 @@ bool WebWidgetTestProxy::IsPointerLocked() {
 }
 
 void WebWidgetTestProxy::SetToolTipText(const blink::WebString& text,
-                                        blink::WebTextDirection hint) {
+                                        base::i18n::TextDirection hint) {
   RenderWidget::SetToolTipText(text, hint);
   GetTestRunner()->SetToolTipText(text);
 }
@@ -176,34 +178,31 @@ TestRunner* WebWidgetTestProxy::GetTestRunner() {
   return GetWebViewTestProxy()->test_interfaces()->GetTestRunner();
 }
 
-static void DoComposite(content::RenderWidget* widget, bool do_raster) {
+// static
+void WebWidgetTestProxy::DoComposite(content::RenderWidget* widget,
+                                     bool do_raster) {
   // Ensure that there is damage so that the compositor submits, and the display
   // compositor draws this frame.
   if (do_raster) {
-    content::LayerTreeView* layer_tree_view = widget->layer_tree_view();
-    layer_tree_view->layer_tree_host()->SetNeedsCommitWithForcedRedraw();
+    widget->layer_tree_host()->SetNeedsCommitWithForcedRedraw();
   }
 
-  widget->layer_tree_view()->layer_tree_host()->Composite(
-      base::TimeTicks::Now(), do_raster);
+  widget->layer_tree_host()->Composite(base::TimeTicks::Now(), do_raster);
 }
 
 void WebWidgetTestProxy::SynchronouslyComposite(bool do_raster) {
   DCHECK(!compositor_deps()->GetCompositorImplThreadTaskRunner());
-  DCHECK(!layer_tree_view()
-              ->layer_tree_host()
-              ->GetSettings()
-              .single_thread_proxy_scheduler);
+  DCHECK(!layer_tree_host()->GetSettings().single_thread_proxy_scheduler);
 
-  if (!layer_tree_view()->layer_tree_host()->IsVisible())
+  if (!layer_tree_host()->IsVisible())
     return;
 
   if (in_synchronous_composite_) {
     // Web tests can use a nested message loop to pump frames while inside a
     // frame, but the compositor does not support this. In this case, we only
     // run blink's lifecycle updates.
-    BeginMainFrame(base::TimeTicks::Now());
-    UpdateVisualState();
+    GetWebWidget()->UpdateAllLifecyclePhases(
+        blink::DocumentUpdateReason::kTest);
     return;
   }
 
@@ -224,7 +223,7 @@ void WebWidgetTestProxy::SynchronouslyComposite(bool do_raster) {
   // WebView without a main frame, would have no opportunity to execute this
   // method call.
   if (delegate()) {
-    blink::WebView* view = GetWebViewTestProxy()->webview();
+    blink::WebView* view = GetWebViewTestProxy()->GetWebView();
     if (blink::WebPagePopup* popup = view->GetPagePopup()) {
       auto* popup_render_widget =
           static_cast<RenderWidget*>(popup->GetClientForTesting());

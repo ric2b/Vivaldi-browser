@@ -62,6 +62,7 @@ static void GetNativeThemeExtraParams(
       native_theme_extra_params->button.checked = extra_params->button.checked;
       native_theme_extra_params->button.indeterminate =
           extra_params->button.indeterminate;
+      native_theme_extra_params->button.zoom = extra_params->button.zoom;
       break;
     case WebThemeEngine::kPartRadio:
       native_theme_extra_params->button.checked = extra_params->button.checked;
@@ -81,6 +82,10 @@ static void GetNativeThemeExtraParams(
           extra_params->text_field.is_listbox;
       native_theme_extra_params->text_field.background_color =
           extra_params->text_field.background_color;
+      native_theme_extra_params->text_field.has_border =
+          extra_params->text_field.has_border;
+      native_theme_extra_params->text_field.auto_complete_active =
+          extra_params->text_field.auto_complete_active;
       break;
     case WebThemeEngine::kPartMenuList:
       native_theme_extra_params->menu_list.has_border =
@@ -101,6 +106,7 @@ static void GetNativeThemeExtraParams(
     case WebThemeEngine::kPartSliderTrack:
       native_theme_extra_params->slider.thumb_x = extra_params->slider.thumb_x;
       native_theme_extra_params->slider.thumb_y = extra_params->slider.thumb_y;
+      native_theme_extra_params->slider.zoom = extra_params->slider.zoom;
       FALLTHROUGH;
       // vertical and in_drag properties are used by both slider track and
       // slider thumb.
@@ -214,7 +220,7 @@ blink::WebRect WebThemeEngineDefault::NinePatchAperture(Part part) const {
 
 base::Optional<SkColor> WebThemeEngineDefault::GetSystemColor(
     blink::WebThemeEngine::SystemThemeColor system_theme_color) const {
-  return ui::NativeTheme::GetInstanceForWeb()->GetSystemColorFromMap(
+  return ui::NativeTheme::GetInstanceForWeb()->GetSystemThemeColor(
       NativeSystemThemeColor(system_theme_color));
 }
 
@@ -232,7 +238,7 @@ void WebThemeEngineDefault::cacheScrollBarMetrics(
 }
 #endif
 
-blink::ForcedColors WebThemeEngineDefault::ForcedColors() const {
+blink::ForcedColors WebThemeEngineDefault::GetForcedColors() const {
   return ui::NativeTheme::GetInstanceForWeb()->UsesHighContrastColors()
              ? blink::ForcedColors::kActive
              : blink::ForcedColors::kNone;

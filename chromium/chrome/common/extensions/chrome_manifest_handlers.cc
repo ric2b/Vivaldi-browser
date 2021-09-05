@@ -15,6 +15,7 @@
 #include "chrome/common/extensions/api/system_indicator/system_indicator_handler.h"
 #include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
 #include "chrome/common/extensions/chrome_manifest_url_handlers.h"
+#include "chrome/common/extensions/manifest_handlers/app_display_mode_info.h"
 #include "chrome/common/extensions/manifest_handlers/app_icon_color_info.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/extensions/manifest_handlers/app_theme_color_info.h"
@@ -24,7 +25,6 @@
 #include "chrome/common/extensions/manifest_handlers/natively_connectable_handler.h"
 #include "chrome/common/extensions/manifest_handlers/settings_overrides_handler.h"
 #include "chrome/common/extensions/manifest_handlers/theme_handler.h"
-#include "chrome/common/extensions/manifest_handlers/ui_overrides_handler.h"
 #include "extensions/common/manifest_handlers/app_isolation_info.h"
 #include "extensions/common/manifest_handlers/automation.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
@@ -45,6 +45,7 @@ void RegisterChromeManifestHandlers() {
   DCHECK(!ManifestHandler::IsRegistrationFinalized());
 
   registry->RegisterHandler(std::make_unique<AboutPageHandler>());
+  registry->RegisterHandler(std::make_unique<AppDisplayModeHandler>());
   registry->RegisterHandler(std::make_unique<AppIconColorHandler>());
   registry->RegisterHandler(std::make_unique<AppThemeColorHandler>());
   registry->RegisterHandler(std::make_unique<AppIsolationHandler>());
@@ -65,7 +66,6 @@ void RegisterChromeManifestHandlers() {
   registry->RegisterHandler(std::make_unique<SystemIndicatorHandler>());
   registry->RegisterHandler(std::make_unique<ThemeHandler>());
   registry->RegisterHandler(std::make_unique<TtsEngineManifestHandler>());
-  registry->RegisterHandler(std::make_unique<UIOverridesHandler>());
   registry->RegisterHandler(std::make_unique<UrlHandlersParser>());
   registry->RegisterHandler(std::make_unique<URLOverridesHandler>());
 #if defined(OS_CHROMEOS)

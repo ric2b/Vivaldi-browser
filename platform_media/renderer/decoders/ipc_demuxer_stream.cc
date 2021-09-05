@@ -49,13 +49,13 @@ IPCDemuxerStream::IPCDemuxerStream(
 IPCDemuxerStream::~IPCDemuxerStream() {
 }
 
-void IPCDemuxerStream::Read(const ReadCB& read_cb) {
+void IPCDemuxerStream::Read(ReadCB read_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(read_cb_.is_null()) << "Overlapping reads are not supported";
 
   // Don't accept any additional reads if we've been told to stop.
   if (ipc_media_pipeline_host_ == NULL) {
-    read_cb.Run(kOk, DecoderBuffer::CreateEOSBuffer());
+    std::move(read_cb).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
 
@@ -69,7 +69,7 @@ void IPCDemuxerStream::Read(const ReadCB& read_cb) {
     return;
   }
 
-  read_cb_ = read_cb;
+  read_cb_ = std::move(read_cb);
 
   ipc_media_pipeline_host_->ReadDecodedData(
       DemuxerTypeToPlatformMediaDataType(type_),
@@ -116,7 +116,8 @@ AudioDecoderConfig IPCDemuxerStream::audio_decoder_config() {
   audio_config.Initialize(
       AudioCodec::kCodecPCM, platform_audio_config.format,
       GuessChannelLayout(platform_audio_config.channel_count),
-      platform_audio_config.samples_per_second, EmptyExtraData(), Unencrypted(),
+      platform_audio_config.samples_per_second, EmptyExtraData(),
+      EncryptionScheme::kUnencrypted,
       base::TimeDelta(), 0);
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -153,7 +154,7 @@ VideoDecoderConfig IPCDemuxerStream::video_decoder_config() {
           reinterpret_cast<const uint8_t*>(&platform_video_config.planes),
           reinterpret_cast<const uint8_t*>(&platform_video_config.planes) +
               sizeof(platform_video_config.planes)),
-      Unencrypted());
+      EncryptionScheme::kUnencrypted);
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " VideoCodecProfile : " << GetProfileName(video_config.profile());

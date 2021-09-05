@@ -6,16 +6,18 @@
 #define CHROME_BROWSER_VR_SERVICE_ISOLATED_DEVICE_PROVIDER_H_
 
 #include "base/containers/flat_map.h"
-#include "device/vr/public/mojom/isolated_xr_service.mojom.h"
+#include "device/vr/public/mojom/isolated_xr_service.mojom-forward.h"
 #include "device/vr/vr_device.h"
 #include "device/vr/vr_device_provider.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
-namespace vr {
+namespace content {
+class VrUiHost;
+}
 
-class VRUiHost;
+namespace vr {
 
 class IsolatedVRDeviceProvider
     : public device::VRDeviceProvider,
@@ -41,8 +43,6 @@ class IsolatedVRDeviceProvider
   // IsolatedXRRuntimeProviderClient
   void OnDeviceAdded(
       mojo::PendingRemote<device::mojom::XRRuntime> device,
-      mojo::PendingRemote<device::mojom::IsolatedXRGamepadProviderFactory>
-          gamepad_factory,
       mojo::PendingRemote<device::mojom::XRCompositorHost> compositor_host,
       device::mojom::XRDeviceId device_id) override;
   void OnDeviceRemoved(device::mojom::XRDeviceId id) override;
@@ -64,8 +64,8 @@ class IsolatedVRDeviceProvider
   mojo::Receiver<device::mojom::IsolatedXRRuntimeProviderClient> receiver_{
       this};
 
-  using UiHostMap =
-      base::flat_map<device::mojom::XRDeviceId, std::unique_ptr<VRUiHost>>;
+  using UiHostMap = base::flat_map<device::mojom::XRDeviceId,
+                                   std::unique_ptr<content::VrUiHost>>;
   UiHostMap ui_host_map_;
 };
 

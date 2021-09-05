@@ -22,14 +22,16 @@
 #include "base/strings/string16.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
+#include "base/trace_event/memory_dump_provider.h"
+#include "components/services/storage/indexed_db/scopes/leveldb_scopes_factory.h"
+#include "components/services/storage/public/mojom/native_file_system_context.mojom-forward.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
 #include "content/browser/indexed_db/indexed_db_data_loss_info.h"
 #include "content/browser/indexed_db/indexed_db_database_error.h"
 #include "content/browser/indexed_db/indexed_db_factory.h"
 #include "content/browser/indexed_db/indexed_db_origin_state_handle.h"
 #include "content/browser/indexed_db/indexed_db_task_helper.h"
-#include "content/browser/indexed_db/leveldb/leveldb_env.h"
-#include "content/browser/indexed_db/scopes/leveldb_scopes_factory.h"
+#include "storage/browser/blob/mojom/blob_storage_context.mojom-forward.h"
 #include "third_party/leveldatabase/src/include/leveldb/status.h"
 #include "url/origin.h"
 
@@ -42,16 +44,18 @@ class Origin;
 }
 
 namespace content {
+class TransactionalLevelDBFactory;
 class TransactionalLevelDBDatabase;
 class IndexedDBClassFactory;
 class IndexedDBContextImpl;
 class IndexedDBFactoryImpl;
 class IndexedDBOriginState;
 
-class CONTENT_EXPORT IndexedDBFactoryImpl : public IndexedDBFactory {
+class CONTENT_EXPORT IndexedDBFactoryImpl
+    : public IndexedDBFactory,
+      base::trace_event::MemoryDumpProvider {
  public:
   IndexedDBFactoryImpl(IndexedDBContextImpl* context,
-                       indexed_db::LevelDBFactory* leveldb_factory,
                        IndexedDBClassFactory* indexed_db_class_factory,
                        base::Clock* clock);
   ~IndexedDBFactoryImpl() override;
@@ -143,11 +147,17 @@ class CONTENT_EXPORT IndexedDBFactoryImpl : public IndexedDBFactory {
   // Used by unittests to allow subclassing of IndexedDBBackingStore.
   virtual std::unique_ptr<IndexedDBBackingStore> CreateBackingStore(
       IndexedDBBackingStore::Mode backing_store_mode,
-      indexed_db::LevelDBFactory* leveldb_factory,
+      TransactionalLevelDBFactory* leveldb_factory,
       const url::Origin& origin,
       const base::FilePath& blob_path,
       std::unique_ptr<TransactionalLevelDBDatabase> db,
-      base::SequencedTaskRunner* task_runner);
+      storage::mojom::BlobStorageContext* blob_storage_context,
+      storage::mojom::NativeFileSystemContext* native_file_system_context,
+      IndexedDBBackingStore::BlobFilesCleanedCallback blob_files_cleaned,
+      IndexedDBBackingStore::ReportOutstandingBlobsCallback
+          report_outstanding_blobs,
+      scoped_refptr<base::SequencedTaskRunner> idb_task_runner,
+      scoped_refptr<base::SequencedTaskRunner> io_task_runner);
 
   IndexedDBContextImpl* context() const { return context_; }
 
@@ -205,10 +215,13 @@ class CONTENT_EXPORT IndexedDBFactoryImpl : public IndexedDBFactory {
   bool IsBackingStoreOpen(const url::Origin& origin) const;
   bool IsBackingStorePendingClose(const url::Origin& origin) const;
 
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
+
   SEQUENCE_CHECKER(sequence_checker_);
+  // Raw pointer is safe because IndexedDBContextImpl owns this object.
   IndexedDBContextImpl* context_;
-  indexed_db::LevelDBFactory* const leveldb_factory_;
-  IndexedDBClassFactory* const indexed_db_class_factory_;
+  IndexedDBClassFactory* const class_factory_;
   base::Clock* const clock_;
   base::Time earliest_sweep_;
 

@@ -9,9 +9,15 @@
 #include "base/metrics/sparse_histogram.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
+#include "content/browser/frame_host/should_swap_browsing_instance.h"
+#include "content/browser/site_instance_impl.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_details.h"
+#include "content/public/browser/reload_type.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace content {
 
@@ -36,6 +42,10 @@ base::TimeTicks Now() {
   if (g_mock_time_clock_for_testing)
     return g_mock_time_clock_for_testing->NowTicks();
   return base::TimeTicks::Now();
+}
+
+bool IsHistoryNavigation(NavigationRequest* navigation) {
+  return navigation->GetPageTransition() & ui::PAGE_TRANSITION_FORWARD_BACK;
 }
 
 }  // namespace
@@ -95,56 +105,120 @@ void BackForwardCacheMetrics::MainFrameDidStartNavigationToDocument() {
 }
 
 void BackForwardCacheMetrics::DidCommitNavigation(
-    NavigationRequest* navigation) {
-  bool is_history_navigation =
-      navigation->GetPageTransition() & ui::PAGE_TRANSITION_FORWARD_BACK;
-  if (navigation->IsInMainFrame() && !navigation->IsSameDocument() &&
-      is_history_navigation) {
-    RecordMetricsForHistoryNavigationCommit(navigation);
-    disallowed_reasons_.clear();
-    evicted_reason_ = base::nullopt;
-  }
-
-  if (last_committed_main_frame_navigation_id_ != -1 &&
-      navigation->IsInMainFrame()) {
-    // We've visited an entry associated with this main frame document before,
-    // so record metrics to determine whether it might be a back-forward cache
-    // hit.
-    ukm::builders::HistoryNavigation builder(ukm::ConvertToSourceId(
-        navigation->GetNavigationId(), ukm::SourceIdType::NAVIGATION_ID));
-    builder.SetLastCommittedSourceIdForTheSameDocument(
-        ukm::ConvertToSourceId(last_committed_main_frame_navigation_id_,
-                               ukm::SourceIdType::NAVIGATION_ID));
-    builder.SetNavigatedToTheMostRecentEntryForDocument(
-        navigation->nav_entry_id() == last_committed_navigation_entry_id_);
-    builder.SetMainFrameFeatures(main_frame_features_);
-    builder.SetSameOriginSubframesFeatures(same_origin_frames_features_);
-    builder.SetCrossOriginSubframesFeatures(cross_origin_frames_features_);
-    // DidStart notification might be missing for some same-document
-    // navigations. It's good that we don't care about the time in the cache
-    // in that case.
-    if (started_navigation_timestamp_ &&
-        navigated_away_from_main_document_timestamp_) {
-      builder.SetTimeSinceNavigatedAwayFromDocument(
-          ClampTime(started_navigation_timestamp_.value() -
-                    navigated_away_from_main_document_timestamp_.value())
-              .InMilliseconds());
+    NavigationRequest* navigation,
+    bool back_forward_cache_allowed) {
+  if (navigation->IsInMainFrame() && !navigation->IsSameDocument()) {
+    {
+      bool is_reload = navigation->GetReloadType() != ReloadType::NONE;
+      RecordHistogramForReloadsAndHistoryNavigations(
+          is_reload, back_forward_cache_allowed);
     }
-    builder.Record(ukm::UkmRecorder::Get());
+
+    if (IsHistoryNavigation(navigation)) {
+      UpdateNotRestoredReasonsForNavigation(navigation);
+      RecordMetricsForHistoryNavigationCommit(navigation,
+                                              back_forward_cache_allowed);
+      RecordHistoryNavigationUkm(navigation);
+    }
+
+    not_restored_reasons_.reset();
+    blocklisted_features_ = 0;
+    disabled_reasons_.clear();
+    previous_navigation_is_served_from_bfcache_ =
+        navigation->IsServedFromBackForwardCache();
+    previous_navigation_is_history_ = IsHistoryNavigation(navigation);
+    last_committed_cross_document_main_frame_navigation_id_ =
+        navigation->GetNavigationId();
   }
-  if (navigation->IsInMainFrame())
-    last_committed_main_frame_navigation_id_ = navigation->GetNavigationId();
   last_committed_navigation_entry_id_ = navigation->nav_entry_id();
 
   navigated_away_from_main_document_timestamp_ = base::nullopt;
   started_navigation_timestamp_ = base::nullopt;
+  renderer_killed_timestamp_ = base::nullopt;
 }
 
-void BackForwardCacheMetrics::MainFrameDidNavigateAwayFromDocument() {
+void BackForwardCacheMetrics::RecordHistoryNavigationUkm(
+    NavigationRequest* navigation) {
+  // If |IsHistoryNavigation| is true and
+  // |last_committed_cross_document_main_frame_navigation_id_| is not -1, it's a
+  // history navigation which we're interested in.
+  //
+  // |IsHistoryNavigation| is true when the navigation is history navigation,
+  // but just after cloning, the metrics object is missing. Then, checking this
+  // is not enough. |last_committed_cross_document_main_frame_navigation_id_| is
+  // not -1 when the metrics object is available.
+  if (!IsHistoryNavigation(navigation))
+    return;
+  if (last_committed_cross_document_main_frame_navigation_id_ == -1)
+    return;
+
+  // We've visited an entry associated with this main frame document before,
+  // so record metrics to determine whether it might be a back-forward cache
+  // hit.
+  ukm::SourceId source_id = ukm::ConvertToSourceId(
+      navigation->GetNavigationId(), ukm::SourceIdType::NAVIGATION_ID);
+  ukm::builders::HistoryNavigation builder(source_id);
+  builder.SetLastCommittedCrossDocumentNavigationSourceIdForTheSameDocument(
+      ukm::ConvertToSourceId(
+          last_committed_cross_document_main_frame_navigation_id_,
+          ukm::SourceIdType::NAVIGATION_ID));
+  builder.SetNavigatedToTheMostRecentEntryForDocument(
+      navigation->nav_entry_id() == last_committed_navigation_entry_id_);
+  builder.SetMainFrameFeatures(main_frame_features_);
+  builder.SetSameOriginSubframesFeatures(same_origin_frames_features_);
+  builder.SetCrossOriginSubframesFeatures(cross_origin_frames_features_);
+  // DidStart notification might be missing for some same-document
+  // navigations. It's good that we don't care about the time in the cache
+  // in that case.
+  if (started_navigation_timestamp_ &&
+      navigated_away_from_main_document_timestamp_) {
+    builder.SetTimeSinceNavigatedAwayFromDocument(
+        ClampTime(started_navigation_timestamp_.value() -
+                  navigated_away_from_main_document_timestamp_.value())
+            .InMilliseconds());
+  }
+
+  builder.SetBackForwardCache_IsServedFromBackForwardCache(
+      navigation->IsServedFromBackForwardCache());
+  builder.SetBackForwardCache_NotRestoredReasons(
+      not_restored_reasons_.to_ullong());
+
+  builder.Record(ukm::UkmRecorder::Get());
+}
+
+void BackForwardCacheMetrics::MainFrameDidNavigateAwayFromDocument(
+    RenderFrameHostImpl* new_main_frame,
+    LoadCommittedDetails* details,
+    NavigationRequest* navigation) {
   // MainFrameDidNavigateAwayFromDocument is called when we commit a navigation
   // to another main frame document and the current document loses its "last
   // committed" status.
   navigated_away_from_main_document_timestamp_ = Now();
+
+  GlobalFrameRoutingId new_main_frame_id{new_main_frame->GetProcess()->GetID(),
+                                         new_main_frame->GetRoutingID()};
+
+  // If the navigation used the same RenderFrameHost, we would not be able to
+  // use back-forward cache.
+  if (navigation->GetPreviousRenderFrameHostId() == new_main_frame_id) {
+    // Converting URLs to origins is generally discouraged [1], but here we are
+    // doing this only for metrics and are not making any decisions based on
+    // that.
+    //
+    // [1]
+    // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/security/origin-vs-url.md#avoid-converting-urls-to-origins
+    GURL previous_site = SiteInstanceImpl::GetSiteForOrigin(
+        url::Origin::Create(details->previous_url));
+    GURL new_site = SiteInstanceImpl::GetSiteForOrigin(
+        url::Origin::Create(navigation->GetURL()));
+    if (previous_site == new_site) {
+      not_restored_reasons_.set(static_cast<size_t>(
+          NotRestoredReason::kRenderFrameHostReused_SameSite));
+    } else {
+      not_restored_reasons_.set(static_cast<size_t>(
+          NotRestoredReason::kRenderFrameHostReused_CrossSite));
+    }
+  }
 }
 
 void BackForwardCacheMetrics::RecordFeatureUsage(
@@ -178,39 +252,125 @@ void BackForwardCacheMetrics::CollectFeatureUsageFromSubtree(
   }
 }
 
-void BackForwardCacheMetrics::MarkDisableForRenderFrameHost(
-    const base::StringPiece& reason) {
-  disallowed_reasons_.push_back(reason.as_string());
+void BackForwardCacheMetrics::MarkNotRestoredWithReason(
+    const BackForwardCacheCanStoreDocumentResult& can_store) {
+  not_restored_reasons_ |= can_store.not_stored_reasons();
+  blocklisted_features_ |= can_store.blocklisted_features();
+  if (!browsing_instance_not_swapped_reason_) {
+    browsing_instance_not_swapped_reason_ =
+        can_store.browsing_instance_not_swapped_reason();
+  }
+  for (const std::string& reason : can_store.disabled_reasons())
+    disabled_reasons_.insert(reason);
+
+  if (can_store.not_stored_reasons().test(
+          static_cast<size_t>(BackForwardCacheMetrics::NotRestoredReason::
+                                  kRendererProcessKilled))) {
+    renderer_killed_timestamp_ = Now();
+  }
 }
 
-void BackForwardCacheMetrics::MarkEvictedFromBackForwardCacheWithReason(
-    BackForwardCacheMetrics::EvictedReason reason) {
-  evicted_reason_ = reason;
+void BackForwardCacheMetrics::UpdateNotRestoredReasonsForNavigation(
+    NavigationRequest* navigation) {
+  // |last_committed_cross_document_main_frame_navigation_id_| is -1 when
+  // navigation history has never been initialized. This can happen only when
+  // the session history has been restored.
+  if (last_committed_cross_document_main_frame_navigation_id_ == -1) {
+    not_restored_reasons_.set(
+        static_cast<size_t>(NotRestoredReason::kSessionRestored));
+  }
+
+  // This should not happen, but record this as an 'unknown' reason just in
+  // case.
+  if (not_restored_reasons_.none() &&
+      !navigation->IsServedFromBackForwardCache()) {
+    not_restored_reasons_.set(static_cast<size_t>(NotRestoredReason::kUnknown));
+    // TODO(altimin): Add a (D)CHECK here, but this code is reached in
+    // unittests.
+    return;
+  }
 }
 
 void BackForwardCacheMetrics::RecordMetricsForHistoryNavigationCommit(
-    NavigationRequest* navigation) {
+    NavigationRequest* navigation,
+    bool back_forward_cache_allowed) const {
+  DCHECK(!navigation->IsServedFromBackForwardCache() ||
+         not_restored_reasons_.none())
+      << "If the navigation is served from bfcache, no not restored reasons "
+         "should be recorded";
   HistoryNavigationOutcome outcome = HistoryNavigationOutcome::kNotRestored;
   if (navigation->IsServedFromBackForwardCache()) {
     outcome = HistoryNavigationOutcome::kRestored;
 
+    if (back_forward_cache_allowed) {
+      UMA_HISTOGRAM_ENUMERATION(
+          "BackForwardCache.EvictedAfterDocumentRestoredReason",
+          BackForwardCacheMetrics::EvictedAfterDocumentRestoredReason::
+              kRestored);
+    }
     UMA_HISTOGRAM_ENUMERATION(
-        "BackForwardCache.EvictedAfterDocumentRestoredReason",
+        "BackForwardCache.AllSites.EvictedAfterDocumentRestoredReason",
         BackForwardCacheMetrics::EvictedAfterDocumentRestoredReason::kRestored);
   }
 
-  // TODO(hajimehoshi): Do not record the outcome when the experient condition
-  // does not match.
-  UMA_HISTOGRAM_ENUMERATION("BackForwardCache.HistoryNavigationOutcome",
-                            outcome);
+  if (back_forward_cache_allowed) {
+    UMA_HISTOGRAM_ENUMERATION("BackForwardCache.HistoryNavigationOutcome",
+                              outcome);
 
-  if (evicted_reason_.has_value()) {
-    UMA_HISTOGRAM_ENUMERATION(
-        "BackForwardCache.HistoryNavigationOutcome.EvictedReason",
-        evicted_reason_.value());
+    // Record total number of history navigations for all websites allowed by
+    // back-forward cache.
+    UMA_HISTOGRAM_ENUMERATION("BackForwardCache.ReloadsAndHistoryNavigations",
+                              ReloadsAndHistoryNavigations::kHistoryNavigation);
   }
 
-  for (const std::string& reason : disallowed_reasons_) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "BackForwardCache.AllSites.HistoryNavigationOutcome", outcome);
+
+  for (int i = 0; i <= static_cast<int>(NotRestoredReason::kMaxValue); i++) {
+    if (!not_restored_reasons_.test(static_cast<size_t>(i)))
+      continue;
+    DCHECK(!navigation->IsServedFromBackForwardCache());
+    NotRestoredReason reason = static_cast<NotRestoredReason>(i);
+    if (back_forward_cache_allowed) {
+      UMA_HISTOGRAM_ENUMERATION(
+          "BackForwardCache.HistoryNavigationOutcome.NotRestoredReason",
+          reason);
+    }
+    UMA_HISTOGRAM_ENUMERATION(
+        "BackForwardCache.AllSites.HistoryNavigationOutcome.NotRestoredReason",
+        reason);
+    if (reason ==
+        BackForwardCacheMetrics::NotRestoredReason::kRendererProcessKilled) {
+      DCHECK(renderer_killed_timestamp_);
+      DCHECK(navigated_away_from_main_document_timestamp_);
+      base::TimeDelta time =
+          renderer_killed_timestamp_.value() -
+          navigated_away_from_main_document_timestamp_.value();
+      UMA_HISTOGRAM_LONG_TIMES(
+          "BackForwardCache.Eviction.TimeUntilProcessKilled", time);
+    }
+  }
+
+  for (int i = 0;
+       i <= static_cast<int>(
+                blink::scheduler::WebSchedulerTrackedFeature::kMaxValue);
+       i++) {
+    blink::scheduler::WebSchedulerTrackedFeature feature =
+        static_cast<blink::scheduler::WebSchedulerTrackedFeature>(i);
+    if (blocklisted_features_ & blink::scheduler::FeatureToBit(feature)) {
+      if (back_forward_cache_allowed) {
+        UMA_HISTOGRAM_ENUMERATION(
+            "BackForwardCache.HistoryNavigationOutcome.BlocklistedFeature",
+            feature);
+      }
+      UMA_HISTOGRAM_ENUMERATION(
+          "BackForwardCache.AllSites.HistoryNavigationOutcome."
+          "BlocklistedFeature",
+          feature);
+    }
+  }
+
+  for (const std::string& reason : disabled_reasons_) {
     // Use SparseHistogram instead of other simple macros for metrics. It is
     // because the reasons are represented as strings, and it was impossible to
     // define an enum values.
@@ -223,12 +383,64 @@ void BackForwardCacheMetrics::RecordMetricsForHistoryNavigationCommit(
     histogram->Add(base::HistogramBase::Sample(
         static_cast<int32_t>(base::HashMetricName(reason))));
   }
+
+  if (ShouldRecordBrowsingInstanceNotSwappedReason() &&
+      browsing_instance_not_swapped_reason_) {
+    if (back_forward_cache_allowed) {
+      UMA_HISTOGRAM_ENUMERATION(
+          "BackForwardCache.HistoryNavigationOutcome."
+          "BrowsingInstanceNotSwappedReason",
+          browsing_instance_not_swapped_reason_.value());
+    }
+    UMA_HISTOGRAM_ENUMERATION(
+        "BackForwardCache.AllSites.HistoryNavigationOutcome."
+        "BrowsingInstanceNotSwappedReason",
+        browsing_instance_not_swapped_reason_.value());
+  }
 }
 
 void BackForwardCacheMetrics::RecordEvictedAfterDocumentRestored(
     EvictedAfterDocumentRestoredReason reason) {
   UMA_HISTOGRAM_ENUMERATION(
       "BackForwardCache.EvictedAfterDocumentRestoredReason", reason);
+  UMA_HISTOGRAM_ENUMERATION(
+      "BackForwardCache.AllSites.EvictedAfterDocumentRestoredReason", reason);
+}
+
+bool BackForwardCacheMetrics::ShouldRecordBrowsingInstanceNotSwappedReason()
+    const {
+  for (NotRestoredReason reason :
+       {NotRestoredReason::kRelatedActiveContentsExist,
+        NotRestoredReason::kRenderFrameHostReused_SameSite,
+        NotRestoredReason::kRenderFrameHostReused_CrossSite}) {
+    if (not_restored_reasons_.test(static_cast<size_t>(reason)))
+      return true;
+  }
+  return false;
+}
+
+void BackForwardCacheMetrics::RecordHistogramForReloadsAndHistoryNavigations(
+    bool is_reload,
+    bool back_forward_cache_allowed) const {
+  if (!is_reload)
+    return;
+  if (!previous_navigation_is_history_)
+    return;
+  if (!back_forward_cache_allowed)
+    return;
+
+  // Record the total number of reloads after a history navigation.
+  UMA_HISTOGRAM_ENUMERATION(
+      "BackForwardCache.ReloadsAndHistoryNavigations",
+      ReloadsAndHistoryNavigations::kReloadAfterHistoryNavigation);
+
+  // Record separate buckets for cases served and not served from
+  // back-forward cache.
+  UMA_HISTOGRAM_ENUMERATION(
+      "BackForwardCache.ReloadsAfterHistoryNavigation",
+      previous_navigation_is_served_from_bfcache_
+          ? ReloadsAfterHistoryNavigation::kServedFromBackForwardCache
+          : ReloadsAfterHistoryNavigation::kNotServedFromBackForwardCache);
 }
 
 }  // namespace content

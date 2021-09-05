@@ -16,13 +16,15 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
-class MessageLoop;
+namespace test {
+class TaskEnvironment;
 }
+}  // namespace base
 
 namespace content {
 class SynchronousCompositor;
 class TestSynchronousCompositor;
-}
+}  // namespace content
 
 namespace ui {
 class TouchHandleDrawable;
@@ -73,7 +75,6 @@ class RenderingTest : public testing::Test,
       bool view_tree_force_dark_state) override {}
 
  protected:
-
   RenderingTest();
   ~RenderingTest() override;
 
@@ -97,7 +98,7 @@ class RenderingTest : public testing::Test,
   std::unique_ptr<content::TestSynchronousCompositor> compositor_;
 
  private:
-  const std::unique_ptr<base::MessageLoop> message_loop_;
+  std::unique_ptr<base::test::TaskEnvironment> task_environment_;
   base::RunLoop run_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderingTest);

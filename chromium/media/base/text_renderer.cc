@@ -34,7 +34,7 @@ TextRenderer::~TextRenderer() {
     std::move(pause_cb_).Run();
 }
 
-void TextRenderer::Initialize(const base::Closure& ended_cb) {
+void TextRenderer::Initialize(const base::RepeatingClosure& ended_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(ended_cb);
   DCHECK_EQ(kUninitialized, state_)  << "state_ " << state_;
@@ -65,22 +65,22 @@ void TextRenderer::StartPlaying() {
   state_ = kPlaying;
 }
 
-void TextRenderer::Pause(const base::Closure& callback) {
+void TextRenderer::Pause(base::OnceClosure callback) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(state_ == kPlaying || state_ == kEnded) << "state_ " << state_;
   DCHECK_GE(pending_read_count_, 0);
 
   if (pending_read_count_ == 0) {
     state_ = kPaused;
-    task_runner_->PostTask(FROM_HERE, callback);
+    task_runner_->PostTask(FROM_HERE, std::move(callback));
     return;
   }
 
-  pause_cb_ = callback;
+  pause_cb_ = std::move(callback);
   state_ = kPausePending;
 }
 
-void TextRenderer::Flush(const base::Closure& callback) {
+void TextRenderer::Flush(base::OnceClosure callback) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(pending_read_count_, 0);
   DCHECK(state_ == kPaused) << "state_ " << state_;
@@ -91,7 +91,7 @@ void TextRenderer::Flush(const base::Closure& callback) {
     itr->second->text_ranges_.Reset();
   }
   DCHECK_EQ(pending_eos_set_.size(), text_track_state_map_.size());
-  task_runner_->PostTask(FROM_HERE, callback);
+  task_runner_->PostTask(FROM_HERE, std::move(callback));
 }
 
 void TextRenderer::AddTextStream(DemuxerStream* text_stream,
@@ -103,12 +103,11 @@ void TextRenderer::AddTextStream(DemuxerStream* text_stream,
   DCHECK(pending_eos_set_.find(text_stream) ==
          pending_eos_set_.end());
 
-  AddTextTrackDoneCB done_cb =
-      BindToCurrentLoop(base::Bind(&TextRenderer::OnAddTextTrackDone,
-                                   weak_factory_.GetWeakPtr(),
-                                   text_stream));
+  AddTextTrackDoneCB done_cb = BindToCurrentLoop(
+      base::BindOnce(&TextRenderer::OnAddTextTrackDone,
+                     weak_factory_.GetWeakPtr(), text_stream));
 
-  add_text_track_cb_.Run(config, done_cb);
+  add_text_track_cb_.Run(config, std::move(done_cb));
 }
 
 void TextRenderer::RemoveTextStream(DemuxerStream* text_stream) {
@@ -173,7 +172,7 @@ void TextRenderer::BufferReady(DemuxerStream* stream,
   }
 
   if (input->end_of_stream()) {
-    CueReady(stream, NULL);
+    CueReady(stream, nullptr);
     return;
   }
 
@@ -311,8 +310,8 @@ void TextRenderer::Read(
   state->read_state = TextTrackState::kReadPending;
   ++pending_read_count_;
 
-  text_stream->Read(base::Bind(
-      &TextRenderer::BufferReady, weak_factory_.GetWeakPtr(), text_stream));
+  text_stream->Read(base::BindOnce(&TextRenderer::BufferReady,
+                                   weak_factory_.GetWeakPtr(), text_stream));
 }
 
 TextRenderer::TextTrackState::TextTrackState(std::unique_ptr<TextTrack> tt)

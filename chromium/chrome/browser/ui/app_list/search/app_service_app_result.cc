@@ -16,8 +16,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/app_service/app_service_app_item.h"
+#include "chrome/browser/ui/app_list/app_service/app_service_context_menu.h"
 #include "chrome/browser/ui/app_list/internal_app/internal_app_metadata.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/services/app_service/public/cpp/app_update.h"
 #include "chrome/services/app_service/public/mojom/types.mojom.h"
 #include "components/favicon/core/large_icon_service.h"
@@ -50,7 +52,7 @@ AppServiceAppResult::AppServiceAppResult(Profile* profile,
 
     constexpr bool allow_placeholder_icon = true;
     CallLoadIcon(false, allow_placeholder_icon);
-    if (display_type() == ash::SearchResultDisplayType::kRecommendation) {
+    if (is_recommendation) {
       CallLoadIcon(true, allow_placeholder_icon);
     }
   }
@@ -82,9 +84,9 @@ AppServiceAppResult::~AppServiceAppResult() = default;
 
 void AppServiceAppResult::Open(int event_flags) {
   Launch(event_flags,
-         (display_type() == ash::SearchResultDisplayType::kRecommendation)
-             ? apps::mojom::LaunchSource::kFromAppListRecommendation
-             : apps::mojom::LaunchSource::kFromAppListQuery);
+         (is_recommendation()
+              ? apps::mojom::LaunchSource::kFromAppListRecommendation
+              : apps::mojom::LaunchSource::kFromAppListQuery));
 }
 
 void AppServiceAppResult::GetContextMenuModel(GetMenuModelCallback callback) {
@@ -95,8 +97,13 @@ void AppServiceAppResult::GetContextMenuModel(GetMenuModelCallback callback) {
     return;
   }
 
-  context_menu_ = AppServiceAppItem::MakeAppContextMenu(
-      app_type_, this, profile(), app_id(), controller(), is_platform_app_);
+  if (base::FeatureList::IsEnabled(features::kAppServiceContextMenu)) {
+    context_menu_ = std::make_unique<AppServiceContextMenu>(
+        this, profile(), app_id(), controller());
+  } else {
+    context_menu_ = AppServiceAppItem::MakeAppContextMenu(
+        app_type_, this, profile(), app_id(), controller(), is_platform_app_);
+  }
   context_menu_->GetMenuModel(std::move(callback));
 }
 
@@ -160,9 +167,10 @@ void AppServiceAppResult::Launch(int event_flags,
   bool is_active_app = false;
   proxy->AppRegistryCache().ForOneApp(
       app_id(), [&is_active_app](const apps::AppUpdate& update) {
-        if ((update.AppType() == apps::mojom::AppType::kExtension ||
-             update.AppType() == apps::mojom::AppType::kWeb) &&
-            update.IsPlatformApp() == apps::mojom::OptionalBool::kFalse) {
+        if (update.AppType() == apps::mojom::AppType::kCrostini ||
+            ((update.AppType() == apps::mojom::AppType::kExtension ||
+              update.AppType() == apps::mojom::AppType::kWeb) &&
+             update.IsPlatformApp() == apps::mojom::OptionalBool::kFalse)) {
           is_active_app = true;
         }
       });
@@ -221,8 +229,7 @@ void AppServiceAppResult::HandleSuggestionChip(Profile* profile) {
   // Set these values to make sure that the chip will show up
   // in the proper position.
   SetDisplayIndex(ash::SearchResultDisplayIndex::kFirstIndex);
-  SetDisplayLocation(
-      ash::SearchResultDisplayLocation::kSuggestionChipContainer);
+  SetDisplayType(ash::SearchResultDisplayType::kChip);
 
   if (id() == ash::kReleaseNotesAppId) {
     SetNotifyVisibilityChange(true);

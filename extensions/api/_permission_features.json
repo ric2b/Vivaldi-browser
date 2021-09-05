@@ -63,6 +63,14 @@
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
+  "contentBlocking": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
   "contextMenu": {
     "vivaldi": true,
     "channel": "stable",
@@ -127,6 +135,14 @@
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   },
+  "menuContent": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
   "menubar": {
     "vivaldi": true,
     "channel": "stable",
@@ -149,6 +165,15 @@
     "extension_types": [ "platform_app" ],
     "whitelist": [
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+    ]
+  },
+  "pipPrivate": {
+    "vivaldi": true,
+    "channel": "stable",
+    "extension_types": [ "platform_app", "extension" ],
+    "whitelist": [
+      "A414F2F4543AC9C68DDF663D0A459E6053E3373C", // Vivaldi
+      "14AB172D91E1DDC1F3963FBAAD72E6179E13264A"  // pip extension
     ]
   },
   "prefs": {

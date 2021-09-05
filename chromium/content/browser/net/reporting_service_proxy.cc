@@ -55,15 +55,16 @@ class ReportingServiceProxyImpl : public blink::mojom::ReportingServiceProxy {
 
   void QueueDeprecationReport(const GURL& url,
                               const std::string& id,
-                              base::Optional<base::Time> anticipatedRemoval,
+                              base::Optional<base::Time> anticipated_removal,
                               const std::string& message,
                               const base::Optional<std::string>& source_file,
                               int line_number,
                               int column_number) override {
     auto body = std::make_unique<base::DictionaryValue>();
     body->SetString("id", id);
-    if (anticipatedRemoval)
-      body->SetDouble("anticipatedRemoval", anticipatedRemoval->ToDoubleT());
+    if (anticipated_removal)
+      body->SetDouble("anticipatedRemoval",
+                      anticipated_removal->ToJsTimeIgnoringNull());
     body->SetString("message", message);
     if (source_file)
       body->SetString("sourceFile", *source_file);
@@ -128,6 +129,29 @@ class ReportingServiceProxyImpl : public blink::mojom::ReportingServiceProxy {
     if (column_number)
       body->SetInteger("columnNumber", column_number);
     QueueReport(url, "default", "feature-policy-violation", std::move(body));
+  }
+
+  void QueueDocumentPolicyViolationReport(
+      const GURL& url,
+      const std::string& group,
+      const std::string& policy_id,
+      const std::string& disposition,
+      const base::Optional<std::string>& message,
+      const base::Optional<std::string>& source_file,
+      int line_number,
+      int column_number) override {
+    auto body = std::make_unique<base::DictionaryValue>();
+    body->SetString("policyId", policy_id);
+    body->SetString("disposition", disposition);
+    if (message)
+      body->SetString("message", *message);
+    if (source_file)
+      body->SetString("sourceFile", *source_file);
+    if (line_number)
+      body->SetInteger("lineNumber", line_number);
+    if (column_number)
+      body->SetInteger("columnNumber", column_number);
+    QueueReport(url, group, "document-policy-violation", std::move(body));
   }
 
  private:

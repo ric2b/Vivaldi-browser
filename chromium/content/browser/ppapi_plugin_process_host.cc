@@ -33,7 +33,6 @@
 #include "content/public/common/pepper_plugin_info.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
-#include "content/public/common/service_names.mojom.h"
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/shared_impl/ppapi_permissions.h"
 #include "services/network/public/cpp/network_connection_tracker.h"
@@ -138,9 +137,9 @@ class PpapiPluginSandboxedProcessLauncherDelegate
   service_manager::SandboxType GetSandboxType() override {
 #if defined(OS_WIN)
     if (is_broker_)
-      return service_manager::SANDBOX_TYPE_NO_SANDBOX;
+      return service_manager::SandboxType::kNoSandbox;
 #endif  // OS_WIN
-    return service_manager::SANDBOX_TYPE_PPAPI;
+    return service_manager::SandboxType::kPpapi;
   }
 
 #if defined(OS_MACOSX)
@@ -325,7 +324,7 @@ PpapiPluginProcessHost::PpapiPluginProcessHost(
   permissions_ = ppapi::PpapiPermissions::GetForCommandLine(base_permissions);
 
   process_ = std::make_unique<BrowserChildProcessHostImpl>(
-      PROCESS_TYPE_PPAPI_PLUGIN, this, mojom::kPluginServiceName);
+      PROCESS_TYPE_PPAPI_PLUGIN, this, ChildProcessHost::IpcMode::kNormal);
 
   host_impl_ = std::make_unique<BrowserPpapiHostImpl>(
       this, permissions_, info.name, info.path, profile_data_directory,
@@ -344,7 +343,7 @@ PpapiPluginProcessHost::PpapiPluginProcessHost(
 
 PpapiPluginProcessHost::PpapiPluginProcessHost() : is_broker_(true) {
   process_ = std::make_unique<BrowserChildProcessHostImpl>(
-      PROCESS_TYPE_PPAPI_BROKER, this, mojom::kPluginServiceName);
+      PROCESS_TYPE_PPAPI_BROKER, this, ChildProcessHost::IpcMode::kNormal);
 
   ppapi::PpapiPermissions permissions;  // No permissions.
   // The plugin name, path and profile data directory shouldn't be needed for
@@ -373,7 +372,10 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
   int flags = plugin_launcher.empty() ? ChildProcessHost::CHILD_ALLOW_SELF :
                                         ChildProcessHost::CHILD_NORMAL;
 #elif defined(OS_MACOSX)
-  int flags = ChildProcessHost::CHILD_PLUGIN;
+  // Flash needs to JIT, but other plugins do not.
+  int flags = permissions_.HasPermission(ppapi::PERMISSION_FLASH)
+                  ? ChildProcessHost::CHILD_PLUGIN
+                  : ChildProcessHost::CHILD_NORMAL;
 #else
   int flags = ChildProcessHost::CHILD_NORMAL;
 #endif

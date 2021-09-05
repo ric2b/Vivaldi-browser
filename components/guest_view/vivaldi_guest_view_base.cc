@@ -12,4 +12,8 @@ void GuestViewBase::WebContentsDidDetach() {
     SignalWhenReady(std::move(attach_completion_callback_));
 }
 
+content::WebContentsDelegate* GuestViewBase::GetDevToolsConnector() {
+  return this;
+}
+
 }  // namespace guest_view

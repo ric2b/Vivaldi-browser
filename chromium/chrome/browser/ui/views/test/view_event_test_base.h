@@ -91,7 +91,7 @@ class ViewEventTestBase : public views::WidgetDelegate, public testing::Test {
   // appropriately.
   virtual gfx::Size GetPreferredSizeForContents() const;
 
-  // Overridden from views::WidgetDelegate:
+  // views::WidgetDelegate:
   bool CanResize() const override;
   views::View* GetContentsView() override;
   const views::Widget* GetWidget() const override;
@@ -146,7 +146,7 @@ class ViewEventTestBase : public views::WidgetDelegate, public testing::Test {
 
   std::unique_ptr<ViewEventTestPlatformPart> platform_part_;
 
-  ChromeTestViewsDelegate views_delegate_;
+  ChromeTestViewsDelegate<> views_delegate_;
 
   base::RunLoop run_loop_;
 

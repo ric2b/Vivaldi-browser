@@ -128,8 +128,32 @@
       },
       "search": {
         "enabled": {
+          "description": "[DEPRECATED 2019/12] Replaced by display enum",
           "type": "boolean",
           "default": true,
+          "syncable": false
+        },
+        "display": {
+          "description": "Search field visibility",
+          "type": "enum",
+          "enum_values": {
+            "field": 0,
+            "button": 1,
+            "disabled": 2
+          },
+          "default": "field",
+          "syncable": true
+        },
+        "field_width": {
+          "description": "Search field width",
+          "type": "integer",
+          "default": 210,
+          "syncable": false
+        },
+        "in_new_tab": {
+          "description": "To always open Search field searches in a new tab",
+          "type": "boolean",
+          "default": false,
           "syncable": true
         },
         "keep_selected": {
@@ -149,6 +173,26 @@
           "syncable": true
         },
         "show_favicon": {
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        }
+      },
+      "inline_search": {
+        "enabled": {
+          "description": "Allow search in Address field",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "suggest_enabled": {
+          "description": "Allow search suggestions in Address field",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "suggest_on_nickname": {
+          "description": "Only allow search suggestions in Address field on search engine nickname match",
           "type": "boolean",
           "default": false,
           "syncable": true
@@ -234,12 +278,6 @@
           "syncable": true
         }
       },
-      "can_initialize": {
-        "description": "Test if initializing can be made possible if false",
-        "type": "boolean",
-        "default": false,
-        "syncable": false
-      },
       "confirm_opening": {
         "description": "Ask before opening a number of bookmarks >= to  kBookmarksConfirmOpeningThreshold",
         "type": "boolean",
@@ -254,7 +292,8 @@
       "deleted_partners": {
         "type": "list",
         "default": [],
-        "syncable": false
+        "syncable": true,
+        "sync_method": "merge"
       },
       "language": {
         "description": "Set on first run. Upgrades will use this language when needed",
@@ -296,12 +335,24 @@
         "syncable": false
       },
       "panel": {
+        "editor_height": {
+          "description": "Vertical editor height",
+          "type": "integer",
+          "default": 230,
+          "syncable": true
+        },
         "sorting": {
           "type": "dictionary",
           "default": {"sortOrder": 1, "sortField": "manually"},
           "syncable": true
         }
       }
+    },
+    "show_extensions_banner": {
+      "description": "Show the Vivaldi banner on the extensions page or not.",
+      "type": "boolean",
+      "default": true,
+      "syncable": true
     },
     "biscuit": {
       "load_bookmarks": {
@@ -322,7 +373,7 @@
           "language": 0,
           "system": 1
         },
-        "default": "language",
+        "default": "system",
         "syncable": false
       },
       "display_mode": {
@@ -338,6 +389,16 @@
         "default": "month",
         "syncable": false
       },
+      "panel_display_mode": {
+        "type": "enum",
+        "enum_values": {
+          "day": 0,
+          "week": 1,
+          "agenda": 5
+        },
+        "default": "agenda",
+        "syncable": false
+      },
       "show_day_sidebar": {
         "type": "boolean",
         "default": false,
@@ -346,6 +407,49 @@
       "default_calendar_id": {
         "type": "string",
         "default": "",
+        "syncable": true
+      },
+      "notification_type": {
+        "type": "enum",
+        "enum_values": {
+          "system": 0,
+          "dialog": 1,
+          "melt": 2,
+          "burn": 3
+        },
+        "default": "dialog",
+        "syncable": false
+      },
+      "display": {
+        "density": {
+          "type": "enum",
+          "enum_values": {
+            "minimal": 0,
+            "compact": 1,
+            "full": 2
+          },
+          "default": "full",
+          "syncable": true
+        }
+      },
+      "mail_account": {
+        "type": "string",
+        "default": "",
+        "syncable": true
+      },
+      "day_starts": {
+        "type": "integer",
+        "default": 8,
+        "syncable": true
+      },
+      "day_ends": {
+        "type": "integer",
+        "default": 17,
+        "syncable": true
+      },
+      "collapse_hours": {
+        "type": "boolean",
+        "default": true,
         "syncable": true
       }
     },
@@ -448,7 +552,7 @@
     },
     "hue": {
       "bridge_ip": {
-        "description": "Hue Bridge IP",
+        "description": "Hue Bridge IP address",
         "type": "string",
         "default": "",
         "syncable": false
@@ -561,6 +665,16 @@
         "default": "fifteen_minutes",
         "syncable": true
       },
+      "composer_colors": {
+        "description": "Changes the default colors of fonts and background for viewing in the composer",
+        "type": "enum",
+        "enum_values": {
+          "black_on_white": 0,
+          "inherit_themes": 1
+        },
+        "default": "black_on_white",
+        "syncable": true
+      },
       "compose_headers_hidden": {
         "description": "What header fields are hidden in mail message header when composing",
         "type": "list",
@@ -671,11 +785,30 @@
         "default": true,
         "syncable": true
       },
+      "show_unsubscribed": {
+        "description": "Show unsubscribed mailboxes",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
       "single_click_tabs": {
         "description": "Open mail tabs with single click",
         "type": "boolean",
         "default": true,
         "syncable": true
+      },
+      "status": {
+        "button_style": {
+          "type": "enum",
+          "default": "image",
+          "syncable": false,
+          "description": "Mail status button style",
+          "enum_values": {
+            "image": 0,
+            "text": 1,
+            "imageandtext": 2
+          }
+        }
       },
       "view_layout": {
         "description": "Layout of mail client",
@@ -693,6 +826,28 @@
         "type": "dictionary",
         "default": {"width": 400, "width_wide": 600, "height": 240},
         "syncable": true
+      }
+    },
+    "menu": {
+      "display": {
+        "description": "App menu display on Linux and Windows",
+        "type": "enum",
+        "enum_values": {
+          "vivaldi": 0,
+          "top": 1
+        },
+        "default": "vivaldi",
+        "syncable": false
+      },
+      "icon_type": {
+        "description": "Menu icon appearance",
+        "type": "enum",
+        "enum_values": {
+          "icon": 0,
+          "burger": 1
+        },
+        "default": "icon",
+        "syncable": false
       }
     },
     "mouse_gestures": {
@@ -765,18 +920,45 @@
         "editor_height": {
           "type": "integer",
           "default": 300,
-          "syncable": true
+          "syncable": false
         },
         "show_markdown": {
-          "description": "Display the notes text formattedusing mmarkdown",
+          "description": "Display the notes text formatted using markdown",
           "type": "boolean",
           "default": false,
-          "syncable": true
+          "syncable": false
         },
         "sorting": {
           "type": "dictionary",
           "default": {"sortOrder": 1, "sortField": "manually"},
-          "syncable": true
+          "syncable": false
+        }
+      },
+      "manager": {
+        "tree": {
+          "height": {
+            "description": "Notes manager tree height",
+            "type": "integer",
+            "default": 400,
+            "syncable": false
+          },
+          "width": {
+            "description": "Notes manager tree width",
+            "type": "integer",
+            "default": 300,
+            "syncable": false
+          }
+        },
+        "show_markdown": {
+          "description": "Display the notes text formatted using markdown",
+          "type": "boolean",
+          "default": false,
+          "syncable": false
+        },
+        "sorting": {
+          "type": "dictionary",
+          "default": {"sortOrder": 1, "sortField": "manually"},
+          "syncable": false
         }
       }
     },
@@ -800,7 +982,7 @@
       }
     },
     "panels": {
-      "as_overlay" : {
+      "as_overlay": {
         "auto_close": {
           "type": "boolean",
           "default": true,
@@ -812,6 +994,69 @@
           "default": false,
           "syncable": true
         }
+      },
+      "list": {
+        "description": "Default panel list",
+        "type": "list",
+        "default": [
+          {
+            "id": "format",
+            "format": 6,
+            "available": false,
+            "forMailOnly": false,
+            "width": -1,
+            "resizable": false
+          }, {
+            "id": "bookmarks",
+            "available": true,
+            "forMailOnly": false,
+            "width": -1,
+            "resizable": false
+          }, {
+            "id": "downloads",
+            "available": true,
+            "forMailOnly": false,
+            "width": -1,
+            "resizable": false
+          }, {
+            "id": "history",
+            "available": true,
+            "forMailOnly": false,
+            "width": -1,
+            "resizable": false
+          }, {
+            "id": "notes",
+            "available": true,
+            "forMailOnly": false,
+            "width": -1,
+            "resizable": false
+          }, {
+            "id": "tabs",
+            "available": true,
+            "forMailOnly": true,
+            "width": -1,
+            "resizable": false
+          }, {
+            "id": "mail",
+            "available": true,
+            "forMailOnly": true,
+            "width": -1,
+            "resizable": false
+          }, {
+            "id": "contacts",
+            "available": true,
+            "forMailOnly": true,
+            "width": -1,
+            "resizable": false
+          }, {
+            "id": "calendar",
+            "available": true,
+            "forMailOnly": false,
+            "width": -1,
+            "resizable": false
+          }
+        ],
+        "syncable": false
       },
       "position": {
         "type": "enum",
@@ -828,11 +1073,62 @@
         "default": false,
         "syncable": true
       },
+      "state": {
+        "type": "dictionary",
+        "default": {
+          "barVisible": true,
+          "selectedPanel": "",
+          "width": 34,
+          "panelVisible": false
+        },
+        "syncable": false
+      },
       "window": {
+        "drag_to_stack": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "show_pinned_group": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
         "show_unread": {
           "type": "boolean",
           "default": true,
           "syncable": true
+        },
+        "single_click_opens": {
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "sorting": {
+          "type": "dictionary",
+          "default": {
+            "sortOrder": 1,
+            "sortField": "manually"
+          },
+          "syncable": true
+        }
+      },
+      "web": {
+        "list": {
+          "type": "list",
+          "default": [],
+          "syncable": false
+        },
+        "removed_list": {
+          "type": "list",
+          "default": [],
+          "syncable": false
+        },
+        "toolbar": {
+          "description": "Web panel toolbar and navigation controls display",
+          "type": "dictionary",
+          "default": { "showToolbar": true, "allControls": false },
+          "syncable": false
         }
       }
     },
@@ -958,6 +1254,12 @@
       }
     },
     "settings": {
+      "in_tab": {
+        "description": "Open settings in a tab instead of standalone window",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
       "size": {
         "width": {
           "type": "integer",
@@ -1005,13 +1307,13 @@
         "path": {
           "description": "Start page image path, 'user_defined', or 'desktop_image' reference",
           "type": "file_path",
-          "default": "/resources/bg.jpg",
+          "default": "../resources/bg.webp",
           "syncable": false
         },
         "path_custom": {
           "description": "User-defined start page image path",
           "type": "file_path",
-          "default": "/resources/bg.jpg",
+          "default": "../resources/bg.webp",
           "syncable": false
         },
         "repeat": {
@@ -1024,6 +1326,17 @@
           "default": true,
           "syncable": false
         }
+      },
+      "navigation": {
+        "description": "Controls Speed Dial navigation display in internal pages",
+        "type": "enum",
+        "enum_values": {
+          "on": 0,
+          "speed_dial_only": 1,
+          "off": 2
+        },
+        "default": "speed_dial_only",
+        "syncable": true
       },
       "speed_dial": {
         "add_button_visible": {
@@ -1053,10 +1366,10 @@
           "syncable": true
         },
         "display_navigation": {
-          "description": "Controls Speed Dial navigation display in other Start Page components",
+          "description": "[DEPRECATED 2020/4] Controls Speed Dial navigation display in other Start Page components",
           "type": "boolean",
           "default": false,
-          "syncable": true
+          "syncable": false
         },
         "display_search": {
           "description": "Display search field on Speed Dial page",
@@ -1105,6 +1418,12 @@
         "type": "boolean",
         "default": true,
         "syncable": false
+      },
+      "show_media_available_information": {
+        "description": "Show dialog on startup regarding media support on Windows N-versions.",
+        "type": "boolean",
+        "default": true,
+        "syncable": false
       }
     },
     "status_bar": {
@@ -1116,6 +1435,16 @@
           "overlay": 2
         },
         "default": "on",
+        "syncable": true
+      },
+      "minimized": {
+        "description": "Determines whether to hide or overlay Status Bar",
+        "type": "enum",
+        "enum_values": {
+          "off": 0,
+          "overlay": 1
+        },
+        "default": "off",
         "syncable": true
       }
     },
@@ -1196,7 +1525,8 @@
       "at_edge": {
         "description": "Remove vertical space around tab bar in fullscreen mode",
         "type": "boolean",
-        "default": false,
+        "default": true,
+        "default_mac": false,
         "syncable": true
       },
       "auto_muting": {
@@ -1292,7 +1622,7 @@
           "description": "[DEPRECATED 2019/6]",
           "type": "boolean",
           "default": false,
-          "syncable": true
+          "syncable": false
         }
       },
       "focus_webview": {
@@ -1332,7 +1662,7 @@
           "description": "[DEPRECATED 2018-11] The actual URL for new tabs",
           "type": "string",
           "default": "",
-          "syncable": true
+          "syncable": false
         },
         "custom_url": {
           "description": "The URL set to be used when choosing a custom URL for new tabs",
@@ -1467,6 +1797,12 @@
           "default": {},
           "syncable": false
         }
+      },
+      "range_buttons": {
+        "description": "Use buttons instead of slider in range controls",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
       }
     },
     "theme": {
@@ -1496,7 +1832,7 @@
             "system": 1,
             "timeline": 2
           },
-          "default": "off",
+          "default": "system",
           "syncable": false
         },
         "timeline": {
@@ -1578,6 +1914,7 @@
         "default": [
           "PanelToggle",
           "SyncStatus",
+          "MailStatus",
           "StatusInfo",
           "TaskList",
           "VersionInfo",
@@ -1585,7 +1922,61 @@
           "TilingToggle",
           "ImagesToggle",
           "PageActions",
-          "Zoom"
+          "Zoom",
+          "Clock"
+        ],
+        "syncable": true
+      },
+      "mail": {
+        "type": "list",
+        "default": [
+          "MailBack",
+          "MailForward",
+          "MailReload",
+          "MailSearch",
+          "MailMsgReply",
+          "MailMsgReplyToAll",
+          "MailMsgForward",
+          "MailMsgStatusRead",
+          "MailMsgFlag",
+          "MailMsgLabel",
+          "MailMsgSpam",
+          "MailMsgTrash",
+          "FlexibleSpacer",
+          "MailViewThreading",
+          "MailViewLayout"
+        ],
+        "syncable": true
+      },
+      "mail_message": {
+        "type": "list",
+        "default": [
+          "MailBack",
+          "MailForward",
+          "MailReload",
+          "MailSearch",
+          "MailMsgReply",
+          "MailMsgReplyToAll",
+          "MailMsgForward",
+          "MailMsgStatusRead",
+          "MailMsgFlag",
+          "MailMsgLabel",
+          "MailMsgSpam",
+          "MailMsgTrash"
+        ],
+        "syncable": true
+      },
+      "mail_composer": {
+        "type": "list",
+        "default": [
+          "MailBack",
+          "MailForward",
+          "MailReload",
+          "MailSearch",
+          "MailMsgSend",
+          "MailMsgAttach",
+          "MailMsgShowHeaders",
+          "MailMsgDiscard"
         ],
         "syncable": true
       }
@@ -1679,6 +2070,37 @@
           "syncable": true
         }
       },
+      "picture_in_picture_button": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true,
+          "description": "Show a PIP button overlaying video elements."
+        }
+      },
+      "reader": {
+        "allow_vertical": {
+          "type": "boolean",
+          "default": false,
+          "syncable": false
+        },
+        "controls": {
+          "type": "boolean",
+          "default": true,
+          "syncable": false
+        },
+        "style": {
+          "type": "dictionary",
+          "default": {
+            "fontFamily": "sans-serif",
+            "fontSize": 1.3,
+            "lineHeight": 1.5,
+            "width": 700,
+            "themeStyle": "light"
+          },
+          "syncable": false
+        }
+      },
       "smooth_scrolling": {
         "enabled": {
           "type": "boolean",
@@ -1695,7 +2117,15 @@
           "blink": 2
         },
         "default": "none",
-        "syncable": true
+        "syncable": false,
+        "description": "[DEPRECATED 2020/02] version of spatnav parameter kept around for migration."
+      },
+      "spatial_navigation": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
       },
       "tab_focuses_links": {
         "type": "boolean",
@@ -1767,6 +2197,96 @@
         "type": "boolean",
         "default": true,
         "syncable": false
+      }
+    },
+
+    "clock": {
+      "mode": {
+        "type": "enum",
+        "default": "countdown",
+        "syncable": false,
+        "description": "Clock timer mode",
+        "enum_values": {
+          "countdown": 0,
+          "alarm": 1
+        }
+      },
+      "button_style": {
+        "type": "enum",
+        "default": "text",
+        "syncable": false,
+        "description": "Countdown button style",
+        "enum_values": {
+          "image": 0,
+          "text": 1,
+          "imageandtext": 2
+        }
+      },
+      "button_show_date": {
+        "type": "boolean",
+        "default": false,
+        "syncable": false,
+        "description": "Show current date in the Clock button title"
+      },
+      "button_show_name": {
+        "type": "boolean",
+        "default": true,
+        "syncable": false,
+        "description": "Show the current timer name in the title"
+      },
+      "notification_sound": {
+        "type": "string",
+        "default": "",
+        "syncable": false,
+        "description": "Sound played when a clock timer triggers"
+      },
+      "show_seconds": {
+        "type": "boolean",
+        "default": false,
+        "syncable": false,
+        "description": "Show seconds"
+      },
+      "timers": {
+        "type": "list",
+        "default": [],
+        "syncable": false,
+        "description": "List of active alarms and countdowns"
+      },
+      "alarm_presets": {
+        "syncable": false,
+        "description": "List of default alarms",
+        "type": "list",
+        "default": [
+          {
+            "id": "2",
+            "name": "Lunch",
+            "hour":11,
+            "minute": 30
+          },
+          {
+            "id": "3",
+            "name": "Meeting",
+            "hour":15,
+            "minute": 0
+          }
+        ]
+      },
+      "countdown_presets": {
+        "syncable": false,
+        "description": "List of default countdowns",
+        "type": "list",
+        "default": [
+          {
+            "id": "1",
+            "name": "Break",
+            "seconds": 300
+          },
+          {
+            "id": "3",
+            "name": "Pomodoro",
+            "seconds": 1500
+          }
+        ]
       }
     },
 
@@ -1892,6 +2412,10 @@
     "kWebRTCIPHandlingPolicy": {
       "path": "webrtc.ip_handling_policy",
       "type": "string"
+    },
+    "kMediaRouterMediaRemotingEnabled": {
+      "path": "media_router.media_remoting.enabled",
+      "type": "boolean"
     }
   },
 

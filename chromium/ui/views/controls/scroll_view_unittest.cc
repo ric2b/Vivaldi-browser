@@ -4,10 +4,12 @@
 
 #include "ui/views/controls/scroll_view.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/scoped_feature_list.h"
@@ -278,9 +280,7 @@ class WidgetScrollViewTest : public test::WidgetTest,
   WidgetScrollViewTest() = default;
 
   // Call this before adding the ScrollView to test with overlay scrollbars.
-  void SetUseOverlayScrollers() {
-    use_overlay_scrollers_ = true;
-  }
+  void SetUseOverlayScrollers() { use_overlay_scrollers_ = true; }
 
   // Adds a ScrollView with the given |contents_view| and does layout.
   ScrollView* AddScrollViewWithContents(std::unique_ptr<View> contents,
@@ -947,8 +947,8 @@ TEST_F(ScrollViewTest, ChildWithLayerTest) {
   // should be true.
   EXPECT_TRUE(test_api.contents_viewport()->layer()->fills_bounds_opaquely());
 
-  // Setting a transparent color should make fills opaquely false.
-  scroll_view_->SetBackgroundColor(SK_ColorTRANSPARENT);
+  // Setting a base::nullopt color should make fills opaquely false.
+  scroll_view_->SetBackgroundColor(base::nullopt);
   EXPECT_FALSE(test_api.contents_viewport()->layer()->fills_bounds_opaquely());
 
   child->DestroyLayer();
@@ -1028,6 +1028,33 @@ TEST_F(ScrollViewTest, CocoaOverlayScrollBars) {
   EXPECT_EQ(100 - HorizontalScrollBarHeight(), contents->parent()->height());
   EXPECT_NE(0, VerticalScrollBarWidth());
   EXPECT_NE(0, HorizontalScrollBarHeight());
+}
+
+// Test that overlay scroll bars will only process events when visible.
+TEST_F(WidgetScrollViewTest,
+       OverlayScrollBarsCannotProcessEventsWhenTransparent) {
+  // Allow expectations to distinguish between fade outs and immediate changes.
+  ui::ScopedAnimationDurationScaleMode really_animate(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  SetUseOverlayScrollers();
+
+  ScrollView* scroll_view = AddScrollViewWithContentSize(
+      gfx::Size(kDefaultWidth * 5, kDefaultHeight * 5));
+  ScrollViewTestApi test_api(scroll_view);
+  ScrollBar* scroll_bar = test_api.GetScrollBar(HORIZONTAL);
+
+  // Verify scroll bar is unable to process events.
+  EXPECT_FALSE(scroll_bar->CanProcessEventsWithinSubtree());
+
+  ui::test::EventGenerator generator(
+      GetContext(), scroll_view->GetWidget()->GetNativeWindow());
+
+  generator.GenerateTrackpadRest();
+
+  // Since the scroll bar will become visible, it should now be able to process
+  // events.
+  EXPECT_TRUE(scroll_bar->CanProcessEventsWithinSubtree());
 }
 
 // Test overlay scrollbar behavior when just resting fingers on the trackpad.
@@ -1809,7 +1836,7 @@ TEST_F(WidgetScrollViewTest, CompositedScrollEvents) {
   EXPECT_EQ(gfx::ScrollOffset(0, 10), test_api.CurrentOffset());
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          WidgetScrollViewTestRTLAndLayers,
                          ::testing::Values(UiConfig::kLtr,
                                            UiConfig::kRtl,

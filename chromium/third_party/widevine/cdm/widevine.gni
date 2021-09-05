@@ -19,7 +19,8 @@ declare_args() {
 # TODO(hmchen): Provide support on "arm64".
 library_widevine_cdm_available =
     (is_chromeos && (target_cpu == "x64" || target_cpu == "arm")) ||
-    (is_desktop_linux && (target_cpu == "x86" || target_cpu == "x64")) ||
+    (is_desktop_linux && (target_cpu == "x86" || target_cpu == "x64" ||
+                          target_cpu == "arm" || target_cpu == "arm64")) ||
     (is_mac && target_cpu == "x64") ||
     (is_win && (target_cpu == "x86" || target_cpu == "x64"))
 
@@ -62,12 +63,8 @@ template("widevine_sign_file") {
     }
 
     script = "//third_party/widevine/scripts/signature_generator.py"
-    sources = [
-      "$file",
-    ]
-    outputs = [
-      "$signature_file",
-    ]
+    sources = [ "$file" ]
+    outputs = [ "$signature_file" ]
     args = [
       "--input_file",
       rebase_path("$file", root_build_dir),

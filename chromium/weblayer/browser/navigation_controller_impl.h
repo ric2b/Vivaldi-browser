@@ -7,9 +7,11 @@
 
 #include <map>
 
+#include <memory>
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "weblayer/browser/navigation_impl.h"
 #include "weblayer/public/navigation_controller.h"
@@ -17,6 +19,10 @@
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
 #endif
+
+namespace content {
+class NavigationThrottle;
+}
 
 namespace weblayer {
 class TabImpl;
@@ -27,6 +33,11 @@ class NavigationControllerImpl : public NavigationController,
   explicit NavigationControllerImpl(TabImpl* tab);
   ~NavigationControllerImpl() override;
 
+  // Creates the NavigationThrottle used to ensure WebContents::Stop() is called
+  // at safe times. See NavigationControllerImpl for details.
+  std::unique_ptr<content::NavigationThrottle> CreateNavigationThrottle(
+      content::NavigationHandle* handle);
+
 #if defined(OS_ANDROID)
   void SetNavigationControllerImpl(
       JNIEnv* env,
@@ -34,6 +45,10 @@ class NavigationControllerImpl : public NavigationController,
   void Navigate(JNIEnv* env,
                 const base::android::JavaParamRef<jobject>& obj,
                 const base::android::JavaParamRef<jstring>& url);
+  void NavigateWithParams(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj,
+                          const base::android::JavaParamRef<jstring>& url,
+                          jboolean should_replace_current_entry);
   void GoBack(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj) {
     GoBack();
   }
@@ -47,6 +62,9 @@ class NavigationControllerImpl : public NavigationController,
                     const base::android::JavaParamRef<jobject>& obj) {
     return CanGoForward();
   }
+  void GoToIndex(JNIEnv* env,
+                 const base::android::JavaParamRef<jobject>& obj,
+                 int index);
   void Reload(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj) {
     Reload();
   }
@@ -66,27 +84,36 @@ class NavigationControllerImpl : public NavigationController,
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       int index);
+  base::android::ScopedJavaLocalRef<jstring> GetNavigationEntryTitle(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      int index);
 #endif
 
-  // Called by BrowserControllerImpl when the loading progress has changed.
-  // TODO(estade): move LoadProgressChanged from WebContentsDelegate to
-  // WebContentsObserver to avoid this extra bounce.
-  void NotifyLoadProgressChanged(double progress);
-
  private:
+  class NavigationThrottleImpl;
+
+  // Called from NavigationControllerImpl::WillRedirectRequest(). See
+  // description of NavigationControllerImpl for details.
+  void WillRedirectRequest(NavigationThrottleImpl* throttle,
+                           content::NavigationHandle* navigation_handle);
+
   // NavigationController implementation:
   void AddObserver(NavigationObserver* observer) override;
   void RemoveObserver(NavigationObserver* observer) override;
   void Navigate(const GURL& url) override;
+  void Navigate(const GURL& url, const NavigateParams& params) override;
   void GoBack() override;
   void GoForward() override;
   bool CanGoBack() override;
   bool CanGoForward() override;
+  void GoToIndex(int index) override;
   void Reload() override;
   void Stop() override;
   int GetNavigationListSize() override;
   int GetNavigationListCurrentIndex() override;
   GURL GetNavigationEntryDisplayURL(int index) override;
+  std::string GetNavigationEntryTitle(int index) override;
 
   // content::WebContentsObserver implementation:
   void DidStartNavigation(
@@ -99,13 +126,24 @@ class NavigationControllerImpl : public NavigationController,
       content::NavigationHandle* navigation_handle) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
+  void LoadProgressChanged(double progress) override;
   void DidFirstVisuallyNonEmptyPaint() override;
 
   void NotifyLoadStateChanged();
 
+  void DoNavigate(
+      std::unique_ptr<content::NavigationController::LoadURLParams> params);
+
   base::ObserverList<NavigationObserver>::Unchecked observers_;
   std::map<content::NavigationHandle*, std::unique_ptr<NavigationImpl>>
       navigation_map_;
+
+  // If non-null then processing is inside DidStartNavigation() and
+  // |navigation_starting_| is the NavigationImpl that was created.
+  NavigationImpl* navigation_starting_ = nullptr;
+
+  // Set to non-null while in WillRedirectRequest().
+  NavigationThrottleImpl* active_throttle_ = nullptr;
 
 #if defined(OS_ANDROID)
   base::android::ScopedJavaGlobalRef<jobject> java_controller_;

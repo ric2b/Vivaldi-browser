@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">Je toegang tot internet wordt geblokkeerd</translation>
 <translation id="2317259163369394535">Voor <ph name="DOMAIN" /> is een gebruikersnaam en wachtwoord vereist.</translation>
 <translation id="2337852623177822836">Instelling beheerd door je beheerder</translation>
+<translation id="2344028582131185878">Automatische downloads</translation>
 <translation id="2355395290879513365">Aanvallers kunnen mogelijk de afbeeldingen zien die je op deze website bekijkt en je misleiden door deze aan te passen.</translation>
 <translation id="2356070529366658676">Vragen</translation>
 <translation id="2359808026110333948">Doorgaan</translation>
@@ -84,7 +85,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> wordt geblokkeerd</translation>
 <translation id="3987940399970879459">Minder dan 1 MB</translation>
 <translation id="4075732493274867456">De client en server ondersteunen geen algemene SSL-protocolversie of coderingssuite.</translation>
-<translation id="410351446219883937">Automatisch afspelen</translation>
 <translation id="4116663294526079822">Altijd toestaan op deze website</translation>
 <translation id="4130226655945681476">Controleer de netwerkkabels, modem en router</translation>
 <translation id="4151403195736952345">Algemene standaardinstelling gebruiken (detecteren)</translation>
@@ -142,7 +142,7 @@
 <translation id="5932224571077948991">Website geeft opdringerige of misleidende advertenties weer</translation>
 <translation id="5990559369517809815">Verzoeken aan de server zijn door een extensie geblokkeerd.</translation>
 <translation id="6051221802930200923">Je kunt <ph name="SITE" /> momenteel niet bezoeken, omdat de website gebruikmaakt van certificaatpinning. Netwerkfouten en aanvallen zijn doorgaans tijdelijk, dus deze pagina werkt later waarschijnlijk correct.</translation>
-<translation id="6146055958333702838">Controleer alle kabels en start alle routers, modems of andere netwerkapparaten die je gebruikt, opnieuw op.</translation>
+<translation id="6146055958333702838">Controleer alle kabels en start alle routers, modems of andere gebruikte netwerkapparaten, opnieuw op.</translation>
 <translation id="614940544461990577">Probeer het volgende:</translation>
 <translation id="6165508094623778733">Meer informatie</translation>
 <translation id="6177128806592000436">Je verbinding met deze website is niet beveiligd</translation>

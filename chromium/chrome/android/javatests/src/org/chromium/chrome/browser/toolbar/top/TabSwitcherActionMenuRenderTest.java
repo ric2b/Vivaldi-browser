@@ -11,7 +11,6 @@ import android.support.test.filters.MediumTest;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
-import android.widget.FrameLayout;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -23,12 +22,12 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.night_mode.NightModeTestUtils;
-import org.chromium.chrome.browser.toolbar.top.tab_switcher_action_menu.TabSwitcherActionMenuCoordinator;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
-import org.chromium.chrome.test.ui.DummyUiActivityTestCase;
-import org.chromium.chrome.test.util.RenderTestRule;
+import org.chromium.chrome.test.util.ChromeRenderTestRule;
+import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.ui.test.util.DummyUiActivityTestCase;
+import org.chromium.ui.test.util.NightModeTestUtils;
 
 import java.io.IOException;
 import java.util.List;
@@ -44,8 +43,7 @@ public class TabSwitcherActionMenuRenderTest extends DummyUiActivityTestCase {
             new NightModeTestUtils.NightModeParams().getParameters();
 
     @Rule
-    public RenderTestRule mRenderTestRule =
-            new RenderTestRule("chrome/test/data/android/render_tests");
+    public ChromeRenderTestRule mRenderTestRule = new ChromeRenderTestRule();
 
     private View mView;
 
@@ -59,16 +57,16 @@ public class TabSwitcherActionMenuRenderTest extends DummyUiActivityTestCase {
         super.setUpTest();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Activity activity = getActivity();
-            FrameLayout anchorView = new FrameLayout(activity);
             TabSwitcherActionMenuCoordinator coordinator = new TabSwitcherActionMenuCoordinator();
 
-            coordinator.displayMenu(
-                    activity, anchorView, coordinator.buildMenuItems(activity), null);
+            coordinator.displayMenu(activity, new ListMenuButton(activity, null),
+                    coordinator.buildMenuItems(), null);
 
             mView = coordinator.getContentView();
             ((ViewGroup) mView.getParent()).removeView(mView);
 
-            int popupWidth = activity.getResources().getDimensionPixelSize(R.dimen.menu_width);
+            int popupWidth =
+                    activity.getResources().getDimensionPixelSize(R.dimen.tab_switcher_menu_width);
             mView.setBackground(ApiCompatibilityUtils.getDrawable(
                     activity.getResources(), R.drawable.popup_bg_tinted));
             activity.setContentView(mView, new LayoutParams(popupWidth, WRAP_CONTENT));

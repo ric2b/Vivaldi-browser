@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -18,6 +17,7 @@
 #include "google_apis/gcm/base/mcs_util.h"
 #include "google_apis/gcm/engine/fake_connection_handler.h"
 #include "google_apis/gcm/monitoring/fake_gcm_stats_recorder.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/base/backoff_entry.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_test_util.h"
@@ -95,7 +95,7 @@ class TestConnectionFactoryImpl : public ConnectionFactoryImpl {
  public:
   TestConnectionFactoryImpl(
       GetProxyResolvingFactoryCallback get_socket_factory_callback,
-      const base::Closure& finished_callback);
+      base::RepeatingClosure finished_callback);
   ~TestConnectionFactoryImpl() override;
 
   void InitializeFactory();
@@ -140,7 +140,7 @@ class TestConnectionFactoryImpl : public ConnectionFactoryImpl {
   // Whether to delay a login handshake completion or not.
   bool delay_login_;
   // Callback to invoke when all connection attempts have been made.
-  base::Closure finished_callback_;
+  base::RepeatingClosure finished_callback_;
   // A temporary scoped pointer to make sure we don't leak the handler in the
   // cases it's never consumed by the ConnectionFactory.
   std::unique_ptr<FakeConnectionHandler> scoped_handler_;
@@ -155,7 +155,7 @@ class TestConnectionFactoryImpl : public ConnectionFactoryImpl {
 
 TestConnectionFactoryImpl::TestConnectionFactoryImpl(
     GetProxyResolvingFactoryCallback get_socket_factory_callback,
-    const base::Closure& finished_callback)
+    base::RepeatingClosure finished_callback)
     : ConnectionFactoryImpl(
           BuildEndpoints(),
           net::BackoffEntry::Policy(),
@@ -169,8 +169,8 @@ TestConnectionFactoryImpl::TestConnectionFactoryImpl(
       delay_login_(false),
       finished_callback_(finished_callback),
       scoped_handler_(std::make_unique<FakeConnectionHandler>(
-          base::Bind(&ReadContinuation),
-          base::Bind(&WriteContinuation))),
+          base::BindRepeating(&ReadContinuation),
+          base::BindRepeating(&WriteContinuation))),
       fake_handler_(scoped_handler_.get()) {
   // Set a non-null time.
   tick_clock_.Advance(base::TimeDelta::FromMilliseconds(1));
@@ -294,8 +294,9 @@ class ConnectionFactoryImplTest
 
  private:
   void GetProxyResolvingSocketFactory(
-      network::mojom::ProxyResolvingSocketFactoryRequest request) {
-    network_context_->CreateProxyResolvingSocketFactory(std::move(request));
+      mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>
+          receiver) {
+    network_context_->CreateProxyResolvingSocketFactory(std::move(receiver));
   }
   void ConnectionsComplete();
 
@@ -316,11 +317,12 @@ ConnectionFactoryImplTest::ConnectionFactoryImplTest()
     : network_connection_tracker_(
           network::TestNetworkConnectionTracker::CreateInstance()),
       task_environment_(base::test::TaskEnvironment::MainThreadType::IO),
-      factory_(base::BindRepeating(
-                   &ConnectionFactoryImplTest::GetProxyResolvingSocketFactory,
-                   base::Unretained(this)),
-               base::Bind(&ConnectionFactoryImplTest::ConnectionsComplete,
-                          base::Unretained(this))),
+      factory_(
+          base::BindRepeating(
+              &ConnectionFactoryImplTest::GetProxyResolvingSocketFactory,
+              base::Unretained(this)),
+          base::BindRepeating(&ConnectionFactoryImplTest::ConnectionsComplete,
+                              base::Unretained(this))),
       run_loop_(new base::RunLoop()),
       network_change_notifier_(
           net::NetworkChangeNotifier::CreateMockIfNeeded()),

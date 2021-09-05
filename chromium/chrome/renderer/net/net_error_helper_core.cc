@@ -130,7 +130,7 @@ base::TimeDelta GetAutoReloadTime(size_t reload_count) {
 // the tab helper should start a DNS probe after receiving it).
 bool IsNetDnsError(const error_page::Error& error) {
   return error.domain() == error_page::Error::kNetErrorDomain &&
-         net::IsDnsError(error.reason());
+         net::IsHostnameResolutionError(error.reason());
 }
 
 GURL SanitizeURL(const GURL& url) {
@@ -172,7 +172,10 @@ bool ShouldUseFixUrlServiceForError(const error_page::Error& error,
     *error_param = "http404";
     return true;
   }
-  if (IsNetDnsError(error)) {
+  // Don't use the link doctor for secure DNS network errors, since the
+  // additional navigation may interfere with the captive portal probe state.
+  if (IsNetDnsError(error) &&
+      !error.resolve_error_info().is_secure_network_error) {
     *error_param = "dnserror";
     return true;
   }
@@ -475,7 +478,13 @@ bool NetErrorHelperCore::IsReloadableError(
          info.error.reason() != net::ERR_INVALID_AUTH_CREDENTIALS &&
          // Don't auto-reload non-http/https schemas.
          // https://crbug.com/471713
-         url.SchemeIsHTTPOrHTTPS();
+         url.SchemeIsHTTPOrHTTPS() &&
+         // Don't auto reload if the error was a secure DNS network error, since
+         // the reload may interfere with the captive portal probe state.
+         // TODO(crbug.com/1016164): Explore how to allow reloads for secure DNS
+         // network errors without interfering with the captive portal probe
+         // state.
+         !info.error.resolve_error_info().is_secure_network_error;
 }
 
 NetErrorHelperCore::NetErrorHelperCore(Delegate* delegate,
@@ -892,8 +901,8 @@ void NetErrorHelperCore::StartAutoReloadTimer() {
   auto_reload_timer_->Stop();
   auto_reload_timer_->Start(
       FROM_HERE, delay,
-      base::Bind(&NetErrorHelperCore::AutoReloadTimerFired,
-                 base::Unretained(this)));
+      base::BindOnce(&NetErrorHelperCore::AutoReloadTimerFired,
+                     base::Unretained(this)));
 }
 
 void NetErrorHelperCore::AutoReloadTimerFired() {

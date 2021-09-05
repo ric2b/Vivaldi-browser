@@ -28,7 +28,7 @@ class DriveServiceWrapper : public base::SupportsWeakPtr<DriveServiceWrapper> {
   void AddNewDirectory(const std::string& parent_resource_id,
                        const std::string& directory_title,
                        const drive::AddNewDirectoryOptions& options,
-                       const google_apis::FileResourceCallback& callback);
+                       google_apis::FileResourceCallback callback);
 
   void DeleteResource(
       const std::string& resource_id,
@@ -42,8 +42,7 @@ class DriveServiceWrapper : public base::SupportsWeakPtr<DriveServiceWrapper> {
       const google_apis::GetContentCallback& get_content_callback,
       const google_apis::ProgressCallback& progress_callback);
 
-  void GetAboutResource(
-      const google_apis::AboutResourceCallback& callback);
+  void GetAboutResource(google_apis::AboutResourceCallback callback);
 
   void GetStartPageToken(const std::string& team_drive_id,
                          const google_apis::StartPageTokenCallback& callback);
@@ -67,9 +66,8 @@ class DriveServiceWrapper : public base::SupportsWeakPtr<DriveServiceWrapper> {
       const GURL& next_link,
       const google_apis::FileListCallback& callback);
 
-  void GetFileResource(
-      const std::string& resource_id,
-      const google_apis::FileResourceCallback& callback);
+  void GetFileResource(const std::string& resource_id,
+                       google_apis::FileResourceCallback callback);
 
   void GetFileListInDirectory(
       const std::string& directory_resource_id,

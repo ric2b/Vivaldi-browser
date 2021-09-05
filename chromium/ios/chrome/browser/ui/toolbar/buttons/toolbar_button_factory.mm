@@ -9,16 +9,16 @@
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_actions_handler.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_visibility_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
-#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_search_button.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_new_tab_button.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tools_menu_button.h"
 #import "ios/chrome/browser/ui/toolbar/public/features.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/dynamic_color_util.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/colors/dynamic_color_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
@@ -152,7 +152,7 @@
   ToolbarButton* bookmarkButton = [ToolbarButton
       toolbarButtonWithImage:[UIImage imageNamed:@"toolbar_bookmark"]];
   [bookmarkButton setImage:[UIImage imageNamed:@"toolbar_bookmark_active"]
-                  forState:ControlStateSpotlighted];
+                  forState:kControlStateSpotlighted];
   [self configureButton:bookmarkButton width:kAdaptiveToolbarButtonWidth];
   bookmarkButton.adjustsImageWhenHighlighted = NO;
   [bookmarkButton
@@ -168,39 +168,26 @@
   return bookmarkButton;
 }
 
-- (ToolbarButton*)searchButton {
-  UIImage* buttonImage = nil;
-  if (base::FeatureList::IsEnabled(kToolbarNewTabButton)) {
-    buttonImage = [UIImage imageNamed:@"toolbar_new_tab_page"];
-  } else {
-    buttonImage = [UIImage imageNamed:@"toolbar_search"];
-  }
-  ToolbarSearchButton* searchButton =
-      [ToolbarSearchButton toolbarButtonWithImage:buttonImage];
+- (ToolbarButton*)openNewTabButton {
+  ToolbarNewTabButton* newTabButton = [ToolbarNewTabButton
+      toolbarButtonWithImage:[UIImage imageNamed:@"toolbar_new_tab_page"]];
 
-  [searchButton addTarget:self.actionHandler
+  [newTabButton addTarget:self.actionHandler
                    action:@selector(searchAction:)
          forControlEvents:UIControlEventTouchUpInside];
-  if (base::FeatureList::IsEnabled(kToolbarNewTabButton)) {
-    BOOL isIncognito = self.style == INCOGNITO;
+  BOOL isIncognito = self.style == INCOGNITO;
 
-    [self configureButton:searchButton width:kAdaptiveToolbarButtonWidth];
+  [self configureButton:newTabButton width:kAdaptiveToolbarButtonWidth];
 
-    searchButton.accessibilityLabel = l10n_util::GetNSString(
-        isIncognito ? IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB
-                    : IDS_IOS_TOOLS_MENU_NEW_TAB);
-  } else {
-    [self configureButton:searchButton width:kSearchButtonWidth];
+  newTabButton.accessibilityLabel =
+      l10n_util::GetNSString(isIncognito ? IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB
+                                         : IDS_IOS_TOOLS_MENU_NEW_TAB);
 
-    searchButton.accessibilityLabel =
-        l10n_util::GetNSString(IDS_IOS_TOOLBAR_SEARCH);
-  }
+  newTabButton.accessibilityIdentifier = kToolbarNewTabButtonIdentifier;
 
-  searchButton.accessibilityIdentifier = kToolbarSearchButtonIdentifier;
-
-  searchButton.visibilityMask =
+  newTabButton.visibilityMask =
       self.visibilityConfiguration.searchButtonVisibility;
-  return searchButton;
+  return newTabButton;
 }
 
 - (UIButton*)cancelButton {

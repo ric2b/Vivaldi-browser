@@ -46,7 +46,7 @@ TestSyncService::TestSyncService()
 
 TestSyncService::~TestSyncService() = default;
 
-void TestSyncService::SetDisableReasons(int disable_reasons) {
+void TestSyncService::SetDisableReasons(DisableReasonSet disable_reasons) {
   disable_reasons_ = disable_reasons;
 }
 
@@ -90,6 +90,10 @@ void TestSyncService::SetActiveDataTypes(const ModelTypeSet& types) {
   active_data_types_ = types;
 }
 
+void TestSyncService::SetBackedOffDataTypes(const ModelTypeSet& types) {
+  backed_off_data_types_ = types;
+}
+
 void TestSyncService::SetLastCycleSnapshot(const SyncCycleSnapshot& snapshot) {
   last_cycle_snapshot_ = snapshot;
 }
@@ -127,6 +131,15 @@ void TestSyncService::SetPassphraseRequiredForPreferredDataTypes(
   user_settings_.SetPassphraseRequiredForPreferredDataTypes(required);
 }
 
+void TestSyncService::SetTrustedVaultKeyRequired(bool required) {
+  user_settings_.SetTrustedVaultKeyRequired(required);
+}
+
+void TestSyncService::SetTrustedVaultKeyRequiredForPreferredDataTypes(
+    bool required) {
+  user_settings_.SetTrustedVaultKeyRequiredForPreferredDataTypes(required);
+}
+
 void TestSyncService::SetIsUsingSecondaryPassphrase(bool enabled) {
   user_settings_.SetIsUsingSecondaryPassphrase(enabled);
 }
@@ -149,7 +162,7 @@ const SyncUserSettings* TestSyncService::GetUserSettings() const {
   return &user_settings_;
 }
 
-int TestSyncService::GetDisableReasons() const {
+SyncService::DisableReasonSet TestSyncService::GetDisableReasons() const {
   return disable_reasons_;
 }
 
@@ -209,6 +222,10 @@ ModelTypeSet TestSyncService::GetPreferredDataTypes() const {
 
 ModelTypeSet TestSyncService::GetActiveDataTypes() const {
   return active_data_types_;
+}
+
+ModelTypeSet TestSyncService::GetBackedOffDataTypes() const {
+  return backed_off_data_types_;
 }
 
 void TestSyncService::StopAndClear() {}
@@ -295,9 +312,14 @@ base::WeakPtr<JsController> TestSyncService::GetJsController() {
 }
 
 void TestSyncService::GetAllNodesForDebugging(
-    const base::Callback<void(std::unique_ptr<base::ListValue>)>& callback) {}
+    base::OnceCallback<void(std::unique_ptr<base::ListValue>)> callback) {}
 
 void TestSyncService::SetInvalidationsForSessionsEnabled(bool enabled) {}
+
+void TestSyncService::AddTrustedVaultDecryptionKeysFromWeb(
+    const std::string& gaia_id,
+    const std::vector<std::vector<uint8_t>>& keys,
+    int last_key_version) {}
 
 UserDemographicsResult TestSyncService::GetUserNoisedBirthYearAndGender(
     base::Time now) {

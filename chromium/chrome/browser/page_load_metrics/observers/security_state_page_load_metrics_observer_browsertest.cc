@@ -6,12 +6,14 @@
 
 #include <memory>
 
+#include "base/feature_list.h"
 #include "base/run_loop.h"
 #include "base/task/post_task.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/lookalikes/safety_tips/reputation_web_contents_observer.h"
-#include "chrome/browser/lookalikes/safety_tips/safety_tip_test_utils.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/reputation/reputation_web_contents_observer.h"
+#include "chrome/browser/reputation/safety_tip_test_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -19,6 +21,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/security_state/core/features.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -258,8 +261,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsBrowserTest,
     content::WebContents* contents =
         browser()->tab_strip_model()->GetActiveWebContents();
 
-    safety_tips::ReputationWebContentsObserver* rep_observer =
-        safety_tips::ReputationWebContentsObserver::FromWebContents(contents);
+    ReputationWebContentsObserver* rep_observer =
+        ReputationWebContentsObserver::FromWebContents(contents);
     ASSERT_TRUE(rep_observer);
 
     // Navigate to |url| and wait for the reputation check to complete before
@@ -308,8 +311,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsBrowserTest,
 
     content::WebContents* contents =
         browser()->tab_strip_model()->GetActiveWebContents();
-    safety_tips::ReputationWebContentsObserver* rep_observer =
-        safety_tips::ReputationWebContentsObserver::FromWebContents(contents);
+    ReputationWebContentsObserver* rep_observer =
+        ReputationWebContentsObserver::FromWebContents(contents);
     ASSERT_TRUE(rep_observer);
 
     // Navigate to |url| and wait for the reputation check to complete before
@@ -391,9 +394,16 @@ IN_PROC_BROWSER_TEST_F(
   observer.WaitForDidChangeVisibleSecurityState();
   CloseAllTabs();
 
+  security_state::SecurityLevel mixed_content_security_level =
+      base::FeatureList::IsEnabled(
+          security_state::features::kPassiveMixedContentWarning)
+          ? security_state::WARNING
+          : security_state::NONE;
+
   histogram_tester()->ExpectTotalCount(
       SecurityStatePageLoadMetricsObserver::
-          GetEngagementFinalHistogramNameForTesting(security_state::NONE),
+          GetEngagementFinalHistogramNameForTesting(
+              mixed_content_security_level),
       1);
   histogram_tester()->ExpectTotalCount(
       SecurityStatePageLoadMetricsObserver::
@@ -401,7 +411,8 @@ IN_PROC_BROWSER_TEST_F(
       0);
   histogram_tester()->ExpectTotalCount(
       SecurityStatePageLoadMetricsObserver::
-          GetEngagementDeltaHistogramNameForTesting(security_state::NONE),
+          GetEngagementDeltaHistogramNameForTesting(
+              mixed_content_security_level),
       1);
   histogram_tester()->ExpectTotalCount(
       SecurityStatePageLoadMetricsObserver::
@@ -411,7 +422,7 @@ IN_PROC_BROWSER_TEST_F(
   ExpectMetricForUrl(url, UkmEntry::kInitialSecurityLevelName,
                      security_state::SECURE);
   ExpectMetricForUrl(url, UkmEntry::kFinalSecurityLevelName,
-                     security_state::NONE);
+                     mixed_content_security_level);
 }
 
 IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsBrowserTest,
@@ -483,8 +494,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsBrowserTest,
     }
     content::WebContents* contents =
         browser()->tab_strip_model()->GetActiveWebContents();
-    safety_tips::ReputationWebContentsObserver* rep_observer =
-        safety_tips::ReputationWebContentsObserver::FromWebContents(contents);
+    ReputationWebContentsObserver* rep_observer =
+        ReputationWebContentsObserver::FromWebContents(contents);
     ASSERT_TRUE(rep_observer);
 
     // Navigate to |url| and wait for the reputation check to complete before
@@ -555,7 +566,8 @@ IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsBrowserTest,
   // Ensure that the tab is open for more than 0 ms, even in the face of bots
   // with bad clocks.
   base::RunLoop run_loop;
-  base::PostDelayedTask(FROM_HERE, run_loop.QuitClosure(), kMinForegroundTime);
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, run_loop.QuitClosure(), kMinForegroundTime);
   run_loop.Run();
   CloseAllTabs();
 

@@ -5,7 +5,7 @@
 #include "ios/chrome/browser/infobars/infobar_container_ios.h"
 
 #include "base/metrics/histogram_macros.h"
-#include "ios/chrome/browser/infobars/infobar.h"
+#include "ios/chrome/browser/infobars/infobar_ios.h"
 #import "ios/chrome/browser/ui/infobars/infobar_container_consumer.h"
 #import "ios/chrome/browser/ui/infobars/infobar_feature.h"
 #import "ios/chrome/browser/ui/infobars/infobar_ui_delegate.h"
@@ -49,9 +49,10 @@ void InfoBarContainerIOS::PlatformSpecificAddInfoBar(infobars::InfoBar* infobar,
     // Only InfobarUIReboot Infobars should be presented using the non legacy
     // consumer.
     DCHECK(IsInfobarUIRebootEnabled());
-    [consumer_ addInfoBarWithDelegate:delegate];
+    [consumer_ addInfoBarWithDelegate:delegate
+                           skipBanner:infobar_ios->skip_banner()];
   } else {
-    [legacyConsumer_ addInfoBarWithDelegate:delegate];
+    [legacyConsumer_ addInfoBarWithDelegate:delegate skipBanner:NO];
   }
 }
 

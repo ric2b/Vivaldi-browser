@@ -40,7 +40,7 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
   void Destroy() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
-              ColorSpace color_space,
+              const gfx::ColorSpace& color_space,
               bool has_alpha) override;
   bool IsOffscreen() override;
 
@@ -82,6 +82,7 @@ class GL_EXPORT GLSurfaceEGLSurfaceControl : public GLSurfaceEGL {
   bool SupportsPostSubBuffer() override;
   bool SupportsCommitOverlayPlanes() override;
   void SetDisplayTransform(gfx::OverlayTransform transform) override;
+  gfx::SurfaceOrigin GetOrigin() const override;
 
  private:
   ~GLSurfaceEGLSurfaceControl() override;

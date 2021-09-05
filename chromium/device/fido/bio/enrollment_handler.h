@@ -13,10 +13,6 @@
 #include "device/fido/fido_request_handler_base.h"
 #include "device/fido/pin.h"
 
-namespace service_manager {
-class Connector;
-}  // namespace service_manager
-
 namespace device {
 
 enum class BioEnrollmentStatus {
@@ -50,7 +46,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) BioEnrollmentHandler
       base::OnceCallback<void(CtapDeviceResponseCode, TemplateId)>;
 
   BioEnrollmentHandler(
-      service_manager::Connector* connector,
       const base::flat_set<FidoTransportProtocol>& supported_transports,
       base::OnceClosure ready_callback,
       ErrorCallback error_callback,
@@ -59,11 +54,11 @@ class COMPONENT_EXPORT(DEVICE_FIDO) BioEnrollmentHandler
   ~BioEnrollmentHandler() override;
 
   // Enrolls a new fingerprint template. The user must provide the required
-  // number of samples by touching the authenticator's sensor repeatedly.
-  // After each sample, or a timeout, |sample_callback| is invoked with the
-  // remaining number of samples. Once all samples have been collected or
-  // the operation has been cancelled, |completion_callback| is invoked
-  // with the operation status.
+  // number of samples by touching the authenticator's sensor repeatedly. For
+  // each sample, |sample_callback| is invoked with a status and the remaining
+  // number of samples. Once all samples have been collected or the operation
+  // has been cancelled, |completion_callback| is invoked with the operation
+  // status.
   void EnrollTemplate(SampleCallback sample_callback,
                       CompletionCallback completion_callback);
 
@@ -90,7 +85,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) BioEnrollmentHandler
     kWaitingForTouch,
     kGettingRetries,
     kWaitingForPIN,
-    kGettingEphemeralKey,
     kGettingPINToken,
     kReady,
     kEnrolling,
@@ -110,9 +104,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) BioEnrollmentHandler
   void OnRetriesResponse(CtapDeviceResponseCode,
                          base::Optional<pin::RetriesResponse>);
   void OnHavePIN(std::string pin);
-  void OnHaveEphemeralKey(std::string,
-                          CtapDeviceResponseCode,
-                          base::Optional<pin::KeyAgreementResponse>);
   void OnHavePINToken(CtapDeviceResponseCode,
                       base::Optional<pin::TokenResponse>);
   void OnEnrollResponse(SampleCallback,

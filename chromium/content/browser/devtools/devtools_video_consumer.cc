@@ -10,7 +10,6 @@
 #include "base/memory/shared_memory_mapping.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "components/viz/host/host_frame_sink_manager.h"
-#include "components/viz/service/frame_sinks/video_capture/frame_sink_video_capturer_impl.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "media/base/limits.h"
 #include "media/capture/mojom/video_capture_types.mojom.h"
@@ -135,7 +134,8 @@ void DevToolsVideoConsumer::OnFrameCaptured(
     base::ReadOnlySharedMemoryRegion data,
     ::media::mojom::VideoFrameInfoPtr info,
     const gfx::Rect& content_rect,
-    viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks) {
+    mojo::PendingRemote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
+        callbacks) {
   if (!data.IsValid())
     return;
 
@@ -169,7 +169,8 @@ void DevToolsVideoConsumer::OnFrameCaptured(
   }
   frame->AddDestructionObserver(base::BindOnce(
       [](base::ReadOnlySharedMemoryMapping mapping,
-         viz::mojom::FrameSinkVideoConsumerFrameCallbacksPtr callbacks) {},
+         mojo::PendingRemote<viz::mojom::FrameSinkVideoConsumerFrameCallbacks>
+             callbacks) {},
       std::move(mapping), std::move(callbacks)));
   frame->metadata()->MergeInternalValuesFrom(info->metadata);
   if (info->color_space.has_value())

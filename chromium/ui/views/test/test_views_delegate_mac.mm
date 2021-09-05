@@ -15,10 +15,10 @@ TestViewsDelegate::~TestViewsDelegate() = default;
 void TestViewsDelegate::OnBeforeWidgetInit(
     Widget::InitParams* params,
     internal::NativeWidgetDelegate* delegate) {
-  if (params->opacity == Widget::InitParams::INFER_OPACITY) {
-    params->opacity = use_transparent_windows_ ?
-        Widget::InitParams::TRANSLUCENT_WINDOW :
-        Widget::InitParams::OPAQUE_WINDOW;
+  if (params->opacity == Widget::InitParams::WindowOpacity::kInferred) {
+    params->opacity = use_transparent_windows_
+                          ? Widget::InitParams::WindowOpacity::kTranslucent
+                          : Widget::InitParams::WindowOpacity::kOpaque;
   }
   // TODO(tapted): This should return a *Desktop*NativeWidgetMac.
   if (!params->native_widget && use_desktop_native_widgets_)
@@ -27,10 +27,6 @@ void TestViewsDelegate::OnBeforeWidgetInit(
 
 ui::ContextFactory* TestViewsDelegate::GetContextFactory() {
   return context_factory_;
-}
-
-ui::ContextFactoryPrivate* TestViewsDelegate::GetContextFactoryPrivate() {
-  return context_factory_private_;
 }
 
 }  // namespace views

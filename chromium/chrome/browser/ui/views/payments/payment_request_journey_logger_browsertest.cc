@@ -25,12 +25,12 @@ namespace payments {
 
 using PaymentRequestJourneyLoggerTestBase = PaymentRequestBrowserTestBase;
 
-using PaymentRequestJourneyLoggerSelectedPaymentInstrumentTest =
+using PaymentRequestJourneyLoggerSelectedPaymentAppTest =
     PaymentRequestJourneyLoggerTestBase;
 
-// Tests that the selected instrument metric is correctly logged when the
+// Tests that the selected app metric is correctly logged when the
 // Payment Request is completed with a credit card.
-IN_PROC_BROWSER_TEST_F(PaymentRequestJourneyLoggerSelectedPaymentInstrumentTest,
+IN_PROC_BROWSER_TEST_F(PaymentRequestJourneyLoggerSelectedPaymentAppTest,
                        TestSelectedPaymentMethod) {
   NavigateTo("/payment_request_no_shipping_test.html");
   base::HistogramTester histogram_tester;
@@ -862,7 +862,6 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestNotShownTest, OnlyNotShownMetricsLogged) {
 
   // Make sure that the metrics that required the Payment Request to be shown
   // are not logged.
-  histogram_tester.ExpectTotalCount("PaymentRequest.SelectedPaymentMethod", 0);
   histogram_tester.ExpectTotalCount("PaymentRequest.NumberOfSelectionAdds", 0);
   histogram_tester.ExpectTotalCount("PaymentRequest.NumberOfSelectionChanges",
                                     0);

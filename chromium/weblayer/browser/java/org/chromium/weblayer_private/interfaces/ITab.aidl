@@ -6,6 +6,7 @@ package org.chromium.weblayer_private.interfaces;
 
 import org.chromium.weblayer_private.interfaces.IDownloadCallbackClient;
 import org.chromium.weblayer_private.interfaces.IErrorPageCallbackClient;
+import org.chromium.weblayer_private.interfaces.IFindInPageCallbackClient;
 import org.chromium.weblayer_private.interfaces.IFullscreenCallbackClient;
 import org.chromium.weblayer_private.interfaces.INavigationController;
 import org.chromium.weblayer_private.interfaces.INavigationControllerClient;
@@ -17,6 +18,7 @@ interface ITab {
 
   INavigationController createNavigationController(in INavigationControllerClient client) = 1;
 
+  // Deprecated, use Profile.setDownloadCallbackClient.
   void setDownloadCallbackClient(IDownloadCallbackClient client) = 2;
 
   void setErrorPageCallbackClient(IErrorPageCallbackClient client) = 3;
@@ -31,4 +33,15 @@ interface ITab {
   // restores. The id is intended for the client library to avoid creating duplicate client objects
   // for the same ITab.
   int getId() = 7;
+
+  boolean setFindInPageCallbackClient(IFindInPageCallbackClient client) = 8;
+  void findInPage(in String searchText, boolean forward) = 9;
+
+  // And and removed in 82; superseded by dismissTransientUi().
+  // void dismissTabModalOverlay() = 10;
+  void dispatchBeforeUnloadAndClose() = 11;
+
+  boolean dismissTransientUi() = 12;
+
+  String getGuid() = 13;
 }

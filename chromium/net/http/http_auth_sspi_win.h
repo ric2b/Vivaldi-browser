@@ -21,7 +21,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
 #include "net/http/http_auth.h"
-#include "net/http/http_negotiate_auth_system.h"
+#include "net/http/http_auth_mechanism.h"
 
 namespace net {
 
@@ -142,12 +142,12 @@ class SSPILibraryDefault : public SSPILibrary {
   SECURITY_STATUS FreeContextBuffer(PVOID pvContextBuffer) override;
 };
 
-class NET_EXPORT_PRIVATE HttpAuthSSPI : public HttpNegotiateAuthSystem {
+class NET_EXPORT_PRIVATE HttpAuthSSPI : public HttpAuthMechanism {
  public:
-  HttpAuthSSPI(SSPILibrary* sspi_library, const std::string& scheme);
+  HttpAuthSSPI(SSPILibrary* sspi_library, HttpAuth::Scheme scheme);
   ~HttpAuthSSPI() override;
 
-  // HttpNegotiateAuthSystem implementation:
+  // HttpAuthMechanism implementation:
   bool Init(const NetLogWithSource& net_log) override;
   bool NeedsIdentity() const override;
   bool AllowsExplicitCredentials() const override;
@@ -176,7 +176,7 @@ class NET_EXPORT_PRIVATE HttpAuthSSPI : public HttpNegotiateAuthSystem {
   void ResetSecurityContext();
 
   SSPILibrary* library_;
-  std::string scheme_;
+  HttpAuth::Scheme scheme_;
   std::string decoded_server_auth_token_;
   CredHandle cred_;
   CtxtHandle ctxt_;

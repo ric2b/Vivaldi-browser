@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include <memory>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -32,6 +33,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread.h"
@@ -247,15 +249,6 @@ std::string QuoteCommandLineForDesktopFileExec(
 #if defined(USE_GLIB)
 const char kDesktopEntry[] = "Desktop Entry";
 const char kXdgOpenShebang[] = "#!/usr/bin/env xdg-open";
-#endif
-
-// TODO(loyso): shell_integraion_linux.cc won't compile with app_list disabled?
-#if BUILDFLAG(ENABLE_APP_LIST)
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-const char kAppListDesktopName[] = "chrome-app-list";
-#else  // BUILDFLAG(CHROMIUM_BRANDING)
-const char kAppListDesktopName[] = "chromium-app-list";
-#endif
 #endif
 
 }  // namespace
@@ -497,21 +490,22 @@ std::vector<base::FilePath> GetExistingProfileShortcutFilenames(
   return shortcut_paths;
 }
 
-std::string GetDesktopFileContents(
-    const base::FilePath& chrome_exe_path,
-    const std::string& app_name,
-    const GURL& url,
-    const std::string& extension_id,
-    const base::string16& title,
-    const std::string& icon_name,
-    const base::FilePath& profile_path,
-    const std::string& categories,
-    bool no_display) {
+std::string GetDesktopFileContents(const base::FilePath& chrome_exe_path,
+                                   const std::string& app_name,
+                                   const GURL& url,
+                                   const std::string& extension_id,
+                                   const base::string16& title,
+                                   const std::string& icon_name,
+                                   const base::FilePath& profile_path,
+                                   const std::string& categories,
+                                   const std::string& mime_type,
+                                   bool no_display) {
   base::CommandLine cmd_line = shell_integration::CommandLineArgsForLauncher(
       url, extension_id, profile_path);
   cmd_line.SetProgram(chrome_exe_path);
   return GetDesktopFileContentsForCommand(cmd_line, app_name, url, title,
-                                          icon_name, categories, no_display);
+                                          icon_name, categories, mime_type,
+                                          no_display);
 }
 
 std::string GetDesktopFileContentsForCommand(
@@ -521,6 +515,7 @@ std::string GetDesktopFileContentsForCommand(
     const base::string16& title,
     const std::string& icon_name,
     const std::string& categories,
+    const std::string& mime_type,
     bool no_display) {
 #if defined(USE_GLIB)
   // Although not required by the spec, Nautilus on Ubuntu Karmic creates its
@@ -547,8 +542,25 @@ std::string GetDesktopFileContentsForCommand(
   }
   g_key_file_set_string(key_file, kDesktopEntry, "Name", final_title.c_str());
 
+  base::CommandLine modified_command_line(command_line);
+
+  // Set the "MimeType" key.
+  if (!mime_type.empty() && mime_type.find("\n") == std::string::npos &&
+      mime_type.find("\r") == std::string::npos) {
+    g_key_file_set_string(key_file, kDesktopEntry, "MimeType",
+                          mime_type.c_str());
+
+    // Some Linux Desktop Environments don't show file handlers unless they
+    // specify where to place file arguments.
+    // Note: We only include this parameter if the application is actually able
+    // to handle files, to prevent it showing up in the list of all applications
+    // which can handle files.
+    modified_command_line.AppendArg("%F");
+  }
+
   // Set the "Exec" key.
-  std::string final_path = QuoteCommandLineForDesktopFileExec(command_line);
+  std::string final_path =
+      QuoteCommandLineForDesktopFileExec(modified_command_line);
   g_key_file_set_string(key_file, kDesktopEntry, "Exec", final_path.c_str());
 
   // Set the "Icon" key.
@@ -635,48 +647,42 @@ std::string GetDirectoryFileContents(const base::string16& title,
 #endif
 }
 
-#if BUILDFLAG(ENABLE_APP_LIST)
-bool CreateAppListDesktopShortcut(
-    const std::string& wm_class,
-    const std::string& title) {
-  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
-                                                base::BlockingType::MAY_BLOCK);
+base::FilePath GetMimeTypesRegistrationFilename(
+    const base::FilePath& profile_path,
+    const web_app::AppId& app_id) {
+  DCHECK(!profile_path.empty() && !app_id.empty());
 
-  base::FilePath desktop_name(kAppListDesktopName);
-  base::FilePath shortcut_filename = desktop_name.AddExtension("desktop");
+  // Use a prefix to clearly group files created by Chrome.
+  std::string filename = base::StringPrintf(
+      "%s-%s-%s%s", chrome::kBrowserProcessExecutableName, app_id.c_str(),
+      profile_path.BaseName().value().c_str(), ".xml");
 
-  // We do not want duplicate shortcuts. Delete any that already exist and
-  // replace them.
-  DeleteShortcutInApplicationsMenu(shortcut_filename, base::FilePath());
+  // Replace illegal characters and spaces in |filename|.
+  base::i18n::ReplaceIllegalCharactersInPath(&filename, '_');
+  base::ReplaceChars(filename, " ", "_", &filename);
 
-  base::FilePath chrome_exe_path = GetChromeExePath();
-  if (chrome_exe_path.empty()) {
-    NOTREACHED();
-    return false;
+  return base::FilePath(filename);
+}
+
+std::string GetMimeTypesRegistrationFileContents(
+    const apps::FileHandlers& file_handlers) {
+  std::stringstream ss;
+  ss << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<mime-info "
+        "xmlns=\"http://www.freedesktop.org/standards/shared-mime-info\">\n";
+
+  for (const auto& file_handler : file_handlers) {
+    for (const auto& accept_entry : file_handler.accept) {
+      ss << "  <mime-type type=\"" << accept_entry.mime_type + "\">\n";
+      for (const auto& file_extension : accept_entry.file_extensions)
+        ss << "    <glob pattern=\"*" << file_extension << "\"/>\n";
+      ss << "  </mime-type>\n";
+    }
   }
 
-  gfx::ImageFamily icon_images;
-  ui::ResourceBundle& resource_bundle = ui::ResourceBundle::GetSharedInstance();
-  icon_images.Add(*resource_bundle.GetImageSkiaNamed(IDR_APP_LIST_16));
-  icon_images.Add(*resource_bundle.GetImageSkiaNamed(IDR_APP_LIST_32));
-  icon_images.Add(*resource_bundle.GetImageSkiaNamed(IDR_APP_LIST_48));
-  icon_images.Add(*resource_bundle.GetImageSkiaNamed(IDR_APP_LIST_256));
-  std::string icon_name = CreateShortcutIcon(icon_images, desktop_name);
-
-  base::CommandLine command_line(chrome_exe_path);
-  command_line.AppendSwitch(switches::kShowAppList);
-  std::string contents =
-      GetDesktopFileContentsForCommand(command_line,
-                                       wm_class,
-                                       GURL(),
-                                       base::UTF8ToUTF16(title),
-                                       icon_name,
-                                       kAppListCategories,
-                                       false);
-  return CreateShortcutInApplicationsMenu(
-      shortcut_filename, contents, base::FilePath(), "");
+  ss << "</mime-info>\n";
+  return ss.str();
 }
-#endif
 
 }  // namespace shell_integration_linux
 

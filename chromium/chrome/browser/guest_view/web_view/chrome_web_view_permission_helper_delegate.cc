@@ -10,19 +10,23 @@
 #include "base/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
-#include "chrome/browser/permissions/permission_manager.h"
-#include "chrome/browser/permissions/permission_request_id.h"
-#include "chrome/browser/plugins/chrome_plugin_service_filter.h"
+#include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/render_messages.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/permissions/permission_manager.h"
+#include "components/permissions/permission_request_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "ppapi/buildflags/buildflags.h"
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+#include "chrome/browser/plugins/chrome_plugin_service_filter.h"
+#endif
 
 #include "components/guest_view/vivaldi_guest_view_constants.h"
 
@@ -39,8 +43,13 @@ void CallbackWrapper(base::OnceCallback<void(bool)> callback,
 
 ChromeWebViewPermissionHelperDelegate::ChromeWebViewPermissionHelperDelegate(
     WebViewPermissionHelper* web_view_permission_helper)
-    : WebViewPermissionHelperDelegate(web_view_permission_helper),
-      plugin_auth_host_bindings_(web_contents(), this) {}
+    : WebViewPermissionHelperDelegate(web_view_permission_helper)
+#if BUILDFLAG(ENABLE_PLUGINS)
+      ,
+      plugin_auth_host_receivers_(web_contents(), this)
+#endif
+{
+}
 
 ChromeWebViewPermissionHelperDelegate::~ChromeWebViewPermissionHelperDelegate()
 {}
@@ -131,7 +140,7 @@ void ChromeWebViewPermissionHelperDelegate::OnDownloadPermissionResponse(
 void ChromeWebViewPermissionHelperDelegate::RequestPointerLockPermission(
     bool user_gesture,
     bool last_unlocked_by_target,
-    const base::Callback<void(bool)>& callback) {
+    base::OnceCallback<void(bool)> callback) {
   base::DictionaryValue request_info;
   request_info.SetBoolean(guest_view::kUserGesture, user_gesture);
   request_info.SetBoolean(webview::kLastUnlockedBySelf,
@@ -140,20 +149,18 @@ void ChromeWebViewPermissionHelperDelegate::RequestPointerLockPermission(
                          web_contents()->GetLastCommittedURL().spec());
 
   web_view_permission_helper()->RequestPermission(
-      WEB_VIEW_PERMISSION_TYPE_POINTER_LOCK,
-      request_info,
-      base::Bind(&ChromeWebViewPermissionHelperDelegate::
-                     OnPointerLockPermissionResponse,
-                 weak_factory_.GetWeakPtr(),
-                 callback),
+      WEB_VIEW_PERMISSION_TYPE_POINTER_LOCK, request_info,
+      base::BindOnce(&ChromeWebViewPermissionHelperDelegate::
+                         OnPointerLockPermissionResponse,
+                     weak_factory_.GetWeakPtr(), std::move(callback)),
       false /* allowed_by_default */);
 }
 
 void ChromeWebViewPermissionHelperDelegate::OnPointerLockPermissionResponse(
-    const base::Callback<void(bool)>& callback,
+    base::OnceCallback<void(bool)> callback,
     bool allow,
     const std::string& user_input) {
-  callback.Run(allow && web_view_guest()->attached());
+  std::move(callback).Run(allow && web_view_guest()->attached());
 }
 
 void ChromeWebViewPermissionHelperDelegate::RequestGeolocationPermission(
@@ -199,9 +206,8 @@ void ChromeWebViewPermissionHelperDelegate::OnGeolocationPermissionResponse(
   int render_process_id = web_contents->GetMainFrame()->GetProcess()->GetID();
   int render_frame_id = web_contents->GetMainFrame()->GetRoutingID();
 
-  const PermissionRequestID request_id(
-      render_process_id,
-      render_frame_id,
+  const permissions::PermissionRequestID request_id(
+      render_process_id, render_frame_id,
       // The geolocation permission request here is not initiated
       // through WebGeolocationPermissionRequest. We are only interested
       // in the fact whether the embedder/app has geolocation
@@ -210,8 +216,8 @@ void ChromeWebViewPermissionHelperDelegate::OnGeolocationPermissionResponse(
 
   Profile* profile = Profile::FromBrowserContext(
       web_view_guest()->browser_context());
-  PermissionManager::Get(profile)->RequestPermission(
-      CONTENT_SETTINGS_TYPE_GEOLOCATION, web_contents->GetMainFrame(),
+  PermissionManagerFactory::GetForProfile(profile)->RequestPermission(
+      ContentSettingsType::GEOLOCATION, web_contents->GetMainFrame(),
       web_view_guest()
           ->embedder_web_contents()
           ->GetLastCommittedURL()
@@ -254,36 +260,6 @@ void ChromeWebViewPermissionHelperDelegate::OnFileSystemPermissionResponse(
     bool allow,
     const std::string& user_input) {
   std::move(callback).Run(allow && web_view_guest()->attached());
-}
-
-void ChromeWebViewPermissionHelperDelegate::FileSystemAccessedAsync(
-    int render_process_id,
-    int render_frame_id,
-    int request_id,
-    const GURL& url,
-    bool blocked_by_policy) {
-  RequestFileSystemPermission(
-      url, !blocked_by_policy,
-      base::BindOnce(&ChromeWebViewPermissionHelperDelegate::
-                         FileSystemAccessedAsyncResponse,
-                     weak_factory_.GetWeakPtr(), render_process_id,
-                     render_frame_id, request_id, url));
-}
-
-void ChromeWebViewPermissionHelperDelegate::FileSystemAccessedAsyncResponse(
-    int render_process_id,
-    int render_frame_id,
-    int request_id,
-    const GURL& url,
-    bool allowed) {
-  TabSpecificContentSettings::FileSystemAccessed(
-      render_process_id, render_frame_id, url, !allowed);
-  content::RenderFrameHost* rfh =
-      content::RenderFrameHost::FromID(render_process_id, render_frame_id);
-  if (rfh) {
-    rfh->Send(new ChromeViewMsg_RequestFileSystemAccessAsyncResponse(
-        render_frame_id, request_id, allowed));
-  }
 }
 
 }  // namespace extensions

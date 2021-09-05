@@ -22,15 +22,12 @@ WebContents::CreateParams::CreateParams(BrowserContext* context,
       opener_render_frame_id(MSG_ROUTING_NONE),
       opener_suppressed(false),
       created_with_opener(false),
-      routing_id(MSG_ROUTING_NONE),
-      main_frame_routing_id(MSG_ROUTING_NONE),
-      main_frame_widget_routing_id(MSG_ROUTING_NONE),
       initially_hidden(false),
       guest_delegate(nullptr),
       context(nullptr),
       renderer_initiated_creation(false),
       desired_renderer_state(kOkayToHaveRendererProcess),
-      starting_sandbox_flags(blink::WebSandboxFlags::kNone),
+      starting_sandbox_flags(blink::mojom::WebSandboxFlags::kNone),
       is_never_visible(false) {}
 
 WebContents::CreateParams::CreateParams(const CreateParams& other) = default;

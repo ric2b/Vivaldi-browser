@@ -11,12 +11,8 @@
       "position": [-10, -10],
       "bounds": [220, 220],
       "backgroundColor": "#0000FF",
-      "paintInvalidations": [
-        {
-          "object": "LayoutNGBlockFlow DIV id='target'",
-          "rect": [0, 0, 220, 220],
-          "reason": "style change"
-        }
+      "invalidations": [
+        [0, 0, 220, 220]
       ],
       "transform": 1
     },
@@ -25,6 +21,18 @@
       "bounds": [185, 2000],
       "contentsOpaque": true,
       "backgroundColor": "#0000FF",
+      "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Horizontal Scrollbar Layer",
+      "position": [0, 185],
+      "bounds": [185, 15],
+      "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [185, 0],
+      "bounds": [15, 185],
       "transform": 1
     },
     {

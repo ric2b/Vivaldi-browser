@@ -2,7 +2,25 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="et">
 <translation id="3830627370375585318">Luba tulemüüri või viirusetõrje seadetes Vivaldile võrgujuurdepääs</translation>
+<translation id="4200102020577305737">Valige
+          Vivaldi menüü &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          LAN-seaded
+          ja tühistage valik „Kasuta LAN-i jaoks puhverserverit”.</translation>
 <translation id="5248344925342018662">See on turvaline Vivaldi-sisene leht</translation>
+<translation id="7023871570427738255">Avage
+        Vivaldi menüü &gt;
+        <ph name="SETTINGS_TITLE" />
+        &gt;
+        <ph name="ADVANCED_TITLE" />
+        ja tühistage valik „<ph name="NO_PREFETCH_DESCRIPTION" />”.
+        Kui see probleemi ei lahenda, soovitame toimivuse parandamiseks
+        selle valiku uuesti teha.</translation>
 <translation id="8187289872471304532">ava
           Rakendused &gt; Süsteemi eelistused &gt; Võrk &gt; Täpsemalt &gt; Puhverserverid
           (Applications &gt; System Preferences &gt; Network &gt; Advanced &gt; Proxies)

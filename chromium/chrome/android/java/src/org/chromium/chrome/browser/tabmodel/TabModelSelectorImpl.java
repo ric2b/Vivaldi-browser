@@ -7,12 +7,16 @@ package org.chromium.chrome.browser.tabmodel;
 import android.app.Activity;
 import android.os.Handler;
 
-import org.chromium.base.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.TabHidingType;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabPersistentStoreObserver;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -134,13 +138,15 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
 
         addObserver(new EmptyTabModelSelectorObserver() {
             @Override
-            public void onNewTabCreated(Tab tab) {
+            public void onNewTabCreated(Tab tab, @TabCreationState int creationState) {
                 // Only invalidate if the tab exists in the currently selected model.
                 if (TabModelUtils.getTabById(getCurrentModel(), tab.getId()) != null) {
-                    mTabContentManager.invalidateIfChanged(tab.getId(), tab.getUrl());
+                    mTabContentManager.invalidateIfChanged(tab.getId(), tab.getUrlString());
                 }
 
-                if (tab.hasPendingLoadParams()) mTabSaver.addTabToSaveQueue(tab);
+                if (creationState == TabCreationState.FROZEN_FOR_LAZY_LOAD) {
+                    mTabSaver.addTabToSaveQueue(tab);
+                }
             }
         });
 
@@ -149,7 +155,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
             public void onUrlUpdated(Tab tab) {
                 TabModel model = getModelForTabId(tab.getId());
                 if (model == getCurrentModel()) {
-                    mTabContentManager.invalidateIfChanged(tab.getId(), tab.getUrl());
+                    mTabContentManager.invalidateIfChanged(tab.getId(), tab.getUrlString());
                 }
             }
 
@@ -160,7 +166,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
 
             @Override
             public void onPageLoadStarted(Tab tab, String url) {
-                String previousUrl = tab.getUrl();
+                String previousUrl = tab.getUrlString();
                 mTabContentManager.invalidateTabThumbnail(tab.getId(), previousUrl);
             }
 
@@ -187,7 +193,9 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
 
             @Override
             public void onActivityAttachmentChanged(Tab tab, boolean attached) {
-                if (!attached) getModel(tab.isIncognito()).removeTab(tab);
+                if (!attached && !isReparentingInProgress()) {
+                    getModel(tab.isIncognito()).removeTab(tab);
+                }
             }
 
             @Override
@@ -257,6 +265,10 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
         return isIncognitoSelected() == model.isIncognito();
     }
 
+    /**
+     * Save the current state of the tab model. Usage of this method is discouraged due to it
+     * writing to disk.
+     */
     public void saveState() {
         commitAllTabClosures();
         mTabSaver.saveState();
@@ -330,7 +342,9 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
             TabModelImpl.startTabSwitchLatencyTiming(type);
         }
         if (mVisibleTab != null && mVisibleTab != tab && !mVisibleTab.needsReload()) {
-            if (mVisibleTab.isInitialized() && !mVisibleTab.isDetached()) {
+            boolean attached = mVisibleTab.getWebContents() != null
+                    && mVisibleTab.getWebContents().getTopLevelNativeWindow() != null;
+            if (mVisibleTab.isInitialized() && attached) {
                 // TODO(dtrainor): Once we figure out why we can't grab a snapshot from the current
                 // tab when we have other tabs loading from external apps remove the checks for
                 // FROM_EXTERNAL_APP/FROM_NEW.
@@ -360,7 +374,7 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
         mVisibleTab = tab;
 
         // Don't execute the tab display part if Chrome has just been sent to background. This
-        // avoids uneccessary work (tab restore) and prevents pollution of tab display metrics - see
+        // avoids unecessary work (tab restore) and prevents pollution of tab display metrics - see
         // http://crbug.com/316166.
         if (type != TabSelectionType.FROM_EXIT) {
             tab.show(type);
@@ -382,6 +396,11 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
     @Override
     public boolean isSessionRestoreInProgress() {
         return mSessionRestoreInProgress.get();
+    }
+
+    @Override
+    public boolean isReparentingInProgress() {
+        return super.isReparentingInProgress();
     }
 
     // TODO(tedchoc): Remove the need for this to be exposed.

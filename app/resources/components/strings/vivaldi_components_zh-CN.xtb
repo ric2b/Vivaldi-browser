@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
-<translation id="3830627370375585318">在防火墙或防病毒设置部分设为允许 Vivaldi 访问网络。</translation>
+<translation id="3830627370375585318">为使 Vivaldi 可以访问网络开启防火墙或防病毒软件的
+设置。</translation>
 <translation id="4200102020577305737">转到
           Vivaldi 主菜单 &gt;
           <ph name="SETTINGS_TITLE" />
@@ -9,7 +10,8 @@
           <ph name="ADVANCED_TITLE" />
           &gt;
           <ph name="PROXIES_TITLE" />
-          &gt;局域网设置
+          &gt;
+          局域网设置
           然后取消勾选“在局域网中使用代理服务器”。</translation>
 <translation id="4932161901409251843">转到
           Vivaldi 主菜单 &gt;

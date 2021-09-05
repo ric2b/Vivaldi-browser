@@ -26,6 +26,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_TIMING_PERFORMANCE_MARK_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_TIMING_PERFORMANCE_MARK_H_
 
+#include "third_party/blink/public/mojom/timing/performance_mark_or_measure.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/core/timing/performance_entry.h"
 #include "third_party/blink/renderer/platform/bindings/trace_wrapper_v8_reference.h"
@@ -42,30 +43,30 @@ class CORE_EXPORT PerformanceMark final : public PerformanceEntry {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static PerformanceMark* Create(ScriptState* script_state,
-                                 const AtomicString& name,
-                                 double start_time,
-                                 const ScriptValue& detail,
-                                 ExceptionState& exception_state);
-
-  // This method is required by the constructor defined in performance_mark.idl.
+  // This method corresponds to the PerformanceMark constructor defined in the
+  // User Timing L3 spec
+  // (https://w3c.github.io/user-timing/#the-performancemark-constructor). It
+  // gets called as a subroutine of the `performance.mark` method as well as
+  // whenever script runs `new PerformanceMark(..)`.
   static PerformanceMark* Create(ScriptState*,
                                  const AtomicString& mark_name,
                                  PerformanceMarkOptions*,
                                  ExceptionState&);
 
-  PerformanceMark(ScriptState*,
-                  const AtomicString& name,
+  // This constructor is only public so that MakeGarbageCollected can call it.
+  PerformanceMark(const AtomicString& name,
                   double start_time,
                   scoped_refptr<SerializedScriptValue>,
                   ExceptionState& exception_state);
 
   AtomicString entryType() const override;
   PerformanceEntryType EntryTypeEnum() const override;
+  mojom::blink::PerformanceMarkOrMeasurePtr ToMojoPerformanceMarkOrMeasure()
+      override;
 
   ScriptValue detail(ScriptState*);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   ~PerformanceMark() override = default;

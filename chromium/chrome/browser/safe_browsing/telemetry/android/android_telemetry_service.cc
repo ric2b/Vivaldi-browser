@@ -21,11 +21,11 @@
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/common/safe_browsing_prefs.h"
-#include "components/safe_browsing/db/database_manager.h"
-#include "components/safe_browsing/features.h"
-#include "components/safe_browsing/ping_manager.h"
-#include "components/safe_browsing/web_ui/safe_browsing_ui.h"
+#include "components/safe_browsing/content/web_ui/safe_browsing_ui.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/db/database_manager.h"
+#include "components/safe_browsing/core/features.h"
+#include "components/safe_browsing/core/ping_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item_utils.h"
@@ -142,7 +142,7 @@ bool AndroidTelemetryService::CanSendPing(download::DownloadItem* item) {
     return false;
   }
 
-  if (!IsSafeBrowsingEnabled()) {
+  if (!IsSafeBrowsingEnabled(*GetPrefs())) {
     RecordApkDownloadTelemetryOutcome(
         ApkDownloadTelemetryOutcome::NOT_SENT_SAFE_BROWSING_NOT_ENABLED);
     return false;
@@ -154,9 +154,11 @@ bool AndroidTelemetryService::CanSendPing(download::DownloadItem* item) {
     return false;
   }
 
-  if (!IsExtendedReportingEnabled(*GetPrefs())) {
+  bool no_ping_allowed = !IsExtendedReportingEnabled(*GetPrefs());
+
+  if (no_ping_allowed) {
     RecordApkDownloadTelemetryOutcome(
-        ApkDownloadTelemetryOutcome::NOT_SENT_EXTENDED_REPORTING_DISABLED);
+        ApkDownloadTelemetryOutcome::NOT_SENT_UNCONSENTED);
     return false;
   }
 
@@ -165,10 +167,6 @@ bool AndroidTelemetryService::CanSendPing(download::DownloadItem* item) {
 
 const PrefService* AndroidTelemetryService::GetPrefs() {
   return profile_->GetPrefs();
-}
-
-bool AndroidTelemetryService::IsSafeBrowsingEnabled() {
-  return GetPrefs()->GetBoolean(prefs::kSafeBrowsingEnabled);
 }
 
 void AndroidTelemetryService::FillReferrerChain(

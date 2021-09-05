@@ -13,6 +13,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/display/display_transform.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/native_widget_types.h"
@@ -80,7 +81,10 @@ void TestScreen::SetDeviceScaleFactor(float device_scale_factor) {
 void TestScreen::SetColorSpace(const gfx::ColorSpace& color_space,
                                float sdr_white_level) {
   display::Display display(GetPrimaryDisplay());
-  display.SetColorSpaceAndDepth(color_space, sdr_white_level);
+  gfx::DisplayColorSpaces display_color_spaces(color_space,
+                                               gfx::BufferFormat::RGBA_8888);
+  display_color_spaces.SetSDRWhiteLevel(sdr_white_level);
+  display.set_color_spaces(display_color_spaces);
   display_list().UpdateDisplay(display);
 }
 
@@ -95,7 +99,7 @@ void TestScreen::SetDisplayRotation(display::Display::Rotation rotation) {
   display.set_rotation(rotation);
   display.SetScaleAndBounds(display.device_scale_factor(), new_bounds);
   display_list().UpdateDisplay(display);
-  host_->SetRootTransform(GetRotationTransform() * GetUIScaleTransform());
+  host_->SetRootTransform(GetUIScaleTransform() * GetRotationTransform());
 }
 
 void TestScreen::SetUIScale(float ui_scale) {
@@ -106,7 +110,7 @@ void TestScreen::SetUIScale(float ui_scale) {
       gfx::ScaleRect(gfx::RectF(bounds_in_pixel), 1.0f / ui_scale));
   display.SetScaleAndBounds(display.device_scale_factor(), new_bounds);
   display_list().UpdateDisplay(display);
-  host_->SetRootTransform(GetRotationTransform() * GetUIScaleTransform());
+  host_->SetRootTransform(GetUIScaleTransform() * GetRotationTransform());
 }
 
 void TestScreen::SetWorkAreaInsets(const gfx::Insets& insets) {
@@ -116,26 +120,9 @@ void TestScreen::SetWorkAreaInsets(const gfx::Insets& insets) {
 }
 
 gfx::Transform TestScreen::GetRotationTransform() const {
-  gfx::Transform rotate;
-  display::Display display(GetPrimaryDisplay());
-  switch (display.rotation()) {
-    case display::Display::ROTATE_0:
-      break;
-    case display::Display::ROTATE_90:
-      rotate.Translate(display.bounds().height(), 0);
-      rotate.Rotate(90);
-      break;
-    case display::Display::ROTATE_270:
-      rotate.Translate(0, display.bounds().width());
-      rotate.Rotate(270);
-      break;
-    case display::Display::ROTATE_180:
-      rotate.Translate(display.bounds().width(), display.bounds().height());
-      rotate.Rotate(180);
-      break;
-  }
-
-  return rotate;
+  display::Display display = GetPrimaryDisplay();
+  return display::CreateRotationTransform(display.rotation(),
+                                          gfx::SizeF(display.size()));
 }
 
 gfx::Transform TestScreen::GetUIScaleTransform() const {
@@ -179,6 +166,10 @@ gfx::NativeWindow TestScreen::GetWindowAtScreenPoint(const gfx::Point& point) {
 display::Display TestScreen::GetDisplayNearestWindow(
     gfx::NativeWindow window) const {
   return GetPrimaryDisplay();
+}
+
+std::string TestScreen::GetCurrentWorkspace() {
+  return {};
 }
 
 TestScreen::TestScreen(const gfx::Rect& screen_bounds) {

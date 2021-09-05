@@ -8,10 +8,10 @@
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread.h"
 #include "net/base/address_tracker_linux.h"
 #include "net/dns/dns_config_service_posix.h"
@@ -87,8 +87,8 @@ void NetworkChangeNotifierLinux::BlockingThreadObjects::OnLinkChanged() {
 NetworkChangeNotifierLinux::NetworkChangeNotifierLinux(
     const std::unordered_set<std::string>& ignored_interfaces)
     : NetworkChangeNotifier(NetworkChangeCalculatorParamsLinux()),
-      blocking_thread_runner_(base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock()})),
+      blocking_thread_runner_(
+          base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()})),
       blocking_thread_objects_(
           new BlockingThreadObjects(ignored_interfaces),
           // Ensure |blocking_thread_objects_| lives on

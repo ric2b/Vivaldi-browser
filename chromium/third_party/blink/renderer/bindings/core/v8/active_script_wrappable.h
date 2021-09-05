@@ -37,7 +37,8 @@ class ScriptWrappable;
 //
 // Since this pending activity will not keep the wrappable alive after the
 // context is destroyed, it is common for ActiveScriptWrappable objects to also
-// derive from ContextLifecycleObserver to abort the activity at that time.
+// derive from ExecutionContextLifecycleObserver to abort the activity at that
+// time.
 template <typename T>
 class ActiveScriptWrappable : public ActiveScriptWrappableBase {
  public:
@@ -54,7 +55,9 @@ class ActiveScriptWrappable : public ActiveScriptWrappableBase {
   bool DispatchHasPendingActivity() const final {
     return static_cast<const T*>(this)->HasPendingActivity();
   }
-  ScriptWrappable* ToScriptWrappable() final { return static_cast<T*>(this); }
+  const ScriptWrappable* ToScriptWrappable() const final {
+    return static_cast<const T*>(this);
+  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ActiveScriptWrappable);

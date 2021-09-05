@@ -28,6 +28,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "absl/base/internal/exception_testing.h"
+#include "absl/base/options.h"
 #include "absl/hash/hash_testing.h"
 #include "absl/memory/memory.h"
 
@@ -186,6 +187,21 @@ TEST(FixedArrayTest, AtThrows) {
   EXPECT_EQ(a.at(2), 3);
   ABSL_BASE_INTERNAL_EXPECT_FAIL(a.at(3), std::out_of_range,
                                  "failed bounds check");
+}
+
+TEST(FixedArrayTest, Hardened) {
+#if !defined(NDEBUG) || ABSL_OPTION_HARDENED
+  absl::FixedArray<int> a = {1, 2, 3};
+  EXPECT_EQ(a[2], 3);
+  EXPECT_DEATH_IF_SUPPORTED(a[3], "");
+  EXPECT_DEATH_IF_SUPPORTED(a[-1], "");
+
+  absl::FixedArray<int> empty(0);
+  EXPECT_DEATH_IF_SUPPORTED(empty[0], "");
+  EXPECT_DEATH_IF_SUPPORTED(empty[-1], "");
+  EXPECT_DEATH_IF_SUPPORTED(empty.front(), "");
+  EXPECT_DEATH_IF_SUPPORTED(empty.back(), "");
+#endif
 }
 
 TEST(FixedArrayRelationalsTest, EqualArrays) {
@@ -604,19 +620,16 @@ TEST(FixedArrayTest, Fill) {
   empty.fill(fill_val);
 }
 
-// TODO(johnsoncj): Investigate InlinedStorage default initialization in GCC 4.x
 #ifndef __GNUC__
 TEST(FixedArrayTest, DefaultCtorDoesNotValueInit) {
   using T = char;
   constexpr auto capacity = 10;
   using FixedArrType = absl::FixedArray<T, capacity>;
-  using FixedArrBuffType =
-      absl::aligned_storage_t<sizeof(FixedArrType), alignof(FixedArrType)>;
   constexpr auto scrubbed_bits = 0x95;
   constexpr auto length = capacity / 2;
 
-  FixedArrBuffType buff;
-  std::memset(std::addressof(buff), scrubbed_bits, sizeof(FixedArrBuffType));
+  alignas(FixedArrType) unsigned char buff[sizeof(FixedArrType)];
+  std::memset(std::addressof(buff), scrubbed_bits, sizeof(FixedArrType));
 
   FixedArrType* arr =
       ::new (static_cast<void*>(std::addressof(buff))) FixedArrType(length);

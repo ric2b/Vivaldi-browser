@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/files/file_util.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 
@@ -38,13 +39,34 @@ base::FilePath GetFirefoxInstallPathFromRegistry();
 base::FilePath GetFirefoxDylibPath();
 #endif  // OS_MACOSX
 
-// Returns the path to the Firefox profile.
-base::FilePath GetFirefoxProfilePath();
+struct FirefoxDetail {
+  // |path| represents the Path field in Profiles.ini.
+  // This path is the directory name where all the profile information
+  // in stored.
+  base::FilePath path;
+  // The user specified name of the profile.
+  std::string name;
+};
+
+inline bool operator==(const FirefoxDetail& a1, const FirefoxDetail& a2) {
+  return a1.name == a2.name && a1.path == a2.path;
+}
+
+inline bool operator!=(const FirefoxDetail& a1, const FirefoxDetail& a2) {
+  return !(a1 == a2);
+}
+
+// Returns a vector of FirefoxDetail for available profiles.
+std::vector<FirefoxDetail> GetFirefoxDetails(
+    const std::string& firefox_install_id);
 
 // Returns the path to the Firefox profile, using a custom dictionary.
+// If |firefox_install_id| is not empty returns the default profile associated
+// with that id.
 // Exposed for testing.
-base::FilePath GetFirefoxProfilePathFromDictionary(
-    const base::DictionaryValue& root);
+std::vector<FirefoxDetail> GetFirefoxDetailsFromDictionary(
+    const base::DictionaryValue& root,
+    const std::string& firefox_install_id);
 
 // Detects version of Firefox and installation path for the given Firefox
 // profile.

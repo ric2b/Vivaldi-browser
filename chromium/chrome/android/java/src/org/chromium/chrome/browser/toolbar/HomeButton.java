@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.toolbar;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
-import android.support.v4.content.ContextCompat;
 import android.util.AttributeSet;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
@@ -14,8 +13,9 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnCreateContextMenuListener;
-import android.view.ViewGroup;
-import android.widget.TextView;
+
+import androidx.annotation.VisibleForTesting;
+import androidx.core.content.ContextCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
@@ -23,10 +23,17 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabTabObserver;
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.ThemeColorProvider.TintObserver;
+import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeState;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.homepage.HomepageManager;
+import org.chromium.chrome.browser.homepage.HomepagePolicyManager;
+import org.chromium.chrome.browser.homepage.settings.HomepageSettings;
 import org.chromium.chrome.browser.ntp.NewTabPage;
-import org.chromium.chrome.browser.partnercustomizations.HomepageManager;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarConfiguration;
 import org.chromium.ui.widget.ChromeImageButton;
 
 import org.chromium.chrome.browser.ChromeApplication;
@@ -37,7 +44,10 @@ import org.chromium.chrome.browser.ChromeApplication;
 public class HomeButton extends ChromeImageButton
         implements TintObserver, OnCreateContextMenuListener, MenuItem.OnMenuItemClickListener,
                    HomepageManager.HomepageStateListener {
-    private static final int ID_REMOVE = 0;
+    @VisibleForTesting
+    public static final int ID_REMOVE = 0;
+    @VisibleForTesting
+    public static final int ID_SETTINGS = 1;
 
     /** A provider that notifies components when the theme color changes.*/
     private ThemeColorProvider mThemeColorProvider;
@@ -48,11 +58,15 @@ public class HomeButton extends ChromeImageButton
     /** The {@link ActivityTabProvider} used to know if the active tab is on the NTP. */
     private ActivityTabProvider mActivityTabProvider;
 
-    /** The home button text label. */
-    private TextView mLabel;
+    /** The {@link OverviewModeBehavior} used to observe overview state changes.  */
+    private OverviewModeBehavior mOverviewModeBehavior;
 
-    /** The wrapper View that contains the home button and the label. */
-    private View mWrapper;
+    /** The {@link OvervieModeObserver} observing the OverviewModeBehavior  */
+    private OverviewModeBehavior.OverviewModeObserver mOverviewModeObserver;
+
+    // Test related members
+    private static boolean sSaveContextMenuForTests;
+    private ContextMenu mMenuForTests;
 
     public HomeButton(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -64,29 +78,20 @@ public class HomeButton extends ChromeImageButton
         final int homeButtonIcon = R.drawable.btn_toolbar_home;
         setImageDrawable(ContextCompat.getDrawable(context, homeButtonIcon));
         }
-        if (!FeatureUtilities.isBottomToolbarEnabled()) {
-            setOnCreateContextMenuListener(this);
-        }
-
         HomepageManager.getInstance().addListener(this);
-    }
+        updateContextMenuListener();
 
-    /**
-     * @param wrapper The wrapping View of this button.
-     */
-    public void setWrapperView(ViewGroup wrapper) {
-        mWrapper = wrapper;
-        mLabel = mWrapper.findViewById(R.id.home_button_label);
-        if (FeatureUtilities.isLabeledBottomToolbarEnabled()) mLabel.setVisibility(View.VISIBLE);
-    }
-
-    @Override
-    public void setOnClickListener(OnClickListener listener) {
-        if (mWrapper != null) {
-            mWrapper.setOnClickListener(listener);
-        } else {
-            super.setOnClickListener(listener);
-        }
+        mOverviewModeObserver = new EmptyOverviewModeObserver() {
+            @Override
+            public void onOverviewModeStateChanged(
+                    @OverviewModeState int overviewModeState, boolean showTabSwitcherToolbar) {
+                if (overviewModeState == OverviewModeState.SHOWN_HOMEPAGE) {
+                    updateButtonEnabledState(false);
+                } else {
+                    updateButtonEnabledState(null);
+                }
+            }
+        };
     }
 
     public void destroy() {
@@ -101,6 +106,11 @@ public class HomeButton extends ChromeImageButton
         }
 
         HomepageManager.getInstance().removeListener(this);
+
+        if (mOverviewModeBehavior != null) {
+            mOverviewModeBehavior.removeOverviewModeObserver(mOverviewModeObserver);
+            mOverviewModeObserver = null;
+        }
     }
 
     public void setThemeColorProvider(ThemeColorProvider themeColorProvider) {
@@ -108,27 +118,50 @@ public class HomeButton extends ChromeImageButton
         mThemeColorProvider.addTintObserver(this);
     }
 
+    public void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
+        assert overviewModeBehavior != null;
+        mOverviewModeBehavior = overviewModeBehavior;
+        mOverviewModeBehavior.addOverviewModeObserver(mOverviewModeObserver);
+    }
+
     @Override
     public void onTintChanged(ColorStateList tint, boolean useLight) {
         ApiCompatibilityUtils.setImageTintList(this, tint);
-        if (mLabel != null) mLabel.setTextColor(tint);
     }
 
     @Override
     public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
-        menu.add(Menu.NONE, ID_REMOVE, Menu.NONE, R.string.remove).setOnMenuItemClickListener(this);
+        // Disable long click before native initialized.
+        if (!ChromeFeatureList.isInitialized()) return;
+
+        if (isHomepageSettingsUIConversionEnabled()) {
+            menu.add(Menu.NONE, ID_SETTINGS, Menu.NONE, R.string.options_homepage_edit_title)
+                    .setOnMenuItemClickListener(this);
+        } else {
+            menu.add(Menu.NONE, ID_REMOVE, Menu.NONE, R.string.remove)
+                    .setOnMenuItemClickListener(this);
+        }
+
+        if (sSaveContextMenuForTests) mMenuForTests = menu;
     }
 
     @Override
     public boolean onMenuItemClick(MenuItem item) {
-        assert item.getItemId() == ID_REMOVE;
-        HomepageManager.getInstance().setPrefHomepageEnabled(false);
+        assert !isManagedByPolicy();
+        if (isHomepageSettingsUIConversionEnabled()) {
+            assert item.getItemId() == ID_SETTINGS;
+            SettingsLauncher.getInstance().launchSettingsPage(getContext(), HomepageSettings.class);
+        } else {
+            assert item.getItemId() == ID_REMOVE;
+            HomepageManager.getInstance().setPrefHomepageEnabled(false);
+        }
+
         return true;
     }
 
     @Override
     public void onHomepageStateUpdated() {
-        updateButtonEnabledState();
+        updateButtonEnabledState(null);
     }
 
     public void setActivityTabProvider(ActivityTabProvider activityTabProvider) {
@@ -136,12 +169,14 @@ public class HomeButton extends ChromeImageButton
         mActivityTabTabObserver = new ActivityTabTabObserver(activityTabProvider) {
             @Override
             public void onObservingDifferentTab(Tab tab) {
-                updateButtonEnabledState();
+                if (tab == null) return;
+                updateButtonEnabledState(tab);
             }
 
             @Override
             public void onUpdateUrl(Tab tab, String url) {
-                updateButtonEnabledState();
+                if (tab == null) return;
+                updateButtonEnabledState(tab);
             }
         };
     }
@@ -149,23 +184,82 @@ public class HomeButton extends ChromeImageButton
     /**
      * Menu button is enabled when not in NTP or if in NTP and homepage is enabled and set to
      * somewhere other than the NTP.
+     * @param tab The notifying {@link Tab} that might be selected soon, this is a hint that a tab
+     *         change is likely.
      */
-    private void updateButtonEnabledState() {
+    public void updateButtonEnabledState(Tab tab) {
         // New tab page button takes precedence over homepage.
         final boolean isHomepageEnabled = HomepageManager.isHomepageEnabled();
-        final boolean isEnabled = !isActiveTabNTP()
-                || (isHomepageEnabled && !NewTabPage.isNTPUrl(HomepageManager.getHomepageUri()));
-        setEnabled(isEnabled);
-        if (mWrapper != null) mWrapper.setEnabled(isEnabled);
-        if (mLabel != null) mLabel.setEnabled(isEnabled);
+
+        boolean isEnabled;
+        if (getActiveTab() != null) {
+            // Now tab shows a webpage, let's check if the webpage is not the NTP, or the webpage is
+            // NTP but homepage is not NTP.
+            isEnabled = !isTabNTP(getActiveTab())
+                    || (isHomepageEnabled
+                            && !NewTabPage.isNTPUrl(HomepageManager.getHomepageUri()));
+        } else {
+            // There is no active tab, which means tab is in transition, ex tab swither view to tab
+            // view, or from one tab to another tab.
+            isEnabled = !isTabNTP(tab);
+        }
+        updateButtonEnabledState(isEnabled);
     }
 
-    private boolean isActiveTabNTP() {
-        if (mActivityTabProvider == null) return false;
+    private void updateButtonEnabledState(boolean isEnabled) {
+        setEnabled(isEnabled);
+        updateContextMenuListener();
+    }
 
-        final Tab tab = mActivityTabProvider.get();
-        if (tab == null) return false;
+    /**
+     * Check if the provided tab is NTP. The tab is a hint that
+     * @param tab The notifying {@link Tab} that might be selected soon, this is a hint that a tab
+     *         change is likely.
+     */
+    private boolean isTabNTP(Tab tab) {
+        return tab != null && NewTabPage.isNTPUrl(tab.getUrlString());
+    }
 
-        return NewTabPage.isNTPUrl(tab.getUrl());
+    /**
+     * Return the active tab. If no active tab is shown, return null.
+     */
+    private Tab getActiveTab() {
+        if (mActivityTabProvider == null) return null;
+
+        return mActivityTabProvider.get();
+    }
+
+    private boolean isManagedByPolicy() {
+        return HomepagePolicyManager.isHomepageManagedByPolicy();
+    }
+
+    private void updateContextMenuListener() {
+        if (!BottomToolbarConfiguration.isBottomToolbarEnabled() && !isManagedByPolicy()) {
+            setOnCreateContextMenuListener(this);
+        } else {
+            setOnCreateContextMenuListener(null);
+            setLongClickable(false);
+        }
+    }
+
+    private boolean isHomepageSettingsUIConversionEnabled() {
+        assert ChromeFeatureList.isInitialized();
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.HOMEPAGE_SETTINGS_UI_CONVERSION);
+    }
+
+    /**
+     * @param saveContextMenuForTests Whether we want to store the context menu for testing
+     */
+    @VisibleForTesting
+    public static void setSaveContextMenuForTests(boolean saveContextMenuForTests) {
+        sSaveContextMenuForTests = saveContextMenuForTests;
+    }
+
+    /**
+     * @return Latest context menu created.
+     */
+    @VisibleForTesting
+    public ContextMenu getMenuForTests() {
+        return mMenuForTests;
     }
 }

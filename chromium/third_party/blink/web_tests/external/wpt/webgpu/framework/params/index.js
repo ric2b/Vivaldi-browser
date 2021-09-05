@@ -2,31 +2,54 @@
 * AUTO-GENERATED - DO NOT EDIT. Source: https://github.com/gpuweb/cts
 **/
 
+import { objectEquals } from '../util/index.js';
 export * from './combine.js';
+export * from './exclude.js';
 export * from './filter.js';
 export * from './options.js';
-export * from './exclude.js';
+export function extractPublicParams(params) {
+  const publicParams = {};
+
+  for (const k of Object.keys(params)) {
+    if (!k.startsWith('_')) {
+      publicParams[k] = params[k];
+    }
+  }
+
+  return publicParams;
+}
+export function stringifyPublicParams(p) {
+  if (p === null || paramsEquals(p, {})) {
+    return '';
+  }
+
+  return JSON.stringify(extractPublicParams(p));
+}
 export function paramsEquals(x, y) {
   if (x === y) {
     return true;
   }
 
-  if (x === null || y === null) {
-    return false;
+  if (x === null) {
+    x = {};
+  }
+
+  if (y === null) {
+    y = {};
   }
 
   for (const xk of Object.keys(x)) {
-    if (!y.hasOwnProperty(xk)) {
+    if (x[xk] !== undefined && !y.hasOwnProperty(xk)) {
       return false;
     }
 
-    if (x[xk] !== y[xk]) {
+    if (!objectEquals(x[xk], y[xk])) {
       return false;
     }
   }
 
   for (const yk of Object.keys(y)) {
-    if (!x.hasOwnProperty(yk)) {
+    if (y[yk] !== undefined && !x.hasOwnProperty(yk)) {
       return false;
     }
   }
@@ -39,8 +62,7 @@ export function paramsSupersets(sup, sub) {
   }
 
   if (sup === null) {
-    // && sub !== undefined
-    return false;
+    sup = {};
   }
 
   for (const k of Object.keys(sub)) {

@@ -12,10 +12,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
-#include "content/browser/renderer_host/dip_util.h"
-#include "content/browser/web_contents/web_contents_impl.h"
+#include "components/sessions/content/session_tab_helper.h"
+#include "content/browser/browser_plugin/browser_plugin_guest.h" // nogncheck
+#include "content/browser/renderer_host/dip_util.h" // nogncheck
+#include "content/browser/web_contents/web_contents_impl.h" // nogncheck
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_view_host.h"
@@ -71,16 +71,6 @@ bool VivaldiWebViewWithGuestFunction::PreRunValidation(
   return true;
 }
 
-ExtensionFunction::ResponseAction WebViewPrivateSetVisibleFunction::Run() {
-  using vivaldi::web_view_private::SetVisible::Params;
-
-  std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params);
-
-  guest_->SetVisible(params->is_visible);
-  return RespondNow(NoArguments());
-}
-
 namespace {
 const float kDefaultThumbnailScale = 1.0f;
 }  // namespace
@@ -125,9 +115,6 @@ ExtensionFunction::ResponseAction WebViewPrivateGetThumbnailFunction::RunImpl(
 
   if (!view) {
     return RespondNow(Error("View is not available, no screenshot taken."));
-  }
-  if (!guest_->IsVisible()) {
-    return RespondNow(Error("Guest is not visible, no screenshot taken."));
   }
   // If this happens, the guest view is not attached to a window for some
   // reason. See also VB-23154.
@@ -330,9 +317,10 @@ ExtensionFunction::ResponseAction WebViewPrivateSendRequestFunction::Run() {
                                     WindowOpenDisposition::UNKNOWN, transition,
                                     false);
 
-  url_params.uses_post = params->use_post;
-  url_params.post_data = network::ResourceRequestBody::CreateFromBytes(
-      params->post_data.c_str(), params->post_data.length());
+  if (params->use_post) {
+    url_params.post_data = network::ResourceRequestBody::CreateFromBytes(
+        params->post_data.c_str(), params->post_data.length());
+  }
   url_params.extra_headers = params->extra_headers;
 
   guest_->NavigateGuest(params->url, true, transition, nullptr, &url_params);

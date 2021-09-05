@@ -43,7 +43,6 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/static_node_list.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/events/error_event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
@@ -79,8 +78,8 @@ Mutex& CreationMutex() {
 LocalFrame* ToFrame(ExecutionContext* context) {
   if (!context)
     return nullptr;
-  if (auto* document = DynamicTo<Document>(context))
-    return document->GetFrame();
+  if (auto* window = DynamicTo<LocalDOMWindow>(context))
+    return window->GetFrame();
   if (context->IsMainThreadWorkletGlobalScope())
     return To<WorkletGlobalScope>(context)->GetFrame();
   return nullptr;
@@ -173,8 +172,8 @@ void MainThreadDebugger::ExceptionThrown(ExecutionContext* context,
                                          ErrorEvent* event) {
   LocalFrame* frame = nullptr;
   ScriptState* script_state = nullptr;
-  if (auto* document = DynamicTo<Document>(context)) {
-    frame = document->GetFrame();
+  if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
+    frame = window->GetFrame();
     if (!frame)
       return;
     script_state =
@@ -246,8 +245,6 @@ void MainThreadDebugger::runMessageLoopOnPause(int context_group_id) {
   }
   DCHECK(paused_frame == paused_frame->LocalFrameRoot());
   paused_ = true;
-
-  UserGestureIndicator::SetTimeoutPolicy(UserGestureToken::kHasPaused);
 
   // Wait for continue or step command.
   if (client_message_loop_)
@@ -387,9 +384,8 @@ static Node* SecondArgumentAsNode(
     if (Node* node = V8Node::ToImplWithTypeCheck(info.GetIsolate(), info[1]))
       return node;
   }
-  ExecutionContext* execution_context =
-      ToExecutionContext(info.GetIsolate()->GetCurrentContext());
-  return DynamicTo<Document>(execution_context);
+  auto* window = CurrentDOMWindow(info.GetIsolate());
+  return window ? window->document() : nullptr;
 }
 
 void MainThreadDebugger::QuerySelectorCallback(

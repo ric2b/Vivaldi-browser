@@ -22,7 +22,7 @@ namespace internal {
 class InputMethodDelegate;
 }
 class EventSink;
-}
+}  // namespace ui
 
 namespace views {
 
@@ -46,14 +46,9 @@ class WidgetTest : public ViewsTestBase {
 
   using WidgetAutoclosePtr = std::unique_ptr<Widget, WidgetCloser>;
 
-  // Constructs an AshTestBase with |traits| being forwarded to its
-  // TaskEnvironment. |ViewsTestBase::SubclassManagesTaskEnvironment()|
-  // can also be passed as a sole trait to indicate that this WidgetTest's
-  // subclass will manage the task environment.
-  template <typename... TaskEnvironmentTraits>
-  NOINLINE explicit WidgetTest(TaskEnvironmentTraits&&... traits)
-      : ViewsTestBase(std::forward<TaskEnvironmentTraits>(traits)...) {}
-
+  WidgetTest();
+  explicit WidgetTest(
+      std::unique_ptr<base::test::TaskEnvironment> task_environment);
   ~WidgetTest() override;
 
   // Create Widgets with |native_widget| in InitParams set to an instance of
@@ -164,7 +159,7 @@ class TestDesktopWidgetDelegate : public WidgetDelegate {
   }
   bool can_close() const { return can_close_; }
 
-  // WidgetDelegate overrides:
+  // WidgetDelegate:
   void WindowClosing() override;
   Widget* GetWidget() override;
   const Widget* GetWidget() const override;

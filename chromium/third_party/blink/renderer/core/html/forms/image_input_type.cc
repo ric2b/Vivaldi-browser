@@ -43,8 +43,6 @@
 
 namespace blink {
 
-using namespace html_names;
-
 ImageInputType::ImageInputType(HTMLInputElement& element)
     : BaseButtonInputType(element), use_fallback_content_(false) {}
 
@@ -89,12 +87,12 @@ bool ImageInputType::SupportsValidation() const {
 }
 
 static IntPoint ExtractClickLocation(const Event& event) {
-  if (!event.UnderlyingEvent() || !event.UnderlyingEvent()->IsMouseEvent())
+  const auto* mouse_event = DynamicTo<MouseEvent>(event.UnderlyingEvent());
+  if (!event.UnderlyingEvent() || !mouse_event)
     return IntPoint();
-  auto& mouse_event = *ToMouseEvent(event.UnderlyingEvent());
-  if (!mouse_event.HasPosition())
+  if (!mouse_event->HasPosition())
     return IntPoint();
-  return IntPoint(mouse_event.offsetX(), mouse_event.offsetY());
+  return IntPoint(mouse_event->offsetX(), mouse_event->offsetY());
 }
 
 void ImageInputType::HandleDOMActivateEvent(Event& event) {
@@ -104,6 +102,10 @@ void ImageInputType::HandleDOMActivateEvent(Event& event) {
   // Event handlers can run.
   GetElement().Form()->PrepareForSubmission(&event, &GetElement());
   event.SetDefaultHandled();
+}
+
+bool ImageInputType::TypeShouldForceLegacyLayout() const {
+  return true;
 }
 
 LayoutObject* ImageInputType::CreateLayoutObject(const ComputedStyle& style,
@@ -177,8 +179,8 @@ unsigned ImageInputType::Height() const {
   if (!GetElement().GetLayoutObject()) {
     // Check the attribute first for an explicit pixel value.
     unsigned height;
-    if (ParseHTMLNonNegativeInteger(GetElement().FastGetAttribute(kHeightAttr),
-                                    height))
+    if (ParseHTMLNonNegativeInteger(
+            GetElement().FastGetAttribute(html_names::kHeightAttr), height))
       return height;
 
     // If the image is available, use its height.
@@ -190,7 +192,8 @@ unsigned ImageInputType::Height() const {
     }
   }
 
-  GetElement().GetDocument().UpdateStyleAndLayout();
+  GetElement().GetDocument().UpdateStyleAndLayout(
+      DocumentUpdateReason::kJavaScript);
 
   LayoutBox* box = GetElement().GetLayoutBox();
   return box ? AdjustForAbsoluteZoom::AdjustInt(box->ContentHeight().ToInt(),
@@ -202,8 +205,8 @@ unsigned ImageInputType::Width() const {
   if (!GetElement().GetLayoutObject()) {
     // Check the attribute first for an explicit pixel value.
     unsigned width;
-    if (ParseHTMLNonNegativeInteger(GetElement().FastGetAttribute(kWidthAttr),
-                                    width))
+    if (ParseHTMLNonNegativeInteger(
+            GetElement().FastGetAttribute(html_names::kWidthAttr), width))
       return width;
 
     // If the image is available, use its width.
@@ -215,7 +218,8 @@ unsigned ImageInputType::Width() const {
     }
   }
 
-  GetElement().GetDocument().UpdateStyleAndLayout();
+  GetElement().GetDocument().UpdateStyleAndLayout(
+      DocumentUpdateReason::kJavaScript);
 
   LayoutBox* box = GetElement().GetLayoutBox();
   return box ? AdjustForAbsoluteZoom::AdjustInt(box->ContentWidth().ToInt(),
@@ -224,11 +228,12 @@ unsigned ImageInputType::Width() const {
 }
 
 bool ImageInputType::HasLegalLinkAttribute(const QualifiedName& name) const {
-  return name == kSrcAttr || BaseButtonInputType::HasLegalLinkAttribute(name);
+  return name == html_names::kSrcAttr ||
+         BaseButtonInputType::HasLegalLinkAttribute(name);
 }
 
 const QualifiedName& ImageInputType::SubResourceAttributeName() const {
-  return kSrcAttr;
+  return html_names::kSrcAttr;
 }
 
 void ImageInputType::EnsureFallbackContent() {
@@ -278,13 +283,9 @@ void ImageInputType::CreateShadowSubtree() {
   HTMLImageFallbackHelper::CreateAltTextShadowTree(GetElement());
 }
 
-scoped_refptr<ComputedStyle> ImageInputType::CustomStyleForLayoutObject(
-    scoped_refptr<ComputedStyle> new_style) {
-  if (!use_fallback_content_)
-    return new_style;
-
-  return HTMLImageFallbackHelper::CustomStyleForAltText(GetElement(),
-                                                        std::move(new_style));
+void ImageInputType::CustomStyleForLayoutObject(ComputedStyle& style) {
+  if (use_fallback_content_)
+    HTMLImageFallbackHelper::CustomStyleForAltText(GetElement(), style);
 }
 
 }  // namespace blink

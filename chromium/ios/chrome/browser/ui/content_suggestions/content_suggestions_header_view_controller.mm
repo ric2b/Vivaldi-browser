@@ -13,6 +13,7 @@
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_synchronizing.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
@@ -23,12 +24,11 @@
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_header_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
-#import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/public/provider/chrome/browser/ui/logo_vendor.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -54,12 +54,13 @@ using base::UserMetricsAction;
 @property(nonatomic, assign) BOOL voiceSearchIsEnabled;
 
 // Exposes view and methods to drive the doodle.
-@property(nonatomic, weak) id<LogoVendor> logoVendor;
+@property(nonatomic, weak, readonly) id<LogoVendor> logoVendor;
 
 @property(nonatomic, strong) ContentSuggestionsHeaderView* headerView;
 @property(nonatomic, strong) UIButton* fakeOmnibox;
 @property(nonatomic, strong) UIButton* accessibilityButton;
 @property(nonatomic, strong) UIButton* identityDiscButton;
+@property(nonatomic, strong) UIButton* fakeTapButton;
 @property(nonatomic, strong) NSLayoutConstraint* doodleHeightConstraint;
 @property(nonatomic, strong) NSLayoutConstraint* doodleTopMarginConstraint;
 @property(nonatomic, strong) NSLayoutConstraint* fakeOmniboxWidthConstraint;
@@ -72,11 +73,9 @@ using base::UserMetricsAction;
 @implementation ContentSuggestionsHeaderViewController
 
 @synthesize collectionSynchronizer = _collectionSynchronizer;
-@synthesize logoVendor = _logoVendor;
 @synthesize promoCanShow = _promoCanShow;
 @synthesize showing = _showing;
 @synthesize omniboxFocused = _omniboxFocused;
-
 @synthesize headerView = _headerView;
 @synthesize fakeOmnibox = _fakeOmnibox;
 @synthesize accessibilityButton = _accessibilityButton;
@@ -89,15 +88,11 @@ using base::UserMetricsAction;
 @synthesize logoIsShowing = _logoIsShowing;
 @synthesize logoFetched = _logoFetched;
 
-#pragma mark - Public
-
-- (instancetype)initWithVoiceSearchEnabled:(BOOL)voiceSearchIsEnabled {
-  self = [super initWithNibName:nil bundle:nil];
-  if (self) {
-    _voiceSearchIsEnabled = voiceSearchIsEnabled;
-  }
-  return self;
+- (instancetype)init {
+  return [super initWithNibName:nil bundle:nil];
 }
+
+#pragma mark - Public
 
 - (UIView*)toolBarView {
   return self.headerView.toolBarView;
@@ -114,6 +109,10 @@ using base::UserMetricsAction;
         if (IsSplitToolbarMode()) {
           [self.toolbarDelegate setScrollProgressForTabletOmnibox:1];
         }
+        // Fake Tap button only needs to work in portrait. Disable the button
+        // in landscape because in landscape the button covers logoView (which
+        // need to handle taps).
+        self.fakeTapButton.userInteractionEnabled = IsSplitToolbarMode();
       };
 
   [coordinator animateAlongsideTransition:transition completion:nil];
@@ -175,6 +174,7 @@ using base::UserMetricsAction;
 - (void)updateConstraints {
   self.doodleTopMarginConstraint.constant =
       content_suggestions::doodleTopMargin(YES, [self topInset]);
+  [self.headerView updateForTopSafeAreaInset:[self topInset]];
 }
 
 - (CGFloat)pinnedOffsetY {
@@ -183,7 +183,7 @@ using base::UserMetricsAction;
 
   CGFloat offsetY =
       headerHeight - ntp_header::kScrolledToTopOmniboxBottomMargin;
-  if (!IsRegularXRegularSizeClass(self)) {
+  if (IsSplitToolbarMode(self)) {
     offsetY -= ToolbarExpandedHeight(
                    self.traitCollection.preferredContentSizeCategory) +
                [self topInset];
@@ -213,10 +213,11 @@ using base::UserMetricsAction;
   if (!self.headerView) {
     self.headerView =
         base::mac::ObjCCastStrict<ContentSuggestionsHeaderView>(self.view);
-    [self addFakeTapView];
     [self addFakeOmnibox];
 
     [self.headerView addSubview:self.logoVendor.view];
+    // Fake Tap View has identity disc, which should render above the doodle.
+    [self addFakeTapView];
     [self.headerView addSubview:self.fakeOmnibox];
     self.logoVendor.view.translatesAutoresizingMaskIntoConstraints = NO;
     self.fakeOmnibox.translatesAutoresizingMaskIntoConstraints = NO;
@@ -289,26 +290,34 @@ using base::UserMetricsAction;
 
   [self.headerView addViewsToSearchField:self.fakeOmnibox];
 
-  if (self.voiceSearchIsEnabled) {
-    [self.headerView.voiceSearchButton addTarget:self
-                                          action:@selector(loadVoiceSearch:)
-                                forControlEvents:UIControlEventTouchUpInside];
-    [self.headerView.voiceSearchButton addTarget:self
-                                          action:@selector(preloadVoiceSearch:)
-                                forControlEvents:UIControlEventTouchDown];
-  } else {
-    [self.headerView.voiceSearchButton setEnabled:NO];
-  }
+  [self.headerView.voiceSearchButton addTarget:self
+                                        action:@selector(loadVoiceSearch:)
+                              forControlEvents:UIControlEventTouchUpInside];
+  [self.headerView.voiceSearchButton addTarget:self
+                                        action:@selector(preloadVoiceSearch:)
+                              forControlEvents:UIControlEventTouchDown];
+  self.headerView.voiceSearchButton.enabled = self.voiceSearchIsEnabled;
 }
 
+// On NTP in split toolbar mode the omnibox has different location (in the
+// middle of the screen), but the users have muscle memory and still tap on area
+// where omnibox is normally placed (the top area of NTP). Fake Tap Button is
+// located in the same position where omnibox is normally placed and focuses the
+// omnibox when tapped. Fake Tap Button user interactions are only enabled in
+// split toolbar mode.
 - (void)addFakeTapView {
-  UIButton* fakeTapButton = [[UIButton alloc] init];
-  fakeTapButton.translatesAutoresizingMaskIntoConstraints = NO;
-  fakeTapButton.isAccessibilityElement = NO;
-  [self.headerView addToolbarView:fakeTapButton];
-  [fakeTapButton addTarget:self
-                    action:@selector(fakeboxTapped)
-          forControlEvents:UIControlEventTouchUpInside];
+  UIView* toolbar = [[UIView alloc] init];
+  toolbar.translatesAutoresizingMaskIntoConstraints = NO;
+  self.fakeTapButton = [[UIButton alloc] init];
+  self.fakeTapButton.userInteractionEnabled = IsSplitToolbarMode();
+  self.fakeTapButton.isAccessibilityElement = NO;
+  self.fakeTapButton.translatesAutoresizingMaskIntoConstraints = NO;
+  [toolbar addSubview:self.fakeTapButton];
+  [self.headerView addToolbarView:toolbar];
+  [self.fakeTapButton addTarget:self
+                         action:@selector(fakeboxTapped)
+               forControlEvents:UIControlEventTouchUpInside];
+  AddSameConstraints(self.fakeTapButton, toolbar);
 }
 
 - (void)addIdentityDisc {
@@ -527,6 +536,10 @@ using base::UserMetricsAction;
   [self updateLogoAndFakeboxDisplay];
 }
 
+- (void)setLogoVendor:(id<LogoVendor>)logoVendor {
+  _logoVendor = logoVendor;
+}
+
 - (void)locationBarBecomesFirstResponder {
   if (!self.isShowing)
     return;
@@ -546,6 +559,13 @@ using base::UserMetricsAction;
   }
 
   [self shiftTilesDown];
+}
+
+- (void)setVoiceSearchIsEnabled:(BOOL)voiceSearchIsEnabled {
+  if (_voiceSearchIsEnabled == voiceSearchIsEnabled)
+    return;
+  _voiceSearchIsEnabled = voiceSearchIsEnabled;
+  self.headerView.voiceSearchButton.enabled = _voiceSearchIsEnabled;
 }
 
 #pragma mark - UserAccountImageUpdateDelegate

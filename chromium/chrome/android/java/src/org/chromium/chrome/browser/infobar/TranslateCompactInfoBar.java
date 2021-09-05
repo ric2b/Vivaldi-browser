@@ -4,14 +4,16 @@
 
 package org.chromium.chrome.browser.infobar;
 
-import android.support.design.widget.TabLayout;
-import android.support.v4.content.ContextCompat;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.View.OnLayoutChangeListener;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+
+import androidx.core.content.ContextCompat;
+
+import com.google.android.material.tabs.TabLayout;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
@@ -20,8 +22,13 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.infobar.translate.TranslateMenu;
 import org.chromium.chrome.browser.infobar.translate.TranslateMenuHelper;
 import org.chromium.chrome.browser.infobar.translate.TranslateTabLayout;
-import org.chromium.chrome.browser.snackbar.Snackbar;
-import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarCompactLayout;
+import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
+import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
 import org.chromium.ui.widget.Toast;
 
 /**
@@ -109,6 +116,7 @@ public class TranslateCompactInfoBar extends InfoBar
     private ImageButton mMenuButton;
     private InfoBarCompactLayout mParent;
 
+    private final SnackbarManageable mSnackbarManageable;
     private TranslateSnackbarController mSnackbarController;
 
     private boolean mMenuExpanded;
@@ -159,20 +167,24 @@ public class TranslateCompactInfoBar extends InfoBar
     };
 
     @CalledByNative
-    private static InfoBar create(int initialStep, String sourceLanguageCode,
+    private static InfoBar create(Tab tab, int initialStep, String sourceLanguageCode,
             String targetLanguageCode, boolean alwaysTranslate, boolean triggeredFromMenu,
             String[] languages, String[] languageCodes, int[] hashCodes, int tabTextColor) {
         recordInfobarAction(INFOBAR_IMPRESSION);
-        return new TranslateCompactInfoBar(initialStep, sourceLanguageCode, targetLanguageCode,
-                alwaysTranslate, triggeredFromMenu, languages, languageCodes, hashCodes,
-                tabTextColor);
+        SnackbarManageable snackbarManageable = tab != null ? ((TabImpl) tab).getActivity() : null;
+
+        return new TranslateCompactInfoBar(snackbarManageable, initialStep, sourceLanguageCode,
+                targetLanguageCode, alwaysTranslate, triggeredFromMenu, languages, languageCodes,
+                hashCodes, tabTextColor);
     }
 
-    TranslateCompactInfoBar(int initialStep, String sourceLanguageCode, String targetLanguageCode,
-            boolean alwaysTranslate, boolean triggeredFromMenu, String[] languages,
-            String[] languageCodes, int[] hashCodes, int tabTextColor) {
+    TranslateCompactInfoBar(SnackbarManageable snackbarManageable, int initialStep,
+            String sourceLanguageCode, String targetLanguageCode, boolean alwaysTranslate,
+            boolean triggeredFromMenu, String[] languages, String[] languageCodes, int[] hashCodes,
+            int tabTextColor) {
         super(R.drawable.infobar_translate_compact, 0, null, null);
 
+        mSnackbarManageable = snackbarManageable;
         mInitialStep = initialStep;
         mDefaultTextColor = tabTextColor;
         mOptions = TranslateOptions.create(sourceLanguageCode, targetLanguageCode, languages,
@@ -447,12 +459,6 @@ public class TranslateCompactInfoBar extends InfoBar
 
     @Override
     public void onSourceMenuItemClicked(String code) {
-        // If source language is same as target language, the infobar will dismiss and no
-        // translation will be done.
-        if (mOptions.targetLanguageCode().equals(code)) {
-            closeInfobar(true);
-            return;
-        }
         // Reset source code in both UI and native.
         if (mNativeTranslateInfoBarPtr != 0 && mOptions.setSourceLanguage(code)) {
             recordInfobarLanguageData(
@@ -560,6 +566,10 @@ public class TranslateCompactInfoBar extends InfoBar
                         .setSingleLine(false)
                         .setAction(
                                 getContext().getString(R.string.translate_snackbar_cancel), null));
+    }
+
+    private SnackbarManager getSnackbarManager() {
+        return mSnackbarManageable != null ? mSnackbarManageable.getSnackbarManager() : null;
     }
 
     private void handleTranslateOptionPostSnackbar(int actionId) {

@@ -18,9 +18,11 @@ class SharingIconView : public PageActionIconView {
   using GetBubbleCallback =
       base::RepeatingCallback<views::BubbleDialogDelegateView*(SharingDialog*)>;
 
-  explicit SharingIconView(PageActionIconView::Delegate* delegate,
-                           GetControllerCallback get_controller,
-                           GetBubbleCallback get_bubble);
+  explicit SharingIconView(
+      IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+      PageActionIconView::Delegate* page_action_icon_delegate,
+      GetControllerCallback get_controller,
+      GetBubbleCallback get_bubble);
   ~SharingIconView() override;
 
   void StartLoadingAnimation();
@@ -32,9 +34,10 @@ class SharingIconView : public PageActionIconView {
   bool IsTriggerableEvent(const ui::Event& event) override;
   const gfx::VectorIcon& GetVectorIconBadge() const override;
   views::BubbleDialogDelegateView* GetBubble() const override;
-  bool Update() override;
+  void UpdateImpl() override;
   const gfx::VectorIcon& GetVectorIcon() const override;
   base::string16 GetTextForTooltipAndAccessibleName() const override;
+  const char* GetClassName() const override;
 
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;

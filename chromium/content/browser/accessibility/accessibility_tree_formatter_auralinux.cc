@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/protected_memory_cfi.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -56,6 +55,7 @@ class AccessibilityTreeFormatterAuraLinux
       AtspiAccessible* node);
 
   void AddTextProperties(AtkText* atk_text, base::DictionaryValue* dict);
+  void AddActionProperties(AtkObject* atk_object, base::DictionaryValue* dict);
   void AddValueProperties(AtkObject* atk_object, base::DictionaryValue* dict);
   void AddTableProperties(AtkObject* atk_object, base::DictionaryValue* dict);
   void AddTableCellProperties(const ui::AXPlatformNodeAuraLinux* node,
@@ -198,136 +198,6 @@ void AccessibilityTreeFormatterAuraLinux::RecursiveBuildAccessibilityTree(
   dict->Set(kChildrenDictAttr, std::move(children));
 }
 
-// TODO(aleventhal) Remove this and use atk_role_get_name() once the following
-// GNOME bug is fixed: https://bugzilla.gnome.org/show_bug.cgi?id=795983
-const char* const kRoleNames[] = {
-    "invalid",  // ATK_ROLE_INVALID.
-    "accelerator label",
-    "alert",
-    "animation",
-    "arrow",
-    "calendar",
-    "canvas",
-    "check box",
-    "check menu item",
-    "color chooser",
-    "column header",
-    "combo box",
-    "dateeditor",
-    "desktop icon",
-    "desktop frame",
-    "dial",
-    "dialog",
-    "directory pane",
-    "drawing area",
-    "file chooser",
-    "filler",
-    "fontchooser",
-    "frame",
-    "glass pane",
-    "html container",
-    "icon",
-    "image",
-    "internal frame",
-    "label",
-    "layered pane",
-    "list",
-    "list item",
-    "menu",
-    "menu bar",
-    "menu item",
-    "option pane",
-    "page tab",
-    "page tab list",
-    "panel",
-    "password text",
-    "popup menu",
-    "progress bar",
-    "push button",
-    "radio button",
-    "radio menu item",
-    "root pane",
-    "row header",
-    "scroll bar",
-    "scroll pane",
-    "separator",
-    "slider",
-    "split pane",
-    "spin button",
-    "statusbar",
-    "table",
-    "table cell",
-    "table column header",
-    "table row header",
-    "tear off menu item",
-    "terminal",
-    "text",
-    "toggle button",
-    "tool bar",
-    "tool tip",
-    "tree",
-    "tree table",
-    "unknown",
-    "viewport",
-    "window",
-    "header",
-    "footer",
-    "paragraph",
-    "ruler",
-    "application",
-    "autocomplete",
-    "edit bar",
-    "embedded component",
-    "entry",
-    "chart",
-    "caption",
-    "document frame",
-    "heading",
-    "page",
-    "section",
-    "redundant object",
-    "form",
-    "link",
-    "input method window",
-    "table row",
-    "tree item",
-    "document spreadsheet",
-    "document presentation",
-    "document text",
-    "document web",
-    "document email",
-    "comment",
-    "list box",
-    "grouping",
-    "image map",
-    "notification",
-    "info bar",
-    "level bar",
-    "title bar",
-    "block quote",
-    "audio",
-    "video",
-    "definition",
-    "article",
-    "landmark",
-    "log",
-    "marquee",
-    "math",
-    "rating",
-    "timer",
-    "description list",
-    "description term",
-    "description value",
-    "static",
-    "math fraction",
-    "math root",
-    "subscript",
-    "superscript",
-    "footnote",           // ATK_ROLE_FOOTNOTE = 122.
-    "content deletion",   // ATK_ROLE_CONTENT_DELETION = 123.
-    "content insertion",  // ATK_ROLE_CONTENT_DELETION = 124.
-};
-
 void AccessibilityTreeFormatterAuraLinux::AddTextProperties(
     AtkText* atk_text,
     base::DictionaryValue* dict) {
@@ -344,8 +214,8 @@ void AccessibilityTreeFormatterAuraLinux::AddTextProperties(
   int selection_start, selection_end;
   char* selection_text =
       atk_text_get_selection(atk_text, 0, &selection_start, &selection_end);
-  g_free(selection_text);
-  if (selection_start || selection_end) {
+  if (selection_text) {
+    g_free(selection_text);
     text_values->AppendString(
         base::StringPrintf("selection_start=%i", selection_start));
     text_values->AppendString(
@@ -371,6 +241,23 @@ void AccessibilityTreeFormatterAuraLinux::AddTextProperties(
   }
 
   dict->Set("text", std::move(text_values));
+}
+
+void AccessibilityTreeFormatterAuraLinux::AddActionProperties(
+    AtkObject* atk_object,
+    base::DictionaryValue* dict) {
+  if (!ATK_IS_ACTION(atk_object))
+    return;
+
+  AtkAction* action = ATK_ACTION(atk_object);
+  int action_count = atk_action_get_n_actions(action);
+  if (!action_count)
+    return;
+
+  auto actions = std::make_unique<base::ListValue>();
+  for (int i = 0; i < action_count; i++)
+    actions->AppendString(atk_action_get_name(action, i));
+  dict->Set("actions", std::move(actions));
 }
 
 void AccessibilityTreeFormatterAuraLinux::AddValueProperties(
@@ -540,8 +427,7 @@ void AccessibilityTreeFormatterAuraLinux::AddProperties(
 
   AtkRole role = atk_object_get_role(atk_object);
   if (role != ATK_ROLE_UNKNOWN) {
-    int role_index = static_cast<int>(role);
-    dict->SetString("role", kRoleNames[role_index]);
+    dict->SetString("role", AtkRoleToString(role));
   }
 
   const gchar* name = atk_object_get_name(atk_object);
@@ -578,7 +464,9 @@ void AccessibilityTreeFormatterAuraLinux::AddProperties(
   }
   atk_attribute_set_free(attributes);
 
-  AddTextProperties(ATK_TEXT(atk_object), dict);
+  if (ATK_IS_TEXT(atk_object))
+    AddTextProperties(ATK_TEXT(atk_object), dict);
+  AddActionProperties(atk_object, dict);
   AddValueProperties(atk_object, dict);
   AddTableProperties(atk_object, dict);
   AddTableCellProperties(ax_platform_node, atk_object, dict);
@@ -649,6 +537,7 @@ const char* const ATK_OBJECT_ATTRIBUTES[] = {
     "container-live",
     "container-relevant",
     "current",
+    "details-roles",
     "display",
     "dropeffect",
     "explicit-name",
@@ -711,6 +600,23 @@ base::string16 AccessibilityTreeFormatterAuraLinux::ProcessTreeForOutput(
       std::string state_value;
       if (it->GetAsString(&state_value))
         WriteAttribute(false, state_value, &line);
+    }
+  }
+
+  const base::ListValue* action_names_list;
+  std::vector<std::string> action_names;
+  if (node.GetList("actions", &action_names_list)) {
+    for (auto it = action_names_list->begin(); it != action_names_list->end();
+         ++it) {
+      std::string action_name;
+      if (it->GetAsString(&action_name))
+        action_names.push_back(action_name);
+    }
+    std::string actions_str = base::JoinString(action_names, ", ");
+    if (actions_str.size()) {
+      WriteAttribute(false,
+                     base::StringPrintf("actions=(%s)", actions_str.c_str()),
+                     &line);
     }
   }
 

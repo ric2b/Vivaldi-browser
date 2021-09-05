@@ -20,19 +20,21 @@ CastDownloadManagerDelegate::CastDownloadManagerDelegate() {}
 CastDownloadManagerDelegate::~CastDownloadManagerDelegate() {}
 
 void CastDownloadManagerDelegate::GetNextId(
-      const content::DownloadIdCallback& callback) {
+    content::DownloadIdCallback callback) {
   // See default behavior of DownloadManagerImpl::GetNextId()
   static uint32_t next_id = download::DownloadItem::kInvalidId + 1;
-  callback.Run(next_id++);
+  std::move(callback).Run(next_id++);
 }
 
 bool CastDownloadManagerDelegate::DetermineDownloadTarget(
     download::DownloadItem* item,
-    const content::DownloadTargetCallback& callback) {
+    content::DownloadTargetCallback* callback) {
   base::FilePath empty;
-  callback.Run(empty, download::DownloadItem::TARGET_DISPOSITION_OVERWRITE,
-               download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT, empty,
-               download::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED);
+  std::move(*callback).Run(
+      empty, download::DownloadItem::TARGET_DISPOSITION_OVERWRITE,
+      download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT,
+      download::DownloadItem::MixedContentStatus::UNKNOWN, empty,
+      download::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED);
   return true;
 }
 
@@ -49,7 +51,9 @@ bool CastDownloadManagerDelegate::ShouldCompleteDownload(
 
 bool CastDownloadManagerDelegate::ShouldOpenDownload(
     download::DownloadItem* item,
-    const content::DownloadOpenDelayedCallback& callback) {
+    content::DownloadOpenDelayedCallback callback) {
+  // TODO(qinmin): When this returns false it means this should run the callback
+  // at some point.
   return false;
 }
 

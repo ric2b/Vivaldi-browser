@@ -155,12 +155,34 @@ class FakeSerialPort {
     return result;
   }
 
-  simulateParityError() {
+  simulateReadError(error) {
     this.writer_.close();
     this.writer_.releaseLock();
     this.writer_ = undefined;
     this.writable_ = undefined;
-    this.client_.onReadError(device.mojom.SerialReceiveError.PARITY_ERROR);
+    this.client_.onReadError(error);
+  }
+
+  simulateParityError() {
+    this.simulateReadError(device.mojom.SerialReceiveError.PARITY_ERROR);
+  }
+
+  simulateDisconnectOnRead() {
+    this.simulateReadError(device.mojom.SerialReceiveError.DISCONNECTED);
+  }
+
+  simulateWriteError(error) {
+    this.readable_.cancel();
+    this.readable_ = undefined;
+    this.client_.onSendError(error);
+  }
+
+  simulateSystemErrorOnWrite() {
+    this.simulateWriteError(device.mojom.SerialSendError.SYSTEM_ERROR);
+  }
+
+  simulateDisconnectOnWrite() {
+    this.simulateWriteError(device.mojom.SerialSendError.DISCONNECTED);
   }
 
   simulateInputSignals(signals) {
@@ -171,17 +193,30 @@ class FakeSerialPort {
     return this.outputSignals_;
   }
 
-  waitForErrorCleared() {
+  waitForReadErrorCleared() {
     if (this.writable_)
       return Promise.resolve();
 
-    if (!this.errorClearedPromise_) {
-      this.errorClearedPromise_ = new Promise((resolve) => {
-        this.errorCleared_ = resolve;
+    if (!this.readErrorClearedPromise_) {
+      this.readErrorClearedPromise_ = new Promise((resolve) => {
+        this.readErrorCleared_ = resolve;
       });
     }
 
-    return this.errorClearedPromise_;
+    return this.readErrorClearedPromise_;
+  }
+
+  waitForWriteErrorCleared() {
+    if (this.readable_)
+      return Promise.resolve();
+
+    if (!this.writeErrorClearedPromise_) {
+      this.writeErrorClearedPromise_ = new Promise((resolve) => {
+        this.writeErrorCleared_ = resolve;
+      });
+    }
+
+    return this.writeErrorClearedPromise_;
   }
 
   async open(options, in_stream, out_stream, client) {
@@ -195,13 +230,23 @@ class FakeSerialPort {
     return { success: true };
   }
 
-  async clearSendError(in_stream) {}
+  async clearSendError(in_stream) {
+    this.readable_ = new ReadableStream(new DataPipeSource(in_stream));
+    if (this.writeErrorCleared_) {
+      this.writeErrorCleared_();
+      this.writeErrorCleared_ = undefined;
+      this.writeErrorClearedPromise_ = undefined;
+    }
+  }
 
   async clearReadError(out_stream) {
     this.writable_ = new WritableStream(new DataPipeSink(out_stream));
     this.writer_ = this.writable_.getWriter();
-    if (this.errorCleared_)
-      this.errorCleared_();
+    if (this.readErrorCleared_) {
+      this.readErrorCleared_();
+      this.readErrorCleared_ = undefined;
+      this.readErrorClearedPromise_ = undefined;
+    }
   }
 
   async flush() {
@@ -259,9 +304,10 @@ class FakeSerialPort {
 class FakeSerialService {
   constructor() {
     this.interceptor_ =
-        new MojoInterfaceInterceptor(blink.mojom.SerialService.name, "context", true);
+        new MojoInterfaceInterceptor(blink.mojom.SerialService.name);
     this.interceptor_.oninterfacerequest = e => this.bind(e.handle);
     this.bindingSet_ = new mojo.BindingSet(blink.mojom.SerialService);
+    this.clients_ = [];
     this.nextToken_ = 0;
     this.reset();
   }
@@ -298,11 +344,25 @@ class FakeSerialService {
       fakePort: new FakeSerialPort(),
     };
     this.ports_.set(token, record);
+
+    for (let client of this.clients_) {
+      client.onPortAdded(info);
+    }
+
     return token;
   }
 
   removePort(token) {
+    let record = this.ports_.get(token);
+    if (record === undefined) {
+      return;
+    }
+
     this.ports_.delete(token);
+
+    for (let client of this.clients_) {
+      client.onPortRemoved(record.portInfo);
+    }
   }
 
   setSelectedPort(token) {
@@ -318,6 +378,10 @@ class FakeSerialService {
 
   bind(handle) {
     this.bindingSet_.addBinding(this, handle);
+  }
+
+  async setClient(client_remote) {
+    this.clients_.push(client_remote);
   }
 
   async getPorts() {

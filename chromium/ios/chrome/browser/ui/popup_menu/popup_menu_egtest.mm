@@ -2,21 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import <EarlGrey/EarlGrey.h>
-#import <XCTest/XCTest.h>
-
+#include "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
-#include "ios/chrome/browser/ui/util/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
+#import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #import "ios/web/public/test/http_server/http_server_util.h"
 #include "ios/web/public/test/http_server/http_server_util.h"
-#include "ios/web/public/test/url_test_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -37,7 +34,11 @@ const char kPDFURL[] = "http://ios/testing/data/http_server_files/testpage.pdf";
 // in landscape.
 - (void)tearDown {
   [EarlGrey rotateDeviceToOrientation:UIDeviceOrientationPortrait
+#if defined(CHROME_EARL_GREY_1)
                            errorOrNil:nil];
+#elif defined(CHROME_EARL_GREY_2)
+                                error:nil];
+#endif
   [super tearDown];
 }
 
@@ -52,10 +53,10 @@ const char kPDFURL[] = "http://ios/testing/data/http_server_files/testpage.pdf";
   const GURL URL3 = web::test::HttpServer::MakeUrl("http://page3");
   const GURL URL4 = web::test::HttpServer::MakeUrl("http://page4");
   NSString* entry0 = @"New Tab";
-  NSString* entry1 = base::SysUTF16ToNSString(web::GetDisplayTitleForUrl(URL1));
-  NSString* entry2 = base::SysUTF16ToNSString(web::GetDisplayTitleForUrl(URL2));
-  NSString* entry3 = base::SysUTF16ToNSString(web::GetDisplayTitleForUrl(URL3));
-  NSString* entry4 = base::SysUTF16ToNSString(web::GetDisplayTitleForUrl(URL4));
+  NSString* entry1 = [ChromeEarlGrey displayTitleForURL:URL1];
+  NSString* entry2 = [ChromeEarlGrey displayTitleForURL:URL2];
+  NSString* entry3 = [ChromeEarlGrey displayTitleForURL:URL3];
+  NSString* entry4 = [ChromeEarlGrey displayTitleForURL:URL4];
 
   // Create map of canned responses and set up the test HTML server.
   std::map<GURL, std::string> responses;
@@ -76,7 +77,9 @@ const char kPDFURL[] = "http://ios/testing/data/http_server_files/testpage.pdf";
       performAction:grey_longPress()];
 
   // Check that the first four entries are shown the back tab history menu.
-  [[EarlGrey selectElementWithMatcher:grey_text(entry0)]
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(grey_text(entry0),
+                                          grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_notNil()];
   [[EarlGrey selectElementWithMatcher:grey_text(entry1)]
       assertWithMatcher:grey_notNil()];
@@ -128,7 +131,11 @@ const char kPDFURL[] = "http://ios/testing/data/http_server_files/testpage.pdf";
       assertWithMatcher:grey_sufficientlyVisible()];
 
   [EarlGrey rotateDeviceToOrientation:UIDeviceOrientationLandscapeRight
+#if defined(CHROME_EARL_GREY_1)
                            errorOrNil:nil];
+#elif defined(CHROME_EARL_GREY_2)
+                                error:nil];
+#endif
 
   // Expect that the tools menu has disappeared.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::ToolsMenuView()]
@@ -152,6 +159,12 @@ const char kPDFURL[] = "http://ios/testing/data/http_server_files/testpage.pdf";
 // Navigates to a pdf page and verifies that the "Find in Page..." tool
 // is not enabled
 - (void)testNoSearchForPDF {
+#if defined(CHROME_EARL_GREY_1)
+  // TODO(crbug.com/1036078): EG1 Test flaky on iOS 12.
+  if (!base::ios::IsRunningOnIOS13OrLater()) {
+    EARL_GREY_TEST_DISABLED(@"EG1 flaky on iOS 12.");
+  }
+#endif
   web::test::SetUpFileBasedHttpServer();
   const GURL URL = web::test::HttpServer::MakeUrl(kPDFURL);
 

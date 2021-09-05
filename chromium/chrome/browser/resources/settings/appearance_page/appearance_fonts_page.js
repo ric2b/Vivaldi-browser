@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 (function() {
-'use strict';
 
 /** @type {!Array<number>} */
 const FONT_SIZE_RANGE = [
@@ -33,19 +32,8 @@ Polymer({
   behaviors: [I18nBehavior, WebUIListenerBehavior],
 
   properties: {
-    /** @private */
-    advancedExtensionSublabel_: String,
-
     /** @private {!DropdownMenuOptionList} */
     fontOptions_: Object,
-
-    /** @private */
-    isGuest_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('isGuest');
-      }
-    },
 
     /**
      * Common font sizes.
@@ -83,59 +71,26 @@ Polymer({
   /** @private {?settings.FontsBrowserProxy} */
   browserProxy_: null,
 
-  /** @private {boolean} */
-  advancedExtensionInstalled_: false,
-
-  /** @private {?string} */
-  advancedExtensionUrl_: null,
-
   /** @override */
-  created: function() {
+  created() {
     this.browserProxy_ = settings.FontsBrowserProxyImpl.getInstance();
   },
 
   /** @override */
-  ready: function() {
-    this.addWebUIListener(
-        'advanced-font-settings-installed',
-        this.setAdvancedExtensionInstalled_.bind(this));
-    this.browserProxy_.observeAdvancedFontExtensionAvailable();
-
+  ready() {
     this.browserProxy_.fetchFontsData().then(this.setFontsData_.bind(this));
   },
 
-  /** @private */
-  openAdvancedExtension_: function() {
-    if (this.advancedExtensionInstalled_) {
-      this.browserProxy_.openAdvancedFontSettings();
-    } else {
-      window.open(this.advancedExtensionUrl_);
-    }
-  },
-
   /**
-   * @param {boolean} isInstalled Whether the advanced font settings
-   *     extension is installed.
+   * @param {!FontsData} response A list of fonts.
    * @private
    */
-  setAdvancedExtensionInstalled_: function(isInstalled) {
-    this.advancedExtensionInstalled_ = isInstalled;
-    this.advancedExtensionSublabel_ = this.i18n(
-        isInstalled ? 'openAdvancedFontSettings' : 'requiresWebStoreExtension');
-  },
-
-  /**
-   * @param {!FontsData} response A list of fonts and the advanced
-   *     font settings extension URL.
-   * @private
-   */
-  setFontsData_: function(response) {
+  setFontsData_(response) {
     const fontMenuOptions = [];
     for (const fontData of response.fontList) {
       fontMenuOptions.push({value: fontData[0], name: fontData[1]});
     }
     this.fontOptions_ = fontMenuOptions;
-    this.advancedExtensionUrl_ = response.extensionUrl;
   },
 
   /**
@@ -143,14 +98,14 @@ Polymer({
    * @return {number}
    * @private
    */
-  computeMinimumFontSize_: function() {
+  computeMinimumFontSize_() {
     const prefValue = this.get('prefs.webkit.webprefs.minimum_font_size.value');
     return /** @type {number} */ (prefValue) || MINIMUM_FONT_SIZE_RANGE[0];
   },
 
 
   /** @private */
-  onMinimumSizeChange_: function() {
+  onMinimumSizeChange_() {
     this.$.minimumSizeSample.hidden = this.computeMinimumFontSize_() <= 0;
   },
 });

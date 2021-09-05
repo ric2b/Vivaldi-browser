@@ -1,18 +1,22 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="nl">
+<translation id="1169602411434249000">Traceerders blokkeren</translation>
 <translation id="1397811292916898096">Zoeken met <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Normale/Privétabbladen wisselen</translation>
 <translation id="1644574205037202324">Geschiedenis</translation>
 <translation id="17513872634828108">Open tabs</translation>
 <translation id="1829244130665387512">Zoeken op pagina</translation>
 <translation id="2038563949887743358">'Desktopwebsite aanvragen' inschakelen</translation>
-<translation id="2433507940547922241">Vormgeving</translation>
+<translation id="2433507940547922241">Uiterlijk</translation>
 <translation id="2633278372998075009">Privétabs</translation>
 <translation id="3076631378407175873">Auteursrecht <ph name="YEAR" /> Vivaldi Technologies AS. Alle rechten voorbehouden.</translation>
 <translation id="3234355010754616171">Nieuwe privétab</translation>
+<translation id="3518985090088779359">Akkoord, doorgaan</translation>
 <translation id="3700829948786686853">Welkom bij Vivaldi</translation>
 <translation id="4121750346708795461">Als je deze app gebruikt, ga je akkoord met de <ph name="BEGIN_LINK1" />Licentieovereenkomst voor eindgebruikers<ph name="END_LINK1" /> en het <ph name="BEGIN_LINK2" />Privacybeleid<ph name="END_LINK2" /> van Vivaldi.</translation>
 <translation id="4243710787042215766">Openen in privétab</translation>
+<translation id="4526803704855831732">Privétabs</translation>
 <translation id="4883379392681899581">Privémodus verlaten</translation>
 <translation id="4943872375798546930">Geen resultaten</translation>
 <translation id="5118676864324397542">Opslag van <ph name="APP_NAME" /></translation>
@@ -31,7 +35,6 @@ Druk de zoekterm lang om deze te selecteren en aan te passen. Om de zoekopdracht
 <translation id="7519434535192513364">"Tikken om te zoeken" is een functie die alleen beschikbaar is wanneer Google is ingesteld als standaardzoekmachine in Vivaldi. Het stuurt het geselecteerde woord en de huidige pagina als context naar Google Zoeken. Je kunt deze functie uitschakelen bij <ph name="BEGIN_LINK" />Instellingen<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Help</translation>
 <translation id="804786196054284061">Licentieovereenkomst voor eindgebruikers</translation>
-<translation id="8428213095426709021">Instellingen</translation>
 <translation id="8820817407110198400">Bladwijzers</translation>
 <translation id="9063523880881406963">'Desktopwebsite opvragen' uitschakelen</translation>
 <translation id="9080642952018487277">Privémodus inschakelen</translation>

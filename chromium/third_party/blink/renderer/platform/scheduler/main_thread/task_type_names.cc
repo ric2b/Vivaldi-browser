@@ -85,8 +85,6 @@ const char* TaskTypeNames::TaskTypeToString(TaskType task_type) {
       return "InternalMedia";
     case TaskType::kInternalMediaRealTime:
       return "InternalMediaRealTime";
-    case TaskType::kInternalIPC:
-      return "InternalIPC";
     case TaskType::kInternalUserInteraction:
       return "InternalUserInteraction";
     case TaskType::kInternalInspector:
@@ -109,6 +107,8 @@ const char* TaskTypeNames::TaskTypeToString(TaskType task_type) {
       return "MainThreadTaskQueueCleanup";
     case TaskType::kMainThreadTaskQueueMemoryPurge:
       return "MainThreadTaskQueueMemoryPurge";
+    case TaskType::kMainThreadTaskQueueNonWaking:
+      return "MainThreadTaskQueueNonWaking";
     case TaskType::kInternalIntersectionObserver:
       return "InternalIntersectionObserver";
     case TaskType::kCompositorThreadTaskQueueDefault:
@@ -129,12 +129,16 @@ const char* TaskTypeNames::TaskTypeToString(TaskType task_type) {
       return "InternalContentCapture";
     case TaskType::kInternalNavigationAssociated:
       return "InternalNavigationAssociated";
-    case TaskType::kInternalFreezableIPC:
-      return "InternalFreezableIPC";
+    case TaskType::kInternalNavigationAssociatedUnfreezable:
+      return "InternalNavigationAssociatedUnfreezable";
     case TaskType::kInternalContinueScriptLoading:
       return "InternalContinueScriptLoading";
     case TaskType::kExperimentalWebScheduling:
       return "ExperimentalWebScheduling";
+    case TaskType::kInternalFrameLifecycleControl:
+      return "InternalFrameLifecycleControl";
+    case TaskType::kInternalFindInPage:
+      return "InternalFindInPage";
     case TaskType::kCount:
       return "Count";
   }

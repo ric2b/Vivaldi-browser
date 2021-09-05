@@ -97,7 +97,7 @@ class StrongAssociatedBinding {
                           scoped_refptr<base::SequencedTaskRunner> task_runner)
       : impl_(std::move(impl)),
         binding_(impl_.get(), std::move(request), std::move(task_runner)) {
-    binding_.set_connection_error_with_reason_handler(base::Bind(
+    binding_.set_connection_error_with_reason_handler(base::BindOnce(
         &StrongAssociatedBinding::OnConnectionError, base::Unretained(this)));
   }
 
@@ -123,6 +123,9 @@ class StrongAssociatedBinding {
   DISALLOW_COPY_AND_ASSIGN(StrongAssociatedBinding);
 };
 
+// DEPRECATED: Do not introduce new uses of this API. Instead use the
+// MakeSelfOwnedAssociatedReceiver API defined in
+// self_owned_associated_receiver.h.
 template <typename Interface, typename Impl>
 StrongAssociatedBindingPtr<Interface> MakeStrongAssociatedBinding(
     std::unique_ptr<Impl> impl,

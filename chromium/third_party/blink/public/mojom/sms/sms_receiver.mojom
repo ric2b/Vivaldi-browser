@@ -12,7 +12,8 @@ import "mojo/public/mojom/base/time.mojom";
 enum SmsStatus {
   kSuccess,
   kTimeout,
-  kCancelled
+  kCancelled,
+  kAborted
 };
 
 // This interface is created per storage partition but its execution is context
@@ -22,6 +23,9 @@ interface SmsReceiver {
   // Retrieves the next SMS message that arrives on the phone that is addressed
   // to the caller's origin.
   // Returns the raw content of the received SMS.
-  // |message| is only set if status == kSuccess.
-  Receive() => (SmsStatus status, string? message);
+  // |otp|, |message| is only set if status == kSuccess.
+  Receive() => (SmsStatus status, string? otp);
+  // Aborts the current retrieval process and resolves it with an
+  // kAborted SmsStatus.
+  Abort();
 };

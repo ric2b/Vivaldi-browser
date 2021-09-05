@@ -32,13 +32,12 @@ class GLOutputSurface : public OutputSurface {
   void Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
-               bool has_alpha,
+               gfx::BufferFormat format,
                bool use_stencil) override;
   void SwapBuffers(OutputSurfaceFrame frame) override;
   uint32_t GetFramebufferCopyTextureFormat() override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
-  gfx::BufferFormat GetOverlayBufferFormat() const override;
   bool HasExternalStencilTest() const override;
   void ApplyExternalStencil() override;
   unsigned UpdateGpuFence() override;
@@ -53,6 +52,9 @@ class GLOutputSurface : public OutputSurface {
   base::ScopedClosureRunner GetCacheBackBufferCb() override;
 
   gpu::SurfaceHandle GetSurfaceHandle() const override;
+  scoped_refptr<gpu::GpuTaskSchedulerHelper> GetGpuTaskSchedulerHelper()
+      override;
+  gpu::MemoryTracker* GetMemoryTracker() override;
 
  protected:
   OutputSurfaceClient* client() const { return client_; }
@@ -76,6 +78,7 @@ class GLOutputSurface : public OutputSurface {
  private:
   // Called when a swap completion is signaled from ImageTransportSurface.
   void OnGpuSwapBuffersCompleted(std::vector<ui::LatencyInfo> latency_info,
+                                 bool top_controls_visible_height_changed,
                                  const gfx::Size& pixel_size,
                                  const gpu::SwapBuffersCompleteParams& params);
   void OnPresentation(const gfx::PresentationFeedback& feedback);

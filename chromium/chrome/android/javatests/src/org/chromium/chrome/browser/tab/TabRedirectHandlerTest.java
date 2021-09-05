@@ -20,6 +20,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -58,6 +59,10 @@ public class TabRedirectHandlerTest {
         ContextUtils.initApplicationContextForTests(new TestContext());
     }
 
+    private List<ResolveInfo> queryIntentActivities(Intent intent) {
+        return PackageManagerUtils.queryIntentActivities(intent, 0);
+    }
+
     @Test
     @SmallTest
     @Feature({"IntentHandling"})
@@ -70,9 +75,9 @@ public class TabRedirectHandlerTest {
         Assert.assertFalse(handler.isOnEffectiveIntentRedirectChain());
         handler.updateNewUrlLoading(TRANS_TYPE_OF_LINK_FROM_INTENT, true, false, 0, 0);
         Assert.assertTrue(handler.isOnEffectiveIntentRedirectChain());
-        Assert.assertFalse(handler.hasNewResolver(sMoblieYtIntent));
-        Assert.assertTrue(handler.hasNewResolver(sFooIntent));
-        Assert.assertFalse(handler.hasNewResolver(null));
+        Assert.assertFalse(handler.hasNewResolver(queryIntentActivities(sMoblieYtIntent)));
+        Assert.assertTrue(handler.hasNewResolver(queryIntentActivities(sFooIntent)));
+        Assert.assertFalse(handler.hasNewResolver(new ArrayList<ResolveInfo>()));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -90,9 +95,9 @@ public class TabRedirectHandlerTest {
         Assert.assertFalse(handler.isOnEffectiveIntentRedirectChain());
         handler.updateNewUrlLoading(PageTransition.LINK, false, false, 0, 1);
         Assert.assertTrue(handler.isOnEffectiveIntentRedirectChain());
-        Assert.assertFalse(handler.hasNewResolver(sMoblieYtIntent));
-        Assert.assertTrue(handler.hasNewResolver(sFooIntent));
-        Assert.assertFalse(handler.hasNewResolver(null));
+        Assert.assertFalse(handler.hasNewResolver(queryIntentActivities(sMoblieYtIntent)));
+        Assert.assertTrue(handler.hasNewResolver(queryIntentActivities(sFooIntent)));
+        Assert.assertFalse(handler.hasNewResolver(new ArrayList<ResolveInfo>()));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -110,9 +115,9 @@ public class TabRedirectHandlerTest {
         Assert.assertFalse(handler.isOnEffectiveIntentRedirectChain());
         handler.updateNewUrlLoading(PageTransition.FORM_SUBMIT, false, false, 0, 1);
         Assert.assertTrue(handler.isOnEffectiveIntentRedirectChain());
-        Assert.assertFalse(handler.hasNewResolver(sMoblieYtIntent));
-        Assert.assertTrue(handler.hasNewResolver(sFooIntent));
-        Assert.assertFalse(handler.hasNewResolver(null));
+        Assert.assertFalse(handler.hasNewResolver(queryIntentActivities(sMoblieYtIntent)));
+        Assert.assertTrue(handler.hasNewResolver(queryIntentActivities(sFooIntent)));
+        Assert.assertFalse(handler.hasNewResolver(new ArrayList<ResolveInfo>()));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -130,9 +135,9 @@ public class TabRedirectHandlerTest {
         Assert.assertFalse(handler.isOnEffectiveIntentRedirectChain());
         handler.updateNewUrlLoading(TRANS_TYPE_OF_LINK_FROM_INTENT, true, false, 0, 0);
         Assert.assertFalse(handler.isOnEffectiveIntentRedirectChain());
-        Assert.assertTrue(handler.hasNewResolver(sMoblieYtIntent));
-        Assert.assertTrue(handler.hasNewResolver(sFooIntent));
-        Assert.assertFalse(handler.hasNewResolver(null));
+        Assert.assertTrue(handler.hasNewResolver(queryIntentActivities(sMoblieYtIntent)));
+        Assert.assertTrue(handler.hasNewResolver(queryIntentActivities(sFooIntent)));
+        Assert.assertFalse(handler.hasNewResolver(new ArrayList<ResolveInfo>()));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -150,7 +155,7 @@ public class TabRedirectHandlerTest {
         Assert.assertFalse(handler.isOnEffectiveIntentRedirectChain());
         handler.updateNewUrlLoading(TRANS_TYPE_OF_LINK_FROM_INTENT, true, false, 0, 0);
         Assert.assertTrue(handler.isOnEffectiveIntentRedirectChain());
-        Assert.assertFalse(handler.hasNewResolver(sMoblieYtIntent));
+        Assert.assertFalse(handler.hasNewResolver(queryIntentActivities(sMoblieYtIntent)));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -158,9 +163,9 @@ public class TabRedirectHandlerTest {
         handler.clear();
         Assert.assertFalse(handler.isOnNavigation());
         Assert.assertFalse(handler.isOnEffectiveIntentRedirectChain());
-        Assert.assertTrue(handler.hasNewResolver(sMoblieYtIntent));
-        Assert.assertTrue(handler.hasNewResolver(sFooIntent));
-        Assert.assertFalse(handler.hasNewResolver(null));
+        Assert.assertTrue(handler.hasNewResolver(queryIntentActivities(sMoblieYtIntent)));
+        Assert.assertTrue(handler.hasNewResolver(queryIntentActivities(sFooIntent)));
+        Assert.assertFalse(handler.hasNewResolver(new ArrayList<ResolveInfo>()));
     }
 
     @Test
@@ -175,9 +180,9 @@ public class TabRedirectHandlerTest {
         Assert.assertFalse(handler.isOnEffectiveIntentRedirectChain());
         handler.updateNewUrlLoading(PageTransition.LINK, false, false, 0, 1);
         Assert.assertFalse(handler.isOnEffectiveIntentRedirectChain());
-        Assert.assertTrue(handler.hasNewResolver(sMoblieYtIntent));
-        Assert.assertTrue(handler.hasNewResolver(sFooIntent));
-        Assert.assertFalse(handler.hasNewResolver(null));
+        Assert.assertTrue(handler.hasNewResolver(queryIntentActivities(sMoblieYtIntent)));
+        Assert.assertTrue(handler.hasNewResolver(queryIntentActivities(sFooIntent)));
+        Assert.assertFalse(handler.hasNewResolver(new ArrayList<ResolveInfo>()));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -195,7 +200,7 @@ public class TabRedirectHandlerTest {
         Assert.assertFalse(handler.isOnEffectiveIntentRedirectChain());
         handler.updateNewUrlLoading(TRANS_TYPE_OF_LINK_FROM_INTENT, true, false, 0, 0);
         Assert.assertTrue(handler.isOnEffectiveIntentRedirectChain());
-        Assert.assertFalse(handler.hasNewResolver(sMoblieYtIntent));
+        Assert.assertFalse(handler.hasNewResolver(queryIntentActivities(sMoblieYtIntent)));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -204,9 +209,9 @@ public class TabRedirectHandlerTest {
         handler.updateNewUrlLoading(
                 PageTransition.LINK, false, true, SystemClock.elapsedRealtime(), 1);
         Assert.assertFalse(handler.isOnEffectiveIntentRedirectChain());
-        Assert.assertTrue(handler.hasNewResolver(sMoblieYtIntent));
-        Assert.assertTrue(handler.hasNewResolver(sFooIntent));
-        Assert.assertFalse(handler.hasNewResolver(null));
+        Assert.assertTrue(handler.hasNewResolver(queryIntentActivities(sMoblieYtIntent)));
+        Assert.assertTrue(handler.hasNewResolver(queryIntentActivities(sFooIntent)));
+        Assert.assertFalse(handler.hasNewResolver(new ArrayList<ResolveInfo>()));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(1, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -221,15 +226,15 @@ public class TabRedirectHandlerTest {
         fooIntent.putExtra(Browser.EXTRA_APPLICATION_ID, TEST_PACKAGE_NAME);
         handler.updateIntent(fooIntent);
         Assert.assertFalse(handler.isOnNavigation());
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         handler.updateNewUrlLoading(TRANS_TYPE_OF_LINK_FROM_INTENT, false, false, 0, 0);
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
         handler.updateNewUrlLoading(PageTransition.LINK, false, false, 0, 1);
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -237,8 +242,8 @@ public class TabRedirectHandlerTest {
         SystemClock.sleep(1);
         handler.updateNewUrlLoading(
                 PageTransition.LINK, false, true, SystemClock.elapsedRealtime(), 2);
-        Assert.assertFalse(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertFalse(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(2, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -279,15 +284,15 @@ public class TabRedirectHandlerTest {
         fooIntent.setPackage(TEST_PACKAGE_NAME);
         handler.updateIntent(fooIntent);
         Assert.assertFalse(handler.isOnNavigation());
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         handler.updateNewUrlLoading(TRANS_TYPE_OF_LINK_FROM_INTENT, false, false, 0, 0);
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
         handler.updateNewUrlLoading(PageTransition.LINK, false, false, 0, 1);
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -295,8 +300,8 @@ public class TabRedirectHandlerTest {
         SystemClock.sleep(1);
         handler.updateNewUrlLoading(
                 PageTransition.LINK, false, true, SystemClock.elapsedRealtime(), 2);
-        Assert.assertFalse(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertFalse(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(2, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -314,7 +319,7 @@ public class TabRedirectHandlerTest {
         Assert.assertFalse(handler.shouldNotOverrideUrlLoading());
 
         handler.updateNewUrlLoading(PageTransition.LINK, false, true, 0, 0);
-        handler.setShouldNotOverrideUrlLoadingUntilNewUrlLoading();
+        handler.setShouldNotOverrideUrlLoadingOnCurrentRedirectChain();
 
         handler.updateNewUrlLoading(PageTransition.LINK, true, false, 0, 0);
         Assert.assertTrue(handler.shouldNotOverrideUrlLoading());
@@ -328,7 +333,7 @@ public class TabRedirectHandlerTest {
         Assert.assertFalse(handler.shouldNotOverrideUrlLoading());
 
         handler.updateNewUrlLoading(PageTransition.LINK, false, true, 0, 0);
-        handler.setShouldNotOverrideUrlLoadingUntilNewUrlLoading();
+        handler.setShouldNotOverrideUrlLoadingOnCurrentRedirectChain();
 
         // Effective redirection occurred.
         handler.updateNewUrlLoading(PageTransition.LINK, false, false, 0, 1);
@@ -353,17 +358,17 @@ public class TabRedirectHandlerTest {
         TabRedirectHandler handler = TabRedirectHandler.create();
         handler.updateIntent(sYtIntent);
         Assert.assertFalse(handler.isOnNavigation());
-        Assert.assertFalse(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertFalse(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         handler.updateNewUrlLoading(
                 PageTransition.LINK, false, false, SystemClock.elapsedRealtime(), 0);
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertTrue(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertTrue(handler.shouldStayInApp(true));
         handler.updateNewUrlLoading(
                 PageTransition.LINK, false, false, SystemClock.elapsedRealtime(), 1);
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertTrue(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertTrue(handler.shouldStayInApp(true));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -371,8 +376,8 @@ public class TabRedirectHandlerTest {
         SystemClock.sleep(1);
         handler.updateNewUrlLoading(
                 PageTransition.LINK, false, true, SystemClock.elapsedRealtime(), 2);
-        Assert.assertFalse(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertFalse(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(2, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -386,17 +391,17 @@ public class TabRedirectHandlerTest {
         TabRedirectHandler handler = TabRedirectHandler.create();
         handler.updateIntent(sYtIntent);
         Assert.assertFalse(handler.isOnNavigation());
-        Assert.assertFalse(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertFalse(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         handler.updateNewUrlLoading(
                 PageTransition.RELOAD, false, false, SystemClock.elapsedRealtime(), 0);
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertTrue(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertTrue(handler.shouldStayInApp(true));
         handler.updateNewUrlLoading(
                 PageTransition.LINK, false, false, SystemClock.elapsedRealtime(), 1);
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertTrue(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertTrue(handler.shouldStayInApp(true));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -404,8 +409,8 @@ public class TabRedirectHandlerTest {
         SystemClock.sleep(1);
         handler.updateNewUrlLoading(
                 PageTransition.LINK, false, true, SystemClock.elapsedRealtime(), 2);
-        Assert.assertFalse(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertFalse(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(2, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -419,17 +424,17 @@ public class TabRedirectHandlerTest {
         TabRedirectHandler handler = TabRedirectHandler.create();
         handler.updateIntent(sYtIntent);
         Assert.assertFalse(handler.isOnNavigation());
-        Assert.assertFalse(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertFalse(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         handler.updateNewUrlLoading(PageTransition.FORM_SUBMIT | PageTransition.FORWARD_BACK,
                 false, true, SystemClock.elapsedRealtime(), 0);
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertTrue(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertTrue(handler.shouldStayInApp(true));
         handler.updateNewUrlLoading(
                 PageTransition.LINK, false, false, SystemClock.elapsedRealtime(), 1);
-        Assert.assertTrue(handler.shouldStayInChrome(false));
-        Assert.assertTrue(handler.shouldStayInChrome(true));
+        Assert.assertTrue(handler.shouldStayInApp(false));
+        Assert.assertTrue(handler.shouldStayInApp(true));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(0, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -437,8 +442,8 @@ public class TabRedirectHandlerTest {
         SystemClock.sleep(1);
         handler.updateNewUrlLoading(
                 PageTransition.LINK, false, true, SystemClock.elapsedRealtime(), 2);
-        Assert.assertFalse(handler.shouldStayInChrome(false));
-        Assert.assertFalse(handler.shouldStayInChrome(true));
+        Assert.assertFalse(handler.shouldStayInApp(false));
+        Assert.assertFalse(handler.shouldStayInApp(true));
 
         Assert.assertTrue(handler.isOnNavigation());
         Assert.assertEquals(2, handler.getLastCommittedEntryIndexBeforeStartingNavigation());
@@ -474,8 +479,8 @@ public class TabRedirectHandlerTest {
         Assert.assertFalse(handler.isOnNavigation());
 
         handler.updateNewUrlLoading(PageTransition.CLIENT_REDIRECT, false, false, 0, 0);
-        Assert.assertTrue(handler.shouldStayInChrome(true));
-        Assert.assertFalse(handler.shouldStayInChrome(true, true));
+        Assert.assertTrue(handler.shouldStayInApp(true));
+        Assert.assertFalse(handler.shouldStayInApp(true, true));
     }
 
     private static class TestPackageManager extends MockPackageManager {

@@ -81,7 +81,7 @@ SVGFELightElement::SVGFELightElement(const QualifiedName& tag_name,
   AddToPropertyMap(limiting_cone_angle_);
 }
 
-void SVGFELightElement::Trace(blink::Visitor* visitor) {
+void SVGFELightElement::Trace(Visitor* visitor) {
   visitor->Trace(azimuth_);
   visitor->Trace(elevation_);
   visitor->Trace(x_);
@@ -127,13 +127,13 @@ void SVGFELightElement::SvgAttributeChanged(const QualifiedName& attr_name) {
       return;
 
     LayoutObject* layout_object = parent->GetLayoutObject();
-    if (!layout_object || !layout_object->IsSVGResourceFilterPrimitive())
+    if (!layout_object || !layout_object->IsSVGFilterPrimitive())
       return;
 
     SVGElement::InvalidationGuard invalidation_guard(this);
-    if (auto* diffuse = ToSVGFEDiffuseLightingElementOrNull(*parent))
+    if (auto* diffuse = DynamicTo<SVGFEDiffuseLightingElement>(*parent))
       diffuse->LightElementAttributeChanged(this, attr_name);
-    else if (auto* specular = ToSVGFESpecularLightingElementOrNull(*parent))
+    else if (auto* specular = DynamicTo<SVGFESpecularLightingElement>(*parent))
       specular->LightElementAttributeChanged(this, attr_name);
 
     return;
@@ -145,10 +145,10 @@ void SVGFELightElement::SvgAttributeChanged(const QualifiedName& attr_name) {
 void SVGFELightElement::ChildrenChanged(const ChildrenChange& change) {
   SVGElement::ChildrenChanged(change);
 
-  if (!change.by_parser) {
+  if (!change.ByParser()) {
     if (ContainerNode* parent = parentNode()) {
       LayoutObject* layout_object = parent->GetLayoutObject();
-      if (layout_object && layout_object->IsSVGResourceFilterPrimitive())
+      if (layout_object && layout_object->IsSVGFilterPrimitive())
         MarkForLayoutAndParentResourceInvalidation(*layout_object);
     }
   }

@@ -45,6 +45,8 @@
 #include "net/quic/quic_chromium_connection_helper.h"
 #include "net/quic/quic_chromium_packet_reader.h"
 #include "net/quic/quic_chromium_packet_writer.h"
+#include "net/quic/quic_client_session_cache.h"
+#include "net/quic/quic_context.h"
 #include "net/quic/quic_crypto_client_stream_factory.h"
 #include "net/quic/quic_http_stream.h"
 #include "net/quic/quic_server_info.h"
@@ -57,9 +59,9 @@
 #include "net/third_party/quiche/src/quic/core/crypto/proof_verifier.h"
 #include "net/third_party/quiche/src/quic/core/crypto/quic_random.h"
 #include "net/third_party/quiche/src/quic/core/http/quic_client_promised_info.h"
+#include "net/third_party/quiche/src/quic/core/quic_clock.h"
 #include "net/third_party/quiche/src/quic/core/quic_connection.h"
 #include "net/third_party/quiche/src/quic/core/quic_utils.h"
-#include "net/third_party/quiche/src/quic/platform/api/quic_clock.h"
 #include "net/third_party/quiche/src/quic/platform/api/quic_flags.h"
 #include "third_party/boringssl/src/include/openssl/aead.h"
 #include "url/gurl.h"
@@ -105,19 +107,6 @@ enum class ConnectionStateAfterDNS {
   kCryptoFinishedDnsNoMatch = 5,
   kMaxValue = kCryptoFinishedDnsNoMatch,
 };
-
-// The maximum receive window sizes for QUIC sessions and streams.
-const int32_t kQuicSessionMaxRecvWindowSize = 15 * 1024 * 1024;  // 15 MB
-const int32_t kQuicStreamMaxRecvWindowSize = 6 * 1024 * 1024;    // 6 MB
-
-// QUIC's socket receive buffer size.
-// We should adaptively set this buffer size, but for now, we'll use a size
-// that seems large enough to receive data at line rate for most connections,
-// and does not consume "too much" memory.
-const int32_t kQuicSocketReceiveBufferSize = 1024 * 1024;  // 1MB
-
-// Set the maximum number of undecryptable packets the connection will store.
-const int32_t kMaxUndecryptablePackets = 100;
 
 base::Value NetLogQuicStreamFactoryJobParams(
     const quic::QuicServerId* server_id) {
@@ -171,6 +160,21 @@ void LogRacingStatus(ConnectionStateAfterDNS status) {
   UMA_HISTOGRAM_ENUMERATION("Net.QuicSession.ConnectionStateAfterDNS", status);
 }
 
+void LogStaleConnectionTime(base::TimeTicks start_time) {
+  UMA_HISTOGRAM_TIMES("Net.QuicSession.StaleConnectionTime",
+                      base::TimeTicks::Now() - start_time);
+}
+
+void LogValidConnectionTime(base::TimeTicks start_time) {
+  UMA_HISTOGRAM_TIMES("Net.QuicSession.ValidConnectionTime",
+                      base::TimeTicks::Now() - start_time);
+}
+
+void LogFreshDnsResolveTime(base::TimeTicks start_time) {
+  UMA_HISTOGRAM_TIMES("Net.QuicSession.FreshDnsResolutionTime",
+                      base::TimeTicks::Now() - start_time);
+}
+
 void SetInitialRttEstimate(base::TimeDelta estimate,
                            enum InitialRttEstimateSource source,
                            quic::QuicConfig* config) {
@@ -178,29 +182,6 @@ void SetInitialRttEstimate(base::TimeDelta estimate,
                             INITIAL_RTT_SOURCE_MAX);
   if (estimate != base::TimeDelta())
     config->SetInitialRoundTripTimeUsToSend(estimate.InMicroseconds());
-}
-
-quic::QuicConfig InitializeQuicConfig(
-    const quic::QuicTagVector& connection_options,
-    const quic::QuicTagVector& client_connection_options,
-    base::TimeDelta idle_connection_timeout,
-    base::TimeDelta max_time_before_crypto_handshake,
-    base::TimeDelta max_idle_time_before_crypto_handshake) {
-  DCHECK_GT(idle_connection_timeout, base::TimeDelta());
-  quic::QuicConfig config;
-  config.SetIdleNetworkTimeout(quic::QuicTime::Delta::FromMicroseconds(
-                                   idle_connection_timeout.InMicroseconds()),
-                               quic::QuicTime::Delta::FromMicroseconds(
-                                   idle_connection_timeout.InMicroseconds()));
-  config.set_max_time_before_crypto_handshake(
-      quic::QuicTime::Delta::FromMicroseconds(
-          max_time_before_crypto_handshake.InMicroseconds()));
-  config.set_max_idle_time_before_crypto_handshake(
-      quic::QuicTime::Delta::FromMicroseconds(
-          max_idle_time_before_crypto_handshake.InMicroseconds()));
-  config.SetConnectionOptionsToSend(connection_options);
-  config.SetClientConnectionOptions(client_connection_options);
-  return config;
 }
 
 // An implementation of quic::QuicCryptoClientConfig::ServerIdFilter that wraps
@@ -224,7 +205,7 @@ class ServerIdOriginFilter
   }
 
  private:
-  const base::Callback<bool(const GURL&)> origin_filter_;
+  const base::RepeatingCallback<bool(const GURL&)> origin_filter_;
 };
 
 std::set<std::string> HostsFromOrigins(std::set<HostPortPair> origins) {
@@ -236,22 +217,6 @@ std::set<std::string> HostsFromOrigins(std::set<HostPortPair> origins) {
 }
 
 }  // namespace
-
-QuicParams::QuicParams()
-    : max_packet_length(quic::kDefaultMaxPacketSize),
-      reduced_ping_timeout(
-          base::TimeDelta::FromSeconds(quic::kPingTimeoutSecs)),
-      max_time_before_crypto_handshake(
-          base::TimeDelta::FromSeconds(quic::kMaxTimeForCryptoHandshakeSecs)),
-      max_idle_time_before_crypto_handshake(
-          base::TimeDelta::FromSeconds(quic::kInitialIdleTimeoutSecs)) {
-  supported_versions.push_back(quic::ParsedQuicVersion(
-      quic::PROTOCOL_QUIC_CRYPTO, quic::QUIC_VERSION_46));
-}
-
-QuicParams::QuicParams(const QuicParams& other) = default;
-
-QuicParams::~QuicParams() = default;
 
 // Responsible for verifying the certificates saved in
 // quic::QuicCryptoClientConfig, and for notifying any associated requests when
@@ -360,8 +325,9 @@ class QuicStreamFactory::QuicCryptoClientConfigOwner {
  public:
   QuicCryptoClientConfigOwner(
       std::unique_ptr<quic::ProofVerifier> proof_verifier,
+      std::unique_ptr<QuicClientSessionCache> session_cache,
       QuicStreamFactory* quic_stream_factory)
-      : config_(std::move(proof_verifier)),
+      : config_(std::move(proof_verifier), std::move(session_cache)),
         quic_stream_factory_(quic_stream_factory) {
     DCHECK(quic_stream_factory_);
   }
@@ -600,6 +566,7 @@ class QuicStreamFactory::Job {
   std::unique_ptr<HostResolver::ResolveHostRequest> fresh_resolve_host_request_;
   base::TimeTicks dns_resolution_start_time_;
   base::TimeTicks dns_resolution_end_time_;
+  base::TimeTicks quic_connection_start_time_;
   std::set<QuicStreamRequest*> stream_requests_;
   base::WeakPtrFactory<Job> weak_factory_{this};
 
@@ -716,6 +683,8 @@ void QuicStreamFactory::Job::OnSessionClosed(
 void QuicStreamFactory::Job::OnResolveHostComplete(int rv) {
   DCHECK(!host_resolution_finished_);
 
+  LogFreshDnsResolveTime(dns_resolution_start_time_);
+
   if (fresh_resolve_host_request_) {
     DCHECK(race_stale_dns_on_connection_);
     dns_resolution_end_time_ = base::TimeTicks::Now();
@@ -775,8 +744,10 @@ void QuicStreamFactory::Job::OnResolveHostComplete(int rv) {
 void QuicStreamFactory::Job::OnConnectComplete(int rv) {
   // This early return will be triggered when CloseSessionOnError is called
   // before crypto handshake has completed.
-  if (!session_)
+  if (!session_) {
+    LogStaleConnectionTime(quic_connection_start_time_);
     return;
+  }
 
   rv = DoLoop(rv);
   if (rv != ERR_IO_PENDING && !callback_.is_null())
@@ -788,7 +759,7 @@ void QuicStreamFactory::Job::PopulateNetErrorDetails(
   if (!session_)
     return;
   details->connection_info = QuicHttpStream::ConnectionInfoFromQuicVersion(
-      session_->connection()->transport_version());
+      session_->connection()->version());
   details->quic_connection_error = session_->error();
 }
 
@@ -810,8 +781,9 @@ int QuicStreamFactory::Job::DoResolveHost() {
   }
   if (key_.session_key().disable_secure_dns())
     parameters.secure_dns_mode_override = DnsConfig::SecureDnsMode::OFF;
-  resolve_host_request_ =
-      host_resolver_->CreateRequest(key_.destination(), net_log_, parameters);
+  resolve_host_request_ = host_resolver_->CreateRequest(
+      key_.destination(), key_.session_key().network_isolation_key(), net_log_,
+      parameters);
   // Unretained is safe because |this| owns the request, ensuring cancellation
   // on destruction.
   // When race_stale_dns_on_connection_ is on, this request will query for stale
@@ -821,6 +793,10 @@ int QuicStreamFactory::Job::DoResolveHost() {
 
   if (rv == ERR_IO_PENDING || !resolve_host_request_->GetStaleInfo() ||
       !resolve_host_request_->GetStaleInfo().value().is_stale()) {
+    // Returns non-stale result synchronously.
+    if (rv != ERR_IO_PENDING) {
+      LogFreshDnsResolveTime(dns_resolution_start_time_);
+    }
     // Not a stale result.
     if (race_stale_dns_on_connection_)
       LogStaleHostRacing(false);
@@ -832,8 +808,9 @@ int QuicStreamFactory::Job::DoResolveHost() {
 
   parameters.cache_usage =
       HostResolver::ResolveHostParameters::CacheUsage::DISALLOWED;
-  fresh_resolve_host_request_ =
-      host_resolver_->CreateRequest(key_.destination(), net_log_, parameters);
+  fresh_resolve_host_request_ = host_resolver_->CreateRequest(
+      key_.destination(), key_.session_key().network_isolation_key(), net_log_,
+      parameters);
   // Unretained is safe because |this| owns the request, ensuring cancellation
   // on destruction.
   // This request will only query fresh host resolution.
@@ -841,6 +818,7 @@ int QuicStreamFactory::Job::DoResolveHost() {
       &QuicStreamFactory::Job::OnResolveHostComplete, base::Unretained(this)));
   if (fresh_rv != ERR_IO_PENDING) {
     // Fresh request returned immediate results.
+    LogFreshDnsResolveTime(dns_resolution_start_time_);
     LogStaleHostRacing(false);
     resolve_host_request_ = std::move(fresh_resolve_host_request_);
     return fresh_rv;
@@ -884,6 +862,7 @@ int QuicStreamFactory::Job::DoResolveHostComplete(int rv) {
 }
 
 int QuicStreamFactory::Job::DoConnect() {
+  quic_connection_start_time_ = base::TimeTicks::Now();
   DCHECK(dns_resolution_end_time_ != base::TimeTicks());
   io_state_ = STATE_CONNECT_COMPLETE;
   bool require_confirmation = was_alternative_service_recently_broken_;
@@ -925,6 +904,7 @@ int QuicStreamFactory::Job::DoConnect() {
 
 int QuicStreamFactory::Job::DoConnectComplete(int rv) {
   if (!fresh_resolve_host_request_) {
+    LogValidConnectionTime(quic_connection_start_time_);
     io_state_ = STATE_CONFIRM_CONNECTION;
     return rv;
   }
@@ -937,6 +917,7 @@ int QuicStreamFactory::Job::DoConnectComplete(int rv) {
   // Connection from stale host resolution failed, has been closed and will
   // be deleted soon. Update Job status accordingly to wait for fresh host
   // resolution.
+  LogStaleConnectionTime(quic_connection_start_time_);
   resolve_host_request_ = std::move(fresh_resolve_host_request_);
   session_ = nullptr;
   io_state_ = STATE_RESOLVE_HOST_COMPLETE;
@@ -947,6 +928,7 @@ int QuicStreamFactory::Job::DoConnectComplete(int rv) {
 // have finished successfully.
 int QuicStreamFactory::Job::DoValidateHost() {
   if (DoesPeerAddressMatchWithFreshAddressList()) {
+    LogValidConnectionTime(quic_connection_start_time_);
     LogRacingStatus(ConnectionStateAfterDNS::kCryptoFinishedDnsMatch);
     LogStaleAndFreshHostMatched(true);
     fresh_resolve_host_request_ = nullptr;
@@ -955,6 +937,7 @@ int QuicStreamFactory::Job::DoValidateHost() {
     return OK;
   }
 
+  LogStaleConnectionTime(quic_connection_start_time_);
   LogRacingStatus(ConnectionStateAfterDNS::kCryptoFinishedDnsNoMatch);
   LogStaleAndFreshHostMatched(false);
   resolve_host_request_ = std::move(fresh_resolve_host_request_);
@@ -972,7 +955,7 @@ int QuicStreamFactory::Job::DoConfirmConnection(int rv) {
     UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.ConnectAfterBroken", rv == OK);
 
   if (retry_on_alternate_network_before_handshake_ && session_ &&
-      !session_->IsCryptoHandshakeConfirmed() &&
+      !session_->OneRttKeysAvailable() &&
       network_ == factory_->default_network()) {
     if (session_->error() == quic::QUIC_NETWORK_IDLE_TIMEOUT ||
         session_->error() == quic::QUIC_HANDSHAKE_TIMEOUT ||
@@ -1190,9 +1173,7 @@ QuicStreamFactory::QuicStreamFactory(
     CTVerifier* cert_transparency_verifier,
     SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
     QuicCryptoClientStreamFactory* quic_crypto_client_stream_factory,
-    quic::QuicRandom* random_generator,
-    quic::QuicClock* clock,
-    const QuicParams& params)
+    QuicContext* quic_context)
     : is_quic_known_to_work_on_current_network_(false),
       net_log_(net_log),
       host_resolver_(host_resolver),
@@ -1204,23 +1185,21 @@ QuicStreamFactory::QuicStreamFactory(
       transport_security_state_(transport_security_state),
       cert_transparency_verifier_(cert_transparency_verifier),
       quic_crypto_client_stream_factory_(quic_crypto_client_stream_factory),
-      random_generator_(random_generator),
-      clock_(clock),
-      params_(params),
+      random_generator_(quic_context->random_generator()),
+      clock_(quic_context->clock()),
+      // TODO(vasilvv): figure out how to avoid having multiple copies of
+      // QuicParams.
+      params_(*quic_context->params()),
       clock_skew_detector_(base::TimeTicks::Now(), base::Time::Now()),
       socket_performance_watcher_factory_(socket_performance_watcher_factory),
       recent_crypto_config_map_(kMaxRecentCryptoConfigs),
-      config_(
-          InitializeQuicConfig(params.connection_options,
-                               params.client_connection_options,
-                               params.idle_connection_timeout,
-                               params.max_time_before_crypto_handshake,
-                               params.max_idle_time_before_crypto_handshake)),
+      config_(InitializeQuicConfig(*quic_context->params())),
       ping_timeout_(quic::QuicTime::Delta::FromSeconds(quic::kPingTimeoutSecs)),
       reduced_ping_timeout_(quic::QuicTime::Delta::FromMicroseconds(
-          params.reduced_ping_timeout.InMicroseconds())),
+          quic_context->params()->reduced_ping_timeout.InMicroseconds())),
       retransmittable_on_wire_timeout_(quic::QuicTime::Delta::FromMicroseconds(
-          params.retransmittable_on_wire_timeout.InMicroseconds())),
+          quic_context->params()
+              ->retransmittable_on_wire_timeout.InMicroseconds())),
       yield_after_packets_(kQuicYieldAfterPacketsRead),
       yield_after_duration_(quic::QuicTime::Delta::FromMilliseconds(
           kQuicYieldAfterDurationMilliseconds)),
@@ -1511,7 +1490,7 @@ std::unique_ptr<base::Value> QuicStreamFactory::QuicStreamFactoryInfoToValue()
 }
 
 void QuicStreamFactory::ClearCachedStatesInCryptoConfig(
-    const base::Callback<bool(const GURL&)>& origin_filter) {
+    const base::RepeatingCallback<bool(const GURL&)>& origin_filter) {
   ServerIdOriginFilter filter(origin_filter);
   for (const auto& crypto_config : active_crypto_config_map_) {
     crypto_config.second->config()->ClearCachedStates(filter);
@@ -1922,11 +1901,6 @@ int QuicStreamFactory::CreateSession(
   connection->SetMaxPacketLength(params_.max_packet_length);
 
   quic::QuicConfig config = config_;
-  config.set_max_undecryptable_packets(kMaxUndecryptablePackets);
-  config.SetInitialSessionFlowControlWindowToSend(
-      kQuicSessionMaxRecvWindowSize);
-  config.SetInitialStreamFlowControlWindowToSend(kQuicStreamMaxRecvWindowSize);
-  config.SetBytesForConnectionIdToSend(0);
   ConfigureInitialRttEstimate(
       server_id, key.session_key().network_isolation_key(), &config);
   if (quic_version.transport_version <= quic::QUIC_VERSION_43 &&
@@ -1984,11 +1958,6 @@ int QuicStreamFactory::CreateSession(
     DLOG(DFATAL) << "Session closed during initialize";
     *session = nullptr;
     return ERR_CONNECTION_CLOSED;
-  }
-  if (connection->version().KnowsWhichDecrypterToUse()) {
-    connection->InstallDecrypter(
-        quic::ENCRYPTION_FORWARD_SECURE,
-        std::make_unique<quic::NullDecrypter>(quic::Perspective::IS_CLIENT));
   }
   return OK;
 }
@@ -2228,7 +2197,7 @@ void QuicStreamFactory::ProcessGoingAwaySession(
     return;
   }
 
-  if (session->IsCryptoHandshakeConfirmed()) {
+  if (session->OneRttKeysAvailable()) {
     http_server_properties_->ConfirmAlternativeService(
         alternative_service,
         session->quic_session_key().network_isolation_key());
@@ -2310,7 +2279,7 @@ QuicStreamFactory::CreateCryptoConfigHandle(
               cert_verifier_, ct_policy_enforcer_, transport_security_state_,
               cert_transparency_verifier_,
               HostsFromOrigins(params_.origins_to_force_quic_on)),
-          this);
+          std::make_unique<QuicClientSessionCache>(), this);
 
   quic::QuicCryptoClientConfig* crypto_config = crypto_config_owner->config();
   crypto_config->set_user_agent_id(params_.user_agent_id);

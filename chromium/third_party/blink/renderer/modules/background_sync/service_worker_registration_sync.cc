@@ -7,6 +7,7 @@
 #include "third_party/blink/renderer/modules/background_sync/periodic_sync_manager.h"
 #include "third_party/blink/renderer/modules/background_sync/sync_manager.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
@@ -40,9 +41,10 @@ SyncManager* ServiceWorkerRegistrationSync::sync(
 SyncManager* ServiceWorkerRegistrationSync::sync() {
   if (!sync_manager_) {
     ExecutionContext* execution_context = registration_->GetExecutionContext();
-    sync_manager_ = SyncManager::Create(
+    // TODO(falken): Consider defining a task source in the spec for this event.
+    sync_manager_ = MakeGarbageCollected<SyncManager>(
         registration_,
-        execution_context->GetTaskRunner(TaskType::kInternalIPC));
+        execution_context->GetTaskRunner(TaskType::kMiscPlatformAPI));
   }
   return sync_manager_.Get();
 }
@@ -55,14 +57,15 @@ PeriodicSyncManager* ServiceWorkerRegistrationSync::periodicSync(
 PeriodicSyncManager* ServiceWorkerRegistrationSync::periodicSync() {
   if (!periodic_sync_manager_) {
     ExecutionContext* execution_context = registration_->GetExecutionContext();
-    periodic_sync_manager_ = PeriodicSyncManager::Create(
+    // TODO(falken): Consider defining a task source in the spec for this event.
+    periodic_sync_manager_ = MakeGarbageCollected<PeriodicSyncManager>(
         registration_,
-        execution_context->GetTaskRunner(TaskType::kInternalIPC));
+        execution_context->GetTaskRunner(TaskType::kMiscPlatformAPI));
   }
   return periodic_sync_manager_.Get();
 }
 
-void ServiceWorkerRegistrationSync::Trace(blink::Visitor* visitor) {
+void ServiceWorkerRegistrationSync::Trace(Visitor* visitor) {
   visitor->Trace(registration_);
   visitor->Trace(sync_manager_);
   visitor->Trace(periodic_sync_manager_);

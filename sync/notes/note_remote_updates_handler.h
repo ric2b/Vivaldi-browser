@@ -1,0 +1,107 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef SYNC_NOTES_NOTE_REMOTE_UPDATES_HANDLER_H_
+#define SYNC_NOTES_NOTE_REMOTE_UPDATES_HANDLER_H_
+
+#include <map>
+#include <string>
+#include <vector>
+
+#include "components/sync/engine/non_blocking_sync_common.h"
+#include "sync/notes/synced_note_tracker.h"
+
+namespace vivaldi {
+class NotesModel;
+class NoteNode;
+}  // namespace vivaldi
+
+namespace sync_notes {
+
+// Responsible for processing one batch of remote updates received from the sync
+// server.
+class NoteRemoteUpdatesHandler {
+ public:
+  // |notes_model| and |note_tracker| must not be null
+  // and must outlive this object.
+  NoteRemoteUpdatesHandler(vivaldi::NotesModel* notes_model,
+                           SyncedNoteTracker* note_tracker);
+  // Processes the updates received from the sync server in |updates| and
+  // updates the |notes_model_| and |note_tracker_| accordingly. If
+  // |got_new_encryption_requirements| is true, it recommits all tracked
+  // entities except those in |updates| which should use the latest encryption
+  // key and hence don't need recommitting.
+  void Process(const syncer::UpdateResponseDataList& updates,
+               bool got_new_encryption_requirements);
+
+  // Public for testing.
+  static std::vector<const syncer::UpdateResponseData*> ReorderUpdatesForTest(
+      const syncer::UpdateResponseDataList* updates);
+
+ private:
+  // Reorders incoming updates such that parent creation is before child
+  // creation and child deletion is before parent deletion, and deletions should
+  // come last. The returned pointers point to the elements in the original
+  // |updates|.
+  static std::vector<const syncer::UpdateResponseData*> ReorderUpdates(
+      const syncer::UpdateResponseDataList* updates);
+
+  // Given a remote update entity, it returns the parent note node of the
+  // corresponding node. It returns null if the parent node cannot be found.
+  const vivaldi::NoteNode* GetParentNode(
+      const syncer::EntityData& update_entity) const;
+
+  // Processes a remote creation of a note node.
+  // 1. For permanent folders, they are only registered in |note_tracker_|.
+  // 2. If the nodes parent cannot be found, the remote creation update is
+  //    ignored.
+  // 3. Otherwise, a new node is created in the local note model and
+  //    registered in |note_tracker_|.
+  //
+  // Returns the newly tracked entity or null if the creation failed.
+  const SyncedNoteTracker::Entity* ProcessCreate(
+      const syncer::UpdateResponseData& update);
+
+  // Processes a remote update of a note node. |update| must not be a
+  // deletion, and the server_id must be already tracked, otherwise, it is a
+  // creation that gets handled in ProcessCreate(). |tracked_entity| is
+  // the tracked entity for that server_id. It is passed as a dependency instead
+  // of performing a lookup inside ProcessUpdate() to avoid wasting CPU
+  // cycles for doing another lookup (this code runs on the UI thread).
+  void ProcessUpdate(const syncer::UpdateResponseData& update,
+                     const SyncedNoteTracker::Entity* tracked_entity);
+
+  // Processes a remote delete of a note node. |update_entity| must not be a
+  // deletion. |tracked_entity| is the tracked entity for that server_id. It is
+  // passed as a dependency instead of performing a lookup inside
+  // ProcessDelete() to avoid wasting CPU cycles for doing another lookup
+  // (this code runs on the UI thread).
+  void ProcessDelete(const syncer::EntityData& update_entity,
+                     const SyncedNoteTracker::Entity* tracked_entity);
+
+  // Processes a conflict where the note has been changed both locally and
+  // remotely. It applies the general policy the server wins except in the case
+  // of remote deletions in which local wins. |tracked_entity| is the tracked
+  // entity for that server_id. It is passed as a dependency instead of
+  // performing a lookup inside ProcessDelete() to avoid wasting CPU cycles for
+  // doing another lookup (this code runs on the UI thread).
+  void ProcessConflict(const syncer::UpdateResponseData& update,
+                       const SyncedNoteTracker::Entity* tracked_entity);
+
+  // Recursively removes the entities corresponding to |node| and its children
+  // from |note_tracker_|.
+  void RemoveEntityAndChildrenFromTracker(const vivaldi::NoteNode* node);
+
+  void ReuploadEntityIfNeeded(const sync_pb::NotesSpecifics& specifics,
+                              const SyncedNoteTracker::Entity* tracked_entity);
+
+  vivaldi::NotesModel* const notes_model_;
+  SyncedNoteTracker* const note_tracker_;
+
+  DISALLOW_COPY_AND_ASSIGN(NoteRemoteUpdatesHandler);
+};
+
+}  // namespace sync_notes
+
+#endif  // SYNC_NOTES_NOTE_REMOTE_UPDATES_HANDLER_H_

@@ -21,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
@@ -258,6 +259,7 @@ base::Optional<AutocompleteMatch> ClipboardProvider::CreateURLMatch(
   AutocompleteMatch match(this, 800, IsMatchDeletionEnabled(),
                           AutocompleteMatchType::CLIPBOARD_URL);
   match.destination_url = url;
+
   // Because the user did not type a related input to get this clipboard
   // suggestion, preserve the subdomain so the user has extra context.
   auto format_types = AutocompleteMatch::GetFormatTypes(false, true);
@@ -265,6 +267,9 @@ base::Optional<AutocompleteMatch> ClipboardProvider::CreateURLMatch(
       url, format_types, net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
   if (!match.contents.empty())
     match.contents_class.push_back({0, ACMatchClassification::URL});
+  match.fill_into_edit =
+      AutocompleteInput::FormattedStringWithEquivalentMeaning(
+          url, match.contents, client_->GetSchemeClassifier(), nullptr);
 
   match.description.assign(l10n_util::GetStringUTF16(IDS_LINK_FROM_CLIPBOARD));
   if (!match.description.empty())
@@ -275,12 +280,6 @@ base::Optional<AutocompleteMatch> ClipboardProvider::CreateURLMatch(
 
 base::Optional<AutocompleteMatch> ClipboardProvider::CreateTextMatch(
     const AutocompleteInput& input) {
-  // Only try text match if feature is enabled
-  if (!base::FeatureList::IsEnabled(
-          omnibox::kEnableClipboardProviderTextSuggestions)) {
-    return base::nullopt;
-  }
-
   base::Optional<base::string16> optional_text =
       clipboard_content_->GetRecentTextFromClipboard();
   if (!optional_text)
@@ -300,6 +299,8 @@ base::Optional<AutocompleteMatch> ClipboardProvider::CreateTextMatch(
   // Add the clipboard match. The relevance is 800 to beat ZeroSuggest results.
   AutocompleteMatch match(this, 800, IsMatchDeletionEnabled(),
                           AutocompleteMatchType::CLIPBOARD_TEXT);
+  match.fill_into_edit = text;
+
   TemplateURLService* url_service = client_->GetTemplateURLService();
   const TemplateURL* default_url = url_service->GetDefaultSearchProvider();
   if (!default_url)
@@ -324,16 +325,6 @@ base::Optional<AutocompleteMatch> ClipboardProvider::CreateTextMatch(
   match.keyword = default_url->keyword();
   match.transition = ui::PAGE_TRANSITION_GENERATED;
 
-  // Some users may be in a counterfactual study arm in which we perform all
-  // necessary work but do not forward the autocomplete matches.
-  bool in_counterfactual_group = base::GetFieldTrialParamByFeatureAsBool(
-      omnibox::kEnableClipboardProviderTextSuggestions,
-      "ClipboardProviderTextSuggestionsCounterfactualArm", false);
-  field_trial_triggered_ = true;
-  field_trial_triggered_in_session_ = true;
-  if (in_counterfactual_group)
-    return base::nullopt;
-
   return match;
 }
 
@@ -344,10 +335,9 @@ bool ClipboardProvider::CreateImageMatch(const AutocompleteInput& input) {
     return false;
   }
 
-  base::Optional<gfx::Image> optional_image =
-      clipboard_content_->GetRecentImageFromClipboard();
-  if (!optional_image)
+  if (!clipboard_content_->HasRecentImageFromClipboard()) {
     return false;
+  }
 
   // Make sure current provider supports image search
   TemplateURLService* url_service = client_->GetTemplateURLService();
@@ -364,6 +354,20 @@ bool ClipboardProvider::CreateImageMatch(const AutocompleteInput& input) {
   // when the match is created).
   base::TimeDelta clipboard_contents_age =
       clipboard_content_->GetClipboardContentAge();
+  clipboard_content_->GetRecentImageFromClipboard(
+      base::BindOnce(&ClipboardProvider::OnReceiveImage,
+                     callback_weak_ptr_factory_.GetWeakPtr(), input,
+                     url_service, clipboard_contents_age));
+  return true;
+}
+
+void ClipboardProvider::OnReceiveImage(
+    const AutocompleteInput& input,
+    TemplateURLService* url_service,
+    base::TimeDelta clipboard_contents_age,
+    base::Optional<gfx::Image> optional_image) {
+  if (!optional_image)
+    return;
   done_ = false;
   PostTaskAndReplyWithResult(
       FROM_HERE,
@@ -372,7 +376,6 @@ bool ClipboardProvider::CreateImageMatch(const AutocompleteInput& input) {
       base::BindOnce(&ClipboardProvider::ConstructImageMatchCallback,
                      callback_weak_ptr_factory_.GetWeakPtr(), input,
                      url_service, clipboard_contents_age));
-  return true;
 }
 
 scoped_refptr<base::RefCountedMemory> ClipboardProvider::EncodeClipboardImage(
@@ -395,6 +398,12 @@ void ClipboardProvider::ConstructImageMatchCallback(
   match.description.assign(l10n_util::GetStringUTF16(IDS_IMAGE_FROM_CLIPBOARD));
   if (!match.description.empty())
     match.description_class.push_back({0, ACMatchClassification::NONE});
+
+  // This will end up being something like "Search for Copied Image." This may
+  // seem strange to use for |fill_into_edit, but it is because iOS requires
+  // some text in the text field for the Enter key to work when using keyboard
+  // navigation.
+  match.fill_into_edit = match.description;
 
   TemplateURLRef::SearchTermsArgs search_args(base::ASCIIToUTF16(""));
   search_args.image_thumbnail_content.assign(image_bytes->front_as<char>(),

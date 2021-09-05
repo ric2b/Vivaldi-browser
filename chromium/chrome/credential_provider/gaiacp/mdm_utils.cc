@@ -22,23 +22,36 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/win_util.h"
 #include "base/win/wmi.h"
+#include "build/branding_buildflags.h"
 #include "chrome/credential_provider/common/gcp_strings.h"
 #include "chrome/credential_provider/gaiacp/gcp_utils.h"
+#include "chrome/credential_provider/gaiacp/gcpw_strings.h"
 #include "chrome/credential_provider/gaiacp/logging.h"
 #include "chrome/credential_provider/gaiacp/reg_utils.h"
 
 namespace credential_provider {
 
+constexpr wchar_t kRegEnableVerboseLogging[] = L"enable_verbose_logging";
+constexpr wchar_t kRegInitializeCrashReporting[] = L"enable_crash_reporting";
 constexpr wchar_t kRegMdmUrl[] = L"mdm";
-constexpr wchar_t kRegMdmEscrowServiceServerUrl[] = L"mdm_ess_url";
-constexpr wchar_t kRegMdmSupportsMultiUser[] = L"mdm_mu";
-constexpr wchar_t kRegMdmAllowConsumerAccounts[] = L"mdm_aca";
+constexpr wchar_t kRegEnableDmEnrollment[] = L"enable_dm_enrollment";
+
+constexpr wchar_t kRegMdmEnableForcePasswordReset[] =
+    L"enable_force_reset_password_option";
+constexpr wchar_t kRegDisablePasswordSync[] = L"disable_password_sync";
+constexpr wchar_t kRegMdmSupportsMultiUser[] = L"enable_multi_user_login";
+constexpr wchar_t kRegMdmAllowConsumerAccounts[] = L"enable_consumer_accounts ";
+constexpr wchar_t kRegDeviceDetailsUploadStatus[] =
+    L"device_details_upload_status";
+constexpr wchar_t kRegGlsPath[] = L"gls_path";
+constexpr wchar_t kRegUserDeviceResourceId[] = L"device_resource_id";
 constexpr wchar_t kUserPasswordLsaStoreKeyPrefix[] =
-#if defined(GOOGLE_CHROME_BUILD)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     L"Chrome-GCPW-";
 #else
     L"Chromium-GCPW-";
 #endif
+const char kErrorKeyInRequestResult[] = "error";
 
 // Overridden in tests to force the MDM enrollment to either succeed or fail.
 enum class EnrollmentStatus {
@@ -57,7 +70,7 @@ enum class EnrolledStatus {
 };
 EnrolledStatus g_enrolled_status = EnrolledStatus::kDontForce;
 
-#if !defined(GOOGLE_CHROME_BUILD)
+#if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
 enum class EscrowServiceStatus {
   kDisabled,
   kEnabled,
@@ -65,6 +78,14 @@ enum class EscrowServiceStatus {
 
 EscrowServiceStatus g_escrow_service_enabled = EscrowServiceStatus::kDisabled;
 #endif
+
+enum class DeviceDetailsUploadNeeded {
+  kForceTrue,
+  kForceFalse,
+  kDontForce,
+};
+DeviceDetailsUploadNeeded g_device_details_upload_needed =
+    DeviceDetailsUploadNeeded::kDontForce;
 
 namespace {
 
@@ -87,6 +108,15 @@ T GetMdmFunctionPointer(const base::ScopedNativeLibrary& library,
   GetMdmFunctionPointer<decltype(&::name)>(library, #name)
 
 base::string16 GetMdmUrl() {
+  DWORD enable_dm_enrollment;
+  HRESULT hr = GetGlobalFlag(kRegEnableDmEnrollment, &enable_dm_enrollment);
+  if (SUCCEEDED(hr)) {
+    if (enable_dm_enrollment)
+      return kDefaultMdmUrl;
+    return L"";
+  }
+
+  // Fallback to using the older flag to control mdm url.
   return GetGlobalFlagOrDefault(kRegMdmUrl, kDefaultMdmUrl);
 }
 
@@ -142,13 +172,15 @@ HRESULT ExtractRegistrationData(const base::Value& registration_data,
                                 base::string16* out_access_token,
                                 base::string16* out_sid,
                                 base::string16* out_username,
-                                base::string16* out_domain) {
+                                base::string16* out_domain,
+                                base::string16* out_is_ad_user_joined) {
   DCHECK(out_email);
   DCHECK(out_id_token);
   DCHECK(out_access_token);
   DCHECK(out_sid);
   DCHECK(out_username);
   DCHECK(out_domain);
+  DCHECK(out_is_ad_user_joined);
   if (!registration_data.is_dict()) {
     LOGFN(ERROR) << "Registration data is not a dictionary";
     return E_INVALIDARG;
@@ -160,6 +192,7 @@ HRESULT ExtractRegistrationData(const base::Value& registration_data,
   *out_sid = GetDictString(registration_data, kKeySID);
   *out_username = GetDictString(registration_data, kKeyUsername);
   *out_domain = GetDictString(registration_data, kKeyDomain);
+  *out_is_ad_user_joined = GetDictString(registration_data, kKeyIsAdJoinedUser);
 
   if (out_email->empty()) {
     LOGFN(ERROR) << "Email is empty";
@@ -188,6 +221,11 @@ HRESULT ExtractRegistrationData(const base::Value& registration_data,
 
   if (out_domain->empty()) {
     LOGFN(ERROR) << "domain is empty";
+    return E_INVALIDARG;
+  }
+
+  if (out_is_ad_user_joined->empty()) {
+    LOGFN(ERROR) << "is_ad_user_joined is empty";
     return E_INVALIDARG;
   }
 
@@ -236,9 +274,11 @@ HRESULT RegisterWithGoogleDeviceManagement(const base::string16& mdm_url,
   base::string16 sid;
   base::string16 username;
   base::string16 domain;
+  base::string16 is_ad_joined_user;
 
-  HRESULT hr = ExtractRegistrationData(properties, &email, &id_token,
-                                       &access_token, &sid, &username, &domain);
+  HRESULT hr =
+      ExtractRegistrationData(properties, &email, &id_token, &access_token,
+                              &sid, &username, &domain, &is_ad_joined_user);
 
   if (FAILED(hr)) {
     LOGFN(ERROR) << "ExtractRegistrationData hr=" << putHR(hr);
@@ -248,22 +288,21 @@ HRESULT RegisterWithGoogleDeviceManagement(const base::string16& mdm_url,
   LOGFN(INFO) << "MDM_URL=" << mdm_url
               << " token=" << base::string16(id_token.c_str(), 10);
 
-  switch (g_enrollment_status) {
-    case EnrollmentStatus::kForceSuccess:
-      return S_OK;
-    case EnrollmentStatus::kForceFailure:
-      return E_FAIL;
-    case EnrollmentStatus::kDontForce:
-      break;
-  }
-
   // Add the serial number to the registration data dictionary.
-  base::string16 serial_number =
-      base::win::WmiComputerSystemInfo::Get().serial_number();
+  base::string16 serial_number = GetSerialNumber();
 
   if (serial_number.empty()) {
     LOGFN(ERROR) << "Failed to get serial number.";
     return E_FAIL;
+  }
+
+  // Add machine_guid to the registration data dictionary.
+  base::string16 machine_guid;
+  hr = GetMachineGuid(&machine_guid);
+
+  if (FAILED(hr) || machine_guid.empty()) {
+    LOGFN(ERROR) << "Failed to get machine guid.";
+    return FAILED(hr) ? hr : E_FAIL;
   }
 
   // Need localized local user group name for Administrators group
@@ -272,13 +311,13 @@ HRESULT RegisterWithGoogleDeviceManagement(const base::string16& mdm_url,
   hr = LookupLocalizedNameForWellKnownSid(WinBuiltinAdministratorsSid,
                                           &local_administrators_group_name);
   if (FAILED(hr)) {
-    LOGFN(INFO) << "Failed to fetch name for administrators group";
+    LOGFN(WARNING) << "Failed to fetch name for administrators group";
   }
 
   base::string16 builtin_administrator_name = L"";
   hr = GetLocalizedNameBuiltinAdministratorAccount(&builtin_administrator_name);
   if (FAILED(hr)) {
-    LOGFN(INFO) << "Failed to fetch name for builtin administrator account";
+    LOGFN(WARNING) << "Failed to fetch name for builtin administrator account";
   }
 
   // Build the json data needed by the server.
@@ -289,15 +328,33 @@ HRESULT RegisterWithGoogleDeviceManagement(const base::string16& mdm_url,
   registration_data.SetStringKey("username", username);
   registration_data.SetStringKey("domain", domain);
   registration_data.SetStringKey("serial_number", serial_number);
+  registration_data.SetStringKey("machine_guid", machine_guid);
   registration_data.SetStringKey("admin_local_user_group_name",
                                  local_administrators_group_name);
   registration_data.SetStringKey("builtin_administrator_name",
                                  builtin_administrator_name);
+  registration_data.SetStringKey(kKeyIsAdJoinedUser, is_ad_joined_user);
+
+  // Send device resource ID if available as part of the enrollment payload.
+  // Enrollment backend should not assume that this will always be available.
+  base::string16 user_device_resource_id = GetUserDeviceResourceId(sid);
+  if (!user_device_resource_id.empty()) {
+    registration_data.SetStringKey("resource_id", user_device_resource_id);
+  }
 
   std::string registration_data_str;
   if (!base::JSONWriter::Write(registration_data, &registration_data_str)) {
     LOGFN(ERROR) << "JSONWriter::Write(registration_data)";
     return E_FAIL;
+  }
+
+  switch (g_enrollment_status) {
+    case EnrollmentStatus::kForceSuccess:
+      return S_OK;
+    case EnrollmentStatus::kForceFailure:
+      return E_FAIL;
+    case EnrollmentStatus::kDontForce:
+      break;
   }
 
   base::ScopedNativeLibrary library(
@@ -325,39 +382,48 @@ bool NeedsToEnrollWithMdm() {
   return !mdm_url.empty() && !IsEnrolledWithGoogleMdm(mdm_url);
 }
 
+bool UploadDeviceDetailsNeeded(const base::string16& sid) {
+  switch (g_device_details_upload_needed) {
+    case DeviceDetailsUploadNeeded::kForceTrue:
+      return true;
+    case DeviceDetailsUploadNeeded::kForceFalse:
+      return false;
+    case DeviceDetailsUploadNeeded::kDontForce:
+      break;
+  }
+
+  DWORD status = 0;
+  GetUserProperty(sid, kRegDeviceDetailsUploadStatus, &status);
+
+  return status != 1;
+}
+
 bool MdmEnrollmentEnabled() {
   base::string16 mdm_url = GetMdmUrl();
   return !mdm_url.empty();
 }
 
-GURL MdmEscrowServiceUrl() {
-  base::string16 escrow_service_url = GetGlobalFlagOrDefault(
-      kRegMdmEscrowServiceServerUrl, kDefaultEscrowServiceServerUrl);
-
-  if (escrow_service_url.empty())
+GURL EscrowServiceUrl() {
+  DWORD disable_password_sync =
+      GetGlobalFlagOrDefault(kRegDisablePasswordSync, 0);
+  if (disable_password_sync)
     return GURL();
 
-  return GURL(base::UTF16ToUTF8(escrow_service_url));
+  // By default, the password recovery feature should be enabled.
+  return GURL(base::UTF16ToUTF8(kDefaultEscrowServiceServerUrl));
 }
 
-bool MdmPasswordRecoveryEnabled() {
-#if !defined(GOOGLE_CHROME_BUILD)
-  if (g_escrow_service_enabled == EscrowServiceStatus::kDisabled)
-    return false;
-#endif
+bool PasswordRecoveryEnabled() {
+  return !EscrowServiceUrl().is_empty();
+}
 
-  // Password recovery is enabled only if MDM is enabled.
-  if (!MdmEnrollmentEnabled())
-    return false;
-
-  if (MdmEscrowServiceUrl().is_empty())
-    return false;
-
-  return true;
+bool IsGemEnabled() {
+  // The gem features are enabled by default.
+  return GetGlobalFlagOrDefault(kKeyEnableGemFeatures, 1);
 }
 
 HRESULT EnrollToGoogleMdmIfNeeded(const base::Value& properties) {
-  LOGFN(INFO);
+  LOGFN(VERBOSE);
 
   // Only enroll with MDM if configured.
   base::string16 mdm_url = GetMdmUrl();
@@ -367,14 +433,13 @@ HRESULT EnrollToGoogleMdmIfNeeded(const base::Value& properties) {
   // TODO(crbug.com/935577): Check if machine is already enrolled because
   // attempting to enroll when already enrolled causes a crash.
   if (IsEnrolledWithGoogleMdm(mdm_url)) {
-    LOGFN(INFO) << "Already enrolled to Google MDM";
+    LOGFN(VERBOSE) << "Already enrolled to Google MDM";
     return S_OK;
   }
 
   HRESULT hr = RegisterWithGoogleDeviceManagement(mdm_url, properties);
   if (FAILED(hr))
     LOGFN(ERROR) << "RegisterWithGoogleDeviceManagement hr=" << putHR(hr);
-
   return hr;
 }
 
@@ -382,6 +447,18 @@ base::string16 GetUserPasswordLsaStoreKey(const base::string16& sid) {
   DCHECK(sid.size());
 
   return kUserPasswordLsaStoreKeyPrefix + sid;
+}
+
+base::string16 GetUserDeviceResourceId(const base::string16& sid) {
+  wchar_t known_resource_id[512];
+  ULONG known_resource_id_size = base::size(known_resource_id);
+  HRESULT hr = GetUserProperty(sid, kRegUserDeviceResourceId, known_resource_id,
+                               &known_resource_id_size);
+
+  if (SUCCEEDED(hr) && known_resource_id_size > 0)
+    return base::string16(known_resource_id, known_resource_id_size - 1);
+
+  return base::string16();
 }
 
 // GoogleMdmEnrollmentStatusForTesting ////////////////////////////////////////
@@ -410,17 +487,19 @@ GoogleMdmEnrolledStatusForTesting::~GoogleMdmEnrolledStatusForTesting() {
 
 // GoogleMdmEnrolledStatusForTesting //////////////////////////////////////////
 
-#if !defined(GOOGLE_CHROME_BUILD)
-GoogleMdmEscrowServiceEnablerForTesting::
-    GoogleMdmEscrowServiceEnablerForTesting(bool enable) {
-  g_escrow_service_enabled =
-      enable ? EscrowServiceStatus::kEnabled : EscrowServiceStatus::kDisabled;
+// GoogleUploadDeviceDetailsNeededForTesting //////////////////////////////////
+
+GoogleUploadDeviceDetailsNeededForTesting::
+    GoogleUploadDeviceDetailsNeededForTesting(bool success) {
+  g_device_details_upload_needed = success
+                                       ? DeviceDetailsUploadNeeded::kForceTrue
+                                       : DeviceDetailsUploadNeeded::kForceFalse;
 }
 
-GoogleMdmEscrowServiceEnablerForTesting::
-    ~GoogleMdmEscrowServiceEnablerForTesting() {
-  g_escrow_service_enabled = EscrowServiceStatus::kDisabled;
+GoogleUploadDeviceDetailsNeededForTesting::
+    ~GoogleUploadDeviceDetailsNeededForTesting() {
+  g_device_details_upload_needed = DeviceDetailsUploadNeeded::kDontForce;
 }
-#endif
 
+// GoogleUploadDeviceDetailsNeededForTesting //////////////////////////////////
 }  // namespace credential_provider

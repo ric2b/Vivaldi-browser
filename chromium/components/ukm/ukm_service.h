@@ -25,11 +25,7 @@ class PrefRegistrySimple;
 class PrefService;
 FORWARD_DECLARE_TEST(ChromeMetricsServiceClientTest, TestRegisterUKMProviders);
 FORWARD_DECLARE_TEST(IOSChromeMetricsServiceClientTest,
-                     TestRegisterUKMProvidersWhenDisabled);
-FORWARD_DECLARE_TEST(IOSChromeMetricsServiceClientTest,
-                     TestRegisterUKMProvidersWhenForceMetricsReporting);
-FORWARD_DECLARE_TEST(IOSChromeMetricsServiceClientTest,
-                     TestRegisterUKMProvidersWhenUKMFeatureEnabled);
+                     TestRegisterUkmProvidersWhenUKMFeatureEnabled);
 
 namespace metrics {
 class MetricsServiceClient;
@@ -48,9 +44,10 @@ class UkmDebugDataExtractor;
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused. This maps to the enum UkmResetReason.
 enum class ResetReason {
-  kOnSyncPrefsChanged = 0,
+  kOnUkmAllowedStateChanged = 0,
   kUpdatePermissions = 1,
-  kMaxValue = kUpdatePermissions,
+  kClonedInstall = 2,
+  kMaxValue = kClonedInstall,
 };
 
 // The URL-Keyed Metrics (UKM) service is responsible for gathering and
@@ -88,6 +85,9 @@ class UkmService : public UkmRecorderImpl {
   // Deletes any unsent local data.
   void Purge();
 
+  // Deletes any unsent local data related to Chrome extensions.
+  void PurgeExtensions();
+
   // Resets the client prefs (client_id/session_id). |reason| should be passed
   // to provide the reason of the reset - this is only used for UMA logging.
   void ResetClientState(ResetReason reason);
@@ -116,11 +116,9 @@ class UkmService : public UkmRecorderImpl {
   FRIEND_TEST_ALL_PREFIXES(::ChromeMetricsServiceClientTest,
                            TestRegisterUKMProviders);
   FRIEND_TEST_ALL_PREFIXES(::IOSChromeMetricsServiceClientTest,
-                           TestRegisterUKMProvidersWhenDisabled);
-  FRIEND_TEST_ALL_PREFIXES(::IOSChromeMetricsServiceClientTest,
-                           TestRegisterUKMProvidersWhenForceMetricsReporting);
-  FRIEND_TEST_ALL_PREFIXES(::IOSChromeMetricsServiceClientTest,
-                           TestRegisterUKMProvidersWhenUKMFeatureEnabled);
+                           TestRegisterUkmProvidersWhenUKMFeatureEnabled);
+  FRIEND_TEST_ALL_PREFIXES(UkmServiceTest,
+                           PurgeExtensionDataFromUnsentLogStore);
 
   // Starts metrics client initialization.
   void StartInitTask();

@@ -24,6 +24,7 @@ import org.chromium.chrome.browser.webapps.WebApkUpdateTask;
 import org.chromium.components.background_task_scheduler.BackgroundTask;
 import org.chromium.components.background_task_scheduler.BackgroundTaskFactory;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
+import org.chromium.components.background_task_scheduler.NativeBackgroundTask;
 import org.chromium.components.background_task_scheduler.TaskIds;
 
 /**
@@ -45,6 +46,16 @@ public class ChromeBackgroundTaskFactory implements BackgroundTaskFactory {
 
     @Override
     public BackgroundTask getBackgroundTaskFromTaskId(int taskId) {
+        BackgroundTask backgroundTask = createBackgroundTaskFromTaskId(taskId);
+        if (backgroundTask instanceof NativeBackgroundTask) {
+            ((NativeBackgroundTask) backgroundTask)
+                    .setDelegate(new ChromeNativeBackgroundTaskDelegate());
+        }
+
+        return backgroundTask;
+    }
+
+    private BackgroundTask createBackgroundTaskFromTaskId(int taskId) {
         switch (taskId) {
             case TaskIds.OMAHA_JOB_ID:
                 return new OmahaService();
@@ -81,6 +92,9 @@ public class ChromeBackgroundTaskFactory implements BackgroundTaskFactory {
                 return new PeriodicBackgroundSyncChromeWakeUpTask();
             // When adding a new job id with a BackgroundTask, remember to add a specific case for
             // it here.
+            // If the job id corresponds to a native task, use {@link ProxyNativeTask} as the task
+            // here and also update ChromeBackgroundTaskFactory::GetNativeBackgroundTaskFromTaskId
+            // to link to the real task.
             default:
                 Log.w(TAG, "Unable to find BackgroundTask class for task id " + taskId);
                 return null;

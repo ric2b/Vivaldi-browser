@@ -6,7 +6,9 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -113,17 +115,15 @@ ExtensionUpdater::FetchedCRXFile::FetchedCRXFile(
     : info(file),
       file_ownership_passed(file_ownership_passed),
       request_ids(request_ids),
-      callback(callback) {
-}
+      callback(callback) {}
 
 ExtensionUpdater::FetchedCRXFile::FetchedCRXFile()
-    : file_ownership_passed(true) {
-}
+    : file_ownership_passed(true) {}
 
 ExtensionUpdater::FetchedCRXFile::FetchedCRXFile(const FetchedCRXFile& other) =
     default;
 
-ExtensionUpdater::FetchedCRXFile::~FetchedCRXFile() {}
+ExtensionUpdater::FetchedCRXFile::~FetchedCRXFile() = default;
 
 ExtensionUpdater::InProgressCheck::InProgressCheck()
     : install_immediately(false), awaiting_update_service(false) {}
@@ -370,10 +370,6 @@ void ExtensionUpdater::CheckNow(CheckParams params) {
     }
   }
 
-  UMA_HISTOGRAM_COUNTS_100(
-      "Extensions.ExtensionUpdaterRawUpdateCalls",
-      request.in_progress_ids_.size() + update_check_params.update_info.size());
-
   // StartAllPending() might call OnExtensionDownloadFailed/Finished before
   // it returns, which would cause NotifyIfFinished to incorrectly try to
   // send out a notification. So check before we call StartAllPending if any
@@ -403,59 +399,57 @@ void ExtensionUpdater::CheckNow(CheckParams params) {
   }
 }
 
-void ExtensionUpdater::OnExtensionDownloadStageChanged(const std::string& id,
+void ExtensionUpdater::OnExtensionDownloadStageChanged(const ExtensionId& id,
                                                        Stage stage) {
   InstallationReporter::Get(profile_)->ReportDownloadingStage(id, stage);
 }
 
+void ExtensionUpdater::OnExtensionDownloadCacheStatusRetrieved(
+    const ExtensionId& id,
+    CacheStatus cache_status) {
+  InstallationReporter::Get(profile_)->ReportDownloadingCacheStatus(
+      id, cache_status);
+}
+
 void ExtensionUpdater::OnExtensionDownloadFailed(
-    const std::string& id,
+    const ExtensionId& id,
     Error error,
     const PingResult& ping,
-    const std::set<int>& request_ids) {
+    const std::set<int>& request_ids,
+    const FailureData& data) {
   DCHECK(alive_);
   InstallationReporter* installation_reporter =
       InstallationReporter::Get(profile_);
 
   switch (error) {
     case Error::CRX_FETCH_FAILED:
-      UMA_HISTOGRAM_ENUMERATION(
-          "Extensions.ExtensionUpdaterUpdateResults",
-          ExtensionUpdaterUpdateResult::UPDATE_DOWNLOAD_ERROR,
-          ExtensionUpdaterUpdateResult::UPDATE_RESULT_COUNT);
+      installation_reporter->ReportFetchError(
+          id, InstallationReporter::FailureReason::CRX_FETCH_FAILED, data);
+      break;
+    case Error::CRX_FETCH_URL_EMPTY:
       installation_reporter->ReportFailure(
-          id, InstallationReporter::FailureReason::CRX_FETCH_FAILED);
+          id, InstallationReporter::FailureReason::CRX_FETCH_URL_EMPTY);
+      break;
+    case Error::CRX_FETCH_URL_INVALID:
+      installation_reporter->ReportFailure(
+          id, InstallationReporter::FailureReason::CRX_FETCH_URL_INVALID);
       break;
     case Error::MANIFEST_FETCH_FAILED:
-      installation_reporter->ReportFailure(
-          id, InstallationReporter::FailureReason::MANIFEST_FETCH_FAILED);
-      UMA_HISTOGRAM_ENUMERATION(
-          "Extensions.ExtensionUpdaterUpdateResults",
-          ExtensionUpdaterUpdateResult::UPDATE_CHECK_ERROR,
-          ExtensionUpdaterUpdateResult::UPDATE_RESULT_COUNT);
+      installation_reporter->ReportFetchError(
+          id, InstallationReporter::FailureReason::MANIFEST_FETCH_FAILED, data);
       break;
     case Error::MANIFEST_INVALID:
       installation_reporter->ReportFailure(
           id, InstallationReporter::FailureReason::MANIFEST_INVALID);
-      UMA_HISTOGRAM_ENUMERATION(
-          "Extensions.ExtensionUpdaterUpdateResults",
-          ExtensionUpdaterUpdateResult::UPDATE_CHECK_ERROR,
-          ExtensionUpdaterUpdateResult::UPDATE_RESULT_COUNT);
       break;
     case Error::NO_UPDATE_AVAILABLE:
       installation_reporter->ReportFailure(
           id, InstallationReporter::FailureReason::NO_UPDATE);
-      UMA_HISTOGRAM_ENUMERATION(
-          "Extensions.ExtensionUpdaterUpdateResults",
-          ExtensionUpdaterUpdateResult::NO_UPDATE,
-          ExtensionUpdaterUpdateResult::UPDATE_RESULT_COUNT);
       break;
     case Error::DISABLED:
       // Error::DISABLED corresponds to the browser having disabled extension
       // updates, the extension updater does not actually run when this error
-      // code is emitted. For this reason, Error::DISABLED is not included in
-      // Extensions.ExtensionUpdaterUpdateResults UMA; we are only interested
-      // in the update results when the extension updater runs.
+      // code is emitted.
       break;
   }
 
@@ -500,7 +494,7 @@ void ExtensionUpdater::OnExtensionDownloadFinished(
 }
 
 bool ExtensionUpdater::GetPingDataForExtension(
-    const std::string& id,
+    const ExtensionId& id,
     ManifestFetchData::PingData* ping_data) {
   DCHECK(alive_);
   ping_data->rollcall_days =
@@ -514,17 +508,17 @@ bool ExtensionUpdater::GetPingDataForExtension(
   return true;
 }
 
-std::string ExtensionUpdater::GetUpdateUrlData(const std::string& id) {
+std::string ExtensionUpdater::GetUpdateUrlData(const ExtensionId& id) {
   DCHECK(alive_);
   return extension::GetUpdateURLData(extension_prefs_, id);
 }
 
-bool ExtensionUpdater::IsExtensionPending(const std::string& id) {
+bool ExtensionUpdater::IsExtensionPending(const ExtensionId& id) {
   DCHECK(alive_);
   return service_->pending_extension_manager()->IsIdPending(id);
 }
 
-bool ExtensionUpdater::GetExtensionExistingVersion(const std::string& id,
+bool ExtensionUpdater::GetExtensionExistingVersion(const ExtensionId& id,
                                                    std::string* version) {
   DCHECK(alive_);
   const Extension* extension = registry_->GetExtensionById(
@@ -539,7 +533,7 @@ bool ExtensionUpdater::GetExtensionExistingVersion(const std::string& id,
   return true;
 }
 
-void ExtensionUpdater::UpdatePingData(const std::string& id,
+void ExtensionUpdater::UpdatePingData(const ExtensionId& id,
                                       const PingResult& ping_result) {
   DCHECK(alive_);
   if (ping_result.did_ping)
@@ -608,12 +602,6 @@ void ExtensionUpdater::Observe(int type,
 
   // If installing this file didn't succeed, we may need to re-download it.
   const Extension* extension = content::Details<const Extension>(details).ptr();
-
-  UMA_HISTOGRAM_ENUMERATION(
-      "Extensions.ExtensionUpdaterUpdateResults",
-      extension ? ExtensionUpdaterUpdateResult::UPDATE_SUCCESS
-                : ExtensionUpdaterUpdateResult::UPDATE_INSTALL_ERROR,
-      ExtensionUpdaterUpdateResult::UPDATE_RESULT_COUNT);
 
   CrxInstaller* installer = content::Source<CrxInstaller>(source).ptr();
   const FetchedCRXFile& crx_file = current_crx_file_;

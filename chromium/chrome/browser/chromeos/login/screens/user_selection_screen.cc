@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -35,9 +36,11 @@
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/system/system_clock.h"
 #include "chrome/browser/ui/ash/login_screen_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "chromeos/components/proximity_auth/smart_lock_metrics_recorder.h"
@@ -45,6 +48,7 @@
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/settings/cros_settings_names.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_util.h"
 #include "components/prefs/pref_service.h"
@@ -84,7 +88,7 @@ const char kKeyAllowFingerprint[] = "allowFingerprint";
 
 // Max number of users to show.
 // Please keep synced with one in signin_userlist_unittest.cc.
-const size_t kMaxUsers = 18;
+const size_t kMaxUsers = 50;
 
 const int kPasswordClearTimeoutSec = 60;
 
@@ -187,7 +191,7 @@ ash::FingerprintState GetInitialFingerprintState(
 
   // Auth is available.
   if (quick_unlock_storage->IsFingerprintAuthenticationAvailable())
-    return ash::FingerprintState::AVAILABLE;
+    return ash::FingerprintState::AVAILABLE_DEFAULT;
 
   // Default to unavailabe.
   return ash::FingerprintState::UNAVAILABLE;
@@ -334,6 +338,8 @@ class UserSelectionScreen::DircryptoMigrationChecker {
       UpdateUI(account_id, false);
       return;
     }
+    UMA_HISTOGRAM_BOOLEAN("Ash.Login.Login.MigrationBanner",
+                          needs_migration.value());
 
     needs_dircrypto_migration_cache_[account_id] = needs_migration.value();
     UpdateUI(account_id, needs_migration.value());
@@ -366,7 +372,8 @@ class UserSelectionScreen::DircryptoMigrationChecker {
 };
 
 UserSelectionScreen::UserSelectionScreen(const std::string& display_type)
-    : BaseScreen(UserBoardView::kScreenId), display_type_(display_type) {}
+    : BaseScreen(UserBoardView::kScreenId, OobeScreenPriority::DEFAULT),
+      display_type_(display_type) {}
 
 UserSelectionScreen::~UserSelectionScreen() {
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(nullptr);
@@ -404,9 +411,9 @@ void UserSelectionScreen::FillUserDictionary(
   user_dict->SetBoolean(kKeySignedIn, user->is_logged_in());
   user_dict->SetBoolean(kKeyIsOwner, is_owner);
   user_dict->SetBoolean(kKeyIsActiveDirectory, user->IsActiveDirectoryUser());
-  user_dict->SetBoolean(
-      kKeyAllowFingerprint,
-      GetInitialFingerprintState(user) == ash::FingerprintState::AVAILABLE);
+  user_dict->SetBoolean(kKeyAllowFingerprint,
+                        GetInitialFingerprintState(user) ==
+                            ash::FingerprintState::AVAILABLE_DEFAULT);
 
   FillMultiProfileUserPrefs(user, user_dict, is_signin_to_add);
 
@@ -479,6 +486,21 @@ bool UserSelectionScreen::ShouldForceOnlineSignIn(
     return true;
   }
 
+  const base::TimeDelta offline_signin_time_limit =
+      user_manager::known_user::GetOfflineSigninLimit(user->GetAccountId());
+  if (offline_signin_time_limit == base::TimeDelta())
+    return false;
+
+  const base::Time last_gaia_signin_time =
+      user_manager::known_user::GetLastOnlineSignin(user->GetAccountId());
+  if (last_gaia_signin_time == base::Time())
+    return false;
+  const base::Time now = base::DefaultClock::GetInstance()->Now();
+  const base::TimeDelta time_since_last_gaia_signin =
+      now - last_gaia_signin_time;
+  if (time_since_last_gaia_signin >= offline_signin_time_limit)
+    return true;
+
   return false;
 }
 
@@ -536,6 +558,8 @@ void UserSelectionScreen::Init(const user_manager::UserList& users) {
   ui::UserActivityDetector* activity_detector = ui::UserActivityDetector::Get();
   if (activity_detector && !activity_detector->HasObserver(this))
     activity_detector->AddObserver(this);
+  if (!ime_state_.get())
+    ime_state_ = input_method::InputMethodManager::Get()->GetActiveIMEState();
 }
 
 void UserSelectionScreen::OnBeforeUserRemoved(const AccountId& account_id) {
@@ -642,6 +666,45 @@ void UserSelectionScreen::CheckUserStatus(const AccountId& account_id) {
   }
 }
 
+void UserSelectionScreen::HandleFocusPod(const AccountId& account_id) {
+  proximity_auth::ScreenlockBridge::Get()->SetFocusedUser(account_id);
+  if (focused_pod_account_id_ == account_id)
+    return;
+  CheckUserStatus(account_id);
+  lock_screen_utils::SetUserInputMethod(account_id.GetUserEmail(),
+                                        ime_state_.get());
+  lock_screen_utils::SetKeyboardSettings(account_id);
+
+  bool use_24hour_clock = false;
+  if (user_manager::known_user::GetBooleanPref(
+          account_id, prefs::kUse24HourClock, &use_24hour_clock)) {
+    g_browser_process->platform_part()
+        ->GetSystemClock()
+        ->SetLastFocusedPodHourClockType(use_24hour_clock ? base::k24HourClock
+                                                          : base::k12HourClock);
+  }
+  focused_pod_account_id_ = account_id;
+}
+
+void UserSelectionScreen::HandleNoPodFocused() {
+  focused_pod_account_id_ = EmptyAccountId();
+  lock_screen_utils::EnforcePolicyInputMethods(std::string());
+}
+
+void UserSelectionScreen::OnAllowedInputMethodsChanged() {
+  if (focused_pod_account_id_.is_valid()) {
+    std::string user_input_method = lock_screen_utils::GetUserLastInputMethod(
+        focused_pod_account_id_.GetUserEmail());
+    lock_screen_utils::EnforcePolicyInputMethods(user_input_method);
+  } else {
+    lock_screen_utils::EnforcePolicyInputMethods(std::string());
+  }
+}
+
+void UserSelectionScreen::OnBeforeShow() {
+  input_method::InputMethodManager::Get()->SetState(ime_state_);
+}
+
 void UserSelectionScreen::OnUserStatusChecked(
     const AccountId& account_id,
     TokenHandleUtil::TokenHandleStatus status) {
@@ -741,9 +804,9 @@ void UserSelectionScreen::AttemptEasySignin(const AccountId& account_id,
   }
 }
 
-void UserSelectionScreen::Show() {}
+void UserSelectionScreen::ShowImpl() {}
 
-void UserSelectionScreen::Hide() {}
+void UserSelectionScreen::HideImpl() {}
 
 void UserSelectionScreen::HardLockPod(const AccountId& account_id) {
   view_->SetAuthType(account_id,
@@ -839,6 +902,10 @@ UserSelectionScreen::UpdateAndReturnUserListForAsh() {
     user_info.is_device_owner = is_owner;
     user_info.can_remove = CanRemoveUser(user);
     user_info.fingerprint_state = GetInitialFingerprintState(user);
+    user_info.show_pin_pad_for_password = false;
+    chromeos::CrosSettings::Get()->GetBoolean(
+        chromeos::kDeviceShowNumericKeyboardForPassword,
+        &user_info.show_pin_pad_for_password);
 
     // Fill multi-profile data.
     if (!is_signin_to_add) {

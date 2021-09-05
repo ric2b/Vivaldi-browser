@@ -40,8 +40,8 @@
 <translation id="2087822576218954668">Tipărire: <ph name="PRINT_NAME" /></translation>
 <translation id="2148892889047469596">Proiectează fila</translation>
 <translation id="2150139952286079145">Căutați destinații</translation>
+<translation id="215753907730220065">Ieșire din modul ecran complet</translation>
 <translation id="2177950615300672361">Filă incognito: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Folosiți un număr pentru a indica câte cópii sunt de tipărit (de la 1 la 999).</translation>
 <translation id="219008588003277019">Modúl de client nativ: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">de ex. 1-5, 8, 11-13</translation>
 <translation id="2263497240924215535">Dezactivat</translation>
@@ -50,10 +50,8 @@
 <translation id="2282146716419988068">Proces GPU</translation>
 <translation id="2301382460326681002">Directorul rădăcină pentru extensie este nevalid.</translation>
 <translation id="2318143611928805047">Dimensiune de hârtie</translation>
-<translation id="2318923050469484167">Sesiunea privată actuală (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Anteturi și subsoluri</translation>
 <translation id="2327492829706409234">Activează aplicația</translation>
-<translation id="2344028582131185878">Descărcări automate</translation>
 <translation id="2348176352564285430">Aplicație: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Selectează directorul extensiei.</translation>
 <translation id="2379281330731083556">Tipărește folosind caseta de dialog a sistemului... <ph name="SHORTCUT_KEY" /></translation>
@@ -67,7 +65,6 @@
 <translation id="2482878487686419369">Notificări</translation>
 <translation id="2509495747794740764">Valoarea de scalare trebuie să fie un număr între 10 și 200.</translation>
 <translation id="2546283357679194313">Cookie-uri și date privind site-ul web</translation>
-<translation id="2580924999637585241">Total: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Nu permite niciunui site web să gestioneze protocoale</translation>
 <translation id="2662876636500006917">Magazinul web Vivaldi</translation>
 <translation id="2678063897982469759">Reactivează</translation>
@@ -81,7 +78,6 @@
 <translation id="2932883381142163287">Raportați un abuz</translation>
 <translation id="2941112035454246133">Redus</translation>
 <translation id="2972581237482394796">&amp;Repetă</translation>
-<translation id="299483336428448530">Instalată de părinte.</translation>
 <translation id="3008272652534848354">Resetează permisiunile</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3013291976881901233">Dispozitive MIDI</translation>
@@ -208,7 +204,6 @@
 <translation id="5804241973901381774">Permisiuni</translation>
 <translation id="5828633471261496623">Se tipărește...</translation>
 <translation id="583281660410589416">Necunoscut</translation>
-<translation id="5838456317242088717">Sesiunea privată actuală</translation>
 <translation id="5867841422488265304">Căutați sau introduceți adresa web</translation>
 <translation id="5908769186679515905">Împiedică site-urile web să ruleze Flash</translation>
 <translation id="5956585768868398362">Aceasta este pagina de căutare la care vă așteptați?</translation>
@@ -223,7 +218,6 @@
 <translation id="6122081475643980456">Conexiunea la internet este controlată</translation>
 <translation id="6147020289383635445">Previzualizarea tipăririi a eșuat.</translation>
 <translation id="6169666352732958425">Nu se poate proiecta desktopul.</translation>
-<translation id="6196640612572343990">Blochează cookie-urile părților terțe</translation>
 <translation id="6196854373336333322">Extensia „<ph name="EXTENSION_NAME" />” a preluat controlul asupra setărilor de proxy, ceea ce înseamnă că poate modifica, întrerupe sau intercepta tot ceea ce faci online. Dacă nu știi sigur de ce a apărut această modificare, probabil că nu ai aprobat-o.</translation>
 <translation id="6247802389331535091">Sistem: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6248988683584659830">Setări de căutare</translation>
@@ -232,6 +226,7 @@
 <translation id="6295158916970320988">Toate site-urile web</translation>
 <translation id="6295855836753816081">Se salvează...</translation>
 <translation id="6385543213911723544">Site-urile web pot să salveze și să citească datele asociate cookie-urilor</translation>
+<translation id="6398765197997659313">Ieșire din modul ecran complet</translation>
 <translation id="6445450263907939268">Dacă nu doriți aceste modificări, puteți restabili setările anterioare.</translation>
 <translation id="6447842834002726250">Cookie-uri</translation>
 <translation id="6452181791372256707">Respinge</translation>

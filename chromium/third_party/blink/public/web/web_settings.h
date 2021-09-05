@@ -192,7 +192,6 @@ class WebSettings {
   virtual void SetImmersiveModeEnabled(bool) = 0;
   virtual void SetMinimumFontSize(int) = 0;
   virtual void SetMinimumLogicalFontSize(int) = 0;
-  virtual void SetMockScrollbarsEnabled(bool) = 0;
   virtual void SetHideScrollbars(bool) = 0;
   virtual void SetOfflineWebApplicationCacheEnabled(bool) = 0;
   virtual void SetPassiveEventListenerDefault(PassiveEventListenerDefault) = 0;
@@ -262,7 +261,6 @@ class WebSettings {
   virtual void SetBarrelButtonForDragEnabled(bool) = 0;
   virtual void SetUseLegacyBackgroundSizeShorthandBehavior(bool) = 0;
   virtual void SetViewportStyle(WebViewportStyle) = 0;
-  virtual void SetUseSolidColorScrollbars(bool) = 0;
   virtual void SetUseWideViewport(bool) = 0;
   virtual void SetV8CacheOptions(V8CacheOptions) = 0;
   virtual void SetValidationMessageTimerMagnification(int) = 0;

@@ -5,35 +5,15 @@
 #include "third_party/blink/renderer/core/testing/dictionary_test.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/script_iterator.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_internal_dictionary.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_internal_dictionary_derived.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_internal_dictionary_derived_derived.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
-#include "third_party/blink/renderer/core/testing/internal_dictionary.h"
-#include "third_party/blink/renderer/core/testing/internal_dictionary_derived.h"
-#include "third_party/blink/renderer/core/testing/internal_dictionary_derived_derived.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
-namespace {
-ScriptIterator GetIterator(const Dictionary& iterable,
-                           ExecutionContext* execution_context) {
-  v8::Local<v8::Value> iterator_getter;
-  v8::Isolate* isolate = iterable.GetIsolate();
-  if (!iterable.Get(v8::Symbol::GetIterator(isolate), iterator_getter) ||
-      !iterator_getter->IsFunction()) {
-    return nullptr;
-  }
-  v8::Local<v8::Value> iterator;
-  if (!V8ScriptRunner::CallFunction(
-           v8::Local<v8::Function>::Cast(iterator_getter), execution_context,
-           iterable.V8Value(), 0, nullptr, isolate)
-           .ToLocal(&iterator))
-    return nullptr;
-  if (!iterator->IsObject())
-    return nullptr;
-  return ScriptIterator(v8::Local<v8::Object>::Cast(iterator), isolate);
-}
-}  // namespace
 
 DictionaryTest::DictionaryTest() : required_boolean_member_(false) {}
 
@@ -95,12 +75,6 @@ void DictionaryTest::set(const InternalDictionary* testing_dictionary) {
         testing_dictionary->doubleOrStringSequenceMember();
   }
   event_target_or_null_member_ = testing_dictionary->eventTargetOrNullMember();
-  if (testing_dictionary->hasDictionaryMember()) {
-    NonThrowableExceptionState exception_state;
-    dictionary_member_properties_ =
-        testing_dictionary->dictionaryMember().GetOwnPropertiesAsStringHashMap(
-            exception_state);
-  }
   if (testing_dictionary->hasInternalEnumOrInternalEnumSequenceMember()) {
     internal_enum_or_internal_enum_sequence_ =
         testing_dictionary->internalEnumOrInternalEnumSequenceMember();
@@ -113,18 +87,6 @@ InternalDictionary* DictionaryTest::get() {
   InternalDictionary* result = InternalDictionary::Create();
   GetInternals(result);
   return result;
-}
-
-ScriptValue DictionaryTest::getDictionaryMemberProperties(
-    ScriptState* script_state) {
-  if (!dictionary_member_properties_)
-    return ScriptValue();
-  V8ObjectBuilder builder(script_state);
-  HashMap<String, String> properties = dictionary_member_properties_.value();
-  for (HashMap<String, String>::iterator it = properties.begin();
-       it != properties.end(); ++it)
-    builder.AddString(it->key, it->value);
-  return builder.GetScriptValue();
 }
 
 void DictionaryTest::setDerived(const InternalDictionaryDerived* derived) {
@@ -155,36 +117,6 @@ InternalDictionaryDerivedDerived* DictionaryTest::getDerivedDerived() {
       InternalDictionaryDerivedDerived::Create();
   GetDerivedDerivedInternals(result);
   return result;
-}
-
-String DictionaryTest::stringFromIterable(
-    ScriptState* script_state,
-    Dictionary iterable,
-    ExceptionState& exception_state) const {
-  StringBuilder result;
-  ExecutionContext* execution_context = ExecutionContext::From(script_state);
-  ScriptIterator iterator = GetIterator(iterable, execution_context);
-  if (iterator.IsNull())
-    return g_empty_string;
-
-  bool first_loop = true;
-  while (iterator.Next(execution_context, exception_state)) {
-    if (exception_state.HadException())
-      return g_empty_string;
-
-    if (first_loop)
-      first_loop = false;
-    else
-      result.Append(',');
-
-    v8::Local<v8::Value> value;
-    if (iterator.GetValue().ToLocal(&value)) {
-      result.Append(ToCoreString(
-          value->ToString(script_state->GetContext()).ToLocalChecked()));
-    }
-  }
-
-  return result.ToString();
 }
 
 void DictionaryTest::Reset() {
@@ -294,7 +226,7 @@ void DictionaryTest::GetDerivedDerivedInternals(
   dict->setDerivedDerivedStringMember(derived_derived_string_member_);
 }
 
-void DictionaryTest::Trace(blink::Visitor* visitor) {
+void DictionaryTest::Trace(Visitor* visitor) {
   visitor->Trace(element_member_);
   visitor->Trace(element_or_null_member_);
   visitor->Trace(object_member_);

@@ -36,7 +36,6 @@ extern const char kEmptyTitleError[];
 extern const char kGenerateAppForLinkInstallError[];
 extern const char kNotAllowedInKioskError[];
 extern const char kCannotChangePrimaryKioskAppError[];
-extern const char kInstallReplacementWebAppAlreadyInstalledError[];
 extern const char kInstallReplacementWebAppInvalidWebAppError[];
 extern const char kInstallReplacementWebAppInvalidContextError[];
 extern const char kInstallReplacementWebAppNotFromWebstoreError[];
@@ -45,6 +44,8 @@ extern const char kGestureNeededForInstallReplacementAndroidAppError[];
 extern const char kInstallReplacementAndroidAppCannotInstallApp[];
 extern const char kInstallReplacementAndroidAppInvalidContextError[];
 extern const char kInstallReplacementAndroidAppNotFromWebstoreError[];
+extern const char kWebContentsDisappearedError[];
+extern const char kParentPermissionFailedError[];
 
 }  // namespace extension_management_api_constants
 

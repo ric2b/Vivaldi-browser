@@ -4,6 +4,7 @@
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
+#include "base/i18n/icu_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
@@ -14,11 +15,11 @@
 namespace {
 
 #if defined(OS_WIN)
-const char* kFontDescription = "Segoe UI, 13px";
-#elif (OS_ANDROID)
-const char* kFontDescription = "serif, 13px";
+const char kFontDescription[] = "Segoe UI, 13px";
+#elif defined(OS_ANDROID)
+const char kFontDescription[] = "serif, 13px";
 #else
-const char* kFontDescription = "sans, 13px";
+const char kFontDescription[] = "sans, 13px";
 #endif
 
 struct Environment {
@@ -28,6 +29,7 @@ struct Environment {
                           base::test::TaskEnvironment::MainThreadType::UI)) {
     logging::SetMinLogLevel(logging::LOG_FATAL);
 
+    CHECK(base::i18n::InitializeICU());
     gfx::FontList::SetDefaultFontDescription(kFontDescription);
   }
 
@@ -41,7 +43,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   static Environment env;
 
   std::unique_ptr<gfx::RenderText> render_text =
-      gfx::RenderText::CreateHarfBuzzInstance();
+      gfx::RenderText::CreateRenderText();
   gfx::Canvas canvas;
   render_text->SetText(base::UTF8ToUTF16(
       base::StringPiece(reinterpret_cast<const char*>(data), size)));

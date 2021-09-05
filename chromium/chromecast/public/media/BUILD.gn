@@ -12,18 +12,15 @@ cast_source_set("media") {
     "cast_decrypt_config.h",
     "cast_key_system.h",
     "decoder_config.h",
-    "direct_audio_source.h",
+    "external_audio_decoder.h",
     "external_audio_pipeline_shlib.h",
     "media_pipeline_backend.h",
     "media_pipeline_device_params.h",
-    "redirected_audio_output.h",
     "stream_id.h",
   ]
 
   public_configs = [ ":public_headers" ]
-  public_deps = [
-    "//chromecast/public",
-  ]
+  public_deps = [ "//chromecast/public" ]
 }
 
 # Any target which includes headers in ":media" should include it in its deps

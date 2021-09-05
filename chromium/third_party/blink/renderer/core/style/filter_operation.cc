@@ -44,7 +44,7 @@ FilterOperation* FilterOperation::Blend(const FilterOperation* from,
   return from->Blend(nullptr, 1 - progress);
 }
 
-void ReferenceFilterOperation::Trace(blink::Visitor* visitor) {
+void ReferenceFilterOperation::Trace(Visitor* visitor) {
   visitor->Trace(resource_);
   visitor->Trace(filter_);
   FilterOperation::Trace(visitor);
@@ -185,12 +185,13 @@ FloatRect DropShadowFilterOperation::MapRect(const FloatRect& rect) const {
 FilterOperation* DropShadowFilterOperation::Blend(const FilterOperation* from,
                                                   double progress) const {
   if (!from) {
-    return Create(shadow_.Blend(ShadowData::NeutralValue(), progress,
-                                Color::kTransparent));
+    return MakeGarbageCollected<DropShadowFilterOperation>(shadow_.Blend(
+        ShadowData::NeutralValue(), progress, Color::kTransparent));
   }
 
   const auto& from_op = To<DropShadowFilterOperation>(*from);
-  return Create(shadow_.Blend(from_op.shadow_, progress, Color::kTransparent));
+  return MakeGarbageCollected<DropShadowFilterOperation>(
+      shadow_.Blend(from_op.shadow_, progress, Color::kTransparent));
 }
 
 FloatRect BoxReflectFilterOperation::MapRect(const FloatRect& rect) const {

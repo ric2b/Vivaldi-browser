@@ -39,12 +39,12 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/signin/public/identity_manager/scope_set.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
-#include "services/identity/public/cpp/scope_set.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -309,7 +309,7 @@ void ChromeSigninClient::MaybeFetchSigninTokenHandle() {
         !access_token_fetcher_) {
       auto* identity_manager = IdentityManagerFactory::GetForProfile(profile_);
       if (identity_manager->HasPrimaryAccount()) {
-        const identity::ScopeSet scopes{GaiaConstants::kGoogleUserInfoEmail};
+        const signin::ScopeSet scopes{GaiaConstants::kGoogleUserInfoEmail};
         access_token_fetcher_ =
             std::make_unique<signin::PrimaryAccountAccessTokenFetcher>(
                 "chrome_signin_client", identity_manager, scopes,
@@ -326,15 +326,6 @@ void ChromeSigninClient::SetDiceMigrationCompleted() {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   AccountConsistencyModeManager::GetForProfile(profile_)
       ->SetDiceMigrationCompleted();
-#else
-  NOTREACHED();
-#endif
-}
-
-void ChromeSigninClient::SetReadyForDiceMigration(bool is_ready) {
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  AccountConsistencyModeManager::GetForProfile(profile_)
-      ->SetReadyForDiceMigration(is_ready);
 #else
   NOTREACHED();
 #endif

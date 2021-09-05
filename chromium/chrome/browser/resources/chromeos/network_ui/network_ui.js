@@ -23,33 +23,6 @@ const NetworkUI = (function() {
 
   const mojom = chromeos.networkConfig.mojom;
 
-  CrOncStrings = {
-    OncTypeCellular: loadTimeData.getString('OncTypeCellular'),
-    OncTypeEthernet: loadTimeData.getString('OncTypeEthernet'),
-    OncTypeMobile: loadTimeData.getString('OncTypeMobile'),
-    OncTypeTether: loadTimeData.getString('OncTypeTether'),
-    OncTypeVPN: loadTimeData.getString('OncTypeVPN'),
-    OncTypeWiFi: loadTimeData.getString('OncTypeWiFi'),
-    networkListItemConnected:
-        loadTimeData.getString('networkListItemConnected'),
-    networkListItemConnecting:
-        loadTimeData.getString('networkListItemConnecting'),
-    networkListItemConnectingTo:
-        loadTimeData.getString('networkListItemConnectingTo'),
-    networkListItemInitializing:
-        loadTimeData.getString('networkListItemInitializing'),
-    networkListItemNotAvailable:
-        loadTimeData.getString('networkListItemNotAvailable'),
-    networkListItemScanning: loadTimeData.getString('networkListItemScanning'),
-    networkListItemSimCardLocked:
-        loadTimeData.getString('networkListItemSimCardLocked'),
-    networkListItemNotConnected:
-        loadTimeData.getString('networkListItemNotConnected'),
-    networkListItemNoNetwork:
-        loadTimeData.getString('networkListItemNoNetwork'),
-    vpnNameTemplate: loadTimeData.getString('vpnNameTemplate'),
-  };
-
   // Properties to display in the network state table. Each entry can be either
   // a single state field or an array of state fields. If more than one is
   // specified then the first non empty value is used.
@@ -160,8 +133,8 @@ const NetworkUI = (function() {
   const createStateTableIcon = function(state) {
     const cell = createTableCellElement();
     cell.className = 'state-table-icon-cell';
-    const icon = /** @type {!CrNetworkIconElement} */ (
-        document.createElement('cr-network-icon'));
+    const icon = /** @type {!NetworkIconElement} */ (
+        document.createElement('network-icon'));
     icon.isListItem = true;
     icon.networkState = OncMojo.getDefaultNetworkState(state.type);
     cell.appendChild(icon);
@@ -567,7 +540,7 @@ const NetworkUI = (function() {
   };
 
   /**
-   * Handles clicks on network items in the <cr-network-select> element by
+   * Handles clicks on network items in the <network-select> element by
    * attempting a connection to the selected network or requesting a password
    * if the network requires a password.
    * @param {!Event<!OncMojo.NetworkStateProperties>} event
@@ -603,7 +576,7 @@ const NetworkUI = (function() {
    * Gets network information from WebUI and sets custom items.
    */
   document.addEventListener('DOMContentLoaded', function() {
-    const select = document.querySelector('cr-network-select');
+    const select = document.querySelector('network-select');
     select.customItems = [
       {customItemName: 'Add WiFi', polymerIcon: 'cr:add', customData: 'WiFi'},
       {customItemName: 'Add VPN', polymerIcon: 'cr:add', customData: 'VPN'}

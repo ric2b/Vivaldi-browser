@@ -51,7 +51,7 @@ class ASH_EXPORT FeaturePodsContainerView : public views::View,
   int GetVisibleCount() const;
 
   // Make sure button is visible by switching page if needed.
-  void EnsurePageWithButton(FeaturePodButton* button);
+  void EnsurePageWithButton(views::View* button);
 
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
@@ -63,6 +63,8 @@ class ASH_EXPORT FeaturePodsContainerView : public views::View,
   void OnScrollEvent(ui::ScrollEvent* event) override;
   bool OnMouseWheel(const ui::MouseWheelEvent& event) override;
   const char* GetClassName() const override;
+
+  int row_count() const { return feature_pod_rows_; }
 
  private:
   friend class FeaturePodsContainerViewTest;
@@ -78,6 +80,9 @@ class ASH_EXPORT FeaturePodsContainerView : public views::View,
 
   // Calculates the ideal bounds for all feature pods.
   void CalculateIdealBoundsForFeaturePods();
+
+  // Calculate the number of feature pod rows based on available height.
+  int CalculateRowsFromHeight(int height);
 
   // Calculates the offset for |page_of_view| based on current page and
   // transition target page.

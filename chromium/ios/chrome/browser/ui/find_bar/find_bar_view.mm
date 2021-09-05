@@ -8,10 +8,10 @@
 #import "ios/chrome/browser/ui/find_bar/find_bar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/UIColor+cr_semantic_colors.h"
-#import "ios/chrome/common/colors/dynamic_color_util.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/colors/UIColor+cr_semantic_colors.h"
+#import "ios/chrome/common/ui/colors/dynamic_color_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -22,6 +22,9 @@
 namespace {
 // Horizontal padding betwee all elements (except the previous/next buttons).
 const CGFloat kPadding = 8;
+// Horizontal padding between the last button and the trailing edge in a
+// Regular x Regular environment.
+const CGFloat kIPadButtonEdgeSpacing = 17;
 const CGFloat kInputFieldCornerRadius = 10;
 const CGFloat kFontSize = 15;
 const CGFloat kButtonFontSize = 17;
@@ -97,6 +100,9 @@ const CGFloat kButtonLength = 44;
   [self.inputField setContentHuggingPriority:UILayoutPriorityDefaultLow - 1
                                      forAxis:UILayoutConstraintAxisHorizontal];
 
+  const CGFloat closeButtonTrailingPadding =
+      ShouldShowCompactToolbar() ? kPadding : kIPadButtonEdgeSpacing;
+
   [NSLayoutConstraint activateConstraints:@[
     // Input Field.
     [self.inputField.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
@@ -104,7 +110,6 @@ const CGFloat kButtonLength = 44;
     [self.inputField.leadingAnchor
         constraintEqualToAnchor:safeArea.leadingAnchor
                        constant:kPadding],
-
     [self.inputField.trailingAnchor
         constraintEqualToAnchor:self.previousButton.leadingAnchor
                        constant:-kPadding],
@@ -133,7 +138,7 @@ const CGFloat kButtonLength = 44;
     // Use button intrinsic width.
     [self.closeButton.trailingAnchor
         constraintEqualToAnchor:safeArea.trailingAnchor
-                       constant:-kPadding],
+                       constant:-closeButtonTrailingPadding],
   ]];
 }
 

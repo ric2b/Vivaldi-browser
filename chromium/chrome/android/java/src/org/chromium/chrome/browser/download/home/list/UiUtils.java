@@ -10,20 +10,21 @@ import android.text.format.DateUtils;
 import android.text.format.Formatter;
 
 import androidx.annotation.DrawableRes;
-import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.MathUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.download.home.filter.Filters;
 import org.chromium.chrome.browser.download.home.list.view.CircularProgressView;
 import org.chromium.chrome.browser.download.home.list.view.CircularProgressView.UiState;
-import org.chromium.chrome.browser.util.MathUtils;
+import org.chromium.components.offline_items_collection.LegacyHelpers;
 import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OfflineItem.Progress;
 import org.chromium.components.offline_items_collection.OfflineItemFilter;
 import org.chromium.components.offline_items_collection.OfflineItemProgressUnit;
 import org.chromium.components.offline_items_collection.OfflineItemState;
+import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 
 import java.util.Calendar;
@@ -31,16 +32,6 @@ import java.util.Date;
 
 /** A set of helper utility methods for the UI. */
 public final class UiUtils {
-    private static boolean sDisableUrlFormatting;
-
-    /**
-     * Disable url formatting for tests since tests might not native initialized.
-     */
-    @VisibleForTesting
-    public static void setDisableUrlFormattingForTests(boolean disabled) {
-        sDisableUrlFormatting = disabled;
-    }
-
     private UiUtils() {}
 
     /**
@@ -142,10 +133,8 @@ public final class UiUtils {
     public static CharSequence generatePrefetchCaption(OfflineItem item) {
         Context context = ContextUtils.getApplicationContext();
         String displaySize = Formatter.formatFileSize(context, item.totalSizeBytes);
-        String displayUrl = item.pageUrl;
-        if (!sDisableUrlFormatting) {
-            displayUrl = UrlFormatter.formatUrlForSecurityDisplayOmitScheme(item.pageUrl);
-        }
+        String displayUrl = UrlFormatter.formatUrlForSecurityDisplay(
+                item.pageUrl, SchemeDisplay.OMIT_HTTP_AND_HTTPS);
         return context.getString(
                 R.string.download_manager_prefetch_caption, displayUrl, displaySize);
     }
@@ -157,10 +146,8 @@ public final class UiUtils {
      */
     public static CharSequence generateGenericCaption(OfflineItem item) {
         Context context = ContextUtils.getApplicationContext();
-        String displayUrl = item.pageUrl;
-        if (!sDisableUrlFormatting) {
-            displayUrl = UrlFormatter.formatUrlForSecurityDisplayOmitScheme(item.pageUrl);
-        }
+        String displayUrl = UrlFormatter.formatUrlForSecurityDisplay(
+                item.pageUrl, SchemeDisplay.OMIT_HTTP_AND_HTTPS);
 
         if (item.totalSizeBytes == 0) {
             return context.getString(
@@ -203,6 +190,21 @@ public final class UiUtils {
             case Filters.FilterType.OTHER: // Intentional fallthrough.
             default:
                 return R.drawable.ic_drive_file_24dp;
+        }
+    }
+
+    /**
+     * @return A drawable resource id representing the small media icon to be shown on prefetch
+     *         cards.
+     */
+    public static @DrawableRes int getMediaPlayIconForPrefetchCards(OfflineItem item) {
+        switch (item.filter) {
+            case OfflineItemFilter.VIDEO: // fallthrough
+            case OfflineItemFilter.AUDIO:
+                // TODO(shaktisahu): Provide vector icon for audio.
+                return R.drawable.ic_play_circle_filled_24dp;
+            default:
+                return 0;
         }
     }
 
@@ -373,5 +375,18 @@ public final class UiUtils {
                 assert false;
                 return "";
         }
+    }
+
+    /** @return Whether the given {@link OfflineItem} can be shared. */
+    public static boolean canShare(OfflineItem item) {
+        return LegacyHelpers.isLegacyDownload(item.id)
+                || LegacyHelpers.isLegacyOfflinePage(item.id);
+    }
+
+    /** @return The domain associated with the given {@link OfflineItem}. */
+    public static String getDomainForItem(OfflineItem offlineItem) {
+        String formattedUrl = UrlFormatter.formatUrlForSecurityDisplay(
+                offlineItem.pageUrl, SchemeDisplay.OMIT_HTTP_AND_HTTPS);
+        return formattedUrl;
     }
 }

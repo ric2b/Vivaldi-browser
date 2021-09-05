@@ -108,12 +108,14 @@ interface CacheStorage
     method open
 interface CanMakePaymentEvent : ExtendableEvent
     attribute @@toStringTag
+    getter currency
     getter methodData
     getter modifiers
     getter paymentRequestOrigin
     getter topOrigin
     method constructor
     method respondWith
+    method respondWithMinimalUI
 interface CanvasGradient
     attribute @@toStringTag
     method addColorStop
@@ -165,9 +167,13 @@ interface CookieStore : EventTarget
     method delete
     method get
     method getAll
-    method getChangeSubscriptions
     method set
-    method subscribeToChanges
+interface CookieStoreManager
+    attribute @@toStringTag
+    method constructor
+    method getSubscriptions
+    method subscribe
+    method unsubscribe
 interface CountQueuingStrategy
     attribute @@toStringTag
     getter highWaterMark
@@ -394,24 +400,6 @@ interface DecompressionStream
     getter readable
     getter writable
     method constructor
-interface DetectedBarcode
-    attribute @@toStringTag
-    getter boundingBox
-    getter cornerPoints
-    getter format
-    getter rawValue
-    method constructor
-interface DetectedFace
-    attribute @@toStringTag
-    getter boundingBox
-    getter landmarks
-    method constructor
-interface DetectedText
-    attribute @@toStringTag
-    getter boundingBox
-    getter cornerPoints
-    getter rawValue
-    method constructor
 interface ErrorEvent : Event
     attribute @@toStringTag
     getter colno
@@ -497,6 +485,7 @@ interface FetchEvent : ExtendableEvent
     getter preloadResponse
     getter request
     getter resultingClientId
+    method addPerformanceEntry
     method constructor
     method respondWith
 interface File : Blob
@@ -546,10 +535,11 @@ interface FileSystemDirectoryHandle : FileSystemHandle
     method getEntries
     method getFile
     method removeEntry
+    method resolve
 interface FileSystemFileHandle : FileSystemHandle
     attribute @@toStringTag
     method constructor
-    method createWriter
+    method createWritable
     method getFile
 interface FileSystemHandle
     attribute @@toStringTag
@@ -557,8 +547,16 @@ interface FileSystemHandle
     getter isFile
     getter name
     method constructor
+    method isSameEntry
     method queryPermission
     method requestPermission
+interface FileSystemWritableFileStream : WritableStream
+    attribute @@toStringTag
+    method close
+    method constructor
+    method seek
+    method truncate
+    method write
 interface FileSystemWriter
     attribute @@toStringTag
     method close
@@ -834,8 +832,6 @@ interface Mojo
     static method createDataPipe
     static method createMessagePipe
     static method createSharedBuffer
-    static method getDocumentInterfaceBrokerHandle
-    static method replaceDocumentInterfaceBrokerForTesting
     attribute @@toStringTag
     attribute RESULT_ABORTED
     attribute RESULT_ALREADY_EXISTS
@@ -884,6 +880,18 @@ interface MojoWatcher
     attribute @@toStringTag
     method cancel
     method constructor
+interface NativeIOFile
+    attribute @@toStringTag
+    method close
+    method constructor
+    method read
+    method write
+interface NativeIOManager
+    attribute @@toStringTag
+    method constructor
+    method delete
+    method getAll
+    method open
 interface NavigationPreloadManager
     attribute @@toStringTag
     method constructor
@@ -891,6 +899,12 @@ interface NavigationPreloadManager
     method enable
     method getState
     method setHeaderValue
+interface NavigatorUAData
+    attribute @@toStringTag
+    getter mobile
+    getter uaList
+    method constructor
+    method getHighEntropyValues
 interface NetworkInformation : EventTarget
     attribute @@toStringTag
     getter downlink
@@ -992,6 +1006,7 @@ interface OffscreenCanvasRenderingContext2D
     method fillText
     method getImageData
     method getLineDash
+    method getTransform
     method isPointInPath
     method isPointInStroke
     method lineTo
@@ -1084,7 +1099,6 @@ interface Performance : EventTarget
     method getEntriesByType
     method mark
     method measure
-    method measureMemory
     method now
     method profile
     method setResourceTimingBufferSize
@@ -1139,6 +1153,7 @@ interface PerformanceResourceTiming : PerformanceEntry
     getter serverTiming
     getter transferSize
     getter workerStart
+    getter workerTiming
     method constructor
     method toJSON
 interface PerformanceServerTiming
@@ -1219,6 +1234,16 @@ interface PushSubscriptionOptions
     getter applicationServerKey
     getter userVisibleOnly
     method constructor
+interface QuicTransport
+    attribute @@toStringTag
+    getter closed
+    getter ready
+    method close
+    method constructor
+    method createSendStream
+    method receiveDatagrams
+    method receiveStreams
+    method sendDatagrams
 interface ReadableStream
     attribute @@toStringTag
     getter locked
@@ -1235,6 +1260,12 @@ interface ReadableStreamDefaultReader
     method constructor
     method read
     method releaseLock
+interface ReceiveStream
+    attribute @@toStringTag
+    getter readable
+    getter readingAborted
+    method abortReading
+    method constructor
 interface Request
     attribute @@toStringTag
     getter bodyUsed
@@ -1279,10 +1310,6 @@ interface Response
     method formData
     method json
     method text
-interface ScreenManager
-    attribute @@toStringTag
-    method constructor
-    method requestDisplays
 interface SecurityPolicyViolationEvent : Event
     attribute @@toStringTag
     getter blockedURI
@@ -1297,6 +1324,12 @@ interface SecurityPolicyViolationEvent : Event
     getter sourceFile
     getter statusCode
     getter violatedDirective
+    method constructor
+interface SendStream
+    attribute @@toStringTag
+    getter writable
+    getter writingAborted
+    method abortWriting
     method constructor
 interface ServiceWorker : EventTarget
     attribute @@toStringTag
@@ -1315,6 +1348,7 @@ interface ServiceWorkerRegistration : EventTarget
     attribute @@toStringTag
     getter active
     getter backgroundFetch
+    getter cookies
     getter index
     getter installing
     getter navigationPreload
@@ -1418,10 +1452,17 @@ interface TransformStream
     method constructor
 interface TrustedTypePolicyFactory
     attribute @@toStringTag
+    getter defaultPolicy
+    getter emptyHTML
+    getter emptyScript
     method constructor
+    method createPolicy
     method getAttributeType
     method getPropertyType
     method getTypeMapping
+    method isHTML
+    method isScript
+    method isScriptURL
 interface URL
     attribute @@toStringTag
     getter hash
@@ -3685,14 +3726,17 @@ interface WorkerGlobalScope : EventTarget
     getter indexedDB
     getter isSecureContext
     getter location
+    getter nativeIO
     getter navigator
     getter onerror
     getter onlanguagechange
     getter onrejectionhandled
+    getter ontimezonechange
     getter onunhandledrejection
     getter origin
     getter performance
     getter self
+    getter trustedTypes
     method atob
     method btoa
     method clearInterval
@@ -3707,6 +3751,7 @@ interface WorkerGlobalScope : EventTarget
     setter onerror
     setter onlanguagechange
     setter onrejectionhandled
+    setter ontimezonechange
     setter onunhandledrejection
     setter origin
     setter performance
@@ -3739,17 +3784,20 @@ interface WorkerNavigator
     getter permissions
     getter platform
     getter product
-    getter screen
     getter serial
     getter storage
     getter usb
     getter userAgent
+    getter userAgentData
     getter wakeLock
+    method clearAppBadge
     method constructor
+    method setAppBadge
 interface WritableStream
     attribute @@toStringTag
     getter locked
     method abort
+    method close
     method constructor
     method getWriter
 interface WritableStreamDefaultWriter
@@ -3780,6 +3828,7 @@ interface WritableStreamDefaultWriter
     getter onfetch
     getter oninstall
     getter onmessage
+    getter onmessageerror
     getter onnotificationclick
     getter onnotificationclose
     getter onpaymentrequest
@@ -3789,7 +3838,6 @@ interface WritableStreamDefaultWriter
     getter onsync
     getter registration
     getter serviceWorker
-    getter trustedTypes
     method gc
     method skipWaiting
     setter cookieStore
@@ -3805,6 +3853,7 @@ interface WritableStreamDefaultWriter
     setter onfetch
     setter oninstall
     setter onmessage
+    setter onmessageerror
     setter onnotificationclick
     setter onnotificationclose
     setter onpaymentrequest

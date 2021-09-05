@@ -65,6 +65,8 @@ git commit -m 'Added version 2.0...' | grep -v chromium
 git status | grep -v chromium
 git log
 cd ..
+
+# git add . && git commit -m 'Added version 2.0...' | grep -v chromium
 ```
 
 #### Committing a second version

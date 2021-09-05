@@ -18,7 +18,6 @@
 #include "extensions/buildflags/buildflags.h"
 #include "ui/base/models/tree_node_model.h"
 
-class BrowsingDataCookieHelper;
 class CookiesTreeModel;
 class CookieTreeAppCacheNode;
 class CookieTreeAppCachesNode;
@@ -227,7 +226,7 @@ class CookieTreeHostNode : public CookieTreeNode {
   std::string canonicalized_host() const { return canonicalized_host_; }
 
   // Creates an content exception for this origin of type
-  // CONTENT_SETTINGS_TYPE_COOKIES.
+  // ContentSettingsType::COOKIES.
   void CreateContentException(content_settings::CookieSettings* cookie_settings,
                               ContentSetting setting) const;
 
@@ -357,7 +356,6 @@ class CookiesTreeModel : public ui::TreeNodeModel<CookieTreeNode> {
   void PopulateFlashLSOInfo(LocalDataContainer* container);
   void PopulateMediaLicenseInfo(LocalDataContainer* container);
 
-  BrowsingDataCookieHelper* GetCookieHelper(const std::string& app_id);
   LocalDataContainer* data_container() {
     return data_container_.get();
   }
@@ -373,9 +371,6 @@ class CookiesTreeModel : public ui::TreeNodeModel<CookieTreeNode> {
 
  private:
   enum CookieIconIndex { COOKIE = 0, DATABASE = 1 };
-
-  // Reset the counters for batches.
-  void ResetBatches();
 
   // Record that one batch has been delivered.
   void RecordBatchSeen();

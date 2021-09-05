@@ -8,6 +8,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "net/base/privacy_mode.h"
 #include "net/base/proxy_server.h"
+#include "net/cert/mock_cert_verifier.h"
 #include "net/dns/context_host_resolver.h"
 #include "net/dns/dns_client.h"
 #include "net/dns/dns_config.h"
@@ -16,6 +17,7 @@
 #include "net/dns/host_resolver.h"
 #include "net/dns/host_resolver_manager.h"
 #include "net/dns/host_resolver_proc.h"
+#include "net/dns/public/dns_over_https_server_config.h"
 #include "net/http/http_stream_factory_test_util.h"
 #include "net/log/net_log.h"
 #include "net/socket/transport_client_socket_pool.h"
@@ -38,29 +40,38 @@ const char kTestBody[] = "<html><body>TEST RESPONSE</body></html>";
 
 class TestHostResolverProc : public HostResolverProc {
  public:
-  TestHostResolverProc() : HostResolverProc(nullptr) {}
+  TestHostResolverProc()
+      : HostResolverProc(nullptr), insecure_queries_served_(0) {}
 
   int Resolve(const std::string& hostname,
               AddressFamily address_family,
               HostResolverFlags host_resolver_flags,
               AddressList* addrlist,
               int* os_error) override {
-    return ERR_NAME_NOT_RESOLVED;
+    insecure_queries_served_++;
+    *addrlist = AddressList::CreateFromIPAddress(IPAddress(127, 0, 0, 1), 443);
+    return OK;
   }
+
+  uint32_t insecure_queries_served() { return insecure_queries_served_; }
 
  private:
   ~TestHostResolverProc() override {}
+  uint32_t insecure_queries_served_;
 };
 
 class HttpWithDnsOverHttpsTest : public TestWithTaskEnvironment {
  public:
   HttpWithDnsOverHttpsTest()
       : resolver_(HostResolver::CreateStandaloneContextResolver(nullptr)),
+        host_resolver_proc_(new TestHostResolverProc()),
+        cert_verifier_(std::make_unique<MockCertVerifier>()),
         request_context_(true),
         doh_server_(EmbeddedTestServer::Type::TYPE_HTTPS),
         test_server_(EmbeddedTestServer::Type::TYPE_HTTPS),
+        fail_doh_requests_(false),
         doh_queries_served_(0),
-        test_requests_served_(0) {
+        test_https_requests_served_(0) {
     doh_server_.RegisterRequestHandler(
         base::BindRepeating(&HttpWithDnsOverHttpsTest::HandleDefaultConnect,
                             base::Unretained(this)));
@@ -69,7 +80,7 @@ class HttpWithDnsOverHttpsTest : public TestWithTaskEnvironment {
                             base::Unretained(this)));
     EXPECT_TRUE(doh_server_.Start());
     EXPECT_TRUE(test_server_.Start());
-    GURL url(doh_server_.GetURL("/dns_query"));
+    GURL url(doh_server_.GetURL("doh-server.com", "/dns_query"));
     std::unique_ptr<DnsClient> dns_client(DnsClient::CreateClient(nullptr));
 
     DnsConfig config;
@@ -79,19 +90,22 @@ class HttpWithDnsOverHttpsTest : public TestWithTaskEnvironment {
 
     resolver_->SetRequestContext(&request_context_);
     resolver_->SetProcParamsForTesting(
-        ProcTaskParams(new TestHostResolverProc(), 1));
+        ProcTaskParams(host_resolver_proc_.get(), 1));
     resolver_->GetManagerForTesting()->SetDnsClientForTesting(
         std::move(dns_client));
 
     DnsConfigOverrides overrides;
     overrides.dns_over_https_servers.emplace(
-        {DnsConfig::DnsOverHttpsServerConfig(url.spec(), true /* use_post */)});
+        {DnsOverHttpsServerConfig(url.spec(), true /* use_post */)});
     overrides.secure_dns_mode = DnsConfig::SecureDnsMode::SECURE;
     overrides.use_local_ipv6 = true;
     resolver_->GetManagerForTesting()->SetDnsConfigOverrides(
         std::move(overrides));
-
     request_context_.set_host_resolver(resolver_.get());
+
+    cert_verifier_->set_default_result(net::OK);
+    request_context_.set_cert_verifier(cert_verifier_.get());
+
     request_context_.Init();
   }
 
@@ -99,8 +113,14 @@ class HttpWithDnsOverHttpsTest : public TestWithTaskEnvironment {
 
   std::unique_ptr<test_server::HttpResponse> HandleDefaultConnect(
       const test_server::HttpRequest& request) {
+    std::unique_ptr<test_server::BasicHttpResponse> http_response(
+        new test_server::BasicHttpResponse);
     if (request.relative_url.compare("/dns_query") == 0) {
       doh_queries_served_++;
+      if (fail_doh_requests_) {
+        http_response->set_code(HTTP_NOT_FOUND);
+        return std::move(http_response);
+      }
 
       // Parse request content as a DnsQuery to access the question.
       auto request_buffer =
@@ -128,9 +148,6 @@ class HttpWithDnsOverHttpsTest : public TestWithTaskEnvironment {
                                   0x00, 0x04,  // - RDLENGTH = 4 bytes
                                   0x7f, 0x00,  // - RDDATA, IP is 127.0.0.1
                                   0x00, 0x01};
-
-      std::unique_ptr<test_server::BasicHttpResponse> http_response(
-          new test_server::BasicHttpResponse);
       http_response->set_content(
           std::string(header_data, sizeof(header_data)) +
           query.question().as_string() +
@@ -138,9 +155,7 @@ class HttpWithDnsOverHttpsTest : public TestWithTaskEnvironment {
       http_response->set_content_type("application/dns-message");
       return std::move(http_response);
     } else {
-      test_requests_served_++;
-      std::unique_ptr<test_server::BasicHttpResponse> http_response(
-          new test_server::BasicHttpResponse);
+      test_https_requests_served_++;
       http_response->set_content(kTestBody);
       http_response->set_content_type("text/html");
       return std::move(http_response);
@@ -148,12 +163,19 @@ class HttpWithDnsOverHttpsTest : public TestWithTaskEnvironment {
   }
 
  protected:
+  void set_fail_doh_requests(bool fail_doh_requests) {
+    fail_doh_requests_ = fail_doh_requests;
+  }
+
   std::unique_ptr<ContextHostResolver> resolver_;
+  scoped_refptr<net::TestHostResolverProc> host_resolver_proc_;
+  std::unique_ptr<MockCertVerifier> cert_verifier_;
   TestURLRequestContext request_context_;
   EmbeddedTestServer doh_server_;
   EmbeddedTestServer test_server_;
+  bool fail_doh_requests_;
   uint32_t doh_queries_served_;
-  uint32_t test_requests_served_;
+  uint32_t test_https_requests_served_;
 };
 
 class TestHttpDelegate : public HttpStreamRequest::Delegate {
@@ -180,7 +202,8 @@ class TestHttpDelegate : public HttpStreamRequest::Delegate {
   void OnStreamFailed(int status,
                       const NetErrorDetails& net_error_details,
                       const SSLConfig& used_ssl_config,
-                      const ProxyInfo& used_proxy_info) override {}
+                      const ProxyInfo& used_proxy_info,
+                      ResolveErrorInfo resolve_eror_info) override {}
 
   void OnCertificateError(int status,
                           const SSLConfig& used_ssl_config,
@@ -238,6 +261,13 @@ TEST_F(HttpWithDnsOverHttpsTest, EndToEnd) {
                 ->IdleSocketCountInGroup(group_id),
             1u);
 
+  // The domain "localhost" is resolved locally, so no DNS lookups should have
+  // occurred.
+  EXPECT_EQ(doh_queries_served_, 0u);
+  EXPECT_EQ(host_resolver_proc_->insecure_queries_served(), 0u);
+  // A stream was established, but no HTTPS request has been made yet.
+  EXPECT_EQ(test_https_requests_served_, 0u);
+
   // Make a request that will trigger a DoH query as well.
   TestDelegate d;
   d.set_allow_certificate_errors(true);
@@ -249,11 +279,46 @@ TEST_F(HttpWithDnsOverHttpsTest, EndToEnd) {
   EXPECT_TRUE(test_server_.ShutdownAndWaitUntilComplete());
   EXPECT_TRUE(http_server.ShutdownAndWaitUntilComplete());
   EXPECT_TRUE(doh_server_.ShutdownAndWaitUntilComplete());
+
+  // There should be two DoH lookups for "bar.example.com" (both A and AAAA
+  // records are queried).
   EXPECT_EQ(doh_queries_served_, 2u);
-  EXPECT_EQ(test_requests_served_, 1u);
+  // The requests to the DoH server are pooled, so there should only be one
+  // insecure lookup for the DoH server hostname.
+  EXPECT_EQ(host_resolver_proc_->insecure_queries_served(), 1u);
+  // There should be one non-DoH HTTPS request for the connection to
+  // "bar.example.com".
+  EXPECT_EQ(test_https_requests_served_, 1u);
+
   EXPECT_TRUE(d.response_completed());
   EXPECT_EQ(d.request_status(), 0);
   EXPECT_EQ(d.data_received(), kTestBody);
+}
+
+TEST_F(HttpWithDnsOverHttpsTest, EndToEndFail) {
+  // Fail all DoH requests.
+  set_fail_doh_requests(true);
+
+  // Make a request that will trigger a DoH query.
+  TestDelegate d;
+  GURL main_url = test_server_.GetURL("fail.example.com", "/test");
+  std::unique_ptr<URLRequest> req(context()->CreateRequest(
+      main_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+  req->Start();
+  base::RunLoop().Run();
+  EXPECT_TRUE(test_server_.ShutdownAndWaitUntilComplete());
+  EXPECT_TRUE(doh_server_.ShutdownAndWaitUntilComplete());
+
+  // No HTTPS connection to the test server will be attempted due to the
+  // host resolution error.
+  EXPECT_EQ(test_https_requests_served_, 0u);
+
+  EXPECT_TRUE(d.response_completed());
+  EXPECT_EQ(d.request_status(), net::ERR_NAME_NOT_RESOLVED);
+
+  const auto& resolve_error_info = req->response_info().resolve_error_info;
+  EXPECT_TRUE(resolve_error_info.is_secure_network_error);
+  EXPECT_EQ(resolve_error_info.error, net::ERR_DNS_MALFORMED_RESPONSE);
 }
 
 }  // namespace

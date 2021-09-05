@@ -11,6 +11,7 @@
 #define VIVALDI_DATA_URL_SCHEME "chrome"
 
 #define VIVALDI_DATA_URL_HOST "vivaldi-data"
+#define VIVALDI_DATA_URL_NOTES_ATTACHMENT "notes-attachment"
 #define VIVALDI_DATA_URL_PATH_MAPPING_DIR "local-image"
 #define VIVALDI_DATA_URL_THUMBNAIL_DIR "thumbnail"
 #define VIVALDI_WEBUI_URL_HOST "vivaldi-webui"
@@ -43,6 +44,7 @@ extern const char kVivaldiUIDataHost[];
 extern const char kVivaldiWebUIHost[];
 extern const char kVivaldiThumbDataHost[];
 extern const char kVivaldiUIDataURL[];
+extern const char kBaseNotesAttachmentUrl[];
 extern const char kBasePathMappingUrl[];
 extern const char kBaseThumbnailUrl[];
 extern const char kVivaldiWebUIURL[];
@@ -51,6 +53,8 @@ extern const char kVivaldiThumbURL[];
 extern const char kWindowExtDataKey[];
 
 extern const wchar_t kUpdateNotifierAutorunName[];
+
+extern const char kSparkleAutoInstallSettingName[];
 
 }  // namespace vivaldi
 

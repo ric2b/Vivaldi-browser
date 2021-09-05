@@ -8,6 +8,8 @@ import android.content.Context;
 import android.util.Pair;
 import android.view.ContextMenu;
 
+import org.chromium.components.embedder_support.contextmenu.ContextMenuParams;
+
 import java.util.List;
 
 /**
@@ -42,4 +44,9 @@ public interface ContextMenuPopulator {
      * @return       Whether or not the selection was handled.
      */
     public boolean onItemSelected(ContextMenuHelper helper, ContextMenuParams params, int itemId);
+
+    /**
+     * Called when the context menu is closed.
+     */
+    public void onMenuClosed();
 }

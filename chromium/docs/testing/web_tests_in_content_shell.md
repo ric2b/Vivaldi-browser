@@ -60,7 +60,7 @@ browser](#As-a-simple-browser).
 
 In rare cases, to run Content Shell in the exact same way as
 `run_web_tests.py` runs it, you need to run it in the
-[protocol mode](../../content_shell/browser/web_test/test_info_extractor.h).
+[protocol mode](../../content/shell/browser/web_test/test_info_extractor.h).
 
 *** note
 On the Mac, use `Content Shell.app`, not `content_shell`.
@@ -158,7 +158,7 @@ See [Run Web Tests Directly with Content Shell](#Run-Web-Tests-Directly-with-Con
 In most cases you don't need `--single-process` because `content_shell` is
 in single process mode when running most web tests.
 
-See [DevTools frontend](../../third_party/blink/renderer/devtools/readme.md#basics)
+See [DevTools frontend](../../third_party/devtools-frontend/src/README.md#basics)
 for the commands that are useful for debugging devtools web tests.
 
 ### In The Default Multiple Process Mode

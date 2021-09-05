@@ -4,6 +4,8 @@
 
 syntax = "proto2";
 option optimize_for = LITE_RUNTIME;
+option java_package = "org.chromium.components.optimization_guide.proto";
+option java_outer_classname = "ModelsProto";
 
 package optimization_guide.proto;
 
@@ -199,6 +201,10 @@ message ModelInfo {
   repeated ClientModelFeature supported_model_features = 3;
   // The set of model types the requesting client can use to make predictions.
   repeated ModelType supported_model_types = 4;
+  // The set of host model features that are referenced by the model.
+  //
+  // Note that this should only be populated if part of the response.
+  repeated string supported_host_model_features = 5;
 }
 
 // The scenarios for which the optimization guide has models for.

@@ -32,20 +32,20 @@ options = argparser.parse_args()
 
 print "-"*40
 print "<output>"
-format = "%%(path)s/%%(filename)s_%%(locale)s.%%(ext)s"
+format = "%%(path)s%%(filename)s_%%(locale)s.%%(ext)s"
 if options.android:
   format = "%%(path)s-%%(locale)s/%%(filename)s.%%(ext)s"
 for locale in LOCALES:
   spec_locale = locale if locale != "nb" else "no"
   params = dict(
-    path = options.prefix_path,
+    path = options.prefix_path + "/" if options.prefix_path and not options.android else options.prefix_path,
     locale = locale,
     spec_locale = spec_locale,
     ext = "xml" if options.android else "pak",
     filename = options.filename,
     type = "android" if options.android else "data_package",
   )
-  print ('  <output filename="' + format + '" lang="%%(spec_locale)s" type="%%(type)s" />') %% params
+  print ('  <output filename="' + format + '" type="%%(type)s" lang="%%(spec_locale)s" />') %% params
 print "</output>"
 print "-"*40
-""" % dict(locales = '",\n  "'.join(options.locales))
+""" % dict(locales = '",\n  "'.join(sorted(list(set(options.locales)))))

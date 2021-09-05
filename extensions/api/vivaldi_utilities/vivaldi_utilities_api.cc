@@ -29,6 +29,9 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/media/router/media_router_dialog_controller.h"
+#include "chrome/browser/media/router/media_router_feature.h"
+#include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
@@ -62,13 +65,24 @@
 #include "content/public/common/url_constants.h"
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/browser/app_window/app_window.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "ui/lights/razer_chroma_handler.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/vivaldi_ui_utils.h"
 #include "url/url_constants.h"
 
+// DO NOT REMOVE!! Needed by Final Official Release Branch builds
+// See UtilitiesCanShowWhatsNewPageFunction::Run()
+#include "prefs/vivaldi_gen_prefs.h"
+
 #if defined(OS_WIN)
+#if !defined(NTDDI_WIN10_19H1)
+#error Windows 10.0.18362.0 SDK or higher required.
+#endif
+#include <mfapi.h>
+#include <windows.h>
+#include "base/win/windows_version.h"
 #include "chrome/browser/password_manager/password_manager_util_win.h"
 #elif defined(OS_MACOSX)
 #include "chrome/browser/password_manager/password_manager_util_mac.h"
@@ -77,6 +91,9 @@
 namespace extensions {
 
 namespace {
+
+const char kDevToolsLegacyScheme[] = "chrome-devtools";
+const char kDevToolsScheme[] = "devtools";
 
 ContentSetting vivContentSettingFromString(const std::string& name) {
   ContentSetting setting;
@@ -108,10 +125,8 @@ VivaldiUtilitiesAPI::VivaldiUtilitiesAPI(content::BrowserContext* context)
 
   base::PowerMonitor::AddObserver(this);
 
-  if (VivaldiRuntimeFeatures::IsEnabled(context, "razer_chroma_support")) {
-    razer_chroma_handler_.reset(
-        new RazerChromaHandler(Profile::FromBrowserContext(context)));
-  }
+  razer_chroma_handler_.reset(
+      new RazerChromaHandler(Profile::FromBrowserContext(context)));
 }
 
 void VivaldiUtilitiesAPI::PostProfileSetup() {
@@ -438,7 +453,9 @@ ExtensionFunction::ResponseAction UtilitiesIsUrlValidFunction::Run() {
       URLPattern::IsValidSchemeForExtensions(url.scheme()) ||
       url.SchemeIs(url::kJavaScriptScheme) || url.SchemeIs(url::kDataScheme) ||
       url.SchemeIs(url::kMailToScheme) || spec == url::kAboutBlankURL ||
-      url.SchemeIs(content::kViewSourceScheme);
+      url.SchemeIs(content::kViewSourceScheme) ||
+      url.SchemeIs(kDevToolsLegacyScheme) || url.SchemeIs(kDevToolsScheme);
+
   result_.scheme_parsed = url.scheme();
   result_.normalized_url = spec;
   result_.external_handler = false;
@@ -510,8 +527,7 @@ class FileSelectionRunner : private ui::SelectFileDialog::Listener {
  public:
   using ResultCallback = base::OnceCallback<void(base::FilePath file_path)>;
 
-  static void Start(content::WebContents* web_contents,
-                    const FileSelectionOptions& options,
+  static void Start(const FileSelectionOptions& options,
                     ResultCallback callback);
  private:
   FileSelectionRunner(ResultCallback callback);
@@ -542,12 +558,10 @@ FileSelectionRunner::~FileSelectionRunner() {
 }
 
 // static
-void FileSelectionRunner::Start(content::WebContents* web_contents,
-                                const FileSelectionOptions& options,
+void FileSelectionRunner::Start(const FileSelectionOptions& options,
                                 ResultCallback callback) {
   gfx::NativeWindow window =
-      web_contents ? platform_util::GetTopLevel(web_contents->GetNativeView())
-                   : nullptr;
+      BrowserList::GetInstance()->GetLastActive()->window()->GetNativeWindow();
 
   FileSelectionRunner* runner = new FileSelectionRunner(std::move(callback));
   runner->select_file_dialog_->SelectFile(
@@ -610,9 +624,8 @@ ExtensionFunction::ResponseAction UtilitiesSelectFileFunction::Run() {
   }
   options.file_type_info.include_all_files = true;
 
-  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
   FileSelectionRunner::Start(
-      web_contents, options,
+      options,
       base::BindOnce(&UtilitiesSelectFileFunction::OnFileSelected, this));
 
   return RespondLater();
@@ -663,9 +676,8 @@ ExtensionFunction::ResponseAction UtilitiesSelectLocalImageFunction::Run() {
   options.type = ui::SelectFileDialog::SELECT_OPEN_FILE;
   options.file_type_info.include_all_files = true;
 
-  content::WebContents* web_contents = dispatcher()->GetAssociatedWebContents();
   FileSelectionRunner::Start(
-      web_contents, options,
+      options,
       base::BindOnce(&UtilitiesSelectLocalImageFunction::OnFileSelected, this,
                      bookmark_id, preference_index));
 
@@ -1105,13 +1117,23 @@ ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
   std::vector<std::string> last_seen_array = base::SplitString(
       last_seen_version, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
-  if (version_array.size() != 4 || last_seen_array.size() != 4 ||
-      (version_array[0] > last_seen_array[0]) /* major */ ||
-      ((version_array[1] > last_seen_array[1]) /* minor */ &&
-       (version_array[0] >= last_seen_array[0]))) {
+  if (version_array.size() != 4 || last_seen_array.size() != 4) {
     version_changed = true;
     profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
                                    version);
+  } else {
+    int last_seen_major, version_major, last_seen_minor, version_minor;
+    if (base::StringToInt(version_array[0], &version_major) &&
+        base::StringToInt(last_seen_array[0], &last_seen_major) &&
+        base::StringToInt(version_array[1], &version_minor) &&
+        base::StringToInt(last_seen_array[1], &last_seen_minor)) {
+      version_changed =
+        (version_major > last_seen_major) ||
+        ((version_minor > last_seen_minor) &&
+         (version_major >= last_seen_major));
+      profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
+                                     version);
+    }
   }
 
   const base::CommandLine* command_line =
@@ -1292,5 +1314,77 @@ ExtensionFunction::ResponseAction UtilitiesFocusDialogFunction::Run() {
   }
   return RespondNow(ArgumentList(Results::Create(focused)));
 }
+
+ExtensionFunction::ResponseAction UtilitiesStartChromecastFunction::Run() {
+  if (media_router::MediaRouterEnabled(browser_context())) {
+    Browser* browser = ::vivaldi::FindBrowserForEmbedderWebContents(
+        dispatcher()->GetAssociatedWebContents());
+    content::WebContents* current_tab =
+        browser->tab_strip_model()->GetActiveWebContents();
+    media_router::MediaRouterDialogController* dialog_controller =
+        media_router::MediaRouterDialogController::GetOrCreateForWebContents(
+            current_tab);
+    if (dialog_controller) {
+      dialog_controller->ShowMediaRouterDialog(
+          media_router::MediaRouterDialogOpenOrigin::PAGE);
+    }
+  }
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction UtilitiesGetMediaAvailableStateFunction::Run() {
+  namespace Results = vivaldi::utilities::GetMediaAvailableState::Results;
+  bool is_available = true;
+#if defined(OS_WIN)
+  const base::CommandLine& command_line =
+    *base::CommandLine::ForCurrentProcess();
+  if (!command_line.HasSwitch(switches::kAutoTestMode)) {
+    _OSVERSIONINFOEXW version_info = { sizeof(version_info) };
+    ::GetVersionEx(reinterpret_cast<_OSVERSIONINFOW*>(&version_info));
+
+    DWORD os_type = 0;
+    ::GetProductInfo(version_info.dwMajorVersion, version_info.dwMinorVersion,
+      0, 0, &os_type);
+
+    // Only present on Vista+. All these 'N' versions of Windows come without
+    // a media player or codecs.
+    switch (os_type) {
+      case PRODUCT_HOME_BASIC_N:
+      case PRODUCT_BUSINESS_N:
+      case PRODUCT_ENTERPRISE_N:
+      case PRODUCT_ENTERPRISE_N_EVALUATION:
+      case PRODUCT_ENTERPRISE_SUBSCRIPTION_N:
+      case PRODUCT_ENTERPRISE_S_N:
+      case PRODUCT_ENTERPRISE_S_N_EVALUATION:
+      case PRODUCT_EDUCATION_N:
+      case PRODUCT_PRO_FOR_EDUCATION_N:
+      case PRODUCT_HOME_PREMIUM_N:
+      case PRODUCT_ULTIMATE_N:
+      case PRODUCT_PROFESSIONAL_N:
+      case PRODUCT_PROFESSIONAL_S_N:
+      case PRODUCT_PROFESSIONAL_STUDENT_N:
+        is_available = false;
+        break;
+    }
+    // Definitions from mf_initializer.cc.
+    const int kMFVersionVista = (0x0001 << 16 | MF_API_VERSION);
+    const int kMFVersionWin7 = (0x0002 << 16 | MF_API_VERSION);
+    if (!is_available) {
+      // Only check N versions for media framework, otherwise just assume
+      // all is fine and proceed.
+      HRESULT hr = MFStartup(base::win::GetVersion() >= base::win::Version::WIN7
+        ? kMFVersionWin7
+        : kMFVersionVista,
+        MFSTARTUP_LITE);
+      if (SUCCEEDED(hr)) {
+        is_available = true;
+        MFShutdown();
+      }
+    }
+  }
+#endif
+  return RespondNow(ArgumentList(Results::Create(is_available)));
+}
+
 
 }  // namespace extensions

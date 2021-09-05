@@ -35,7 +35,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "net/base/escape.h"
 #include "net/base/filename_util.h"
-#include "storage/browser/fileapi/external_mount_points.h"
+#include "storage/browser/file_system/external_mount_points.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/strings/grit/ui_chromeos_strings.h"
 #include "url/gurl.h"
@@ -108,6 +108,30 @@ bool ShouldMountPrimaryUserDownloads(Profile* profile) {
   return false;
 }
 
+// Extracts the Drive path from the given path located under the legacy Drive
+// mount point. Returns an empty path if |path| is not under the legacy Drive
+// mount point.
+// Example: ExtractLegacyDrivePath("/special/drive-xxx/foo.txt") =>
+//   "drive/foo.txt"
+base::FilePath ExtractLegacyDrivePath(const base::FilePath& path) {
+  std::vector<base::FilePath::StringType> components;
+  path.GetComponents(&components);
+  if (components.size() < 3)
+    return base::FilePath();
+  if (components[0] != FILE_PATH_LITERAL("/"))
+    return base::FilePath();
+  if (components[1] != FILE_PATH_LITERAL("special"))
+    return base::FilePath();
+  static const base::FilePath::CharType kPrefix[] = FILE_PATH_LITERAL("drive");
+  if (components[2].compare(0, base::size(kPrefix) - 1, kPrefix) != 0)
+    return base::FilePath();
+
+  base::FilePath drive_path = drive::util::GetDriveGrandRootPath();
+  for (size_t i = 3; i < components.size(); ++i)
+    drive_path = drive_path.Append(components[i]);
+  return drive_path;
+}
+
 }  // namespace
 
 const base::FilePath::CharType kRemovableMediaPath[] =
@@ -115,6 +139,9 @@ const base::FilePath::CharType kRemovableMediaPath[] =
 
 const base::FilePath::CharType kAndroidFilesPath[] =
     FILE_PATH_LITERAL("/run/arc/sdcard/write/emulated/0");
+
+const base::FilePath::CharType kSystemFontsPath[] =
+    FILE_PATH_LITERAL("/usr/share/fonts");
 
 base::FilePath GetDownloadsFolderForProfile(Profile* profile) {
   // Check if FilesApp has a registered path already.  This happens for tests.
@@ -152,6 +179,17 @@ base::FilePath GetMyFilesFolderForProfile(Profile* profile) {
 
   // Return <cryptohome>/MyFiles.
   return profile->GetPath().AppendASCII(kFolderNameMyFiles);
+}
+
+base::FilePath GetAndroidFilesPath() {
+  // Check if Android has a registered path already. This happens for tests.
+  const std::string mount_point_name = util::GetAndroidFilesMountPointName();
+  storage::ExternalMountPoints* const mount_points =
+      storage::ExternalMountPoints::GetSystemInstance();
+  base::FilePath path;
+  if (mount_points->GetRegisteredPath(mount_point_name, &path))
+    return path;
+  return base::FilePath(file_manager::util::kAndroidFilesPath);
 }
 
 bool MigratePathFromOldFormat(Profile* profile,
@@ -206,8 +244,8 @@ bool MigrateToDriveFs(Profile* profile,
     return false;
   }
   *new_path = integration_service->GetMountPointPath();
-  return drive::util::GetDriveMountPointPath(profile).AppendRelativePath(
-      old_path, new_path);
+  return drive::util::GetDriveGrandRootPath().AppendRelativePath(
+      ExtractLegacyDrivePath(old_path), new_path);
 }
 
 std::string GetDownloadsMountPointName(Profile* profile) {

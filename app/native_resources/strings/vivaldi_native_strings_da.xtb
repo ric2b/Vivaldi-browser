@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Åbn link i nyt vindue</translation>
 <translation id="3588820906588687999">Åbn &amp;billede på ny fane</translation>
 <translation id="3601066750251199488">Monster 3</translation>
-<translation id="366643050267431920">Tilføj som begivenhed</translation>
 <translation id="3732157130969736834">Gem link som bogmærke</translation>
 <translation id="3732388226447288666">Dyr 2</translation>
 <translation id="3732439195215136813">Dyr 5</translation>
@@ -68,7 +67,6 @@
 <translation id="4636708767492582204">Send via mail</translation>
 <translation id="4677434526832593569">Dyr 8</translation>
 <translation id="4881695831933465202">Åbn</translation>
-<translation id="4973311370126107785">Kørsel af JavaScript gemmen AppleScript er slået fra. For at slå det til fra menulinjen, gå til Værktøjer &gt; Tillad JavaScript fra Apple Events.</translation>
 <translation id="5014281392052865061">Importerede Kvikknapper</translation>
 <translation id="5092656712000637858">Tilføj side som Net-panel</translation>
 <translation id="5177818338935286353">Monster 7</translation>
@@ -89,6 +87,7 @@
 <translation id="6229528619562190452">Klik her for at opdatere Vivaldi.</translation>
 <translation id="6234173136417926046">Brug billede som baggrund på Vivaldi-startsiden</translation>
 <translation id="630690498669249215">Opera bogmærker-fil</translation>
+<translation id="6339818817272922368">Lokal konto</translation>
 <translation id="6438786710866753178">Landskab 4</translation>
 <translation id="6477028720702061455">Vælg Opera-profilmappe der skal importeres</translation>
 <translation id="6510706699590490869">&amp;Opdater Vivaldi</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">Vivaldi er gjort mulig af <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source-projektet og anden <ph name="BEGIN_LINK_OSS" />open source software<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Ignorer opdatering</translation>
 <translation id="7724603315864178912">Klip</translation>
+<translation id="7793738202466490491">Tilføj som kalender-begivenhed</translation>
 <translation id="7865983598101744945">Bekræft lukning</translation>
 <translation id="7957213167373139414">Min kalender</translation>
 <translation id="8027581147000338959">Åben i nyt vindue</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">Åbn i baggrunds-fane</translation>
 <translation id="8373293945112511707">Landskab 1</translation>
 <translation id="8427094907586191051">Landskab 17</translation>
+<translation id="8446668873108041390">Eksekvering af JavaScript gennem AppleScript er slået fra. Under Indstillinger &gt; Privatliv &gt; Apple Events, er der en indstilling til tilladelse af JavaScript fra Apple Events.</translation>
 <translation id="8539196077526389150">Landskab 13</translation>
 <translation id="8624587806981488221">&amp;Genindlæs billede</translation>
 <translation id="864444594187862076">Opera version 15+ (Udvikler)</translation>

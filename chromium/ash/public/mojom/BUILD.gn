@@ -11,10 +11,7 @@ mojom("mojom") {
     "assistant_controller.mojom",
     "assistant_state_controller.mojom",
     "assistant_volume_control.mojom",
-    "constants.mojom",
     "cros_display_config.mojom",
-    "ime_controller.mojom",
-    "ime_info.mojom",
     "tray_action.mojom",
     "voice_interaction_controller.mojom",
   ]
@@ -28,7 +25,6 @@ mojom("mojom") {
     "//services/content/public/mojom",
     "//services/preferences/public/mojom",
     "//skia/public/mojom",
-    "//ui/base/ime/chromeos/public/mojom",
     "//ui/display/mojom:mojom",
     "//ui/gfx/geometry/mojom",
     "//ui/gfx/image/mojom",
@@ -40,18 +36,4 @@ mojom("mojom") {
   export_class_attribute = "ASH_PUBLIC_EXPORT"
   export_define = "ASH_PUBLIC_IMPLEMENTATION=1"
   export_header = "ash/public/cpp/ash_public_export.h"
-}
-
-mojom("test_interfaces") {
-  testonly = true
-  disable_variants = true
-  sources = [
-    "status_area_widget_test_api.test-mojom",
-  ]
-  deps = [
-    ":mojom",
-    "//components/account_id/mojom",
-    "//mojo/public/mojom/base",
-    "//ui/gfx/geometry/mojom",
-  ]
 }

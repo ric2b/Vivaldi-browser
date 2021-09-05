@@ -57,9 +57,6 @@ class CORE_EXPORT WorkletGlobalScope
   const KURL& BaseURL() const final { return url_; }
   KURL CompleteURL(const String&) const final;
   String UserAgent() const final { return user_agent_; }
-  SecurityContext& GetSecurityContext() final { return *this; }
-  const SecurityContext& GetSecurityContext() const final { return *this; }
-  bool IsSecureContext(String& error_message) const final;
   bool IsContextThread() const final;
   void AddConsoleMessageImpl(ConsoleMessage*, bool discard_duplicates) final;
   void ExceptionThrown(ErrorEvent*) final;
@@ -83,12 +80,6 @@ class CORE_EXPORT WorkletGlobalScope
     // in the same agent cluster. See
     // https://bugs.chromium.org/p/chromium/issues/detail?id=892067.
     return agent_cluster_id_;
-  }
-
-  DOMTimerCoordinator* Timers() final {
-    // WorkletGlobalScopes don't have timers.
-    NOTREACHED();
-    return nullptr;
   }
 
   // Implementation of the "fetch and invoke a worklet script" algorithm:
@@ -121,7 +112,7 @@ class CORE_EXPORT WorkletGlobalScope
   // document.
   bool DocumentSecureContext() const { return document_secure_context_; }
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   HttpsState GetHttpsState() const override { return https_state_; }
 

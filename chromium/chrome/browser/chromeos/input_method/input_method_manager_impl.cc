@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>  // std::find
+#include <cstdint>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -25,10 +26,12 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
+#include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chromeos/input_method/candidate_window_controller.h"
 #include "chrome/browser/chromeos/input_method/component_extension_ime_manager_impl.h"
+#include "chrome/browser/chromeos/input_method/suggestion_window_controller.h"
 #include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -68,6 +71,11 @@ enum InputMethodCategory {
   INPUT_METHOD_CATEGORY_MAX
 };
 
+const chromeos::input_method::ImeKeyset kKeysets[] = {
+    chromeos::input_method::ImeKeyset::kEmoji,
+    chromeos::input_method::ImeKeyset::kHandwriting,
+    chromeos::input_method::ImeKeyset::kVoice};
+
 InputMethodCategory GetInputMethodCategory(const std::string& input_method_id) {
   const std::string component_id =
       extension_ime_util::GetComponentIDByInputMethodID(input_method_id);
@@ -95,15 +103,15 @@ InputMethodCategory GetInputMethodCategory(const std::string& input_method_id) {
   return category;
 }
 
-std::string KeysetToString(mojom::ImeKeyset keyset) {
+std::string KeysetToString(chromeos::input_method::ImeKeyset keyset) {
   switch (keyset) {
-    case mojom::ImeKeyset::kNone:
+    case chromeos::input_method::ImeKeyset::kNone:
       return "";
-    case mojom::ImeKeyset::kEmoji:
+    case chromeos::input_method::ImeKeyset::kEmoji:
       return "emoji";
-    case mojom::ImeKeyset::kHandwriting:
+    case chromeos::input_method::ImeKeyset::kHandwriting:
       return "hwt";
-    case mojom::ImeKeyset::kVoice:
+    case chromeos::input_method::ImeKeyset::kVoice:
       return "voice";
   }
 }
@@ -520,7 +528,7 @@ void InputMethodManagerImpl::StateImpl::ChangeInputMethod(
   }
 
   // Always change input method even if it is the same.
-  // TODO(komatsu): Revisit if this is neccessary.
+  // TODO(komatsu): Revisit if this is necessary.
   if (IsActive())
     manager_->ChangeInputMethodInternal(*descriptor, profile, show_message,
                                         notify_menu);
@@ -875,8 +883,10 @@ void InputMethodManagerImpl::ReconfigureIMFramework(
   // Initialize candidate window controller and widgets such as
   // candidate window, infolist and mode indicator.  Note, mode
   // indicator is used by only keyboard layout input methods.
-  if (state_.get() == state)
+  if (state_.get() == state) {
     MaybeInitializeCandidateWindowController();
+    MaybeInitializeSuggestionWindowController();
+  }
 }
 
 void InputMethodManagerImpl::SetState(
@@ -892,6 +902,7 @@ void InputMethodManagerImpl::SetState(
     // candidate window, infolist and mode indicator.  Note, mode
     // indicator is used by only keyboard layout input methods.
     MaybeInitializeCandidateWindowController();
+    MaybeInitializeSuggestionWindowController();
 
     // Always call ChangeInputMethodInternal even when the input method id
     // remain unchanged, because onActivate event needs to be sent to IME
@@ -942,8 +953,9 @@ void InputMethodManagerImpl::RecordInputMethodUsage(
   UMA_HISTOGRAM_ENUMERATION("InputMethod.Category",
                             GetInputMethodCategory(input_method_id),
                             INPUT_METHOD_CATEGORY_MAX);
-  base::UmaHistogramSparse("InputMethod.ID2",
-                           static_cast<int32_t>(base::Hash(input_method_id)));
+  base::UmaHistogramSparse(
+      "InputMethod.ID2",
+      static_cast<int32_t>(base::PersistentHash(input_method_id)));
 }
 
 void InputMethodManagerImpl::AddObserver(
@@ -987,8 +999,12 @@ InputMethodManager::UISessionState InputMethodManagerImpl::GetUISessionState() {
 
 void InputMethodManagerImpl::SetUISessionState(UISessionState new_ui_session) {
   ui_session_ = new_ui_session;
-  if (ui_session_ == STATE_TERMINATING && candidate_window_controller_.get())
-    candidate_window_controller_.reset();
+  if (ui_session_ == STATE_TERMINATING) {
+    if (candidate_window_controller_.get())
+      candidate_window_controller_.reset();
+    if (suggestion_window_controller_.get())
+      suggestion_window_controller_.reset();
+  }
 }
 
 void InputMethodManagerImpl::OnUserAddingStarted() {
@@ -1217,6 +1233,11 @@ void InputMethodManagerImpl::SetCandidateWindowControllerForTesting(
   candidate_window_controller_->AddObserver(this);
 }
 
+void InputMethodManagerImpl::SetSuggestionWindowControllerForTesting(
+    SuggestionWindowController* suggestion_window_controller) {
+  suggestion_window_controller_.reset(suggestion_window_controller);
+}
+
 void InputMethodManagerImpl::SetImeKeyboardForTesting(ImeKeyboard* keyboard) {
   keyboard_.reset(keyboard);
 }
@@ -1278,6 +1299,14 @@ void InputMethodManagerImpl::MaybeInitializeCandidateWindowController() {
   candidate_window_controller_->AddObserver(this);
 }
 
+void InputMethodManagerImpl::MaybeInitializeSuggestionWindowController() {
+  if (suggestion_window_controller_.get())
+    return;
+
+  suggestion_window_controller_.reset(
+      SuggestionWindowController::CreateSuggestionWindowController());
+}
+
 void InputMethodManagerImpl::NotifyImeMenuItemsChanged(
     const std::string& engine_id,
     const std::vector<InputMethodManager::MenuItem>& items) {
@@ -1296,7 +1325,8 @@ void InputMethodManagerImpl::MaybeNotifyImeMenuActivationChanged() {
                         is_ime_menu_activated_);
 }
 
-void InputMethodManagerImpl::OverrideKeyboardKeyset(mojom::ImeKeyset keyset) {
+void InputMethodManagerImpl::OverrideKeyboardKeyset(
+    chromeos::input_method::ImeKeyset keyset) {
   GURL url = state_->GetInputViewUrl();
 
   // If fails to find ref or tag "id" in the ref, it means the current IME is
@@ -1306,11 +1336,11 @@ void InputMethodManagerImpl::OverrideKeyboardKeyset(mojom::ImeKeyset keyset) {
     return;
   std::string overridden_ref = url.ref();
 
-  auto i = overridden_ref.find("id=");
-  if (i == std::string::npos)
+  auto id_start = overridden_ref.find("id=");
+  if (id_start == std::string::npos)
     return;
 
-  if (keyset == mojom::ImeKeyset::kNone) {
+  if (keyset == chromeos::input_method::ImeKeyset::kNone) {
     // Resets the url as the input method default url and notify the hash
     // changed to VK.
     state_->input_view_url = state_->current_input_method.input_view_url();
@@ -1318,16 +1348,41 @@ void InputMethodManagerImpl::OverrideKeyboardKeyset(mojom::ImeKeyset keyset) {
     return;
   }
 
-  // For system IME extension, the input view url is overridden as:
+  // For IME component extension, the input view url is overridden as:
   // chrome-extension://${extension_id}/inputview.html#id=us.compact.qwerty
   // &language=en-US&passwordLayout=us.compact.qwerty&name=keyboard_us
-  // Fow emoji, handwriting and voice input, we append the keyset to the end of
+  // For emoji, handwriting and voice input, we append the keyset to the end of
   // id like: id=${keyset}.emoji/hwt/voice.
-  auto j = overridden_ref.find("&", i + 1);
-  if (j == std::string::npos) {
-    overridden_ref += "." + KeysetToString(keyset);
+  auto id_end = overridden_ref.find("&", id_start + 1);
+  std::string id_string = overridden_ref.substr(id_start, id_end - id_start);
+  // Remove existing keyset string.
+  for (const chromeos::input_method::ImeKeyset keyset : kKeysets) {
+    std::string keyset_string = KeysetToString(keyset);
+    auto keyset_start = id_string.find("." + keyset_string);
+    if (keyset_start != std::string::npos) {
+      id_string.replace(keyset_start, keyset_string.length() + 1, "");
+    }
+  }
+  id_string += "." + KeysetToString(keyset);
+  overridden_ref.replace(id_start, id_end - id_start, id_string);
+
+  // Always add a timestamp tag to make sure the hash tags are changed, so that
+  // the frontend will reload.
+  auto ts_start = overridden_ref.find("&ts=");
+  std::string ts_tag =
+      base::StringPrintf("&ts=%" PRId64, base::Time::NowFromSystemTime()
+                                             .ToDeltaSinceWindowsEpoch()
+                                             .InMicroseconds());
+  if (ts_start == std::string::npos) {
+    overridden_ref += ts_tag;
   } else {
-    overridden_ref.replace(j, 0, "." + KeysetToString(keyset));
+    auto ts_end = overridden_ref.find("&", ts_start + 1);
+    if (ts_end == std::string::npos) {
+      overridden_ref.replace(ts_start, overridden_ref.length() - ts_start,
+                             ts_tag);
+    } else {
+      overridden_ref.replace(ts_start, ts_end - ts_start, ts_tag);
+    }
   }
 
   GURL::Replacements replacements;

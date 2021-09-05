@@ -29,19 +29,6 @@ AudibleMetrics* GetAudibleMetrics() {
   return metrics;
 }
 
-void CheckFullscreenDetectionEnabled(WebContents* web_contents) {
-#if defined(OS_ANDROID)
-  DCHECK(web_contents->GetRenderViewHost()
-             ->GetWebkitPreferences()
-             .video_fullscreen_detection_enabled)
-      << "Attempt to use method relying on fullscreen detection while "
-      << "fullscreen detection is disabled.";
-#else   // defined(OS_ANDROID)
-  NOTREACHED() << "Attempt to use method relying on fullscreen detection, "
-               << "which is only enabled on Android.";
-#endif  // defined(OS_ANDROID)
-}
-
 // Returns true if |player_id| exists in |player_map|.
 bool MediaPlayerEntryExists(
     const MediaPlayerId& player_id,
@@ -66,9 +53,13 @@ static void SuspendAllMediaPlayersInRenderFrame(
 MediaWebContentsObserver::MediaWebContentsObserver(WebContents* web_contents)
     : WebContentsObserver(web_contents),
       audible_metrics_(GetAudibleMetrics()),
-      session_controllers_manager_(this) {}
+      session_controllers_manager_(this),
+      power_experiment_manager_(MediaPowerExperimentManager::Instance()) {}
 
-MediaWebContentsObserver::~MediaWebContentsObserver() = default;
+MediaWebContentsObserver::~MediaWebContentsObserver() {
+  // Remove all players so that the experiment manager is notified.
+  RemoveAllPlayers();
+}
 
 void MediaWebContentsObserver::WebContentsDestroyed() {
   AudioStreamMonitor* audio_stream_monitor =
@@ -77,6 +68,9 @@ void MediaWebContentsObserver::WebContentsDestroyed() {
   audible_metrics_->WebContentsDestroyed(
       web_contents(), audio_stream_monitor->WasRecentlyAudible() &&
                           !web_contents()->IsAudioMuted());
+
+  // Remove all players so that the experiment manager is notified.
+  RemoveAllPlayers();
 }
 
 void MediaWebContentsObserver::RenderFrameDeleted(
@@ -89,6 +83,9 @@ void MediaWebContentsObserver::RenderFrameDeleted(
     picture_in_picture_allowed_in_fullscreen_.reset();
     fullscreen_player_.reset();
   }
+
+  // Cancel any pending callbacks for players from this frame.
+  per_frame_factory_.erase(render_frame_host);
 }
 
 void MediaWebContentsObserver::MaybeUpdateAudibleState() {
@@ -106,7 +103,6 @@ void MediaWebContentsObserver::MaybeUpdateAudibleState() {
 }
 
 bool MediaWebContentsObserver::HasActiveEffectivelyFullscreenVideo() const {
-  CheckFullscreenDetectionEnabled(web_contents_impl());
   if (!web_contents()->IsFullscreen() || !fullscreen_player_)
     return false;
 
@@ -123,7 +119,6 @@ bool MediaWebContentsObserver::IsPictureInPictureAllowedForFullscreenVideo()
 
 const base::Optional<MediaPlayerId>&
 MediaWebContentsObserver::GetFullscreenVideoMediaPlayerId() const {
-  CheckFullscreenDetectionEnabled(web_contents_impl());
   return fullscreen_player_;
 }
 
@@ -147,9 +142,18 @@ bool MediaWebContentsObserver::OnMessageReceived(
         OnMediaEffectivelyFullscreenChanged)
     IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnMediaSizeChanged,
                         OnMediaSizeChanged)
+    IPC_MESSAGE_HANDLER(
+        MediaPlayerDelegateHostMsg_OnPictureInPictureAvailabilityChanged,
+        OnPictureInPictureAvailabilityChanged)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
+}
+
+void MediaWebContentsObserver::MediaPictureInPictureChanged(
+    bool is_picture_in_picture) {
+  session_controllers_manager_.PictureInPictureStateChanged(
+      is_picture_in_picture);
 }
 
 void MediaWebContentsObserver::DidUpdateAudioMutingState(bool muted) {
@@ -179,6 +183,7 @@ bool MediaWebContentsObserver::IsPlayerActive(
 void MediaWebContentsObserver::OnMediaDestroyed(
     RenderFrameHost* render_frame_host,
     int delegate_id) {
+  // TODO(liberato): Should we skip power manager notifications in this case?
   OnMediaPaused(render_frame_host, delegate_id, true);
 }
 
@@ -220,9 +225,6 @@ void MediaWebContentsObserver::OnMediaPlaying(
   if (is_remote)
     return;
 
-  BackForwardCache::DisableForRenderFrameHost(
-      render_frame_host, "MediaWebContentsObserver::OnMediaPlaying");
-
   const MediaPlayerId id(render_frame_host, delegate_id);
   if (has_audio)
     AddMediaPlayerEntry(id, &active_audio_players_);
@@ -231,7 +233,7 @@ void MediaWebContentsObserver::OnMediaPlaying(
     AddMediaPlayerEntry(id, &active_video_players_);
 
   if (!session_controllers_manager_.RequestPlay(
-          id, has_audio, is_remote, media_content_type)) {
+          id, has_audio, is_remote, media_content_type, has_video)) {
     return;
   }
 
@@ -277,6 +279,14 @@ void MediaWebContentsObserver::OnMediaSizeChanged(
     const gfx::Size& size) {
   const MediaPlayerId id(render_frame_host, delegate_id);
   web_contents_impl()->MediaResized(size, id);
+}
+
+void MediaWebContentsObserver::OnPictureInPictureAvailabilityChanged(
+    RenderFrameHost* render_frame_host,
+    int delegate_id,
+    bool available) {
+  session_controllers_manager_.OnPictureInPictureAvailabilityChanged(
+      MediaPlayerId(render_frame_host, delegate_id), available);
 }
 
 void MediaWebContentsObserver::ClearWakeLocks(
@@ -351,11 +361,23 @@ void MediaWebContentsObserver::AddMediaPlayerEntry(
     const MediaPlayerId& id,
     ActiveMediaPlayerMap* player_map) {
   (*player_map)[id.render_frame_host].insert(id.delegate_id);
+  if (power_experiment_manager_) {
+    // Bind the callback to a WeakPtr for the frame, so that we won't try to
+    // notify the frame after it's been destroyed.
+    power_experiment_manager_->PlayerStarted(
+        id,
+        base::BindRepeating(&MediaWebContentsObserver::OnExperimentStateChanged,
+                            GetWeakPtrForFrame(id.render_frame_host), id));
+  }
 }
 
 bool MediaWebContentsObserver::RemoveMediaPlayerEntry(
     const MediaPlayerId& id,
     ActiveMediaPlayerMap* player_map) {
+  // If the power experiment is running, then notify it.
+  if (power_experiment_manager_)
+    power_experiment_manager_->PlayerStopped(id);
+
   auto it = player_map->find(id.render_frame_host);
   if (it == player_map->end())
     return false;
@@ -380,8 +402,17 @@ void MediaWebContentsObserver::RemoveAllMediaPlayerEntries(
   if (it == player_map->end())
     return;
 
-  for (int delegate_id : it->second)
-    removed_players->insert(MediaPlayerId(render_frame_host, delegate_id));
+  for (int delegate_id : it->second) {
+    MediaPlayerId id(render_frame_host, delegate_id);
+    removed_players->insert(id);
+
+    // Since the player is being destroyed, don't bother to notify it if it's
+    // no longer the active experiment.
+    if (power_experiment_manager_) {
+      power_experiment_manager_->PlayerStopped(
+          id, MediaPowerExperimentManager::NotificationMode::kSkip);
+    }
+  }
 
   player_map->erase(it);
 }
@@ -396,5 +427,45 @@ void MediaWebContentsObserver::SuspendAllMediaPlayers() {
       base::BindRepeating(&SuspendAllMediaPlayersInRenderFrame));
 }
 #endif  // defined(OS_ANDROID)
+
+void MediaWebContentsObserver::OnExperimentStateChanged(MediaPlayerId id,
+                                                        bool is_starting) {
+  id.render_frame_host->Send(
+      new MediaPlayerDelegateMsg_NotifyPowerExperimentState(
+          id.render_frame_host->GetRoutingID(), id.delegate_id, is_starting));
+}
+
+void MediaWebContentsObserver::RemoveAllPlayers(
+    ActiveMediaPlayerMap* player_map) {
+  if (power_experiment_manager_) {
+    for (auto& iter : *player_map) {
+      for (auto delegate_id : iter.second) {
+        MediaPlayerId id(iter.first, delegate_id);
+        power_experiment_manager_->PlayerStopped(
+            id, MediaPowerExperimentManager::NotificationMode::kSkip);
+      }
+    }
+  }
+
+  player_map->clear();
+}
+
+void MediaWebContentsObserver::RemoveAllPlayers() {
+  RemoveAllPlayers(&active_audio_players_);
+  RemoveAllPlayers(&active_video_players_);
+}
+
+base::WeakPtr<MediaWebContentsObserver>
+MediaWebContentsObserver::GetWeakPtrForFrame(
+    RenderFrameHost* render_frame_host) {
+  auto iter = per_frame_factory_.find(render_frame_host);
+  if (iter != per_frame_factory_.end())
+    return iter->second->GetWeakPtr();
+
+  auto result = per_frame_factory_.emplace(std::make_pair(
+      render_frame_host,
+      std::make_unique<base::WeakPtrFactory<MediaWebContentsObserver>>(this)));
+  return result.first->second->GetWeakPtr();
+}
 
 }  // namespace content

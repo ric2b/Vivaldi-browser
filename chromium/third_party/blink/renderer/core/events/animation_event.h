@@ -26,10 +26,12 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_EVENTS_ANIMATION_EVENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_EVENTS_ANIMATION_EVENT_H_
 
+#include "third_party/blink/renderer/core/animation/animation_time_delta.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
-#include "third_party/blink/renderer/core/events/animation_event_init.h"
 
 namespace blink {
+
+class AnimationEventInit;
 
 class AnimationEvent final : public Event {
   DEFINE_WRAPPERTYPEINFO();
@@ -40,7 +42,7 @@ class AnimationEvent final : public Event {
   }
   static AnimationEvent* Create(const AtomicString& type,
                                 const String& animation_name,
-                                double elapsed_time,
+                                const AnimationTimeDelta& elapsed_time,
                                 const String& pseudo_element) {
     return MakeGarbageCollected<AnimationEvent>(type, animation_name,
                                                 elapsed_time, pseudo_element);
@@ -53,7 +55,7 @@ class AnimationEvent final : public Event {
   AnimationEvent();
   AnimationEvent(const AtomicString& type,
                  const String& animation_name,
-                 double elapsed_time,
+                 const AnimationTimeDelta& elapsed_time,
                  const String& pseudo_element);
   AnimationEvent(const AtomicString&, const AnimationEventInit*);
   ~AnimationEvent() override;
@@ -64,11 +66,11 @@ class AnimationEvent final : public Event {
 
   const AtomicString& InterfaceName() const override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   String animation_name_;
-  double elapsed_time_;
+  AnimationTimeDelta elapsed_time_;
   String pseudo_element_;
 };
 

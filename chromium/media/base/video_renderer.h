@@ -7,6 +7,7 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "media/base/media_export.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/time_source.h"
@@ -42,14 +43,14 @@ class MEDIA_EXPORT VideoRenderer {
                           CdmContext* cdm_context,
                           RendererClient* client,
                           const TimeSource::WallClockTimeCB& wall_clock_time_cb,
-                          const PipelineStatusCB& init_cb) = 0;
+                          PipelineStatusCallback init_cb) = 0;
 
   // Discards any video data and stops reading from |stream|, executing
   // |callback| when completed.
   //
   // Clients should expect |buffering_state_cb| to be called with
   // BUFFERING_HAVE_NOTHING while flushing is in progress.
-  virtual void Flush(const base::Closure& callback) = 0;
+  virtual void Flush(base::OnceClosure callback) = 0;
 
   // Starts playback at |timestamp| by reading from |stream| and decoding and
   // rendering video.
@@ -62,6 +63,12 @@ class MEDIA_EXPORT VideoRenderer {
   // time stops progressing.
   virtual void OnTimeProgressing() = 0;
   virtual void OnTimeStopped() = 0;
+
+  // Sets a hint indicating target latency. See comment in header for
+  // media::Renderer::SetLatencyHint().
+  // |latency_hint| may be nullopt to indicate the hint has been cleared
+  // (restore UA default).
+  virtual void SetLatencyHint(base::Optional<base::TimeDelta> latency_hint) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(VideoRenderer);

@@ -25,9 +25,12 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/sessions/core/base_session_service_delegate.h"
+#include "components/sessions/content/session_tab_helper_delegate.h"
+#include "components/sessions/core/command_storage_manager_delegate.h"
 #include "components/sessions/core/session_service_commands.h"
 #include "components/sessions/core/tab_restore_service_client.h"
+#include "components/tab_groups/tab_group_id.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/ui_base_types.h"
 
@@ -44,6 +47,7 @@ namespace sessions {
 class SessionCommand;
 struct SessionTab;
 struct SessionWindow;
+class SnapshottingCommandStorageManager;
 }  // namespace sessions
 
 // SessionService ------------------------------------------------------------
@@ -63,10 +67,11 @@ struct SessionWindow;
 // SessionService itself uses functions from session_service_commands to store
 // commands which can rebuild the open state of the browser (as |SessionWindow|,
 // |SessionTab| and |SerializedNavigationEntry|). The commands are periodically
-// flushed to |SessionBackend| and written to a file. Every so often
+// flushed to |CommandStorageBackend| and written to a file. Every so often
 // |SessionService| rebuilds the contents of the file from the open state of the
 // browser.
-class SessionService : public sessions::BaseSessionServiceDelegate,
+class SessionService : public sessions::CommandStorageManagerDelegate,
+                       public sessions::SessionTabHelperDelegate,
                        public KeyedService,
                        public content::NotificationObserver,
                        public BrowserListObserver {
@@ -129,15 +134,14 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   // multiple windows.
   void SetTabGroup(const SessionID& window_id,
                    const SessionID& tab_id,
-                   base::Optional<base::Token> group);
+                   base::Optional<tab_groups::TabGroupId> group);
 
   // Updates the metadata associated with a tab group. |window_id| should be the
   // window where the group currently resides. Note that a group can't be split
   // between multiple windows.
   void SetTabGroupMetadata(const SessionID& window_id,
-                           const base::Token& group_id,
-                           const base::string16& title,
-                           SkColor color);
+                           const tab_groups::TabGroupId& group_id,
+                           const tab_groups::TabGroupVisualData* visual_data);
 
   // Sets the pinned state of the tab.
   void SetPinnedState(const SessionID& window_id,
@@ -177,42 +181,12 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   void SetWindowAppName(const SessionID& window_id,
                         const std::string& app_name);
 
-  // Invoked when the NavigationController has removed entries from the list.
-  // |index| gives the the starting index from which entries were deleted.
-  // |count| gives the number of entries that were removed.
-  void TabNavigationPathPruned(const SessionID& window_id,
-                               const SessionID& tab_id,
-                               int index,
-                               int count);
-
-  // Invoked when the NavigationController has deleted entries because of a
-  // history deletion.
-  void TabNavigationPathEntriesDeleted(const SessionID& window_id,
-                                       const SessionID& tab_id);
-
-  // Updates the navigation entry for the specified tab.
-  void UpdateTabNavigation(
-      const SessionID& window_id,
-      const SessionID& tab_id,
-      const sessions::SerializedNavigationEntry& navigation);
-
   // Notification that a tab has restored its entries or a closed tab is being
   // reused.
   void TabRestored(content::WebContents* tab, bool pinned);
 
-  // Sets the index of the selected entry in the navigation controller for the
-  // specified tab.
-  void SetSelectedNavigationIndex(const SessionID& window_id,
-                                  const SessionID& tab_id,
-                                  int index);
-
   // Sets the index of the selected tab in the specified window.
   void SetSelectedTabInWindow(const SessionID& window_id, int index);
-
-  // Sets the user agent override of the specified tab.
-  void SetTabUserAgentOverride(const SessionID& window_id,
-                               const SessionID& tab_id,
-                               const std::string& user_agent_override);
 
   // Sets the application extension id of the specified tab.
   void SetTabExtensionAppID(const SessionID& window_id,
@@ -228,12 +202,30 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   // done. If the callback is supplied an empty vector of SessionWindows
   // it means the session could not be restored.
   base::CancelableTaskTracker::TaskId GetLastSession(
-      const sessions::GetLastSessionCallback& callback,
+      sessions::GetLastSessionCallback callback,
       base::CancelableTaskTracker* tracker);
 
-  // BaseSessionServiceDelegate:
+  // CommandStorageManagerDelegate:
   bool ShouldUseDelayedSave() override;
   void OnWillSaveCommands() override;
+
+  // sessions::SessionTabHelperDelegate:
+  void SetTabUserAgentOverride(const SessionID& window_id,
+                               const SessionID& tab_id,
+                               const std::string& user_agent_override) override;
+  void SetSelectedNavigationIndex(const SessionID& window_id,
+                                  const SessionID& tab_id,
+                                  int index) override;
+  void UpdateTabNavigation(
+      const SessionID& window_id,
+      const SessionID& tab_id,
+      const sessions::SerializedNavigationEntry& navigation) override;
+  void TabNavigationPathPruned(const SessionID& window_id,
+                               const SessionID& tab_id,
+                               int index,
+                               int count) override;
+  void TabNavigationPathEntriesDeleted(const SessionID& window_id,
+                                       const SessionID& tab_id) override;
 
   // Vivaldi
   // Sets the ext data of the specified window.
@@ -282,7 +274,7 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
 
   // Converts |commands| to SessionWindows and notifies the callback.
   void OnGotSessionCommands(
-      const sessions::GetLastSessionCallback& callback,
+      sessions::GetLastSessionCallback callback,
       std::vector<std::unique_ptr<sessions::SessionCommand>> commands);
 
   // Adds commands to commands that will recreate the state of the specified
@@ -293,7 +285,7 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   void BuildCommandsForTab(const SessionID& window_id,
                            content::WebContents* tab,
                            int index_in_window,
-                           base::Optional<base::Token> group,
+                           base::Optional<tab_groups::TabGroupId> group,
                            bool is_pinned,
                            IdToRange* tab_to_available_range);
 
@@ -352,7 +344,7 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   void MaybeDeleteSessionOnlyData();
 
   // Unit test accessors.
-  sessions::BaseSessionService* GetBaseSessionServiceForTest();
+  sessions::CommandStorageManager* GetCommandStorageManagerForTest();
 
   void SetAvailableRangeForTest(const SessionID& tab_id,
                                 const std::pair<int, int>& range);
@@ -371,8 +363,8 @@ class SessionService : public sessions::BaseSessionServiceDelegate,
   // (which should only be used for testing).
   bool should_use_delayed_save_;
 
-  // The owned BaseSessionService.
-  std::unique_ptr<sessions::BaseSessionService> base_session_service_;
+  std::unique_ptr<sessions::SnapshottingCommandStorageManager>
+      command_storage_manager_;
 
   content::NotificationRegistrar registrar_;
 

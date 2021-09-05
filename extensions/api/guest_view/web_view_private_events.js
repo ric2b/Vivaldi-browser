@@ -8,7 +8,7 @@ var CreateEvent = require('guestViewEvents').CreateEvent;
 var EVENTS_PRIVATE = {
   'fullscreen': {
     evt: CreateEvent('webViewPrivate.onFullscreen'),
-    fields: ['enterFullscreen']
+    fields: ['windowId', 'enterFullscreen']
   },
   'sslstatechanged': {
     evt: CreateEvent('webViewPrivate.onSSLStateChanged'),
@@ -29,6 +29,10 @@ var EVENTS_PRIVATE = {
   'simpleAction': {
     evt: CreateEvent('webViewPrivate.onSimpleAction'),
     fields: ['command', 'text', 'url', 'modifiers']
+  },
+  'contentallowed': {
+    evt: CreateEvent('webViewPrivate.onContentAllowed'),
+    fields: ['allowedType']
   },
   'contentblocked': {
     evt: CreateEvent('webViewPrivate.onContentBlocked'),

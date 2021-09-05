@@ -44,15 +44,11 @@ class Page;
 class Settings;
 
 class InternalSettings final : public InternalSettingsGenerated,
-                               public Supplement<Page> {
+                               public InternalSettingsPageSupplementBase {
   USING_GARBAGE_COLLECTED_MIXIN(InternalSettings);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static const char kSupplementName[];
-
-  static void PrepareForLeakDetection();
-
   class Backup {
     DISALLOW_NEW();
 
@@ -68,7 +64,6 @@ class InternalSettings final : public InternalSettingsGenerated,
     float original_accessibility_font_scale_factor_;
     String original_media_type_override_;
     blink::mojom::DisplayMode original_display_mode_override_;
-    bool original_mock_scrollbars_enabled_;
     bool original_mock_gesture_tap_highlights_enabled_;
     bool lang_attribute_aware_form_control_ui_enabled_;
     bool images_enabled_;
@@ -111,7 +106,6 @@ class InternalSettings final : public InternalSettingsGenerated,
   void setImagesEnabled(bool, ExceptionState&);
   void setMediaTypeOverride(const String& media_type, ExceptionState&);
   void setDisplayModeOverride(const String& display_mode, ExceptionState&);
-  void setMockScrollbarsEnabled(bool, ExceptionState&);
   void setHideScrollbars(bool, ExceptionState&);
   void setMockGestureTapHighlightsEnabled(bool, ExceptionState&);
   void setTextAutosizingEnabled(bool, ExceptionState&);
@@ -137,7 +131,7 @@ class InternalSettings final : public InternalSettingsGenerated,
   void setImageAnimationPolicy(const String&, ExceptionState&);
   void setScrollTopLeftInteropEnabled(bool);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   void setAvailablePointerTypes(const String&, ExceptionState&);
   void setPrimaryPointerType(const String&, ExceptionState&);

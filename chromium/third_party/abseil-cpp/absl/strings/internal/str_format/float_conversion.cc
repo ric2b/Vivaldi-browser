@@ -9,6 +9,7 @@
 #include "absl/base/config.h"
 
 namespace absl {
+ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
 namespace {
@@ -27,12 +28,12 @@ bool FallbackToSnprintf(const Float v, const ConversionSpec &conv,
   {
     char *fp = fmt;
     *fp++ = '%';
-    fp = CopyStringTo(conv.flags().ToString(), fp);
+    fp = CopyStringTo(FormatConversionSpecImplFriend::FlagsToString(conv), fp);
     fp = CopyStringTo("*.*", fp);
     if (std::is_same<long double, Float>()) {
       *fp++ = 'L';
     }
-    *fp++ = conv.conv().Char();
+    *fp++ = FormatConversionCharToChar(conv.conversion_char());
     *fp = 0;
     assert(fp < fmt + sizeof(fmt));
   }
@@ -99,15 +100,19 @@ bool ConvertNonNumericFloats(char sign_char, Float v,
   char text[4], *ptr = text;
   if (sign_char) *ptr++ = sign_char;
   if (std::isnan(v)) {
-    ptr = std::copy_n(conv.conv().upper() ? "NAN" : "nan", 3, ptr);
+    ptr = std::copy_n(
+        FormatConversionCharIsUpper(conv.conversion_char()) ? "NAN" : "nan", 3,
+        ptr);
   } else if (std::isinf(v)) {
-    ptr = std::copy_n(conv.conv().upper() ? "INF" : "inf", 3, ptr);
+    ptr = std::copy_n(
+        FormatConversionCharIsUpper(conv.conversion_char()) ? "INF" : "inf", 3,
+        ptr);
   } else {
     return false;
   }
 
   return sink->PutPaddedString(string_view(text, ptr - text), conv.width(), -1,
-                               conv.flags().left);
+                               conv.has_left_flag());
 }
 
 // Round up the last digit of the value.
@@ -355,9 +360,9 @@ void WriteBufferToSink(char sign_char, string_view str,
                                        static_cast<int>(sign_char != 0),
                                    0)
                         : 0;
-  if (conv.flags().left) {
+  if (conv.has_left_flag()) {
     right_spaces = missing_chars;
-  } else if (conv.flags().zero) {
+  } else if (conv.has_zero_flag()) {
     zeros = missing_chars;
   } else {
     left_spaces = missing_chars;
@@ -379,9 +384,9 @@ bool FloatToSink(const Float v, const ConversionSpec &conv,
   if (std::signbit(abs_v)) {
     sign_char = '-';
     abs_v = -abs_v;
-  } else if (conv.flags().show_pos) {
+  } else if (conv.has_show_pos_flag()) {
     sign_char = '+';
-  } else if (conv.flags().sign_col) {
+  } else if (conv.has_sign_col_flag()) {
     sign_char = ' ';
   }
 
@@ -398,14 +403,14 @@ bool FloatToSink(const Float v, const ConversionSpec &conv,
 
   Buffer buffer;
 
-  switch (conv.conv().id()) {
+  switch (conv.conversion_char()) {
     case ConversionChar::f:
     case ConversionChar::F:
       if (!FloatToBuffer<FormatStyle::Fixed>(decomposed, precision, &buffer,
                                              nullptr)) {
         return FallbackToSnprintf(v, conv, sink);
       }
-      if (!conv.flags().alt && buffer.back() == '.') buffer.pop_back();
+      if (!conv.has_alt_flag() && buffer.back() == '.') buffer.pop_back();
       break;
 
     case ConversionChar::e:
@@ -414,8 +419,10 @@ bool FloatToSink(const Float v, const ConversionSpec &conv,
                                                  &exp)) {
         return FallbackToSnprintf(v, conv, sink);
       }
-      if (!conv.flags().alt && buffer.back() == '.') buffer.pop_back();
-      PrintExponent(exp, conv.conv().upper() ? 'E' : 'e', &buffer);
+      if (!conv.has_alt_flag() && buffer.back() == '.') buffer.pop_back();
+      PrintExponent(
+          exp, FormatConversionCharIsUpper(conv.conversion_char()) ? 'E' : 'e',
+          &buffer);
       break;
 
     case ConversionChar::g:
@@ -442,11 +449,16 @@ bool FloatToSink(const Float v, const ConversionSpec &conv,
         }
         exp = 0;
       }
-      if (!conv.flags().alt) {
+      if (!conv.has_alt_flag()) {
         while (buffer.back() == '0') buffer.pop_back();
         if (buffer.back() == '.') buffer.pop_back();
       }
-      if (exp) PrintExponent(exp, conv.conv().upper() ? 'E' : 'e', &buffer);
+      if (exp) {
+        PrintExponent(
+            exp,
+            FormatConversionCharIsUpper(conv.conversion_char()) ? 'E' : 'e',
+            &buffer);
+      }
       break;
 
     case ConversionChar::a:
@@ -482,4 +494,5 @@ bool ConvertFloatImpl(double v, const ConversionSpec &conv,
 }
 
 }  // namespace str_format_internal
+ABSL_NAMESPACE_END
 }  // namespace absl

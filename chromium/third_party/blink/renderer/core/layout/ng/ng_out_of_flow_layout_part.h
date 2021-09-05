@@ -122,7 +122,7 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
       NGBlockNode node,
       const LogicalSize& container_content_size_in_child_writing_mode,
       const base::Optional<LayoutUnit>& block_estimate,
-      const NGLogicalOutOfFlowPosition& node_position);
+      const NGLogicalOutOfFlowDimensions& node_dimensions);
 
   const NGConstraintSpace& container_space_;
   NGBoxFragmentBuilder* container_builder_;
@@ -131,6 +131,7 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
   const WritingMode writing_mode_;
   bool is_absolute_container_;
   bool is_fixed_container_;
+  bool allow_first_tier_oof_cache_;
 };
 
 }  // namespace blink

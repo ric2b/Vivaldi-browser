@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/statistics_recorder.h"
@@ -41,7 +42,7 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
-#include "content/public/test/url_loader_interceptor.h"
+#include "content/public/test/url_loader_monitor.h"
 #include "net/base/escape.h"
 #include "net/base/features.h"
 #include "net/base/load_flags.h"
@@ -76,6 +77,7 @@ const char k302RedirectPage[] = "/prerender/302_redirect.html";
 const char kPrefetchAppcache[] = "/prerender/prefetch_appcache.html";
 const char kPrefetchAppcacheManifest[] = "/prerender/appcache.manifest";
 const char kPrefetchCookiePage[] = "/prerender/cookie.html";
+const char kPrefetchFromSubframe[] = "/prerender/prefetch_from_subframe.html";
 const char kPrefetchImagePage[] = "/prerender/prefetch_image.html";
 const char kPrefetchJpeg[] = "/prerender/image.jpeg";
 const char kPrefetchLoaderPath[] = "/prerender/prefetch_loader.html";
@@ -280,7 +282,7 @@ IN_PROC_BROWSER_TEST_P(
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     NoStatePrefetchBrowserTestHttpCache_DefaultAndAppendFrameOrigin,
     ::testing::Combine(::testing::Values(true), ::testing::Bool()));
 
@@ -359,7 +361,7 @@ IN_PROC_BROWSER_TEST_P(
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     NoStatePrefetchBrowserTestHttpCache_DefaultAndDoubleKeyedHttpCache,
     ::testing::Combine(::testing::Bool(), ::testing::Values(false)));
 
@@ -480,6 +482,45 @@ IN_PROC_BROWSER_TEST_F(HTMLCSSSyncScriptNoStatePrefetchBrowserTest,
   WaitForRequestCount(src_server()->GetURL(kPrefetchPng), 0);
   WaitForRequestCount(src_server()->GetURL(kPrefetchCss), 1);
   WaitForRequestCount(src_server()->GetURL(kPrefetchFont), 0);
+}
+
+// Test and Test Class for lightweight prefetch under the
+// HTML+CSS+SyncScript+Font configuration.
+class HTMLCSSSyncScriptFontNoStatePrefetchBrowserTest
+    : public NoStatePrefetchBrowserTest {
+ public:
+  void SetUp() override {
+    std::map<std::string, std::string> parameters;
+    parameters["skip_other"] = "true";
+    parameters["skip_async_script"] = "true";
+    feature_list_.InitWithFeaturesAndParameters(
+        {{blink::features::kLightweightNoStatePrefetch, parameters}}, {});
+    fonts_feature_list_.InitAndEnableFeature(
+        blink::features::kLightweightNoStatePrefetch_FetchFonts);
+    NoStatePrefetchBrowserTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+  base::test::ScopedFeatureList fonts_feature_list_;
+};
+
+// Checks that the expected resource types are fetched via NoState Prefetch.
+IN_PROC_BROWSER_TEST_F(HTMLCSSSyncScriptFontNoStatePrefetchBrowserTest,
+                       PrefetchHTMLCSSSyncScript) {
+  std::unique_ptr<TestPrerender> test_prerender =
+      PrefetchFromFile(kPrefetchPageMultipleResourceTypes,
+                       FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+
+  // Verify that the page load did not happen.
+  test_prerender->WaitForLoads(0);
+  WaitForRequestCount(src_server()->GetURL(kPrefetchPageMultipleResourceTypes),
+                      1);
+  WaitForRequestCount(src_server()->GetURL(kPrefetchScript), 1);
+  WaitForRequestCount(src_server()->GetURL(kPrefetchScript2), 0);
+  WaitForRequestCount(src_server()->GetURL(kPrefetchPng), 0);
+  WaitForRequestCount(src_server()->GetURL(kPrefetchCss), 1);
+  WaitForRequestCount(src_server()->GetURL(kPrefetchFont), 1);
 }
 
 // Test and Test Class for lightweight prefetch under the HTML+CSS+Script
@@ -641,16 +682,7 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchLoadFlag) {
   GURL prefetch_page = src_server()->GetURL(kPrefetchPage);
   GURL prefetch_script = src_server()->GetURL(kPrefetchScript);
 
-  content::URLLoaderInterceptor interceptor(base::BindRepeating(
-      [](const GURL& prefetch_page, const GURL& prefetch_script,
-         content::URLLoaderInterceptor::RequestParams* params) {
-        if (params->url_request.url == prefetch_page ||
-            params->url_request.url == prefetch_script) {
-          EXPECT_TRUE(params->url_request.load_flags & net::LOAD_PREFETCH);
-        }
-        return false;
-      },
-      prefetch_page, prefetch_script));
+  content::URLLoaderMonitor monitor({prefetch_page, prefetch_script});
 
   std::unique_ptr<TestPrerender> test_prerender =
       PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
@@ -659,6 +691,14 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchLoadFlag) {
 
   // Verify that the page load did not happen.
   test_prerender->WaitForLoads(0);
+  monitor.WaitForUrls();
+
+  base::Optional<network::ResourceRequest> page_request =
+      monitor.GetRequestInfo(prefetch_page);
+  EXPECT_TRUE(page_request->load_flags & net::LOAD_PREFETCH);
+  base::Optional<network::ResourceRequest> script_request =
+      monitor.GetRequestInfo(prefetch_script);
+  EXPECT_TRUE(script_request->load_flags & net::LOAD_PREFETCH);
 }
 
 // Check that prefetched resources and subresources set the 'Purpose: prefetch'
@@ -667,29 +707,25 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PurposeHeaderIsSet) {
   GURL prefetch_page = src_server()->GetURL(kPrefetchPage);
   GURL prefetch_script = src_server()->GetURL(kPrefetchScript);
 
-  content::URLLoaderInterceptor interceptor(base::BindRepeating(
-      [](const GURL& prefetch_page, const GURL& prefetch_script,
-         content::URLLoaderInterceptor::RequestParams* params) {
-        if (params->url_request.url == prefetch_page ||
-            params->url_request.url == prefetch_script) {
-          EXPECT_TRUE(params->url_request.load_flags & net::LOAD_PREFETCH);
-          EXPECT_FALSE(params->url_request.headers.HasHeader(
-              kExpectedPurposeHeaderOnPrefetch));
-          EXPECT_TRUE(params->url_request.cors_exempt_headers.HasHeader(
-              kExpectedPurposeHeaderOnPrefetch));
-          std::string purpose_header;
-          params->url_request.cors_exempt_headers.GetHeader(
-              kExpectedPurposeHeaderOnPrefetch, &purpose_header);
-          EXPECT_EQ("prefetch", purpose_header);
-        }
-        return false;
-      },
-      prefetch_page, prefetch_script));
+  content::URLLoaderMonitor monitor({prefetch_page, prefetch_script});
 
   std::unique_ptr<TestPrerender> test_prerender =
       PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
   WaitForRequestCount(prefetch_page, 1);
   WaitForRequestCount(prefetch_script, 1);
+  monitor.WaitForUrls();
+  for (const GURL& url : {prefetch_page, prefetch_script}) {
+    base::Optional<network::ResourceRequest> request =
+        monitor.GetRequestInfo(url);
+    EXPECT_TRUE(request->load_flags & net::LOAD_PREFETCH);
+    EXPECT_FALSE(request->headers.HasHeader(kExpectedPurposeHeaderOnPrefetch));
+    EXPECT_TRUE(request->cors_exempt_headers.HasHeader(
+        kExpectedPurposeHeaderOnPrefetch));
+    std::string purpose_header;
+    request->cors_exempt_headers.GetHeader(kExpectedPurposeHeaderOnPrefetch,
+                                           &purpose_header);
+    EXPECT_EQ("prefetch", purpose_header);
+  }
 }
 
 // Check that on normal navigations the 'Purpose: prefetch' header is not set.
@@ -699,30 +735,25 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
   GURL prefetch_script = src_server()->GetURL(kPrefetchScript);
   GURL prefetch_script2 = src_server()->GetURL(kPrefetchScript2);
 
-  content::URLLoaderInterceptor interceptor(base::BindRepeating(
-      [](const GURL& prefetch_page, const GURL& prefetch_script,
-         const GURL& prefetch_script2,
-         content::URLLoaderInterceptor::RequestParams* params) {
-        if (params->url_request.url == prefetch_page ||
-            params->url_request.url == prefetch_script ||
-            params->url_request.url == prefetch_script2) {
-          EXPECT_FALSE(params->url_request.load_flags & net::LOAD_PREFETCH);
-          EXPECT_FALSE(params->url_request.headers.HasHeader(
-              kExpectedPurposeHeaderOnPrefetch));
-          EXPECT_FALSE(params->url_request.cors_exempt_headers.HasHeader(
-              kExpectedPurposeHeaderOnPrefetch));
-        }
-        return false;
-      },
-      prefetch_page, prefetch_script, prefetch_script2));
+  content::URLLoaderMonitor monitor(
+      {prefetch_page, prefetch_script, prefetch_script2});
 
   ui_test_utils::NavigateToURL(current_browser(), prefetch_page);
   WaitForRequestCount(prefetch_page, 1);
   WaitForRequestCount(prefetch_script, 1);
   WaitForRequestCount(prefetch_script2, 1);
+  monitor.WaitForUrls();
+  for (const GURL& url : {prefetch_page, prefetch_script, prefetch_script2}) {
+    base::Optional<network::ResourceRequest> request =
+        monitor.GetRequestInfo(url);
+    EXPECT_FALSE(request->load_flags & net::LOAD_PREFETCH);
+    EXPECT_FALSE(request->headers.HasHeader(kExpectedPurposeHeaderOnPrefetch));
+    EXPECT_FALSE(request->cors_exempt_headers.HasHeader(
+        kExpectedPurposeHeaderOnPrefetch));
+  }
 }
 
-// Check that a prefetch followed by a load produces the approriate
+// Check that a prefetch followed by a load produces the appropriate
 // histograms. Note that other histogram testing is done in
 // browser/page_load_metrics, in particular, testing the combinations of
 // Warm/Cold and Cacheable/NoCacheable.
@@ -760,6 +791,31 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchCrossDomain) {
       "http://%s:%d%s", secondary_domain.c_str(),
       embedded_test_server()->host_port_pair().port(), kPrefetchPage));
   PrefetchFromURL(cross_domain_url, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+  WaitForRequestCount(src_server()->GetURL(kPrefetchPage), 1);
+}
+
+// Checks that prefetching from a cross-domain subframe works correctly.
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
+                       PrefetchFromCrossDomainSubframe) {
+  const std::string secondary_domain = "www.foo.com";
+
+  GURL target_url(base::StringPrintf(
+      "http://%s:%d%s", secondary_domain.c_str(),
+      embedded_test_server()->host_port_pair().port(), kPrefetchPage));
+
+  GURL inner_frame_url = ServeLoaderURLWithHostname(
+      kPrefetchLoaderPath, "REPLACE_WITH_PREFETCH_URL", target_url, "",
+      secondary_domain);
+
+  GURL outer_frame_url = ServeLoaderURL(
+      kPrefetchFromSubframe, "REPLACE_WITH_SUBFRAME_URL", inner_frame_url, "");
+
+  std::vector<FinalStatus> expected_final_status_queue(
+      1, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+  std::vector<std::unique_ptr<TestPrerender>> prerenders =
+      NavigateWithPrerenders(outer_frame_url, expected_final_status_queue);
+  prerenders[0]->WaitForStop();
+
   WaitForRequestCount(src_server()->GetURL(kPrefetchPage), 1);
 }
 
@@ -881,18 +937,16 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, Prefetch301LoadFlags) {
   std::string redirect_path = CreateServerRedirect(kPrefetchPage);
   GURL redirect_url = src_server()->GetURL(redirect_path);
   GURL page_url = src_server()->GetURL(kPrefetchPage);
-  content::URLLoaderInterceptor interceptor(base::BindRepeating(
-      [](const GURL& page_url,
-         content::URLLoaderInterceptor::RequestParams* params) {
-        if (params->url_request.url == page_url)
-          EXPECT_TRUE(params->url_request.load_flags & net::LOAD_PREFETCH);
-        return false;
-      },
-      redirect_url));
+  content::URLLoaderMonitor monitor({redirect_url});
 
   PrefetchFromFile(redirect_path, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
   WaitForRequestCount(redirect_url, 1);
   WaitForRequestCount(page_url, 1);
+  monitor.WaitForUrls();
+
+  base::Optional<network::ResourceRequest> request =
+      monitor.GetRequestInfo(redirect_url);
+  EXPECT_TRUE(request->load_flags & net::LOAD_PREFETCH);
 }
 
 // Checks that a subresource 301 redirect is followed.
@@ -1125,22 +1179,22 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, IssuesIdlePriorityRequests) {
   // priority state, a high-priority request with the same URL from a foreground
   // navigation hits the server.
   GURL script_url = src_server()->GetURL(kPrefetchScript);
-  content::URLLoaderInterceptor interceptor(base::BindLambdaForTesting(
-      [=](content::URLLoaderInterceptor::RequestParams* params) {
-#if defined(OS_ANDROID)
-        // On Android requests from prerenders do not get downgraded
-        // priority. See: https://crbug.com/652746.
-        constexpr net::RequestPriority kExpectedPriority = net::HIGHEST;
-#else
-        constexpr net::RequestPriority kExpectedPriority = net::IDLE;
-#endif
-        if (params->url_request.url == script_url)
-          EXPECT_EQ(kExpectedPriority, params->url_request.priority);
-        return false;
-      }));
+  content::URLLoaderMonitor monitor({script_url});
 
   PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
   WaitForRequestCount(script_url, 1);
+  monitor.WaitForUrls();
+
+#if defined(OS_ANDROID)
+  // On Android requests from prerenders do not get downgraded
+  // priority. See: https://crbug.com/652746.
+  constexpr net::RequestPriority kExpectedPriority = net::HIGHEST;
+#else
+  constexpr net::RequestPriority kExpectedPriority = net::IDLE;
+#endif
+  base::Optional<network::ResourceRequest> request =
+      monitor.GetRequestInfo(script_url);
+  EXPECT_EQ(kExpectedPriority, request->priority);
 }
 
 // Checks that a registered ServiceWorker (SW) that is not currently running
@@ -1178,7 +1232,7 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, ServiceWorkerIntercept) {
   ui_test_utils::NavigateToURLWithDisposition(
       current_browser(), GURL(url::kAboutBlankURL),
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   // The SW intercepts kPrefetchPage and replaces it with a body that contains
   // an <img> tage for kPrefetchPng. This verifies that the SW ran correctly by

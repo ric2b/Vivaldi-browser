@@ -4,11 +4,12 @@
 
 #include "ui/base/mojom/cursor_mojom_traits.h"
 
-#include "mojo/public/cpp/bindings/binding_set.h"
 #include "skia/public/mojom/bitmap_skbitmap_mojom_traits.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/base/cursor/cursor_lookup.h"
 #include "ui/base/mojom/cursor.mojom.h"
+#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 #include "ui/gfx/skia_util.h"
 
@@ -26,20 +27,20 @@ using CursorStructTraitsTest = testing::Test;
 
 // Test that basic cursor structs are passed correctly across the wire.
 TEST_F(CursorStructTraitsTest, TestBuiltIn) {
-  for (int i = 0; i < static_cast<int>(ui::CursorType::kCustom); ++i) {
-    ui::CursorType type = static_cast<ui::CursorType>(i);
+  for (int i = 0; i < static_cast<int>(ui::mojom::CursorType::kCustom); ++i) {
+    ui::mojom::CursorType type = static_cast<ui::mojom::CursorType>(i);
     ui::Cursor input(type);
-    input.set_device_scale_factor(1);
+    input.set_image_scale_factor(1);
 
     ui::Cursor output;
     ASSERT_TRUE(EchoCursor(input, &output));
-    EXPECT_EQ(type, output.native_type());
+    EXPECT_EQ(type, output.type());
   }
 }
 
 // Test that cursor bitmaps and metadata are passed correctly across the wire.
 TEST_F(CursorStructTraitsTest, TestBitmapCursor) {
-  ui::Cursor input(ui::CursorType::kCustom);
+  ui::Cursor input(ui::mojom::CursorType::kCustom);
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(10, 10);
@@ -50,25 +51,26 @@ TEST_F(CursorStructTraitsTest, TestBitmapCursor) {
   input.set_custom_bitmap(bitmap);
 
   const float kScale = 2.0f;
-  input.set_device_scale_factor(kScale);
+  input.set_image_scale_factor(kScale);
 
   ui::Cursor output;
   EXPECT_TRUE(EchoCursor(input, &output));
   EXPECT_EQ(input, output);
 
-  EXPECT_EQ(ui::CursorType::kCustom, output.native_type());
-  EXPECT_EQ(kScale, output.device_scale_factor());
-  EXPECT_EQ(kHotspot, output.GetHotspot());
+  EXPECT_EQ(ui::mojom::CursorType::kCustom, output.type());
+  EXPECT_EQ(kScale, output.image_scale_factor());
+  EXPECT_EQ(kHotspot, GetCursorHotspot(output));
 
   // Even though the pixel data is the same, the bitmap generation ids differ.
-  EXPECT_TRUE(gfx::BitmapsAreEqual(input.GetBitmap(), output.GetBitmap()));
-  EXPECT_NE(input.GetBitmap().getGenerationID(),
-            output.GetBitmap().getGenerationID());
+  EXPECT_TRUE(
+      gfx::BitmapsAreEqual(GetCursorBitmap(input), GetCursorBitmap(output)));
+  EXPECT_NE(GetCursorBitmap(input).getGenerationID(),
+            GetCursorBitmap(output).getGenerationID());
 
   // Make a copy of output; the bitmap generation ids should be the same.
   ui::Cursor copy = output;
-  EXPECT_EQ(output.GetBitmap().getGenerationID(),
-            copy.GetBitmap().getGenerationID());
+  EXPECT_EQ(GetCursorBitmap(output).getGenerationID(),
+            GetCursorBitmap(copy).getGenerationID());
   EXPECT_EQ(input, output);
 }
 
@@ -78,27 +80,27 @@ TEST_F(CursorStructTraitsTest, TestEmptyCursor) {
   const gfx::Point kHotspot = gfx::Point(5, 2);
   const float kScale = 2.0f;
 
-  ui::Cursor input(ui::CursorType::kCustom);
+  ui::Cursor input(ui::mojom::CursorType::kCustom);
   input.set_custom_hotspot(kHotspot);
   input.set_custom_bitmap(SkBitmap());
-  input.set_device_scale_factor(kScale);
+  input.set_image_scale_factor(kScale);
 
   ui::Cursor output;
   ASSERT_TRUE(EchoCursor(input, &output));
 
-  EXPECT_TRUE(output.GetBitmap().empty());
+  EXPECT_TRUE(GetCursorBitmap(output).empty());
 }
 
 // Test that various device scale factors are passed correctly over the wire.
 TEST_F(CursorStructTraitsTest, TestDeviceScaleFactors) {
-  ui::Cursor input(ui::CursorType::kCustom);
+  ui::Cursor input(ui::mojom::CursorType::kCustom);
   ui::Cursor output;
 
   for (auto scale : {0.f, 0.525f, 0.75f, 0.9f, 1.f, 2.1f, 2.5f, 3.f, 10.f}) {
     SCOPED_TRACE(testing::Message() << " scale: " << scale);
-    input.set_device_scale_factor(scale);
+    input.set_image_scale_factor(scale);
     EXPECT_TRUE(EchoCursor(input, &output));
-    EXPECT_EQ(scale, output.device_scale_factor());
+    EXPECT_EQ(scale, output.image_scale_factor());
   }
 }
 

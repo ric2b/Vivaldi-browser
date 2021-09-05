@@ -38,13 +38,12 @@
 #include "cc/layers/texture_layer_client.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "gpu/GLES2/gl2extchromium.h"
-#include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/client/raster_interface.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/geometry/int_size.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_color_params.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_host.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
-#include "third_party/blink/renderer/platform/graphics/paint/paint_recorder.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
@@ -99,7 +98,8 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
       override;
 
   void FinalizeFrame();
-  void SetIsHidden(bool);
+  void SetIsInHiddenPage(bool);
+  void SetIsBeingDisplayed(bool);
   void DidDraw(const FloatRect&);
   void DoPaintInvalidation(const FloatRect& dirty_rect);
   cc::Layer* Layer();
@@ -112,7 +112,8 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   virtual void DidRestoreCanvasMatrixClipStack(cc::PaintCanvas*) {}
   virtual bool IsAccelerated() const;
 
-  cc::PaintCanvas* DrawingCanvas();
+  // This may recreate CanvasResourceProvider
+  cc::PaintCanvas* GetPaintCanvas();
   bool IsValid();
   bool WritePixels(const SkImageInfo&,
                    const void* pixels,
@@ -122,9 +123,7 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   void DontUseIdleSchedulingForTesting() {
     dont_use_idle_scheduling_for_testing_ = true;
   }
-  void SetCanvasResourceHost(CanvasResourceHost* host) {
-    resource_host_ = host;
-  }
+  void SetCanvasResourceHost(CanvasResourceHost* host);
 
   void Hibernate();
   bool IsHibernating() const { return hibernation_image_ != nullptr; }
@@ -170,12 +169,15 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   CanvasResourceProvider* ResourceProvider() const;
   void FlushRecording();
 
-  sk_sp<cc::PaintRecord> getLastRecord() { return last_recording_; }
+  sk_sp<cc::PaintRecord> getLastRecord() {
+    return last_record_tainted_by_write_pixels_ ? nullptr : last_recording_;
+  }
 
   // This is called when the Canvas element has cleared the frame, so the 2D
   // bridge knows that there's no previous content on the resource.
   void ClearFrame() { clear_frame_ = true; }
-  bool IsDeferralEnabled() const { return is_deferral_enabled_; }
+
+  bool HasRateLimiterForTesting();
 
  private:
   friend class Canvas2DLayerBridgeTest;
@@ -186,12 +188,11 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   bool CheckResourceProviderValid();
   void ResetResourceProvider();
 
-  void StartRecording();
   void SkipQueuedDrawCommands();
+  void EnsureCleared();
 
   bool ShouldAccelerate(AccelerationHint) const;
 
-  std::unique_ptr<PaintRecorder> recorder_;
   sk_sp<SkImage> hibernation_image_;
   scoped_refptr<cc::TextureLayer> layer_;
   std::unique_ptr<SharedContextRateLimiter> rate_limiter_;
@@ -199,12 +200,16 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   int frames_since_last_commit_ = 0;
   bool have_recorded_draw_commands_;
   bool is_hidden_;
-  bool is_deferral_enabled_;
+  bool is_being_displayed_;
   bool software_rendering_while_hidden_;
   bool hibernation_scheduled_ = false;
   bool dont_use_idle_scheduling_for_testing_ = false;
   bool context_lost_ = false;
   bool clear_frame_ = true;
+
+  // WritePixels content is not saved in recording. If a call was made to
+  // WritePixels, the recording is now missing that information.
+  bool last_record_tainted_by_write_pixels_ = false;
 
   const AccelerationMode acceleration_mode_;
   const CanvasColorParams color_params_;
@@ -217,7 +222,7 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   mutable SnapshotState snapshot_state_;
 
   void ClearPendingRasterTimers();
-  void FinishRasterTimers(gpu::gles2::GLES2Interface*);
+  void FinishRasterTimers(gpu::raster::RasterInterface*);
   struct RasterTimer {
     // The id for querying the duration of the gpu-side of the draw
     GLuint gl_query_id = 0u;
@@ -238,6 +243,10 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   Deque<RasterTimer> pending_raster_timers_;
 
   sk_sp<cc::PaintRecord> last_recording_;
+
+  // This tracks whether the canvas has been cleared once after
+  // this bridge was created.
+  bool cleared_ = false;
 
   base::WeakPtrFactory<Canvas2DLayerBridge> weak_ptr_factory_{this};
 

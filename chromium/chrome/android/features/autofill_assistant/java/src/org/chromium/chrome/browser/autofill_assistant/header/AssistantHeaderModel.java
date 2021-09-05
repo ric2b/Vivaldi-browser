@@ -4,7 +4,8 @@
 
 package org.chromium.chrome.browser.autofill_assistant.header;
 
-import org.chromium.base.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.browser.autofill_assistant.carousel.AssistantChip;
@@ -40,9 +41,13 @@ public class AssistantHeaderModel extends PropertyModel {
 
     public static final WritableBooleanPropertyKey CHIP_VISIBLE = new WritableBooleanPropertyKey();
 
+    @VisibleForTesting
+    public static final WritableBooleanPropertyKey DISABLE_ANIMATIONS_FOR_TESTING =
+            new WritableBooleanPropertyKey();
+
     public AssistantHeaderModel() {
         super(STATUS_MESSAGE, BUBBLE_MESSAGE, PROGRESS, PROGRESS_VISIBLE, SPIN_POODLE,
-                FEEDBACK_BUTTON_CALLBACK, CHIP, CHIP_VISIBLE);
+                FEEDBACK_BUTTON_CALLBACK, CHIP, CHIP_VISIBLE, DISABLE_ANIMATIONS_FOR_TESTING);
     }
 
     @CalledByNative
@@ -73,5 +78,10 @@ public class AssistantHeaderModel extends PropertyModel {
     @CalledByNative
     private void setDelegate(AssistantHeaderDelegate delegate) {
         set(FEEDBACK_BUTTON_CALLBACK, delegate::onFeedbackButtonClicked);
+    }
+
+    @CalledByNative
+    private void setDisableAnimations(boolean disableAnimations) {
+        set(DISABLE_ANIMATIONS_FOR_TESTING, disableAnimations);
     }
 }

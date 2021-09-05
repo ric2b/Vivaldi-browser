@@ -26,6 +26,7 @@
 #include "chrome/common/net/x509_certificate_model_nss.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/web_contents.h"
 #include "net/cert/x509_util_nss.h"
@@ -278,9 +279,7 @@ std::string CertificateViewerDialog::GetDialogArgs() const {
   return data;
 }
 
-void CertificateViewerDialog::OnDialogShown(
-    content::WebUI* webui,
-    content::RenderViewHost* render_view_host) {
+void CertificateViewerDialog::OnDialogShown(content::WebUI* webui) {
   webui_ = webui;
 }
 

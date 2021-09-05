@@ -194,7 +194,7 @@ std::pair<FileCreationInfo, int64_t> CreateFileAndWriteItems(
     DiskSpaceFuncPtr disk_space_function,
     const FilePath& file_path,
     scoped_refptr<base::TaskRunner> file_task_runner,
-    std::vector<base::span<const char>> data,
+    std::vector<base::span<const uint8_t>> data,
     size_t total_size_bytes) {
   DCHECK_NE(0u, total_size_bytes);
   UMA_HISTOGRAM_MEMORY_KB("Storage.Blob.PageFileSize", total_size_bytes / 1024);
@@ -234,9 +234,9 @@ std::pair<FileCreationInfo, int64_t> CreateFileAndWriteItems(
     size_t length = item.size();
     size_t bytes_left = length;
     while (bytes_left > 0) {
-      bytes_written =
-          file.WriteAtCurrentPos(item.data() + (length - bytes_left),
-                                 base::saturated_cast<int>(bytes_left));
+      bytes_written = file.WriteAtCurrentPos(
+          reinterpret_cast<const char*>(item.data() + (length - bytes_left)),
+          base::saturated_cast<int>(bytes_left));
       if (bytes_written < 0)
         break;
       DCHECK_LE(static_cast<size_t>(bytes_written), bytes_left);
@@ -939,7 +939,7 @@ void BlobMemoryController::MaybeScheduleEvictionUntilSystemHealthy(
     if (total_items_size == 0)
       break;
 
-    std::vector<base::span<const char>> data_for_paging;
+    std::vector<base::span<const uint8_t>> data_for_paging;
     for (auto& shared_blob_item : items_to_swap) {
       items_paging_to_file_.insert(shared_blob_item->item_id());
       data_for_paging.push_back(shared_blob_item->item()->bytes());
@@ -1039,6 +1039,13 @@ void BlobMemoryController::OnEvictionComplete(
 
 void BlobMemoryController::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
+  // TODO(sebmarchand): Check if MEMORY_PRESSURE_LEVEL_MODERATE should also be
+  // ignored.
+  if (memory_pressure_level ==
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE) {
+    return;
+  }
+
   auto time_from_last_evicion = base::TimeTicks::Now() - last_eviction_time_;
   if (last_eviction_time_ != base::TimeTicks() &&
       time_from_last_evicion.InSeconds() < kMinSecondsForPressureEvictions) {

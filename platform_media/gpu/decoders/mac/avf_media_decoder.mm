@@ -16,23 +16,21 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
-#include "platform_media/gpu/decoders/mac/avf_audio_tap.h"
-#import "platform_media/gpu/decoders/mac/data_source_loader.h"
+#include "common/platform_media_pipeline_types.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/data_buffer.h"
-#include "platform_media/common/mac/framework_type_conversions.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
-#include "platform_media/common/mac/platform_media_pipeline_types_mac.h"
 #include "net/base/mime_util.h"
+
+#import "platform_media/gpu/decoders/mac/data_source_loader.h"
+#include "platform_media/gpu/decoders/mac/avf_audio_tap.h"
+#include "platform_media/common/mac/framework_type_conversions.h"
+#include "platform_media/common/mac/platform_media_pipeline_types_mac.h"
 
 namespace {
 typedef base::Callback<void(base::scoped_nsobject<id>)> PlayerObserverCallback;
 }  // namespace
-
-@interface AVURLAsset (MavericksSDK)
-@property(nonatomic, readonly) AVAssetResourceLoader* resourceLoader;
-@end
 
 @interface PlayerObserver : NSObject {
  @private
@@ -116,7 +114,7 @@ class BackgroundThread {
     return instance;
   }
 
-  scoped_refptr<base::TaskRunner> task_runner() const {
+  scoped_refptr<base::SequencedTaskRunner> task_runner() const {
     return thread_.task_runner();
   }
 
@@ -152,7 +150,7 @@ scoped_refptr<DataBuffer> GetVideoFrame(
     VLOG(3) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " No pixel buffer available for time "
             << CMTimeToTimeDelta(timestamp).InMicroseconds();
-    return NULL;
+    return nullptr;
   }
 
   DCHECK_EQ(CVPixelBufferGetPlaneCount(pixel_buffer), 3u);
@@ -320,33 +318,15 @@ AVFMediaDecoder::~AVFMediaDecoder() {
   [data_source_loader_ stop];
 }
 
-void AVFMediaDecoder::Initialize(media::DataSource* data_source,
-                                 const std::string& mime_type,
-                                 const ResultCB& initialize_cb) {
+void AVFMediaDecoder::Initialize(ipc_data_source::Reader source_reader,
+                                 ipc_data_source::Info source_info,
+                                 ResultCB initialize_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   data_source_loader_.reset([[DataSourceLoader alloc]
-      initWithDataSource:data_source
-            withMIMEType:base::SysUTF8ToNSString(mime_type)]);
-
-  // Use a "custom" URL scheme to force AVURLAsset to ask our instance of
-  // AVAssetResourceLoaderDelegate for data.  This way, we make sure all data
-  // is fetched through Chrome's network stack rather than by AVURLAsset
-  // directly.
-  // AVPlayer does not play some links (without extension, with query or
-  // containing some characters like ';'). To avoid all future problems with
-  // invalid URL, file name set in AVURLAsset is constant.
-  //
-  // This technique is also described here:
-  // http://vombat.tumblr.com/post/86294492874/caching-audio-streamed-using-avplayer
-  AVURLAsset* url_asset = [AVURLAsset
-      assetWithURL:[NSURL URLWithString:@"opop://media_file.mp4"]];
-  base::scoped_nsobject<AVAsset> asset([url_asset retain]);
-
-  // Set our DataSourceLoader as a Proxy between the IPCDataSource and the
-  // AVURLAsset
-  [[url_asset resourceLoader] setDelegate:data_source_loader_
-                                    queue:[data_source_loader_ dispatchQueue]];
+      initWithDataSource:std::move(source_reader)
+          withSourceInfo:std::move(source_info)
+       withDispatchQueue:dispatch_get_main_queue()]);
 
   base::scoped_nsobject<NSArray> asset_keys_to_load_and_test(
       [[NSArray arrayWithObjects:@"playable",
@@ -357,12 +337,14 @@ void AVFMediaDecoder::Initialize(media::DataSource* data_source,
   const base::Closure asset_keys_loaded_cb =
       BindToCurrentLoop(base::Bind(&AVFMediaDecoder::AssetKeysLoaded,
                                           weak_ptr_factory_.GetWeakPtr(),
-                                          initialize_cb,
-                                          asset,
+                                          std::move(initialize_cb),
                                           asset_keys_to_load_and_test));
 
-  [url_asset loadValuesAsynchronouslyForKeys:asset_keys_to_load_and_test
-                           completionHandler:^{ asset_keys_loaded_cb.Run(); }];
+  [[data_source_loader_ asset]
+      loadValuesAsynchronouslyForKeys:asset_keys_to_load_and_test
+                    completionHandler:^{
+                      asset_keys_loaded_cb.Run();
+                    }];
 }
 
 void AVFMediaDecoder::Seek(const base::TimeDelta& time,
@@ -403,8 +385,8 @@ void AVFMediaDecoder::NotifyStreamCapacityDepleted() {
     return;
 
   if (seeking_) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Ignoring stream capacity depletion while seeking";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " Ignoring stream capacity depletion while seeking";
     return;
   }
 
@@ -429,13 +411,14 @@ base::TimeDelta AVFMediaDecoder::start_time() const {
 }
 
 void AVFMediaDecoder::AssetKeysLoaded(const ResultCB& initialize_cb,
-                                      base::scoped_nsobject<AVAsset> asset,
                                       base::scoped_nsobject<NSArray> keys) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // First test whether the values of each of the keys we need have been
   // successfully loaded.
+
+  AVAsset* asset = [data_source_loader_ asset];
   for (NSString* key in keys.get()) {
     NSError* error = nil;
     if ([asset statusOfValueForKey:key error:&error] !=
@@ -655,27 +638,27 @@ void AVFMediaDecoder::PlayWhenReady(base::StringPiece reason) {
     return;
 
   if (playback_state_ == PLAYING || playback_state_ == STARTING) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Giving up on playing AVPlayer when '" << reason
-                 << ", because already playing/starting to play";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " Giving up on playing AVPlayer when '" << reason
+            << ", because already playing/starting to play";
     return;
   }
 
   if (stream_has_ended_) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Giving up on playing AVPlayer when '" << reason
-                 << "', because the stream has ended";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " Giving up on playing AVPlayer when '" << reason
+            << "', because the stream has ended";
     return;
   }
 
   base::PostTaskAndReplyWithResult(
       background_runner().get(),
       FROM_HERE,
-      base::Bind(&IsPlayerLikelyToStall,
+      base::BindOnce(&IsPlayerLikelyToStall,
                  background_tasks_canceled_,
                  [player_ currentItem],
                  min_loaded_range_size_),
-      base::Bind(&AVFMediaDecoder::PlayIfNotLikelyToStall,
+      base::BindOnce(&AVFMediaDecoder::PlayIfNotLikelyToStall,
                  weak_ptr_factory_.GetWeakPtr(),
                  reason));
 }
@@ -688,23 +671,23 @@ void AVFMediaDecoder::PlayIfNotLikelyToStall(base::StringPiece reason,
     return;
 
   if (playback_state_ == PLAYING || playback_state_ == STARTING) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Giving up on playing AVPlayer when '" << reason
-                 << "', because already playing/starting to play";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " Giving up on playing AVPlayer when '" << reason
+            << "', because already playing/starting to play";
     return;
   }
 
   if (stream_has_ended_) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Giving up on playing AVPlayer when '" << reason
-                 << "', because the stream has ended";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " Giving up on playing AVPlayer when '" << reason
+            << "', because the stream has ended";
     return;
   }
 
   if (likely_to_stall) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Giving up on playing AVPlayer when '" << reason
-                 << "', because the player is likely to stall";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " Giving up on playing AVPlayer when '" << reason
+            << "', because the player is likely to stall";
     return;
   }
 
@@ -715,16 +698,14 @@ void AVFMediaDecoder::PlayIfNotLikelyToStall(base::StringPiece reason,
   const base::Closure play_task = base::Bind(
       &AVFMediaDecoder::PlayWhenReady, weak_ptr_factory_.GetWeakPtr(), reason);
   if (seeking_) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Temporarily ignoring '" << reason
-                 << "' notification while seeking";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Temporarily ignoring '"
+            << reason << "' notification while seeking";
     play_on_seek_done_task_ = play_task;
     return;
   }
   if (playback_state_ == STOPPING) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Temporarily ignoring '" << reason
-                 << "' notification while pausing";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Temporarily ignoring '"
+            << reason << "' notification while pausing";
     play_on_pause_done_task_ = play_task;
     return;
   }
@@ -768,11 +749,11 @@ void AVFMediaDecoder::ScheduleSeekTask(const base::Closure& seek_task) {
   base::PostTaskAndReplyWithResult(
       background_runner().get(),
       FROM_HERE,
-      base::Bind(&IsPlayerLikelyToStall,
+      base::BindOnce(&IsPlayerLikelyToStall,
                  background_tasks_canceled_,
                  [player_ currentItem],
                  min_loaded_range_size_),
-      base::Bind(&AVFMediaDecoder::SeekIfNotLikelyToStall,
+      base::BindOnce(&AVFMediaDecoder::SeekIfNotLikelyToStall,
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
@@ -946,7 +927,8 @@ void AVFMediaDecoder::AudioSamplesReady(
 
   last_audio_timestamp_ = buffer->timestamp();
 
-  client_->AudioSamplesReady(buffer);
+  client_->MediaSamplesReady(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO,
+                             buffer);
 }
 
 bool AVFMediaDecoder::InitializeVideoOutput() {
@@ -1027,7 +1009,8 @@ void AVFMediaDecoder::ReadFromVideoOutput(const CMTime& cm_timestamp) {
 
   last_video_timestamp_ = buffer->timestamp();
 
-  client_->VideoFrameReady(buffer);
+  client_->MediaSamplesReady(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO,
+                             buffer);
 }
 
 void AVFMediaDecoder::AutoSeekDone() {
@@ -1094,7 +1077,22 @@ AVAssetTrack* AVFMediaDecoder::AssetTrackForType(
     NSString* track_type_name) const {
   NSArray* tracks =
       [[[player_ currentItem] asset] tracksWithMediaType:track_type_name];
-  return [tracks count] > 0u ? [tracks objectAtIndex:0] : nil;
+  AVAssetTrack* track = [tracks count] > 0u ? [tracks objectAtIndex:0] : nil;
+
+  if (track && track_type_name == AVMediaTypeVideo) {
+    // NOTE(tomas@vivaldi.com): VB-45871
+    // Return nil to avoid renderer crash
+    if (track.formatDescriptions.count > 1) {
+      return nil;
+    }
+    CMFormatDescriptionRef desc = reinterpret_cast<CMFormatDescriptionRef>(
+        [[track formatDescriptions] objectAtIndex:0]);
+    if ("jpeg" == FourCCToString(CMFormatDescriptionGetMediaSubType(desc))) {
+      return nil;
+    }
+  }
+
+  return track;
 }
 
 AVAssetTrack* AVFMediaDecoder::VideoTrack() const {

@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 /* Id for tracking automatic refresh of crash list.  */
-var refreshCrashListId = undefined;
+let refreshCrashListId = undefined;
 
 /**
  * Requests the list of crashes from the backend.
@@ -20,142 +20,155 @@ function requestCrashes() {
  * @param {array} crashes The list of crashes.
  * @param {string} version The browser version.
  * @param {string} os The OS name and version.
+ * @param {boolean} isGoogleAccount whether primary account is internal.
  */
 function updateCrashList(
     enabled, dynamicBackend, manualUploads,
-    crashes, version, os) {
-  $('countBanner').textContent =
-      loadTimeData.getStringF('crashCountFormat',
-                              crashes.length.toLocaleString());
+    crashes, version, os, isGoogleAccount) {
+  $('crashesCount').textContent = loadTimeData.getStringF(
+      'crashCountFormat', crashes.length.toLocaleString());
 
-  var crashSection = $('crashList');
+  const crashList = $('crashList');
 
   $('disabledMode').hidden = enabled;
   $('crashUploadStatus').hidden = !enabled || !dynamicBackend;
 
-  // Make the height fixed while clearing the
-  // element in order to maintain scroll position.
-  crashSection.style.height = getComputedStyle(crashSection).height;
+  const template = crashList.getElementsByTagName('template')[0];
+
   // Clear any previous list.
-  crashSection.textContent = '';
+  crashList.querySelectorAll('.crashRow').forEach((elm) => elm.remove());
 
-  var productName = loadTimeData.getString('shortProductName');
+  const productName = loadTimeData.getString('shortProductName');
 
-  for (var i = 0; i < crashes.length; i++) {
-    var crash = crashes[i];
-    if (crash.local_id == '')
+  for (let i = 0; i < crashes.length; i++) {
+    const crash = crashes[i];
+    if (crash.local_id === '') {
       crash.local_id = productName;
-
-    var crashBlock = document.createElement('div');
-    if (crash.state != 'uploaded')
-      crashBlock.className = 'notUploaded';
-
-    var title = document.createElement('h3');
-    var uploaded = crash.state == 'uploaded';
-    if (uploaded) {
-      title.textContent = loadTimeData.getStringF('crashHeaderFormat',
-                                                  crash.id,
-                                                  crash.local_id);
-    } else {
-      title.textContent = loadTimeData.getStringF('crashHeaderFormatLocalOnly',
-                                                  crash.local_id);
     }
-    crashBlock.appendChild(title);
 
+    const crashRow = template.content.cloneNode(true);
+    if (crash.state !== 'uploaded') {
+      crashRow.querySelector('.crashRow').classList.add('notUploaded');
+    }
+
+    const uploaded = crash.state === 'uploaded';
+
+    // Some clients do not distinguish between capture time and upload time,
+    // so use the latter if the former is not available.
+    crashRow.querySelector('.captureTime').textContent =
+        loadTimeData.getStringF(
+            'crashCaptureTimeFormat',
+            crash.capture_time || crash.upload_time || '');
+    crashRow.querySelector('.localId .value').textContent = crash.local_id;
+
+    let stateText = '';
+    switch (crash.state) {
+      case 'not_uploaded':
+        stateText = loadTimeData.getString('crashStatusNotUploaded');
+        break;
+      case 'pending':
+        stateText = loadTimeData.getString('crashStatusPending');
+        break;
+      case 'pending_user_requested':
+        stateText = loadTimeData.getString('crashStatusPendingUserRequested');
+        break;
+      case 'uploaded':
+        stateText = loadTimeData.getString('crashStatusUploaded');
+        break;
+      default:
+        continue;  // Unknown state.
+    }
+    crashRow.querySelector('.status .value').textContent = stateText;
+
+    const uploadId = crashRow.querySelector('.uploadId');
+    const uploadTime = crashRow.querySelector('.uploadTime');
+    const sendNowButton = crashRow.querySelector('.sendNow');
+    const fileBugButton = crashRow.querySelector('.fileBug');
     if (uploaded) {
-      var date = document.createElement('p');
-      date.textContent = ""
-      if (crash.capture_time) {
-        date.textContent += loadTimeData.getStringF(
-            'crashCaptureAndUploadTimeFormat', crash.capture_time,
-            crash.upload_time);
+      const uploadIdValue = uploadId.querySelector('.value');
+      if (isGoogleAccount) {
+        const crashLink = document.createElement('a');
+        crashLink.href = `https://goto.google.com/crash/${crash.id}`;
+        crashLink.target = '_blank';
+        crashLink.textContent = crash.id;
+        uploadIdValue.appendChild(crashLink);
       } else {
-        date.textContent += loadTimeData.getStringF('crashUploadTimeFormat',
-                                                    crash.upload_time);
+        uploadIdValue.textContent = crash.id;
       }
-      crashBlock.appendChild(date);
 
-      var linkBlock = document.createElement('p');
-      var link = document.createElement('a');
-      var commentLines = [
-        'IMPORTANT: Your crash has already been automatically reported ' +
-        'to our crash system. Please file this bug only if you can provide ' +
-        'more information about it.',
-        '',
-        '',
-        'Chrome Version: ' + version,
-        'Operating System: ' + os,
-        '',
-        'URL (if applicable) where crash occurred:',
-        '',
-        'Can you reproduce this crash?',
-        '',
-        'What steps will reproduce this crash? (If it\'s not ' +
-        'reproducible, what were you doing just before the crash?)',
-        '1.', '2.', '3.',
-        '',
-        '****DO NOT CHANGE BELOW THIS LINE****',
-        'Crash ID: crash/' + crash.id
-      ];
-      var params = {
-        template: 'Crash Report',
-        comment: commentLines.join('\n'),
-        // TODO(scottmg): Use add_labels to add 'User-Submitted' rather than
-        // duplicating the template's labels (the first two) once
-        // https://bugs.chromium.org/p/monorail/issues/detail?id=1488 is done.
-        labels: 'Restrict-View-EditIssue,Stability-Crash,User-Submitted',
-      };
-      var href = 'https://code.google.com/p/chromium/issues/entry';
-      for (var param in params) {
-        href = appendParam(href, param, params[param]);
-      }
-      link.href = href;
-      link.target = '_blank';
-      link.textContent = loadTimeData.getString('bugLinkText');
-      linkBlock.appendChild(link);
-      crashBlock.appendChild(linkBlock);
+      uploadTime.querySelector('.value').textContent = crash.upload_time;
+
+      sendNowButton.remove();
+      fileBugButton.onclick = () => fileBug(crash.id, os, version);
     } else {
-      if (crash.state == 'pending_user_requested')
-        var textContentKey = 'crashUserRequested';
-      else if (crash.state == 'pending')
-        var textContentKey = 'crashPending';
-      else if (crash.state == 'not_uploaded')
-        var textContentKey = 'crashNotUploaded';
-      else
-        continue;
-
-      var crashText = document.createElement('p');
-      crashText.textContent = loadTimeData.getStringF(textContentKey,
-                                                      crash.capture_time);
-      crashBlock.appendChild(crashText);
-
-      if (crash.file_size != '') {
-        var crashSizeText =  document.createElement('p');
-        crashSizeText.textContent = loadTimeData.getStringF('crashSizeMessage',
-                                                            crash.file_size);
-        crashBlock.appendChild(crashSizeText);
+      uploadId.remove();
+      uploadTime.remove();
+      fileBugButton.remove();
+      // Do not allow crash submission if the Chromium build does not support
+      // it, or if the user already requested it.
+      if (!manualUploads || crash.state === 'pending_user_requested') {
+        sendNowButton.remove();
       }
-
-      // Do not show "Send now" link for already requested crashes.
-      if (crash.state != 'pending_user_requested' && manualUploads) {
-        var uploadNowLinkBlock = document.createElement('p');
-        var link = document.createElement('a');
-        link.href = '';
-        link.textContent = loadTimeData.getString('uploadNowLinkText');
-        link.local_id = crash.local_id;
-        link.onclick = function() {
-          chrome.send('requestSingleCrashUpload', [this.local_id]);
-        };
-        uploadNowLinkBlock.appendChild(link);
-        crashBlock.appendChild(uploadNowLinkBlock);
-      }
+      sendNowButton.onclick = (e) => {
+        e.target.disabled = true;
+        chrome.send('requestSingleCrashUpload', [crash.local_id]);
+      };
     }
-    crashSection.appendChild(crashBlock);
+
+    const fileSize = crashRow.querySelector('.fileSize');
+    if (crash.file_size === '') {
+      fileSize.remove();
+    } else {
+      fileSize.querySelector('.value').textContent = crash.file_size;
+    }
+
+    crashList.appendChild(crashRow);
   }
 
-  // Reset the height, in order to accommodate for the new content.
-  crashSection.style.height = "";
-  $('noCrashes').hidden = crashes.length != 0;
+  $('noCrashes').hidden = crashes.length !== 0;
+}
+
+/**
+ * Opens a new tab/window to report the crash to crbug.
+ * @param {string} The crash report ID.
+ * @param {string} The OS name.
+ * @param {string} The product version.
+ */
+function fileBug(crashId, os, version) {
+  const commentLines = [
+    'IMPORTANT: Your crash has already been automatically reported ' +
+    'to our crash system. Please file this bug only if you can provide ' +
+    'more information about it.',
+    '',
+    '',
+    'Chrome Version: ' + version,
+    'Operating System: ' + os,
+    '',
+    'URL (if applicable) where crash occurred:',
+    '',
+    'Can you reproduce this crash?',
+    '',
+    'What steps will reproduce this crash? (If it\'s not ' +
+    'reproducible, what were you doing just before the crash?)',
+    '1.', '2.', '3.',
+    '',
+    '****DO NOT CHANGE BELOW THIS LINE****',
+    'Crash ID: crash/' + crashId
+  ];
+  const params = {
+    template: 'Crash Report',
+    comment: commentLines.join('\n'),
+    // TODO(scottmg): Use add_labels to add 'User-Submitted' rather than
+    // duplicating the template's labels (the first two) once
+    // https://bugs.chromium.org/p/monorail/issues/detail?id=1488 is done.
+    labels: 'Restrict-View-EditIssue,Stability-Crash,User-Submitted',
+  };
+  let href = 'https://bugs.chromium.org/p/chromium/issues/entry';
+  for (const param in params) {
+    href = appendParam(href, param, params[param]);
+  }
+
+  window.open(href);
 }
 
 /**
@@ -171,7 +184,17 @@ function requestCrashUpload() {
   refreshCrashListId = setTimeout(requestCrashes, 5000);
 }
 
+/**
+ * Toggles hiding/showing the developer details of a crash report, depending
+ * on the value of the check box.
+ * @param {Event} The DOM event for onclick.
+ */
+function toggleDevDetails(e) {
+  $('crashList').classList.toggle('showingDevDetails', e.target.checked);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   $('uploadCrashes').onclick = requestCrashUpload;
+  $('showDevDetails').onclick = toggleDevDetails;
   requestCrashes();
 });

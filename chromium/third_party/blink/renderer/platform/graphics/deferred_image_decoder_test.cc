@@ -131,8 +131,7 @@ class DeferredImageDecoderTest : public testing::Test,
         .set_id(paint_image_id_)
         .set_animation_type(type)
         .set_completion_state(state)
-        .set_paint_image_generator(
-            decoder->CreateGenerator(PaintImage::kDefaultFrameIndex))
+        .set_paint_image_generator(decoder->CreateGenerator())
         .TakePaintImage();
   }
 
@@ -270,7 +269,7 @@ TEST_F(DeferredImageDecoderTest, MAYBE_decodeOnOtherThread) {
 
   // Create a thread to rasterize PaintRecord.
   std::unique_ptr<Thread> thread = Platform::Current()->CreateThread(
-      ThreadCreationParams(WebThreadType::kTestThread)
+      ThreadCreationParams(ThreadType::kTestThread)
           .SetThreadNameForTest("RasterThread"));
   PostCrossThreadTask(
       *thread->GetTaskRunner(), FROM_HERE,

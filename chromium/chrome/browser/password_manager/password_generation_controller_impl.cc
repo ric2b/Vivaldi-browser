@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/autofill/manual_filling_controller.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -55,9 +56,8 @@ struct PasswordGenerationControllerImpl::GenerationElementData {
       const autofill::password_generation::PasswordGenerationUIData& ui_data) {
     const std::string kFieldType = "password";
 
-    form = ui_data.password_form;
-    form_signature =
-        autofill::CalculateFormSignature(ui_data.password_form.form_data);
+    form_data = ui_data.form_data;
+    form_signature = autofill::CalculateFormSignature(ui_data.form_data);
     field_signature = autofill::CalculateFieldSignatureByNameAndType(
         ui_data.generation_element, kFieldType);
     generation_element_id = ui_data.generation_element_id;
@@ -65,7 +65,7 @@ struct PasswordGenerationControllerImpl::GenerationElementData {
   }
 
   // Form for which password generation is triggered.
-  autofill::PasswordForm form;
+  autofill::FormData form_data;
 
   // Signature of the form for which password generation is triggered.
   autofill::FormSignature form_signature;
@@ -95,7 +95,7 @@ void PasswordGenerationControllerImpl::OnAutomaticGenerationAvailable(
 
   active_frame_driver_->GetPasswordManager()
       ->SetGenerationElementAndReasonForForm(
-          active_frame_driver_.get(), ui_data.password_form,
+          active_frame_driver_.get(), ui_data.form_data,
           ui_data.generation_element, false /* is_manually_triggered */);
 
   if (!base::FeatureList::IsEnabled(
@@ -153,7 +153,7 @@ void PasswordGenerationControllerImpl::GeneratedPasswordAccepted(
   password_manager::metrics_util::LogGenerationDialogChoice(
       GenerationDialogChoice::kAccepted, type);
   driver->GeneratedPasswordAccepted(
-      generation_element_data_->form.form_data,
+      generation_element_data_->form_data,
       generation_element_data_->generation_element_id, password);
   ResetState();
 }
@@ -219,13 +219,12 @@ void PasswordGenerationControllerImpl::ShowDialog(PasswordGenerationType type) {
 
   dialog_view_ = create_dialog_factory_.Run(this);
 
-  uint32_t spec_priority = 0;
   base::string16 password =
       active_frame_driver_->GetPasswordGenerationHelper()->GeneratePassword(
           web_contents_->GetLastCommittedURL().GetOrigin(),
           generation_element_data_->form_signature,
           generation_element_data_->field_signature,
-          generation_element_data_->max_password_length, &spec_priority);
+          generation_element_data_->max_password_length);
   dialog_view_->Show(password, active_frame_driver_, type);
 }
 

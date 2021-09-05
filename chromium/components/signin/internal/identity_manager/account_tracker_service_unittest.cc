@@ -110,8 +110,7 @@ std::string AccountKeyToPictureURL(AccountKey account_key) {
 std::string AccountKeyToPictureURLWithSize(AccountKey account_key) {
   return signin::GetAvatarImageURLWithOptions(
              GURL(AccountKeyToPictureURL(account_key)),
-             AccountFetcherService::kAccountImageDownloadSize,
-             true /* no_silhouette */)
+             signin::kAccountInfoImageSize, true /* no_silhouette */)
       .spec();
 }
 
@@ -143,7 +142,7 @@ class TrackingEvent {
     }
     return base::StringPrintf(
         "{ type: %s, account_id: %s, gaia: %s, email: %s }", typestr,
-        account_id_.id.c_str(), gaia_id_.c_str(), email_.c_str());
+        account_id_.ToString().c_str(), gaia_id_.c_str(), email_.c_str());
   }
 
   TrackingEventType type_;
@@ -358,6 +357,8 @@ class AccountTrackerServiceTest : public testing::Test {
       account_tracker_->Shutdown();
       account_tracker_.reset();
     }
+    // Allow residual |account_tracker_| posted tasks to run.
+    task_environment_.RunUntilIdle();
   }
 
   TestingPrefServiceSimple pref_service_;
@@ -443,18 +444,21 @@ TEST_F(AccountTrackerServiceTest, TokenAvailable_UserInfo_ImageSuccess) {
                     AccountKeyToEmail(kAccountKeyAlpha)),
   }));
 
-  EXPECT_TRUE(account_tracker()
-                  ->GetAccountInfo(AccountKeyToAccountId(kAccountKeyAlpha))
-                  .account_image.IsEmpty());
+  AccountInfo account_info = account_tracker()->GetAccountInfo(
+      AccountKeyToAccountId(kAccountKeyAlpha));
+  EXPECT_TRUE(account_info.account_image.IsEmpty());
+  EXPECT_TRUE(account_info.last_downloaded_image_url_with_size.empty());
   ReturnAccountImageFetchSuccess(kAccountKeyAlpha);
   EXPECT_TRUE(CheckAccountTrackerEvents({
       TrackingEvent(UPDATED, AccountKeyToAccountId(kAccountKeyAlpha),
                     AccountKeyToGaiaId(kAccountKeyAlpha),
                     AccountKeyToEmail(kAccountKeyAlpha)),
   }));
-  EXPECT_FALSE(account_tracker()
-                   ->GetAccountInfo(AccountKeyToAccountId(kAccountKeyAlpha))
-                   .account_image.IsEmpty());
+  account_info = account_tracker()->GetAccountInfo(
+      AccountKeyToAccountId(kAccountKeyAlpha));
+  EXPECT_FALSE(account_info.account_image.IsEmpty());
+  EXPECT_EQ(account_info.last_downloaded_image_url_with_size,
+            AccountKeyToPictureURLWithSize(kAccountKeyAlpha));
 }
 
 TEST_F(AccountTrackerServiceTest, TokenAvailable_UserInfo_ImageFailure) {
@@ -467,13 +471,15 @@ TEST_F(AccountTrackerServiceTest, TokenAvailable_UserInfo_ImageFailure) {
                     AccountKeyToEmail(kAccountKeyAlpha)),
   }));
 
-  EXPECT_TRUE(account_tracker()
-                  ->GetAccountInfo(AccountKeyToAccountId(kAccountKeyAlpha))
-                  .account_image.IsEmpty());
+  AccountInfo account_info = account_tracker()->GetAccountInfo(
+      AccountKeyToAccountId(kAccountKeyAlpha));
+  EXPECT_TRUE(account_info.account_image.IsEmpty());
+  EXPECT_TRUE(account_info.last_downloaded_image_url_with_size.empty());
   ReturnAccountImageFetchFailure(kAccountKeyAlpha);
-  EXPECT_TRUE(account_tracker()
-                  ->GetAccountInfo(AccountKeyToAccountId(kAccountKeyAlpha))
-                  .account_image.IsEmpty());
+  account_info = account_tracker()->GetAccountInfo(
+      AccountKeyToAccountId(kAccountKeyAlpha));
+  EXPECT_TRUE(account_info.account_image.IsEmpty());
+  EXPECT_TRUE(account_info.last_downloaded_image_url_with_size.empty());
 }
 
 TEST_F(AccountTrackerServiceTest, TokenAvailable_UserInfo_Revoked) {
@@ -628,7 +634,7 @@ TEST_F(AccountTrackerServiceTest, FindAccountInfoByGaiaId) {
 
   const std::string gaia_id_beta = AccountKeyToGaiaId(kAccountKeyBeta);
   info = account_tracker()->FindAccountInfoByGaiaId(gaia_id_beta);
-  EXPECT_EQ(std::string(), info.account_id);
+  EXPECT_TRUE(info.account_id.empty());
 }
 
 TEST_F(AccountTrackerServiceTest, FindAccountInfoByEmail) {
@@ -727,6 +733,11 @@ TEST_F(AccountTrackerServiceTest, Persistence) {
 #else
   EXPECT_FALSE(infos[0].is_under_advanced_protection);
 #endif
+
+  // Delete the account tracker before cleaning up |scoped_user_data_dir| so
+  // that all in-use files are closed.
+  ResetAccountTracker();
+  ASSERT_TRUE(scoped_user_data_dir.Delete());
 }
 
 TEST_F(AccountTrackerServiceTest, SeedAccountInfo) {
@@ -969,8 +980,8 @@ TEST_F(AccountTrackerServiceTest, MigrateAccountIdToGaiaId) {
   EXPECT_EQ(account_info.gaia, gaia_alpha);
   EXPECT_EQ(account_info.email, email_alpha);
 
-  account_info = account_tracker()->GetAccountInfo(gaia_beta);
-  EXPECT_EQ(account_info.account_id, gaia_beta);
+  account_info = account_tracker()->GetAccountInfo(CoreAccountId(gaia_beta));
+  EXPECT_EQ(account_info.account_id, CoreAccountId(gaia_beta));
   EXPECT_EQ(account_info.gaia, gaia_beta);
   EXPECT_EQ(account_info.email, email_beta);
 

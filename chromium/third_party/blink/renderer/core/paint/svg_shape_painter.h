@@ -11,7 +11,6 @@
 
 namespace blink {
 
-class FloatRect;
 class GraphicsContext;
 class LayoutSVGResourceMarker;
 class LayoutSVGShape;
@@ -28,10 +27,10 @@ class SVGShapePainter {
   void Paint(const PaintInfo&);
 
  private:
-  void FillShape(GraphicsContext&, const PaintFlags&, SkPath::FillType);
+  void FillShape(GraphicsContext&, const PaintFlags&, SkPathFillType);
   void StrokeShape(GraphicsContext&, const PaintFlags&);
 
-  void PaintMarkers(const PaintInfo&, const FloatRect& bounding_box);
+  void PaintMarkers(const PaintInfo&);
   void PaintMarker(const PaintInfo&,
                    LayoutSVGResourceMarker&,
                    const MarkerPosition&,

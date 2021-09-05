@@ -20,9 +20,11 @@
 #include "printing/backend/print_backend.h"
 #include "printing/backend/win_helper.h"
 #include "printing/buildflags/buildflags.h"
+#include "printing/metafile_skia.h"
 #include "printing/print_settings_initializer_win.h"
 #include "printing/printed_document.h"
 #include "printing/printing_context_system_dialog_win.h"
+#include "printing/printing_features.h"
 #include "printing/printing_utils.h"
 #include "printing/units.h"
 #include "skia/ext/skia_utils_win.h"
@@ -58,6 +60,12 @@ PrintingContextWin::~PrintingContextWin() {
   ReleaseContext();
 }
 
+void PrintingContextWin::PrintDocument(const base::string16& device_name,
+                                       const MetafileSkia& metafile) {
+  // TODO(crbug.com/1008222)
+  NOTIMPLEMENTED();
+}
+
 void PrintingContextWin::AskUserForSettings(int max_pages,
                                             bool has_selection,
                                             bool is_scripted,
@@ -68,7 +76,8 @@ void PrintingContextWin::AskUserForSettings(int max_pages,
 PrintingContext::Result PrintingContextWin::UseDefaultSettings() {
   DCHECK(!in_print_job_);
 
-  scoped_refptr<PrintBackend> backend = PrintBackend::CreateInstance(nullptr);
+  scoped_refptr<PrintBackend> backend =
+      PrintBackend::CreateInstance(nullptr, delegate_->GetAppLocale());
   base::string16 default_printer =
       base::UTF8ToWide(backend->GetDefaultPrinterName());
   if (!default_printer.empty()) {
@@ -228,6 +237,15 @@ PrintingContext::Result PrintingContextWin::UpdatePrinterSettings(
   }
   // Set printer then refresh printer settings.
   scoped_dev_mode = CreateDevMode(printer.Get(), scoped_dev_mode.get());
+  if (!scoped_dev_mode)
+    return OnError();
+
+  // Since CreateDevMode() doesn't honor color settings through the GDI call
+  // to DocumentProperties(), ensure the requested values persist here.
+  scoped_dev_mode->dmFields |= DM_COLOR;
+  scoped_dev_mode->dmColor =
+      settings_->color() != GRAY ? DMCOLOR_COLOR : DMCOLOR_MONOCHROME;
+
   return InitializeSettings(settings_->device_name(), scoped_dev_mode.get());
 }
 
@@ -258,6 +276,11 @@ PrintingContext::Result PrintingContextWin::NewDocument(
   abort_printing_ = false;
 
   in_print_job_ = true;
+
+  if (base::FeatureList::IsEnabled(printing::features::kUseXpsForPrinting))
+    return OK;  // This is all the new document context needed when using XPS.
+
+  // Need more context setup when using GDI.
 
   // Register the application's AbortProc function with GDI.
   if (SP_ERROR == SetAbortProc(context_, &AbortProc))

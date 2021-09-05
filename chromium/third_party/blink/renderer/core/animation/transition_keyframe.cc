@@ -54,10 +54,9 @@ Interpolation*
 TransitionKeyframe::PropertySpecificKeyframe::CreateInterpolation(
     const PropertyHandle& property,
     const Keyframe::PropertySpecificKeyframe& other_super_class) const {
-  const PropertySpecificKeyframe& other =
-      ToTransitionPropertySpecificKeyframe(other_super_class);
+  const auto& other = To<TransitionPropertySpecificKeyframe>(other_super_class);
   DCHECK(value_->GetType() == other.value_->GetType());
-  return TransitionInterpolation::Create(
+  return MakeGarbageCollected<TransitionInterpolation>(
       property, value_->GetType(), value_->Value().Clone(),
       other.value_->Value().Clone(), compositor_value_,
       other.compositor_value_);

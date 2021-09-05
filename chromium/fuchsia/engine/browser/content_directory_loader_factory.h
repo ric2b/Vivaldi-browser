@@ -14,6 +14,7 @@
 
 #include "fuchsia/engine/web_engine_export.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 
@@ -32,12 +33,12 @@ class ContentDirectoryLoaderFactory : public network::mojom::URLLoaderFactory {
 
   // network::mojom::URLLoaderFactory:
   void CreateLoaderAndStart(
-      network::mojom::URLLoaderRequest loader,
+      mojo::PendingReceiver<network::mojom::URLLoader> loader,
       int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& request,
-      network::mojom::URLLoaderClientPtr client,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) final;
   void Clone(
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader) final;

@@ -151,7 +151,9 @@ bool RenderFrameMetadataObserverImpl::ShouldSendRenderFrameMetadata(
       rfm1.viewport_size_in_pixels != rfm2.viewport_size_in_pixels ||
       rfm1.top_controls_height != rfm2.top_controls_height ||
       rfm1.top_controls_shown_ratio != rfm2.top_controls_shown_ratio ||
-      rfm1.local_surface_id_allocation != rfm2.local_surface_id_allocation) {
+      rfm1.local_surface_id_allocation != rfm2.local_surface_id_allocation ||
+      rfm2.new_vertical_scroll_direction !=
+          viz::VerticalScrollDirection::kNull) {
     *needs_activation_notification = true;
     return true;
   }
@@ -162,6 +164,10 @@ bool RenderFrameMetadataObserverImpl::ShouldSendRenderFrameMetadata(
       rfm1.root_scroll_offset != rfm2.root_scroll_offset;
   if (rfm1.bottom_controls_height != rfm2.bottom_controls_height ||
       rfm1.bottom_controls_shown_ratio != rfm2.bottom_controls_shown_ratio ||
+      rfm1.top_controls_min_height_offset !=
+          rfm2.top_controls_min_height_offset ||
+      rfm1.bottom_controls_min_height_offset !=
+          rfm2.bottom_controls_min_height_offset ||
       rfm1.min_page_scale_factor != rfm2.min_page_scale_factor ||
       rfm1.max_page_scale_factor != rfm2.max_page_scale_factor ||
       rfm1.root_overflow_y_hidden != rfm2.root_overflow_y_hidden ||

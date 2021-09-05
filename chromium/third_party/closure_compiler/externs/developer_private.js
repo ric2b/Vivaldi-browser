@@ -1,4 +1,4 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2019 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -181,7 +181,9 @@ chrome.developerPrivate.RuntimeError;
  * @typedef {{
  *   suspiciousInstall: boolean,
  *   corruptInstall: boolean,
- *   updateRequired: boolean
+ *   updateRequired: boolean,
+ *   blockedByPolicy: boolean,
+ *   custodianApprovalRequired: boolean
  * }}
  */
 chrome.developerPrivate.DisableReasons;
@@ -219,7 +221,6 @@ chrome.developerPrivate.ExtensionView;
  */
 chrome.developerPrivate.ControllerType = {
   POLICY: 'POLICY',
-  CHILD_CUSTODIAN: 'CHILD_CUSTODIAN',
   SUPERVISED_USER_CUSTODIAN: 'SUPERVISED_USER_CUSTODIAN',
 };
 
@@ -335,7 +336,6 @@ chrome.developerPrivate.ExtensionInfo;
 
 /**
  * @typedef {{
- *   appInfoDialogEnabled: boolean,
  *   canLoadUnpacked: boolean,
  *   inDeveloperMode: boolean,
  *   isDeveloperModeControlledByPolicy: boolean,

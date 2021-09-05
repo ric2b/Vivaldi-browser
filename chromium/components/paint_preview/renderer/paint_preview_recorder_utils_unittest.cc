@@ -17,9 +17,7 @@
 #include "cc/paint/paint_recorder.h"
 #include "components/paint_preview/common/file_stream.h"
 #include "components/paint_preview/common/paint_preview_tracker.h"
-#include "components/paint_preview/common/proto/paint_preview.pb.h"
 #include "components/paint_preview/common/serial_utils.h"
-#include "components/paint_preview/common/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkFont.h"
@@ -28,12 +26,6 @@
 #include "third_party/skia/include/core/SkTypeface.h"
 
 namespace paint_preview {
-
-namespace {
-
-constexpr int32_t kRoutingId = 1;
-
-}  // namespace
 
 TEST(PaintPreviewServiceUtilsTest, TestParseGlyphs) {
   auto typeface = SkTypeface::MakeDefault();
@@ -53,8 +45,8 @@ TEST(PaintPreviewServiceUtilsTest, TestParseGlyphs) {
   outer_canvas->drawPicture(inner_recorder.finishRecordingAsPicture());
   auto record = outer_recorder.finishRecordingAsPicture();
 
-  PaintPreviewTracker tracker(base::UnguessableToken::Create(), kRoutingId,
-                              true);
+  PaintPreviewTracker tracker(base::UnguessableToken::Create(),
+                              base::UnguessableToken::Create(), true);
   ParseGlyphs(record.get(), &tracker);
   auto* usage_map = tracker.GetTypefaceUsageMap();
   EXPECT_TRUE(usage_map->count(typeface->uniqueID()));
@@ -73,8 +65,8 @@ TEST(PaintPreviewServiceUtilsTest, TestParseGlyphs) {
 }
 
 TEST(PaintPreviewServiceUtilsTest, TestSerializeAsSkPicture) {
-  PaintPreviewTracker tracker(base::UnguessableToken::Create(), kRoutingId,
-                              true);
+  PaintPreviewTracker tracker(base::UnguessableToken::Create(),
+                              base::UnguessableToken::Create(), true);
 
   gfx::Rect dimensions(100, 100);
   cc::PaintRecorder recorder;
@@ -85,12 +77,12 @@ TEST(PaintPreviewServiceUtilsTest, TestSerializeAsSkPicture) {
                    flags);
 
   base::flat_set<uint32_t> ctx;
-  uint32_t content_id =
-      tracker.CreateContentForRemoteFrame(gfx::Rect(10, 10), kRoutingId + 1);
+  uint32_t content_id = tracker.CreateContentForRemoteFrame(
+      gfx::Rect(10, 10), base::UnguessableToken::Create());
   canvas->recordCustomData(content_id);
   ctx.insert(content_id);
-  content_id =
-      tracker.CreateContentForRemoteFrame(gfx::Rect(20, 20), kRoutingId + 2);
+  content_id = tracker.CreateContentForRemoteFrame(
+      gfx::Rect(20, 20), base::UnguessableToken::Create());
   canvas->recordCustomData(content_id);
   ctx.insert(content_id);
 
@@ -125,32 +117,27 @@ TEST(PaintPreviewServiceUtilsTest, TestSerializeAsSkPicture) {
 
 TEST(PaintPreviewServiceUtilsTest, TestBuildAndSerializeProto) {
   auto token = base::UnguessableToken::Create();
-  PaintPreviewTracker tracker(token, kRoutingId, true);
-  tracker.AnnotateLink("www.google.com", gfx::Rect(1, 2, 3, 4));
-  tracker.AnnotateLink("www.chromium.org", gfx::Rect(10, 20, 10, 20));
-  tracker.CreateContentForRemoteFrame(gfx::Rect(1, 1, 1, 1), kRoutingId + 1);
-  tracker.CreateContentForRemoteFrame(gfx::Rect(1, 2, 4, 8), kRoutingId + 2);
+  auto embedding_token = base::UnguessableToken::Create();
+  PaintPreviewTracker tracker(token, embedding_token, true);
+  tracker.AnnotateLink(GURL("www.google.com"), gfx::Rect(1, 2, 3, 4));
+  tracker.AnnotateLink(GURL("www.chromium.org"), gfx::Rect(10, 20, 10, 20));
+  tracker.CreateContentForRemoteFrame(gfx::Rect(1, 1, 1, 1),
+                                      base::UnguessableToken::Create());
+  tracker.CreateContentForRemoteFrame(gfx::Rect(1, 2, 4, 8),
+                                      base::UnguessableToken::Create());
 
-  base::ReadOnlySharedMemoryRegion region;
-  EXPECT_TRUE(BuildAndSerializeProto(&tracker, &region));
-  PaintPreviewFrameProto proto;
-  EXPECT_TRUE(region.IsValid());
-  auto mapping = region.Map();
-  EXPECT_TRUE(mapping.IsValid());
-  EXPECT_TRUE(proto.ParseFromArray(mapping.memory(), mapping.size()));
+  auto response = mojom::PaintPreviewCaptureResponse::New();
+  BuildResponse(&tracker, response.get());
 
-  EXPECT_TRUE(proto.is_main_frame());
-  EXPECT_EQ(static_cast<int>(proto.id()), kRoutingId);
-  EXPECT_EQ(proto.unguessable_token_low(),
-            tracker.Guid().GetLowForSerialization());
-  EXPECT_EQ(proto.unguessable_token_high(),
-            tracker.Guid().GetHighForSerialization());
-  EXPECT_EQ(proto.links_size(), 2);
-  EXPECT_EQ(static_cast<size_t>(proto.links_size()), tracker.GetLinks().size());
-  for (int i = 0; i < proto.links_size(); ++i)
-    EXPECT_THAT(proto.links(i), EqualsProto(tracker.GetLinks()[i]));
+  EXPECT_EQ(response->embedding_token, embedding_token);
+  EXPECT_EQ(response->links.size(), 2U);
+  EXPECT_EQ(response->links.size(), tracker.GetLinks().size());
+  for (size_t i = 0; i < response->links.size(); ++i) {
+    EXPECT_THAT(response->links[i]->url, tracker.GetLinks()[i].url);
+    EXPECT_THAT(response->links[i]->rect, tracker.GetLinks()[i].rect);
+  }
   auto* content_map = tracker.GetPictureSerializationContext();
-  for (const auto& id_pair : proto.content_id_proxy_id_map()) {
+  for (const auto& id_pair : response->content_id_to_embedding_token) {
     auto it = content_map->find(id_pair.first);
     EXPECT_NE(it, content_map->end());
     EXPECT_EQ(id_pair.first, it->first);

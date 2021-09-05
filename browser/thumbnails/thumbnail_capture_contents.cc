@@ -217,14 +217,6 @@ void ThumbnailCaptureContents::DidFinishLoad(
   if (render_frame_host->GetParent()) {
     return;
   }
-  // If we're showing some error page, send error.
-  content::NavigationEntry* active =
-      offscreen_tab_web_contents_->GetController().GetVisibleEntry();
-  if (active->GetPageType() == content::PageType::PAGE_TYPE_ERROR) {
-    LOG(ERROR) << "page load error";
-    RespondAndDelete();
-    return;
-  }
 
   next_capture_try_wait_ = base::TimeDelta::FromSeconds(1);
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -260,6 +252,15 @@ void ThumbnailCaptureContents::TryCapture(bool last_try) {
         base::BindOnce(&ThumbnailCaptureContents::TryCapture,
                       weak_ptr_factory_.GetWeakPtr(), false),
         next_capture_try_wait_);
+    return;
+  }
+
+  // If we're showing some error page, send error.
+  content::NavigationEntry* active =
+      offscreen_tab_web_contents_->GetController().GetVisibleEntry();
+  if (active->GetPageType() == content::PageType::PAGE_TYPE_ERROR) {
+    LOG(ERROR) << "page load error";
+    RespondAndDelete();
     return;
   }
 

@@ -37,7 +37,7 @@ int32_t BytesPerElement(gfx::BufferFormat format, int plane) {
     case gfx::BufferFormat::BGRA_8888:
     case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::RGBA_8888:
-    case gfx::BufferFormat::BGRX_1010102:
+    case gfx::BufferFormat::BGRA_1010102:
       DCHECK_EQ(plane, 0);
       return 4;
     case gfx::BufferFormat::RGBA_F16:
@@ -52,7 +52,7 @@ int32_t BytesPerElement(gfx::BufferFormat format, int plane) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::RGBX_1010102:
+    case gfx::BufferFormat::RGBA_1010102:
     case gfx::BufferFormat::YVU_420:
     case gfx::BufferFormat::P010:
       NOTREACHED();
@@ -67,7 +67,7 @@ int32_t PixelFormat(gfx::BufferFormat format) {
   switch (format) {
     case gfx::BufferFormat::R_8:
       return 'L008';
-    case gfx::BufferFormat::BGRX_1010102:
+    case gfx::BufferFormat::BGRA_1010102:
       return 'l10r';  // little-endian ARGB2101010 full-range ARGB
     case gfx::BufferFormat::BGRA_8888:
     case gfx::BufferFormat::BGRX_8888:
@@ -82,8 +82,8 @@ int32_t PixelFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::RGBX_1010102:
-    // Technically RGBX_1010102 should be accepted as 'R10k', but then it won't
+    case gfx::BufferFormat::RGBA_1010102:
+    // Technically RGBA_1010102 should be accepted as 'R10k', but then it won't
     // be supported by CGLTexImageIOSurface2D(), so it's best to reject it here.
     case gfx::BufferFormat::YVU_420:
     case gfx::BufferFormat::P010:
@@ -114,6 +114,75 @@ void IOSurfaceMachPortTraits::Release(mach_port_t port) {
       mach_port_mod_refs(mach_task_self(), port, MACH_PORT_RIGHT_SEND, -1);
   MACH_LOG_IF(ERROR, kr != KERN_SUCCESS, kr)
       << "IOSurfaceMachPortTraits::Release mach_port_mod_refs";
+}
+
+// Common method used by IOSurfaceSetColorSpace and IOSurfaceCanSetColorSpace.
+bool IOSurfaceSetColorSpace(IOSurfaceRef io_surface,
+                            const ColorSpace& color_space) {
+  // Allow but ignore invalid color spaces.
+  if (!color_space.IsValid())
+    return true;
+
+  // Prefer using named spaces.
+  CFStringRef color_space_name = nullptr;
+  if (__builtin_available(macos 10.12, *)) {
+    if (color_space == ColorSpace::CreateSRGB()) {
+      color_space_name = kCGColorSpaceSRGB;
+    } else if (color_space == ColorSpace::CreateDisplayP3D65()) {
+      color_space_name = kCGColorSpaceDisplayP3;
+    } else if (color_space == ColorSpace::CreateExtendedSRGB()) {
+      color_space_name = kCGColorSpaceExtendedSRGB;
+    } else if (color_space == ColorSpace::CreateSCRGBLinear()) {
+      color_space_name = kCGColorSpaceExtendedLinearSRGB;
+    }
+  }
+  if (__builtin_available(macos 10.15, *)) {
+    if (color_space == ColorSpace(ColorSpace::PrimaryID::BT2020,
+                                  ColorSpace::TransferID::SMPTEST2084,
+                                  ColorSpace::MatrixID::BT2020_NCL,
+                                  ColorSpace::RangeID::LIMITED)) {
+      color_space_name = kCGColorSpaceITUR_2020_PQ_EOTF;
+    } else if (color_space == ColorSpace(ColorSpace::PrimaryID::BT2020,
+                                         ColorSpace::TransferID::ARIB_STD_B67,
+                                         ColorSpace::MatrixID::BT2020_NCL,
+                                         ColorSpace::RangeID::LIMITED)) {
+      // The CGColorSpace kCGColorSpaceITUR_2020_HLG cannot be used here because
+      // it expects that "pixel values should be between 0.0 and 12.0", while
+      // Chrome uses pixel values between 0.0 and 1.0.
+      // https://crbug.com/1061723.
+      return false;
+    }
+  }
+  if (color_space_name) {
+    if (io_surface) {
+      IOSurfaceSetValue(io_surface, CFSTR("IOSurfaceColorSpace"),
+                        color_space_name);
+    }
+    return true;
+  }
+
+  gfx::ColorSpace as_rgb = color_space.GetAsRGB();
+  gfx::ColorSpace as_full_range_rgb = color_space.GetAsFullRangeRGB();
+
+  // IOSurfaces do not support full-range YUV video. Fortunately, the hardware
+  // decoders never produce full-range video.
+  // https://crbug.com/882627
+  if (color_space != as_rgb && as_rgb == as_full_range_rgb)
+    return false;
+
+  // Generate an ICCProfile from the parametric color space.
+  ICCProfile icc_profile = ICCProfile::FromColorSpace(as_full_range_rgb);
+  if (!icc_profile.IsValid())
+    return false;
+
+  // Package it as a CFDataRef and send it to the IOSurface.
+  std::vector<char> icc_profile_data = icc_profile.GetData();
+  base::ScopedCFTypeRef<CFDataRef> cf_data_icc_profile(CFDataCreate(
+      nullptr, reinterpret_cast<const UInt8*>(icc_profile_data.data()),
+      icc_profile_data.size()));
+  IOSurfaceSetValue(io_surface, CFSTR("IOSurfaceColorSpace"),
+                    cf_data_icc_profile);
+  return true;
 }
 
 }  // namespace internal
@@ -185,61 +254,30 @@ IOSurfaceRef CreateIOSurface(const gfx::Size& size,
   }
 
   // Ensure that all IOSurfaces start as sRGB.
-  CGColorSpaceRef color_space = base::mac::GetSRGBColorSpace();
-  base::ScopedCFTypeRef<CFDataRef> color_space_icc(
-      CGColorSpaceCopyICCProfile(color_space));
-  IOSurfaceSetValue(surface, CFSTR("IOSurfaceColorSpace"), color_space_icc);
+  if (__builtin_available(macos 10.12, *)) {
+    IOSurfaceSetValue(surface, CFSTR("IOSurfaceColorSpace"), kCGColorSpaceSRGB);
+  } else {
+    CGColorSpaceRef color_space = base::mac::GetSRGBColorSpace();
+    base::ScopedCFTypeRef<CFDataRef> color_space_icc(
+        CGColorSpaceCopyICCProfile(color_space));
+    IOSurfaceSetValue(surface, CFSTR("IOSurfaceColorSpace"), color_space_icc);
+  }
 
   UMA_HISTOGRAM_TIMES("GPU.IOSurface.CreateTime",
                       base::TimeTicks::Now() - start_time);
   return surface;
 }
 
+bool IOSurfaceCanSetColorSpace(const ColorSpace& color_space) {
+  return internal::IOSurfaceSetColorSpace(nullptr, color_space);
+}
+
 void IOSurfaceSetColorSpace(IOSurfaceRef io_surface,
                             const ColorSpace& color_space) {
-  // Special-case sRGB.
-  if (color_space == ColorSpace::CreateSRGB()) {
-    base::ScopedCFTypeRef<CFDataRef> srgb_icc(
-        CGColorSpaceCopyICCProfile(base::mac::GetSRGBColorSpace()));
-    IOSurfaceSetValue(io_surface, CFSTR("IOSurfaceColorSpace"), srgb_icc);
-    return;
-  }
-
-  // Special-case BT2020_NCL.
-  if (__builtin_available(macos 10.12, *)) {
-    const ColorSpace kBt2020(
-        ColorSpace::PrimaryID::BT2020, ColorSpace::TransferID::SMPTEST2084,
-        ColorSpace::MatrixID::BT2020_NCL, ColorSpace::RangeID::LIMITED);
-    if (color_space == kBt2020) {
-      base::ScopedCFTypeRef<CGColorSpaceRef> cg_color_space(
-          CGColorSpaceCreateWithName(kCGColorSpaceITUR_2020));
-      DCHECK(cg_color_space);
-
-      base::ScopedCFTypeRef<CFDataRef> cf_data_icc_profile(
-          CGColorSpaceCopyICCData(cg_color_space));
-      DCHECK(cf_data_icc_profile);
-      IOSurfaceSetValue(io_surface, CFSTR("IOSurfaceColorSpace"),
-                        cf_data_icc_profile);
-      return;
-    }
-  }
-
-  // Generate an ICCProfile from the parametric color space.
-  ICCProfile icc_profile =
-      ICCProfile::FromColorSpace(color_space.GetAsFullRangeRGB());
-  if (!icc_profile.IsValid()) {
-    DLOG(ERROR) << "Failed to set color space for IOSurface: no ICC profile: "
+  if (!internal::IOSurfaceSetColorSpace(io_surface, color_space)) {
+    DLOG(ERROR) << "Failed to set color space for IOSurface: "
                 << color_space.ToString();
-    return;
   }
-
-  // Package it as a CFDataRef and send it to the IOSurface.
-  std::vector<char> icc_profile_data = icc_profile.GetData();
-  base::ScopedCFTypeRef<CFDataRef> cf_data_icc_profile(CFDataCreate(
-      nullptr, reinterpret_cast<const UInt8*>(icc_profile_data.data()),
-      icc_profile_data.size()));
-  IOSurfaceSetValue(io_surface, CFSTR("IOSurfaceColorSpace"),
-                    cf_data_icc_profile);
 }
 
 }  // namespace gfx

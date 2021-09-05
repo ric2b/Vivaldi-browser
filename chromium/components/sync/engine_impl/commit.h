@@ -47,8 +47,7 @@ class Commit {
   ~Commit();
 
   // |extensions_activity| may be null.
-  static std::unique_ptr<Commit> Init(ModelTypeSet requested_types,
-                                      ModelTypeSet enabled_types,
+  static std::unique_ptr<Commit> Init(ModelTypeSet enabled_types,
                                       size_t max_entries,
                                       const std::string& account_name,
                                       const std::string& cache_guid,
@@ -68,6 +67,9 @@ class Commit {
   void CleanUp();
 
  private:
+  // Report commit failure to each contribution.
+  void ReportFullCommitFailure(SyncerError syncer_error);
+
   ContributionMap contributions_;
 
   sync_pb::ClientToServerMessage message_;

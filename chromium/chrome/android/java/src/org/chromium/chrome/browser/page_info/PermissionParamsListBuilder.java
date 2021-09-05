@@ -7,24 +7,28 @@ package org.chromium.chrome.browser.page_info;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.support.v4.app.NotificationManagerCompat;
 import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
-import android.text.style.StyleSpan;
+import android.text.style.TextAppearanceSpan;
+
+import androidx.core.app.NotificationManagerCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.ContentSettingsType;
-import org.chromium.chrome.browser.browserservices.Origin;
 import org.chromium.chrome.browser.browserservices.permissiondelegation.TrustedWebActivityPermissionManager;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.preferences.website.ContentSettingValues;
-import org.chromium.chrome.browser.preferences.website.ContentSettingsResources;
-import org.chromium.chrome.browser.preferences.website.WebsitePreferenceBridge;
+import org.chromium.chrome.browser.site_settings.ContentSettingValues;
+import org.chromium.chrome.browser.site_settings.ContentSettingsResources;
+import org.chromium.chrome.browser.site_settings.WebsitePreferenceBridge;
+import org.chromium.components.browser_ui.site_settings.SiteSettingsFeatureList;
+import org.chromium.components.content_settings.ContentSettingsType;
+import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.location.LocationUtils;
+import org.chromium.components.page_info.PageInfoView;
+import org.chromium.components.page_info.SystemSettingsActivityRequiredListener;
+import org.chromium.components.permissions.PermissionUtil;
+import org.chromium.components.permissions.nfc.NfcSystemLevelSetting;
 import org.chromium.ui.base.AndroidPermissionDelegate;
 import org.chromium.ui.base.PermissionCallback;
 
@@ -39,10 +43,11 @@ import java.util.List;
 class PermissionParamsListBuilder {
     private final List<PageInfoPermissionEntry> mEntries;
     private final String mFullUrl;
+    private final boolean mShouldShowTitle;
     private final Context mContext;
     private final AndroidPermissionDelegate mPermissionDelegate;
     private final SystemSettingsActivityRequiredListener mSettingsActivityRequiredListener;
-    private final Callback<List<PageInfoView.PermissionParams>> mDisplayPermissionsCallback;
+    private final Callback<PageInfoView.PermissionParams> mDisplayPermissionsCallback;
 
     /**
      * Creates a new builder of a list of PermissionParams that can be displayed.
@@ -56,11 +61,12 @@ class PermissionParamsListBuilder {
      *                                   user interaction with a permission entry.
      */
     PermissionParamsListBuilder(Context context, AndroidPermissionDelegate permissionDelegate,
-            String fullUrl,
+            String fullUrl, boolean shouldShowTitle,
             SystemSettingsActivityRequiredListener systemSettingsActivityRequiredListener,
-            Callback<List<PageInfoView.PermissionParams>> displayPermissionsCallback) {
+            Callback<PageInfoView.PermissionParams> displayPermissionsCallback) {
         mContext = context;
         mFullUrl = fullUrl;
+        mShouldShowTitle = shouldShowTitle;
         mSettingsActivityRequiredListener = systemSettingsActivityRequiredListener;
         mPermissionDelegate = permissionDelegate;
         mEntries = new ArrayList<>();
@@ -71,64 +77,82 @@ class PermissionParamsListBuilder {
         mEntries.add(new PageInfoPermissionEntry(name, type, value));
     }
 
-    List<PageInfoView.PermissionParams> build() {
-        List<PageInfoView.PermissionParams> permissionParams = new ArrayList<>();
+    PageInfoView.PermissionParams build() {
+        List<PageInfoView.PermissionRowParams> rowParams = new ArrayList<>();
         for (PermissionParamsListBuilder.PageInfoPermissionEntry permission : mEntries) {
-            permissionParams.add(createPermissionParams(permission));
+            rowParams.add(createPermissionParams(permission));
         }
-        return permissionParams;
+        PageInfoView.PermissionParams params = new PageInfoView.PermissionParams();
+        params.show_title = !rowParams.isEmpty() && mShouldShowTitle;
+        params.permissions = rowParams;
+        return params;
     }
 
-    private PageInfoView.PermissionParams createPermissionParams(
+    private PageInfoView.PermissionRowParams createPermissionParams(
             PermissionParamsListBuilder.PageInfoPermissionEntry permission) {
-        PageInfoView.PermissionParams permissionParams = new PageInfoView.PermissionParams();
+        PageInfoView.PermissionRowParams permissionParams = new PageInfoView.PermissionRowParams();
 
         permissionParams.iconResource = getImageResourceForPermission(permission.type);
         if (permission.setting == ContentSettingValues.ALLOW) {
             LocationUtils locationUtils = LocationUtils.getInstance();
-            Intent intentOverride = null;
-            String[] androidPermissions = null;
-            if (permission.type == ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION
+            if (permission.type == ContentSettingsType.GEOLOCATION
                     && !locationUtils.isSystemLocationSettingEnabled()) {
                 permissionParams.warningTextResource = R.string.page_info_android_location_blocked;
-                intentOverride = locationUtils.getSystemLocationSettingsIntent();
+                permissionParams.clickCallback = createPermissionClickCallback(
+                        locationUtils.getSystemLocationSettingsIntent(),
+                        null /* androidPermissions */);
+            } else if (permission.type == ContentSettingsType.NFC
+                    && !NfcSystemLevelSetting.isNfcAccessPossible()) {
+                permissionParams.warningTextResource = R.string.page_info_android_nfc_unsupported;
+            } else if (permission.type == ContentSettingsType.NFC
+                    && !NfcSystemLevelSetting.isNfcSystemLevelSettingEnabled()) {
+                permissionParams.warningTextResource =
+                        R.string.page_info_android_permission_blocked;
+                permissionParams.clickCallback = createPermissionClickCallback(
+                        NfcSystemLevelSetting.getNfcSystemLevelSettingIntent(),
+                        null /* androidPermissions */);
             } else if (shouldShowNotificationsDisabledWarning(permission)) {
                 permissionParams.warningTextResource =
                         R.string.page_info_android_permission_blocked;
-                intentOverride = ApiCompatibilityUtils.getNotificationSettingsIntent();
+                permissionParams.clickCallback = createPermissionClickCallback(
+                        ApiCompatibilityUtils.getNotificationSettingsIntent(),
+                        null /* androidPermissions */);
             } else if (!hasAndroidPermission(permission.type)) {
                 permissionParams.warningTextResource =
                         R.string.page_info_android_permission_blocked;
-                androidPermissions =
-                        PrefServiceBridge.getAndroidPermissionsForContentSetting(permission.type);
+                permissionParams.clickCallback = createPermissionClickCallback(
+                        null /* intentOverride */,
+                        PermissionUtil.getAndroidPermissionsForContentSetting(permission.type));
             }
 
             if (permissionParams.warningTextResource != 0) {
                 permissionParams.iconResource = R.drawable.exclamation_triangle;
                 permissionParams.iconTintColorResource = R.color.default_icon_color_blue;
-                permissionParams.clickCallback =
-                        createPermissionClickCallback(intentOverride, androidPermissions);
             }
         }
 
         // The ads permission requires an additional static subtitle.
-        if (permission.type == ContentSettingsType.CONTENT_SETTINGS_TYPE_ADS) {
+        if (permission.type == ContentSettingsType.ADS) {
             permissionParams.subtitleTextResource = R.string.page_info_permission_ads_subtitle;
         }
 
         SpannableStringBuilder builder = new SpannableStringBuilder();
         SpannableString nameString = new SpannableString(permission.name);
-        final StyleSpan boldSpan = new StyleSpan(android.graphics.Typeface.BOLD);
-        nameString.setSpan(boldSpan, 0, nameString.length(), Spannable.SPAN_INCLUSIVE_EXCLUSIVE);
+        final TextAppearanceSpan span =
+                new TextAppearanceSpan(mContext, R.style.TextAppearance_TextMediumThick_Primary);
+        nameString.setSpan(span, 0, nameString.length(), Spannable.SPAN_INCLUSIVE_EXCLUSIVE);
 
         builder.append(nameString);
         builder.append(" – "); // en-dash.
         String status_text = "";
 
         String managedBy = null;
-        if (permission.type == ContentSettingsType.CONTENT_SETTINGS_TYPE_NOTIFICATIONS) {
+        if (permission.type == ContentSettingsType.NOTIFICATIONS) {
             TrustedWebActivityPermissionManager manager = TrustedWebActivityPermissionManager.get();
-            managedBy = manager.getDelegateAppName(new Origin(mFullUrl));
+            Origin origin = Origin.create(mFullUrl);
+            if (origin != null) {
+                managedBy = manager.getDelegateAppName(origin);
+            }
         }
         if (managedBy != null) {
             status_text = String.format(
@@ -157,14 +181,15 @@ class PermissionParamsListBuilder {
     }
 
     private boolean shouldShowNotificationsDisabledWarning(PageInfoPermissionEntry permission) {
-        return permission.type == ContentSettingsType.CONTENT_SETTINGS_TYPE_NOTIFICATIONS
+        return permission.type == ContentSettingsType.NOTIFICATIONS
                 && !NotificationManagerCompat.from(mContext).areNotificationsEnabled()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.APP_NOTIFICATION_STATUS_MESSAGING);
+                && SiteSettingsFeatureList.isEnabled(
+                        SiteSettingsFeatureList.APP_NOTIFICATION_STATUS_MESSAGING);
     }
 
     private boolean hasAndroidPermission(int contentSettingType) {
         String[] androidPermissions =
-                PrefServiceBridge.getAndroidPermissionsForContentSetting(contentSettingType);
+                PermissionUtil.getAndroidPermissionsForContentSetting(contentSettingType);
         if (androidPermissions == null) return true;
         for (int i = 0; i < androidPermissions.length; i++) {
             if (!mPermissionDelegate.hasPermission(androidPermissions[i])) {
@@ -190,7 +215,8 @@ class PermissionParamsListBuilder {
     private Runnable createPermissionClickCallback(
             Intent intentOverride, String[] androidPermissions) {
         return () -> {
-            if (intentOverride == null && mPermissionDelegate != null) {
+            if (intentOverride == null && androidPermissions != null
+                    && mPermissionDelegate != null) {
                 // Try and immediately request missing Android permissions where possible.
                 for (int i = 0; i < androidPermissions.length; i++) {
                     if (!mPermissionDelegate.canRequestPermission(androidPermissions[i])) continue;

@@ -25,23 +25,23 @@ const base::Feature kEmptyWorkingSet{"EmptyWorkingSet",
 #if defined(OS_CHROMEOS)
 
 const base::Feature kTrimOnMemoryPressure{"TrimOnMemoryPressure",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kTrimOnFreeze{"TrimOnFreeze",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::FeatureParam<int> kGraphWalkBackoffTimeSec = {
-    &kTrimOnMemoryPressure, "GraphWalkBackoffTimeSec", 120};
+    &kTrimOnMemoryPressure, "GraphWalkBackoffTimeSec", 180};
 
 // Specifies the minimum amount of time a parent frame node must be invisible
 // before considering the process node for working set trim.
 const base::FeatureParam<int> kNodeInvisibileTimeSec = {
-    &kTrimOnMemoryPressure, "NodeInvisibleTimeSec", 360};
+    &kTrimOnMemoryPressure, "NodeInvisibleTimeSec", 900};
 
 // Specifies the minimum amount of time a parent frame node must be invisible
 // before considering the process node for working set trim.
 const base::FeatureParam<int> kNodeTrimBackoffTimeSec = {
-    &kTrimOnMemoryPressure, "NodeTrimBackoffTimeSec", 1200};
+    &kTrimOnMemoryPressure, "NodeTrimBackoffTimeSec", 1800};
 
 TrimOnMemoryPressureParams::TrimOnMemoryPressureParams() = default;
 TrimOnMemoryPressureParams::TrimOnMemoryPressureParams(
@@ -74,11 +74,27 @@ const base::FeatureParam<int> kDynamicTuningTimeSec = {
 
 // The time a frame must be invisible before being additionally scaled. -1 will
 // disable invisible scaling.
-extern const base::FeatureParam<int> kDynamicTuningScaleInvisibleTimeSec = {
+const base::FeatureParam<int> kDynamicTuningScaleInvisibleTimeSec = {
     &kDynamicTcmallocTuning, "DynamicTcmallocScaleInvisibleTimeSec", -1};
 #endif  // BUILDFLAG(USE_TCMALLOC)
 
 #endif  // defined(OS_LINUX)
+
+#if !defined(OS_ANDROID)
+const base::Feature kPageFreezingFromPerformanceManager{
+    "PageFreezingFromPerformanceManager", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kUrgentDiscardingFromPerformanceManager{
+    "UrgentDiscardingFromPerformanceManager",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kBackgroundTabLoadingFromPerformanceManager{
+    "BackgroundTabLoadingFromPerformanceManager",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
+const base::Feature kHighPMFMemoryPressureSignals{
+    "HighPMFMemoryPressureSignals", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace performance_manager

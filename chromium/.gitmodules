@@ -10,6 +10,9 @@
 [submodule "third_party/flac"]
 	path = third_party/flac
 	url = ../deps/flac.git
+[submodule "third_party/sqlite/src"]
+	path = third_party/sqlite/src
+	url = ../deps/sqlite.git
 [submodule "third_party/swiftshader"]
 	path = third_party/swiftshader
 	url = ../../swiftshader/SwiftShader.git
@@ -70,6 +73,9 @@
 [submodule "third_party/lss"]
 	path = third_party/lss
 	url = ../../linux-syscall-support.git
+[submodule "third_party/wuffs/src"]
+	path = third_party/wuffs/src
+	url = ../../skia/external/github.com/google/wuffs.git
 [submodule "third_party/flatbuffers/src"]
 	path = third_party/flatbuffers/src
 	url = ../../external/github.com/google/flatbuffers.git
@@ -85,9 +91,12 @@
 [submodule "third_party/shaderc/src"]
 	path = third_party/shaderc/src
 	url = ../../external/github.com/google/shaderc.git
-[submodule "third_party/pywebsocket/src"]
-	path = third_party/pywebsocket/src
-	url = ../../external/github.com/google/pywebsocket.git
+[submodule "third_party/libgifcodec"]
+	path = third_party/libgifcodec
+	url = ../../skia/libgifcodec.git
+[submodule "third_party/openh264/src"]
+	path = third_party/openh264/src
+	url = ../../external/github.com/cisco/openh264.git
 [submodule "third_party/pefile"]
 	path = third_party/pefile
 	url = ../../external/pefile.git
@@ -97,9 +106,6 @@
 [submodule "third_party/spirv-cross/spirv-cross"]
 	path = third_party/spirv-cross/spirv-cross
 	url = ../../external/github.com/KhronosGroup/SPIRV-Cross.git
-[submodule "third_party/libevdev/src"]
-	path = third_party/libevdev/src
-	url = ../../chromiumos/platform/libevdev.git
 [submodule "third_party/libyuv"]
 	path = third_party/libyuv
 	url = ../../libyuv/libyuv.git
@@ -115,9 +121,6 @@
 [submodule "third_party/libsync/src"]
 	path = third_party/libsync/src
 	url = ../../aosp/platform/system/core/libsync.git
-[submodule "third_party/bison"]
-	path = third_party/bison
-	url = ../deps/bison.git
 [submodule "third_party/icu"]
 	path = third_party/icu
 	url = ../deps/icu.git
@@ -139,6 +142,9 @@
 [submodule "third_party/dav1d/libdav1d"]
 	path = third_party/dav1d/libdav1d
 	url = ../../external/github.com/videolan/dav1d.git
+[submodule "third_party/weston/src"]
+	path = third_party/weston/src
+	url = ../../external/anongit.freedesktop.org/git/wayland/weston.git
 [submodule "third_party/SPIRV-Tools/src"]
 	path = third_party/SPIRV-Tools/src
 	url = ../../external/github.com/KhronosGroup/SPIRV-Tools.git
@@ -150,19 +156,19 @@
 	url = ../../breakpad/breakpad.git
 [submodule "buildtools/third_party/libc++abi/trunk"]
 	path = buildtools/third_party/libc++abi/trunk
-	url = ../llvm-project/libcxxabi.git
+	url = ../../external/github.com/llvm/llvm-project/libcxxabi.git
 [submodule "third_party/hunspell_dictionaries"]
 	path = third_party/hunspell_dictionaries
 	url = ../deps/hunspell_dictionaries.git
-[submodule "third_party/sfntly/src"]
-	path = third_party/sfntly/src
-	url = ../../external/github.com/googlefonts/sfntly.git
 [submodule "third_party/libvpx/source/libvpx"]
 	path = third_party/libvpx/source/libvpx
 	url = ../../webm/libvpx.git
 [submodule "third_party/re2/src"]
 	path = third_party/re2/src
 	url = ../../external/github.com/google/re2.git
+[submodule "third_party/devtools-frontend/src"]
+	path = third_party/devtools-frontend/src
+	url = ../../devtools/devtools-frontend.git
 [submodule "third_party/perfetto"]
 	path = third_party/perfetto
 	url = ../../android/platform/external/perfetto.git
@@ -207,19 +213,22 @@
 	url = ../../external/github.com/sctplab/usrsctp.git
 [submodule "buildtools/third_party/libunwind/trunk"]
 	path = buildtools/third_party/libunwind/trunk
-	url = ../../external/llvm.org/libunwind.git
+	url = ../../external/github.com/llvm/llvm-project/libunwind.git
 [submodule "third_party/libprotobuf-mutator/src"]
 	path = third_party/libprotobuf-mutator/src
 	url = ../../external/github.com/google/libprotobuf-mutator.git
+[submodule "third_party/pywebsocket3/src"]
+	path = third_party/pywebsocket3/src
+	url = ../../external/github.com/GoogleChromeLabs/pywebsocket3.git
 [submodule "third_party/grpc/src"]
 	path = third_party/grpc/src
 	url = ../../external/github.com/grpc/grpc.git
-[submodule "third_party/gestures/gestures"]
-	path = third_party/gestures/gestures
-	url = ../../chromiumos/platform/gestures.git
 [submodule "third_party/libaddressinput/src"]
 	path = third_party/libaddressinput/src
 	url = ../../external/libaddressinput.git
+[submodule "third_party/webgpu-cts/src"]
+	path = third_party/webgpu-cts/src
+	url = ../../external/github.com/gpuweb/cts.git
 [submodule "third_party/libphonenumber/dist"]
 	path = third_party/libphonenumber/dist
 	url = ../../external/libphonenumber.git
@@ -235,15 +244,15 @@
 [submodule "third_party/minizip/src"]
 	path = third_party/minizip/src
 	url = ../../external/github.com/nmoinvaz/minizip.git
-[submodule "third_party/openh264/src"]
-	path = third_party/openh264/src
-	url = ../../external/github.com/cisco/openh264.git
+[submodule "third_party/libgav1/src"]
+	path = third_party/libgav1/src
+	url = ../../codecs/libgav1.git
 [submodule "third_party/jsoncpp/source"]
 	path = third_party/jsoncpp/source
 	url = ../../external/github.com/open-source-parsers/jsoncpp.git
 [submodule "buildtools/third_party/libc++/trunk"]
 	path = buildtools/third_party/libc++/trunk
-	url = ../llvm-project/libcxx.git
+	url = ../../external/github.com/llvm/llvm-project/libcxx.git
 [submodule "v8"]
 	path = v8
 	url = ../../v8/v8.git

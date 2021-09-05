@@ -5,6 +5,9 @@
 #include "ui/views/window/dialog_client_view.h"
 
 #include <algorithm>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include "build/build_config.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -86,47 +89,10 @@ DialogClientView::~DialogClientView() {
     dialog->RemoveObserver(this);
 }
 
-void DialogClientView::AcceptWindow() {
-  // Only notify the delegate once. See |delegate_allowed_close_|'s comment.
-  if (!delegate_allowed_close_ && GetDialogDelegate()->Accept()) {
-    delegate_allowed_close_ = true;
-    GetWidget()->CloseWithReason(
-        views::Widget::ClosedReason::kAcceptButtonClicked);
-  }
-}
-
-void DialogClientView::CancelWindow() {
-  // Only notify the delegate once. See |delegate_allowed_close_|'s comment.
-  if (!delegate_allowed_close_ && GetDialogDelegate()->Cancel()) {
-    delegate_allowed_close_ = true;
-    GetWidget()->CloseWithReason(
-        views::Widget::ClosedReason::kCancelButtonClicked);
-  }
-}
-
 void DialogClientView::SetButtonRowInsets(const gfx::Insets& insets) {
   button_row_insets_ = insets;
   if (GetWidget())
     UpdateDialogButtons();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// DialogClientView, ClientView overrides:
-
-bool DialogClientView::CanClose() {
-  // If the dialog is closing but no Accept or Cancel action has been performed
-  // before, it's a Close action.
-  if (!delegate_allowed_close_)
-    delegate_allowed_close_ = GetDialogDelegate()->Close();
-  return delegate_allowed_close_;
-}
-
-DialogClientView* DialogClientView::AsDialogClientView() {
-  return this;
-}
-
-const DialogClientView* DialogClientView::AsDialogClientView() const {
-  return this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -221,6 +187,7 @@ void DialogClientView::ViewHierarchyChanged(
 }
 
 void DialogClientView::OnThemeChanged() {
+  ClientView::OnThemeChanged();
   // The old dialog style needs an explicit background color, while the new
   // dialog style simply inherits the bubble's frame view color.
   const DialogDelegate* dialog = GetDialogDelegate();
@@ -243,9 +210,9 @@ void DialogClientView::ButtonPressed(Button* sender, const ui::Event& event) {
     return;
 
   if (sender == ok_button_)
-    AcceptWindow();
+    GetDialogDelegate()->AcceptDialog();
   else if (sender == cancel_button_)
-    CancelWindow();
+    GetDialogDelegate()->CancelDialog();
   else
     NOTREACHED();
 }
@@ -442,10 +409,12 @@ void DialogClientView::SetupViews() {
     UpdateDialogButton(&ok_button_, ui::DIALOG_BUTTON_OK);
   }
 
-  if (extra_view_)
+  auto disowned_extra_view = GetDialogDelegate()->DisownExtraView();
+  if (!disowned_extra_view)
     return;
 
-  extra_view_ = GetDialogDelegate()->CreateExtraView().release();
+  delete extra_view_;
+  extra_view_ = disowned_extra_view.release();
   if (extra_view_ && Button::AsButton(extra_view_))
     extra_view_->SetGroup(kButtonGroup);
 }

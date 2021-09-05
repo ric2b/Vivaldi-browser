@@ -36,7 +36,6 @@
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/widget/widget.h"
-#include "ui/views/window/dialog_client_view.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window_tree_host.h"
@@ -64,10 +63,19 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     DesktopMediaPickerViews* parent,
     std::vector<std::unique_ptr<DesktopMediaList>> source_lists)
     : parent_(parent), modality_(params.modality) {
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_DESKTOP_MEDIA_PICKER_SHARE));
   const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+
+  std::unique_ptr<views::Checkbox> audio_share_checkbox;
+  if (params.request_audio) {
+    audio_share_checkbox = std::make_unique<views::Checkbox>(
+        l10n_util::GetStringUTF16(IDS_DESKTOP_MEDIA_PICKER_AUDIO_SHARE));
+    audio_share_checkbox->SetChecked(params.approve_audio_by_default);
+    audio_share_checkbox_ =
+        DialogDelegate::SetExtraView(std::move(audio_share_checkbox));
+  }
 
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical,
@@ -195,9 +203,6 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
 
   DCHECK(!source_types_.empty());
 
-  request_audio_ = params.request_audio;
-  approve_audio_by_default_ = params.approve_audio_by_default;
-
   // Focus on the first non-null media_list.
   OnSourceTypeSwitched(0);
 
@@ -205,9 +210,9 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
   // picker will be shown modal to the web contents. Otherwise the picker is
   // shown in a separate window.
   views::Widget* widget = nullptr;
-  bool modal_dialog =
-      params.web_contents &&
-      !params.web_contents->GetDelegate()->IsNeverVisible(params.web_contents);
+  bool modal_dialog = params.web_contents &&
+                      !params.web_contents->GetDelegate()->IsNeverComposited(
+                          params.web_contents);
   if (modal_dialog) {
     widget =
         constrained_window::ShowWebModalDialogViews(this, params.web_contents);
@@ -343,19 +348,7 @@ bool DesktopMediaPickerDialogView::IsDialogButtonEnabled(
 }
 
 views::View* DesktopMediaPickerDialogView::GetInitiallyFocusedView() {
-  return GetDialogClientView()->cancel_button();
-}
-
-std::unique_ptr<views::View> DesktopMediaPickerDialogView::CreateExtraView() {
-  std::unique_ptr<views::Checkbox> audio_share_checkbox;
-  if (request_audio_) {
-    audio_share_checkbox = std::make_unique<views::Checkbox>(
-        l10n_util::GetStringUTF16(IDS_DESKTOP_MEDIA_PICKER_AUDIO_SHARE));
-    audio_share_checkbox->SetChecked(approve_audio_by_default_);
-    audio_share_checkbox_ = audio_share_checkbox.get();
-  }
-  OnSourceTypeSwitched(0);
-  return audio_share_checkbox;
+  return GetCancelButton();
 }
 
 bool DesktopMediaPickerDialogView::Accept() {
@@ -414,7 +407,7 @@ void DesktopMediaPickerDialogView::OnSelectionChanged() {
 
 void DesktopMediaPickerDialogView::AcceptSource() {
   // This will call Accept() and close the dialog.
-  GetDialogClientView()->AcceptWindow();
+  AcceptDialog();
 }
 
 void DesktopMediaPickerDialogView::AcceptSpecificSource(DesktopMediaID source) {

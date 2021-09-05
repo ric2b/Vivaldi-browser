@@ -8,6 +8,7 @@
 #include "base/command_line.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
+#include "base/task/post_task.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -16,6 +17,7 @@
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/variations/net/variations_http_headers.h"
+#include "ios/web/public/thread/web_task_traits.h"
 #include "ios/web/public/thread/web_thread.h"
 #include "ios/web_view/cwv_web_view_buildflags.h"
 #include "ios/web_view/internal/app/web_view_io_thread.h"
@@ -55,8 +57,6 @@ ApplicationContext* ApplicationContext::GetInstance() {
 }
 
 ApplicationContext::ApplicationContext() {
-  net_log_ = std::make_unique<net::NetLog>();
-
   SetApplicationLocale(l10n_util::GetLocaleOverride());
 }
 
@@ -70,7 +70,6 @@ void ApplicationContext::PreCreateThreads() {
 
 void ApplicationContext::SaveState() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // TODO(crbug.com/723854): Commit prefs when entering background.
   if (local_state_) {
     local_state_->CommitPendingWrite();
   }
@@ -79,8 +78,8 @@ void ApplicationContext::SaveState() {
     shared_url_loader_factory_->Detach();
 
   if (network_context_) {
-    web::WebThread::DeleteSoon(web::WebThread::IO, FROM_HERE,
-                               network_context_owner_.release());
+    base::DeleteSoon(FROM_HERE, {web::WebThread::IO},
+                     network_context_owner_.release());
   }
 }
 
@@ -143,7 +142,7 @@ ApplicationContext::GetSharedURLLoaderFactory() {
     url_loader_factory_params->process_id = network::mojom::kBrowserProcessId;
     url_loader_factory_params->is_corb_enabled = false;
     GetSystemNetworkContext()->CreateURLLoaderFactory(
-        mojo::MakeRequest(&url_loader_factory_),
+        url_loader_factory_.BindNewPipeAndPassReceiver(),
         std::move(url_loader_factory_params));
     shared_url_loader_factory_ =
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
@@ -188,7 +187,7 @@ const std::string& ApplicationContext::GetApplicationLocale() {
 
 net::NetLog* ApplicationContext::GetNetLog() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return net_log_.get();
+  return net::NetLog::Get();
 }
 
 WebViewIOThread* ApplicationContext::GetWebViewIOThread() {

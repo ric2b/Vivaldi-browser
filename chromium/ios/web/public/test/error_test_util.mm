@@ -27,11 +27,13 @@ std::string GetErrorText(WebState* web_state,
                          const std::string& error_domain,
                          long error_code,
                          bool is_post,
-                         bool is_off_the_record) {
-  return base::StringPrintf(
-      "web_state: %p url: %s domain: %s code: %ld post: %d otr: %d", web_state,
-      url.spec().c_str(), error_domain.c_str(), error_code, is_post,
-      is_off_the_record);
+                         bool is_off_the_record,
+                         net::CertStatus cert_status) {
+  return base::StringPrintf("web_state: %p url: %s domain: %s code: %ld post: "
+                            "%d otr: %d cert_status: %d",
+                            web_state, url.spec().c_str(), error_domain.c_str(),
+                            error_code, is_post, is_off_the_record,
+                            cert_status);
 }
 
 }  // namespace testing

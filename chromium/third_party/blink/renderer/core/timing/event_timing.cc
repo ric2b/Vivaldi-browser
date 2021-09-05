@@ -6,7 +6,10 @@
 
 #include "base/time/tick_clock.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/events/pointer_event.h"
+#include "third_party/blink/renderer/core/events/touch_event.h"
+#include "third_party/blink/renderer/core/events/wheel_event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/loader/interactive_detector.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
@@ -33,9 +36,9 @@ bool ShouldLogEvent(const Event& event) {
 }
 
 bool IsEventTypeForEventTiming(const Event& event) {
-  return (event.IsMouseEvent() || event.IsPointerEvent() ||
-          event.IsTouchEvent() || event.IsKeyboardEvent() ||
-          event.IsWheelEvent() || event.IsInputEvent() ||
+  return (IsA<MouseEvent>(event) || IsA<PointerEvent>(event) ||
+          IsA<TouchEvent>(event) || IsA<KeyboardEvent>(event) ||
+          IsA<WheelEvent>(event) || event.IsInputEvent() ||
           event.IsCompositionEvent()) &&
          event.isTrusted();
 }
@@ -72,14 +75,15 @@ std::unique_ptr<EventTiming> EventTiming::Create(LocalDOMWindow* window,
   if (!should_report_for_event_timing && !should_log_event)
     return nullptr;
 
+  auto* pointer_event = DynamicTo<PointerEvent>(&event);
   base::TimeTicks event_timestamp =
-      event.IsPointerEvent() ? ToPointerEvent(&event)->OldestPlatformTimeStamp()
-                             : event.PlatformTimeStamp();
+      pointer_event ? pointer_event->OldestPlatformTimeStamp()
+                    : event.PlatformTimeStamp();
 
   base::TimeTicks processing_start = Now();
   if (should_log_event) {
     Document* document =
-        DynamicTo<Document>(performance->GetExecutionContext());
+        Document::DynamicFrom(performance->GetExecutionContext());
     InteractiveDetector* interactive_detector =
         InteractiveDetector::From(*document);
     if (interactive_detector) {

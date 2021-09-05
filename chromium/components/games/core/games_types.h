@@ -10,9 +10,22 @@
 
 #include "base/callback.h"
 #include "components/games/core/proto/game.pb.h"
+#include "components/games/core/proto/games_catalog.pb.h"
 
 namespace games {
-using HighlightedGameCallback = base::OnceCallback<void(std::unique_ptr<Game>)>;
+
+enum ResponseCode {
+  kSuccess = 0,
+  kFileNotFound = 1,
+  kInvalidData = 2,
+  kMissingCatalog = 3,
+  kComponentNotInstalled = 4,
+};
+
+using GamesCatalogCallback =
+    base::OnceCallback<void(ResponseCode, std::unique_ptr<GamesCatalog>)>;
+using HighlightedGameCallback =
+    base::OnceCallback<void(ResponseCode, const Game)>;
 
 }  // namespace games
 

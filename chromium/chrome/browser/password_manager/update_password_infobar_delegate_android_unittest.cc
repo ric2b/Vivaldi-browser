@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
@@ -14,13 +15,17 @@
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/fake_form_fetcher.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
+#include "components/password_manager/core/browser/password_save_manager_impl.h"
 #include "components/password_manager/core/browser/stub_form_saver.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/stub_password_manager_driver.h"
+#include "components/strings/grit/components_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using password_manager::PasswordFormManager;
+using password_manager::PasswordSaveManagerImpl;
+using testing::ElementsAre;
 
 namespace {
 
@@ -49,11 +54,14 @@ class UpdatePasswordInfoBarDelegateTest
   void TearDown() override;
 
   const autofill::PasswordForm& test_form() { return test_form_; }
+
+  // TODO(crbug.com/1048107): Replace real PasswordFormManager instance with the
+  // mock.
   std::unique_ptr<password_manager::PasswordFormManager>
   CreateTestFormManager();
 
  protected:
-  std::unique_ptr<PasswordManagerInfoBarDelegate> CreateDelegate(
+  std::unique_ptr<UpdatePasswordInfoBarDelegate> CreateDelegate(
       std::unique_ptr<password_manager::PasswordFormManager>
           password_form_manager,
       bool is_smartlock_branding_enabled);
@@ -106,18 +114,19 @@ std::unique_ptr<password_manager::PasswordFormManager>
 UpdatePasswordInfoBarDelegateTest::CreateTestFormManager() {
   auto manager = std::make_unique<password_manager::PasswordFormManager>(
       &client_, driver_.AsWeakPtr(), observed_form_, &fetcher_,
-      std::make_unique<password_manager::StubFormSaver>(),
+      std::make_unique<PasswordSaveManagerImpl>(
+          std::make_unique<password_manager::StubFormSaver>()),
       nullptr /* metrics_recorder */);
   manager->ProvisionallySave(observed_form_, &driver_, nullptr);
   return manager;
 }
 
-std::unique_ptr<PasswordManagerInfoBarDelegate>
+std::unique_ptr<UpdatePasswordInfoBarDelegate>
 UpdatePasswordInfoBarDelegateTest::CreateDelegate(
     std::unique_ptr<password_manager::PasswordFormManager>
         password_form_manager,
     bool is_smartlock_branding_enabled) {
-  std::unique_ptr<PasswordManagerInfoBarDelegate> delegate(
+  std::unique_ptr<UpdatePasswordInfoBarDelegate> delegate(
       new TestUpdatePasswordInfoBarDelegate(web_contents(),
                                             std::move(password_form_manager),
                                             is_smartlock_branding_enabled));
@@ -142,3 +151,54 @@ TEST_F(UpdatePasswordInfoBarDelegateTest, EmptyDetailsMessageForNotSignedIn) {
                      false /* is_smartlock_branding_enabled */));
   EXPECT_TRUE(infobar->GetDetailsMessageText().empty());
 }
+
+TEST_F(UpdatePasswordInfoBarDelegateTest, NoCurrentForms) {
+  std::vector<base::string16> usernames;
+  std::vector<std::unique_ptr<autofill::PasswordForm>> current_forms;
+  base::string16 default_username = base::ASCIIToUTF16("username");
+  unsigned int selected_username =
+      UpdatePasswordInfoBarDelegate::GetDisplayUsernames(
+          current_forms, default_username, &usernames);
+  EXPECT_EQ(default_username, usernames[selected_username]);
+  EXPECT_THAT(usernames, ElementsAre(default_username));
+}
+
+TEST_F(UpdatePasswordInfoBarDelegateTest, MultipleCurrentForms) {
+  std::vector<std::unique_ptr<autofill::PasswordForm>> current_forms;
+  autofill::PasswordForm additional_form;
+  additional_form.username_value = base::ASCIIToUTF16("another username");
+  current_forms.push_back(std::make_unique<autofill::PasswordForm>(test_form_));
+  current_forms.push_back(
+      std::make_unique<autofill::PasswordForm>(additional_form));
+
+  base::string16 default_username = base::ASCIIToUTF16("another username");
+
+  std::vector<base::string16> usernames;
+  unsigned int selected_username =
+      UpdatePasswordInfoBarDelegate::GetDisplayUsernames(
+          current_forms, default_username, &usernames);
+  EXPECT_EQ(default_username, usernames[selected_username]);
+  EXPECT_THAT(usernames,
+              ElementsAre(test_form_.username_value, default_username));
+}
+
+TEST_F(UpdatePasswordInfoBarDelegateTest, EmptyUsername) {
+  std::vector<std::unique_ptr<autofill::PasswordForm>> current_forms;
+  autofill::PasswordForm additional_form;
+  current_forms.push_back(std::make_unique<autofill::PasswordForm>(test_form_));
+  current_forms.push_back(
+      std::make_unique<autofill::PasswordForm>(additional_form));
+
+  base::string16 default_username = test_form_.username_value;
+
+  std::vector<base::string16> usernames;
+  unsigned int selected_username =
+      UpdatePasswordInfoBarDelegate::GetDisplayUsernames(
+          current_forms, default_username, &usernames);
+  base::string16 empty_username =
+      l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_EMPTY_LOGIN);
+
+  EXPECT_EQ(default_username, usernames[selected_username]);
+  EXPECT_THAT(usernames, ElementsAre(default_username, empty_username));
+}
+

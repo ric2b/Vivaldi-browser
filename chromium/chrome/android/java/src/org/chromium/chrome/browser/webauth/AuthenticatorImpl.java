@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.webauth;
 
 import android.annotation.TargetApi;
 import android.content.Context;
-import android.hardware.fingerprint.FingerprintManager;
 import android.os.Build;
 
 import org.chromium.base.PackageUtils;
@@ -17,11 +16,14 @@ import org.chromium.blink.mojom.MakeCredentialAuthenticatorResponse;
 import org.chromium.blink.mojom.PublicKeyCredentialCreationOptions;
 import org.chromium.blink.mojom.PublicKeyCredentialRequestOptions;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsStatics;
 import org.chromium.mojo.system.MojoException;
+
+import java.util.LinkedList;
+import java.util.Queue;
 
 /**
  * Android implementation of the authenticator.mojom interface.
@@ -31,8 +33,6 @@ public class AuthenticatorImpl extends HandlerResponseCallback implements Authen
     private final WebContents mWebContents;
 
     private static final String GMSCORE_PACKAGE_NAME = "com.google.android.gms";
-    private static final int GMSCORE_MIN_VERSION = 12800000;
-    private static final int GMSCORE_MIN_VERSION_ISUVPAA = 16200000;
 
     /** Ensures only one request is processed at a time. */
     private boolean mIsOperationPending;
@@ -41,8 +41,12 @@ public class AuthenticatorImpl extends HandlerResponseCallback implements Authen
             .Callback2<Integer, MakeCredentialAuthenticatorResponse> mMakeCredentialCallback;
     private org.chromium.mojo.bindings.Callbacks
             .Callback2<Integer, GetAssertionAuthenticatorResponse> mGetAssertionCallback;
-    private org.chromium.mojo.bindings.Callbacks
-            .Callback1<Boolean> mIsUserVerifyingPlatformAuthenticatorAvailableCallback;
+    // A queue is used to store pending IsUserVerifyingPlatformAuthenticatorAvailable request
+    // callbacks when there are multiple requests pending on the result from GMSCore. Noted that
+    // the callbacks may not be invoked in the same order as the pending requests, which in this
+    // situation does not matter because all pending requests will return the same value.
+    private Queue<org.chromium.mojo.bindings.Callbacks.Callback1<Boolean>>
+            mIsUserVerifyingPlatformAuthenticatorAvailableCallbackQueue = new LinkedList<>();
 
     /**
      * Builds the Authenticator service implementation.
@@ -65,7 +69,8 @@ public class AuthenticatorImpl extends HandlerResponseCallback implements Authen
 
         mMakeCredentialCallback = callback;
         Context context = ChromeActivity.fromWebContents(mWebContents);
-        if (PackageUtils.getPackageVersion(context, GMSCORE_PACKAGE_NAME) < GMSCORE_MIN_VERSION) {
+        if (PackageUtils.getPackageVersion(context, GMSCORE_PACKAGE_NAME)
+                < Fido2ApiHandler.GMSCORE_MIN_VERSION) {
             onError(AuthenticatorStatus.NOT_IMPLEMENTED);
             return;
         }
@@ -84,7 +89,8 @@ public class AuthenticatorImpl extends HandlerResponseCallback implements Authen
 
         mGetAssertionCallback = callback;
         Context context = ChromeActivity.fromWebContents(mWebContents);
-        if (PackageUtils.getPackageVersion(context, GMSCORE_PACKAGE_NAME) < GMSCORE_MIN_VERSION) {
+        if (PackageUtils.getPackageVersion(context, GMSCORE_PACKAGE_NAME)
+                < Fido2ApiHandler.GMSCORE_MIN_VERSION) {
             onError(AuthenticatorStatus.NOT_IMPLEMENTED);
             return;
         }
@@ -110,20 +116,14 @@ public class AuthenticatorImpl extends HandlerResponseCallback implements Authen
         }
 
         if (PackageUtils.getPackageVersion(context, GMSCORE_PACKAGE_NAME)
-                >= GMSCORE_MIN_VERSION_ISUVPAA) {
-            mIsUserVerifyingPlatformAuthenticatorAvailableCallback = callback;
-            Fido2ApiHandler.getInstance().isUserVerifyingPlatformAuthenticatorAvailable(
-                    mRenderFrameHost, this);
-        } else if (PackageUtils.getPackageVersion(context, GMSCORE_PACKAGE_NAME)
-                        >= GMSCORE_MIN_VERSION
-                && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            FingerprintManager fingerprintManager =
-                    (FingerprintManager) context.getSystemService(Context.FINGERPRINT_SERVICE);
-            callback.call(
-                    fingerprintManager != null && fingerprintManager.hasEnrolledFingerprints());
-        } else {
+                < Fido2ApiHandler.GMSCORE_MIN_VERSION) {
             callback.call(false);
+            return;
         }
+
+        mIsUserVerifyingPlatformAuthenticatorAvailableCallbackQueue.add(callback);
+        Fido2ApiHandler.getInstance().isUserVerifyingPlatformAuthenticatorAvailable(
+                mRenderFrameHost, this);
     }
 
     @Override
@@ -151,9 +151,8 @@ public class AuthenticatorImpl extends HandlerResponseCallback implements Authen
 
     @Override
     public void onIsUserVerifyingPlatformAuthenticatorAvailableResponse(boolean isUVPAA) {
-        assert mIsUserVerifyingPlatformAuthenticatorAvailableCallback != null;
-        mIsUserVerifyingPlatformAuthenticatorAvailableCallback.call(isUVPAA);
-        mIsUserVerifyingPlatformAuthenticatorAvailableCallback = null;
+        assert !mIsUserVerifyingPlatformAuthenticatorAvailableCallbackQueue.isEmpty();
+        mIsUserVerifyingPlatformAuthenticatorAvailableCallbackQueue.poll().call(isUVPAA);
     }
 
     @Override

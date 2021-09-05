@@ -85,14 +85,6 @@ std::string PreviousSaveCreditCardPromptUserDecisionToString(
 
 }  // namespace
 
-int64_t HashFormSignature(autofill::FormSignature form_signature) {
-  return static_cast<uint64_t>(form_signature) % 1021;
-}
-
-int64_t HashFieldSignature(autofill::FieldSignature field_signature) {
-  return static_cast<uint64_t>(field_signature) % 1021;
-}
-
 // First, translates |field_type| to the corresponding logical |group| from
 // |FieldTypeGroupForMetrics|.  Then, interpolates this with the given |metric|,
 // which should be in the range [0, |num_possible_metrics|).
@@ -587,11 +579,6 @@ void AutofillMetrics::LogSubmittedServerCardExpirationStatusMetric(
 }
 
 // static
-void AutofillMetrics::LogMaskedCardComparisonNetworksMatch(bool matches) {
-  UMA_HISTOGRAM_BOOLEAN("Autofill.MaskedCardComparisonNetworksMatch", matches);
-}
-
-// static
 void AutofillMetrics::LogCreditCardSaveNotOfferedDueToMaxStrikesMetric(
     SaveTypeMetric metric) {
   UMA_HISTOGRAM_ENUMERATION(
@@ -1020,6 +1007,30 @@ void AutofillMetrics::LogUserPerceivedLatencyOnCardSelection(
 }
 
 // static
+void AutofillMetrics::LogUserPerceivedLatencyOnCardSelectionDuration(
+    const base::TimeDelta duration) {
+  base::UmaHistogramLongTimes(
+      "Autofill.BetterAuth.UserPerceivedLatencyOnCardSelection.OptedIn."
+      "Duration",
+      duration);
+}
+
+// static
+void AutofillMetrics::LogUserPerceivedLatencyOnCardSelectionTimedOut(
+    bool did_time_out) {
+  base::UmaHistogramBoolean(
+      "Autofill.BetterAuth.UserPerceivedLatencyOnCardSelection.OptedIn."
+      "TimedOutCvcFallback",
+      did_time_out);
+}
+
+void AutofillMetrics::LogUserVerifiabilityCheckDuration(
+    const base::TimeDelta& duration) {
+  base::UmaHistogramLongTimes(
+      "Autofill.BetterAuth.UserVerifiabilityCheckDuration", duration);
+}
+
+// static
 void AutofillMetrics::LogWebauthnResult(WebauthnFlowEvent event,
                                         WebauthnResultMetric metric) {
   std::string histogram_name = "Autofill.BetterAuth.WebauthnResult.";
@@ -1380,10 +1391,40 @@ void AutofillMetrics::LogIsAutofillEnabledAtStartup(bool enabled) {
 }
 
 // static
+void AutofillMetrics::LogIsAutofillProfileEnabledAtStartup(bool enabled) {
+  UMA_HISTOGRAM_BOOLEAN("Autofill.Address.IsEnabled.Startup", enabled);
+}
+
+// static
+void AutofillMetrics::LogIsAutofillCreditCardEnabledAtStartup(bool enabled) {
+  UMA_HISTOGRAM_BOOLEAN("Autofill.CreditCard.IsEnabled.Startup", enabled);
+}
+
+// static
 void AutofillMetrics::LogIsAutofillEnabledAtPageLoad(
     bool enabled,
     AutofillSyncSigninState sync_state) {
   std::string name("Autofill.IsEnabled.PageLoad");
+  UMA_HISTOGRAM_BOOLEAN(name, enabled);
+  base::UmaHistogramBoolean(name + GetMetricsSyncStateSuffix(sync_state),
+                            enabled);
+}
+
+// static
+void AutofillMetrics::LogIsAutofillProfileEnabledAtPageLoad(
+    bool enabled,
+    AutofillSyncSigninState sync_state) {
+  std::string name("Autofill.Address.IsEnabled.PageLoad");
+  UMA_HISTOGRAM_BOOLEAN(name, enabled);
+  base::UmaHistogramBoolean(name + GetMetricsSyncStateSuffix(sync_state),
+                            enabled);
+}
+
+// static
+void AutofillMetrics::LogIsAutofillCreditCardEnabledAtPageLoad(
+    bool enabled,
+    AutofillSyncSigninState sync_state) {
+  std::string name("Autofill.CreditCard.IsEnabled.PageLoad");
   UMA_HISTOGRAM_BOOLEAN(name, enabled);
   base::UmaHistogramBoolean(name + GetMetricsSyncStateSuffix(sync_state),
                             enabled);
@@ -1814,9 +1855,7 @@ void AutofillMetrics::LogDeveloperEngagementUkm(
 AutofillMetrics::FormInteractionsUkmLogger::FormInteractionsUkmLogger(
     ukm::UkmRecorder* ukm_recorder,
     const ukm::SourceId source_id)
-    : ukm_recorder_(ukm_recorder), source_id_(source_id) {
-  UMA_HISTOGRAM_BOOLEAN("Autofill.CanLogUKM", CanLog());
-}
+    : ukm_recorder_(ukm_recorder), source_id_(source_id) {}
 
 void AutofillMetrics::FormInteractionsUkmLogger::OnFormsParsed(
     const ukm::SourceId source_id) {

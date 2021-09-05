@@ -17,8 +17,9 @@ import org.chromium.weblayer_private.interfaces.IBrowser;
 import org.chromium.weblayer_private.interfaces.IBrowserClient;
 import org.chromium.weblayer_private.interfaces.ITab;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
+import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
-import java.util.List;
+import java.util.Set;
 
 /**
  * Browser contains any number of Tabs, with one active Tab. The active Tab is visible to the user,
@@ -26,27 +27,47 @@ import java.util.List;
  *
  * By default Browser has a single active Tab.
  */
-public final class Browser {
+public class Browser {
     private final IBrowser mImpl;
     private final ObserverList<TabListCallback> mTabListCallbacks;
+    private final UrlBarController mUrlBarController;
+
+    // Constructor for test mocking.
+    protected Browser() {
+        mImpl = null;
+        mTabListCallbacks = null;
+        mUrlBarController = null;
+    }
 
     Browser(IBrowser impl) {
         mImpl = impl;
         mTabListCallbacks = new ObserverList<TabListCallback>();
+
         try {
             mImpl.setClient(new BrowserClientImpl());
-        } catch (RemoteException e) {
-            throw new APICallException(e);
-        }
-        try {
-            for (Object tab : impl.getTabs()) {
-                // getTabs() returns List<TabImpl>, which isn't accessible from the client library.
-                ITab iTab = ITab.Stub.asInterface((android.os.IBinder) tab);
-                // Tab's constructor calls registerTab().
-                new Tab(iTab, this);
+            if (WebLayer.getSupportedMajorVersionInternal() >= 82) {
+                mUrlBarController = new UrlBarController(mImpl.getUrlBarController());
+            } else {
+                mUrlBarController = null;
             }
         } catch (RemoteException e) {
             throw new APICallException(e);
+        }
+        if (WebLayer.getSupportedMajorVersionInternal() < 82) {
+            // On WebLayer versions < 82 the tabs are internally created before the client is set,
+            // so it doesn't receive the onTabAdded() callbacks; hence the client-side Tab
+            // objects need to be manually created to mirror the implementation-side objects.
+            try {
+                for (Object tab : impl.getTabs()) {
+                    // getTabs() returns List<TabImpl>, which isn't accessible from the client
+                    // library.
+                    ITab iTab = ITab.Stub.asInterface((android.os.IBinder) tab);
+                    // Tab's constructor calls registerTab().
+                    new Tab(iTab, this);
+                }
+            } catch (RemoteException e) {
+                throw new APICallException(e);
+            }
         }
     }
 
@@ -132,7 +153,7 @@ public final class Browser {
      * @return The Tabs
      */
     @NonNull
-    public List<Tab> getTabs() {
+    public Set<Tab> getTabs() {
         ThreadCheck.ensureOnUiThread();
         return Tab.getTabsInBrowser(this);
     }
@@ -140,6 +161,9 @@ public final class Browser {
     /**
      * Disposes a Tab. If {@link tab} is the active Tab, no Tab is made active. After this call
      *  {@link tab} should not be used.
+     *
+     * Note this will skip any beforeunload handlers. To run those first, use
+     * {@link Tab#dispatchBeforeUnloadAndClose} instead.
      *
      * @param tab The Tab to dispose.
      *
@@ -228,9 +252,23 @@ public final class Browser {
         }
     }
 
+    /**
+     * Returns the UrlBarController.
+     * @since 82
+     */
+    @NonNull
+    public UrlBarController getUrlBarController() {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 82) {
+            throw new UnsupportedOperationException();
+        }
+        return mUrlBarController;
+    }
+
     private final class BrowserClientImpl extends IBrowserClient.Stub {
         @Override
         public void onActiveTabChanged(int activeTabId) {
+            StrictModeWorkaround.apply();
             Tab tab = Tab.getTabById(activeTabId);
             for (TabListCallback callback : mTabListCallbacks) {
                 callback.onActiveTabChanged(tab);
@@ -239,6 +277,7 @@ public final class Browser {
 
         @Override
         public void onTabAdded(ITab iTab) {
+            StrictModeWorkaround.apply();
             int id = 0;
             try {
                 id = iTab.getId();
@@ -258,6 +297,7 @@ public final class Browser {
 
         @Override
         public void onTabRemoved(int tabId) {
+            StrictModeWorkaround.apply();
             Tab tab = Tab.getTabById(tabId);
             // This should only be called with a previously created tab.
             assert tab != null;

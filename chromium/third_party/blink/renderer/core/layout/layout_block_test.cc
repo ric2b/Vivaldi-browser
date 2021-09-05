@@ -31,7 +31,8 @@ TEST_F(LayoutBlockTest, LayoutNameCalledWithNullStyle) {
 }
 
 TEST_F(LayoutBlockTest, WidthAvailableToChildrenChanged) {
-  ScopedOverlayScrollbarsForTest overlay_scrollbars(false);
+  USE_NON_OVERLAY_SCROLLBARS();
+
   SetBodyInnerHTML(R"HTML(
     <!DOCTYPE html>
     <div id='list' style='overflow-y:auto; width:150px; height:100px'>
@@ -53,7 +54,8 @@ TEST_F(LayoutBlockTest, WidthAvailableToChildrenChanged) {
             150 - list_box->VerticalScrollbarWidth());
 
   DummyExceptionStateForTesting exception_state;
-  list_element->style()->setCSSText(&GetDocument(), "width:150px;height:100px;",
+  list_element->style()->setCSSText(GetDocument().GetExecutionContext(),
+                                    "width:150px;height:100px;",
                                     exception_state);
   ASSERT_FALSE(exception_state.HadException());
   UpdateAllLifecyclePhasesForTest();

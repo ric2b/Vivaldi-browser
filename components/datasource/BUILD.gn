@@ -1,6 +1,6 @@
 import("//build/config/jumbo.gni")
 
-jumbo_source_set("datasource") {
+source_set("datasource") {
   sources = [
     "css_mods_data_source.cc",
     "css_mods_data_source.h",
@@ -8,6 +8,8 @@ jumbo_source_set("datasource") {
     "desktop_data_source_win.h",
     "local_image_data_source.cc",
     "local_image_data_source.h",
+    "notes_attachment_data_source.cc",
+    "notes_attachment_data_source.h",
     "vivaldi_data_source.cc",
     "vivaldi_data_source.h",
     "vivaldi_data_source_api.cc",
@@ -16,10 +18,23 @@ jumbo_source_set("datasource") {
     "vivaldi_web_source.h",
   ]
   deps = [
+    "//base:base",
     "//chrome/common:common",
     "//content/public/browser",
-    "//base:base",
     "//skia",
+    "//vivaldi/notes",
+    "//vivaldi/notes:browser",
     "//vivaldi/prefs:prefs_files_generated"
   ]
+  if (!is_android) {
+    deps += [
+      "//chrome/browser/extensions",
+      "//extensions/browser",
+      "//vivaldi/extensions/api:apis",
+    ]
+    allow_circular_includes_from = [
+      "//chrome/browser/extensions",
+      "//vivaldi/extensions/api:apis",
+    ]
+  }
 }

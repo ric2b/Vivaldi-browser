@@ -46,7 +46,8 @@ class EventWithCallback {
 
   void RunCallbacks(InputHandlerProxy::EventDisposition,
                     const LatencyInfo& latency,
-                    std::unique_ptr<DidOverscrollParams>);
+                    std::unique_ptr<DidOverscrollParams>,
+                    const blink::WebInputEventAttribution&);
 
   const blink::WebInputEvent& event() const { return *event_; }
   blink::WebInputEvent* event_pointer() { return event_.get(); }
@@ -63,6 +64,7 @@ class EventWithCallback {
     return original_events_.empty() ? nullptr
                                     : original_events_.front().event_.get();
   }
+  void SetScrollbarManipulationHandledOnCompositorThread();
 
  private:
   friend class test::InputHandlerProxyEventQueueTest;

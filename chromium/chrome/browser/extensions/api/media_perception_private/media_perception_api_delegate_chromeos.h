@@ -7,6 +7,7 @@
 
 #include "base/callback_forward.h"
 #include "extensions/browser/api/media_perception_private/media_perception_api_delegate.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 
 namespace extensions {
 
@@ -25,9 +26,10 @@ class MediaPerceptionAPIDelegateChromeOS
       override;
   void SetMediaPerceptionRequestHandler(
       MediaPerceptionRequestHandler handler) override;
-  void ForwardMediaPerceptionRequest(
-      chromeos::media_perception::mojom::MediaPerceptionRequest request,
-      content::RenderFrameHost* render_frame_host) override;
+  void ForwardMediaPerceptionReceiver(
+      content::RenderFrameHost* render_frame_host,
+      mojo::PendingReceiver<chromeos::media_perception::mojom::MediaPerception>
+          receiver) override;
 
  private:
   MediaPerceptionRequestHandler handler_;

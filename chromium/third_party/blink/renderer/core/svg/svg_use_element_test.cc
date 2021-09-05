@@ -12,12 +12,12 @@
 
 namespace blink {
 
-using LifecycleUpdateReason = DocumentLifecycle::LifecycleUpdateReason;
+using LifecycleUpdateReason = DocumentUpdateReason;
 
 class SVGUseElementTest : public PageTestBase {};
 
 TEST_F(SVGUseElementTest, InstanceInvalidatedWhenNonAttachedTargetRemoved) {
-  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+  GetDocument().body()->setInnerHTML(R"HTML(
     <style></style>
     <svg>
         <unknown>
@@ -39,7 +39,7 @@ TEST_F(SVGUseElementTest, InstanceInvalidatedWhenNonAttachedTargetRemoved) {
 
   // There should be no instance for #target anymore, since that element was
   // removed.
-  auto* use = ToSVGUseElement(GetDocument().getElementById("use"));
+  auto* use = To<SVGUseElement>(GetDocument().getElementById("use"));
   ASSERT_TRUE(use);
   ASSERT_TRUE(use->GetShadowRoot());
   ASSERT_FALSE(use->GetShadowRoot()->getElementById("target"));
@@ -47,7 +47,7 @@ TEST_F(SVGUseElementTest, InstanceInvalidatedWhenNonAttachedTargetRemoved) {
 
 TEST_F(SVGUseElementTest,
        InstanceInvalidatedWhenNonAttachedTargetMovedInDocument) {
-  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+  GetDocument().body()->setInnerHTML(R"HTML(
     <svg>
       <use id="use" href="#path"/>
       <textPath id="path">
@@ -69,14 +69,14 @@ TEST_F(SVGUseElementTest,
 
   // There should be no instance for #target anymore, since that element was
   // removed.
-  auto* use = ToSVGUseElement(GetDocument().getElementById("use"));
+  auto* use = To<SVGUseElement>(GetDocument().getElementById("use"));
   ASSERT_TRUE(use);
   ASSERT_TRUE(use->GetShadowRoot());
   ASSERT_FALSE(use->GetShadowRoot()->getElementById("target"));
 }
 
 TEST_F(SVGUseElementTest, NullInstanceRootWhenNotConnectedToDocument) {
-  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+  GetDocument().body()->setInnerHTML(R"HTML(
     <svg>
       <defs>
         <rect id="r" width="100" height="100" fill="blue"/>
@@ -96,7 +96,7 @@ TEST_F(SVGUseElementTest, NullInstanceRootWhenNotConnectedToDocument) {
 }
 
 TEST_F(SVGUseElementTest, NullInstanceRootWhenConnectedToInactiveDocument) {
-  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+  GetDocument().body()->setInnerHTML(R"HTML(
     <svg>
       <defs>
         <rect id="r" width="100" height="100" fill="blue"/>
@@ -118,7 +118,7 @@ TEST_F(SVGUseElementTest, NullInstanceRootWhenConnectedToInactiveDocument) {
 }
 
 TEST_F(SVGUseElementTest, NullInstanceRootWhenShadowTreePendingRebuild) {
-  GetDocument().body()->SetInnerHTMLFromString(R"HTML(
+  GetDocument().body()->setInnerHTML(R"HTML(
     <svg>
       <defs>
         <rect id="r" width="100" height="100" fill="blue"/>

@@ -95,9 +95,9 @@ You can encode 8-bit characters using "$0xFF" syntax, so a string with newlines
 
 ### Lists
 
-There is no way to get the length of a list. If you find yourself
-wanting to do this kind of thing, you're trying to do too much work in
-the build.
+Aside from telling empty lists from non empty lists (`a == []`), there is no
+way to get the length of a list. If you find yourself wanting to do this kind
+of thing, you're trying to do too much work in the build.
 
 Lists support appending:
 

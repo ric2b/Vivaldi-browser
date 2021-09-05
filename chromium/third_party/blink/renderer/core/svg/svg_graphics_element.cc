@@ -46,15 +46,16 @@ SVGGraphicsElement::SVGGraphicsElement(const QualifiedName& tag_name,
 
 SVGGraphicsElement::~SVGGraphicsElement() = default;
 
-void SVGGraphicsElement::Trace(blink::Visitor* visitor) {
+void SVGGraphicsElement::Trace(Visitor* visitor) {
   visitor->Trace(transform_);
   SVGElement::Trace(visitor);
   SVGTests::Trace(visitor);
 }
 
 static bool IsViewportElement(const Element& element) {
-  return (IsSVGSVGElement(element) || IsSVGSymbolElement(element) ||
-          IsSVGForeignObjectElement(element) || IsSVGImageElement(element));
+  return (IsA<SVGSVGElement>(element) || IsA<SVGSymbolElement>(element) ||
+          IsA<SVGForeignObjectElement>(element) ||
+          IsA<SVGImageElement>(element));
 }
 
 AffineTransform SVGGraphicsElement::ComputeCTM(
@@ -89,14 +90,16 @@ AffineTransform SVGGraphicsElement::ComputeCTM(
 }
 
 SVGMatrixTearOff* SVGGraphicsElement::getCTM() {
-  GetDocument().UpdateStyleAndLayoutForNode(this);
+  GetDocument().UpdateStyleAndLayoutForNode(this,
+                                            DocumentUpdateReason::kJavaScript);
 
   return MakeGarbageCollected<SVGMatrixTearOff>(
       ComputeCTM(kNearestViewportScope));
 }
 
 SVGMatrixTearOff* SVGGraphicsElement::getScreenCTM() {
-  GetDocument().UpdateStyleAndLayoutForNode(this);
+  GetDocument().UpdateStyleAndLayoutForNode(this,
+                                            DocumentUpdateReason::kJavaScript);
 
   return MakeGarbageCollected<SVGMatrixTearOff>(ComputeCTM(kScreenScope));
 }
@@ -170,7 +173,7 @@ FloatRect SVGGraphicsElement::GetBBox() {
 }
 
 SVGRectTearOff* SVGGraphicsElement::getBBoxFromJavascript() {
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
 
   // FIXME: Eventually we should support getBBox for detached elements.
   FloatRect boundingBox;

@@ -156,6 +156,116 @@ TEST_F(ImeServiceTest, MultipleClientsRulebased) {
   EXPECT_EQ(1, count);
 }
 
+TEST_F(ImeServiceTest, RuleBasedDoesNotHandleModifierKeys) {
+  bool success = false;
+  TestClientChannel test_channel;
+  mojo::Remote<mojom::InputChannel> to_engine_remote;
+
+  remote_manager_->ConnectToImeEngine(
+      "m17n:ar", to_engine_remote.BindNewPipeAndPassReceiver(),
+      test_channel.CreatePendingRemote(), extra,
+      base::BindOnce(&ConnectCallback, &success));
+  remote_manager_.FlushForTesting();
+  EXPECT_TRUE(success);
+
+  constexpr const char* kModifierKeys[] = {
+      "Shift",    "ShiftLeft", "ShiftRight", "Alt",         "AltLeft",
+      "AltRight", "AltGraph",  "CapsLock",   "ControlLeft", "ControlRight"};
+
+  for (const auto* modifier_key : kModifierKeys) {
+    mojom::KeypressResponseForRulebased response;
+    to_engine_remote->ProcessKeypressForRulebased(
+        mojom::KeypressInfoForRulebased::New("keydown", modifier_key, false,
+                                             false, false, false, false),
+        base::BindOnce(&TestProcessKeypressForRulebasedCallback, &response));
+    to_engine_remote.FlushForTesting();
+
+    EXPECT_EQ(response.result, false);
+    ASSERT_EQ(0U, response.operations.size());
+  }
+}
+
+TEST_F(ImeServiceTest, RuleBasedDoesNotHandleCtrlShortCut) {
+  bool success = false;
+  TestClientChannel test_channel;
+  mojo::Remote<mojom::InputChannel> to_engine_remote;
+
+  remote_manager_->ConnectToImeEngine(
+      "m17n:ar", to_engine_remote.BindNewPipeAndPassReceiver(),
+      test_channel.CreatePendingRemote(), extra,
+      base::BindOnce(&ConnectCallback, &success));
+  remote_manager_.FlushForTesting();
+  EXPECT_TRUE(success);
+
+  mojom::KeypressResponseForRulebased response;
+  to_engine_remote->ProcessKeypressForRulebased(
+      mojom::KeypressInfoForRulebased::New("keydown", "ControlLeft", false,
+                                           false, false, false, false),
+      base::BindOnce(&TestProcessKeypressForRulebasedCallback, &response));
+  to_engine_remote->ProcessKeypressForRulebased(
+      mojom::KeypressInfoForRulebased::New("keydown", "A", false, false, false,
+                                           true, false),
+      base::BindOnce(&TestProcessKeypressForRulebasedCallback, &response));
+  to_engine_remote.FlushForTesting();
+
+  EXPECT_EQ(response.result, false);
+  ASSERT_EQ(0U, response.operations.size());
+}
+
+TEST_F(ImeServiceTest, RuleBasedDoesNotHandleAltShortCut) {
+  bool success = false;
+  TestClientChannel test_channel;
+  mojo::Remote<mojom::InputChannel> to_engine_remote;
+
+  remote_manager_->ConnectToImeEngine(
+      "m17n:ar", to_engine_remote.BindNewPipeAndPassReceiver(),
+      test_channel.CreatePendingRemote(), extra,
+      base::BindOnce(&ConnectCallback, &success));
+  remote_manager_.FlushForTesting();
+  EXPECT_TRUE(success);
+
+  mojom::KeypressResponseForRulebased response;
+  to_engine_remote->ProcessKeypressForRulebased(
+      mojom::KeypressInfoForRulebased::New("keydown", "AltLeft", false, false,
+                                           false, false, false),
+      base::BindOnce(&TestProcessKeypressForRulebasedCallback, &response));
+  to_engine_remote->ProcessKeypressForRulebased(
+      mojom::KeypressInfoForRulebased::New("keydown", "A", false, false, false,
+                                           false, true),
+      base::BindOnce(&TestProcessKeypressForRulebasedCallback, &response));
+  to_engine_remote.FlushForTesting();
+
+  EXPECT_EQ(response.result, false);
+  ASSERT_EQ(0U, response.operations.size());
+}
+
+TEST_F(ImeServiceTest, RuleBasedHandlesAltRight) {
+  bool success = false;
+  TestClientChannel test_channel;
+  mojo::Remote<mojom::InputChannel> to_engine_remote;
+
+  remote_manager_->ConnectToImeEngine(
+      "m17n:ar", to_engine_remote.BindNewPipeAndPassReceiver(),
+      test_channel.CreatePendingRemote(), extra,
+      base::BindOnce(&ConnectCallback, &success));
+  remote_manager_.FlushForTesting();
+  EXPECT_TRUE(success);
+
+  mojom::KeypressResponseForRulebased response;
+  to_engine_remote->ProcessKeypressForRulebased(
+      mojom::KeypressInfoForRulebased::New("keydown", "AltRight", false, false,
+                                           false, false, false),
+      base::BindOnce(&TestProcessKeypressForRulebasedCallback, &response));
+  to_engine_remote->ProcessKeypressForRulebased(
+      mojom::KeypressInfoForRulebased::New("keydown", "A", false, false, false,
+                                           false, true),
+      base::BindOnce(&TestProcessKeypressForRulebasedCallback, &response));
+  to_engine_remote.FlushForTesting();
+
+  EXPECT_EQ(response.result, false);
+  ASSERT_EQ(0U, response.operations.size());
+}
+
 // Tests that the rule-based Arabic keyboard can work correctly.
 TEST_F(ImeServiceTest, RuleBasedArabic) {
   bool success = false;
@@ -356,6 +466,39 @@ TEST_F(ImeServiceTest, RuleBasedDoesNotEscapeCharacters) {
   EXPECT_EQ(mojom::OperationMethodForRulebased::COMMIT_TEXT,
             response.operations[0]->method);
   EXPECT_EQ("<", response.operations[0]->arguments);
+}
+
+// Tests that AltGr works with rule-based. See crbug.com/1035145.
+TEST_F(ImeServiceTest, KhmerKeyboardAltGr) {
+  bool success = false;
+  TestClientChannel test_channel;
+  mojo::Remote<mojom::InputChannel> to_engine_remote;
+
+  remote_manager_->ConnectToImeEngine(
+      "m17n:km", to_engine_remote.BindNewPipeAndPassReceiver(),
+      test_channel.CreatePendingRemote(), extra,
+      base::BindOnce(&ConnectCallback, &success));
+  remote_manager_.FlushForTesting();
+  EXPECT_TRUE(success);
+
+  // Test AltRight+KeyA.
+  // We do not support AltGr for rule-based. We treat AltRight as AltGr.
+  mojom::KeypressResponseForRulebased response;
+  to_engine_remote->ProcessKeypressForRulebased(
+      mojom::KeypressInfoForRulebased::New("keydown", "AltRight", false, false,
+                                           false, false, false),
+      base::BindOnce(&TestProcessKeypressForRulebasedCallback, &response));
+  to_engine_remote->ProcessKeypressForRulebased(
+      mojom::KeypressInfoForRulebased::New("keydown", "KeyA", false, false,
+                                           false, false, false),
+      base::BindOnce(&TestProcessKeypressForRulebasedCallback, &response));
+  to_engine_remote.FlushForTesting();
+
+  EXPECT_EQ(response.result, true);
+  ASSERT_EQ(1U, response.operations.size());
+  EXPECT_EQ(mojom::OperationMethodForRulebased::COMMIT_TEXT,
+            response.operations[0]->method);
+  EXPECT_EQ("+", response.operations[0]->arguments);
 }
 
 }  // namespace ime

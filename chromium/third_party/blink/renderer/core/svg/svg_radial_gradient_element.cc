@@ -73,7 +73,7 @@ SVGRadialGradientElement::SVGRadialGradientElement(Document& document)
   AddToPropertyMap(fr_);
 }
 
-void SVGRadialGradientElement::Trace(blink::Visitor* visitor) {
+void SVGRadialGradientElement::Trace(Visitor* visitor) {
   visitor->Trace(cx_);
   visitor->Trace(cy_);
   visitor->Trace(r_);
@@ -105,12 +105,11 @@ LayoutObject* SVGRadialGradientElement::CreateLayoutObject(const ComputedStyle&,
 static void SetGradientAttributes(const SVGGradientElement& element,
                                   RadialGradientAttributes& attributes,
                                   bool is_radial) {
-  element.SynchronizeAnimatedSVGAttribute(AnyQName());
   element.CollectCommonAttributes(attributes);
 
   if (!is_radial)
     return;
-  const SVGRadialGradientElement& radial = ToSVGRadialGradientElement(element);
+  const auto& radial = To<SVGRadialGradientElement>(element);
 
   if (!attributes.HasCx() && radial.cx()->IsSpecified())
     attributes.SetCx(radial.cx()->CurrentValue());
@@ -131,8 +130,8 @@ static void SetGradientAttributes(const SVGGradientElement& element,
     attributes.SetFr(radial.fr()->CurrentValue());
 }
 
-bool SVGRadialGradientElement::CollectGradientAttributes(
-    RadialGradientAttributes& attributes) {
+void SVGRadialGradientElement::CollectGradientAttributes(
+    RadialGradientAttributes& attributes) const {
   DCHECK(GetLayoutObject());
 
   VisitedSet visited;
@@ -140,14 +139,16 @@ bool SVGRadialGradientElement::CollectGradientAttributes(
 
   while (true) {
     SetGradientAttributes(*current, attributes,
-                          IsSVGRadialGradientElement(*current));
+                          IsA<SVGRadialGradientElement>(*current));
     visited.insert(current);
 
     current = current->ReferencedElement();
-    if (!current || visited.Contains(current))
+    // Ignore the referenced gradient element if it is not attached.
+    if (!current || !current->GetLayoutObject())
       break;
-    if (!current->GetLayoutObject())
-      return false;
+    // Cycle detection.
+    if (visited.Contains(current))
+      break;
   }
 
   // Handle default values for fx/fy
@@ -156,8 +157,6 @@ bool SVGRadialGradientElement::CollectGradientAttributes(
 
   if (!attributes.HasFy())
     attributes.SetFy(attributes.Cy());
-
-  return true;
 }
 
 bool SVGRadialGradientElement::SelfHasRelativeLengths() const {

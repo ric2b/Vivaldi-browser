@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind_test_util.h"
@@ -200,7 +199,8 @@ class GCMConnectionHandlerImplTest : public testing::Test {
   net::MockClientSocketFactory socket_factory_;
   net::TestURLRequestContext url_request_context_;
   std::unique_ptr<network::NetworkContext> network_context_;
-  network::mojom::ProxyResolvingSocketFactoryPtr mojo_socket_factory_ptr_;
+  mojo::Remote<network::mojom::ProxyResolvingSocketFactory>
+      mojo_socket_factory_remote_;
   mojo::ScopedDataPipeConsumerHandle receive_pipe_handle_;
   mojo::ScopedDataPipeProducerHandle send_pipe_handle_;
 };
@@ -239,8 +239,9 @@ void GCMConnectionHandlerImplTest::BuildSocket(const ReadList& read_list,
 
   run_loop_ = std::make_unique<base::RunLoop>();
 
+  mojo_socket_factory_remote_.reset();
   network_context_->CreateProxyResolvingSocketFactory(
-      mojo::MakeRequest(&mojo_socket_factory_ptr_));
+      mojo_socket_factory_remote_.BindNewPipeAndPassReceiver());
   base::RunLoop run_loop;
   int net_error = net::ERR_FAILED;
   const GURL kDestination("https://example.com");
@@ -248,7 +249,7 @@ void GCMConnectionHandlerImplTest::BuildSocket(const ReadList& read_list,
       network::mojom::ProxyResolvingSocketOptions::New();
   options->use_tls = true;
   mojo_socket_remote_.reset();
-  mojo_socket_factory_ptr_->CreateProxyResolvingSocket(
+  mojo_socket_factory_remote_->CreateProxyResolvingSocket(
       kDestination, std::move(options),
       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
       mojo_socket_remote_.BindNewPipeAndPassReceiver(),
@@ -276,12 +277,12 @@ void GCMConnectionHandlerImplTest::Connect(
     ScopedMessage* dst_proto) {
   connection_handler_ = std::make_unique<ConnectionHandlerImpl>(
       base::ThreadTaskRunnerHandle::Get(), TestTimeouts::tiny_timeout(),
-      base::Bind(&GCMConnectionHandlerImplTest::ReadContinuation,
-                 base::Unretained(this), dst_proto),
-      base::Bind(&GCMConnectionHandlerImplTest::WriteContinuation,
-                 base::Unretained(this)),
-      base::Bind(&GCMConnectionHandlerImplTest::ConnectionContinuation,
-                 base::Unretained(this)));
+      base::BindRepeating(&GCMConnectionHandlerImplTest::ReadContinuation,
+                          base::Unretained(this), dst_proto),
+      base::BindRepeating(&GCMConnectionHandlerImplTest::WriteContinuation,
+                          base::Unretained(this)),
+      base::BindRepeating(&GCMConnectionHandlerImplTest::ConnectionContinuation,
+                          base::Unretained(this)));
   EXPECT_FALSE(connection_handler()->CanSendMessage());
   connection_handler_->Init(*BuildLoginRequest(kAuthId, kAuthToken, ""),
                             std::move(receive_pipe_handle_),

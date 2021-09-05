@@ -24,6 +24,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/messaging/native_messaging_host_manifest.h"
@@ -49,7 +50,8 @@ class NativeProcessLauncherImpl : public NativeProcessLauncher {
                             intptr_t native_window,
                             const base::FilePath& profile_directory,
                             bool require_native_initiated_connections,
-                            const std::string& connect_id);
+                            const std::string& connect_id,
+                            const std::string& error_arg);
   ~NativeProcessLauncherImpl() override;
 
   void Launch(const GURL& origin,
@@ -63,7 +65,8 @@ class NativeProcessLauncherImpl : public NativeProcessLauncher {
          intptr_t native_window,
          const base::FilePath& profile_directory,
          bool require_native_initiated_connections,
-         const std::string& connect_id);
+         const std::string& connect_id,
+         const std::string& error_arg);
     void Launch(const GURL& origin,
                 const std::string& native_host_name,
                 const LaunchedCallback& callback);
@@ -96,6 +99,8 @@ class NativeProcessLauncherImpl : public NativeProcessLauncher {
     const bool require_native_initiated_connections_;
 
     const std::string connect_id_;
+    const std::string error_arg_;
+
 #if defined(OS_WIN)
     // Handle of the native window corresponding to the extension.
     intptr_t window_handle_;
@@ -113,13 +118,15 @@ NativeProcessLauncherImpl::Core::Core(bool allow_user_level_hosts,
                                       intptr_t window_handle,
                                       const base::FilePath& profile_directory,
                                       bool require_native_initiated_connections,
-                                      const std::string& connect_id)
+                                      const std::string& connect_id,
+                                      const std::string& error_arg)
     : detached_(false),
       allow_user_level_hosts_(allow_user_level_hosts),
       profile_directory_(profile_directory),
       require_native_initiated_connections_(
           require_native_initiated_connections),
-      connect_id_(connect_id)
+      connect_id_(connect_id),
+      error_arg_(error_arg)
 #if defined(OS_WIN)
       ,
       window_handle_(window_handle)
@@ -139,9 +146,8 @@ void NativeProcessLauncherImpl::Core::Launch(
     const GURL& origin,
     const std::string& native_host_name,
     const LaunchedCallback& callback) {
-  base::PostTask(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Core::DoLaunchOnThreadPool, this, origin,
                      native_host_name, callback));
 }
@@ -234,8 +240,13 @@ void NativeProcessLauncherImpl::Core::DoLaunchOnThreadPool(
       base::StringPrintf("--parent-window=%" PRIdPTR, window_handle_));
 #endif  // !defined(OS_WIN)
 
-  if (manifest->supports_native_initiated_connections() &&
-      !profile_directory_.empty()) {
+  bool send_connect_id = false;
+  if (!error_arg_.empty()) {
+    send_connect_id = true;
+    command_line.AppendArg(error_arg_);
+  } else if (manifest->supports_native_initiated_connections() &&
+             !profile_directory_.empty()) {
+    send_connect_id = true;
     base::FilePath exe_path;
     base::PathService::Get(base::FILE_EXE, &exe_path);
 
@@ -256,7 +267,6 @@ void NativeProcessLauncherImpl::Core::DoLaunchOnThreadPool(
         ::switches::kPrefetchArgumentBrowserBackground);
 #endif
     base::Value args(base::Value::Type::LIST);
-    args.GetList().reserve(reconnect_command_line.argv().size());
     for (const auto& arg : reconnect_command_line.argv()) {
       args.Append(arg);
     }
@@ -267,11 +277,11 @@ void NativeProcessLauncherImpl::Core::DoLaunchOnThreadPool(
     base::Base64Encode(encoded_reconnect_command, &encoded_reconnect_command);
     command_line.AppendArg(
         base::StrCat({"--reconnect-command=", encoded_reconnect_command}));
+  }
 
-    if (!connect_id_.empty()) {
-      command_line.AppendArg(base::StrCat(
-          {"--", switches::kNativeMessagingConnectId, "=", connect_id_}));
-    }
+  if (send_connect_id && !connect_id_.empty()) {
+    command_line.AppendArg(base::StrCat(
+        {"--", switches::kNativeMessagingConnectId, "=", connect_id_}));
   }
 
   base::Process process;
@@ -327,12 +337,14 @@ NativeProcessLauncherImpl::NativeProcessLauncherImpl(
     intptr_t window_handle,
     const base::FilePath& profile_directory,
     bool require_native_initiated_connections,
-    const std::string& connect_id)
+    const std::string& connect_id,
+    const std::string& error_arg)
     : core_(base::MakeRefCounted<Core>(allow_user_level_hosts,
                                        window_handle,
                                        profile_directory,
                                        require_native_initiated_connections,
-                                       connect_id)) {}
+                                       connect_id,
+                                       error_arg)) {}
 
 NativeProcessLauncherImpl::~NativeProcessLauncherImpl() {
   core_->Detach();
@@ -352,7 +364,8 @@ std::unique_ptr<NativeProcessLauncher> NativeProcessLauncher::CreateDefault(
     gfx::NativeView native_view,
     const base::FilePath& profile_directory,
     bool require_native_initiated_connections,
-    const std::string& connect_id) {
+    const std::string& connect_id,
+    const std::string& error_arg) {
   intptr_t window_handle = 0;
 #if defined(OS_WIN)
   window_handle = reinterpret_cast<intptr_t>(
@@ -360,7 +373,7 @@ std::unique_ptr<NativeProcessLauncher> NativeProcessLauncher::CreateDefault(
 #endif
   return std::make_unique<NativeProcessLauncherImpl>(
       allow_user_level_hosts, window_handle, profile_directory,
-      require_native_initiated_connections, connect_id);
+      require_native_initiated_connections, connect_id, error_arg);
 }
 
 }  // namespace extensions

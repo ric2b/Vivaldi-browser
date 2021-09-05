@@ -49,7 +49,7 @@ TranslateController::TranslateController(web::WebState* web_state,
   DCHECK(web_state_);
   web_state_->AddObserver(this);
   subscription_ = web_state_->AddScriptCommandCallback(
-      base::Bind(
+      base::BindRepeating(
           [](TranslateController* ptr, const base::DictionaryValue& command,
              const GURL& page_url, bool user_is_interacting,
              web::WebFrame* sender_frame) {
@@ -84,7 +84,7 @@ void TranslateController::StartTranslation(const std::string& source_language,
 
 void TranslateController::SetJsTranslateManagerForTesting(
     JsTranslateManager* manager) {
-  js_manager_.reset(manager);
+  js_manager_ = manager;
 }
 
 bool TranslateController::OnJavascriptCommandReceived(

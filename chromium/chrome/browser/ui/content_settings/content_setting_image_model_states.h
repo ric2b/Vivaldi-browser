@@ -27,6 +27,12 @@ class ContentSettingImageModelStates
   void SetAccessibilityNotified(ImageType type, bool notified);
   bool GetAccessibilityNotified(ImageType type) const;
 
+  void SetBubbleWasAutoOpened(ImageType type, bool animation_has_run);
+  bool BubbleWasAutoOpened(ImageType type) const;
+
+  void SetPromoWasShown(ImageType type, bool promo_was_shown);
+  bool PromoWasShown(ImageType type) const;
+
  private:
   friend class content::WebContentsUserData<ContentSettingImageModelStates>;
   explicit ContentSettingImageModelStates(content::WebContents* contents);
@@ -44,6 +50,14 @@ class ContentSettingImageModelStates
   // false when the image is hidden.
   bool accessibility_notified_[static_cast<int>(ImageType::NUM_IMAGE_TYPES)] =
       {};
+
+  // Array of bool for whether the bubble was auto-opened for a given image
+  // model. This bit is reset to false when the image is hidden.
+  bool auto_opened_bubbles_[static_cast<int>(ImageType::NUM_IMAGE_TYPES)] = {};
+
+  // Array of bool for whether the indicator had a promo shown for a image
+  // model. This bit is reset to false when the image is hidden.
+  bool promo_was_shown_[static_cast<int>(ImageType::NUM_IMAGE_TYPES)] = {};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 

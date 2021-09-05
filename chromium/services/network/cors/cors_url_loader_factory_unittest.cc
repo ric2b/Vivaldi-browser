@@ -5,10 +5,10 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
@@ -42,7 +42,7 @@ class CorsURLLoaderFactoryTest : public testing::Test {
       : task_environment_(base::test::TaskEnvironment::MainThreadType::IO) {
     net::URLRequestContextBuilder context_builder;
     context_builder.set_proxy_resolution_service(
-        net::ProxyResolutionService::CreateDirect());
+        net::ConfiguredProxyResolutionService::CreateDirect());
     url_request_context_ = context_builder.Build();
   }
 
@@ -73,14 +73,14 @@ class CorsURLLoaderFactoryTest : public testing::Test {
         network_context_.get(), std::move(factory_params),
         resource_scheduler_client,
         cors_url_loader_factory_remote_.BindNewPipeAndPassReceiver(),
-        &origin_access_list_, nullptr);
+        &origin_access_list_);
   }
 
   void CreateLoaderAndStart(const ResourceRequest& request) {
     cors_url_loader_factory_->CreateLoaderAndStart(
-        mojo::MakeRequest(&url_loader_), kRouteId, kRequestId,
+        url_loader_.BindNewPipeAndPassReceiver(), kRouteId, kRequestId,
         mojom::kURLLoadOptionNone, request,
-        test_cors_loader_client_.CreateInterfacePtr(),
+        test_cors_loader_client_.CreateRemote(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   }
 
@@ -102,8 +102,8 @@ class CorsURLLoaderFactoryTest : public testing::Test {
   std::unique_ptr<mojom::URLLoaderFactory> cors_url_loader_factory_;
   mojo::Remote<mojom::URLLoaderFactory> cors_url_loader_factory_remote_;
 
-  // Holds URLLoaderPtr that CreateLoaderAndStart() creates.
-  mojom::URLLoaderPtr url_loader_;
+  // Holds URLLoader that CreateLoaderAndStart() creates.
+  mojo::Remote<mojom::URLLoader> url_loader_;
 
   // TestURLLoaderClient that records callback activities.
   TestURLLoaderClient test_cors_loader_client_;

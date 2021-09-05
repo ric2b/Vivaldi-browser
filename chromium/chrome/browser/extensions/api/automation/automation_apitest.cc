@@ -11,7 +11,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
@@ -420,6 +419,12 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, IgnoredNodesNotReturned) {
       << message_;
 }
 
+IN_PROC_BROWSER_TEST_F(AutomationApiTest, ForceLayout) {
+  StartEmbeddedTestServer();
+  ASSERT_TRUE(RunExtensionSubtest("automation/tests/tabs", "force_layout.html"))
+      << message_;
+}
+
 #if defined(OS_CHROMEOS)
 
 class AutomationApiTestWithDeviceScaleFactor : public AutomationApiTest {
@@ -439,6 +444,12 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTestWithDeviceScaleFactor, LocationScaled) {
 IN_PROC_BROWSER_TEST_F(AutomationApiTestWithDeviceScaleFactor, HitTest) {
   StartEmbeddedTestServer();
   ASSERT_TRUE(RunExtensionSubtest("automation/tests/desktop", "hit_test.html"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(AutomationApiTest, Position) {
+  StartEmbeddedTestServer();
+  ASSERT_TRUE(RunExtensionSubtest("automation/tests/desktop", "position.html"))
       << message_;
 }
 

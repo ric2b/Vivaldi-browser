@@ -43,7 +43,7 @@ cr.define('cr.translateInternals', function() {
       hash = hash.substring(1);
 
       const id = 'tabpanel-' + hash;
-      if (tabpanelIds.indexOf(id) == -1) {
+      if (tabpanelIds.indexOf(id) === -1) {
         return;
       }
 
@@ -554,7 +554,7 @@ cr.define('cr.translateInternals', function() {
       button.addEventListener('click', clearCallback, false);
     } else {
       // Used for tooltip when the button is unclickable.
-      button.title = 'No pref values to clear.'
+      button.title = 'No pref values to clear.';
     }
 
     elt.appendChild(button);

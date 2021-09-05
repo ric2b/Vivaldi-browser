@@ -178,14 +178,15 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
   init_params.remove_standard_frame = IsFrameless() || has_frame_color_;
   init_params.use_system_default_icon = false;
   if (create_params.alpha_enabled) {
-    init_params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+    init_params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
 
     // The given window is most likely not rectangular since it uses
     // transparency and has no standard frame, don't show a shadow for it.
     // TODO(skuhne): If we run into an application which should have a shadow
     // but does not have, a new attribute has to be added.
     if (IsFrameless())
-      init_params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
+      init_params.shadow_type =
+          views::Widget::InitParams::ShadowType::kNone;
   }
   init_params.visible_on_all_workspaces =
     create_params.visible_on_all_workspaces;
@@ -644,14 +645,6 @@ void VivaldiNativeAppWindowViews::DeleteDelegate() {
     widget_->RemoveObserver(this);
   }
   window_->OnNativeClose();
-}
-
-views::Widget* VivaldiNativeAppWindowViews::GetWidget() {
-  return widget_;
-}
-
-const views::Widget* VivaldiNativeAppWindowViews::GetWidget() const {
-  return widget_;
 }
 
 bool VivaldiNativeAppWindowViews::ShouldDescendIntoChildForEventHandling(

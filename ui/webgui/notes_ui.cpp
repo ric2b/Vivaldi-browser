@@ -15,13 +15,13 @@ std::string NotesUIHTMLSource::GetSource() {
 }
 
 void NotesUIHTMLSource::StartDataRequest(
-    const std::string& path,
+    const GURL& path,
     const content::WebContents::Getter& wc_getter,
-    const GotDataCallback& callback) {
+    GotDataCallback callback) {
   NOTREACHED() << "We should never get here since the extension should have"
                << "been triggered";
 
-  callback.Run(NULL);
+  std::move(callback).Run(nullptr);
 }
 
 std::string NotesUIHTMLSource::GetMimeType(const std::string& path) {

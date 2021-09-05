@@ -11,6 +11,7 @@
 #include "ash/app_list/views/assistant/assistant_main_stage.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/assistant/ui/assistant_view_delegate.h"
+#include "ash/assistant/ui/assistant_view_ids.h"
 #include "ash/assistant/util/animation_util.h"
 #include "ash/assistant/util/assistant_util.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
@@ -31,6 +32,7 @@ constexpr base::TimeDelta kDialogPlateAnimationFadeInDuration =
 
 AssistantMainView::AssistantMainView(AssistantViewDelegate* delegate)
     : delegate_(delegate) {
+  SetID(AssistantViewID::kMainView);
   InitLayout();
 
   // The view hierarchy will be destructed before AssistantController in Shell,
@@ -112,14 +114,14 @@ void AssistantMainView::InitLayout() {
       views::BoxLayout::CrossAxisAlignment::kCenter);
 
   // Dialog plate, which will be animated on its own layer.
-  dialog_plate_ = new AssistantDialogPlate(delegate_);
+  dialog_plate_ =
+      AddChildView(std::make_unique<AssistantDialogPlate>(delegate_));
   dialog_plate_->SetPaintToLayer();
   dialog_plate_->layer()->SetFillsBoundsOpaquely(false);
-  AddChildView(dialog_plate_);
 
   // Main stage.
-  main_stage_ = new AppListAssistantMainStage(delegate_);
-  AddChildView(main_stage_);
+  main_stage_ =
+      AddChildView(std::make_unique<AppListAssistantMainStage>(delegate_));
 
   layout->SetFlexForView(main_stage_, 1);
 }

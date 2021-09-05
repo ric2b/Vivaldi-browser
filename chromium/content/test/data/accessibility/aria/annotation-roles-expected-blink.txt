@@ -1,7 +1,13 @@
 rootWebArea
 ++genericContainer ignored
-++++annotationAttribution name='annotation-attribution'
-++++annotationCommentary name='annotation-commentary'
-++++annotationPresence name='annotation-presence'
-++++annotationRevision name='annotation-revision'
-++++annotationSuggestion name='annotation-suggestion'
+++++genericContainer ignored
+++++++comment name='comment'
+++++++suggestion name='suggestion'
+++++++paragraph
+++++++++staticText name='This is '
+++++++++++inlineTextBox name='This is '
+++++++++mark
+++++++++++staticText name='highlighted'
+++++++++++++inlineTextBox name='highlighted'
+++++++++staticText name='.'
+++++++++++inlineTextBox name='.'

@@ -107,8 +107,8 @@ struct MessageMemoryDumpInfo {
 
 struct MessageMemoryDumpInfoHash {
   size_t operator()(const MessageMemoryDumpInfo& info) const {
-    return base::HashInts32(
-        info.id, info.profiler_tag ? base::Hash(info.profiler_tag) : 0);
+    return base::HashInts(
+        info.id, info.profiler_tag ? base::FastHash(info.profiler_tag) : 0);
   }
 };
 
@@ -120,9 +120,11 @@ class ChannelAssociatedGroupController
   ChannelAssociatedGroupController(
       bool set_interface_id_namespace_bit,
       const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
-      const scoped_refptr<base::SingleThreadTaskRunner>& proxy_task_runner)
+      const scoped_refptr<base::SingleThreadTaskRunner>& proxy_task_runner,
+      const scoped_refptr<mojo::internal::MessageQuotaChecker>& quota_checker)
       : task_runner_(ipc_task_runner),
         proxy_task_runner_(proxy_task_runner),
+        quota_checker_(quota_checker),
         set_interface_id_namespace_bit_(set_interface_id_namespace_bit),
         dispatcher_(this),
         control_message_handler_(this),
@@ -168,10 +170,12 @@ class ChannelAssociatedGroupController
         task_runner_));
     connector_->set_incoming_receiver(&dispatcher_);
     connector_->set_connection_error_handler(
-        base::Bind(&ChannelAssociatedGroupController::OnPipeError,
-                   base::Unretained(this)));
+        base::BindRepeating(&ChannelAssociatedGroupController::OnPipeError,
+                            base::Unretained(this)));
     connector_->set_enforce_errors_from_incoming_receiver(false);
     connector_->SetWatcherHeapProfilerTag("IPC Channel");
+    if (quota_checker_)
+      connector_->SetMessageQuotaChecker(quota_checker_);
 
     // Don't let the Connector do any sort of queuing on our behalf. Individual
     // messages bound for the IPC::ChannelProxy thread (i.e. that vast majority
@@ -198,6 +202,9 @@ class ChannelAssociatedGroupController
       base::AutoLock lock(outgoing_messages_lock_);
       std::swap(outgoing_messages, outgoing_messages_);
     }
+    if (quota_checker_ && outgoing_messages.size())
+      quota_checker_->AfterMessagesDequeued(outgoing_messages.size());
+
     for (auto& message : outgoing_messages)
       SendMessage(&message);
   }
@@ -243,6 +250,9 @@ class ChannelAssociatedGroupController
     connector_.reset();
 
     base::AutoLock lock(outgoing_messages_lock_);
+    if (quota_checker_ && outgoing_messages_.size())
+      quota_checker_->AfterMessagesDequeued(outgoing_messages_.size());
+
     outgoing_messages_.clear();
   }
 
@@ -706,6 +716,8 @@ class ChannelAssociatedGroupController
       if (!connector_ || paused_) {
         if (!shut_down_) {
           base::AutoLock lock(outgoing_messages_lock_);
+          if (quota_checker_)
+            quota_checker_->BeforeMessagesEnqueued(1);
           outgoing_messages_.emplace_back(std::move(*message));
         }
         return true;
@@ -722,7 +734,7 @@ class ChannelAssociatedGroupController
           FROM_HERE,
           base::BindOnce(
               &ChannelAssociatedGroupController::SendMessageOnMasterThread,
-              this, base::Passed(message)));
+              this, std::move(*message)));
       return true;
     }
   }
@@ -977,12 +989,19 @@ class ChannelAssociatedGroupController
     return true;
   }
 
+  bool WaitForFlushToComplete(
+      mojo::ScopedMessagePipeHandle flush_pipe) override {
+    // We don't support async flushing on the IPC Channel pipe.
+    return false;
+  }
+
   // Checked in places which must be run on the master endpoint's thread.
   base::ThreadChecker thread_checker_;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   const scoped_refptr<base::SingleThreadTaskRunner> proxy_task_runner_;
+  const scoped_refptr<mojo::internal::MessageQuotaChecker> quota_checker_;
   const bool set_interface_id_namespace_bit_;
   bool paused_ = false;
   std::unique_ptr<mojo::Connector> connector_;
@@ -1100,11 +1119,12 @@ std::unique_ptr<MojoBootstrap> MojoBootstrap::Create(
     mojo::ScopedMessagePipeHandle handle,
     Channel::Mode mode,
     const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner,
-    const scoped_refptr<base::SingleThreadTaskRunner>& proxy_task_runner) {
+    const scoped_refptr<base::SingleThreadTaskRunner>& proxy_task_runner,
+    const scoped_refptr<mojo::internal::MessageQuotaChecker>& quota_checker) {
   return std::make_unique<MojoBootstrapImpl>(
-      std::move(handle),
-      new ChannelAssociatedGroupController(mode == Channel::MODE_SERVER,
-                                           ipc_task_runner, proxy_task_runner));
+      std::move(handle), new ChannelAssociatedGroupController(
+                             mode == Channel::MODE_SERVER, ipc_task_runner,
+                             proxy_task_runner, quota_checker));
 }
 
 }  // namespace IPC

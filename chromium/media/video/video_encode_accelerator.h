@@ -22,6 +22,7 @@
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame.h"
 #include "media/video/h264_parser.h"
+#include "media/video/video_encoder_info.h"
 
 namespace media {
 
@@ -38,9 +39,6 @@ class VideoFrame;
 //                  temporal_idx > 0.
 struct MEDIA_EXPORT Vp8Metadata final {
   Vp8Metadata();
-  Vp8Metadata(const Vp8Metadata& other);
-  Vp8Metadata(Vp8Metadata&& other);
-  ~Vp8Metadata();
   bool non_reference;
   uint8_t temporal_idx;
   bool layer_sync;
@@ -208,6 +206,9 @@ class MEDIA_EXPORT VideoEncodeAccelerator {
     // reported here, but will instead be indicated by a false return value
     // there.
     virtual void NotifyError(Error error) = 0;
+
+    // Call VideoEncoderInfo of the VEA is changed.
+    virtual void NotifyEncoderInfoChange(const VideoEncoderInfo& info);
 
    protected:
     // Clients are not owned by VEA instances and should not be deleted through

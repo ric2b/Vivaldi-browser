@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -126,8 +127,7 @@ void SystemTokenCertDBInitializer::OnGotTpmIsReady(
       // have been lost if initialization was interrupted.
       // We don't care about the result, and don't block waiting for it.
       LOG(WARNING) << "Request attempting TPM ownership.";
-      CryptohomeClient::Get()->TpmCanAttemptOwnership(
-          EmptyVoidDBusMethodCallback());
+      CryptohomeClient::Get()->TpmCanAttemptOwnership(base::DoNothing());
     }
 
     return;

@@ -53,7 +53,7 @@ def _ReadFirstIdsFromFile(filename, defines):
   Returns a tuple, the absolute path of SRCDIR followed by the
   first_ids dictionary.
   """
-  first_ids_dict = eval(util.ReadFile(filename, util.RAW_TEXT))
+  first_ids_dict = eval(util.ReadFile(filename, 'utf-8'))
   src_root_dir = os.path.abspath(os.path.join(os.path.dirname(filename),
                                               first_ids_dict['SRCDIR']))
 
@@ -145,21 +145,21 @@ def _ComputeIds(root, predetermined_tids):
 
       elif ('offset' in item.attrs and group and
             group.attrs.get('first_id', '') != ''):
-         offset_text = item.attrs['offset']
-         parent_text = group.attrs['first_id']
+        offset_text = item.attrs['offset']
+        parent_text = group.attrs['first_id']
 
-         try:
-           offset_id = long(offset_text)
-         except ValueError:
-           offset_id = tids[offset_text]
+        try:
+          offset_id = long(offset_text)
+        except ValueError:
+          offset_id = tids[offset_text]
 
-         try:
-           parent_id = long(parent_text)
-         except ValueError:
-           parent_id = tids[parent_text]
+        try:
+          parent_id = long(parent_text)
+        except ValueError:
+          parent_id = tids[parent_text]
 
-         id = parent_id + offset_id
-         reason = 'first_id %d + offset %d' % (parent_id, offset_id)
+        id = parent_id + offset_id
+        reason = 'first_id %d + offset %d' % (parent_id, offset_id)
 
       # We try to allocate IDs sequentially for blocks of items that might
       # be related, for instance strings in a stringtable (as their IDs might be
@@ -513,7 +513,8 @@ class GritNode(base.Node):
     """Returns the distinct (language, context, fallback_to_default_layout)
     triples from the output nodes.
     """
-    return set((n.GetLanguage(), n.GetContext(), n.GetFallbackToDefaultLayout()) for n in self.GetOutputFiles())
+    return set((n.GetLanguage(), n.GetContext(), n.GetFallbackToDefaultLayout())
+               for n in self.GetOutputFiles())
 
   def GetSubstitutionMessages(self):
     """Returns the list of <message sub_variable="true"> nodes."""

@@ -52,9 +52,9 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
-#include "storage/browser/fileapi/external_mount_points.h"
-#include "storage/common/fileapi/file_system_types.h"
-#include "storage/common/fileapi/file_system_util.h"
+#include "storage/browser/file_system/external_mount_points.h"
+#include "storage/common/file_system/file_system_types.h"
+#include "storage/common/file_system/file_system_util.h"
 
 using chromeos::disks::Disk;
 using chromeos::disks::DiskMountManager;
@@ -314,12 +314,14 @@ class DeviceEventRouterImpl : public DeviceEventRouter {
 
   // DeviceEventRouter overrides.
   void OnDeviceEvent(file_manager_private::DeviceEventType type,
-                     const std::string& device_path) override {
+                     const std::string& device_path,
+                     const std::string& device_label) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
     file_manager_private::DeviceEvent event;
     event.type = type;
     event.device_path = device_path;
+    event.device_label = device_label;
 
     BroadcastEvent(profile_,
                    extensions::events::FILE_MANAGER_PRIVATE_ON_DEVICE_CHANGED,
@@ -815,24 +817,28 @@ void EventRouter::DispatchMountCompletedEvent(
 }
 
 void EventRouter::OnFormatStarted(const std::string& device_path,
+                                  const std::string& device_label,
                                   bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // Do nothing.
 }
 
 void EventRouter::OnFormatCompleted(const std::string& device_path,
+                                    const std::string& device_label,
                                     bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // Do nothing.
 }
 
 void EventRouter::OnRenameStarted(const std::string& device_path,
+                                  const std::string& device_label,
                                   bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // Do nothing.
 }
 
 void EventRouter::OnRenameCompleted(const std::string& device_path,
+                                    const std::string& device_label,
                                     bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // Do nothing.

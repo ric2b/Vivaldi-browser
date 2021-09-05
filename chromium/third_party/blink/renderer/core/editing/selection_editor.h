@@ -52,6 +52,7 @@ class SelectionEditor final : public GarbageCollected<SelectionEditor>,
 
   VisibleSelection ComputeVisibleSelectionInDOMTree() const;
   VisibleSelectionInFlatTree ComputeVisibleSelectionInFlatTree() const;
+  bool ComputeAbsoluteBounds(IntRect& anchor, IntRect& focus) const;
   void SetSelectionAndEndTyping(const SelectionInDOMTree&);
 
   void DidAttachDocument(Document*);
@@ -61,6 +62,8 @@ class SelectionEditor final : public GarbageCollected<SelectionEditor>,
   Range* DocumentCachedRange() const;
   void ClearDocumentCachedRange();
 
+  void MarkCacheDirty();
+
   void Trace(Visitor*) override;
 
  private:
@@ -69,7 +72,6 @@ class SelectionEditor final : public GarbageCollected<SelectionEditor>,
 
   void AssertSelectionValid() const;
   void ClearVisibleSelection();
-  void MarkCacheDirty();
   bool ShouldAlwaysUseDirectionalSelection() const;
 
   // VisibleSelection cache related
@@ -78,11 +80,15 @@ class SelectionEditor final : public GarbageCollected<SelectionEditor>,
   void UpdateCachedVisibleSelectionIfNeeded() const;
   void UpdateCachedVisibleSelectionInFlatTreeIfNeeded() const;
 
+  // AbsoluteBounds cache related
+  bool NeedsUpdateAbsoluteBounds() const;
+  void UpdateCachedAbsoluteBoundsIfNeeded() const;
+
   void DidFinishTextChange(const Position& base, const Position& extent);
   void DidFinishDOMMutation();
 
   // Implementation of |SynchronousMutationObsderver| member functions.
-  void ContextDestroyed(Document*) final;
+  void ContextDestroyed() final;
   void DidChangeChildren(const ContainerNode&) final;
   void DidMergeTextNodes(const Text& merged_node,
                          const NodeWithIndex& node_to_be_removed_with_index,
@@ -105,10 +111,22 @@ class SelectionEditor final : public GarbageCollected<SelectionEditor>,
 
   mutable VisibleSelection cached_visible_selection_in_dom_tree_;
   mutable VisibleSelectionInFlatTree cached_visible_selection_in_flat_tree_;
+  mutable bool cached_visible_selection_in_dom_tree_is_dirty_ = true;
+  mutable bool cached_visible_selection_in_flat_tree_is_dirty_ = true;
+
+  mutable IntRect cached_anchor_bounds_;
+  mutable IntRect cached_focus_bounds_;
+  mutable bool cached_absolute_bounds_are_dirty_ = true;
+  mutable bool has_selection_bounds_ = false;
+
+#if DCHECK_IS_ON()
+  // TODO(xiaochengh): We should move these style versions into VisibleSelection
+  // and a new structure for absolute bounds, instead of maintaining them here.
   mutable uint64_t style_version_for_dom_tree_ = static_cast<uint64_t>(-1);
   mutable uint64_t style_version_for_flat_tree_ = static_cast<uint64_t>(-1);
-  mutable bool cached_visible_selection_in_dom_tree_is_dirty_ = false;
-  mutable bool cached_visible_selection_in_flat_tree_is_dirty_ = false;
+  mutable uint64_t style_version_for_absolute_bounds_ =
+      static_cast<uint64_t>(-1);
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(SelectionEditor);
 };

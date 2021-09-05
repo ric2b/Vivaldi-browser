@@ -86,7 +86,10 @@ class CC_PAINT_EXPORT DisplayItemList
     size_t offset = paint_op_buffer_.next_op_offset();
     if (usage_hint_ == kTopLevelDisplayItemList)
       offsets_.push_back(offset);
-    paint_op_buffer_.push<T>(std::forward<Args>(args)...);
+    const T* op = paint_op_buffer_.push<T>(std::forward<Args>(args)...);
+    if (op->IsDrawOp())
+      has_draw_ops_ = true;
+    DCHECK(op->IsValid());
     return offset;
   }
 
@@ -165,7 +168,6 @@ class CC_PAINT_EXPORT DisplayItemList
 
   int NumSlowPaths() const { return paint_op_buffer_.numSlowPaths(); }
   bool HasNonAAPaint() const { return paint_op_buffer_.HasNonAAPaint(); }
-  bool HasText() const { return paint_op_buffer_.HasText(); }
 
   // This gives the total number of PaintOps.
   size_t TotalOpCount() const { return paint_op_buffer_.total_op_count(); }
@@ -195,10 +197,11 @@ class CC_PAINT_EXPORT DisplayItemList
                              SkColor* color,
                              int max_ops_to_analyze = 1);
 
+  std::string ToString() const;
+  bool has_draw_ops() const { return has_draw_ops_; }
+
  private:
-  FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, TraceEmptyVisualRect);
-  FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, AsValueWithNoOps);
-  FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, AsValueWithOps);
+  friend class DisplayItemListTest;
   friend gpu::raster::RasterImplementation;
   friend gpu::raster::RasterImplementationGLES;
 
@@ -208,6 +211,7 @@ class CC_PAINT_EXPORT DisplayItemList
 
   std::unique_ptr<base::trace_event::TracedValue> CreateTracedValue(
       bool include_items) const;
+  void AddToValue(base::trace_event::TracedValue*, bool include_items) const;
 
   // If we're currently within a paired display item block, unions the
   // given visual rect with the begin display item's visual rect.
@@ -244,6 +248,7 @@ class CC_PAINT_EXPORT DisplayItemList
 #endif
 
   UsageHint usage_hint_;
+  bool has_draw_ops_ = false;
 
   friend class base::RefCountedThreadSafe<DisplayItemList>;
   FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, BytesUsed);

@@ -136,6 +136,8 @@ namespace developerPrivate {
     boolean suspiciousInstall;
     boolean corruptInstall;
     boolean updateRequired;
+    boolean blockedByPolicy;
+    boolean custodianApprovalRequired;
   };
 
   dictionary OptionsPage {
@@ -160,7 +162,6 @@ namespace developerPrivate {
 
   enum ControllerType {
     POLICY,
-    CHILD_CUSTODIAN,
     SUPERVISED_USER_CUSTODIAN
   };
 
@@ -259,7 +260,6 @@ namespace developerPrivate {
   };
 
   dictionary ProfileInfo {
-    boolean appInfoDialogEnabled;
     boolean canLoadUnpacked;
     boolean inDeveloperMode;
     boolean isDeveloperModeControlledByPolicy;

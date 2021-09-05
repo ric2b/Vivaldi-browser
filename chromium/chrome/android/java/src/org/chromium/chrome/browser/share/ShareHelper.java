@@ -21,11 +21,12 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
-import android.graphics.Bitmap;
+import android.content.res.Resources;
+import android.content.res.Resources.NotFoundException;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
-import android.support.v7.app.AlertDialog;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Pair;
 import android.view.MenuItem;
@@ -33,29 +34,23 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.app.AlertDialog;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.ApplicationState;
-import org.chromium.base.ApplicationStatus;
-import org.chromium.base.Callback;
-import org.chromium.base.ContentUriUtils;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
-import org.chromium.base.StreamUtil;
 import org.chromium.base.StrictModeContext;
-import org.chromium.base.VisibleForTesting;
-import org.chromium.base.metrics.CachedMetrics;
-import org.chromium.base.task.AsyncTask;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.content_public.browser.RenderWidgetHostView;
-import org.chromium.content_public.browser.WebContents;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.ui.UiUtils;
+import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.base.WindowAndroid.IntentCallback;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
@@ -87,18 +82,9 @@ public class ShareHelper {
     /** The task ID of the activity that triggered the share action. */
     public static final String EXTRA_TASK_ID = "org.chromium.chrome.extra.TASK_ID";
 
-    private static final String JPEG_EXTENSION = ".jpg";
-    private static final String PACKAGE_NAME_KEY = "last_shared_package_name";
-    private static final String CLASS_NAME_KEY = "last_shared_class_name";
+    private static final String PACKAGE_NAME_KEY_SUFFIX = "last_shared_package_name";
+    private static final String CLASS_NAME_KEY_SUFFIX = "last_shared_class_name";
     private static final String EXTRA_SHARE_SCREENSHOT_AS_STREAM = "share_screenshot_as_stream";
-    private static final long COMPONENT_INFO_READ_TIMEOUT_IN_MS = 1000;
-
-    /**
-     * Directory name for shared images.
-     *
-     * Named "screenshot" for historical reasons as we only initially shared screenshot images.
-     */
-    private static final String SHARE_IMAGES_DIRECTORY_NAME = "screenshot";
 
     /** Force the use of a Chrome-specific intent chooser, not the system chooser. */
     private static boolean sForceCustomChooserForTesting;
@@ -122,30 +108,21 @@ public class ShareHelper {
     /**
      * Fire the intent to share content with the target app.
      *
-     * @param activity The current activity.
+     * @param window The current window.
      * @param intent The intent to fire.
-     * @param allowIdentification Allow the target app to identify Chrome as the source.
+     * @param callback The callback to be triggered when the calling activity has finished.  This
+     *                 allows the target app to identify Chrome as the source.
      */
-    private static void fireIntent(Activity activity, Intent intent, boolean allowIdentification) {
+    private static void fireIntent(
+            WindowAndroid window, Intent intent, @Nullable IntentCallback callback) {
         if (sFakeIntentReceiverForTesting != null) {
             sFakeIntentReceiverForTesting.fireIntent(ContextUtils.getApplicationContext(), intent);
-        } else if (allowIdentification) {
-            activity.startActivityForResult(intent, 0);
+        } else if (callback != null) {
+            window.showIntent(intent, callback, null);
         } else {
+            // TODO(tedchoc): Allow startActivity w/o intent via Window.
+            Activity activity = window.getActivity().get();
             activity.startActivity(intent);
-        }
-    }
-
-    private static void deleteShareImageFiles(File file) {
-        if (!file.exists()) return;
-        if (file.isDirectory()) {
-            File[] file_list = file.listFiles();
-            if (file_list != null) {
-                for (File f : file_list) deleteShareImageFiles(f);
-            }
-        }
-        if (!file.delete()) {
-            Log.w(TAG, "Failed to delete share image file: %s", file.getAbsolutePath());
         }
     }
 
@@ -191,7 +168,7 @@ public class ShareHelper {
     /**
      * Receiver to record the chosen component when sharing an Intent.
      */
-    static class TargetChosenReceiver extends BroadcastReceiver {
+    static class TargetChosenReceiver extends BroadcastReceiver implements IntentCallback {
         private static final String EXTRA_RECEIVER_TOKEN = "receiver_token";
         private static final String EXTRA_SOURCE_PACKAGE_NAME = "source_package_name";
         private static final Object LOCK = new Object();
@@ -200,7 +177,8 @@ public class ShareHelper {
         private static TargetChosenReceiver sLastRegisteredReceiver;
 
         private final boolean mSaveLastUsed;
-        @Nullable private final TargetChosenCallback mCallback;
+        @Nullable
+        private TargetChosenCallback mCallback;
 
         private TargetChosenReceiver(boolean saveLastUsed,
                                      @Nullable TargetChosenCallback callback) {
@@ -214,12 +192,14 @@ public class ShareHelper {
         }
 
         @TargetApi(Build.VERSION_CODES.LOLLIPOP_MR1)
-        static void sendChooserIntent(boolean saveLastUsed, Activity activity, Intent sharingIntent,
-                @Nullable TargetChosenCallback callback, @Nullable String sourcePackageName) {
+        static void sendChooserIntent(boolean saveLastUsed, WindowAndroid window,
+                Intent sharingIntent, @Nullable TargetChosenCallback callback,
+                @Nullable String sourcePackageName) {
+            final String packageName = ContextUtils.getApplicationContext().getPackageName();
             synchronized (LOCK) {
                 if (sTargetChosenReceiveAction == null) {
-                    sTargetChosenReceiveAction = activity.getPackageName() + "/"
-                            + TargetChosenReceiver.class.getName() + "_ACTION";
+                    sTargetChosenReceiveAction =
+                            packageName + "/" + TargetChosenReceiver.class.getName() + "_ACTION";
                 }
                 Context context = ContextUtils.getApplicationContext();
                 if (sLastRegisteredReceiver != null) {
@@ -236,9 +216,10 @@ public class ShareHelper {
             }
 
             Intent intent = new Intent(sTargetChosenReceiveAction);
-            intent.setPackage(activity.getPackageName());
+            intent.setPackage(packageName);
             intent.putExtra(EXTRA_RECEIVER_TOKEN, sLastRegisteredReceiver.hashCode());
             intent.putExtra(EXTRA_SOURCE_PACKAGE_NAME, sourcePackageName);
+            Activity activity = window.getActivity().get();
             final PendingIntent pendingIntent = PendingIntent.getBroadcast(activity, 0, intent,
                     PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_ONE_SHOT);
             Intent chooserIntent = Intent.createChooser(sharingIntent,
@@ -247,7 +228,7 @@ public class ShareHelper {
             if (sFakeIntentReceiverForTesting != null) {
                 sFakeIntentReceiverForTesting.setIntentToSendBack(intent);
             }
-            fireIntent(activity, chooserIntent, false);
+            fireIntent(window, chooserIntent, sLastRegisteredReceiver);
         }
 
         @Override
@@ -266,157 +247,78 @@ public class ShareHelper {
             String sourcePackageName = intent.getStringExtra(EXTRA_SOURCE_PACKAGE_NAME);
             if (mCallback != null) {
                 mCallback.onTargetChosen(target);
+                mCallback = null;
             }
             if (mSaveLastUsed && target != null) {
                 setLastShareComponentName(target, sourcePackageName);
             }
         }
 
+        @Override
+        public void onIntentCompleted(WindowAndroid window, int resultCode, Intent data) {
+            if (resultCode == Activity.RESULT_CANCELED) {
+                cancel();
+            }
+        }
+
         private void cancel() {
             if (mCallback != null) {
                 mCallback.onCancel();
+                mCallback = null;
             }
         }
     }
 
     /**
-     * Returns the directory where temporary files are stored to be shared with external
-     * applications. These files are deleted on startup and when there are no longer any active
-     * Activities.
-     *
-     * @return The directory where shared files are stored.
-     */
-    public static File getSharedFilesDirectory() throws IOException {
-        File imagePath = UiUtils.getDirectoryForImageCapture(ContextUtils.getApplicationContext());
-        return new File(imagePath, SHARE_IMAGES_DIRECTORY_NAME);
-    }
-
-    /**
-     * Clears all shared image files.
-     */
-    public static void clearSharedImages() {
-        AsyncTask.SERIAL_EXECUTOR.execute(() -> {
-            try {
-                deleteShareImageFiles(getSharedFilesDirectory());
-            } catch (IOException ie) {
-                // Ignore exception.
-            }
-        });
-    }
-
-    /**
-     * Creates and shows a share intent picker dialog or starts a share intent directly with the
-     * activity that was most recently used to share based on shareDirectly value.
-     *
-     * This function will save |screenshot| under {app's root}/files/images/screenshot (or
-     * /sdcard/DCIM/browser-images/screenshot if ADK is lower than JB MR2).
-     * Cleaning up doesn't happen automatically, and so an app should call clearSharedScreenshots()
-     * explicitly when needed.
-     *
+     * Share directly with the last used share target.
      * @param params The container holding the share parameters.
      */
-    public static void share(ShareParams params) {
-        if (params.shareDirectly()) {
-            ComponentName component = getLastShareComponentName(params.getSourcePackageName());
-            if (component == null) return;
-            assert params.getCallback() == null;
-            makeIntentAndShare(params, component);
-        } else if (TargetChosenReceiver.isSupported()) {
-            makeIntentAndShare(params, null);
-        } else {
-            showShareDialog(params);
-        }
+    public static void shareDirectly(ShareParams params) {
+        assert params.shareDirectly();
+        ComponentName component = getLastShareComponentName(params.getSourcePackageName());
+        if (component == null) return;
+        assert params.getCallback() == null;
+        makeIntentAndShare(params, component);
     }
 
-    /**
-     * Generate a temporary URI for a set of JPEG bytes and provide that URI to a callback for
-     * sharing.
-     * @param activity The activity used to trigger the share action.
-     * @param jpegImageData The image data to be shared in jpeg format.
-     * @param callback A provided callback function which will act on the generated URI.
-     */
-    public static void generateUriFromData(
-            final Activity activity, final byte[] jpegImageData, Callback<Uri> callback) {
-        if (jpegImageData.length == 0) {
-            Log.w(TAG, "Share failed -- Received image contains no data.");
-            return;
-        }
-
-        new AsyncTask<Uri>() {
-            @Override
-            protected Uri doInBackground() {
-                FileOutputStream fOut = null;
-                try {
-                    File path = new File(UiUtils.getDirectoryForImageCapture(activity),
-                            SHARE_IMAGES_DIRECTORY_NAME);
-                    if (path.exists() || path.mkdir()) {
-                        File saveFile = File.createTempFile(
-                                String.valueOf(System.currentTimeMillis()), JPEG_EXTENSION, path);
-                        fOut = new FileOutputStream(saveFile);
-                        fOut.write(jpegImageData);
-                        fOut.flush();
-
-                        return ContentUriUtils.getContentUriFromFile(saveFile);
-                    } else {
-                        Log.w(TAG, "Share failed -- Unable to create share image directory.");
-                    }
-                } catch (IOException ie) {
-                    // Ignore exception.
-                } finally {
-                    StreamUtil.closeQuietly(fOut);
-                }
-
-                return null;
-            }
-
-            @Override
-            protected void onPostExecute(Uri imageUri) {
-                if (imageUri == null) {
-                    return;
-                }
-                if (ApplicationStatus.getStateForApplication()
-                        == ApplicationState.HAS_DESTROYED_ACTIVITIES) {
-                    return;
-                }
-
-                callback.onResult(imageUri);
-            }
-        }.executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
-    }
 
     /**
      * Share an image URI with an activity identified by the provided Component Name.
-     * @param activity The current activity
+     * @param window The current window.
      * @param name The component name of the activity to share the image with.
      * @param imageUri The url to share with the external activity.
      */
-    public static void shareImage(final Activity activity, final ComponentName name, Uri imageUri) {
+    public static void shareImage(
+            final WindowAndroid window, final ComponentName name, Uri imageUri) {
         Intent shareIntent = getShareImageIntent(imageUri);
         if (name == null) {
             if (TargetChosenReceiver.isSupported()) {
-                TargetChosenReceiver.sendChooserIntent(true, activity, shareIntent, null, null);
+                TargetChosenReceiver.sendChooserIntent(true, window, shareIntent, null, null);
             } else {
-                Intent chooserIntent = Intent.createChooser(
-                        shareIntent, activity.getString(R.string.share_link_chooser_title));
-                fireIntent(activity, chooserIntent, false);
+                Intent chooserIntent = Intent.createChooser(shareIntent,
+                        window.getActivity().get().getString(R.string.share_link_chooser_title));
+                fireIntent(window, chooserIntent, null);
             }
         } else {
             shareIntent.setComponent(name);
-            fireIntent(activity, shareIntent, false);
+            fireIntent(window, shareIntent, null);
         }
     }
 
     /**
      * Share an image URI with Google Lens.
-     * @param activity The current activity
+     * @param window The current window.
      * @param imageUri The url to share with the app.
      * @param isIncognito Whether the current tab is in incognito mode.
      */
     public static void shareImageWithGoogleLens(
-            final Activity activity, Uri imageUri, boolean isIncognito) {
-        Intent shareIntent = LensUtils.getShareWithGoogleLensIntent(imageUri, isIncognito);
+            final WindowAndroid window, Uri imageUri, boolean isIncognito) {
+        Intent shareIntent = LensUtils.getShareWithGoogleLensIntent(
+                imageUri, isIncognito, SystemClock.elapsedRealtimeNanos());
         try {
-            fireIntent(activity, shareIntent, /* allowIdentification= */ true);
+            // Pass an empty callback to ensure the triggered activity can identify the source
+            // of the intent (startActivityForResult allows app identification).
+            fireIntent(window, shareIntent, (w, resultCode, data) -> {});
         } catch (ActivityNotFoundException e) {
             // The initial version check should guarantee that the activity is available. However,
             // the exception may be thrown in test environments after mocking out the version check.
@@ -425,74 +327,13 @@ public class ShareHelper {
         }
     }
 
-    private static class ExternallyVisibleUriCallback implements Callback<String> {
-        private Callback<Uri> mComposedCallback;
-        ExternallyVisibleUriCallback(Callback<Uri> cb) {
-            mComposedCallback = cb;
-        }
-
-        @Override
-        public void onResult(final String path) {
-            if (TextUtils.isEmpty(path)) {
-                mComposedCallback.onResult(null);
-                return;
-            }
-
-            new AsyncTask<Uri>() {
-                @Override
-                protected Uri doInBackground() {
-                    return ContentUriUtils.getContentUriFromFile(new File(path));
-                }
-
-                @Override
-                protected void onPostExecute(Uri uri) {
-                    mComposedCallback.onResult(uri);
-                }
-            }
-                    .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-        }
-    }
-
-    // TODO(yfriedman): Remove after internal tree is updated.
-    public static void saveScreenshotToDisk(
-            Bitmap screenshot, Context context, Callback<Uri> callback) {}
-
-    /**
-     * Captures a screenshot for the provided web contents, persists it and notifies the file
-     * provider that the file is ready to be accessed by the client.
-     *
-     * The screenshot is compressed to JPEG before being written to the file.
-     *
-     * @param contents The WebContents instance for which to capture a screenshot.
-     * @param width    The desired width of the resulting screenshot, or 0 for "auto."
-     * @param height   The desired height of the resulting screenshot, or 0 for "auto."
-     * @param callback The callback that will be called once the screenshot is saved.
-     */
-    public static void captureScreenshotForContents(
-            WebContents contents, int width, int height, Callback<Uri> callback) {
-        RenderWidgetHostView rwhv = contents.getRenderWidgetHostView();
-        if (rwhv == null) {
-          callback.onResult(null);
-          return;
-        }
-        try {
-            String path = UiUtils.getDirectoryForImageCapture(ContextUtils.getApplicationContext())
-                    + File.separator + SHARE_IMAGES_DIRECTORY_NAME;
-            rwhv.writeContentBitmapToDiskAsync(
-                    width, height, path, new ExternallyVisibleUriCallback(callback));
-        } catch (IOException e) {
-            Log.e(TAG, "Error getting content bitmap: ", e);
-            callback.onResult(null);
-        }
-    }
-
     /**
      * Creates and shows a share intent picker dialog.
      *
      * @param params The container holding the share parameters.
      */
-    private static void showShareDialog(final ShareParams params) {
-        Activity activity = params.getActivity();
+    static void showShareDialog(final ShareParams params) {
+        Activity activity = params.getWindow().getActivity().get();
         final TargetChosenCallback callback = params.getCallback();
         Intent intent = getShareLinkAppCompatibilityIntent();
         PackageManager manager = activity.getPackageManager();
@@ -551,15 +392,30 @@ public class ShareHelper {
         }
     }
 
-    private static void makeIntentAndShare(ShareParams params, @Nullable ComponentName component) {
+    /**
+     * Show the default share sheet. On L+ this is the Android system share sheet on K and below
+     * this is a custom share dialog.
+     * @param params The share parameters.
+     */
+    static void showDefaultShareUi(ShareParams params) {
+        if (TargetChosenReceiver.isSupported()) {
+            // On L+ open system share sheet.
+            makeIntentAndShare(params, null);
+        } else {
+            // On K and below open custom share dialog.
+            showShareDialog(params);
+        }
+    }
+
+    static void makeIntentAndShare(ShareParams params, @Nullable ComponentName component) {
         Intent intent = getShareLinkIntent(params);
         intent.addFlags(Intent.FLAG_ACTIVITY_FORWARD_RESULT | Intent.FLAG_ACTIVITY_PREVIOUS_IS_TOP);
         intent.setComponent(component);
         if (intent.getComponent() != null) {
-            fireIntent(params.getActivity(), intent, false);
+            fireIntent(params.getWindow(), intent, null);
         } else {
             assert TargetChosenReceiver.isSupported();
-            TargetChosenReceiver.sendChooserIntent(params.saveLastUsed(), params.getActivity(),
+            TargetChosenReceiver.sendChooserIntent(params.saveLastUsed(), params.getWindow(),
                     intent, params.getCallback(), params.getSourcePackageName());
         }
     }
@@ -622,10 +478,8 @@ public class ShareHelper {
             } catch (NameNotFoundException exception) {
                 // Use the default null values.
             }
-            CachedMetrics.BooleanHistogramSample isLastSharedAppInfoRetrieved =
-                    new CachedMetrics.BooleanHistogramSample(
-                            "Android.IsLastSharedAppInfoRetrieved");
-            isLastSharedAppInfoRetrieved.record(retrieved);
+            RecordHistogram.recordBooleanHistogram(
+                    "Android.IsLastSharedAppInfoRetrieved", retrieved);
         }
 
         return new Pair<>(directShareIcon, directShareTitle);
@@ -642,11 +496,24 @@ public class ShareHelper {
     @VisibleForTesting
     public static void setLastShareComponentName(
             ComponentName component, @Nullable String sourcePackageName) {
-        SharedPreferences preferences = getSharePreferences(sourcePackageName);
+        if (sourcePackageName == null) {
+            setLastShareComponentNameForChrome(component);
+            return;
+        }
+
+        SharedPreferences preferences = getExternalAppSharingSharedPreferences();
         SharedPreferences.Editor editor = preferences.edit();
         editor.putString(getPackageNameKey(sourcePackageName), component.getPackageName());
         editor.putString(getClassNameKey(sourcePackageName), component.getClassName());
         editor.apply();
+    }
+
+    private static void setLastShareComponentNameForChrome(ComponentName component) {
+        SharedPreferencesManager preferencesManager = SharedPreferencesManager.getInstance();
+        preferencesManager.writeString(
+                ChromePreferenceKeys.SHARING_LAST_SHARED_PACKAGE_NAME, component.getPackageName());
+        preferencesManager.writeString(
+                ChromePreferenceKeys.SHARING_LAST_SHARED_CLASS_NAME, component.getClassName());
     }
 
     @VisibleForTesting
@@ -657,7 +524,7 @@ public class ShareHelper {
                 isMultipleFileShare ? Intent.ACTION_SEND_MULTIPLE : Intent.ACTION_SEND;
         Intent intent = new Intent(action);
         intent.addFlags(ApiCompatibilityUtils.getActivityNewDocumentFlag());
-        intent.putExtra(EXTRA_TASK_ID, params.getActivity().getTaskId());
+        intent.putExtra(EXTRA_TASK_ID, params.getWindow().getActivity().get().getTaskId());
 
         Uri screenshotUri = params.getScreenshotUri();
         if (screenshotUri != null) {
@@ -732,25 +599,63 @@ public class ShareHelper {
      */
     @Nullable
     public static ComponentName getLastShareComponentName(@Nullable String sourcePackageName) {
-        SharedPreferences preferences = getSharePreferences(sourcePackageName);
+        if (sourcePackageName == null) {
+            return getLastShareByChromeComponentName();
+        }
+
+        SharedPreferences preferences = getExternalAppSharingSharedPreferences();
         String packageName = preferences.getString(getPackageNameKey(sourcePackageName), null);
         String className = preferences.getString(getClassNameKey(sourcePackageName), null);
+        return createComponentName(packageName, className);
+    }
+
+    /**
+     * Gets the {@link ComponentName} of the app that was used to last share by Chrome.
+     */
+    @Nullable
+    public static ComponentName getLastShareByChromeComponentName() {
+        SharedPreferencesManager preferencesManager = SharedPreferencesManager.getInstance();
+        String packageName = preferencesManager.readString(
+                ChromePreferenceKeys.SHARING_LAST_SHARED_PACKAGE_NAME, null);
+        String className = preferencesManager.readString(
+                ChromePreferenceKeys.SHARING_LAST_SHARED_CLASS_NAME, null);
+        return createComponentName(packageName, className);
+    }
+
+    private static ComponentName createComponentName(String packageName, String className) {
         if (packageName == null || className == null) return null;
         return new ComponentName(packageName, className);
     }
 
-    private static SharedPreferences getSharePreferences(@Nullable String sourcePackageName) {
-        return sourcePackageName != null
-                ? ContextUtils.getApplicationContext().getSharedPreferences(
-                          EXTERNAL_APP_SHARING_PREF_FILE_NAME, Context.MODE_PRIVATE)
-                : ContextUtils.getAppSharedPreferences();
+    private static SharedPreferences getExternalAppSharingSharedPreferences() {
+        return ContextUtils.getApplicationContext().getSharedPreferences(
+                EXTERNAL_APP_SHARING_PREF_FILE_NAME, Context.MODE_PRIVATE);
     }
 
-    private static String getPackageNameKey(@Nullable String sourcePackageName) {
-        return (TextUtils.isEmpty(sourcePackageName) ? "" : sourcePackageName) + PACKAGE_NAME_KEY;
+    private static String getPackageNameKey(@NonNull String sourcePackageName) {
+        return sourcePackageName + PACKAGE_NAME_KEY_SUFFIX;
     }
 
-    private static String getClassNameKey(@Nullable String sourcePackageName) {
-        return (TextUtils.isEmpty(sourcePackageName) ? "" : sourcePackageName) + CLASS_NAME_KEY;
+    private static String getClassNameKey(@NonNull String sourcePackageName) {
+        return sourcePackageName + CLASS_NAME_KEY_SUFFIX;
+    }
+
+    /**
+     * Loads the icon for the provided ResolveInfo.
+     * @param info The ResolveInfo to load the icon for.
+     * @param manager The package manager to use to load the icon.
+     */
+    static Drawable loadIconForResolveInfo(ResolveInfo info, PackageManager manager) {
+        try {
+            final int iconRes = info.getIconResource();
+            if (iconRes != 0) {
+                Resources res = manager.getResourcesForApplication(info.activityInfo.packageName);
+                Drawable icon = ApiCompatibilityUtils.getDrawable(res, iconRes);
+                return icon;
+            }
+        } catch (NameNotFoundException | NotFoundException e) {
+            // Could not find the icon. loadIcon call below will return the default app icon.
+        }
+        return info.loadIcon(manager);
     }
 }

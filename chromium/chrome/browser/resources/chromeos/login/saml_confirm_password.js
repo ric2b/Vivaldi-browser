@@ -5,6 +5,8 @@
 Polymer({
   is: 'saml-confirm-password',
 
+  behaviors: [OobeI18nBehavior],
+
   properties: {
     email: String,
 
@@ -14,7 +16,7 @@ Polymer({
         {type: Boolean, value: false, observer: 'manualInputChanged_'}
   },
 
-  ready: function() {
+  ready() {
     /**
      * Workaround for
      * https://github.com/PolymerElements/neon-animation/issues/32
@@ -23,62 +25,62 @@ Polymer({
     var pages = this.$.animatedPages;
     delete pages._squelchNextFinishEvent;
     Object.defineProperty(pages, '_squelchNextFinishEvent', {
-      get: function() {
+      get() {
         return false;
       }
     });
   },
 
-  reset: function() {
+  reset() {
     if (this.$.cancelConfirmDlg.open)
       this.$.cancelConfirmDlg.close();
     this.disabled = false;
     this.$.navigation.closeVisible = true;
     if (this.$.animatedPages.selected != 0)
       this.$.animatedPages.selected = 0;
-    this.$.passwordInput.isInvalid = false;
+    this.$.passwordInput.invalid = false;
     this.$.passwordInput.value = '';
     if (this.manualInput) {
-      this.$$('#confirmPasswordInput').isInvalid = false;
+      this.$$('#confirmPasswordInput').invalid = false;
       this.$$('#confirmPasswordInput').value = '';
     }
   },
 
-  invalidate: function() {
-    this.$.passwordInput.isInvalid = true;
+  invalidate() {
+    this.$.passwordInput.invalid = true;
   },
 
-  focus: function() {
+  focus() {
     if (this.$.animatedPages.selected == 0)
       this.$.passwordInput.focus();
   },
 
-  onClose_: function() {
+  onClose_() {
     this.disabled = true;
     this.$.cancelConfirmDlg.showModal();
   },
 
-  onCancelNo_: function() {
+  onCancelNo_() {
     this.$.cancelConfirmDlg.close();
   },
 
-  onCancelYes_: function() {
+  onCancelYes_() {
     this.$.cancelConfirmDlg.close();
     this.fire('cancel');
   },
 
-  onPasswordSubmitted_: function() {
-    if (!this.$.passwordInput.checkValidity())
+  onPasswordSubmitted_() {
+    if (!this.$.passwordInput.validate())
       return;
     if (this.manualInput) {
       // When using manual password entry, both passwords must match.
       var confirmPasswordInput = this.$$('#confirmPasswordInput');
-      if (!confirmPasswordInput.checkValidity())
+      if (!confirmPasswordInput.validate())
         return;
 
       if (confirmPasswordInput.value != this.$.passwordInput.value) {
-        this.$.passwordInput.isInvalid = true;
-        confirmPasswordInput.isInvalid = true;
+        this.$.passwordInput.invalid = true;
+        confirmPasswordInput.invalid = true;
         return;
       }
     }
@@ -88,20 +90,20 @@ Polymer({
     this.fire('passwordEnter', {password: this.$.passwordInput.value});
   },
 
-  onDialogOverlayClosed_: function() {
+  onDialogOverlayClosed_() {
     this.disabled = false;
   },
 
-  disabledChanged_: function(disabled) {
+  disabledChanged_(disabled) {
     this.$.confirmPasswordCard.classList.toggle('full-disabled', disabled);
   },
 
-  onAnimationFinish_: function() {
+  onAnimationFinish_() {
     if (this.$.animatedPages.selected == 1)
       this.$.passwordInput.value = '';
   },
 
-  manualInputChanged_: function() {
+  manualInputChanged_() {
     var titleId =
         this.manualInput ? 'manualPasswordTitle' : 'confirmPasswordTitle';
     var passwordInputLabelId =
@@ -115,11 +117,11 @@ Polymer({
     this.$.passwordInput.error = loadTimeData.getString(passwordInputErrorId);
   },
 
-  getConfirmPasswordInputLabel_: function() {
+  getConfirmPasswordInputLabel_() {
     return loadTimeData.getString('confirmPasswordLabel');
   },
 
-  getConfirmPasswordInputError_: function() {
+  getConfirmPasswordInputError_() {
     return loadTimeData.getString('manualPasswordMismatch');
   }
 });

@@ -2,6 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/polymer/v3_0/iron-location/iron-location.js';
+import 'chrome://resources/polymer/v3_0/iron-location/iron-query-params.js';
+
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {selectFolder, setSearchTerm} from './actions.js';
+import {BOOKMARKS_BAR_ID} from './constants.js';
+import {StoreClient} from './store_client.js';
+
 Polymer({
   /**
    * This element is a one way bound interface that routes the page URL to
@@ -10,8 +19,10 @@ Polymer({
    */
   is: 'bookmarks-router',
 
+  _template: html`{__html_template__}`,
+
   behaviors: [
-    bookmarks.StoreClient,
+    StoreClient,
   ],
 
   properties: {
@@ -49,7 +60,7 @@ Polymer({
     'onStateChanged_(searchTerm_, selectedId_)',
   ],
 
-  attached: function() {
+  attached() {
     this.watch('selectedId_', function(state) {
       return state.selectedFolder;
     });
@@ -60,25 +71,24 @@ Polymer({
   },
 
   /** @private */
-  onQueryParamsChanged_: function() {
+  onQueryParamsChanged_() {
     const searchTerm = this.queryParams_.q || '';
     let selectedId = this.queryParams_.id;
     if (!selectedId && !searchTerm) {
       selectedId = BOOKMARKS_BAR_ID;
     }
 
-    if (searchTerm != this.searchTerm_) {
+    if (searchTerm !== this.searchTerm_) {
       this.searchTerm_ = searchTerm;
-      this.dispatch(bookmarks.actions.setSearchTerm(searchTerm));
+      this.dispatch(setSearchTerm(searchTerm));
     }
 
-    if (selectedId && selectedId != this.selectedId_) {
+    if (selectedId && selectedId !== this.selectedId_) {
       this.selectedId_ = selectedId;
       // Need to dispatch a deferred action so that during page load
       // `this.getState()` will only evaluate after the Store is initialized.
       this.dispatchAsync((dispatch) => {
-        dispatch(
-            bookmarks.actions.selectFolder(selectedId, this.getState().nodes));
+        dispatch(selectFolder(selectedId, this.getState().nodes));
       });
     }
   },
@@ -88,27 +98,27 @@ Polymer({
    * @param {?string} previous Previous value of the query.
    * @private
    */
-  onQueryChanged_: function(current, previous) {
+  onQueryChanged_(current, previous) {
     if (previous !== undefined) {
       this.urlQuery_ = this.query_;
     }
   },
 
   /** @private */
-  onUrlQueryChanged_: function() {
+  onUrlQueryChanged_() {
     this.query_ = this.urlQuery_;
   },
 
   /** @private */
-  onStateChanged_: function() {
+  onStateChanged_() {
     this.debounce('updateQueryParams', this.updateQueryParams_.bind(this));
   },
 
   /** @private */
-  updateQueryParams_: function() {
+  updateQueryParams_() {
     if (this.searchTerm_) {
       this.queryParams_ = {q: this.searchTerm_};
-    } else if (this.selectedId_ != BOOKMARKS_BAR_ID) {
+    } else if (this.selectedId_ !== BOOKMARKS_BAR_ID) {
       this.queryParams_ = {id: this.selectedId_};
     } else {
       this.queryParams_ = {};

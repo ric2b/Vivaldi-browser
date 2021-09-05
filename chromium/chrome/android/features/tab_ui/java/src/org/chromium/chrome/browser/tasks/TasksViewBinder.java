@@ -6,9 +6,18 @@ package org.chromium.chrome.browser.tasks;
 
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.FAKE_SEARCH_BOX_CLICK_LISTENER;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.FAKE_SEARCH_BOX_TEXT_WATCHER;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.INCOGNITO_COOKIE_CONTROLS_CARD_VISIBILITY;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.INCOGNITO_COOKIE_CONTROLS_ICON_CLICK_LISTENER;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.INCOGNITO_COOKIE_CONTROLS_MANAGER;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.INCOGNITO_COOKIE_CONTROLS_TOGGLE_CHECKED;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.INCOGNITO_COOKIE_CONTROLS_TOGGLE_CHECKED_LISTENER;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.INCOGNITO_COOKIE_CONTROLS_TOGGLE_ENFORCEMENT;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.INCOGNITO_LEARN_MORE_CLICK_LISTENER;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.IS_FAKE_SEARCH_BOX_VISIBLE;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.IS_INCOGNITO;
-import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.IS_TAB_CAROUSEL;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.IS_INCOGNITO_DESCRIPTION_INITIALIZED;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.IS_INCOGNITO_DESCRIPTION_VISIBLE;
+import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.IS_TAB_CAROUSEL_VISIBLE;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.IS_VOICE_RECOGNITION_BUTTON_VISIBLE;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.MORE_TABS_CLICK_LISTENER;
 import static org.chromium.chrome.browser.tasks.TasksSurfaceProperties.MV_TILES_VISIBLE;
@@ -26,12 +35,42 @@ class TasksViewBinder {
             view.setFakeSearchBoxClickListener(model.get(FAKE_SEARCH_BOX_CLICK_LISTENER));
         } else if (propertyKey == FAKE_SEARCH_BOX_TEXT_WATCHER) {
             view.setFakeSearchBoxTextWatcher(model.get(FAKE_SEARCH_BOX_TEXT_WATCHER));
+        } else if (propertyKey == INCOGNITO_COOKIE_CONTROLS_CARD_VISIBILITY) {
+            view.setIncognitoCookieControlsCardVisibility(
+                    model.get(INCOGNITO_COOKIE_CONTROLS_CARD_VISIBILITY));
+        } else if (propertyKey == INCOGNITO_COOKIE_CONTROLS_ICON_CLICK_LISTENER) {
+            view.setIncognitoCookieControlsIconClickListener(
+                    model.get(INCOGNITO_COOKIE_CONTROLS_ICON_CLICK_LISTENER));
+        } else if (propertyKey == INCOGNITO_COOKIE_CONTROLS_TOGGLE_CHECKED) {
+            view.setIncognitoCookieControlsToggleChecked(
+                    model.get(INCOGNITO_COOKIE_CONTROLS_TOGGLE_CHECKED));
+        } else if (propertyKey == INCOGNITO_COOKIE_CONTROLS_TOGGLE_CHECKED_LISTENER) {
+            view.setIncognitoCookieControlsToggleCheckedListener(
+                    model.get(INCOGNITO_COOKIE_CONTROLS_TOGGLE_CHECKED_LISTENER));
+        } else if (propertyKey == INCOGNITO_COOKIE_CONTROLS_TOGGLE_ENFORCEMENT) {
+            view.setIncognitoCookieControlsToggleEnforcement(
+                    model.get(INCOGNITO_COOKIE_CONTROLS_TOGGLE_ENFORCEMENT));
+        } else if (propertyKey == INCOGNITO_LEARN_MORE_CLICK_LISTENER) {
+            view.setIncognitoDescriptionLearnMoreClickListener(
+                    model.get(INCOGNITO_LEARN_MORE_CLICK_LISTENER));
         } else if (propertyKey == IS_FAKE_SEARCH_BOX_VISIBLE) {
             view.setFakeSearchBoxVisibility(model.get(IS_FAKE_SEARCH_BOX_VISIBLE));
         } else if (propertyKey == IS_INCOGNITO) {
             view.setIncognitoMode(model.get(IS_INCOGNITO));
-        } else if (propertyKey == IS_TAB_CAROUSEL) {
-            view.setIsTabCarousel(model.get(IS_TAB_CAROUSEL));
+        } else if (propertyKey == IS_INCOGNITO_DESCRIPTION_INITIALIZED) {
+            if (model.get(IS_INCOGNITO_DESCRIPTION_INITIALIZED)) {
+                view.initializeIncognitoDescriptionView();
+            }
+        } else if (propertyKey == IS_INCOGNITO_DESCRIPTION_VISIBLE) {
+            boolean isVisible = model.get(IS_INCOGNITO_DESCRIPTION_VISIBLE);
+            if (isVisible) {
+                // Need to update the service when the description view becomes visible because
+                // there may be a new off the record profile.
+                model.get(INCOGNITO_COOKIE_CONTROLS_MANAGER).updateIfNecessary();
+            }
+            view.setIncognitoDescriptionVisibility(isVisible);
+        } else if (propertyKey == IS_TAB_CAROUSEL_VISIBLE) {
+            view.setTabCarouselVisibility(model.get(IS_TAB_CAROUSEL_VISIBLE));
         } else if (propertyKey == IS_VOICE_RECOGNITION_BUTTON_VISIBLE) {
             view.setVoiceRecognitionButtonVisibility(
                     model.get(IS_VOICE_RECOGNITION_BUTTON_VISIBLE));

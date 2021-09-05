@@ -15,7 +15,8 @@ class ZoomView : public PageActionIconView {
   // WebContents. Because the current WebContents changes as the user switches
   // tabs, a LocationBarView::Delegate is supplied to queried for the current
   // WebContents when needed.
-  explicit ZoomView(PageActionIconView::Delegate* delegate);
+  ZoomView(IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+           PageActionIconView::Delegate* page_action_icon_delegate);
   ~ZoomView() override;
 
   // Updates the image and its tooltip appropriately, hiding or showing the icon
@@ -24,11 +25,12 @@ class ZoomView : public PageActionIconView {
 
  protected:
   // PageActionIconView:
-  bool Update() override;
+  void UpdateImpl() override;
   void OnExecuting(PageActionIconView::ExecuteSource source) override;
   views::BubbleDialogDelegateView* GetBubble() const override;
   const gfx::VectorIcon& GetVectorIcon() const override;
   base::string16 GetTextForTooltipAndAccessibleName() const override;
+  const char* GetClassName() const override;
 
  private:
   bool ShouldBeVisible(bool can_show_bubble) const;

@@ -17,9 +17,6 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
-import android.support.v4.text.BidiFormatter;
-import android.support.v4.view.MarginLayoutParamsCompat;
-import android.support.v7.content.res.AppCompatResources;
 import android.text.SpannableString;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
@@ -36,33 +33,39 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.text.BidiFormatter;
+import androidx.core.view.MarginLayoutParamsCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.WindowDelegate;
-import org.chromium.chrome.browser.native_page.NativePage;
 import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.LocationBar;
-import org.chromium.chrome.browser.omnibox.LocationBarVoiceRecognitionHandler;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.omnibox.UrlBarCoordinator;
 import org.chromium.chrome.browser.omnibox.UrlBarCoordinator.SelectionState;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
+import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.page_info.PageInfoController;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TrustedCdn;
+import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
-import org.chromium.chrome.browser.ui.widget.TintedDrawable;
-import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.chrome.browser.ui.native_page.NativePage;
+import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.chromium.components.browser_ui.widget.TintedDrawable;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -73,6 +76,7 @@ import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
+import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.widget.Toast;
 
 import java.util.List;
@@ -168,14 +172,14 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
     public CustomTabToolbar(Context context, AttributeSet attrs) {
         super(context, attrs);
 
-        mDarkModeTint = ColorUtils.getThemedToolbarIconTint(context, false);
-        mLightModeTint = ColorUtils.getThemedToolbarIconTint(context, true);
+        mDarkModeTint = ToolbarColors.getThemedToolbarIconTint(context, false);
+        mLightModeTint = ToolbarColors.getThemedToolbarIconTint(context, true);
     }
 
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        final int backgroundColor = ColorUtils.getDefaultThemeColor(getResources(), false);
+        final int backgroundColor = ChromeColors.getDefaultThemeColor(getResources(), false);
         setBackground(new ColorDrawable(backgroundColor));
         mUseDarkColors = !ColorUtils.shouldUseLightForegroundOnBackground(backgroundColor);
         mUrlBar = (TextView) findViewById(R.id.url_bar);
@@ -202,6 +206,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
     @Override
     void initialize(ToolbarDataProvider toolbarDataProvider, ToolbarTabController tabController) {
         super.initialize(toolbarDataProvider, tabController);
+        mLocationBar.setToolbarDataProvider(toolbarDataProvider);
         mLocationBar.updateVisualsForState();
     }
 
@@ -215,6 +220,9 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
     void setCloseButtonImageResource(Drawable drawable) {
         mCloseButton.setVisibility(drawable != null ? View.VISIBLE : View.GONE);
         mCloseButton.setImageDrawable(drawable);
+        if (drawable != null) {
+            updateButtonTint(mCloseButton);
+        }
     }
 
     @Override
@@ -328,7 +336,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         if (publisherUrl != null) return extractPublisherFromPublisherUrl(publisherUrl);
 
         // TODO(bauerb): Remove this once trusted CDN publisher URLs have rolled out completely.
-        if (mState == STATE_TITLE_ONLY) return parsePublisherNameFromUrl(tab.getUrl());
+        if (mState == STATE_TITLE_ONLY) return parsePublisherNameFromUrl(tab.getUrlString());
 
         return null;
     }
@@ -339,9 +347,9 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         mLocationBar.setTitleToPageTitle();
         if (mState == STATE_TITLE_ONLY) {
             if (TextUtils.isEmpty(mFirstUrl)) {
-                mFirstUrl = getToolbarDataProvider().getTab().getUrl();
+                mFirstUrl = getToolbarDataProvider().getTab().getUrlString();
             } else {
-                if (mFirstUrl.equals(getToolbarDataProvider().getTab().getUrl())) return;
+                if (mFirstUrl.equals(getToolbarDataProvider().getTab().getUrlString())) return;
                 setUrlBarHidden(false);
             }
         }
@@ -588,8 +596,10 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                 if (currentTab == null || currentTab.getWebContents() == null) return;
                 Activity activity = currentTab.getWindowAndroid().getActivity().get();
                 if (activity == null) return;
-                PageInfoController.show(activity, currentTab, getContentPublisher(),
-                        PageInfoController.OpenedFromSource.TOOLBAR);
+                PageInfoController.show((ChromeActivity) activity, currentTab.getWebContents(),
+                        getContentPublisher(), PageInfoController.OpenedFromSource.TOOLBAR,
+                        /*offlinePageLoadUrlDelegate=*/
+                        new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(currentTab));
             });
         }
 
@@ -655,7 +665,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
             }
 
             String publisherUrl = TrustedCdn.getPublisherUrl(tab);
-            String url = publisherUrl != null ? publisherUrl : tab.getUrl().trim();
+            String url = publisherUrl != null ? publisherUrl : tab.getUrlString().trim();
             if (mState == STATE_TITLE_ONLY) {
                 if (!TextUtils.isEmpty(getToolbarDataProvider().getTitle())) setTitleToPageTitle();
             }
@@ -736,7 +746,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                                    : R.color.default_text_color_light));
 
             if (getProgressBar() != null) {
-                if (!ColorUtils.isUsingDefaultToolbarColor(
+                if (!ToolbarColors.isUsingDefaultToolbarColor(
                             getResources(), false, getBackground().getColor())) {
                     getProgressBar().setThemeColor(getBackground().getColor(), false);
                 } else {
@@ -763,15 +773,23 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                 mSecurityButton.setImageDrawable(null);
                 mAnimDelegate.hideSecurityButton();
             } else {
+                // Vivaldi: Don't show search engine favicon in custom tabs mode - there is no
+                //          omnibox to be used for search. Ref. VB-62270.
+                if (getToolbarDataProvider().getSecurityIconColorStateList() == 0) {
+                    mSecurityButton.setImageDrawable(null);
+                    mAnimDelegate.hideSecurityButton();
+                } else {
                 // ImageView#setImageResource is no-op if given resource is the current one.
                 mSecurityButton.setImageResource(securityIconResource);
                 ColorStateList colorStateList = AppCompatResources.getColorStateList(
                         getContext(), getToolbarDataProvider().getSecurityIconColorStateList());
                 ApiCompatibilityUtils.setImageTintList(mSecurityButton, colorStateList);
                 mAnimDelegate.showSecurityButton();
+                }
             }
 
-            int contentDescriptionId = getToolbarDataProvider().getSecurityIconContentDescription();
+            int contentDescriptionId =
+                    getToolbarDataProvider().getSecurityIconContentDescriptionResourceId();
             String contentDescription = getContext().getString(contentDescriptionId);
             mSecurityButton.setContentDescription(contentDescription);
 
@@ -829,11 +847,6 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         public void setShowIconsWhenUrlFocused(boolean showIcon) {}
 
         @Override
-        public int getUrlContainerMarginEnd() {
-            return 0;
-        }
-
-        @Override
         public void setUnfocusedWidth(int unfocusedWidth) {}
 
         @Override
@@ -856,7 +869,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         }
 
         @Override
-        public LocationBarVoiceRecognitionHandler getLocationBarVoiceRecognitionHandler() {
+        public VoiceRecognitionHandler getVoiceRecognitionHandler() {
             return null;
         }
     }

@@ -10,8 +10,9 @@ import android.os.HandlerThread;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.Log;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.content_public.browser.InputMethodManagerWrapper;
 
 /**
@@ -21,7 +22,7 @@ import org.chromium.content_public.browser.InputMethodManagerWrapper;
 // TODO(changwan): add unit tests once Robolectric supports Android API level >= 21.
 // See crbug.com/588547 for details.
 public class ThreadedInputConnectionFactory implements ChromiumBaseInputConnection.Factory {
-    private static final String TAG = "cr_Ime";
+    private static final String TAG = "Ime";
     private static final boolean DEBUG_LOGS = false;
 
     // Most of the time we do not need to retry. But if we have lost window focus while triggering
@@ -33,7 +34,6 @@ public class ThreadedInputConnectionFactory implements ChromiumBaseInputConnecti
     private static final int CHECK_REGISTER_RETRY = 1;
 
     private final InputMethodManagerWrapper mInputMethodManagerWrapper;
-    private final InputMethodUma mInputMethodUma;
     private ThreadedInputConnectionProxyView mProxyView;
     private ThreadedInputConnection mThreadedInputConnection;
     private CheckInvalidator mCheckInvalidator;
@@ -70,7 +70,6 @@ public class ThreadedInputConnectionFactory implements ChromiumBaseInputConnecti
 
     ThreadedInputConnectionFactory(InputMethodManagerWrapper inputMethodManagerWrapper) {
         mInputMethodManagerWrapper = inputMethodManagerWrapper;
-        mInputMethodUma = createInputMethodUma();
         mTriggerDelayedOnCreateInputConnection = true;
     }
 
@@ -84,11 +83,6 @@ public class ThreadedInputConnectionFactory implements ChromiumBaseInputConnecti
             Handler handler, View containerView) {
         return new ThreadedInputConnectionProxyView(
                 containerView.getContext(), handler, containerView, this);
-    }
-
-    @VisibleForTesting
-    protected InputMethodUma createInputMethodUma() {
-        return new InputMethodUma();
     }
 
     @VisibleForTesting
@@ -232,13 +226,11 @@ public class ThreadedInputConnectionFactory implements ChromiumBaseInputConnecti
     @VisibleForTesting
     protected void onRegisterProxyViewSuccess() {
         Log.d(TAG, "onRegisterProxyViewSuccess");
-        mInputMethodUma.recordProxyViewSuccess();
     }
 
     @VisibleForTesting
     protected void onRegisterProxyViewFailure() {
         Log.w(TAG, "onRegisterProxyViewFailure");
-        mInputMethodUma.recordProxyViewFailure();
     }
 
     @Override

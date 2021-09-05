@@ -16,6 +16,7 @@
 #include "ash/assistant/model/assistant_ui_model_observer.h"
 #include "ash/assistant/ui/assistant_view_delegate.h"
 #include "ash/highlighter/highlighter_controller.h"
+#include "ash/public/cpp/tablet_mode_observer.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
@@ -25,6 +26,7 @@ namespace ash {
 
 class AssistantController;
 class AssistantInteractionModelObserver;
+class ProactiveSuggestions;
 enum class AssistantButtonId;
 enum class AssistantQuerySource;
 
@@ -34,6 +36,7 @@ class AssistantInteractionController
       public AssistantInteractionModelObserver,
       public AssistantUiModelObserver,
       public AssistantViewDelegateObserver,
+      public TabletModeObserver,
       public HighlighterController::Observer {
  public:
   using AssistantInteractionMetadata =
@@ -44,9 +47,12 @@ class AssistantInteractionController
       chromeos::assistant::mojom::AssistantInteractionResolution;
   using AssistantInteractionType =
       chromeos::assistant::mojom::AssistantInteractionType;
+  using AssistantQuerySource = chromeos::assistant::mojom::AssistantQuerySource;
   using AssistantSuggestion = chromeos::assistant::mojom::AssistantSuggestion;
   using AssistantSuggestionPtr =
       chromeos::assistant::mojom::AssistantSuggestionPtr;
+  using AssistantSuggestionType =
+      chromeos::assistant::mojom::AssistantSuggestionType;
 
   explicit AssistantInteractionController(
       AssistantController* assistant_controller);
@@ -76,8 +82,6 @@ class AssistantInteractionController
   void OnCommittedQueryChanged(const AssistantQuery& assistant_query) override;
 
   // AssistantUiModelObserver:
-  void OnUiModeChanged(AssistantUiMode ui_mode,
-                       bool due_to_interaction) override;
   void OnUiVisibilityChanged(
       AssistantVisibility new_visibility,
       AssistantVisibility old_visibility,
@@ -85,7 +89,6 @@ class AssistantInteractionController
       base::Optional<AssistantExitPoint> exit_point) override;
 
   // HighlighterController::Observer:
-  void OnHighlighterEnabledChanged(HighlighterEnabledState state) override;
   void OnHighlighterSelectionRecognized(const gfx::Rect& rect) override;
 
   // chromeos::assistant::mojom::AssistantInteractionSubscriber:
@@ -97,6 +100,7 @@ class AssistantInteractionController
   void OnSuggestionsResponse(
       std::vector<AssistantSuggestionPtr> response) override;
   void OnTextResponse(const std::string& response) override;
+  void OnTimersResponse(const std::vector<std::string>& timer_ids) override;
   void OnOpenUrlResponse(const GURL& url, bool in_background) override;
   void OnOpenAppResponse(chromeos::assistant::mojom::AndroidAppInfoPtr app_info,
                          OnOpenAppResponseCallback callback) override;
@@ -115,25 +119,40 @@ class AssistantInteractionController
   void OnDialogPlateContentsCommitted(const std::string& text) override;
   void OnSuggestionChipPressed(const AssistantSuggestion* suggestion) override;
 
- private:
-  bool HasUnprocessedPendingResponse();
+  // TabletModeObserver:
+  void OnTabletModeStarted() override;
+  void OnTabletModeEnded() override;
 
-  void OnProcessPendingResponse();
-  void OnPendingResponseProcessed(bool success);
-
-  void OnUiVisible(AssistantEntryPoint entry_point);
-
-  void StartMetalayerInteraction(const gfx::Rect& region);
-  void StartProactiveSuggestionsInteraction(
-      scoped_refptr<const ProactiveSuggestions> proactive_suggestions);
-  void StartScreenContextInteraction(AssistantQuerySource query_source);
-  void StartTextInteraction(const std::string text,
+  void StartTextInteraction(const std::string& text,
                             bool allow_tts,
                             AssistantQuerySource query_source);
+
+ private:
+  void OnTabletModeChanged();
+
+  bool HasUnprocessedPendingResponse();
+  bool HasActiveInteraction() const;
+
+  void OnProcessPendingResponse();
+  void OnPendingResponseProcessed(bool is_completed);
+
+  void OnUiVisible(AssistantEntryPoint entry_point);
+  bool ShouldAttemptWarmerWelcome(AssistantEntryPoint entry_point) const;
+  void AttemptWarmerWelcome();
+
+  void StartProactiveSuggestionsInteraction(
+      scoped_refptr<const ProactiveSuggestions> proactive_suggestions);
+  void StartScreenContextInteraction(bool include_assistant_structure,
+                                     const gfx::Rect& region,
+                                     AssistantQuerySource query_source);
 
   void StartVoiceInteraction();
   void StopActiveInteraction(bool cancel_conversation);
 
+  InputModality GetDefaultInputModality() const;
+  AssistantResponse* GetResponseForActiveInteraction();
+  AssistantVisibility GetVisibility() const;
+  bool IsVisible() const;
 
   AssistantController* const assistant_controller_;  // Owned by Shell.
 
@@ -145,8 +164,13 @@ class AssistantInteractionController
 
   AssistantInteractionModel model_;
 
-  bool should_attempt_warmer_welcome_ = true;
+  // The number of times the Assistant UI has been shown (since the device
+  // booted).
+  // Might overflow so do not use for super critical things.
+  int number_of_times_shown_ = 0;
 
+  base::WeakPtrFactory<AssistantInteractionController>
+      screen_context_request_factory_{this};
   base::WeakPtrFactory<AssistantInteractionController> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(AssistantInteractionController);

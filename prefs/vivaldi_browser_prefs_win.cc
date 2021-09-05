@@ -27,19 +27,14 @@ void MigrateOldPlatformPrefs(PrefService* prefs) {
   prefs->ClearPref(vivaldiprefs::kOldHideMouseCursorInFullscreen);
 }
 
-std::unique_ptr<base::Value> GetPlatformComputedDefault(
-    const std::string& path) {
+base::Value GetPlatformComputedDefault(const std::string& path) {
   if (path == vivaldiprefs::kSystemHasDesktopWallpaperProtocol) {
     Microsoft::WRL::ComPtr<IDesktopWallpaper> desktop_w;
     HRESULT hr = CoCreateInstance(__uuidof(DesktopWallpaper), nullptr,
                                   CLSCTX_ALL, IID_PPV_ARGS(&desktop_w));
-    return std::make_unique<base::Value>(SUCCEEDED(hr));
+    return base::Value(SUCCEEDED(hr));
   }
-  return std::make_unique<base::Value>();
-}
-
-std::string GetPlatformDefaultKey() {
-  return "default_win";
+  return base::Value();
 }
 
 }  // namespace vivaldi

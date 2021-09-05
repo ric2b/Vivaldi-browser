@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
@@ -28,11 +29,35 @@ class SimpleURLLoader;
 
 namespace optimization_guide {
 
+// Status of a request to fetch hints.
+// This enum must remain synchronized with the enum
+// |OptimizationGuideHintsFetcherRequestStatus| in
+// tools/metrics/histograms/enums.xml.
+enum class HintsFetcherRequestStatus {
+  // No fetch status known. Used in testing.
+  kUnknown,
+  // Fetch request was sent and a response received.
+  kSuccess,
+  // Fetch request was sent but no response received.
+  kResponseError,
+  // Fetch request not sent because of offline network status.
+  kNetworkOffline,
+  // Fetch request not sent because fetcher was busy with another request.
+  kFetcherBusy,
+  // Fetch request not sent because the host and URL lists were empty.
+  kNoHostsOrURLsToFetch,
+  // Fetch request not sent because no supported optimization types were
+  // provided.
+  kNoSupportedOptimizationTypes,
+
+  // Insert new values before this line.
+  kMaxValue = kNoSupportedOptimizationTypes
+};
+
 // Callback to inform the caller that the remote hints have been fetched and
 // to pass back the fetched hints response from the remote Optimization Guide
 // Service.
 using HintsFetchedCallback = base::OnceCallback<void(
-    optimization_guide::proto::RequestContext request_context,
     base::Optional<std::unique_ptr<proto::GetHintsResponse>>)>;
 
 // A class to handle requests for optimization hints from a remote Optimization
@@ -51,13 +76,20 @@ class HintsFetcher {
 
   // Requests hints from the Optimization Guide Service if a request for them is
   // not already in progress. Returns whether a new request was issued.
-  // |hints_fetched_callback| is run, passing a GetHintsResponse object, if a
-  // fetch was successful or passes nullopt if the fetch fails. Virtualized for
+  // |hints_fetched_callback| is run once when the outcome of this request is
+  // determined (whether a request was actually sent or not). Virtualized for
   // testing. Hints fetcher may fetch hints for only a subset of the provided
   // |hosts|. |hosts| should be an ordered list in descending order of
-  // probability that the hints are needed for that host.
+  // probability that the hints are needed for that host. Only supported |urls|
+  // will be included in the fetch. |urls| is an ordered list in descending
+  // order of probability that a hint will be needed for the URL. The supplied
+  // optimization types will be included in the request, if empty no fetch will
+  // be made.
   virtual bool FetchOptimizationGuideServiceHints(
       const std::vector<std::string>& hosts,
+      const std::vector<GURL>& urls,
+      const base::flat_set<optimization_guide::proto::OptimizationType>&
+          optimization_types,
       optimization_guide::proto::RequestContext request_context,
       HintsFetchedCallback hints_fetched_callback);
 
@@ -88,22 +120,18 @@ class HintsFetcher {
                       int status,
                       int response_code);
 
-  // Stores the hosts in |hosts_in_fetch_| in the
+  // Stores the hosts in |hosts_fetched_| in the
   // HintsFetcherHostsSuccessfullyFetched dictionary pref. The value stored for
   // each host is the time that the hints fetched for each host will expire.
-  // |hosts_in_fetch_| is cleared once the hosts are stored
+  // |hosts_fetched_| is cleared once the hosts are stored
   // in the pref.
-  void UpdateHostsSuccessfullyFetched();
+  void UpdateHostsSuccessfullyFetched(base::TimeDelta valid_duration);
 
   // Returns the subset of hosts from |hosts| for which the hints should be
   // refreshed. The count of returned hosts is limited to
   // features::MaxHostsForOptimizationGuideServiceHintsFetch().
   std::vector<std::string> GetSizeLimitedHostsDueForHintsRefresh(
       const std::vector<std::string>& hosts) const;
-
-  // Used to hold the GetHintsRequest being constructed and sent as a remote
-  // request.
-  std::unique_ptr<proto::GetHintsRequest> get_hints_request_;
 
   // Used to hold the callback while the SimpleURLLoader performs the request
   // asynchronously.
@@ -113,7 +141,7 @@ class HintsFetcher {
   const GURL optimization_guide_service_url_;
 
   // Holds the |URLLoader| for an active hints request.
-  std::unique_ptr<network::SimpleURLLoader> url_loader_;
+  std::unique_ptr<network::SimpleURLLoader> active_url_loader_;
 
   // Context of the fetch request. Opaque field that's returned back in the
   // callback and is also included in the requests to the hints server.
@@ -128,7 +156,7 @@ class HintsFetcher {
   // Clock used for recording time that the hints fetch occurred.
   const base::Clock* time_clock_;
 
-  // Used for creating a |url_loader_| when needed for request hints.
+  // Used for creating an |active_url_loader_| when needed for request hints.
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   // The start time of the current hints fetch, used to determine the latency in

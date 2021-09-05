@@ -141,6 +141,12 @@ void DumpMockReadWrite(const MockReadWrite<type>& r) {
   DVLOG(1) << "Stage:   " << (r.sequence_number & ~MockRead::STOPLOOP) << stop;
 }
 
+void RunClosureIfNonNull(base::OnceClosure closure) {
+  if (!closure.is_null()) {
+    std::move(closure).Run();
+  }
+}
+
 }  // namespace
 
 MockConnect::MockConnect() : mode(ASYNC), result(OK) {
@@ -839,6 +845,10 @@ std::unique_ptr<SSLClientSocket> MockClientSocketFactory::CreateSSLClientSocket(
     EXPECT_EQ(*next_ssl_data->expected_network_isolation_key,
               ssl_config.network_isolation_key);
   }
+  if (next_ssl_data->expected_disable_legacy_crypto) {
+    EXPECT_EQ(*next_ssl_data->expected_disable_legacy_crypto,
+              ssl_config.disable_legacy_crypto);
+  }
   return std::unique_ptr<SSLClientSocket>(new MockSSLClientSocket(
       std::move(stream_socket), host_and_port, ssl_config, next_ssl_data));
 }
@@ -1520,6 +1530,7 @@ int MockSSLClientSocket::Connect(CompletionOnceCallback callback) {
   data_->is_connect_data_consumed = true;
   if (data_->connect.result == OK)
     connected_ = true;
+  RunClosureIfNonNull(std::move(data_->connect_callback));
   if (data_->connect.mode == ASYNC) {
     RunCallbackAsync(std::move(callback), data_->connect.result);
     return ERR_IO_PENDING;
@@ -1543,6 +1554,7 @@ int MockSSLClientSocket::ConfirmHandshake(CompletionOnceCallback callback) {
   DCHECK(stream_socket_->IsConnected());
   if (data_->is_confirm_data_consumed)
     return data_->confirm.result;
+  RunClosureIfNonNull(std::move(data_->confirm_callback));
   if (data_->confirm.mode == ASYNC) {
     RunCallbackAsync(
         base::BindOnce(&MockSSLClientSocket::RunConfirmHandshakeCallback,

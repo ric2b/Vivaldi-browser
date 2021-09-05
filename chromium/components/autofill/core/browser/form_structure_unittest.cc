@@ -25,7 +25,6 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/signatures_util.h"
-#include "components/variations/entropy_provider.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -131,19 +130,22 @@ class FormStructureTest : public testing::Test {
     return form_structure.ShouldBeUploaded();
   }
 
-  void DisableAutofillMetadataFieldTrial() { field_trial_list_.reset(); }
+  void DisableAutofillMetadataFieldTrial() {
+    field_trial_ = nullptr;
+    scoped_feature_list_.Reset();
+    scoped_feature_list_.Init();
+  }
 
  private:
   void EnableAutofillMetadataFieldTrial() {
-    field_trial_list_.reset();
-    field_trial_list_.reset(new base::FieldTrialList(
-        std::make_unique<variations::SHA1EntropyProvider>("foo")));
+    scoped_feature_list_.Reset();
+    scoped_feature_list_.Init();
     field_trial_ = base::FieldTrialList::CreateFieldTrial(
         "AutofillFieldMetadata", "Enabled");
     field_trial_->group();
   }
 
-  std::unique_ptr<base::FieldTrialList> field_trial_list_;
+  base::test::ScopedFeatureList scoped_feature_list_;
   scoped_refptr<base::FieldTrial> field_trial_;
 };
 
@@ -6724,7 +6726,7 @@ TEST_F(FormStructureTest, RationalizeRepreatedFields_LastFieldRationalized) {
   EXPECT_EQ(ADDRESS_HOME_STATE, forms[0]->field(5)->Type().GetStorableType());
 }
 
-INSTANTIATE_TEST_SUITE_P(, ParameterizedFormStructureTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, ParameterizedFormStructureTest, testing::Bool());
 
 // Tests that, when the flag is off, we will not set the predicted type to
 // unknown for fields that have no server data and autocomplete off, and when
@@ -6951,11 +6953,11 @@ class RationalizationFieldTypeRelationshipsTest
       public testing::WithParamInterface<
           RationalizationTypeRelationshipsTestParams> {};
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          RationalizationFieldTypeFilterTest,
                          testing::Values(PHONE_HOME_COUNTRY_CODE));
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          RationalizationFieldTypeRelationshipsTest,
                          testing::Values(
                              RationalizationTypeRelationshipsTestParams{

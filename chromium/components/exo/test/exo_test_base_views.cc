@@ -6,9 +6,9 @@
 
 #include "components/exo/vsync_timing_manager.h"
 #include "components/exo/wm_helper.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "ui/base/ime/init/input_method_factory.h"
 #include "ui/display/manager/managed_display_info.h"
-#include "ui/wm/core/default_activation_client.h"
 #include "ui/wm/core/wm_core_switches.h"
 
 namespace exo {
@@ -86,7 +86,8 @@ class WMHelperTester : public WMHelper, public VSyncTimingManager::Delegate {
 
   // Overridden from VSyncTimingManager::Delegate:
   void AddVSyncParameterObserver(
-      viz::mojom::VSyncParameterObserverPtr observer) override {}
+      mojo::PendingRemote<viz::mojom::VSyncParameterObserver> observer)
+      override {}
 
  private:
   aura::Window* root_window_;
@@ -103,8 +104,6 @@ ExoTestBaseViews::~ExoTestBaseViews() {}
 
 void ExoTestBaseViews::SetUp() {
   views::ViewsTestBase::SetUp();
-  // Takes care of its own lifetime.
-  new wm::DefaultActivationClient(root_window());
 
   wm_helper_ = std::make_unique<WMHelperTester>(root_window());
   WMHelper::SetInstance(wm_helper_.get());

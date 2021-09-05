@@ -30,7 +30,6 @@
 #include "net/base/net_module.h"
 #include "net/grit/net_resources.h"
 #include "services/service_manager/embedder/result_codes.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 
@@ -65,13 +64,12 @@ GURL GetStartupURL() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kBrowserTest))
     return GURL();
-  const base::CommandLine::StringVector& args = command_line->GetArgs();
 
 #if defined(OS_ANDROID)
   // Delay renderer creation on Android until surface is ready.
   return GURL();
-#endif
-
+#else
+  const base::CommandLine::StringVector& args = command_line->GetArgs();
   if (args.empty())
     return GURL("https://www.google.com/");
 
@@ -81,6 +79,7 @@ GURL GetStartupURL() {
 
   return net::FilePathToFileURL(
       base::MakeAbsoluteFilePath(base::FilePath(args[0])));
+#endif
 }
 
 scoped_refptr<base::RefCountedMemory> PlatformResourceProvider(int key) {
@@ -139,7 +138,6 @@ void ShellBrowserMainParts::InitializeBrowserContexts() {
 }
 
 void ShellBrowserMainParts::InitializeMessageLoopContext() {
-  ui::MaterialDesignController::Initialize();
   Shell::CreateNewWindow(browser_context_.get(), GetStartupURL(), nullptr,
                          gfx::Size());
 }
@@ -165,7 +163,7 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
   InitializeMessageLoopContext();
 
   if (parameters_.ui_task) {
-    parameters_.ui_task->Run();
+    std::move(*parameters_.ui_task).Run();
     delete parameters_.ui_task;
     run_message_loop_ = false;
   }

@@ -278,6 +278,8 @@ base::Value URLRequest::GetStateAsValue() const {
     dict.SetStringKey("delegate_blocked_by", blocked_by_);
 
   dict.SetStringKey("method", method_);
+  dict.SetStringKey("network_isolation_key",
+                    isolation_info_.network_isolation_key().ToDebugString());
   dict.SetBoolKey("has_upload", has_upload());
   dict.SetBoolKey("is_pending", is_pending_);
 
@@ -442,22 +444,7 @@ void URLRequest::SetDefaultCookiePolicyToBlock() {
   g_default_can_use_cookies = false;
 }
 
-// static
-bool URLRequest::IsHandledProtocol(const std::string& scheme) {
-  return URLRequestJobManager::SupportsScheme(scheme);
-}
-
-// static
-bool URLRequest::IsHandledURL(const GURL& url) {
-  if (!url.is_valid()) {
-    // We handle error cases.
-    return true;
-  }
-
-  return IsHandledProtocol(url.scheme());
-}
-
-void URLRequest::set_site_for_cookies(const GURL& site_for_cookies) {
+void URLRequest::set_site_for_cookies(const SiteForCookies& site_for_cookies) {
   DCHECK(!is_pending_);
   site_for_cookies_ = site_for_cookies;
 }
@@ -636,6 +623,7 @@ void URLRequest::StartJob(URLRequestJob* job) {
   net_log_.BeginEvent(NetLogEventType::URL_REQUEST_START_JOB, [&] {
     return NetLogURLRequestStartParams(
         url(), method_, load_flags_, privacy_mode_,
+        isolation_info_.network_isolation_key(), site_for_cookies_, initiator_,
         upload_data_stream_ ? upload_data_stream_->identifier() : -1);
   });
 
@@ -657,8 +645,11 @@ void URLRequest::StartJob(URLRequestJob* job) {
   maybe_stored_cookies_.clear();
 
   GURL referrer_url(referrer_);
-  if (referrer_url != URLRequestJob::ComputeReferrerForPolicy(
-                          referrer_policy_, referrer_url, url())) {
+  bool same_origin_for_metrics;
+
+  if (referrer_url !=
+      URLRequestJob::ComputeReferrerForPolicy(
+          referrer_policy_, referrer_url, url(), &same_origin_for_metrics)) {
     if (!network_delegate_ ||
         !network_delegate_->CancelURLRequestWithPolicyViolatingReferrerHeader(
             *this, url(), referrer_url)) {
@@ -674,6 +665,8 @@ void URLRequest::StartJob(URLRequestJob* job) {
       return;
     }
   }
+
+  RecordReferrerGranularityMetrics(same_origin_for_metrics);
 
   // Start() always completes asynchronously.
   //
@@ -777,23 +770,6 @@ int URLRequest::Read(IOBuffer* dest, int dest_size) {
   // If rv is not 0 or actual bytes read, the status cannot be success.
   DCHECK(rv >= 0 || status_.status() != URLRequestStatus::SUCCESS);
   return rv;
-}
-
-// Deprecated.
-bool URLRequest::Read(IOBuffer* dest, int dest_size, int* bytes_read) {
-  int result = Read(dest, dest_size);
-  if (result >= 0) {
-    *bytes_read = result;
-    return true;
-  }
-
-  if (result == ERR_IO_PENDING) {
-    *bytes_read = 0;
-  } else {
-    *bytes_read = -1;
-  }
-
-  return false;
 }
 
 void URLRequest::NotifyReceivedRedirect(const RedirectInfo& redirect_info,
@@ -946,6 +922,8 @@ void URLRequest::Redirect(
   referrer_ = redirect_info.new_referrer;
   referrer_policy_ = redirect_info.new_referrer_policy;
   site_for_cookies_ = redirect_info.new_site_for_cookies;
+  isolation_info_ = isolation_info_.CreateForRedirect(
+      url::Origin::Create(redirect_info.new_url));
 
   url_chain_.push_back(redirect_info.new_url);
   --redirect_limit_;
@@ -1054,7 +1032,7 @@ net::PrivacyMode URLRequest::DeterminePrivacyMode() const {
   bool enable_privacy_mode = !g_default_can_use_cookies;
   if (network_delegate_) {
     enable_privacy_mode = network_delegate_->ForcePrivacyMode(
-        url(), site_for_cookies_, network_isolation_key_.GetTopFrameOrigin());
+        url(), site_for_cookies_, isolation_info_.top_frame_origin());
   }
   return enable_privacy_mode ? PRIVACY_MODE_ENABLED : PRIVACY_MODE_DISABLED;
 }
@@ -1132,6 +1110,31 @@ void URLRequest::OnCallToDelegateComplete() {
   calling_delegate_ = false;
   net_log_.EndEvent(delegate_event_type_);
   delegate_event_type_ = NetLogEventType::FAILED;
+}
+
+void URLRequest::RecordReferrerGranularityMetrics(
+    bool request_is_same_origin) const {
+  GURL referrer_url(referrer_);
+  bool referrer_more_descriptive_than_its_origin =
+      referrer_url.is_valid() && referrer_url.PathForRequestPiece().size() > 1;
+
+  // To avoid renaming the existing enum, we have to use the three-argument
+  // histogram macro.
+  if (request_is_same_origin) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Net.URLRequest.ReferrerPolicyForRequest.SameOrigin", referrer_policy_,
+        MAX_REFERRER_POLICY + 1);
+    UMA_HISTOGRAM_BOOLEAN(
+        "Net.URLRequest.ReferrerHasInformativePath.SameOrigin",
+        referrer_more_descriptive_than_its_origin);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Net.URLRequest.ReferrerPolicyForRequest.CrossOrigin", referrer_policy_,
+        MAX_REFERRER_POLICY + 1);
+    UMA_HISTOGRAM_BOOLEAN(
+        "Net.URLRequest.ReferrerHasInformativePath.CrossOrigin",
+        referrer_more_descriptive_than_its_origin);
+  }
 }
 
 void URLRequest::GetConnectionAttempts(ConnectionAttempts* out) const {

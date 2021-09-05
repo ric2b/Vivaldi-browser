@@ -6,6 +6,7 @@
 
 #include "base/no_destructor.h"
 #include "build/build_config.h"
+#include "chrome/browser/vr/xr_test_utils.h"
 #include "content/public/browser/service_process_host.h"
 
 namespace vr {
@@ -27,9 +28,9 @@ const mojo::Remote<device::mojom::XRDeviceService>& GetXRDeviceService() {
         remote->BindNewPipeAndPassReceiver(),
         content::ServiceProcessHost::Options()
 #if defined(OS_WIN)
-            .WithSandboxType(service_manager::SANDBOX_TYPE_XRCOMPOSITING)
+            .WithSandboxType(service_manager::SandboxType::kXrCompositing)
 #else
-            .WithSandboxType(service_manager::SANDBOX_TYPE_UTILITY)
+            .WithSandboxType(service_manager::SandboxType::kUtility)
 #endif
             .WithDisplayName("Isolated XR Device Service")
             .Pass());

@@ -49,8 +49,8 @@ class CORE_EXPORT HTMLFormControlElement : public HTMLElement,
   ~HTMLFormControlElement() override;
   void Trace(Visitor*) override;
 
-  void formAction(USVStringOrTrustedURL&) const;
-  void setFormAction(const USVStringOrTrustedURL&, ExceptionState&);
+  String formAction() const;
+  void setFormAction(const AtomicString&);
   String formEnctype() const;
   void setFormEnctype(const AtomicString&);
   String formMethod() const;
@@ -58,8 +58,6 @@ class CORE_EXPORT HTMLFormControlElement : public HTMLElement,
   bool FormNoValidate() const;
 
   void Reset();
-
-  void DispatchChangeEvent();
 
   HTMLFormElement* formOwner() const final;
 
@@ -137,7 +135,6 @@ class CORE_EXPORT HTMLFormControlElement : public HTMLElement,
   void ParseAttribute(const AttributeModificationParams&) override;
   virtual void RequiredAttributeChanged();
   void DisabledAttributeChanged() override;
-  void AttachLayoutTree(AttachContext&) override;
   InsertionNotificationRequest InsertedInto(ContainerNode&) override;
   void RemovedFrom(ContainerNode&) override;
   void WillChangeForm() override;
@@ -146,17 +143,13 @@ class CORE_EXPORT HTMLFormControlElement : public HTMLElement,
 
   bool SupportsFocus() const override;
   bool IsKeyboardFocusable() const override;
-  bool ShouldHaveFocusAppearance() const final;
-
-  void DidRecalcStyle(const StyleRecalcChange) override;
+  bool ShouldHaveFocusAppearance() const override;
 
   virtual void ResetImpl() {}
 
  private:
   bool IsFormControlElement() const final { return true; }
   bool AlwaysCreateUserAgentShadowRoot() const override { return true; }
-
-  int tabIndex() const override;
 
   bool IsValidElement() override;
   bool MatchesValidityPseudoClasses() const override;
@@ -169,22 +162,24 @@ class CORE_EXPORT HTMLFormControlElement : public HTMLElement,
   bool blocks_form_submission_ : 1;
 };
 
-inline bool IsHTMLFormControlElement(const Element& element) {
-  return element.IsFormControlElement();
+template <>
+inline bool IsElementOfType<const HTMLFormControlElement>(const Node& node) {
+  return IsA<HTMLFormControlElement>(node);
 }
-
-DEFINE_HTMLELEMENT_TYPE_CASTS_WITH_FUNCTION(HTMLFormControlElement);
-
 template <>
 struct DowncastTraits<HTMLFormControlElement> {
   static bool AllowFrom(const Node& node) {
-    auto* element = DynamicTo<Element>(node);
-    return element && element->IsFormControlElement();
+    auto* html_element = DynamicTo<HTMLElement>(node);
+    return html_element && AllowFrom(*html_element);
   }
   static bool AllowFrom(const ListedElement& control) {
     return control.IsFormControlElement();
   }
+  static bool AllowFrom(const HTMLElement& html_element) {
+    return html_element.IsFormControlElement();
+  }
 };
+
 }  // namespace blink
 
 #endif

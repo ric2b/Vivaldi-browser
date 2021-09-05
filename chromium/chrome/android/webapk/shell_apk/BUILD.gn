@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
 import("current_version/current_version.gni")
 import("generate_manifest_for_upload_outputs.gni")
 import("mustache_pass.gni")
@@ -17,7 +18,7 @@ h2o_junit_manifest_target_name = "h2o_j_unit_manifest_target"
 # old copy of the runtime library.
 android_library("compiled_in_runtime_library_java") {
   chromium_code = false
-  java_files = [ "src/org/chromium/webapk/lib/runtime_library/IWebApkApi.java" ]
+  sources = [ "src/org/chromium/webapk/lib/runtime_library/IWebApkApi.java" ]
 }
 
 mustache_pass("generate_old_style_manifest_for_upload") {
@@ -49,12 +50,12 @@ template("webapk_java") {
                              "deps",
                            ])
 
-    java_files = [
+    sources = [
+      "src/org/chromium/webapk/shell_apk/ChooseHostBrowserDialog.java",
+      "src/org/chromium/webapk/shell_apk/DexLoader.java",
       "src/org/chromium/webapk/shell_apk/HostBrowserClassLoader.java",
       "src/org/chromium/webapk/shell_apk/HostBrowserLauncher.java",
       "src/org/chromium/webapk/shell_apk/HostBrowserLauncherParams.java",
-      "src/org/chromium/webapk/shell_apk/ChooseHostBrowserDialog.java",
-      "src/org/chromium/webapk/shell_apk/DexLoader.java",
       "src/org/chromium/webapk/shell_apk/HostBrowserUtils.java",
       "src/org/chromium/webapk/shell_apk/IdentityService.java",
       "src/org/chromium/webapk/shell_apk/InstallHostBrowserDialog.java",
@@ -87,7 +88,7 @@ template("webapk_with_service_java") {
                              "deps",
                            ])
 
-    java_files = [
+    sources = [
       "src/org/chromium/webapk/shell_apk/WebApkServiceFactory.java",
       "src/org/chromium/webapk/shell_apk/WebApkServiceImplWrapper.java",
     ]
@@ -130,9 +131,7 @@ template("webapk_tmpl") {
     input = input[0]
     output = _manifest_output
     extra_variables = [ "manifest_package=$apk_package_name" ]
-    deps = [
-      _manifest_to_upload_dep,
-    ]
+    deps = [ _manifest_to_upload_dep ]
   }
 
   # Populate background color in values/background_color.xml
@@ -144,10 +143,83 @@ template("webapk_tmpl") {
 
   android_resources(_resources_target_name) {
     custom_package = "org.chromium.webapk.shell_apk"
-    resource_dirs = [ "res" ]
-    generated_resource_dirs = [ _generated_res_background_dir ]
-    generated_resource_files =
-        get_target_outputs(":$_generate_res_background_xml_target_name")
+    sources = [
+      "res/drawable-hdpi/last_resort_runtime_host_logo.png",
+      "res/drawable-hdpi/notification_badge.png",
+      "res/drawable-hdpi/shortcut_1_icon.png",
+      "res/drawable-hdpi/shortcut_2_icon.png",
+      "res/drawable-hdpi/shortcut_3_icon.png",
+      "res/drawable-hdpi/shortcut_4_icon.png",
+      "res/drawable-hdpi/splash_icon.xml",
+      "res/drawable-mdpi/notification_badge.png",
+      "res/drawable-mdpi/shortcut_1_icon.png",
+      "res/drawable-mdpi/shortcut_2_icon.png",
+      "res/drawable-mdpi/shortcut_3_icon.png",
+      "res/drawable-mdpi/shortcut_4_icon.png",
+      "res/drawable-mdpi/splash_icon.xml",
+      "res/drawable-xhdpi/notification_badge.png",
+      "res/drawable-xhdpi/shortcut_1_icon.png",
+      "res/drawable-xhdpi/shortcut_2_icon.png",
+      "res/drawable-xhdpi/shortcut_3_icon.png",
+      "res/drawable-xhdpi/shortcut_4_icon.png",
+      "res/drawable-xhdpi/splash_icon.xml",
+      "res/drawable-xxhdpi/notification_badge.png",
+      "res/drawable-xxhdpi/shortcut_1_icon.png",
+      "res/drawable-xxhdpi/shortcut_2_icon.png",
+      "res/drawable-xxhdpi/shortcut_3_icon.png",
+      "res/drawable-xxhdpi/shortcut_4_icon.png",
+      "res/drawable-xxhdpi/splash_icon.xml",
+      "res/drawable-xxxhdpi/notification_badge.png",
+      "res/drawable-xxxhdpi/shortcut_1_icon.png",
+      "res/drawable-xxxhdpi/shortcut_2_icon.png",
+      "res/drawable-xxxhdpi/shortcut_3_icon.png",
+      "res/drawable-xxxhdpi/shortcut_4_icon.png",
+      "res/drawable-xxxhdpi/splash_icon.xml",
+      "res/layout/choose_host_browser_dialog.xml",
+      "res/layout/host_browser_list_item.xml",
+      "res/mipmap-anydpi-v26/ic_launcher.xml",
+      "res/mipmap-hdpi/app_icon.xml",
+      "res/mipmap-hdpi/ic_launcher.xml",
+      "res/mipmap-hdpi/maskable_app_icon.xml",
+      "res/mipmap-mdpi/app_icon.xml",
+      "res/mipmap-mdpi/ic_launcher.xml",
+      "res/mipmap-mdpi/ic_launcher_background.png",
+      "res/mipmap-mdpi/ic_launcher_foreground.png",
+      "res/mipmap-mdpi/maskable_app_icon.xml",
+      "res/mipmap-nodpi/app_icon_hdpi.png",
+      "res/mipmap-nodpi/app_icon_mdpi.png",
+      "res/mipmap-nodpi/app_icon_xhdpi.png",
+      "res/mipmap-nodpi/app_icon_xxhdpi.png",
+      "res/mipmap-nodpi/app_icon_xxxhdpi.png",
+      "res/mipmap-nodpi/maskable_app_icon_hdpi.png",
+      "res/mipmap-nodpi/maskable_app_icon_mdpi.png",
+      "res/mipmap-nodpi/maskable_app_icon_xhdpi.png",
+      "res/mipmap-nodpi/maskable_app_icon_xxhdpi.png",
+      "res/mipmap-nodpi/maskable_app_icon_xxxhdpi.png",
+      "res/mipmap-nodpi/maskable_splash_icon_xxhdpi.png",
+      "res/mipmap-nodpi/maskable_splash_icon_xxxhdpi.png",
+      "res/mipmap-nodpi/splash_icon_xxhdpi.png",
+      "res/mipmap-nodpi/splash_icon_xxxhdpi.png",
+      "res/mipmap-xhdpi/app_icon.xml",
+      "res/mipmap-xhdpi/ic_launcher.xml",
+      "res/mipmap-xhdpi/maskable_app_icon.xml",
+      "res/mipmap-xxhdpi/app_icon.xml",
+      "res/mipmap-xxhdpi/ic_launcher.xml",
+      "res/mipmap-xxhdpi/maskable_app_icon.xml",
+      "res/mipmap-xxxhdpi/app_icon.xml",
+      "res/mipmap-xxxhdpi/ic_launcher.xml",
+      "res/mipmap-xxxhdpi/maskable_app_icon.xml",
+      "res/values-hdpi/is_splash_icon_maskable_bool.xml",
+      "res/values-mdpi/is_splash_icon_maskable_bool.xml",
+      "res/values-v17/styles.xml",
+      "res/values-xhdpi/is_splash_icon_maskable_bool.xml",
+      "res/values-xxhdpi/is_splash_icon_maskable_bool.xml",
+      "res/values-xxxhdpi/is_splash_icon_maskable_bool.xml",
+      "res/values/colors.xml",
+      "res/values/dimens.xml",
+      "res/xml/shortcuts.xml",
+    ]
+    sources += get_target_outputs(":$_generate_res_background_xml_target_name")
     deps = [
       ":$_generate_res_background_xml_target_name",
       ":webapk_strings_grd",
@@ -172,14 +244,12 @@ template("webapk_tmpl") {
 
   android_apk(target_name) {
     forward_variables_from(invoker, [ "apk_name" ])
-    deps = [
-      ":$_java_with_services_target_name",
-    ]
+    deps = [ ":$_java_with_services_target_name" ]
 
     android_manifest = _manifest_output
     android_manifest_dep = ":$_manifest_target_name"
     min_sdk_version = 19
-    target_sdk_version = 28
+    target_sdk_version = 29
     never_incremental = true
     enable_multidex = false
 
@@ -201,61 +271,10 @@ template("webapk_tmpl") {
 java_strings_grd("webapk_strings_grd") {
   grd_file = "//chrome/android/webapk/strings/android_webapk_strings.grd"
 
-  outputs = [
-    "values/android_webapk_strings.xml",
-    "values-am/android_webapk_strings.xml",
-    "values-ar/android_webapk_strings.xml",
-    "values-bg/android_webapk_strings.xml",
-    "values-bn/android_webapk_strings.xml",
-    "values-ca/android_webapk_strings.xml",
-    "values-cs/android_webapk_strings.xml",
-    "values-da/android_webapk_strings.xml",
-    "values-de/android_webapk_strings.xml",
-    "values-el/android_webapk_strings.xml",
-    "values-en-rGB/android_webapk_strings.xml",
-    "values-es/android_webapk_strings.xml",
-    "values-es-rUS/android_webapk_strings.xml",
-    "values-et/android_webapk_strings.xml",
-    "values-fa/android_webapk_strings.xml",
-    "values-fi/android_webapk_strings.xml",
-    "values-fr/android_webapk_strings.xml",
-    "values-gu/android_webapk_strings.xml",
-    "values-hi/android_webapk_strings.xml",
-    "values-hr/android_webapk_strings.xml",
-    "values-hu/android_webapk_strings.xml",
-    "values-in/android_webapk_strings.xml",
-    "values-it/android_webapk_strings.xml",
-    "values-iw/android_webapk_strings.xml",
-    "values-ja/android_webapk_strings.xml",
-    "values-kn/android_webapk_strings.xml",
-    "values-ko/android_webapk_strings.xml",
-    "values-lt/android_webapk_strings.xml",
-    "values-lv/android_webapk_strings.xml",
-    "values-ml/android_webapk_strings.xml",
-    "values-mr/android_webapk_strings.xml",
-    "values-ms/android_webapk_strings.xml",
-    "values-nb/android_webapk_strings.xml",
-    "values-nl/android_webapk_strings.xml",
-    "values-pl/android_webapk_strings.xml",
-    "values-pt-rBR/android_webapk_strings.xml",
-    "values-pt-rPT/android_webapk_strings.xml",
-    "values-ro/android_webapk_strings.xml",
-    "values-ru/android_webapk_strings.xml",
-    "values-sk/android_webapk_strings.xml",
-    "values-sl/android_webapk_strings.xml",
-    "values-sr/android_webapk_strings.xml",
-    "values-sv/android_webapk_strings.xml",
-    "values-sw/android_webapk_strings.xml",
-    "values-ta/android_webapk_strings.xml",
-    "values-te/android_webapk_strings.xml",
-    "values-th/android_webapk_strings.xml",
-    "values-tl/android_webapk_strings.xml",
-    "values-tr/android_webapk_strings.xml",
-    "values-uk/android_webapk_strings.xml",
-    "values-vi/android_webapk_strings.xml",
-    "values-zh-rCN/android_webapk_strings.xml",
-    "values-zh-rTW/android_webapk_strings.xml",
-  ]
+  outputs = [ "values/android_webapk_strings.xml" ] +
+            process_file_template(
+                android_bundle_locales_as_resources,
+                [ "values-{{source_name_part}}/android_webapk_strings.xml" ])
 }
 
 # Template for WebAPK. When a WebAPK is generated:
@@ -273,6 +292,14 @@ webapk_tmpl("maps_go_webapk") {
   manifest_to_upload_dep = ":generate_old_style_manifest_for_upload"
   apk_name = "MapsWebApk"
   apk_package_name = "org.chromium.maps_go_webapk"
+}
+
+webapk_tmpl("uiautomator_maps_go_webapk") {
+  config_file = "manifest/maps_go_manifest_config.json"
+  manifest_to_upload_dep = ":generate_old_style_manifest_for_upload"
+  apk_name = "JavatestsMapsWebApk"
+  delta_config_file = "manifest/javatest_maps_go_manifest_config_delta.json"
+  apk_package_name = "org.chromium.test.maps_go_webapk"
 }
 
 webapk_tmpl("unbound_webapk") {
@@ -310,7 +337,7 @@ webapk_tmpl("h2o_j_unit_webapk") {
 
 android_library("shell_apk_javatests") {
   testonly = true
-  java_files = [
+  sources = [
     "javatests/src/org/chromium/webapk/shell_apk/DexLoaderTest.java",
     "javatests/src/org/chromium/webapk/shell_apk/h2o/SplashUtilsTest.java",
   ]
@@ -327,7 +354,7 @@ android_library("shell_apk_javatests") {
 }
 
 junit_binary("webapk_shell_apk_junit_tests") {
-  java_files = [
+  sources = [
     "junit/src/org/chromium/webapk/shell_apk/HostBrowserClassLoaderTest.java",
     "junit/src/org/chromium/webapk/shell_apk/HostBrowserLauncherParamsTest.java",
     "junit/src/org/chromium/webapk/shell_apk/HostBrowserUtilsTest.java",
@@ -345,7 +372,7 @@ junit_binary("webapk_shell_apk_junit_tests") {
 }
 
 junit_binary("webapk_shell_apk_h2o_junit_tests") {
-  java_files = [
+  sources = [
     "junit/src/org/chromium/webapk/shell_apk/CustomAndroidOsShadowAsyncTask.java",
     "junit/src/org/chromium/webapk/shell_apk/TestBrowserInstaller.java",
     "junit/src/org/chromium/webapk/shell_apk/h2o/LaunchTest.java",
@@ -357,7 +384,5 @@ junit_binary("webapk_shell_apk_h2o_junit_tests") {
     "//chrome/android/webapk/libs/common:common_java",
     "//chrome/android/webapk/test:junit_test_support",
   ]
-  data_deps = [
-    ":${h2o_junit_manifest_target_name}",
-  ]
+  data_deps = [ ":${h2o_junit_manifest_target_name}" ]
 }

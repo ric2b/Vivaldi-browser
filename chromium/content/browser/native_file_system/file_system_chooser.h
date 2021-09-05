@@ -5,11 +5,12 @@
 #ifndef CONTENT_BROWSER_NATIVE_FILE_SYSTEM_FILE_SYSTEM_CHOOSER_H_
 #define CONTENT_BROWSER_NATIVE_FILE_SYSTEM_FILE_SYSTEM_CHOOSER_H_
 
+#include "base/callback_helpers.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/task_runner.h"
 #include "content/common/content_export.h"
-#include "storage/browser/fileapi/isolated_context.h"
+#include "storage/browser/file_system/isolated_context.h"
 #include "third_party/blink/public/mojom/native_file_system/native_file_system_manager.mojom.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
@@ -50,11 +51,11 @@ class CONTENT_EXPORT FileSystemChooser : public ui::SelectFileDialog::Listener {
   static void CreateAndShow(WebContents* web_contents,
                             const Options& options,
                             ResultCallback callback,
-                            scoped_refptr<base::TaskRunner> callback_runner);
+                            base::ScopedClosureRunner fullscreen_block);
 
   FileSystemChooser(blink::mojom::ChooseFileSystemEntryType type,
                     ResultCallback callback,
-                    scoped_refptr<base::TaskRunner> callback_runner);
+                    base::ScopedClosureRunner fullscreen_block);
 
  private:
   ~FileSystemChooser() override;
@@ -68,8 +69,8 @@ class CONTENT_EXPORT FileSystemChooser : public ui::SelectFileDialog::Listener {
   void FileSelectionCanceled(void* params) override;
 
   ResultCallback callback_;
-  scoped_refptr<base::TaskRunner> callback_runner_;
   blink::mojom::ChooseFileSystemEntryType type_;
+  base::ScopedClosureRunner fullscreen_block_;
 
   scoped_refptr<ui::SelectFileDialog> dialog_;
 };

@@ -689,9 +689,10 @@ void V8DOMConfiguration::InstallConstants(
     v8::Local<v8::ObjectTemplate> prototype_template,
     const ConstantConfiguration* constants,
     size_t constant_count) {
-  for (size_t i = 0; i < constant_count; ++i)
+  for (size_t i = 0; i < constant_count; ++i) {
     InstallConstantInternal(isolate, interface_template, prototype_template,
                             constants[i]);
+  }
 }
 
 void V8DOMConfiguration::InstallConstant(
@@ -709,6 +710,41 @@ void V8DOMConfiguration::InstallConstant(
     v8::Local<v8::Object> prototype,
     const ConstantConfiguration& constant) {
   InstallConstantInternal(isolate, interface, prototype, constant);
+}
+
+void V8DOMConfiguration::InstallConstants(
+    v8::Isolate* isolate,
+    v8::Local<v8::FunctionTemplate> interface_template,
+    v8::Local<v8::ObjectTemplate> prototype_template,
+    const ConstantCallbackConfiguration* constants,
+    size_t constant_count) {
+  for (size_t i = 0; i < constant_count; ++i) {
+    v8::Local<v8::String> name = V8AtomicString(isolate, constants[i].name);
+    interface_template->SetNativeDataProperty(
+        name, constants[i].getter, nullptr, v8::Local<v8::Value>(),
+        static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete),
+        v8::Local<v8::AccessorSignature>(), v8::DEFAULT,
+        v8::SideEffectType::kHasNoSideEffect,
+        v8::SideEffectType::kHasNoSideEffect);
+    prototype_template->SetNativeDataProperty(
+        name, constants[i].getter, nullptr, v8::Local<v8::Value>(),
+        static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete),
+        v8::Local<v8::AccessorSignature>(), v8::DEFAULT,
+        v8::SideEffectType::kHasNoSideEffect,
+        v8::SideEffectType::kHasNoSideEffect);
+  }
+}
+
+void V8DOMConfiguration::InstallConstants(
+    v8::Isolate* isolate,
+    v8::Local<v8::Function> interface_object,
+    v8::Local<v8::Object> prototype_object,
+    const V8DOMConfiguration::ConstantConfiguration* constants,
+    size_t constant_count) {
+  for (size_t i = 0; i < constant_count; ++i) {
+    InstallConstantInternal(isolate, interface_object, prototype_object,
+                            constants[i]);
+  }
 }
 
 void V8DOMConfiguration::InstallConstantWithGetter(
@@ -750,6 +786,20 @@ void V8DOMConfiguration::InstallMethod(
     const MethodConfiguration& method) {
   InstallMethodInternal(isolate, instance_template, prototype_template,
                         interface_template, signature, method, world);
+}
+
+void V8DOMConfiguration::InstallMethods(v8::Isolate* isolate,
+                                        const DOMWrapperWorld& world,
+                                        v8::Local<v8::Object> instance,
+                                        v8::Local<v8::Object> prototype,
+                                        v8::Local<v8::Function> interface,
+                                        v8::Local<v8::Signature> signature,
+                                        const MethodConfiguration* methods,
+                                        size_t method_count) {
+  for (size_t i = 0; i < method_count; ++i) {
+    InstallMethodInternal(isolate, instance, prototype, interface, signature,
+                          methods[i], world);
+  }
 }
 
 void V8DOMConfiguration::InstallMethod(v8::Isolate* isolate,

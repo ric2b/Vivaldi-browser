@@ -4,12 +4,15 @@
 
 module blink.mojom;
 
+import "mojo/public/mojom/base/file_path.mojom";
 import "mojo/public/mojom/base/string16.mojom";
+import "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom";
 import "third_party/blink/public/mojom/messaging/transferable_message.mojom";
 import "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom";
 import "third_party/blink/public/mojom/service_worker/service_worker_error_type.mojom";
 import "third_party/blink/public/mojom/service_worker/service_worker_object.mojom";
 import "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_registration_options.mojom";
 import "third_party/blink/public/mojom/web_feature/web_feature.mojom";
 import "url/mojom/url.mojom";
 
@@ -37,10 +40,13 @@ enum ControllerServiceWorkerPurpose {
 interface ServiceWorkerContainerHost {
   // Corresponds to navigator.serviceWorker.register().
   // Registers a service worker from |script_url| with |options|.
+  // |outside_fetch_client_settings_object| is used to fetch the top-level
+  // script.
   // On success, |error| is kNone with |registration| set.
   // Otherwise, |error| and |error_msg| describe the failure.
   Register(url.mojom.Url script_url,
-           ServiceWorkerRegistrationOptions options)
+           ServiceWorkerRegistrationOptions options,
+           FetchClientSettingsObject outside_fetch_client_settings_object)
     => (ServiceWorkerErrorType error,
         string? error_msg,
         ServiceWorkerRegistrationObjectInfo? registration);
@@ -95,6 +101,13 @@ interface ServiceWorkerContainerHost {
   // The browser process can possibly coalesce hints for the same service
   // worker into a single update.
   HintToUpdateServiceWorker();
+
+  // Ensures that controller Service Worker has access to specified |files|.
+  // This is necessary in cases where controller Service Worker is being run in
+  // a different process than controllee initiating the network request.
+  // The implementation must validate that the caller already has access to
+  // |files|.
+  EnsureFileAccess(array<mojo_base.mojom.FilePath> files) => ();
 
   // Informs the host that the context is execution ready.
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-environment-execution-ready-flag

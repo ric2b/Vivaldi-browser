@@ -30,8 +30,7 @@
 #include "cc/layers/picture_layer.h"
 #include "cc/trees/layer_tree_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_float_point.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/web/web_frame.h"
@@ -93,13 +92,8 @@ class LinkHighlightImplTest : public testing::Test,
     ThreadState::Current()->CollectAllGarbageForTesting();
   }
 
-  size_t ContentLayerCount() {
-    // paint_artifact_compositor()->EnableExtraDataForTesting() should be called
-    // before using this function.
-    DCHECK(paint_artifact_compositor()->GetExtraDataForTesting());
-    return paint_artifact_compositor()
-        ->GetExtraDataForTesting()
-        ->content_layers.size();
+  size_t LayerCount() {
+    return paint_artifact_compositor()->RootLayer()->children().size();
   }
 
   PaintArtifactCompositor* paint_artifact_compositor() {
@@ -109,7 +103,7 @@ class LinkHighlightImplTest : public testing::Test,
 
   void UpdateAllLifecyclePhases() {
     web_view_helper_.GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
-        WebWidget::LifecycleUpdateReason::kTest);
+        DocumentUpdateReason::kTest);
   }
 
   LinkHighlight& GetLinkHighlight() {
@@ -146,14 +140,14 @@ TEST_P(LinkHighlightImplTest, verifyWebViewImplIntegration) {
 
   // The coordinates below are linked to absolute positions in the referenced
   // .html file.
-  touch_event.SetPositionInWidget(WebFloatPoint(20, 20));
+  touch_event.SetPositionInWidget(gfx::PointF(20, 20));
 
   ASSERT_TRUE(web_view_impl->BestTapNode(GetTargetedEvent(touch_event)));
 
-  touch_event.SetPositionInWidget(WebFloatPoint(20, 40));
+  touch_event.SetPositionInWidget(gfx::PointF(20, 40));
   EXPECT_FALSE(web_view_impl->BestTapNode(GetTargetedEvent(touch_event)));
 
-  touch_event.SetPositionInWidget(WebFloatPoint(20, 20));
+  touch_event.SetPositionInWidget(gfx::PointF(20, 20));
   // Shouldn't crash.
   web_view_impl->EnableTapHighlightAtPoint(GetTargetedEvent(touch_event));
 
@@ -163,7 +157,7 @@ TEST_P(LinkHighlightImplTest, verifyWebViewImplIntegration) {
   EXPECT_TRUE(highlight->LayerForTesting(0));
 
   // Find a target inside a scrollable div
-  touch_event.SetPositionInWidget(WebFloatPoint(20, 100));
+  touch_event.SetPositionInWidget(gfx::PointF(20, 100));
   web_view_impl->EnableTapHighlightAtPoint(GetTargetedEvent(touch_event));
   ASSERT_TRUE(highlight);
 
@@ -172,11 +166,11 @@ TEST_P(LinkHighlightImplTest, verifyWebViewImplIntegration) {
 
   // Don't highlight if no "hand cursor"
   touch_event.SetPositionInWidget(
-      WebFloatPoint(20, 220));  // An A-link with cross-hair cursor.
+      gfx::PointF(20, 220));  // An A-link with cross-hair cursor.
   web_view_impl->EnableTapHighlightAtPoint(GetTargetedEvent(touch_event));
   EXPECT_FALSE(GetLinkHighlightImpl());
 
-  touch_event.SetPositionInWidget(WebFloatPoint(20, 260));  // A text input box.
+  touch_event.SetPositionInWidget(gfx::PointF(20, 260));  // A text input box.
   web_view_impl->EnableTapHighlightAtPoint(GetTargetedEvent(touch_event));
   EXPECT_FALSE(GetLinkHighlightImpl());
 }
@@ -193,7 +187,7 @@ TEST_P(LinkHighlightImplTest, resetDuringNodeRemoval) {
                               WebInputEvent::kNoModifiers,
                               WebInputEvent::GetStaticTimeStampForTests(),
                               WebGestureDevice::kTouchscreen);
-  touch_event.SetPositionInWidget(WebFloatPoint(20, 20));
+  touch_event.SetPositionInWidget(gfx::PointF(20, 20));
 
   GestureEventWithHitTestResults targeted_event = GetTargetedEvent(touch_event);
   Node* touch_node = web_view_impl->BestTapNode(targeted_event);
@@ -202,14 +196,14 @@ TEST_P(LinkHighlightImplTest, resetDuringNodeRemoval) {
   web_view_impl->EnableTapHighlightAtPoint(targeted_event);
   const auto* highlight = GetLinkHighlightImpl();
   ASSERT_TRUE(highlight);
-  EXPECT_EQ(touch_node, highlight->GetNode());
+  EXPECT_EQ(touch_node->GetLayoutObject(), highlight->GetLayoutObject());
 
   touch_node->remove(IGNORE_EXCEPTION_FOR_TESTING);
   UpdateAllLifecyclePhases();
 
   ASSERT_EQ(highlight, GetLinkHighlightImpl());
   ASSERT_TRUE(highlight);
-  EXPECT_FALSE(highlight->GetNode());
+  EXPECT_FALSE(highlight->GetLayoutObject());
 }
 
 // A lifetime test: delete LayerTreeView while running LinkHighlights.
@@ -225,7 +219,7 @@ TEST_P(LinkHighlightImplTest, resetLayerTreeView) {
                               WebInputEvent::kNoModifiers,
                               WebInputEvent::GetStaticTimeStampForTests(),
                               WebGestureDevice::kTouchscreen);
-  touch_event.SetPositionInWidget(WebFloatPoint(20, 20));
+  touch_event.SetPositionInWidget(gfx::PointF(20, 20));
 
   GestureEventWithHitTestResults targeted_event = GetTargetedEvent(touch_event);
   Node* touch_node = web_view_impl->BestTapNode(targeted_event);
@@ -243,15 +237,14 @@ TEST_P(LinkHighlightImplTest, HighlightLayerEffectNode) {
   WebViewImpl* web_view_impl = web_view_helper_.GetWebView();
   web_view_impl->MainFrameWidget()->Resize(WebSize(page_width, page_height));
 
-  paint_artifact_compositor()->EnableExtraDataForTesting();
   UpdateAllLifecyclePhases();
-  size_t layer_count_before_highlight = ContentLayerCount();
+  size_t layer_count_before_highlight = LayerCount();
 
   WebGestureEvent touch_event(WebInputEvent::kGestureShowPress,
                               WebInputEvent::kNoModifiers,
                               WebInputEvent::GetStaticTimeStampForTests(),
                               WebGestureDevice::kTouchscreen);
-  touch_event.SetPositionInWidget(WebFloatPoint(20, 20));
+  touch_event.SetPositionInWidget(gfx::PointF(20, 20));
 
   GestureEventWithHitTestResults targeted_event = GetTargetedEvent(touch_event);
   Node* touch_node = web_view_impl->BestTapNode(targeted_event);
@@ -259,7 +252,7 @@ TEST_P(LinkHighlightImplTest, HighlightLayerEffectNode) {
 
   web_view_impl->EnableTapHighlightAtPoint(targeted_event);
   // The highlight should create one additional layer.
-  EXPECT_EQ(layer_count_before_highlight + 1, ContentLayerCount());
+  EXPECT_EQ(layer_count_before_highlight + 1, LayerCount());
 
   const auto* highlight = GetLinkHighlightImpl();
   ASSERT_TRUE(highlight);
@@ -295,7 +288,7 @@ TEST_P(LinkHighlightImplTest, HighlightLayerEffectNode) {
   touch_node->remove(IGNORE_EXCEPTION_FOR_TESTING);
   UpdateAllLifecyclePhases();
   // Removing the highlight layer should drop the cc layer count by one.
-  EXPECT_EQ(layer_count_before_highlight, ContentLayerCount());
+  EXPECT_EQ(layer_count_before_highlight, LayerCount());
 
   WebTestSupport::SetIsRunningWebTest(was_running_web_test);
 }
@@ -307,16 +300,15 @@ TEST_P(LinkHighlightImplTest, MultiColumn) {
   web_view_impl->MainFrameWidget()->Resize(WebSize(page_width, page_height));
   UpdateAllLifecyclePhases();
 
-  paint_artifact_compositor()->EnableExtraDataForTesting();
   UpdateAllLifecyclePhases();
-  size_t layer_count_before_highlight = ContentLayerCount();
+  size_t layer_count_before_highlight = LayerCount();
 
   WebGestureEvent touch_event(WebInputEvent::kGestureShowPress,
                               WebInputEvent::kNoModifiers,
                               WebInputEvent::GetStaticTimeStampForTests(),
                               WebGestureDevice::kTouchscreen);
   // This will touch the link under multicol.
-  touch_event.SetPositionInWidget(WebFloatPoint(20, 300));
+  touch_event.SetPositionInWidget(gfx::PointF(20, 300));
 
   GestureEventWithHitTestResults targeted_event = GetTargetedEvent(touch_event);
   Node* touch_node = web_view_impl->BestTapNode(targeted_event);
@@ -349,15 +341,66 @@ TEST_P(LinkHighlightImplTest, MultiColumn) {
   };
 
   // The highlight should create 2 additional layer, each for each fragment.
-  EXPECT_EQ(layer_count_before_highlight + 2, ContentLayerCount());
+  EXPECT_EQ(layer_count_before_highlight + 2, LayerCount());
   EXPECT_EQ(2u, highlight->FragmentCountForTesting());
   check_layer(highlight->LayerForTesting(0));
   check_layer(highlight->LayerForTesting(1));
 
+  Element* multicol = touch_node->parentElement();
+  EXPECT_EQ(50, multicol->OffsetHeight());
+  // Make multicol shorter to create 3 total columns for touch_node.
+  multicol->setAttribute(html_names::kStyleAttr, "height: 25px");
+  UpdateAllLifecyclePhases();
+  ASSERT_EQ(&first_fragment, &touch_node->GetLayoutObject()->FirstFragment());
+  ASSERT_EQ(second_fragment, first_fragment.NextFragment());
+  const auto* third_fragment = second_fragment->NextFragment();
+  ASSERT_TRUE(third_fragment);
+  EXPECT_FALSE(third_fragment->NextFragment());
+
+  EXPECT_EQ(layer_count_before_highlight + 3, LayerCount());
+  EXPECT_EQ(3u, highlight->FragmentCountForTesting());
+  check_layer(highlight->LayerForTesting(0));
+  check_layer(highlight->LayerForTesting(1));
+  check_layer(highlight->LayerForTesting(2));
+
+  // Make multicol taller to create only 1 column for touch_node.
+  multicol->setAttribute(html_names::kStyleAttr, "height: 100px");
+  UpdateAllLifecyclePhases();
+  ASSERT_EQ(&first_fragment, &touch_node->GetLayoutObject()->FirstFragment());
+  EXPECT_FALSE(first_fragment.NextFragment());
+
+  EXPECT_EQ(layer_count_before_highlight + 1, LayerCount());
+  EXPECT_EQ(1u, highlight->FragmentCountForTesting());
+  check_layer(highlight->LayerForTesting(0));
+
   touch_node->remove(IGNORE_EXCEPTION_FOR_TESTING);
   UpdateAllLifecyclePhases();
   // Removing the highlight layer should drop the cc layers for highlights.
-  EXPECT_EQ(layer_count_before_highlight, ContentLayerCount());
+  EXPECT_EQ(layer_count_before_highlight, LayerCount());
+}
+
+TEST_P(LinkHighlightImplTest, DisplayContents) {
+  WebViewImpl* web_view_impl = web_view_helper_.GetWebView();
+
+  int page_width = 640;
+  int page_height = 480;
+  web_view_impl->MainFrameWidget()->Resize(WebSize(page_width, page_height));
+  UpdateAllLifecyclePhases();
+
+  WebGestureEvent touch_event(WebInputEvent::kGestureShowPress,
+                              WebInputEvent::kNoModifiers,
+                              WebInputEvent::GetStaticTimeStampForTests(),
+                              WebGestureDevice::kTouchscreen);
+  // This will touch the div with display:contents and cursor:pointer.
+  touch_event.SetPositionInWidget(gfx::PointF(20, 400));
+
+  GestureEventWithHitTestResults targeted_event = GetTargetedEvent(touch_event);
+  const Node* touched_node = targeted_event.GetHitTestResult().InnerNode();
+  EXPECT_TRUE(touched_node->IsTextNode());
+  EXPECT_FALSE(web_view_impl->BestTapNode(targeted_event));
+
+  web_view_impl->EnableTapHighlightAtPoint(targeted_event);
+  EXPECT_FALSE(GetLinkHighlightImpl());
 }
 
 }  // namespace blink

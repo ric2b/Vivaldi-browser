@@ -6,32 +6,34 @@
 
 #include "base/feature_list.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
-#include "chrome/browser/permissions/permission_request_id.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/permissions/permission_request_id.h"
 #include "services/device/public/cpp/device_features.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom.h"
 #include "url/gurl.h"
 
-SensorPermissionContext::SensorPermissionContext(Profile* profile)
-    : PermissionContextBase(profile,
-                            CONTENT_SETTINGS_TYPE_SENSORS,
+SensorPermissionContext::SensorPermissionContext(
+    content::BrowserContext* browser_context)
+    : PermissionContextBase(browser_context,
+                            ContentSettingsType::SENSORS,
                             blink::mojom::FeaturePolicyFeature::kNotFound) {}
 
 SensorPermissionContext::~SensorPermissionContext() {}
 
-void SensorPermissionContext::UpdateTabContext(const PermissionRequestID& id,
-                                               const GURL& requesting_frame,
-                                               bool allowed) {
+void SensorPermissionContext::UpdateTabContext(
+    const permissions::PermissionRequestID& id,
+    const GURL& requesting_frame,
+    bool allowed) {
   auto* content_settings = TabSpecificContentSettings::GetForFrame(
       id.render_process_id(), id.render_frame_id());
   if (!content_settings)
     return;
 
   if (allowed)
-    content_settings->OnContentAllowed(CONTENT_SETTINGS_TYPE_SENSORS);
+    content_settings->OnContentAllowed(ContentSettingsType::SENSORS);
   else
-    content_settings->OnContentBlocked(CONTENT_SETTINGS_TYPE_SENSORS);
+    content_settings->OnContentBlocked(ContentSettingsType::SENSORS);
 }
 
 bool SensorPermissionContext::IsRestrictedToSecureOrigins() const {

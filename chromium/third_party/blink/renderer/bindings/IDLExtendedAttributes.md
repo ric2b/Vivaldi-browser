@@ -178,9 +178,9 @@ Calling the non-`[Clamp]` version of `setColor()` uses **ToUint8()** to coerce t
 
 Calling the `[Clamp]` version of `setColor()` uses **clampTo()** to coerce the Numbers to octets. Hence calling `context.setColor(-1, 255, 257)` is equivalent to calling `setColorClamped(0, 255, 255)`.
 
-### [Constructor] _(i)_
+### [Constructor] _(i)_ _deprecated_
 
-Standard: [Constructor](https://heycam.github.io/webidl/#Constructor)
+`[Constructor]` is deprecated. Use [constructor operations](https://heycam.github.io/webidl/#idl-constructors) instead.
 
 Summary: `[Constructor]` indicates that the interface should have a constructor, i.e. "new XXX()".
 
@@ -333,6 +333,18 @@ In the example above, named properties in `HTMLCollection` instances (such as th
 
 The `[LegacyUnenumerableNamedProperties]` extended attribute must be used **only** in interfaces that support named properties.
 
+### [LegacyWindowAlias] _(i)_
+
+Standard: [LegacyWindowAlias](https://heycam.github.io/webidl/#LegacyWindowAlias)
+
+### [LegacyWindowAlias_Measure] _(i)_
+
+Summary: The same as `[Measure]` and `[MeasureAs]` but applied to the property exposed as `[LegacyWindowAlias]`.  Unlike `[Measure]`, you can optionally provide the feature name like `[LegacyWindowAlias_Measure=FeatureName]`.
+
+### [LegacyWindowAlias_RuntimeEnabled] _(i)_
+
+Summary: The same as `[RuntimeEnabled]` but applied to the property exposed as `[LegacyWindowAlias]`.
+
 ### [NamedConstructor] _(i)_
 
 Standard: [NamedConstructor](https://heycam.github.io/webidl/#NamedConstructor)
@@ -352,6 +364,14 @@ Usage: The possible usage is `[NamedConstructor=YYY(...)]`. Just as with constru
 The semantics are the same as `[Constructor]`, except that the name changes: JavaScript can make a DOM object by `new Audio()` instead of by `new HTMLAudioElement()`.
 
 Whether you should allow an interface to have a named constructor or not depends on the spec of each interface.
+
+### [NamedConstructor_CallWith] _(i)_
+
+Summary: The same as `[CallWith]` but applied to the named constructors.
+
+### [NamedConstructor_RaisesException] _(i)_
+
+Summary: The same as `[RaisesException]` but applied to the named constructors.
 
 ### [NewObject] _(m)_
 
@@ -520,6 +540,20 @@ void func([TreatNullAs=Emptytring] DOMString str);
 ```
 
 Implementation: Given `[TreatNullAs=EmptyString]`, a JavaScript null is converted to a Blink empty string, for which `String::IsEmpty()` returns true, but `String::IsNull()` return false.
+
+### [StringContext=TrustedHTML|TrustedScript|TrustedScriptURL] _(t)_
+
+Standard: [TrustedType](https://w3c.github.io/webappsec-trusted-types/dist/spec/#!trustedtypes-extended-attribute)
+
+Summary: Indicate that a DOMString for HTMLs and scripts or USVString for script URLs is to be supplemented with additional Trusted Types enforcement logic.
+
+Usage: Must be specified on a DOMString or a USVString type.
+
+```webidl
+typedef [StringContext=TrustedHTML] DOMString TrustedString;
+attribute TrustedString str;
+void func(TrustedString str);
+```
 
 ### [Unforgeable] _(m,a)_
 
@@ -743,7 +777,7 @@ Summary: They allow you to write bindings code manually as you like: full bindin
 
 Custom bindings are _strongly discouraged_. They are likely to be buggy, a source of security holes, and represent a significant maintenance burden. Before using `[Custom]`, you should doubly consider if you really need custom bindings. You are recommended to modify code generators and add specialized extended attributes or special cases if necessary to avoid using `[Custom]`.
 
-Usage: `[Custom]` can be specified on methods or attributes. `[Custom=CallEpilogue]` can be specified on methods. `[Custom=Getter]` and `[Custom=Setter]` can be specified on attributes. `[Custom=A|B]` can be specified on interfaces, with various values (see below).
+Usage: `[Custom]` can be specified on methods or attributes. `[Custom=Getter]` and `[Custom=Setter]` can be specified on attributes. `[Custom=A|B]` can be specified on interfaces, with various values (see below).
 
 On read only attributes (that are not `[Replaceable]`), `[Custom]` is equivalent to `[Custom=Getter]` (since there is no setter) and `[Custom=Getter]` is preferred.
 
@@ -761,7 +795,6 @@ The bindings generator largely _ignores_ the specified type information of `[Cus
 Before explaining the details, let us clarify the relationship of these IDL attributes.
 
 * `[Custom]` on a method indicates that you can write V8 custom bindings for the method.
-* `[Custom=CallEpilogue]` on a method indicates that the normal code is generated for the method, but with an extra call to an auxiliary custom bindings callback at the end.
 * `[Custom=Getter]` or `[Custom=Setter]` on an attribute means custom bindings for the attribute getter or setter.
 * `[Custom]` on an attribute means custom bindings for both the getter and the setter
 
@@ -770,7 +803,6 @@ Methods:
 ```webidl
 interface XXX {
     [Custom] void func();
-    [Custom=CallEpilogue] void func2();
 };
 ```
 
@@ -778,10 +810,6 @@ You can write custom bindings in third_party/blink/renderer/bindings/{core,modul
 
 ```c++
 void V8XXX::FuncMethodCustom(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  ...;
-}
-
-void V8XXX::Func2MethodEpilogueCustom(const v8::FunctionCallbackInfo<v8::Value>& info, V8XXX* impl) {
   ...;
 }
 ```
@@ -927,7 +955,7 @@ Usage: `[CustomElementCallbacks]` takes no arguments.
 Summary: Denotes an API that exposes data that folks on the internet find useful for fingerprinting.
 
 Attributes and methods marked as `[HighEntropy]` are known to be practically useful for [identifying particular clients](https://dev.chromium.org/Home/chromium-security/client-identification-mechanisms) on the web today.
-Both methods and attribute/constant getters annotated with this attribute are wired up to [`Dactyloscoper::Record`](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/core/frame/use_counter.cc&q=Dactyloscoper::Record) for additional processing.
+Both methods and attribute/constant getters annotated with this attribute are wired up to [`Dactyloscoper::Record`](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/core/frame/dactyloscoper.cc&q=Dactyloscoper::Record) for additional processing.
 
 This attribute must be accompanied by either `[Measure]` or `[MeasureAs]`.
 
@@ -966,7 +994,11 @@ Summary: Measures usage of a specific feature via UseCounter.
 
 In order to measure usage of specific features, Chrome submits anonymous statistics through the Histogram recording system for users who opt-in to sharing usage statistics. This extended attribute hooks up a specific feature to this measurement system.
 
-Usage: `[Measure]` can be specified on interfaces, methods, attributes, and constants. When specified on an interface usage of the constructor will be measured. The generated feature name must be added to [UseCounter::Feature](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/platform/instrumentation/use_counter.h&q=%22enum%20Feature%22&sq=package:chromium&type=cs&l=61) (in [platform/instrumentation/use_counter.h](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/platform/instrumentation/use_counter.h)).
+Usage: `[Measure]` can be specified on interfaces, methods, attributes, and constants.
+
+(_deprecated_) When specified on an interface usage of the constructor will be measured. This behavior could be changed in the future. Specify `[Measure]` on constructor operations instead.
+
+The generated feature name must be added to [UseCounter::Feature](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/platform/instrumentation/use_counter.h&q=%22enum%20Feature%22&sq=package:chromium&type=cs&l=61) (in [platform/instrumentation/use_counter.h](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/platform/instrumentation/use_counter.h)).
 
 ```webidl
 [Measure] attribute Node interestingAttribute;
@@ -979,7 +1011,11 @@ Usage: `[Measure]` can be specified on interfaces, methods, attributes, and cons
 Summary: Like `[Measure]`, but the feature name is provided as the extended attribute value.
 This is similar to the standard `[DeprecateAs]` extended attribute, but does not display a deprecation warning.
 
-Usage: `[MeasureAs]` can be specified on interfaces, methods, attributes, and constants. The value must match one of the enumeration values in [UseCounter::Feature](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/platform/instrumentation/use_counter.h&q=%22enum%20Feature%22&sq=package:chromium&type=cs&l=61) (in [platform/instrumentation/use_counter.h](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/platform/instrumentation/use_counter.h)).
+Usage: `[MeasureAs]` can be specified on interfaces, methods, attributes, and constants.
+
+(_deprecated_) Specifying `[MeasureAs]` on interfaces is deprecated. Specify `[MeasureAs]` on constructor operations instead.
+
+The value must match one of the enumeration values in [UseCounter::Feature](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/platform/instrumentation/use_counter.h&q=%22enum%20Feature%22&sq=package:chromium&type=cs&l=61) (in [platform/instrumentation/use_counter.h](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/blink/renderer/platform/instrumentation/use_counter.h)).
 
 ```webidl
 [MeasureAs=AttributeWeAreInterestedIn] attribute Node interestingAttribute;
@@ -1113,6 +1149,9 @@ The `[ReflectEmpty]` extended attribute specifies the value that an IDL getter f
 
 `[ReflectEmpty]` should be used if the specification for the content attribute has an empty attribute value mapped to some attribute state. For HTML, this applies to [enumerated attributes](http://www.whatwg.org/specs/web-apps/current-work/#enumerated-attribute) only.
 
+Non-empty string value specified by `[ReflectEmpty]` must be added to
+`core/html/keywords.json5`.
+
 ### [ReflectInvalid] _(a)_
 
 Specification: [Limited value attributes](http://www.whatwg.org/specs/web-apps/current-work/#limited-to-only-known-values) - _defined in spec prose, not as an IDL extended attribute._
@@ -1131,6 +1170,9 @@ The `[ReflectInvalid]` extended attribute specifies the value that an IDL getter
 
 `[ReflectInvalid]` should be used if the specification for the content attribute has an _invalid value state_ defined. For HTML, this applies to [enumerated attributes](http://www.whatwg.org/specs/web-apps/current-work/#enumerated-attribute) only.
 
+Non-empty string value specified by `[ReflectInvalid]` must be added to
+`core/html/keywords.json5`.
+
 ### [ReflectMissing] _(a)_
 
 Specification: [Limited value attributes](http://www.whatwg.org/specs/web-apps/current-work/#limited-to-only-known-values) - _defined in spec prose, not as an IDL extended attribute._
@@ -1148,6 +1190,9 @@ interface HTMLMyElement {
 The `[ReflectMissing]` extended attribute specifies the value that an IDL getter for the `direction` attribute should return when the content attribute is missing (e.g., return `"auto"` when accessing the `preload` IDL attribute on `<my-element>`.) Its (string) literal value must be one of the possible values that the `[ReflectOnly]` extended attribute lists.
 
 `[ReflectMissing]` should be used if the specification for the content attribute has a _missing value state_ defined. For HTML, this applies to [enumerated attributes](http://www.whatwg.org/specs/web-apps/current-work/#enumerated-attribute) only.
+
+Non-empty string value specified by `[ReflectMissing]` must be added to
+`core/html/keywords.json5`.
 
 ### [ReflectOnly] _(a)_
 
@@ -1169,6 +1214,9 @@ The ReflectOnly attribute limits the range of values that the attribute getter c
 If there is no match, the empty string will be returned. As required by the specification, no such checking is performed when the reflected IDL attribute is set.
 
 `[ReflectOnly]` should be used if the specification for a reflected IDL attribute says it is _"limited to only known values"_.
+
+Non-empty string values specified by `[ReflectOnly]` must be added to
+`core/html/keywords.json5`.
 
 ### [RuntimeEnabled] _(i, m, a, c)_
 
@@ -1358,7 +1406,9 @@ reads would leak cross-origin information.
 With both `Getter` and `Setter`, allows both cross-origin reads and cross-origin
 writes. This is used for the `Window.location` attribute.
 
-### [CustomConstructor] _(i)_
+### [CustomConstructor] _(i)_ _deprecated_
+
+`[CustomConstructor]` is deprecated. Use [constructor operations](https://heycam.github.io/webidl/#idl-constructors) with `[Custom]`.
 
 Summary: They allow you to write custom bindings for constructors.
 

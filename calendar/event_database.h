@@ -51,6 +51,7 @@ class EventDatabase {
   void FillEventRow(sql::Statement& statement, EventRow* event);
   bool MigrateEventsWithoutSequenceAndIcalColumns();
   bool MigrateCalendarToVersion4();
+  bool MigrateCalendarToVersion6();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(EventDatabase);
@@ -64,7 +65,7 @@ class EventDatabase {
   " id, calendar_id, alarm_id, title, description, start, end, all_day, "    \
   "is_recurring, start_recurring, end_recurring, location, url, etag, href," \
   "uid, event_type_id, task, complete, trash, trash_time, sequence, ical, "  \
-  " rrule "
+  " rrule, organizer, timezone "
 
 }  // namespace calendar
 

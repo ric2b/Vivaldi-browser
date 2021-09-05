@@ -9,6 +9,7 @@ group("closure_compile") {
     "certificate_manager:closure_compile",
     "managed_footnote:closure_compile",
     "managed_footnote:closure_compile_module",
+    "omnibox:closure_compile",
   ]
 
   if (is_chromeos) {
@@ -17,7 +18,12 @@ group("closure_compile") {
 }
 
 group("polymer3_elements") {
-  deps = [
+  public_deps = [
+    "certificate_manager:polymer3_elements",
     "managed_footnote:managed_footnote_module",
+    "omnibox:omnibox_modules",
   ]
+  if (is_chromeos) {
+    public_deps += [ "chromeos:polymer3_elements" ]
+  }
 }

@@ -16,7 +16,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 
 #include "app/vivaldi_apptools.h"
-#include "chrome/browser/ui/javascript_dialogs/javascript_dialog_tab_helper.h"
+#include "components/javascript_dialogs/tab_modal_dialog_manager.h"
 
 namespace extensions {
 
@@ -81,7 +81,7 @@ void JavaScriptDialogHelper::RunBeforeUnloadDialog(
     // NOTE(pettern@vivaldi.com): We want beforeunload dialogs in Vivaldi,
     // so call the full implementation here.
     content::JavaScriptDialogManager* helper =
-        JavaScriptDialogTabHelper::FromWebContents(web_contents);
+        javascript_dialogs::TabModalDialogManager::FromWebContents(web_contents);
     if (helper) {
       helper->RunBeforeUnloadDialog(web_contents, render_frame_host, is_reload,
                                     std::move(callback));

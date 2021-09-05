@@ -103,8 +103,8 @@ VideoCaptureHost::~VideoCaptureHost() {
   }
 
   NotifyAllStreamsRemoved();
-  BrowserThread::DeleteSoon(BrowserThread::UI, FROM_HERE,
-                            render_process_host_delegate_.release());
+  base::DeleteSoon(FROM_HERE, {BrowserThread::UI},
+                   render_process_host_delegate_.release());
 }
 
 void VideoCaptureHost::OnError(const VideoCaptureControllerID& controller_id,
@@ -206,8 +206,8 @@ void VideoCaptureHost::Start(
   controllers_[controller_id] = base::WeakPtr<VideoCaptureController>();
   media_stream_manager_->video_capture_manager()->ConnectClient(
       session_id, params, controller_id, this,
-      base::Bind(&VideoCaptureHost::OnControllerAdded,
-                 weak_factory_.GetWeakPtr(), device_id));
+      base::BindOnce(&VideoCaptureHost::OnControllerAdded,
+                     weak_factory_.GetWeakPtr(), device_id));
 }
 
 void VideoCaptureHost::Stop(const base::UnguessableToken& device_id) {

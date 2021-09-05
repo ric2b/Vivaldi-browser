@@ -1,4 +1,232 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja-KS">
+<translation id="1038842779957582377">不明な芸名</translation>
+<translation id="1089439967362294234">パスワード変更</translation>
+<translation id="1110994991967754504"><ph name="PERMISSION_NAME" /> の権限どれにするん</translation>
+<translation id="1152921474424827756"><ph name="URL" />の<ph name="BEGIN_LINK" />キャッシュコピー<ph name="END_LINK" />にアクセスするわ</translation>
+<translation id="1158211211994409885"><ph name="HOST_NAME" />、意外やけど途中で接続切ってきたわ。</translation>
+<translation id="1161325031994447685">Wi-Fiにもっかい接ぐ</translation>
+<translation id="1175364870820465910">刷るわ... (&amp;P)</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />Cookie消してみて<ph name="END_LINK" /></translation>
+<translation id="1375198122581997741">バージョン情報</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" />からデータ送信されへんかったわ。</translation>
+<translation id="1559528461873125649">そんなファイルとかフォルダーないみたいやわ</translation>
+<translation id="1620510694547887537">カメラ</translation>
+<translation id="1640244768702815859"><ph name="BEGIN_LINK" />サイトのトップページにアクセス<ph name="END_LINK" />してみて。</translation>
+<translation id="1645368109819982629">対応してへんプロトコル</translation>
+<translation id="1710259589646384581">OS</translation>
+<translation id="1728677426644403582">ウェブページのソースが表示されてるで</translation>
+<translation id="1734878702283171397">システム管理者に聞いてみて。</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windowsのネットワーク診断試してみて<ph name="END_LINK" />。</translation>
+<translation id="1834321415901700177">このサイト、有害なプログラム入ってるで</translation>
+<translation id="1916770123977586577">さらの設定をこのサイトに適用するんやったら、ページリロードして</translation>
+<translation id="1919345977826869612">チラシ</translation>
+<translation id="194030505837763158"><ph name="LINK" />に行くで</translation>
+<translation id="1974060860693918893">詳細</translation>
+<translation id="2030481566774242610">もしかして: <ph name="LINK" />？</translation>
+<translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォール確認する<ph name="END_LINK" /></translation>
+<translation id="2091887806945687916">音声</translation>
+<translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
+<translation id="2147827593068025794">バックグラウンド同期</translation>
+<translation id="2166378884831602661">このサイト、安全に接続できへんわ</translation>
+<translation id="2187317261103489799">検出（デフォルト）</translation>
+<translation id="2224337661447660594">ネット繋がってへん</translation>
+<translation id="2230458221926704099"><ph name="BEGIN_LINK" />診断アプリ<ph name="END_LINK" />で接続直して</translation>
+<translation id="2292556288342944218">インターネットアクセスがブロックされてるわ</translation>
+<translation id="2317259163369394535"><ph name="DOMAIN" />にはユーザー名とパスワードが要るねん。</translation>
+<translation id="2337852623177822836">管理者が指定する設定</translation>
+<translation id="2344028582131185878">自動ダウンロード</translation>
+<translation id="2355395290879513365">悪さしよるユーザーが、あんたがこのサイトで見ている画像勝手に変えて、あんたを騙そうとしているかも知れへん。</translation>
+<translation id="2356070529366658676">確認して</translation>
+<translation id="2359808026110333948">続ける</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />ネットワーク診断使う<ph name="END_LINK" /></translation>
+<translation id="2482878487686419369">通知</translation>
+<translation id="2539524384386349900">検出</translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" />から無効な応答送られてきよったわ。</translation>
+<translation id="2586657967955657006">クリップボード</translation>
+<translation id="2609632851001447353">バリエーション</translation>
+<translation id="2634124572758952069"><ph name="HOST_NAME" /> のサーバーのIPアドレス見つからへんかったわ。</translation>
+<translation id="2649204054376361687"><ph name="COUNTRY" /> <ph name="CITY" /></translation>
+<translation id="2650446666397867134">ファイルへのアクセス、断られたわ</translation>
+<translation id="2705137772291741111">このサイトの保存(キャッシュ)されたコピー、読み取られへんかったわ。</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />接続診断ツール使う<ph name="END_LINK" /></translation>
+<translation id="2784949926578158345">接続リセットされたわ。</translation>
+<translation id="2826760142808435982"><ph name="CIPHER" /> で接続が暗号化・認証されてて、<ph name="KX" /> が鍵交換メカニズムとして使われてるわ。</translation>
+<translation id="2856444702002559011"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />に行ったら、悪さしよるユーザーにパスワード、メッセージ、クレジットカードとかの情報が盗られる可能性あるで。<ph name="BEGIN_LEARN_MORE_LINK" />詳しい情報<ph name="END_LEARN_MORE_LINK" /></translation>
+<translation id="2909946352844186028">ネットワークの変更が検出されたわ。</translation>
+<translation id="2948083400971632585">接続用に構成したプロキシー、、設定ページから無効にできるで。</translation>
+<translation id="2991571918955627853"><ph name="SITE" />はHSTSが使われてるから、今アクセスできへんわ。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
+<translation id="3005723025932146533">保存したコピー出す</translation>
+<translation id="301521992641321250">自動ブロックされたわ</translation>
+<translation id="3041612393474885105">証明書情報</translation>
+<translation id="3109728660330352905">このページ表示する権限がないねん。</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />接続診断ツール使ってみて<ph name="END_LINK" />。</translation>
+<translation id="3154506275960390542">このページのフォーム、安全に送信されへん可能性あるで。送信したデータを途中で他の人に見られたり、悪さしよるユーザーがサーバーの受信するデータ書き換えてきよるかもしれへんで。</translation>
+<translation id="3176929007561373547">プロキシーの設定確認するか、ネットワーク管理者に問い合わせて、プロキシーサーバーが正常に
+      動作してるか確認してもうてもええかな。プロキシーサーバー使ってないんやったら
+      次の方法試してみて。
+      <ph name="PLATFORM_TEXT" /></translation>
+<translation id="3226128629678568754">ページ読み込むんやったらデータ再送信せなあかんから、再読み込みボタンを押したって。</translation>
+<translation id="3227137524299004712">マイク</translation>
+<translation id="3234666976984236645">このサイトの重要なコンテンツを常に検出</translation>
+<translation id="3422472998109090673"><ph name="HOST_NAME" />、今アクセスできへんわ。</translation>
+<translation id="3427092606871434483">ええよ（デフォルト）</translation>
+<translation id="3447661539832366887">このデバイスの所有者が恐竜ゲーム無効にしてるわ。</translation>
+<translation id="3447884698081792621">証明書（発行元: <ph name="ISSUER" />）出す</translation>
+<translation id="3462200631372590220">詳細は表示せえへん</translation>
+<translation id="3484560055331845446">Googleアカウントにアクセスできへんようになるかも。パスワード変えた方がええかも。変えるんやったら要ログインな。</translation>
+<translation id="3566021033012934673">この接続、プライバシー守られてへんで</translation>
+<translation id="3574305903863751447"><ph name="COUNTRY" /> <ph name="STATE" /> <ph name="CITY" /></translation>
+<translation id="3586931643579894722">詳細を非表示</translation>
+<translation id="3630155396527302611">ネットワークアクセスが許可されたプログラムのリストにもう登録されてるんやったら、
+      リストから外して、もっかい追加し直してみて。</translation>
+<translation id="3658742229777143148">変更履歴</translation>
+<translation id="3681007416295224113">証明書情報</translation>
+<translation id="3717027428350673159"><ph name="BEGIN_LINK" />プロキシー、ファイアウォール、DNSの設定確認する<ph name="END_LINK" /></translation>
+<translation id="382518646247711829">プロキシーサーバー使ってるんやったら...</translation>
+<translation id="3950820424414687140">ログイン</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" />、ブロックされとるわ</translation>
+<translation id="3987940399970879459">1 MB未満</translation>
+<translation id="4075732493274867456">クライアントとサーバーがどっちもサポートするSSLプロトコルのバージョンも暗号化方式も見つからへんわ。</translation>
+<translation id="4116663294526079822">このサイトではいつも許可</translation>
+<translation id="4130226655945681476">ネットワークケーブル、モデム、ルーターを確認する</translation>
+<translation id="4151403195736952345">グローバルのデフォルト値（つまり検出）にしとく</translation>
+<translation id="4165986682804962316">サイト設定</translation>
+<translation id="4203896806696719780"><ph name="BEGIN_LINK" />ファイアウォールとウイルス対策の設定確認する<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />ネットワーク診断を試してみて<ph name="END_LINK" />。</translation>
+<translation id="4235360514405112390">有効</translation>
+<translation id="4250431568374086873">このサイトへの接続、完全には保護されてへんで</translation>
+<translation id="4265872034478892965">管理者に許可されとる</translation>
+<translation id="4312866146174492540">ブロック（デフォルト）</translation>
+<translation id="4356973930735388585">このサイト使ったらな、悪さしよるユーザーに危ないプログラム（写真、パスワード、メッセージ、クレジット カード番号などの情報を盗み取るか削除するやつ）勝手にインストールされる可能性あるで。</translation>
+<translation id="4408413947728134509">Cookie <ph name="NUM_COOKIES" /></translation>
+<translation id="4432688616882109544"><ph name="HOST_NAME" />でログイン証明書が承認されなかったか、ログイン証明書が提示されていない可能性があるわ。</translation>
+<translation id="4506599922270137252">システム管理者に問い合わせる</translation>
+<translation id="4522570452068850558">細かいこと</translation>
+<translation id="4552089082226364758">Flash</translation>
+<translation id="4558551763791394412">拡張機能、無効にしてみて。</translation>
+<translation id="4592951414987517459"><ph name="DOMAIN" /> への接続はおニューの暗号スイートで暗号化されてるで。</translation>
+<translation id="4690462567478992370">無効な証明書は使えへんようにする</translation>
+<translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
+<translation id="4708268264240856090">接続が途中で切れたわ</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windowsのネットワーク診断使う<ph name="END_LINK" /></translation>
+<translation id="4744603770635761495">実行ファイルのパス</translation>
+<translation id="4750917950439032686">このサイトに送信した情報（パスワード、クレジット カード番号とか）は第三者に見られへんになってる。</translation>
+<translation id="4764776831041365478"><ph name="URL" />のウェブページは今だけダウンしてるか、新しいウェブアドレスに引っ越したんかも。</translation>
+<translation id="4943872375798546930">見つからへんわ</translation>
+<translation id="4974590756084640048">警告をもっかい有効にする</translation>
+<translation id="5023310440958281426">管理者ポリシー確認してもうてもええかな</translation>
+<translation id="5039804452771397117">ええよ</translation>
+<translation id="5068778127327928576">{NUM_COOKIES,plural, =1{（1 個が使用中）}other{（# 個が使用中）}}</translation>
+<translation id="5070335125961472645"><ph name="BEGIN_LINK" />プロキシーアドレス確認する<ph name="END_LINK" /></translation>
+<translation id="5115563688576182185">(64-bit)</translation>
+<translation id="5287240709317226393">Cookie出す</translation>
+<translation id="5355557959165512791"><ph name="SITE" />は証明書が失効してるから、今アクセスできへんで。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
+<translation id="5386426401304769735">このサイトの証明書チェーンには SHA-1 使て署名された証明書が含まれてるわ。</translation>
+<translation id="5431657950005405462">ファイルなかったわ</translation>
+<translation id="5452270690849572955">この<ph name="HOST_NAME" />ページ、どこにも見当たらへん</translation>
+<translation id="5457113250005438886">無効</translation>
+<translation id="5492298309214877701">このサイトは企業、団体か学校のイントラネット上にあるんやけどな、外部のウェブサイトと同じURLが使われてるねん。
+    <ph name="LINE_BREAK" />
+    システム管理者に聞いてみて。</translation>
+<translation id="5510766032865166053">別んとこ行ったか消されたかも知れへん。</translation>
+<translation id="5556459405103347317">再読み込み</translation>
+<translation id="5610142619324316209">接続を確認する</translation>
+<translation id="5617949217645503996"><ph name="HOST_NAME" />でリダイレクト何回もあったわ。</translation>
+<translation id="5675650730144413517">このページ動いてへんわ</translation>
+<translation id="5689516760719285838">今おるとこ</translation>
+<translation id="5710435578057952990">このウェブサイトは確認されてへんで。</translation>
+<translation id="5778550464785688721">MIDI デバイスのフルコントロール</translation>
+<translation id="5785756445106461925">ほんで、このページには安全ちゃう他のリソースがあんねん。このリソースは受信中に他のユーザーから見られる可能性あるし、悪意のあるユーザーに改変されたらページの見た目も変わるかも知れへん。</translation>
+<translation id="5799902971440853357"><ph name="SITE" />から送信された暗号化済みの認証情報がVivaldiで処理できへんから、今このウェブサイトにアクセスできへんわ。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
+<translation id="5810442152076338065"><ph name="DOMAIN" /> への接続は昔の暗号スイートで暗号化されてるで。</translation>
+<translation id="5838278095973806738">このサイトに大事な情報（パスワード、クレジット カードとか）を入れたらあかんで。悪さしよるユーザーに情報盗まれるかもしれへんし。</translation>
+<translation id="5869405914158311789">このサイト、アクセスできへん</translation>
+<translation id="5932224571077948991">このサイト、けったいな広告とか誤解招くような広告出してきよるわ</translation>
+<translation id="5990559369517809815">サーバーへのリクエストが拡張機能にブロックされとるわ。</translation>
+<translation id="6051221802930200923"><ph name="SITE" />では証明書ピンニングが使われてるから、今アクセスできへんわ。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
+<translation id="6146055958333702838">ケーブル見てな、使ってる可能性があるネットワークデバイス（ルーターとかモデムとか）
+    再起動してみて。</translation>
+<translation id="614940544461990577">これやってみ：</translation>
+<translation id="6165508094623778733">詳しく見るわ</translation>
+<translation id="6177128806592000436">このサイトへの接続、保護されてへんで</translation>
+<translation id="6203231073485539293">インターネット接続確認してもうてもええかな</translation>
+<translation id="625755898061068298">このサイトのセキュリティ警告、無効にしたで。</translation>
+<translation id="6264485186158353794">セキュリティで保護されたページに戻る</translation>
+<translation id="6305205051461490394"><ph name="URL" />にアクセスできへん。</translation>
+<translation id="6321917430147971392">DNS設定確認してもうてもええかな</translation>
+<translation id="6328639280570009161">ネットワーク予測、無効にしてみて</translation>
+<translation id="6328786501058569169">これ詐欺サイトやで</translation>
+<translation id="6358450015545214790">一人で悩まんと、ヘルプページ来てな</translation>
+<translation id="6433595998831338502"><ph name="HOST_NAME" />で接続拒否されたわ。</translation>
+<translation id="6447842834002726250">Cookie</translation>
+<translation id="6451458296329894277">フォーム再送信の確認</translation>
+<translation id="6569060085658103619">拡張機能のページが表示されてるで</translation>
+<translation id="6657585470893396449">パスワード</translation>
+<translation id="6685834062052613830">ログアウトして設定完了して</translation>
+<translation id="6711464428925977395">プロキシーサーバーに問題があるか、アドレスが合ってないかも。</translation>
+<translation id="6757797048963528358">あんたのデバイス、さっきまで寝とったで。</translation>
+<translation id="6897140037006041989">ユーザーエージェント</translation>
+<translation id="7053983685419859001">ブロック</translation>
+<translation id="7079718277001814089">このサイト、悪さするソフトウェア入ってるで</translation>
+<translation id="7090678807593890770"><ph name="LINK" /> ググってみて</translation>
+<translation id="7108819624672055576">拡張機能で許可されとる</translation>
+<translation id="7111012039238467737">（有効）</translation>
+<translation id="7210863904660874423"><ph name="HOST_NAME" />、セキュリティ規格遵守しとらへんわ。</translation>
+<translation id="7219179957768738017">この接続には <ph name="SSL_VERSION" /> を使うてんで。</translation>
+<translation id="7260504762447901703">アクセス権取り消す</translation>
+<translation id="7353601530677266744">コマンドライン</translation>
+<translation id="7419106976560586862">プロファイルのパス</translation>
+<translation id="7445762425076701745">接続してるサーバー、十分な検証ができへんねん。このサーバーは、そのネットワーク内だけでしか有効ちゃう名前使っててな、他所の認証局はその所有権を検証できへんねん。そういう名義の子らに対して無条件に証明書発行する認証局もあるし、接続先が意図したウェブサイトか、悪さしよるユーザーのサイトかかは確認できへんねん。</translation>
+<translation id="7455133967321480974">グローバルのデフォルト値（つまりブロック）にしとく</translation>
+<translation id="7518003948725431193">次のウェブページアドレス見つからへんかったわ: <ph name="URL" /></translation>
+<translation id="7521387064766892559">Javascript</translation>
+<translation id="7549584377607005141">このウェブページちゃんと表示するんやったら、さっき入れたデータが要るで。データ再送信できるけど、このページでやっきやったこと、もっかいやらなあかんで。</translation>
+<translation id="759889825892636187"><ph name="HOST_NAME" />、今このリクエスト処理できへんねんて。</translation>
+<translation id="7662298039739062396">拡張機能に指定される設定</translation>
+<translation id="7663736086183791259">証明書 <ph name="CERTIFICATE_VALIDITY" /></translation>
+<translation id="7669271284792375604">このサイト使ったらな、悪さしよるユーザーに閲覧時のエクスペリエンスを損なうプログラム（ホームページ改ざんしたり、アクセス先のサイトに追加の広告を表示したりするやつ）インストールするよう誘導される可能性あるで。</translation>
+<translation id="7714464543167945231">証明書</translation>
+<translation id="7716147886133743102">管理者にブロックされたわ</translation>
+<translation id="7716424297397655342">このサイト、キャッシュから読み込まれへんわ</translation>
+<translation id="7758069387465995638">ファイアウォールかウイルス対策ソフトウェアが接続ブロックしたかも知れへん。</translation>
+<translation id="7800304661137206267"><ph name="CIPHER" /> で接続が暗号化されてて、メッセージ認証に <ph name="MAC" />、鍵交換メカニズムに <ph name="KX" /> が使われてるわ。</translation>
+<translation id="7802523362929240268">正規のサイトや</translation>
+<translation id="7834399512844817676"><ph name="SITE" />は普段な、暗号化して情報を保護してるねん。今回Vivaldiから<ph name="SITE" />に接続しよう思った時に、いつものとちゃう誤った認証情報が返ってきてん。悪さしよるユーザーが<ph name="SITE" />になりすまそうとしているか、Wi-Fiログイン画面で接続が中断された可能性があるわ。データのやり取りが行われる前にVivaldiが接続止めたから、情報は保護されたままやで。</translation>
+<translation id="7878562273885520351">パスワード、不正利用されるかも知れへんで</translation>
+<translation id="7951415247503192394">(32-bit)</translation>
+<translation id="8025119109950072390">このサイト使ったらな、悪さしよるユーザーに危ない操作 - ソフトウェアのインストールとか個人情報（例: パスワード、電話番号、クレジットカード番号）の入力とか - するよう誘導される可能性あるで。</translation>
+<translation id="8037357227543935929">確認して（デフォルト）</translation>
+<translation id="8041940743680923270">グローバルのデフォルト値（つまり確認）にしとく</translation>
+<translation id="808894953321890993">パスワード変更</translation>
+<translation id="8142868475871995937">&lt;strong&gt;vivaldi://policy&lt;/strong&gt;にアクセスして、システム管理者が登録したブラックリストのURLとかポリシー、確認してな。</translation>
+<translation id="8149426793427495338">さっきまでパソコン寝とったで。</translation>
+<translation id="8150722005171944719"><ph name="URL" />のファイル、読まれへんわ。消されたんか、どっか他のとこ行ったんちゃう？ファイルへのアクセス権もろてへん可能性もあるけど。</translation>
+<translation id="8184538546369750125">グローバルのデフォルト値（つまり許可）にしとく</translation>
+<translation id="8211406090763984747">この接続、保護されてるわ</translation>
+<translation id="8225771182978767009">このサイト、あんたの使てるパソコン設定した人にブロックされてるわ。</translation>
+<translation id="8241707690549784388">今行こうとしてるページ、あんたが入力した情報使ってるやん。そのページ戻ったら、もっかい同じことせなあかんかもしれんけど、行ってみる？</translation>
+<translation id="8241712895048303527">このサイトでブロック</translation>
+<translation id="8286036467436129157">ログイン</translation>
+<translation id="8288807391153049143">証明書出す</translation>
+<translation id="8289355894181816810">確認方法わからへんかったら、ネットワーク管理者に聞いてみ。</translation>
+<translation id="8332188693563227489"><ph name="HOST_NAME" />へのアクセス断られたわ</translation>
+<translation id="8498891568109133222"><ph name="HOST_NAME" />からの応答がタイムアウトしたわ。</translation>
+<translation id="8503813439785031346">ユーザーの芸名</translation>
+<translation id="8703575177326907206"><ph name="DOMAIN" /> への接続、暗号化されてへんで。</translation>
+<translation id="8740359287975076522"><ph name="HOST_NAME" />の&lt;abbr id="dnsDefinition"&gt;DNSアドレス&lt;/abbr&gt;見つからへんかったわ。もうちょっと見てみるな。</translation>
+<translation id="8820817407110198400">ブックマーク</translation>
+<translation id="9001074447101275817">プロキシー <ph name="DOMAIN" />にはユーザー名とパスワードが要るで。</translation>
+<translation id="9008201768610948239">無視する</translation>
+<translation id="9011424611726486705">サイト設定を開くで</translation>
+<translation id="9025348182339809926">（無効）</translation>
+<translation id="9039213469156557790">ほんで、このページには安全ちゃう他のリソースがあんねん。このリソースは受信中に他のユーザーから見られる可能性あるし、悪意のあるユーザーに改変されたらページの動作も変わるかも知れへん。</translation>
+<translation id="9069693763241529744">拡張機能にブロックされたわ</translation>
+<translation id="9169664750068251925">このサイトではいつもブロック</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" />、サポートされていないプロトコル使っとるわ。</translation>
+<translation id="9219103736887031265">画像</translation>
+<translation id="936602727769022409">Googleアカウントにアクセスできへんようになるかも。パスワード変えた方がええかも。変えるんやったら要ログインな。</translation>
+<translation id="969892804517981540">公式ビルド</translation>
+<translation id="988159990683914416">デベロッパービルド</translation>
 </translationbundle>

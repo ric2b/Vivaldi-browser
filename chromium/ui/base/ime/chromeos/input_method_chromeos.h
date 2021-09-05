@@ -52,7 +52,9 @@ class COMPONENT_EXPORT(UI_BASE_IME_CHROMEOS) InputMethodChromeOS
       uint32_t before,
       uint32_t after,
       const std::vector<ui::ImeTextSpan>& text_spans) override;
-  void ConfirmCompositionText(bool reset_engine) override;
+
+  bool SetSelectionRange(uint32_t start, uint32_t end) override;
+  void ConfirmCompositionText(bool reset_engine, bool keep_selection) override;
 
  protected:
   // Converts |text| into CompositionText.

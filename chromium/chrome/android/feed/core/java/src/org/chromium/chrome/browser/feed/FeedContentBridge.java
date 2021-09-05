@@ -4,18 +4,18 @@
 
 package org.chromium.chrome.browser.feed;
 
-import com.google.android.libraries.feed.api.host.storage.ContentMutation;
-import com.google.android.libraries.feed.api.host.storage.ContentOperation;
-import com.google.android.libraries.feed.api.host.storage.ContentOperation.Delete;
-import com.google.android.libraries.feed.api.host.storage.ContentOperation.DeleteByPrefix;
-import com.google.android.libraries.feed.api.host.storage.ContentOperation.Type;
-import com.google.android.libraries.feed.api.host.storage.ContentOperation.Upsert;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.chrome.browser.feed.library.api.host.storage.ContentMutation;
+import org.chromium.chrome.browser.feed.library.api.host.storage.ContentOperation;
+import org.chromium.chrome.browser.feed.library.api.host.storage.ContentOperation.Delete;
+import org.chromium.chrome.browser.feed.library.api.host.storage.ContentOperation.DeleteByPrefix;
+import org.chromium.chrome.browser.feed.library.api.host.storage.ContentOperation.Type;
+import org.chromium.chrome.browser.feed.library.api.host.storage.ContentOperation.Upsert;
 import org.chromium.chrome.browser.profiles.Profile;
 
 import java.util.HashMap;

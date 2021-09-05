@@ -15,6 +15,7 @@
 
 #include "base/cancelable_callback.h"
 #include "base/files/file_path.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
@@ -32,7 +33,9 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/web_preferences.h"
 #include "content/shell/browser/web_test/leak_detector.h"
+#include "content/shell/common/blink_test.mojom.h"
 #include "content/shell/common/web_test.mojom.h"
+#include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -108,7 +111,8 @@ class BlinkTestResultPrinter {
 class BlinkTestController : public WebContentsObserver,
                             public RenderProcessHostObserver,
                             public NotificationObserver,
-                            public GpuDataManagerObserver {
+                            public GpuDataManagerObserver,
+                            public mojom::BlinkTestClient {
  public:
   static BlinkTestController* Get();
 
@@ -148,12 +152,29 @@ class BlinkTestController : public WebContentsObserver,
 
   void DevToolsProcessCrashed();
 
+  // Returns a path to a temporary directory. Each call to this method will
+  // return a new (empty) directory, as well as delete any directories that
+  // might have been created by previous calls.
+  base::FilePath GetWritableDirectoryForTests();
+
+  // For the duration of the current test this causes all file choosers to
+  // return the passed in path.
+  void SetFilePathForMockFileDialog(const base::FilePath& path);
+
+  void AddBlinkTestClientReceiver(
+      mojo::PendingAssociatedReceiver<mojom::BlinkTestClient> receiver);
+
   // WebContentsObserver implementation.
-  bool OnMessageReceived(const IPC::Message& message) override;
   void PluginCrashed(const base::FilePath& plugin_path,
                      base::ProcessId plugin_pid) override;
   void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
+  void TitleWasSet(NavigationEntry* entry) override;
+  void DidFailLoad(RenderFrameHost* render_frame_host,
+                   const GURL& validated_url,
+                   int error_code) override;
   void WebContentsDestroyed() override;
+  void DidUpdateFaviconURL(
+      const std::vector<blink::mojom::FaviconURLPtr>& candidates) override;
 
   // RenderProcessHostObserver implementation.
   void RenderProcessHostDestroyed(
@@ -173,6 +194,26 @@ class BlinkTestController : public WebContentsObserver,
       const {
     return accumulated_web_test_runtime_flags_changes_;
   }
+
+  // BlinkTestClient implementation.
+  void InitiateLayoutDump() override;
+  void ResetDone() override;
+  void PrintMessageToStderr(const std::string& message) override;
+  void PrintMessage(const std::string& message) override;
+  void Reload() override;
+  void OverridePreferences(
+      const content::WebPreferences& web_preferences) override;
+  void CloseRemainingWindows() override;
+  void GoToOffset(int offset) override;
+  void SendBluetoothManualChooserEvent(const std::string& event,
+                                       const std::string& argument) override;
+  void SetBluetoothManualChooser(bool enable) override;
+  void GetBluetoothManualChooserEvents() override;
+  void SetPopupBlockingEnabled(bool block_popups) override;
+  void LoadURLForFrame(const GURL& url, const std::string& frame_name) override;
+  void NavigateSecondaryWindow(const GURL& url) override;
+  void SetScreenOrientationChanged() override;
+  void BlockThirdPartyCookies(bool block);
 
  private:
   enum TestPhase { BETWEEN_TESTS, DURING_TEST, CLEAN_UP };
@@ -201,36 +242,24 @@ class BlinkTestController : public WebContentsObserver,
   void OnAudioDump(const std::vector<unsigned char>& audio_dump);
   void OnImageDump(const std::string& actual_pixel_hash, const SkBitmap& image);
   void OnTextDump(const std::string& dump);
-  void OnInitiateLayoutDump();
   void OnDumpFrameLayoutResponse(int frame_tree_node_id,
                                  const std::string& dump);
-  void OnPrintMessageToStderr(const std::string& message);
-  void OnPrintMessage(const std::string& message);
-  void OnOverridePreferences(const WebPreferences& prefs);
-  void OnSetPopupBlockingEnabled(bool block_popups);
   void OnTestFinished();
-  void OnNavigateSecondaryWindow(const GURL& url);
-  void OnGoToOffset(int offset);
-  void OnReload();
-  void OnLoadURLForFrame(const GURL& url, const std::string& frame_name);
   void OnCaptureSessionHistory();
-  void OnCloseRemainingWindows();
-  void OnResetDone();
   void OnLeakDetectionDone(const LeakDetector::LeakDetectionReport& report);
-  void OnSetBluetoothManualChooser(bool enable);
-  void OnGetBluetoothManualChooserEvents();
-  void OnSendBluetoothManualChooserEvent(const std::string& event,
-                                         const std::string& argument);
-  void OnBlockThirdPartyCookies(bool block);
-  mojo::AssociatedRemote<mojom::WebTestControl>& GetWebTestControlRemote(
-      RenderFrameHost* frame);
-  void HandleWebTestControlError(const GlobalFrameRoutingId& key);
 
   void OnCleanupFinished();
-  void OnCaptureDumpCompleted(mojom::WebTestDumpPtr dump);
+  void OnCaptureDumpCompleted(mojom::BlinkTestDumpPtr dump);
   void OnPixelDumpCaptured(const SkBitmap& snapshot);
   void ReportResults();
   void EnqueueSurfaceCopyRequest();
+
+  mojo::AssociatedRemote<mojom::BlinkTestControl>& GetBlinkTestControlRemote(
+      RenderFrameHost* frame);
+  mojo::AssociatedRemote<mojom::WebTestControl>& GetWebTestControlRemote(
+      RenderProcessHost* process);
+  void HandleBlinkTestControlError(const GlobalFrameRoutingId& key);
+  void HandleWebTestControlError(RenderProcessHost* key);
 
   // CompositeAllFramesThen() first builds a frame tree based on
   // frame->GetParent(). Then, it builds a queue of frames in depth-first order,
@@ -273,9 +302,6 @@ class BlinkTestController : public WebContentsObserver,
   // What phase of running an individual test we are currently in.
   TestPhase test_phase_;
 
-  // True if the currently running test is a compositing test.
-  bool is_compositing_test_;
-
   // Per test config.
   std::string expected_pixel_hash_;
   gfx::Size initial_size_;
@@ -300,7 +326,7 @@ class BlinkTestController : public WebContentsObserver,
 
   // Map from frame_tree_node_id into frame-specific dumps.
   std::map<int, std::string> frame_to_layout_dump_map_;
-  // Number of WebTestControl.DumpFrameLayout responses we are waiting for.
+  // Number of BlinkTestControl.DumpFrameLayout responses we are waiting for.
   int pending_layout_dumps_;
 
   // Renderer processes are observed to detect crashes.
@@ -308,6 +334,7 @@ class BlinkTestController : public WebContentsObserver,
       render_process_host_observer_{this};
   std::set<RenderProcessHost*> all_observed_render_process_hosts_;
   std::set<RenderProcessHost*> main_window_render_process_hosts_;
+  std::set<RenderViewHost*> main_window_render_view_hosts_;
 
   // Changes reported by OnWebTestRuntimeFlagsChanged that have accumulated
   // since PrepareForWebTest (i.e. changes that need to be send to a fresh
@@ -317,7 +344,7 @@ class BlinkTestController : public WebContentsObserver,
   std::string navigation_history_dump_;
   base::Optional<SkBitmap> pixel_dump_;
   std::string actual_pixel_hash_;
-  mojom::WebTestDumpPtr main_frame_dump_;
+  mojom::BlinkTestDumpPtr main_frame_dump_;
   bool waiting_for_pixel_results_ = false;
   bool waiting_for_main_frame_dump_ = false;
 
@@ -325,8 +352,17 @@ class BlinkTestController : public WebContentsObserver,
   std::queue<Node*> composite_all_frames_node_queue_;
 
   // Map from one frame to one mojo pipe.
-  std::map<GlobalFrameRoutingId, mojo::AssociatedRemote<mojom::WebTestControl>>
+  std::map<GlobalFrameRoutingId,
+           mojo::AssociatedRemote<mojom::BlinkTestControl>>
+      blink_test_control_map_;
+
+  std::map<RenderProcessHost*, mojo::AssociatedRemote<mojom::WebTestControl>>
       web_test_control_map_;
+
+  mojo::AssociatedReceiverSet<mojom::BlinkTestClient>
+      blink_test_client_receivers_;
+
+  base::ScopedTempDir writable_directory_for_tests_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

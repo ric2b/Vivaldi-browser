@@ -16,7 +16,7 @@
 #include "content/browser/indexed_db/indexed_db_origin_state.h"
 #include "content/browser/indexed_db/indexed_db_tracing.h"
 #include "content/browser/indexed_db/indexed_db_transaction.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_exception.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
 
 namespace content {
 
@@ -27,8 +27,6 @@ static int32_t g_next_indexed_db_connection_id;
 }  // namespace
 
 IndexedDBConnection::IndexedDBConnection(
-    IndexedDBExecutionContextConnectionTracker::Handle
-        execution_context_connection_handle,
     IndexedDBOriginStateHandle origin_state_handle,
     IndexedDBClassFactory* indexed_db_class_factory,
     base::WeakPtr<IndexedDBDatabase> database,
@@ -36,8 +34,6 @@ IndexedDBConnection::IndexedDBConnection(
     base::OnceCallback<void(IndexedDBConnection*)> on_close,
     scoped_refptr<IndexedDBDatabaseCallbacks> callbacks)
     : id_(g_next_indexed_db_connection_id++),
-      execution_context_connection_handle_(
-          std::move(execution_context_connection_handle)),
       origin_state_handle_(std::move(origin_state_handle)),
       indexed_db_class_factory_(indexed_db_class_factory),
       database_(std::move(database)),
@@ -45,7 +41,6 @@ IndexedDBConnection::IndexedDBConnection(
       on_close_(std::move(on_close)),
       callbacks_(callbacks) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!execution_context_connection_handle_.is_null());
 }
 
 IndexedDBConnection::~IndexedDBConnection() {
@@ -74,7 +69,7 @@ leveldb::Status IndexedDBConnection::AbortTransactionsAndClose(
   callbacks_ = nullptr;
 
   // Finish up any transaction, in case there were any running.
-  IndexedDBDatabaseError error(blink::kWebIDBDatabaseExceptionUnknownError,
+  IndexedDBDatabaseError error(blink::mojom::IDBException::kUnknownError,
                                "Connection is closing.");
   leveldb::Status status;
   switch (error_handling) {

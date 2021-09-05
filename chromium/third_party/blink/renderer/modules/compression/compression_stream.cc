@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/modules/compression/compression_stream.h"
 
+#include "base/metrics/histogram_macros.h"
+#include "third_party/blink/renderer/modules/compression/compression_format.h"
 #include "third_party/blink/renderer/modules/compression/deflate_transformer.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 
@@ -31,23 +33,23 @@ void CompressionStream::Trace(Visitor* visitor) {
 
 CompressionStream::CompressionStream(ScriptState* script_state,
                                      const AtomicString& format,
-                                     ExceptionState& exception_state)
-    : transform_(MakeGarbageCollected<TransformStream>()) {
-  DeflateTransformer::Format deflate_format =
-      DeflateTransformer::Format::kDeflate;
-  if (format == "gzip") {
-    deflate_format = DeflateTransformer::Format::kGzip;
-  } else if (format != "deflate") {
-    exception_state.ThrowTypeError("Unsupported format");
+                                     ExceptionState& exception_state) {
+  CompressionFormat deflate_format =
+      LookupCompressionFormat(format, exception_state);
+  if (exception_state.HadException())
     return;
-  }
+
+  UMA_HISTOGRAM_ENUMERATION("Blink.Compression.CompressionStream.Format",
+                            deflate_format);
 
   // default level is hardcoded for now.
   // TODO(arenevier): Make level configurable
   const int deflate_level = 6;
-  transform_->Init(MakeGarbageCollected<DeflateTransformer>(
-                       script_state, deflate_format, deflate_level),
-                   script_state, exception_state);
+  transform_ =
+      TransformStream::Create(script_state,
+                              MakeGarbageCollected<DeflateTransformer>(
+                                  script_state, deflate_format, deflate_level),
+                              exception_state);
 }
 
 }  // namespace blink

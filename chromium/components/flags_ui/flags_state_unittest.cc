@@ -151,9 +151,10 @@ static FeatureEntry kEntries[] = {
      FeatureEntry::ORIGIN_LIST_VALUE, kStringSwitch, kValueForStringSwitch,
      nullptr, nullptr, nullptr /* feature */, 0, nullptr, nullptr, nullptr}};
 
-class FlagsStateTest : public ::testing::Test {
+class FlagsStateTest : public ::testing::Test,
+                       public flags_ui::FlagsState::Delegate {
  protected:
-  FlagsStateTest() : flags_storage_(&prefs_), trial_list_(nullptr) {
+  FlagsStateTest() : flags_storage_(&prefs_) {
     prefs_.registry()->RegisterListPref(prefs::kAboutFlagsEntries);
     prefs_.registry()->RegisterDictionaryPref(prefs::kAboutFlagsOriginLists);
 
@@ -164,23 +165,21 @@ class FlagsStateTest : public ::testing::Test {
     while (os_other_than_current == FlagsState::GetCurrentPlatform())
       os_other_than_current <<= 1;
     kEntries[2].supported_platforms = os_other_than_current;
-    flags_state_.reset(new FlagsState(
-        kEntries, base::size(kEntries),
-        base::Bind(&FlagsStateTest::IsFlagExcluded, base::Unretained(this))));
+    flags_state_.reset(new FlagsState(kEntries, this));
   }
 
   ~FlagsStateTest() override {
     variations::testing::ClearAllVariationParams();
   }
 
-  bool IsFlagExcluded(const FeatureEntry& entry) {
+  // FlagsState::Delegate:
+  bool ShouldExcludeFlag(const FeatureEntry& entry) override {
     return exclude_flags_.count(entry.internal_name) != 0;
   }
 
   TestingPrefServiceSimple prefs_;
   PrefServiceFlagsStorage flags_storage_;
   std::unique_ptr<FlagsState> flags_state_;
-  base::FieldTrialList trial_list_;
   std::set<std::string> exclude_flags_;
 };
 
@@ -912,7 +911,7 @@ TEST_F(FlagsStateTest, GetFlagFeatureEntries) {
   base::ListValue unsupported_entries;
   flags_state_->GetFlagFeatureEntries(&flags_storage_, kGeneralAccessFlagsOnly,
                                       &supported_entries, &unsupported_entries,
-                                      base::Bind(&SkipFeatureEntry));
+                                      base::BindRepeating(&SkipFeatureEntry));
   // All |kEntries| except for |kFlags3| should be supported.
   EXPECT_EQ(10u, supported_entries.GetSize());
   EXPECT_EQ(1u, unsupported_entries.GetSize());

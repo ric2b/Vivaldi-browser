@@ -13,6 +13,7 @@
 #include <string>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/containers/flat_map.h"
 #include "base/fuchsia/default_context.h"
 #include "base/fuchsia/scoped_service_binding.h"
@@ -115,7 +116,6 @@ class AgentImpl : public ::fuchsia::modular::Agent {
   void Connect(std::string requester_url,
                fidl::InterfaceRequest<::fuchsia::sys::ServiceProvider> services)
       override;
-  void RunTask(std::string task_id, RunTaskCallback callback) override;
 
  private:
   friend class ComponentStateBase;

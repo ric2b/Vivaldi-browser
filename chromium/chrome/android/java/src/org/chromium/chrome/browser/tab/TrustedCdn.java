@@ -9,8 +9,9 @@ import androidx.annotation.Nullable;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ssl.SecurityStateModel;
+import org.chromium.chrome.browser.ssl.ChromeSecurityStateModelDelegate;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
+import org.chromium.components.security_state.SecurityStateModel;
 import org.chromium.content_public.browser.WebContents;
 
 /**
@@ -19,7 +20,7 @@ import org.chromium.content_public.browser.WebContents;
 public class TrustedCdn extends TabWebContentsUserData {
     private static final Class<TrustedCdn> USER_DATA_KEY = TrustedCdn.class;
 
-    private final Tab mTab;
+    private final TabImpl mTab;
     private final long mNativeTrustedCdn;
 
     /**
@@ -50,7 +51,7 @@ public class TrustedCdn extends TabWebContentsUserData {
 
     private TrustedCdn(Tab tab) {
         super(tab);
-        mTab = tab;
+        mTab = (TabImpl) tab;
         mNativeTrustedCdn = TrustedCdnJni.get().init(TrustedCdn.this);
     }
 
@@ -80,7 +81,9 @@ public class TrustedCdn extends TabWebContentsUserData {
     }
 
     private int getSecurityLevel() {
-        return SecurityStateModel.getSecurityLevelForWebContents(mTab.getWebContents());
+        int securityLevel = SecurityStateModel.getSecurityLevelForWebContents(
+                mTab.getWebContents(), ChromeSecurityStateModelDelegate.getInstance());
+        return securityLevel;
     }
 
     @CalledByNative

@@ -12,7 +12,7 @@
 #include "base/optional.h"
 
 #include "device/vr/openxr/openxr_controller.h"
-#include "device/vr/public/mojom/isolated_xr_service.mojom.h"
+#include "device/vr/openxr/openxr_interaction_profiles.h"
 
 namespace device {
 
@@ -28,14 +28,17 @@ class OpenXRInputHelper {
 
   ~OpenXRInputHelper();
 
-  mojom::XRGamepadDataPtr GetGamepadData(XrTime predicted_display_time);
-
   std::vector<mojom::XRInputSourceStatePtr> GetInputState(
       XrTime predicted_display_time);
 
+  void OnInteractionProfileChanged(XrResult* xr_result);
+
+  base::WeakPtr<OpenXRInputHelper> GetWeakPtr();
+
  private:
-  base::Optional<Gamepad> GetWebXRGamepad(
-      const OpenXrController& controller) const;
+  base::Optional<Gamepad> GetWebXRGamepad(const OpenXrController& controller);
+
+  XrResult Initialize(XrInstance instance);
 
   XrResult SyncActions(XrTime predicted_display_time);
 
@@ -49,6 +52,11 @@ class OpenXRInputHelper {
   std::array<OpenXrControllerState,
              static_cast<size_t>(OpenXrHandednessType::kCount)>
       controller_states_;
+
+  std::unique_ptr<OpenXRPathHelper> path_helper_;
+
+  // This must be the last member
+  base::WeakPtrFactory<OpenXRInputHelper> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(OpenXRInputHelper);
 };

@@ -5,9 +5,9 @@
 #include "third_party/blink/renderer/core/html/forms/internal_popup_menu.h"
 
 #include "build/build_config.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
 #include "third_party/blink/renderer/core/css/css_font_selector.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_selector_client.h"
 #include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
+#include "ui/base/ui_base_features.h"
 
 namespace blink {
 
@@ -275,7 +276,7 @@ void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
       AddOption(context, *option);
     else if (auto* optgroup = DynamicTo<HTMLOptGroupElement>(child))
       AddOptGroup(context, *optgroup);
-    else if (auto* hr = ToHTMLHRElementOrNull(child))
+    else if (auto* hr = DynamicTo<HTMLHRElement>(child))
       AddSeparator(context, *hr);
   }
   context.FinishGroupIfNecessary();
@@ -286,6 +287,8 @@ void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
   AddProperty("scaleFactor", scale_factor, data);
   bool is_rtl = !owner_style->IsLeftToRightDirection();
   AddProperty("isRTL", is_rtl, data);
+  AddProperty("isFormControlsRefreshEnabled",
+              features::IsFormControlsRefreshEnabled(), data);
   AddProperty("paddingStart",
               is_rtl ? owner_element.ClientPaddingRight().ToDouble()
                      : owner_element.ClientPaddingLeft().ToDouble(),
@@ -411,11 +414,11 @@ void InternalPopupMenu::AddSeparator(ItemIterationContext& context,
   PagePopupClient::AddString("},\n", data);
 }
 
-void InternalPopupMenu::SelectFontsFromOwnerDocument(Document& document) {
+CSSFontSelector* InternalPopupMenu::CreateCSSFontSelector(
+    Document& popup_document) {
   Document& owner_document = OwnerElement().GetDocument();
-  document.GetStyleEngine().SetFontSelector(
-      MakeGarbageCollected<PopupMenuCSSFontSelector>(
-          &document, owner_document.GetStyleEngine().GetFontSelector()));
+  return MakeGarbageCollected<PopupMenuCSSFontSelector>(
+      &popup_document, owner_document.GetStyleEngine().GetFontSelector());
 }
 
 void InternalPopupMenu::SetValueAndClosePopup(int num_value,
@@ -473,6 +476,10 @@ void InternalPopupMenu::DidClosePopup() {
 
 Element& InternalPopupMenu::OwnerElement() {
   return *owner_element_;
+}
+
+ChromeClient& InternalPopupMenu::GetChromeClient() {
+  return *chrome_client_;
 }
 
 Locale& InternalPopupMenu::GetLocale() {
@@ -541,7 +548,7 @@ void InternalPopupMenu::Update() {
       AddOption(context, *option);
     else if (auto* optgroup = DynamicTo<HTMLOptGroupElement>(child))
       AddOptGroup(context, *optgroup);
-    else if (auto* hr = ToHTMLHRElementOrNull(child))
+    else if (auto* hr = DynamicTo<HTMLHRElement>(child))
       AddSeparator(context, *hr);
   }
   context.FinishGroupIfNecessary();

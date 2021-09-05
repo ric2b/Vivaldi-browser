@@ -25,6 +25,7 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -56,16 +57,9 @@ public class NavigationPopupTest {
     @Before
     public void setUp() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
+        // TODO (https://crbug.com/1063807):  Add incognito mode tests.
         TestThreadUtils.runOnUiThreadBlocking(
-                (Runnable) () -> mProfile = Profile.getLastUsedProfile());
-    }
-
-    // Exists solely to expose protected methods to this test.
-    private static class TestNavigationHistory extends NavigationHistory {
-        @Override
-        public void addEntry(NavigationEntry entry) {
-            super.addEntry(entry);
-        }
+                (Runnable) () -> mProfile = Profile.getLastUsedRegularProfile());
     }
 
     // Exists solely to expose protected methods to this test.
@@ -78,11 +72,11 @@ public class NavigationPopupTest {
     }
 
     private static class TestNavigationController extends MockNavigationController {
-        private final TestNavigationHistory mHistory;
+        private final NavigationHistory mHistory;
         private int mNavigatedIndex = INVALID_NAVIGATION_INDEX;
 
         public TestNavigationController() {
-            mHistory = new TestNavigationHistory();
+            mHistory = new NavigationHistory();
             mHistory.addEntry(new TestNavigationEntry(
                     1, "about:blank", null, null, "About Blank", null, 0, 0));
             mHistory.addEntry(new TestNavigationEntry(

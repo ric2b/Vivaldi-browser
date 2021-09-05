@@ -16,7 +16,6 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -89,8 +88,8 @@ class TestBatchableDelegate : public BatchableDelegate {
   std::vector<std::string> GetExtraRequestHeaders() const override {
     return std::vector<std::string>();
   }
-  void Prepare(const PrepareCallback& callback) override {
-    callback.Run(HTTP_SUCCESS);
+  void Prepare(PrepareCallback callback) override {
+    std::move(callback).Run(HTTP_SUCCESS);
   }
   bool GetContentData(std::string* upload_content_type,
                       std::string* upload_content) override {
@@ -101,9 +100,9 @@ class TestBatchableDelegate : public BatchableDelegate {
   void NotifyError(DriveApiErrorCode code) override { callback_.Run(); }
   void NotifyResult(DriveApiErrorCode code,
                     const std::string& body,
-                    const base::Closure& closure) override {
+                    base::OnceClosure closure) override {
     callback_.Run();
-    closure.Run();
+    std::move(closure).Run();
   }
   void NotifyUploadProgress(int64_t current, int64_t total) override {
     progress_values_.push_back(current);
@@ -155,7 +154,7 @@ class DriveApiRequestsTest : public testing::Test {
     params->process_id = network::mojom::kBrowserProcessId;
     params->is_corb_enabled = false;
     network_context_->CreateURLLoaderFactory(
-        mojo::MakeRequest(&url_loader_factory_), std::move(params));
+        url_loader_factory_.BindNewPipeAndPassReceiver(), std::move(params));
     test_shared_loader_factory_ =
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             url_loader_factory_.get());
@@ -231,7 +230,7 @@ class DriveApiRequestsTest : public testing::Test {
   std::unique_ptr<network::mojom::NetworkServiceClient> network_service_client_;
   std::unique_ptr<network::mojom::NetworkContextClient> network_context_client_;
   mojo::Remote<network::mojom::NetworkContext> network_context_;
-  network::mojom::URLLoaderFactoryPtr url_loader_factory_;
+  mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_;
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
       test_shared_loader_factory_;
   base::ScopedTempDir temp_dir_;
@@ -2096,16 +2095,16 @@ TEST_F(DriveApiRequestsTest, BatchUploadRequest) {
   std::unique_ptr<FileResource> file_resources[2];
   base::RunLoop run_loop[2];
   for (int i = 0; i < 2; ++i) {
-    const FileResourceCallback callback = test_util::CreateQuitCallback(
+    FileResourceCallback callback = test_util::CreateQuitCallback(
         &run_loop[i],
         test_util::CreateCopyResultCallback(&errors[i], &file_resources[i]));
     drive::MultipartUploadNewFileDelegate* const child_request =
         new drive::MultipartUploadNewFileDelegate(
             request_sender_->blocking_task_runner(),
-            base::StringPrintf("new file title %d", i),
-            "parent_resource_id", kTestContentType, kTestContent.size(),
-            base::Time(), base::Time(), kTestFilePath, drive::Properties(),
-            *url_generator_, callback, ProgressCallback());
+            base::StringPrintf("new file title %d", i), "parent_resource_id",
+            kTestContentType, kTestContent.size(), base::Time(), base::Time(),
+            kTestFilePath, drive::Properties(), *url_generator_,
+            std::move(callback), ProgressCallback());
     child_request->SetBoundaryForTesting("INNERBOUNDARY");
     request_ptr->AddRequest(child_request);
   }

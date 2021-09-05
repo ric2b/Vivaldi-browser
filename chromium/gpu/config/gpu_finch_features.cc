@@ -11,33 +11,11 @@
 #endif
 
 namespace features {
-namespace {
 
 #if defined(OS_ANDROID)
-bool FieldIsInBlacklist(const char* current_value, std::string blacklist_str) {
-  std::vector<std::string> blacklist = base::SplitString(
-      blacklist_str, ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  for (const std::string& value : blacklist) {
-    if (value == current_value)
-      return true;
-  }
-
-  return false;
-}
-#endif
-
-}  // namespace
-
-#if defined(OS_ANDROID)
-// Use android AImageReader when playing videos with MediaPlayer.
-const base::Feature kAImageReaderMediaPlayer{"AImageReaderMediaPlayer",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Use android SurfaceControl API for managing display compositor's buffer queue
-// and using overlays on Android.
-// Note that the feature only works with VizDisplayCompositor enabled.
-const base::Feature kAndroidSurfaceControl{"AndroidSurfaceControl",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
+// Used only by webview to disable SurfaceControl.
+const base::Feature kDisableSurfaceControlForWebview{
+    "DisableSurfaceControlForWebview", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 // Enable GPU Rasterization by default. This can still be overridden by
@@ -55,8 +33,13 @@ const base::Feature kDefaultEnableGpuRasterization{
 
 // Enable out of process rasterization by default.  This can still be overridden
 // by --enable-oop-rasterization or --disable-oop-rasterization.
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS) || defined(OS_MACOSX)
+const base::Feature kDefaultEnableOopRasterization{
+    "DefaultEnableOopRasterization", base::FEATURE_ENABLED_BY_DEFAULT};
+#else
 const base::Feature kDefaultEnableOopRasterization{
     "DefaultEnableOopRasterization", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // Allow putting a video swapchain underneath the main swapchain, so overlays
 // can be used even if there are controls on top of the video. It can be
@@ -67,11 +50,11 @@ const base::Feature kDirectCompositionUnderlays{
 #if defined(OS_WIN)
 // Use a high priority for GPU process on Windows.
 const base::Feature kGpuProcessHighPriorityWin{
-    "GpuProcessHighPriorityWin", base::FEATURE_DISABLED_BY_DEFAULT};
+    "GpuProcessHighPriorityWin", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Use ThreadPriority::DISPLAY for GPU main, viz compositor and IO threads.
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS) || defined(OS_WIN)
 const base::Feature kGpuUseDisplayThreadPriority{
     "GpuUseDisplayThreadPriority", base::FEATURE_ENABLED_BY_DEFAULT};
 #else
@@ -79,15 +62,17 @@ const base::Feature kGpuUseDisplayThreadPriority{
     "GpuUseDisplayThreadPriority", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
-// Allow GPU watchdog to keep waiting for ackowledgement if one is already
-// issued from the monitored thread.
-const base::Feature kGpuWatchdogNoTerminationAwaitingAcknowledge{
-    "GpuWatchdogNoTerminationAwaitingAcknowledge",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Gpu watchdog V2 to simplify the logic and reduce GPU hangs
 const base::Feature kGpuWatchdogV2{"GpuWatchdogV2",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
+                                   base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Use a different set of watchdog timeouts on V1
+const base::Feature kGpuWatchdogV1NewTimeout{"GpuWatchdogV1NewTimeout",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Use a different set of watchdog timeouts on V2
+const base::Feature kGpuWatchdogV2NewTimeout{"GpuWatchdogV2NewTimeout",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_MACOSX)
 // Enable use of Metal for OOP rasterization.
@@ -120,32 +105,26 @@ const base::Feature kVaapiJpegImageDecodeAcceleration{
 const base::Feature kVaapiWebPImageDecodeAcceleration{
     "VaapiWebPImageDecodeAcceleration", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enable Vulkan graphics backend if --use-vulkan flag is not used. Otherwise
+// Enable Vulkan graphics backend for compositing and rasterization. Defaults to
+// native implementation if --use-vulkan flag is not used. Otherwise
 // --use-vulkan will be followed.
 const base::Feature kVulkan{"Vulkan", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enable SkiaRenderer Dawn graphics backend. On Windows this will use D3D12,
+// and on Linux this will use Vulkan.
+const base::Feature kSkiaDawn{"SkiaDawn", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Used to enable shared image mailbox and disable legacy texture mailbox on
+// webview.
+const base::Feature kEnableSharedImageForWebview{
+    "EnableSharedImageForWebview", base::FEATURE_DISABLED_BY_DEFAULT};
+
 #if defined(OS_ANDROID)
 bool IsAndroidSurfaceControlEnabled() {
-  if (!gl::SurfaceControl::IsSupported())
+  if (base::FeatureList::IsEnabled(kDisableSurfaceControlForWebview))
     return false;
 
-  if (!base::FeatureList::IsEnabled(kAndroidSurfaceControl))
-    return false;
-
-  if (FieldIsInBlacklist(base::android::BuildInfo::GetInstance()->model(),
-                         base::GetFieldTrialParamValueByFeature(
-                             kAndroidSurfaceControl, "blacklisted_models"))) {
-    return false;
-  }
-
-  if (FieldIsInBlacklist(
-          base::android::BuildInfo::GetInstance()->android_build_id(),
-          base::GetFieldTrialParamValueByFeature(kAndroidSurfaceControl,
-                                                 "blacklisted_build_ids"))) {
-    return false;
-  }
-
-  return true;
+  return gl::SurfaceControl::IsSupported();
 }
 #endif
 

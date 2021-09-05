@@ -49,6 +49,16 @@ class CORE_EXPORT CSSFontSelector : public FontSelector {
 
   void ReportNotDefGlyph() const override;
 
+  void ReportSuccessfulFontFamilyMatch(
+      const AtomicString& font_family_name) override;
+
+  void ReportFailedFontFamilyMatch(
+      const AtomicString& font_family_name) override;
+
+  void ReportSuccessfulLocalFontMatch(const AtomicString& font_name) override;
+
+  void ReportFailedLocalFontMatch(const AtomicString& font_name) override;
+
   scoped_refptr<FontData> GetFontData(const FontDescription&,
                                       const AtomicString&) override;
   void WillUseFontData(const FontDescription&,
@@ -68,7 +78,9 @@ class CORE_EXPORT CSSFontSelector : public FontSelector {
   void RegisterForInvalidationCallbacks(FontSelectorClient*) override;
   void UnregisterForInvalidationCallbacks(FontSelectorClient*) override;
 
-  ExecutionContext* GetExecutionContext() const override { return document_; }
+  ExecutionContext* GetExecutionContext() const override {
+    return document_ ? document_->GetExecutionContext() : nullptr;
+  }
   FontFaceCache* GetFontFaceCache() override { return &font_face_cache_; }
 
   const GenericFontFamilySettings& GetGenericFontFamilySettings() const {
@@ -76,7 +88,7 @@ class CORE_EXPORT CSSFontSelector : public FontSelector {
   }
   void UpdateGenericFontFamilySettings(Document&);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  protected:
   void DispatchInvalidationCallbacks();

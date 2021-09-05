@@ -2,77 +2,63 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-'use strict';
-
-/**
- * Namespace for the Camera app.
- */
-var cca = cca || {};
-
-/**
- * Namespace for views.
- */
-cca.views = cca.views || {};
+import {assertInstanceof, assertString} from '../chrome_util.js';
+import {View,
+        ViewName,  // eslint-disable-line no-unused-vars
+} from './view.js';
 
 /**
  * Creates the Dialog view controller.
- * @extends {cca.views.View}
- * @constructor
- * @param {string} viewId Root element id of dialog view.
  */
-cca.views.Dialog = function(viewId) {
-  cca.views.View.call(this, viewId, true);
-
+export class Dialog extends View {
   /**
-   * @type {HTMLButtonElement}
-   * @private
+   * @param {ViewName} name View name of the dialog.
    */
-  this.positiveButton_ =
-      document.querySelector(`${viewId} .dialog-positive-button`);
+  constructor(name) {
+    super(name, true);
 
-  /**
-   * @type {!HTMLButtonElement}
-   * @private
-   */
-  this.negativeButton_ =
-      document.querySelector(`${viewId} .dialog-negative-button`);
+    /**
+     * @type {!HTMLButtonElement}
+     * @private
+     */
+    this.positiveButton_ = assertInstanceof(
+        this.root.querySelector('.dialog-positive-button'), HTMLButtonElement);
 
-  /**
-   * @type {!HTMLElement}
-   * @private
-   */
-  this.messageHolder_ = document.querySelector(`${viewId} .dialog-msg-holder`);
+    /**
+     * @type {!HTMLButtonElement}
+     * @private
+     */
+    this.negativeButton_ = assertInstanceof(
+        this.root.querySelector('.dialog-negative-button'), HTMLButtonElement);
 
-  // End of properties, seal the object.
-  Object.seal(this);
+    /**
+     * @type {!HTMLElement}
+     * @private
+     */
+    this.messageHolder_ = assertInstanceof(
+        this.root.querySelector('.dialog-msg-holder'), HTMLElement);
 
-  this.positiveButton_.addEventListener('click', () => this.leave(true));
-  if (this.negativeButton_) {
-    this.negativeButton_.addEventListener('click', () => this.leave());
+    this.positiveButton_.addEventListener('click', () => this.leave(true));
+    if (this.negativeButton_) {
+      this.negativeButton_.addEventListener('click', () => this.leave());
+    }
   }
-};
 
-cca.views.Dialog.prototype = {
-  __proto__: cca.views.View.prototype,
-};
-
-/**
- * @param {string} message Message of the dialog.
- * @param {boolean} cancellable Whether the dialog is cancellable.
- * @override
- */
-cca.views.Dialog.prototype.entering = function({message, cancellable} = {}) {
-  if (this.messageHolder_ && message) {
+  /**
+   * @override
+   */
+  entering({message, cancellable = false} = {}) {
+    message = assertString(message);
     this.messageHolder_.textContent = message;
+    if (this.negativeButton_) {
+      this.negativeButton_.hidden = !cancellable;
+    }
   }
-  if (this.negativeButton_) {
-    this.negativeButton_.hidden = !cancellable;
-  }
-};
 
-/**
- * @override
- */
-cca.views.Dialog.prototype.focus = function() {
-  this.positiveButton_.focus();
-};
+  /**
+   * @override
+   */
+  focus() {
+    this.positiveButton_.focus();
+  }
+}

@@ -10,7 +10,9 @@
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -382,7 +384,6 @@ std::unique_ptr<BackgroundSyncManager> BackgroundSyncManager::Create(
 
 BackgroundSyncManager::~BackgroundSyncManager() {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-
   service_worker_context_->RemoveObserver(this);
 }
 
@@ -402,32 +403,16 @@ void BackgroundSyncManager::Register(
   DCHECK(options.min_interval >= 0 ||
          options.min_interval == kMinIntervalForOneShotSync);
 
-  if (GetBackgroundSyncType(options) == BackgroundSyncType::ONE_SHOT) {
-    auto id = op_scheduler_.CreateId();
-    op_scheduler_.ScheduleOperation(
-        id, CacheStorageSchedulerMode::kExclusive,
-        CacheStorageSchedulerOp::kBackgroundSync,
-        CacheStorageSchedulerPriority::kNormal,
-        base::BindOnce(
-            &BackgroundSyncManager::RegisterCheckIfHasMainFrame,
-            weak_ptr_factory_.GetWeakPtr(), sw_registration_id,
-            std::move(options),
-            op_scheduler_.WrapCallbackToRunNext(id, std::move(callback))));
-  } else {
-    // Periodic Background Sync events already have a pre-defined cadence which
-    // the user agent decides. Don't block registration if there's no top level
-    // frame at the time of registration.
-    auto id = op_scheduler_.CreateId();
-    op_scheduler_.ScheduleOperation(
-        id, CacheStorageSchedulerMode::kExclusive,
-        CacheStorageSchedulerOp::kBackgroundSync,
-        CacheStorageSchedulerPriority::kNormal,
-        base::BindOnce(
-            &BackgroundSyncManager::RegisterImpl,
-            weak_ptr_factory_.GetWeakPtr(), sw_registration_id,
-            std::move(options),
-            op_scheduler_.WrapCallbackToRunNext(id, std::move(callback))));
-  }
+  auto id = op_scheduler_.CreateId();
+  op_scheduler_.ScheduleOperation(
+      id, CacheStorageSchedulerMode::kExclusive,
+      CacheStorageSchedulerOp::kBackgroundSync,
+      CacheStorageSchedulerPriority::kNormal,
+      base::BindOnce(
+          &BackgroundSyncManager::RegisterCheckIfHasMainFrame,
+          weak_ptr_factory_.GetWeakPtr(), sw_registration_id,
+          std::move(options),
+          op_scheduler_.WrapCallbackToRunNext(id, std::move(callback))));
 }
 
 void BackgroundSyncManager::UnregisterPeriodicSync(
@@ -482,6 +467,92 @@ void BackgroundSyncManager::GetPeriodicSyncRegistrations(
     StatusAndRegistrationsCallback callback) {
   GetRegistrations(BackgroundSyncType::PERIODIC, sw_registration_id,
                    std::move(callback));
+}
+
+void BackgroundSyncManager::UnregisterPeriodicSyncForOrigin(
+    const url::Origin& origin) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+
+  auto id = op_scheduler_.CreateId();
+  op_scheduler_.ScheduleOperation(
+      id, CacheStorageSchedulerMode::kExclusive,
+      CacheStorageSchedulerOp::kBackgroundSync,
+      CacheStorageSchedulerPriority::kNormal,
+      base::BindOnce(&BackgroundSyncManager::UnregisterForOriginImpl,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(origin),
+                     MakeEmptyCompletion(id)));
+}
+
+void BackgroundSyncManager::UnregisterForOriginImpl(
+    const url::Origin& origin,
+    base::OnceClosure callback) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+
+  if (disabled_) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  std::move(callback));
+    return;
+  }
+
+  std::vector<int64_t> service_worker_registrations_affected;
+
+  for (const auto& service_worker_and_registration : active_registrations_) {
+    const auto registrations = service_worker_and_registration.second;
+    if (registrations.origin != origin)
+      continue;
+
+    service_worker_registrations_affected.emplace_back(
+        service_worker_and_registration.first);
+  }
+
+  for (auto service_worker_registration_id :
+       service_worker_registrations_affected) {
+    active_registrations_.erase(service_worker_registration_id);
+  }
+
+  if (service_worker_registrations_affected.empty()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  std::move(callback));
+    return;
+  }
+
+  base::RepeatingClosure barrier_closure = base::BarrierClosure(
+      service_worker_registrations_affected.size(),
+      base::BindOnce(
+          &BackgroundSyncManager::UnregisterForOriginScheduleDelayedProcessing,
+          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+
+  for (int64_t service_worker_registration_id :
+       service_worker_registrations_affected) {
+    StoreRegistrations(
+        service_worker_registration_id,
+        base::BindOnce(&BackgroundSyncManager::UnregisterForOriginDidStore,
+                       weak_ptr_factory_.GetWeakPtr(), barrier_closure));
+  }
+}
+
+void BackgroundSyncManager::UnregisterForOriginDidStore(
+    base::OnceClosure done_closure,
+    blink::ServiceWorkerStatusCode status) {
+  if (status == blink::ServiceWorkerStatusCode::kErrorNotFound) {
+    // The service worker registration is gone.
+    std::move(done_closure).Run();
+    return;
+  }
+
+  if (status != blink::ServiceWorkerStatusCode::kOk) {
+    DisableAndClearManager(std::move(done_closure));
+    return;
+  }
+
+  std::move(done_closure).Run();
+}
+
+void BackgroundSyncManager::UnregisterForOriginScheduleDelayedProcessing(
+    base::OnceClosure callback) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+  ScheduleOrCancelDelayedProcessing(BackgroundSyncType::PERIODIC);
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(callback));
 }
 
 void BackgroundSyncManager::GetRegistrations(
@@ -675,6 +746,8 @@ void BackgroundSyncManager::InitDidGetControllerParameters(
     return;
   }
 
+  network_observer_->Init();
+
   GetDataFromBackend(
       kBackgroundSyncUserDataKey,
       base::BindOnce(&BackgroundSyncManager::InitDidGetDataFromBackend,
@@ -694,6 +767,7 @@ void BackgroundSyncManager::InitDidGetDataFromBackend(
   }
 
   std::set<url::Origin> suspended_periodic_sync_origins;
+  std::set<url::Origin> registered_origins;
   for (const std::pair<int64_t, std::string>& data : user_data) {
     BackgroundSyncRegistrationsProto registrations_proto;
     if (registrations_proto.ParseFromString(data.second)) {
@@ -730,6 +804,7 @@ void BackgroundSyncManager::InitDidGetDataFromBackend(
         registration->set_delay_until(
             base::Time::FromInternalValue(registration_proto.delay_until()));
         registration->set_origin(registrations->origin);
+        registered_origins.insert(registration->origin());
         if (registration->is_suspended()) {
           suspended_periodic_sync_origins.insert(registration->origin());
         }
@@ -748,6 +823,7 @@ void BackgroundSyncManager::InitDidGetDataFromBackend(
                   base::DoNothing::Once());
   proxy_->SendSuspendedPeriodicSyncOrigins(
       std::move(suspended_periodic_sync_origins));
+  proxy_->SendRegisteredPeriodicSyncOrigins(std::move(registered_origins));
   base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, std::move(callback));
 }
 
@@ -766,7 +842,7 @@ void BackgroundSyncManager::RegisterCheckIfHasMainFrame(
     return;
   }
 
-  HasMainFrameProviderHost(
+  HasMainFrameWindowClient(
       url::Origin::Create(sw_registration->scope().GetOrigin()),
       base::BindOnce(&BackgroundSyncManager::RegisterDidCheckIfMainFrame,
                      weak_ptr_factory_.GetWeakPtr(), sw_registration_id,
@@ -819,6 +895,13 @@ void BackgroundSyncManager::RegisterImpl(
   }
 
   BackgroundSyncType sync_type = GetBackgroundSyncType(options);
+
+  if (parameters_->skip_permissions_check_for_testing) {
+    RegisterDidAskForPermission(
+        sw_registration_id, std::move(options), std::move(callback),
+        {PermissionStatus::GRANTED, PermissionStatus::GRANTED});
+    return;
+  }
 
   // TODO(crbug.com/824858): Remove the else branch after the feature is
   // enabled. Also, try to make a RunOrPostTaskOnThreadAndReplyWithResult()
@@ -1135,7 +1218,7 @@ BackgroundSyncRegistration* BackgroundSyncManager::LookupActiveRegistration(
 
 void BackgroundSyncManager::StoreRegistrations(
     int64_t sw_registration_id,
-    ServiceWorkerStorage::StatusCallback callback) {
+    ServiceWorkerRegistry::StatusCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
   // Serialize the data.
@@ -1191,6 +1274,10 @@ void BackgroundSyncManager::RegisterDidStore(
         std::move(callback), BACKGROUND_SYNC_STATUS_STORAGE_ERROR, nullptr));
     return;
   }
+
+  // Update controller of this new origin.
+  if (registration.sync_type() == BackgroundSyncType::PERIODIC)
+    proxy_->AddToTrackedOrigins(registration.origin());
 
   BackgroundSyncMetrics::RegistrationCouldFire registration_could_fire =
       AreOptionConditionsMet()
@@ -1268,6 +1355,22 @@ void BackgroundSyncManager::RemoveActiveRegistration(
   registrations->registration_map.erase(
       {registration_info.tag, registration_info.sync_type});
 
+  // Update controller's list of registered origin if necessary.
+  if (registrations->registration_map.empty())
+    proxy_->RemoveFromTrackedOrigins(origin);
+  else {
+    bool no_more_periodic_sync_registrations = true;
+    for (auto& key_and_registration : registrations->registration_map) {
+      if (key_and_registration.second.sync_type() ==
+          BackgroundSyncType::PERIODIC) {
+        no_more_periodic_sync_registrations = false;
+        break;
+      }
+    }
+    if (no_more_periodic_sync_registrations)
+      proxy_->RemoveFromTrackedOrigins(origin);
+  }
+
   if (registration_info.sync_type == BackgroundSyncType::PERIODIC &&
       ShouldLogToDevTools(registration_info.sync_type)) {
     devtools_context_->LogBackgroundServiceEventOnCoreThread(
@@ -1312,7 +1415,7 @@ void BackgroundSyncManager::StoreDataInBackend(
     const url::Origin& origin,
     const std::string& backend_key,
     const std::string& data,
-    ServiceWorkerStorage::StatusCallback callback) {
+    ServiceWorkerRegistry::StatusCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
   service_worker_context_->StoreRegistrationUserData(
@@ -1322,7 +1425,7 @@ void BackgroundSyncManager::StoreDataInBackend(
 
 void BackgroundSyncManager::GetDataFromBackend(
     const std::string& backend_key,
-    ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback callback) {
+    ServiceWorkerRegistry::GetUserDataForAllRegistrationsCallback callback) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
   service_worker_context_->GetUserDataForAllRegistrations(backend_key,
@@ -1415,9 +1518,9 @@ void BackgroundSyncManager::DispatchPeriodicSyncEvent(
   }
 }
 
-void BackgroundSyncManager::HasMainFrameProviderHost(const url::Origin& origin,
+void BackgroundSyncManager::HasMainFrameWindowClient(const url::Origin& origin,
                                                      BoolCallback callback) {
-  service_worker_context_->HasMainFrameProviderHost(origin.GetURL(),
+  service_worker_context_->HasMainFrameWindowClient(origin.GetURL(),
                                                     std::move(callback));
 }
 
@@ -1522,8 +1625,7 @@ void BackgroundSyncManager::ScheduleOrCancelDelayedProcessing(
 
   if (delayed_processing_scheduled(sync_type) && !can_fire_with_connectivity &&
       !GetNumFiringRegistrations(sync_type)) {
-    // TODO(crbug.com/996166): Split out a path to cancel delayed processing.
-    ScheduleDelayedProcessingOfRegistrations(sync_type);
+    CancelDelayedProcessingOfRegistrations(sync_type);
     delayed_processing_scheduled(sync_type) = false;
   } else if (can_fire_with_connectivity ||
              GetNumFiringRegistrations(sync_type)) {
@@ -1851,6 +1953,13 @@ void BackgroundSyncManager::ScheduleDelayedProcessingOfRegistrations(
       std::move(fire_events_callback));
 }
 
+void BackgroundSyncManager::CancelDelayedProcessingOfRegistrations(
+    blink::mojom::BackgroundSyncType sync_type) {
+  DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+
+  proxy_->CancelDelayedProcessing(sync_type);
+}
+
 void BackgroundSyncManager::FireReadyEvents(
     blink::mojom::BackgroundSyncType sync_type,
     bool reschedule,
@@ -2029,7 +2138,7 @@ void BackgroundSyncManager::FireReadyEventsDidFindRegistration(
   const bool last_chance =
       registration->num_attempts() == registration->max_attempts() - 1;
 
-  HasMainFrameProviderHost(
+  HasMainFrameWindowClient(
       url::Origin::Create(service_worker_registration->scope().GetOrigin()),
       base::BindOnce(&BackgroundSyncMetrics::RecordEventStarted, sync_type));
 
@@ -2089,7 +2198,7 @@ void BackgroundSyncManager::EventComplete(
   // from here.
   url::Origin origin =
       url::Origin::Create(service_worker_registration->scope().GetOrigin());
-  HasMainFrameProviderHost(
+  HasMainFrameWindowClient(
       origin,
       base::BindOnce(&BackgroundSyncMetrics::RecordEventResult,
                      registration_info->sync_type,

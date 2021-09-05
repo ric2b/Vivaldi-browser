@@ -9,8 +9,11 @@
 #include "chrome/browser/extensions/devtools_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/common/chrome_switches.h"
+#include "chrome/grit/generated_resources.h"
 #include "extensions/browser/extension_system.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/base/models/simple_menu_model.h"
 #include "ui/devtools/devtools_connector.h"
 
 namespace vivaldi {

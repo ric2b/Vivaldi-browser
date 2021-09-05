@@ -5,6 +5,7 @@
 #include "ui/views/focus/focus_manager.h"
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/auto_reset.h"
@@ -154,7 +155,7 @@ void FocusManager::ClearNativeFocus() {
 }
 
 bool FocusManager::RotatePaneFocus(Direction direction,
-                                   FocusCycleWrappingBehavior wrap) {
+                                   FocusCycleWrapping wrapping) {
   // Get the list of all accessible panes.
   std::vector<View*> panes;
   widget_->widget_delegate()->GetAccessiblePanes(&panes);
@@ -188,7 +189,8 @@ bool FocusManager::RotatePaneFocus(Direction direction,
     else
       index++;
 
-    if (wrap == kNoWrap && (index >= count || index < 0))
+    if (wrapping == FocusCycleWrapping::kDisabled &&
+        (index >= count || index < 0))
       return false;
     index = (index + count) % count;
 
@@ -553,7 +555,8 @@ void FocusManager::RemoveFocusChangeListener(FocusChangeListener* listener) {
 }
 
 bool FocusManager::ProcessArrowKeyTraversal(const ui::KeyEvent& event) {
-  if (event.IsShiftDown() || event.IsControlDown() || event.IsAltDown())
+  if (event.IsShiftDown() || event.IsControlDown() || event.IsAltDown() ||
+      event.IsAltGrDown())
     return false;
 
   const ui::KeyboardCode key = event.key_code();

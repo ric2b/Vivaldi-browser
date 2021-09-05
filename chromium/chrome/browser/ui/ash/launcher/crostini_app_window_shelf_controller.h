@@ -5,23 +5,25 @@
 #ifndef CHROME_BROWSER_UI_ASH_LAUNCHER_CROSTINI_APP_WINDOW_SHELF_CONTROLLER_H_
 #define CHROME_BROWSER_UI_ASH_LAUNCHER_CROSTINI_APP_WINDOW_SHELF_CONTROLLER_H_
 
-#include <map>
 #include <memory>
-#include <set>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/crostini_app_display.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "ui/aura/env_observer.h"
 #include "ui/aura/window_observer.h"
 #include "ui/display/display.h"
 
 namespace aura {
 class Window;
+}
+
+namespace exo {
+class Permission;
 }
 
 class AppWindowBase;
@@ -56,7 +58,7 @@ class CrostiniAppWindowShelfController : public AppWindowLauncherController,
 
  private:
   using AuraWindowToAppWindow =
-      std::map<aura::Window*, std::unique_ptr<AppWindowBase>>;
+      base::flat_map<aura::Window*, std::unique_ptr<AppWindowBase>>;
 
   void RegisterAppWindow(aura::Window* window, const std::string& shelf_app_id);
   void UnregisterAppWindow(AppWindowBase* app_window);
@@ -75,6 +77,11 @@ class CrostiniAppWindowShelfController : public AppWindowLauncherController,
   AuraWindowToAppWindow aura_window_to_app_window_;
   std::set<aura::Window*> observed_windows_;
   CrostiniAppDisplay crostini_app_display_;
+
+  // Permission objects that allow this controller to manage which application
+  // windows can activate themselves.
+  base::flat_map<aura::Window*, std::unique_ptr<exo::Permission>>
+      activation_permissions_;
 
   // These two member variables track an app restart request. When
   // app_id_to_restart_ is not empty the controller observes that app and

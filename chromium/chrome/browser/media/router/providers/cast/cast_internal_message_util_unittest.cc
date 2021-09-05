@@ -443,7 +443,7 @@ TEST(CastInternalMessageUtilTest, CreateAppMessage) {
   std::string client_id = "clientId";
   base::Value message_body(base::Value::Type::DICTIONARY);
   message_body.SetKey("foo", base::Value("bar"));
-  cast_channel::CastMessage cast_message = cast_channel::CreateCastMessage(
+  cast::channel::CastMessage cast_message = cast_channel::CreateCastMessage(
       "urn:x-cast:com.google.foo", message_body, "sourceId", "destinationId");
 
   auto message = CreateAppMessage(session_id, client_id, cast_message);
@@ -473,16 +473,16 @@ TEST(CastInternalMessageUtilTest, CreateV2Message) {
   })"));
 }
 
-TEST(CastInternalMessageUtilTest, SupportedMediaRequestsToListValue) {
-  EXPECT_THAT(SupportedMediaRequestsToListValue(0), IsJson("[]"));
-  EXPECT_THAT(SupportedMediaRequestsToListValue(1), IsJson("[\"pause\"]"));
-  EXPECT_THAT(SupportedMediaRequestsToListValue(2), IsJson("[\"seek\"]"));
-  EXPECT_THAT(SupportedMediaRequestsToListValue(4),
+TEST(CastInternalMessageUtilTest, SupportedMediaCommandsToListValue) {
+  EXPECT_THAT(SupportedMediaCommandsToListValue(0), IsJson("[]"));
+  EXPECT_THAT(SupportedMediaCommandsToListValue(1), IsJson("[\"pause\"]"));
+  EXPECT_THAT(SupportedMediaCommandsToListValue(2), IsJson("[\"seek\"]"));
+  EXPECT_THAT(SupportedMediaCommandsToListValue(4),
               IsJson("[\"stream_volume\"]"));
-  EXPECT_THAT(SupportedMediaRequestsToListValue(8),
+  EXPECT_THAT(SupportedMediaCommandsToListValue(8),
               IsJson("[\"stream_mute\"]"));
   EXPECT_THAT(
-      SupportedMediaRequestsToListValue(15),
+      SupportedMediaCommandsToListValue(15),
       IsJson("[\"pause\", \"seek\", \"stream_volume\", \"stream_mute\"]"));
 }
 

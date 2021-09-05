@@ -8,10 +8,54 @@ provides a collection of the classes that represent code nodes independent from
 specific bindings, such as ECMAScript bindings.
 """
 
-import copy
-import string
-
+from .codegen_accumulator import CodeGenAccumulator
+from .codegen_format import format_template
 from .mako_renderer import MakoRenderer
+from .mako_renderer import MakoTemplate
+
+
+def render_code_node(code_node):
+    """
+    Renders |code_node| and turns it into text letting |code_node| apply all
+    necessary changes (side effects).  Returns the resulting text.
+    """
+    assert isinstance(code_node, CodeNode)
+    assert code_node.outer is None
+
+    renderer = code_node.renderer
+    accumulator = code_node.accumulator
+
+    accumulated_size = accumulator.total_size()
+    while True:
+        prev_accumulated_size = accumulated_size
+        renderer.reset()
+        code_node.render(renderer)
+        accumulated_size = accumulator.total_size()
+        if (renderer.is_rendering_complete()
+                and accumulated_size == prev_accumulated_size):
+            break
+
+    return renderer.to_text()
+
+
+class Likeliness(object):
+    """
+    Represents how much likely a code node will be executed.
+
+    Used in SymbolScopeNode in order to determine where SymbolDefinitionNodes
+    should be inserted.  Likeliness level can change only at SymbolScopeNode.
+
+    Relational operators are supported, and it's guaranteed to be:
+      NEVER < UNLIKELY < LIKELY < ALWAYS
+    """
+
+    class Level(int):
+        pass
+
+    NEVER = Level(0)
+    UNLIKELY = Level(1)
+    LIKELY = Level(2)
+    ALWAYS = Level(3)
 
 
 class CodeNode(object):
@@ -21,7 +65,7 @@ class CodeNode(object):
     - Graph structure
     CodeNode can be nested and |outer| points to the nesting CodeNode.  Also
     CodeNode can make a sequence and |prev| points to the previous CodeNode.
-    See also |SequenceNode|.
+    See also |ListNode|.
 
     - Template rendering
     CodeNode has template text and template variable bindings.  Either of
@@ -37,31 +81,45 @@ class CodeNode(object):
         """
 
         def __init__(self):
-            # Symbols used in generated code, but not yet defined.  See also
-            # SymbolNode.
-            self.code_symbols_used = {}
+            # List of SymbolNodes that are defined at this point of rendering.
+            # Used to determine whether a certain symbol is already defined by
+            # this point of rendering.
+            self.defined_code_symbols = []
 
-    class _LooseFormatter(string.Formatter):
-        def get_value(self, key, args, kwargs):
-            if key in kwargs:
-                return kwargs[key]
-            else:
-                return "{" + key + "}"
+            # List of SymbolNodes that are not yet defined at this point of
+            # rendering.  SymbolNodes are accumulated in order of their first
+            # appearance.  The order affects the insertion order of
+            # SymbolDefinitionNodes.
+            self.undefined_code_symbols = []
 
-    _template_formatter = _LooseFormatter()
+            # Dict from a SymbolNode to a set of tuples of SymbolScopeNodes
+            # where the symbol was used.
+            #
+            # For example, given a code symbol |x|, the following code
+            # structure:
+            #   {  // Scope1
+            #     {  // Scope2A
+            #       {  // Scope3
+            #         x;          // [1]
+            #       }
+            #       x;            // [2]
+            #     }
+            #     x;              // [3]
+            #     {  // Scope2B
+            #       x;            // [4]
+            #     }
+            #     x;              // [5]
+            #   }
+            # is translated into an entry of the dict below:
+            #   set([
+            #     (Scope1),                   # [3], [5]
+            #     (Scope1, Scope2A),          # [2]
+            #     (Scope1, Scope2A, Scope3),  # [1]
+            #     (Scope1, Scope2B),          # [4]
+            #   ])
+            self.symbol_to_scope_chains = {}
+
     _gensym_seq_id = 0
-
-    @classmethod
-    def format_template(cls, format_string, *args, **kwargs):
-        """
-        Formats a string like the built-in |format| allowing unbound keys.
-
-            format_template("${template_var} {format_var}", format_var=42)
-        will produce
-            "${template_var} 42"
-        without raising an exception that |template_var| is unbound.
-        """
-        return cls._template_formatter.format(format_string, *args, **kwargs)
 
     @classmethod
     def gensym(cls):
@@ -84,7 +142,7 @@ class CodeNode(object):
 
         Good example:
             sym = CodeNode.gensym()
-            template_text = CodeNode.format_template(
+            template_text = format_template(
                 "abc ${{{node_a}}} xyz", node_a=sym)
             a = CodeNodeA(template_text='123')
             b = CodeNodeB(template_text=template_text, {sym: a})
@@ -95,27 +153,30 @@ class CodeNode(object):
         cls._gensym_seq_id += 1
         return "gensym{}".format(cls._gensym_seq_id)
 
-    def __init__(self,
-                 outer=None,
-                 prev=None,
-                 template_text=None,
-                 template_vars=None,
-                 renderer=None):
-        assert outer is None or isinstance(outer, CodeNode)
-        assert prev is None or isinstance(prev, CodeNode)
+    def __init__(self, template_text=None, template_vars=None):
         assert template_text is None or isinstance(template_text, str)
         assert template_vars is None or isinstance(template_vars, dict)
-        assert renderer is None or isinstance(renderer, MakoRenderer)
 
         # The outer CodeNode or None iff this is a top-level node
-        self._outer = outer
+        self._outer = None
         # The previous CodeNode if this is a Sequence or None
-        self._prev = prev
+        self._prev = None
 
-        # Mako's template text, bindings dict, and the renderer object
-        self._template_text = template_text
-        self._template_vars = {}
-        self._renderer = renderer
+        # Mako's template text, bindings dict
+        if template_text is None:
+            self._template = None
+        else:
+            self._template = MakoTemplate(template_text)
+
+        # Template variable bindings
+        self._own_template_vars = None
+        self._base_template_vars = None
+        self._cached_template_vars = None
+
+        self._accumulator = None  # CodeGenAccumulator
+        self._accumulate_requests = None
+
+        self._renderer = None  # MakoRenderer
 
         self._render_state = CodeNode._RenderState()
         self._is_rendering = False
@@ -125,31 +186,42 @@ class CodeNode(object):
 
     def __str__(self):
         """
-        Renders this CodeNode object into a Mako template.  This is supposed to
-        be used in a Mako template as ${code_node}.
-        """
-        return self.render()
+        Renders this CodeNode object directly into the renderer's text buffer
+        and always returns the empty string.  This is because it's faster to
+        accumulate the rendering result directly in a single text buffer than
+        making a lot of string pieces and concatenating them.
 
-    def render(self):
+        This function is supposed to be used in a Mako template as ${code_node}.
+        """
+        renderer = self.renderer
+        assert renderer
+
+        self.render(renderer)
+        return ""
+
+    def render(self, renderer):
         """
         Renders this CodeNode object as a text string and also propagates
         updates to related CodeNode objects.  As this method has side-effects
         not only to this object but also other related objects, the resulting
         text may change on each invocation.
         """
-        assert self.renderer
-
         last_render_state = self._render_state
         self._render_state = CodeNode._RenderState()
         self._is_rendering = True
 
         try:
-            text = self._render(
-                renderer=self.renderer, last_render_state=last_render_state)
+            self._render(
+                renderer=renderer, last_render_state=last_render_state)
         finally:
             self._is_rendering = False
 
-        return text
+        if self._accumulate_requests:
+            accumulator = self.accumulator
+            assert accumulator
+            for request in self._accumulate_requests:
+                request(accumulator)
+            self._accumulate_requests = None
 
     def _render(self, renderer, last_render_state):
         """
@@ -158,10 +230,9 @@ class CodeNode(object):
 
         Only limited subclasses may override this method.
         """
-        assert self._template_text is not None
-        return renderer.render(
+        renderer.render(
             caller=self,
-            template_text=self._template_text,
+            template=self._template,
             template_vars=self.template_vars)
 
     @property
@@ -172,6 +243,10 @@ class CodeNode(object):
     def set_outer(self, outer):
         assert isinstance(outer, CodeNode)
         assert self._outer is None
+        self._outer = outer
+
+    def reset_outer(self, outer):
+        assert isinstance(outer, CodeNode) or outer is None
         self._outer = outer
 
     @property
@@ -185,20 +260,36 @@ class CodeNode(object):
         self._prev = prev
 
     def reset_prev(self, prev):
-        assert isinstance(prev, CodeNode)
+        assert isinstance(prev, CodeNode) or prev is None
         self._prev = prev
 
-    @property
-    def upstream(self):
-        """
-        Returns the upstream CodeNode in terms of code flow.
+    def outer_scope(self):
+        """Returns the outer scope closest to this scope or None."""
+        node = self.outer
+        while node is not None:
+            if isinstance(node, SymbolScopeNode):
+                return node
+            node = node.outer
+        return None
 
-        The upstream CodeNode is defined as:
-        1. the previous CodeNode, or
-        2. the outer CodeNode, or
-        3. None (as this is a top-level node)
+    def outermost(self):
+        """Returns the outermost node, i.e. the node whose |outer| is None."""
+        node = self
+        while node.outer is not None:
+            node = node.outer
+        return node
+
+    def inclusive_outers(self):
         """
-        return self.prev or self.outer
+        Returns a list of outer nodes including this node in order from this
+        node to the outermost node.
+        """
+        outers = []
+        node = self
+        while node is not None:
+            outers.append(node)
+            node = node.outer
+        return outers
 
     @property
     def template_vars(self):
@@ -206,36 +297,105 @@ class CodeNode(object):
         Returns the template variable bindings available at this point, i.e.
         bound at this node or outer nodes.
 
-        CAUTION: Do not modify the returned dict.  This method may return the
-        original dict in a CodeNode.
+        CAUTION: This accessor caches the result.  This accessor must not be
+        called during construction of a code node tree.
         """
-        if not self.outer:
-            return self._template_vars
+        if self._cached_template_vars is not None:
+            return self._cached_template_vars
 
-        if not self._template_vars:
-            return self.outer.template_vars
+        outers = self.inclusive_outers()
+        bindings = None
 
-        binds = copy.copy(self.outer.template_vars)
-        for name, value in self._template_vars.iteritems():
-            assert name not in binds, (
-                "Duplicated template variable binding: {}".format(name))
-            binds[name] = value
-        return binds
+        for node in outers:
+            if node.base_template_vars is not None:
+                bindings = dict(node.base_template_vars)
+                break
+        if bindings is None:
+            bindings = {}
+
+        for node in outers:
+            if node.own_template_vars is None:
+                continue
+            for name, value in node.own_template_vars.items():
+                assert name not in bindings, (
+                    "Duplicated template variable binding: {}".format(name))
+                bindings[name] = value
+
+        self._cached_template_vars = bindings
+        return self._cached_template_vars
+
+    @property
+    def own_template_vars(self):
+        """Returns the template variables bound at this code node."""
+        return self._own_template_vars
 
     def add_template_var(self, name, value):
-        assert name not in self._template_vars
+        if self._own_template_vars is None:
+            self._own_template_vars = {}
+        assert isinstance(name, str)
+        assert name not in self._own_template_vars, (
+            "Duplicated template variable binding: {}".format(name))
         if isinstance(value, CodeNode):
             value.set_outer(self)
-        self._template_vars[name] = value
+        self._own_template_vars[name] = value
 
     def add_template_vars(self, template_vars):
         assert isinstance(template_vars, dict)
-        for name, value in template_vars.iteritems():
+        for name, value in template_vars.items():
             self.add_template_var(name, value)
 
     @property
+    def base_template_vars(self):
+        """
+        Returns the base template variables if it's set at this code node.
+
+        The base template variables are a set of template variables that of
+        the innermost code node takes effect.  It means that the base template
+        variables are layered and shadowable.
+        """
+        return self._base_template_vars
+
+    def set_base_template_vars(self, template_vars):
+        assert isinstance(template_vars, dict)
+        for name, value in template_vars.items():
+            assert isinstance(name, str)
+            assert not isinstance(value, CodeNode)
+        assert self._base_template_vars is None
+        self._base_template_vars = template_vars
+
+    @property
+    def accumulator(self):
+        # Always consistently use the accumulator of the root node.
+        if self.outer is None:
+            return self._accumulator
+        return self.outermost().accumulator
+
+    def set_accumulator(self, accumulator):
+        assert isinstance(accumulator, CodeGenAccumulator)
+        assert self._accumulator is None
+        self._accumulator = accumulator
+
+    def accumulate(self, request):
+        """
+        While rendering the code node, |request| will be called with the
+        argument of self.accumulator.
+        """
+        assert callable(request)
+        if self._accumulate_requests is None:
+            self._accumulate_requests = []
+        self._accumulate_requests.append(request)
+
+    @property
     def renderer(self):
-        return self._renderer or self.outer.renderer
+        # Always consistently use the renderer of the root node.
+        if self.outer is None:
+            return self._renderer
+        return self.outermost().renderer
+
+    def set_renderer(self, renderer):
+        assert isinstance(renderer, MakoRenderer)
+        assert self._renderer is None
+        self._renderer = renderer
 
     @property
     def current_render_state(self):
@@ -247,43 +407,68 @@ class CodeNode(object):
         assert not self._is_rendering
         return self._render_state
 
-    def is_code_symbol_defined(self, symbol_node):
-        """
-        Returns True if |symbol_node| is defined at this point or upstream.
-        """
-        if self.upstream:
-            return self.upstream.is_code_symbol_defined(symbol_node)
-        return False
-
-    def on_code_symbol_used(self, symbol_node):
-        """Receives a report of use of an undefined symbol node."""
+    def on_code_symbol_referenced(self, symbol_node, symbol_scope_chain):
+        """Receives a report of use of a symbol node."""
         assert isinstance(symbol_node, SymbolNode)
-        state = self.current_render_state
-        state.code_symbols_used[symbol_node.name] = symbol_node
+        assert isinstance(symbol_scope_chain, tuple)
+        assert all(
+            isinstance(scope, SymbolScopeNode) for scope in symbol_scope_chain)
+        self.current_render_state.symbol_to_scope_chains.setdefault(
+            symbol_node, set()).add(symbol_scope_chain)
+
+
+class EmptyNode(CodeNode):
+    """Represents the zero-length text and renders nothing."""
+
+    def __init__(self):
+        CodeNode.__init__(self)
+
+    def _render(self, renderer, last_render_state):
+        pass
 
 
 class LiteralNode(CodeNode):
     """
     Represents a literal text, which will be rendered as is without any template
-    magic applied.
+    magic applied.  The given literal text object will be stringified on each
+    rendering.
     """
 
-    def __init__(self, literal_text, renderer=None):
-        assert isinstance(literal_text, str)
+    def __init__(self, literal_text):
+        CodeNode.__init__(self)
 
-        literal_text_gensym = CodeNode.gensym()
-        template_text = CodeNode.format_template(
-            "${{{literal_text}}}", literal_text=literal_text_gensym)
-        template_vars = {literal_text_gensym: literal_text}
+        self._literal_text = literal_text
 
-        CodeNode.__init__(
-            self,
-            template_text=template_text,
-            template_vars=template_vars,
-            renderer=renderer)
+    def _render(self, renderer, last_render_state):
+        renderer.push_caller(self)
+        try:
+            renderer.render_text(str(self._literal_text))
+        finally:
+            renderer.pop_caller()
 
 
-class TextNode(CodeNode):
+def TextNode(template_text):
+    """
+    Represents a template text node.
+
+    TextNode is designed to be a leaf node of a code node tree.  TextNode
+    represents a template text while LiteralNode represents a literal text.
+    All template magics will be applied to |template_text|.
+
+    This function is pretending to be a CodeNode subclass and instantiates one
+    of text-ish code node subclass depending on the content of |template_text|.
+    """
+    assert isinstance(template_text, str)
+
+    if "$" in template_text or "%" in template_text:
+        return _TextNode(template_text)
+    elif template_text:
+        return LiteralNode(template_text)
+    else:
+        return EmptyNode()
+
+
+class _TextNode(CodeNode):
     """
     Represents a template text node.
 
@@ -292,40 +477,78 @@ class TextNode(CodeNode):
     All template magics will be applied to |template_text|.
     """
 
-    def __init__(self, template_text, renderer=None):
-        CodeNode.__init__(self, template_text=template_text, renderer=renderer)
+    def __init__(self, template_text):
+        CodeNode.__init__(self, template_text=template_text)
 
 
-class SequenceNode(CodeNode):
+class CompositeNode(CodeNode):
     """
-    Represents a sequence of nodes.
+    Represents a composition of multiple code nodes.  Composition will be done
+    by using |CodeNode.gensym| so that it won't contaminate a namespace of the
+    template variables.
     """
 
-    def __init__(self, code_nodes=None, separator="\n", renderer=None):
-        assert isinstance(separator, str)
-
-        element_nodes_gensym = CodeNode.gensym()
-        element_nodes = []
-        template_text = CodeNode.format_template(
-            """\
-% for node in {element_nodes}:
-${node}\\
-% if not loop.last:
-{separator}\\
-% endif
-% endfor
-""",
-            element_nodes=element_nodes_gensym,
-            separator=separator)
-        template_vars = {element_nodes_gensym: element_nodes}
+    def __init__(self, template_format_str, *args, **kwargs):
+        """
+        Args:
+            template_format_str: A format string that is used to produce the
+                template text.
+            args:
+            kwargs: Arguments to be passed to |format_template|.  Not
+                necessarily be CodeNode, but also anything renderable can be
+                passed in.
+        """
+        assert isinstance(template_format_str, str)
+        gensym_args = []
+        gensym_kwargs = {}
+        template_vars = {}
+        for arg in args:
+            assert isinstance(arg, (CodeNode, int, long, str))
+            gensym = CodeNode.gensym()
+            gensym_args.append("${{{}}}".format(gensym))
+            template_vars[gensym] = arg
+        for key, value in kwargs.items():
+            assert isinstance(key, (int, long, str))
+            assert isinstance(value, (CodeNode, int, long, str))
+            gensym = CodeNode.gensym()
+            gensym_kwargs[key] = "${{{}}}".format(gensym)
+            template_vars[gensym] = value
+        template_text = format_template(template_format_str, *gensym_args,
+                                        **gensym_kwargs)
 
         CodeNode.__init__(
-            self,
-            template_text=template_text,
-            template_vars=template_vars,
-            renderer=renderer)
+            self, template_text=template_text, template_vars=template_vars)
 
-        self._element_nodes = element_nodes
+
+class ListNode(CodeNode):
+    """
+    Represents a list of nodes.
+
+    append, extend, insert, and remove work just like built-in list's methods
+    except that addition and removal of None have no effect.
+    """
+
+    def __init__(self, code_nodes=None, separator="\n", head="", tail=""):
+        """
+        Args:
+            code_nodes: A list of CodeNode to be rendered.
+            separator: A str inserted between code nodes.
+            head:
+            tail: The head and tail sections that will be rendered iff the
+                content list is not empty.
+        """
+        assert isinstance(separator, str)
+        assert isinstance(head, str)
+        assert isinstance(tail, str)
+
+        CodeNode.__init__(self)
+
+        self._element_nodes = []
+        self._separator = separator
+        self._head = head
+        self._tail = tail
+
+        self._will_skip_separator = False
 
         if code_nodes is not None:
             self.extend(code_nodes)
@@ -339,7 +562,29 @@ ${node}\\
     def __len__(self):
         return len(self._element_nodes)
 
+    def _render(self, renderer, last_render_state):
+        renderer.push_caller(self)
+        try:
+            if self._element_nodes:
+                renderer.render_text(self._head)
+            self._will_skip_separator = True
+            for node in self._element_nodes:
+                if self._will_skip_separator:
+                    self._will_skip_separator = False
+                else:
+                    renderer.render_text(self._separator)
+                node.render(renderer)
+            if self._element_nodes:
+                renderer.render_text(self._tail)
+        finally:
+            renderer.pop_caller()
+
+    def skip_separator(self):
+        self._will_skip_separator = True
+
     def append(self, node):
+        if node is None:
+            return
         assert isinstance(node, CodeNode)
         assert node.outer is None and node.prev is None
 
@@ -355,6 +600,8 @@ ${node}\\
             self.append(node)
 
     def insert(self, index, node):
+        if node is None:
+            return
         assert isinstance(index, (int, long))
         assert isinstance(node, CodeNode)
         assert node.outer is None and node.prev is None
@@ -374,6 +621,222 @@ ${node}\\
         node.set_outer(self)
         self._element_nodes.insert(index, node)
 
+    def remove(self, node):
+        if node is None:
+            return
+        assert node in self
+
+        index = self._element_nodes.index(node)
+        if index + 1 < len(self._element_nodes):
+            next_node = self._element_nodes[index + 1]
+            prev_node = self._element_nodes[index - 1] if index != 0 else None
+            next_node.reset_prev(prev_node)
+        del self._element_nodes[index]
+        node.reset_outer(None)
+        node.reset_prev(None)
+
+
+class SequenceNode(ListNode):
+    """
+    Represents a sequence of generated code without introducing any new scope,
+    and provides the points where SymbolDefinitionNodes can be inserted.
+    """
+
+    def __init__(self, code_nodes=None, separator="\n", head="", tail=""):
+        ListNode.__init__(
+            self,
+            code_nodes=code_nodes,
+            separator=separator,
+            head=head,
+            tail=tail)
+
+        self._to_be_removed = []
+
+    def _render(self, renderer, last_render_state):
+        if self._to_be_removed:
+            for node in self._to_be_removed:
+                self.remove(node)
+            self._to_be_removed = []
+
+        super(SequenceNode, self)._render(
+            renderer=renderer, last_render_state=last_render_state)
+
+    def schedule_to_remove(self, node):
+        """Schedules a task to remove the |node| in the next rendering cycle."""
+        assert node in self
+        self._to_be_removed.append(node)
+
+
+class SymbolScopeNode(SequenceNode):
+    """
+    Represents a scope of generated code.
+
+    If SymbolNodes are rendered inside this node, this node will attempt to
+    insert corresponding SymbolDefinitionNodes appropriately.
+    """
+
+    def __init__(self, code_nodes=None, separator="\n", head="", tail=""):
+        SequenceNode.__init__(
+            self,
+            code_nodes=code_nodes,
+            separator=separator,
+            head=head,
+            tail=tail)
+
+        self._likeliness = Likeliness.ALWAYS
+        self._registered_code_symbols = set()
+
+    def _render(self, renderer, last_render_state):
+        for symbol_node in last_render_state.undefined_code_symbols:
+            assert self.is_code_symbol_registered(symbol_node)
+            if not self.is_code_symbol_defined(symbol_node):
+                self._insert_symbol_definition(symbol_node, last_render_state)
+
+        super(SymbolScopeNode, self)._render(
+            renderer=renderer, last_render_state=last_render_state)
+
+        if self.current_render_state.undefined_code_symbols:
+            renderer.invalidate_rendering_result()
+
+    def _insert_symbol_definition(self, symbol_node, last_render_state):
+        DIRECT_USES = "u"
+        DIRECT_CHILD_SCOPES = "s"
+        ANALYSIS_RESULT_KEYS = (
+            # Number of direct uses in this scope
+            DIRECT_USES,
+            # Number of direct child scopes
+            DIRECT_CHILD_SCOPES,
+            # Number of direct child scopes per likeliness
+            Likeliness.ALWAYS,
+            Likeliness.LIKELY,
+            Likeliness.UNLIKELY,
+        )
+
+        def analyze_symbol_usage(render_state):
+            counts = dict.fromkeys(ANALYSIS_RESULT_KEYS, 0)
+
+            scope_chains = render_state.symbol_to_scope_chains.get(symbol_node)
+            if not scope_chains:
+                return counts
+
+            self_index = iter(scope_chains).next().index(self)
+            scope_chains = map(
+                lambda scope_chain: scope_chain[self_index + 1:], scope_chains)
+            scope_to_likeliness = {}
+            for scope_chain in scope_chains:
+                if not scope_chain:
+                    counts[DIRECT_USES] += 1
+                else:
+                    likeliness = min(
+                        map(lambda scope: scope.likeliness, scope_chain))
+                    scope = scope_chain[0]
+                    scope_to_likeliness[scope] = max(
+                        likeliness, scope_to_likeliness.get(scope, likeliness))
+            for likeliness in scope_to_likeliness.values():
+                counts[DIRECT_CHILD_SCOPES] += 1
+                counts[likeliness] += 1
+            return counts
+
+        def likeliness_at(render_state):
+            counts = analyze_symbol_usage(render_state)
+            if counts[DIRECT_USES] >= 1:
+                return Likeliness.ALWAYS
+            for likeliness in (Likeliness.ALWAYS, Likeliness.LIKELY,
+                               Likeliness.UNLIKELY):
+                if counts[likeliness] > 0:
+                    return likeliness
+            return Likeliness.NEVER
+
+        def insert_before_threshold(sequence_node, threshold):
+            for index, node in enumerate(sequence_node):
+                if (isinstance(node, SequenceNode)
+                        and not isinstance(node, SymbolScopeNode)):
+                    did_insert = insert_before_threshold(node, threshold)
+                    if did_insert:
+                        return True
+                elif likeliness_at(node.last_render_state) >= threshold:
+                    sequence_node.insert(index,
+                                         symbol_node.create_definition_node())
+                    return True
+            return False
+
+        counts = analyze_symbol_usage(last_render_state)
+        if counts[DIRECT_USES] >= 1:
+            did_insert = insert_before_threshold(self, Likeliness.UNLIKELY)
+            assert did_insert
+        elif counts[DIRECT_CHILD_SCOPES] == 1:
+            pass  # Let the child SymbolScopeNode do the work.
+        elif counts[Likeliness.ALWAYS] + counts[Likeliness.LIKELY] >= 2:
+            did_insert = insert_before_threshold(self, Likeliness.LIKELY)
+            assert did_insert
+        else:
+            pass  # Let descendant SymbolScopeNodes do the work.
+
+    def is_code_symbol_registered(self, symbol_node):
+        """
+        Returns True if |symbol_node| is registered and available for use within
+        this scope.
+        """
+        assert isinstance(symbol_node, SymbolNode)
+
+        if symbol_node in self._registered_code_symbols:
+            return True
+
+        outer = self.outer_scope()
+        if outer is None:
+            return False
+        return outer.is_code_symbol_registered(symbol_node)
+
+    def register_code_symbol(self, symbol_node):
+        """Registers a SymbolNode and makes it available in this scope."""
+        assert isinstance(symbol_node, SymbolNode)
+        self.add_template_var(symbol_node.name, symbol_node)
+        self._registered_code_symbols.add(symbol_node)
+
+    def register_code_symbols(self, symbol_nodes):
+        for symbol_node in symbol_nodes:
+            self.register_code_symbol(symbol_node)
+
+    @property
+    def likeliness(self):
+        """
+        Returns how much likely that this SymbolScopeNode will be executed in
+        runtime.  The likeliness is relative to the closest outer
+        SymbolScopeNode.
+        """
+        return self._likeliness
+
+    def set_likeliness(self, likeliness):
+        assert isinstance(likeliness, Likeliness.Level)
+        self._likeliness = likeliness
+
+    def is_code_symbol_defined(self, symbol_node):
+        """
+        Returns True if |symbol_node| is defined in this scope by the moment
+        when the method is called.
+        """
+        assert isinstance(symbol_node, SymbolNode)
+
+        if symbol_node in self.current_render_state.defined_code_symbols:
+            return True
+
+        outer = self.outer_scope()
+        if outer is None:
+            return False
+        return outer.is_code_symbol_defined(symbol_node)
+
+    def on_code_symbol_defined(self, symbol_node):
+        """Receives a report that a symbol gets defined."""
+        assert isinstance(symbol_node, SymbolNode)
+        self.current_render_state.defined_code_symbols.append(symbol_node)
+
+    def on_undefined_code_symbol_found(self, symbol_node):
+        """Receives a report of use of an undefined symbol node."""
+        assert isinstance(symbol_node, SymbolNode)
+        state = self.current_render_state
+        if symbol_node not in state.undefined_code_symbols:
+            state.undefined_code_symbols.append(symbol_node)
+
 
 class SymbolNode(CodeNode):
     """
@@ -383,50 +846,62 @@ class SymbolNode(CodeNode):
     will be automatically inserted iff this symbol is referenced.
     """
 
-    def __init__(self,
-                 name,
-                 template_text=None,
-                 definition_node_constructor=None):
+    def __init__(self, name, template_text=None, definition_constructor=None):
         """
         Args:
             name: The name of this code symbol.
             template_text: Template text to be used to define the code symbol.
-            definition_node_constructor: A callable that creates and returns a
-                new definition node.  This SymbolNode will be passed as the
+            definition_constructor: A callable that creates and returns a new
+                definition node.  This SymbolNode will be passed as the
                 argument.
-                Either of |template_text| or |definition_node_constructor| must
-                be given.
+                Either of |template_text| or |definition_constructor| must be
+                given.
         """
         assert isinstance(name, str) and name
-        assert (template_text is not None
-                or definition_node_constructor is not None)
-        assert template_text is None or definition_node_constructor is None
-        if template_text is not None:
-            assert isinstance(template_text, str)
-        if definition_node_constructor is not None:
-            assert callable(definition_node_constructor)
 
         CodeNode.__init__(self)
 
         self._name = name
 
         if template_text is not None:
+            assert isinstance(template_text, str)
+            assert definition_constructor is None
 
             def constructor(symbol_node):
                 return SymbolDefinitionNode(
-                    symbol_node, template_text=template_text)
+                    symbol_node=symbol_node,
+                    code_nodes=[TextNode(template_text)])
 
-            self._definition_node_constructor = constructor
+            self._definition_constructor = constructor
         else:
-            self._definition_node_constructor = definition_node_constructor
+            assert template_text is None
+            assert callable(definition_constructor)
+
+            self._definition_constructor = definition_constructor
 
     def _render(self, renderer, last_render_state):
-        if not renderer.last_caller.is_code_symbol_defined(self):
-            for caller in renderer.callers:
-                assert isinstance(caller, CodeNode)
-                caller.on_code_symbol_used(self)
+        self._request_symbol_definition(renderer)
 
-        return self.name
+        renderer.render_text(self.name)
+
+    def request_symbol_definition(self):
+        self._request_symbol_definition(self.renderer)
+
+    def _request_symbol_definition(self, renderer):
+        symbol_scope_chain = tuple(
+            filter(lambda node: isinstance(node, SymbolScopeNode),
+                   renderer.callers_from_first_to_last))
+
+        for caller in renderer.callers_from_last_to_first:
+            caller.on_code_symbol_referenced(self, symbol_scope_chain)
+            if caller is self.outer:
+                break
+
+        if not symbol_scope_chain[-1].is_code_symbol_defined(self):
+            for scope in reversed(symbol_scope_chain):
+                scope.on_undefined_code_symbol_found(self)
+                if scope is self.outer:
+                    break
 
     @property
     def name(self):
@@ -434,12 +909,13 @@ class SymbolNode(CodeNode):
 
     def create_definition_node(self):
         """Creates a new definition node."""
-        node = self._definition_node_constructor(self)
+        node = self._definition_constructor(self)
         assert isinstance(node, SymbolDefinitionNode)
+        assert node.target_symbol is self
         return node
 
 
-class SymbolDefinitionNode(CodeNode):
+class SymbolDefinitionNode(SequenceNode):
     """
     Represents a definition of a code symbol.
 
@@ -447,56 +923,26 @@ class SymbolDefinitionNode(CodeNode):
     upstream definition(s) are effective.
     """
 
-    def __init__(self, symbol_node, template_text, template_vars=None):
+    def __init__(self, symbol_node, code_nodes=None):
         assert isinstance(symbol_node, SymbolNode)
 
-        CodeNode.__init__(
-            self, template_text=template_text, template_vars=template_vars)
+        SequenceNode.__init__(self, code_nodes)
 
         self._symbol_node = symbol_node
 
     def _render(self, renderer, last_render_state):
-        if (self.upstream
-                and self.upstream.is_code_symbol_defined(self._symbol_node)):
-            return ""
+        scope = self.outer_scope()
+        if scope.is_code_symbol_defined(self._symbol_node):
+            assert isinstance(self.outer, SequenceNode)
+            self.outer.schedule_to_remove(self)
+            self.outer.skip_separator()
+            return
 
-        return super(SymbolDefinitionNode, self)._render(
+        scope.on_code_symbol_defined(self._symbol_node)
+
+        super(SymbolDefinitionNode, self)._render(
             renderer=renderer, last_render_state=last_render_state)
 
-    def is_code_symbol_defined(self, symbol_node):
-        if symbol_node is self._symbol_node:
-            return True
-        return super(SymbolDefinitionNode,
-                     self).is_code_symbol_defined(symbol_node)
-
-
-class SymbolScopeNode(SequenceNode):
-    """
-    Represents a sequence of nodes.
-
-    If SymbolNodes are rendered inside this node, this node will attempt to
-    insert corresponding SymbolDefinitionNodes appropriately.
-    """
-
-    def _render(self, renderer, last_render_state):
-        # Sort nodes in order to render reproducible results.
-        symbol_nodes = sorted(
-            last_render_state.code_symbols_used.itervalues(),
-            key=lambda symbol_node: symbol_node.name)
-        for symbol_node in symbol_nodes:
-            self._insert_symbol_definition(symbol_node)
-
-        return super(SymbolScopeNode, self)._render(
-            renderer=renderer, last_render_state=last_render_state)
-
-    def _insert_symbol_definition(self, symbol_node):
-        self.insert(0, symbol_node.create_definition_node())
-
-    def register_code_symbol(self, symbol_node):
-        """Registers a SymbolNode and makes it available in this scope."""
-        assert isinstance(symbol_node, SymbolNode)
-        self.add_template_var(symbol_node.name, symbol_node)
-
-    def register_code_symbols(self, symbol_nodes):
-        for symbol_node in symbol_nodes:
-            self.register_code_symbol(symbol_node)
+    @property
+    def target_symbol(self):
+        return self._symbol_node

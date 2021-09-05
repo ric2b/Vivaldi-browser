@@ -4,13 +4,12 @@
 
 package org.chromium.chrome.browser.installedapp;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.installedapp.mojom.InstalledAppProvider;
 import org.chromium.services.service_manager.InterfaceFactory;
+import org.chromium.url.URI;
 
-import java.net.URI;
 import java.net.URISyntaxException;
 
 /** Factory to create instances of the InstalledAppProvider Mojo service. */
@@ -49,7 +48,7 @@ public class InstalledAppProviderFactory implements InterfaceFactory<InstalledAp
 
     @Override
     public InstalledAppProvider createImpl() {
-        return new InstalledAppProviderImpl(mFrameUrlDelegate, ContextUtils.getApplicationContext(),
-                InstantAppsHandler.getInstance());
+        return new InstalledAppProviderImpl(
+                mFrameUrlDelegate, new PackageManagerDelegate(), InstantAppsHandler.getInstance());
     }
 }

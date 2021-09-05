@@ -17,7 +17,6 @@ namespace ui {
 namespace {
 
 constexpr int kMinXrandrVersion = 103;  // Need at least xrandr version 1.3
-constexpr auto kDisplayListUpdateDelay = base::TimeDelta::FromMilliseconds(250);
 
 }  // namespace
 
@@ -25,7 +24,8 @@ XDisplayManager::XDisplayManager(Delegate* delegate)
     : delegate_(delegate),
       xdisplay_(gfx::GetXDisplay()),
       x_root_window_(DefaultRootWindow(xdisplay_)),
-      xrandr_version_(GetXrandrVersion(xdisplay_)) {}
+      xrandr_version_(GetXrandrVersion(xdisplay_)),
+      workspace_handler_(this) {}
 
 XDisplayManager::~XDisplayManager() = default;
 
@@ -104,6 +104,11 @@ void XDisplayManager::FetchDisplayList() {
   SetDisplayList(std::move(displays));
 }
 
+void XDisplayManager::OnCurrentWorkspaceChanged(
+    const std::string& new_workspace) {
+  change_notifier_.NotifyCurrentWorkspaceChanged(new_workspace);
+}
+
 void XDisplayManager::UpdateDisplayList() {
   std::vector<display::Display> old_displays = displays_;
   FetchDisplayList();
@@ -111,10 +116,10 @@ void XDisplayManager::UpdateDisplayList() {
 }
 
 void XDisplayManager::DispatchDelayedDisplayListUpdate() {
-  delayed_update_task_.Reset(base::BindOnce(&XDisplayManager::UpdateDisplayList,
-                                            base::Unretained(this)));
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, delayed_update_task_.callback(), kDisplayListUpdateDelay);
+  update_task_.Reset(base::BindOnce(&XDisplayManager::UpdateDisplayList,
+                                    base::Unretained(this)));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                update_task_.callback());
 }
 
 gfx::Point XDisplayManager::GetCursorLocation() const {
@@ -125,6 +130,10 @@ gfx::Point XDisplayManager::GetCursorLocation() const {
                 &win_x, &win_y, &mask);
 
   return gfx::Point(root_x, root_y);
+}
+
+std::string XDisplayManager::GetCurrentWorkspace() {
+  return workspace_handler_.GetCurrentWorkspace();
 }
 
 }  // namespace ui

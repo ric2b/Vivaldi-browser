@@ -104,7 +104,7 @@ is called `MonochromePublic.apk`.
 
 Trichrome is only compatible with Android Q and later.
 
-Trichrome is composed of three APKs:
+Trichrome is composed of three APK/AABs:
 
 1. TrichromeWebView contains WebView-specific code and data, and provides
 Android apps with the WebView implementation.
@@ -119,9 +119,9 @@ The three Trichrome APKs together are roughly the same size as Monochrome,
 providing the same benefits, but many of the downsides and complexities of
 Monochrome don't apply to Trichrome.
 
-The build targets are called `trichrome_webview_apk`, `trichrome_chrome_apk`,
+The build targets are called `trichrome_webview_apk`, `trichrome_chrome_bundle`,
 and `trichrome_library_apk` respectively, and the resulting output files are
-called `TrichromeWebView.apk`, `TrichromeChrome.apk`, and
+called `TrichromeWebView.apk`, `TrichromeChrome.aab`, and
 `TrichromeLibrary.apk`.
 
 ### Choosing a WebView version
@@ -195,10 +195,6 @@ is_component_build = false
 # Disable Google-specific branding/features
 is_chrome_branded = false
 use_official_google_api_keys = false
-
-# Significantly reduces binary size at the cost of preventing Android's native
-# crash handler from being able to produce useful stack unwindings.
-exclude_unwind_tables = true
 ```
 
 The `target_cpu` option must be set to
@@ -271,6 +267,24 @@ ffmpeg_branding = "Chrome"
 proprietary_codecs = true
 ```
 
+#### Crash stack unwinding
+
+By default, builds using `is_official_build = true` exclude unwind tables from
+the binaries, as they significantly increase binary size. Google's builds rely
+on crashes being reported using Crashpad, which can then be decoded server-side.
+If you don't intend to enable Crashpad and set up dedicated crash reporting
+infrastructure for your WebView, you may wish to re-enable the unwind tables
+with the following GN argument:
+
+``` gn
+exclude_unwind_tables = false
+```
+
+This will allow Android's debuggerd to produce meaningful stack traces for
+crashes that occur inside WebView's native code. We don't recommend using this
+setting in shipping builds due to the binary size impact, but it may be the only
+alternative if using Crashpad is impractical.
+
 #### Other build options
 
 Other build options may be used but are not supported by the WebView team and
@@ -307,6 +321,31 @@ the [android-webview-dev Google group][1] for help creating the correct build
 files.
 
 ### Configuring the Android framework
+
+#### Android 10.x (Q)
+
+Using Monochrome as a WebView provider on Android 10 is not supported;
+Chrome packages should not be included in the configuration as either the
+Trichrome WebView or standalone WebView should be used.
+
+The configuration mechanism for Android 10 is the same as the following section
+(for Android 7-9), with the exception that the `isFallback` attribute no longer
+causes the provider to be automatically disabled if another implementation is
+available. Android 10 never automatically enables/disables WebView
+implementations under normal usage.
+
+Instead, the `isFallback` attribute is used to allow clean migration from an
+older configuration. When a device is first booted with Android 10, any provider
+marked as `isFallback` will be re-enabled for all users, as a one-time change.
+This ensures that devices which previously used Chrome as their implementation
+on Android 9 and had a disabled WebView do not end up with no enabled WebView
+implementations.
+
+Thus, if upgrading from an Android 9 device, it's recommended that you leave
+`isFallback` set to true for any provider which had it set to true in the
+Android 9 configuration. If this configuration is for a device which has never
+used an older version of Android, `isFallback` is not necessary and can be
+ignored.
 
 #### Android 7.x (Nougat), 8.x (Oreo), and 9.x (Pie)
 

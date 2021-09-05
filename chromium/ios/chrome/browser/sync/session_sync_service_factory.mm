@@ -25,8 +25,9 @@
 #include "ios/chrome/browser/sync/glue/sync_start_util.h"
 #include "ios/chrome/browser/sync/model_type_store_service_factory.h"
 #import "ios/chrome/browser/sync/sessions/ios_chrome_local_session_event_router.h"
-#include "ios/chrome/browser/tabs/tab_model_synced_window_delegate_getter.h"
+#include "ios/chrome/browser/tabs/ios_synced_window_delegate_getter.h"
 #include "ios/chrome/common/channel_info.h"
+#include "ios/components/webui/web_ui_url_constants.h"
 #include "ios/web/public/thread/web_thread.h"
 #include "url/gurl.h"
 
@@ -40,7 +41,7 @@ namespace {
 
 bool ShouldSyncURLImpl(const GURL& url) {
   if (url == kChromeUIHistoryURL) {
-    // Whitelist the chrome history page, home for "Tabs from other devices",
+    // Allow the chrome history page, home for "Tabs from other devices",
     // so it can trigger starting up the sync engine.
     return true;
   }
@@ -53,10 +54,10 @@ bool ShouldSyncURLImpl(const GURL& url) {
 // might inherit from other interfaces with same methods.
 class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
  public:
-  explicit SyncSessionsClientImpl(ios::ChromeBrowserState* browser_state)
+  explicit SyncSessionsClientImpl(ChromeBrowserState* browser_state)
       : browser_state_(browser_state),
         window_delegates_getter_(
-            std::make_unique<TabModelSyncedWindowDelegatesGetter>()),
+            std::make_unique<IOSSyncedWindowDelegatesGetter>()),
         local_session_event_router_(
             std::make_unique<IOSChromeLocalSessionEventRouter>(
                 browser_state_,
@@ -104,7 +105,7 @@ class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
   }
 
  private:
-  ios::ChromeBrowserState* const browser_state_;
+  ChromeBrowserState* const browser_state_;
   const std::unique_ptr<sync_sessions::SyncedWindowDelegatesGetter>
       window_delegates_getter_;
   const std::unique_ptr<IOSChromeLocalSessionEventRouter>
@@ -129,7 +130,7 @@ bool SessionSyncServiceFactory::ShouldSyncURLForTesting(const GURL& url) {
 
 // static
 SessionSyncService* SessionSyncServiceFactory::GetForBrowserState(
-    ios::ChromeBrowserState* browser_state) {
+    ChromeBrowserState* browser_state) {
   return static_cast<SessionSyncService*>(
       GetInstance()->GetServiceForBrowserState(browser_state, true));
 }
@@ -148,8 +149,8 @@ SessionSyncServiceFactory::~SessionSyncServiceFactory() {}
 std::unique_ptr<KeyedService>
 SessionSyncServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ios::ChromeBrowserState* browser_state =
-      ios::ChromeBrowserState::FromBrowserState(context);
+  ChromeBrowserState* browser_state =
+      ChromeBrowserState::FromBrowserState(context);
   return std::make_unique<sync_sessions::SessionSyncServiceImpl>(
       ::GetChannel(), std::make_unique<SyncSessionsClientImpl>(browser_state));
 }

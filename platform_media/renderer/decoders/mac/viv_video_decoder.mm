@@ -295,7 +295,8 @@ void VivVideoDecoder::Initialize(const VideoDecoderConfig& config,
   DCHECK(decode_cbs_.empty());
 
   if (has_error_) {
-    std::move(init_cb).Run(false);
+    std::move(init_cb).Run(
+        media::Status(media::StatusCode::kDecoderFailedInitialization));
     return;
   }
 
@@ -338,7 +339,7 @@ void VivVideoDecoder::Initialize(const VideoDecoderConfig& config,
     DLOG(ERROR) << "Failed to start decoder thread";
     return;
   }
-  std::move(init_cb_).Run(true);
+  std::move(init_cb_).Run(media::Status());
 }
 
 void VivVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id) {
@@ -1086,7 +1087,8 @@ void VivVideoDecoder::DestroyCallbacks() {
       std::move(reset_cb_).Run();
 
   if (has_error_ && weak_this && init_cb_)
-    std::move(init_cb_).Run(false);
+    std::move(init_cb_).Run(
+        media::Status(media::StatusCode::kInitializationUnspecifiedFailure));
 }
 
 }  // namespace media

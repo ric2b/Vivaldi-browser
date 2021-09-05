@@ -1,0 +1,43 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto2";
+
+option java_multiple_files = true;
+option java_package = "org.chromium.components.sync.protocol";
+
+option optimize_for = LITE_RUNTIME;
+
+package sync_pb;
+
+import "components/sync/protocol/model_type_state.proto";
+import "components/sync/protocol/entity_metadata.proto";
+
+// Corresponds to a single note id/metadata pair.
+message NoteMetadata {
+  // Note local id.
+  optional int64 id = 1;
+
+  // Notes sync metadata.
+  optional EntityMetadata metadata = 2;
+}
+
+// Sync proto to carry the sync metadata for the notes model. It is used for
+// persisting and loading sync metadata from disk.
+message NotesModelMetadata {
+  // Note global metadata.
+  optional ModelTypeState model_type_state = 1;
+
+  // A set of all notes metadata.
+  repeated NoteMetadata notes_metadata = 2;
+
+
+  // Indicates whether the reupload of notes has been triggered such that
+  // they include the full title, which means that their sequence number has
+  // been increased (independently of whether the commit has succeeded or even
+  // started).
+  // TODO(crbug.com/1066962): remove this code when most of notes are
+  // reuploaded.
+  optional bool notes_full_title_reuploaded = 3;
+}

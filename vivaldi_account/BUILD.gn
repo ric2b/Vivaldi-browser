@@ -12,7 +12,21 @@ source_set("vivaldi_account") {
 
   deps = [
     "//base",
-    "//chrome/browser",
+    "//base:i18n",
+    #"//chrome/browser",
+    "//components/autofill/core/common",
+    "//components/keyed_service/content",
+    "//components/keyed_service/core",
+    "//components/os_crypt",
+    "//components/prefs",
+    "//components/sync/driver",
+    "//components/password_manager/core/browser",
+    "//content/public/browser",
+    "//net",
+    "//net/traffic_annotation",
+    "//services/network/public/cpp",
+    "//url",
+    "//vivaldi/prefs:prefs_files_generated",
   ]
 
   if (is_android) {

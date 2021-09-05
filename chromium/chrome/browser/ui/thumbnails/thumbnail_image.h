@@ -12,8 +12,13 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/sequence_checker.h"
 #include "ui/gfx/image/image_skia.h"
+
+namespace base {
+class TimeTicks;
+}  // namespace base
 
 // Stores compressed thumbnail data for a tab and can vend that data as an
 // uncompressed image to observers.
@@ -34,6 +39,22 @@ class ThumbnailImage : public base::RefCounted<ThumbnailImage> {
     // Receives compressed thumbnail image data. Default is no-op.
     virtual void OnCompressedThumbnailDataAvailable(
         CompressedThumbnailData thumbnail_data);
+
+    // Provides a desired aspect ratio and minimum size that the observer will
+    // accept. If not specified, or if available thumbnail data is smaller in
+    // either dimension than this value, OnThumbnailImageAvailable will be
+    // called with an uncropped image. If this value is specified, and the
+    // available image is larger, the image passed to OnThumbnailImageAvailable
+    // will be cropped to the same aspect ratio (but otherwise unchanged,
+    // including scale).
+    //
+    // OnCompressedThumbnailDataAvailable is not affected by this value.
+    //
+    // This method is used to ensure that except for very small thumbnails, the
+    // image passed to OnThumbnailImageAvailable fits the needs of the observer
+    // for display purposes, without the observer having to further crop the
+    // image. The default is unspecified.
+    virtual base::Optional<gfx::Size> GetThumbnailSizeHint() const;
   };
 
   // Represents the endpoint
@@ -53,6 +74,8 @@ class ThumbnailImage : public base::RefCounted<ThumbnailImage> {
   };
 
   explicit ThumbnailImage(Delegate* delegate);
+
+  bool has_data() const { return data_.get(); }
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -83,13 +106,19 @@ class ThumbnailImage : public base::RefCounted<ThumbnailImage> {
 
   virtual ~ThumbnailImage();
 
-  void AssignJPEGData(std::vector<uint8_t> data);
+  void AssignJPEGData(base::TimeTicks assign_sk_bitmap_time,
+                      std::vector<uint8_t> data);
   bool ConvertJPEGDataToImageSkiaAndNotifyObservers();
   void NotifyUncompressedDataObservers(gfx::ImageSkia image);
   void NotifyCompressedDataObservers(CompressedThumbnailData data);
 
   static std::vector<uint8_t> CompressBitmap(SkBitmap bitmap);
   static gfx::ImageSkia UncompressImage(CompressedThumbnailData compressed);
+
+  // Crops and returns a preview from a thumbnail of an entire web page. Uses
+  // logic appropriate for fixed-aspect previews (e.g. hover cards).
+  static gfx::ImageSkia CropPreviewImage(const gfx::ImageSkia& source_image,
+                                         const gfx::Size& minimum_size);
 
   Delegate* delegate_;
 

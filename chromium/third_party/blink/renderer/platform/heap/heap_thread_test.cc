@@ -17,7 +17,13 @@
 namespace blink {
 
 class HeapThreadTest : public TestSupportingGC {};
-class HeapThreadDeathTest : public TestSupportingGC {};
+
+class HeapThreadDeathTest : public TestSupportingGC {
+ public:
+  HeapThreadDeathTest() {
+    testing::FLAGS_gtest_death_test_style = "threadsafe";
+  }
+};
 
 namespace heap_thread_test {
 
@@ -69,7 +75,7 @@ static void ParkWorkerThread() {
 class Object : public GarbageCollected<Object> {
  public:
   Object() {}
-  void Trace(blink::Visitor* visitor) {}
+  void Trace(Visitor* visitor) {}
 };
 
 class AlternatingThreadTester {
@@ -81,7 +87,7 @@ class AlternatingThreadTester {
     ActiveThread() = kMainThreadActive;
 
     std::unique_ptr<Thread> worker_thread = Platform::Current()->CreateThread(
-        ThreadCreationParams(WebThreadType::kTestThread)
+        ThreadCreationParams(ThreadType::kTestThread)
             .SetThreadNameForTest("Test Worker Thread"));
     PostCrossThreadTask(
         *worker_thread->GetTaskRunner(), FROM_HERE,
@@ -136,13 +142,9 @@ class MemberSameThreadCheckTester : public AlternatingThreadTester {
 };
 
 #if DCHECK_IS_ON()
-// TODO(keishi) This test is flaky on mac-rel bot.
-// crbug.com/709069
-#if !defined(OS_MACOSX)
 TEST_F(HeapThreadDeathTest, MemberSameThreadCheck) {
   EXPECT_DEATH(MemberSameThreadCheckTester().Test(), "");
 }
-#endif
 #endif
 
 class PersistentSameThreadCheckTester : public AlternatingThreadTester {
@@ -159,20 +161,16 @@ class PersistentSameThreadCheckTester : public AlternatingThreadTester {
 };
 
 #if DCHECK_IS_ON()
-// TODO(keishi) This test is flaky on mac-rel bot.
-// crbug.com/709069
-#if !defined(OS_MACOSX)
 TEST_F(HeapThreadDeathTest, PersistentSameThreadCheck) {
   EXPECT_DEATH(PersistentSameThreadCheckTester().Test(), "");
 }
-#endif
 #endif
 
 class MarkingSameThreadCheckTester : public AlternatingThreadTester {
  private:
   class MainThreadObject final : public GarbageCollected<MainThreadObject> {
    public:
-    void Trace(blink::Visitor* visitor) { visitor->Trace(set_); }
+    void Trace(Visitor* visitor) { visitor->Trace(set_); }
     void AddToSet(Object* object) { set_.insert(42, object); }
 
    private:
@@ -199,15 +197,11 @@ class MarkingSameThreadCheckTester : public AlternatingThreadTester {
 };
 
 #if DCHECK_IS_ON()
-// TODO(keishi) This test is flaky on mac-rel bot.
-// crbug.com/709069
-#if !defined(OS_MACOSX)
-TEST_F(HeapThreadDeathTest, MarkingSameThreadCheck) {
+TEST_F(HeapThreadDeathTest, DISABLED_MarkingSameThreadCheck) {
   // This will crash during marking, at the DCHECK in Visitor::markHeader() or
   // earlier.
   EXPECT_DEATH(MarkingSameThreadCheckTester().Test(), "");
 }
-#endif
 #endif
 
 class DestructorLockingObject
@@ -217,7 +211,7 @@ class DestructorLockingObject
   virtual ~DestructorLockingObject() { ++destructor_calls_; }
 
   static int destructor_calls_;
-  void Trace(blink::Visitor* visitor) {}
+  void Trace(Visitor* visitor) {}
 };
 
 int DestructorLockingObject::destructor_calls_ = 0;
@@ -256,8 +250,9 @@ class CrossThreadWeakPersistentTester : public AlternatingThreadTester {
 
     // Step 4: Run a GC.
     ThreadState::Current()->CollectGarbage(
-        BlinkGC::kNoHeapPointersOnStack, BlinkGC::kAtomicMarking,
-        BlinkGC::kEagerSweeping, BlinkGC::GCReason::kForcedGCForTesting);
+        BlinkGC::CollectionType::kMajor, BlinkGC::kNoHeapPointersOnStack,
+        BlinkGC::kAtomicMarking, BlinkGC::kEagerSweeping,
+        BlinkGC::GCReason::kForcedGCForTesting);
     SwitchToMainThread();
   }
 

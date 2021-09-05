@@ -45,6 +45,7 @@ class ProxyLookupRequest : public network::mojom::ProxyLookupClient {
   ProxyLookupRequest(
       network::mojom::NetworkContext* network_context,
       const GURL& source_url,
+      const net::NetworkIsolationKey& network_isolation_key,
       ProxyResolutionServiceProvider::NotifyCallback notify_callback)
       : notify_callback_(std::move(notify_callback)) {
     mojo::PendingRemote<network::mojom::ProxyLookupClient> proxy_lookup_client =
@@ -53,7 +54,7 @@ class ProxyLookupRequest : public network::mojom::ProxyLookupClient {
         &ProxyLookupRequest::OnProxyLookupComplete, base::Unretained(this),
         net::ERR_ABORTED, base::nullopt));
 
-    network_context->LookUpProxyForURL(source_url,
+    network_context->LookUpProxyForURL(source_url, network_isolation_key,
                                        std::move(proxy_lookup_client));
   }
 
@@ -89,7 +90,8 @@ class ProxyLookupRequest : public network::mojom::ProxyLookupClient {
 }  // namespace
 
 ProxyResolutionServiceProvider::ProxyResolutionServiceProvider()
-    : origin_thread_(base::ThreadTaskRunnerHandle::Get()) {}
+    : origin_thread_(base::ThreadTaskRunnerHandle::Get()),
+      network_isolation_key_(net::NetworkIsolationKey::CreateTransient()) {}
 
 ProxyResolutionServiceProvider::~ProxyResolutionServiceProvider() {
   DCHECK(OnOriginThread());
@@ -132,8 +134,9 @@ void ProxyResolutionServiceProvider::DbusResolveProxy(
   std::string source_url;
   if (!reader.PopString(&source_url)) {
     LOG(ERROR) << "Method call lacks source URL: " << method_call->ToString();
-    response_sender.Run(dbus::ErrorResponse::FromMethodCall(
-        method_call, DBUS_ERROR_INVALID_ARGS, "No source URL string arg"));
+    std::move(response_sender)
+        .Run(dbus::ErrorResponse::FromMethodCall(
+            method_call, DBUS_ERROR_INVALID_ARGS, "No source URL string arg"));
     return;
   }
 
@@ -165,7 +168,8 @@ void ProxyResolutionServiceProvider::ResolveProxyInternal(
   }
 
   VLOG(1) << "Starting network proxy resolution for " << url;
-  new ProxyLookupRequest(network_context, url, std::move(callback));
+  new ProxyLookupRequest(network_context, url, network_isolation_key_,
+                         std::move(callback));
 }
 
 void ProxyResolutionServiceProvider::NotifyProxyResolved(
@@ -179,7 +183,7 @@ void ProxyResolutionServiceProvider::NotifyProxyResolved(
   dbus::MessageWriter writer(response.get());
   writer.AppendString(pac_string);
   writer.AppendString(error);
-  response_sender.Run(std::move(response));
+  std::move(response_sender).Run(std::move(response));
 }
 
 network::mojom::NetworkContext*

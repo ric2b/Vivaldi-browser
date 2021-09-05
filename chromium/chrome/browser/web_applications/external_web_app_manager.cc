@@ -18,6 +18,7 @@
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/user_type_filter.h"
@@ -27,7 +28,6 @@
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/common/chrome_paths.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
@@ -172,13 +172,12 @@ std::vector<ExternalInstallOptions> ScanDir(const base::FilePath& dir,
       continue;
     }
     std::string launch_container_str = value->GetString();
-    auto display_mode = blink::mojom::DisplayMode::kBrowser;
+    auto user_display_mode = DisplayMode::kBrowser;
     if (launch_container_str == kLaunchContainerTab) {
-      display_mode = blink::mojom::DisplayMode::kBrowser;
+      user_display_mode = DisplayMode::kBrowser;
     } else if (launch_container_str == kLaunchContainerWindow) {
-      display_mode = blink::mojom::DisplayMode::kStandalone;
+      user_display_mode = DisplayMode::kStandalone;
     } else {
-      // TODO(crbug.com/1009909): Support Minimal UI.
       LOG(ERROR) << file.value() << " had an invalid " << kLaunchContainer;
       continue;
     }
@@ -191,7 +190,7 @@ std::vector<ExternalInstallOptions> ScanDir(const base::FilePath& dir,
                    << kUninstallAndReplace;
         continue;
       }
-      base::span<const base::Value> uninstall_and_replace_values =
+      base::Value::ConstListView uninstall_and_replace_values =
           value->GetList();
 
       bool had_error = false;
@@ -209,7 +208,7 @@ std::vector<ExternalInstallOptions> ScanDir(const base::FilePath& dir,
     }
 
     ExternalInstallOptions install_options(
-        std::move(app_url), display_mode,
+        std::move(app_url), user_display_mode,
         ExternalInstallSource::kExternalDefault);
     install_options.add_to_applications_menu = create_shortcuts;
     install_options.add_to_desktop = create_shortcuts;
@@ -297,9 +296,9 @@ void ExternalWebAppManager::ScanForExternalWebApps(ScanCallback callback) {
   //
   // 2. In |callback|, forward the vector of ExternalInstallOptions on to the
   // pending_app_manager_, which can only be called on the UI thread.
-  base::PostTaskAndReplyWithResult(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&ScanDir, dir, apps::DetermineUserType(profile_)),
       std::move(callback));

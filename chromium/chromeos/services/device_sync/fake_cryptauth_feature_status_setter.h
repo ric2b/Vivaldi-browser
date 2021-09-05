@@ -7,9 +7,9 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
-#include "base/containers/queue.h"
 #include "base/macros.h"
 #include "base/timer/timer.h"
 #include "chromeos/components/multidevice/software_feature.h"
@@ -27,6 +27,12 @@ class CryptAuthGCMManager;
 
 class FakeCryptAuthFeatureStatusSetter : public CryptAuthFeatureStatusSetter {
  public:
+  class Delegate {
+   public:
+    virtual ~Delegate() = default;
+    virtual void OnSetFeatureStatusCalled() {}
+  };
+
   struct Request {
     Request(const std::string& device_id,
             multidevice::SoftwareFeature feature,
@@ -48,7 +54,9 @@ class FakeCryptAuthFeatureStatusSetter : public CryptAuthFeatureStatusSetter {
   FakeCryptAuthFeatureStatusSetter();
   ~FakeCryptAuthFeatureStatusSetter() override;
 
-  base::queue<Request>& requests() { return requests_; }
+  void set_delegate(Delegate* delegate) { delegate_ = delegate; }
+
+  std::vector<Request>& requests() { return requests_; }
 
  private:
   // CryptAuthFeatureStatusSetter:
@@ -59,7 +67,8 @@ class FakeCryptAuthFeatureStatusSetter : public CryptAuthFeatureStatusSetter {
       base::OnceClosure success_callback,
       base::OnceCallback<void(NetworkRequestError)> error_callback) override;
 
-  base::queue<Request> requests_;
+  Delegate* delegate_ = nullptr;
+  std::vector<Request> requests_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeCryptAuthFeatureStatusSetter);
 };
@@ -88,11 +97,11 @@ class FakeCryptAuthFeatureStatusSetterFactory
 
  private:
   // CryptAuthFeatureStatusSetterImpl::Factory:
-  std::unique_ptr<CryptAuthFeatureStatusSetter> BuildInstance(
+  std::unique_ptr<CryptAuthFeatureStatusSetter> CreateInstance(
       ClientAppMetadataProvider* client_app_metadata_provider,
       CryptAuthClientFactory* client_factory,
       CryptAuthGCMManager* gcm_manager,
-      std::unique_ptr<base::OneShotTimer> timer = nullptr) override;
+      std::unique_ptr<base::OneShotTimer> timer) override;
 
   std::vector<FakeCryptAuthFeatureStatusSetter*> instances_;
   ClientAppMetadataProvider* last_client_app_metadata_provider_ = nullptr;

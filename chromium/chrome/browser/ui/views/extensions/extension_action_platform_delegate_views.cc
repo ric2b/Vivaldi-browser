@@ -64,11 +64,8 @@ void ExtensionActionPlatformDelegateViews::RegisterCommand() {
   if (focus_manager && controller_->GetExtensionCommand(&extension_command)) {
     action_keybinding_.reset(
         new ui::Accelerator(extension_command.accelerator()));
-    focus_manager->RegisterAccelerator(
-        *action_keybinding_,
-        GetAcceleratorPriority(extension_command.accelerator(),
-                               controller_->extension()),
-        this);
+    focus_manager->RegisterAccelerator(*action_keybinding_,
+                                       kExtensionAcceleratorPriority, this);
   }
 }
 
@@ -117,17 +114,7 @@ void ExtensionActionPlatformDelegateViews::Observe(
 
 bool ExtensionActionPlatformDelegateViews::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
-  // We shouldn't be handling any accelerators if the view is hidden, unless
-  // this is a browser action.
-  DCHECK(controller_->extension_action()->action_type() ==
-             ActionInfo::TYPE_BROWSER ||
-         GetDelegateViews()->GetAsView()->GetVisible());
-
-  // Normal priority shortcuts must be handled via standard browser commands to
-  // be processed at the proper time.
-  if (GetAcceleratorPriority(accelerator, controller_->extension()) ==
-      ui::AcceleratorManager::kNormalPriority)
-    return false;
+  DCHECK(controller_->CanHandleAccelerators());
 
   if (controller_->IsShowingPopup())
     controller_->HidePopup();
@@ -137,12 +124,7 @@ bool ExtensionActionPlatformDelegateViews::AcceleratorPressed(
 }
 
 bool ExtensionActionPlatformDelegateViews::CanHandleAccelerators() const {
-  // Page actions can only handle accelerators when they are visible.
-  // Browser actions can handle accelerators even when not visible, since they
-  // might be hidden in an overflow menu.
-  return controller_->extension_action()->action_type() == ActionInfo::TYPE_PAGE
-             ? GetDelegateViews()->GetAsView()->GetVisible()
-             : true;
+  return controller_->CanHandleAccelerators();
 }
 
 void ExtensionActionPlatformDelegateViews::UnregisterCommand(

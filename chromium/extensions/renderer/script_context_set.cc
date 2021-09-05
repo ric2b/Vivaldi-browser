@@ -215,9 +215,9 @@ Feature::Context ScriptContextSet::ClassifyJavaScriptContext(
                                    : Feature::BLESSED_EXTENSION_CONTEXT;
   }
 
-  // TODO(kalman): This isUnique() check is wrong, it should be performed as
+  // TODO(kalman): This IsOpaque() check is wrong, it should be performed as
   // part of ScriptContext::IsSandboxedPage().
-  if (!origin.IsUnique() &&
+  if (!origin.IsOpaque() &&
       RendererExtensionRegistry::Get()->ExtensionBindingsAllowed(url)) {
     if (!extension)  // TODO(kalman): when does this happen?
       return Feature::UNSPECIFIED_CONTEXT;
@@ -230,6 +230,9 @@ Feature::Context ScriptContextSet::ClassifyJavaScriptContext(
 
   if (url.SchemeIs(content::kChromeUIScheme))
     return Feature::WEBUI_CONTEXT;
+
+  if (url.SchemeIs(content::kChromeUIUntrustedScheme))
+    return Feature::WEBUI_UNTRUSTED_CONTEXT;
 
   return Feature::WEB_PAGE_CONTEXT;
 }

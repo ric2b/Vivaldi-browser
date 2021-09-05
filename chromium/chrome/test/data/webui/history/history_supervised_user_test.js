@@ -2,29 +2,44 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {BrowserService, ensureLazyLoaded} from 'chrome://history/history.js';
+import {TestBrowserService} from 'chrome://test/history/test_browser_service.js';
+import {createHistoryEntry, createHistoryInfo} from 'chrome://test/history/test_util.js';
+import {flushTasks} from 'chrome://test/test_util.m.js';
+
 suite('history-list supervised-user', function() {
   let app;
   let historyList;
   let toolbar;
-  let TEST_HISTORY_RESULTS;
-
-  suiteSetup(function() {
-    TEST_HISTORY_RESULTS =
-        [createHistoryEntry('2016-03-15', 'https://www.google.com')];
-  });
+  let testService;
+  const TEST_HISTORY_RESULTS =
+      [createHistoryEntry('2016-03-15', 'https://www.google.com')];
 
   setup(function() {
-    app = replaceApp();
+    PolymerTest.clearBody();
+    testService = new TestBrowserService();
+    BrowserService.instance_ = testService;
+
+    testService.setQueryResult({
+      info: createHistoryInfo(),
+      value: TEST_HISTORY_RESULTS,
+    });
+    app = document.createElement('history-app');
+    document.body.appendChild(app);
+
     historyList = app.$.history;
     toolbar = app.$.toolbar;
-    app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
+    return Promise.all([
+      testService.whenCalled('queryHistory'),
+      ensureLazyLoaded(),
+    ]);
   });
 
   test('checkboxes disabled for supervised user', function() {
-    return test_util.flushTasks().then(function() {
+    return flushTasks().then(function() {
       const items = historyList.shadowRoot.querySelectorAll('history-item');
 
-      MockInteractions.tap(items[0].$['checkbox']);
+      items[0].$['checkbox'].click();
 
       assertFalse(items[0].selected);
     });
@@ -32,12 +47,9 @@ suite('history-list supervised-user', function() {
 
   test('deletion disabled for supervised user', function() {
     // Make sure that removeVisits is not being called.
-    registerMessageCallback('removeVisits', this, function(toBeRemoved) {
-      assertNotReached();
-    });
-
     historyList.historyData_[0].selected = true;
     toolbar.deleteSelectedItems();
+    assertEquals(0, testService.getCallCount('removeVisits'));
   });
 
   test('remove history menu button disabled', function() {

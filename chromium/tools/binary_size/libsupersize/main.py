@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2017 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -10,13 +10,14 @@ import atexit
 import collections
 import distutils.spawn
 import logging
-import os
 import platform
 import resource
 import sys
 
 import archive
 import console
+import diff
+import file_format
 import html_report
 import start_server
 
@@ -24,12 +25,10 @@ import start_server
 def _LogPeakRamUsage():
   peak_ram_usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
   peak_ram_usage += resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
-  logging.info('Peak RAM usage was %d MB.', peak_ram_usage / 1024)
+  logging.info('Peak RAM usage was %d MB.', peak_ram_usage // 1024)
 
 
 def _AddCommonArguments(parser):
-  parser.add_argument('--no-pypy', action='store_true',
-                      help='Do not automatically switch to pypy when available')
   parser.add_argument('-v',
                       '--verbose',
                       default=0,
@@ -45,7 +44,7 @@ class _DiffAction(object):
     parser.add_argument('--all', action='store_true', help='Verbose diff')
 
   @staticmethod
-  def Run(args, parser):
+  def Run(args, on_config_error):
     args.output_directory = None
     args.tool_prefix = None
     args.inputs = [args.before, args.after]
@@ -61,7 +60,33 @@ class _DiffAction(object):
         '  print("Full diff:")',
         'Print(d, verbose=%s)' % bool(args.all),
     ])
-    console.Run(args, parser)
+    console.Run(args, on_config_error)
+
+
+class _SaveDiffAction(object):
+
+  @staticmethod
+  def AddArguments(parser):
+    parser.add_argument('before', help='Before-patch .size file.')
+    parser.add_argument('after', help='After-patch .size file.')
+    parser.add_argument(
+        'output_file',
+        help='Write generated data to the specified .sizediff file.')
+
+  @staticmethod
+  def Run(args, on_config_error):
+    if not args.before.endswith('.size'):
+      on_config_error('Before input must end with ".size"')
+    if not args.after.endswith('.size'):
+      on_config_error('After input must end with ".size"')
+    if not args.output_file.endswith('.sizediff'):
+      on_config_error('Output must end with ".sizediff"')
+
+    before_size_info = archive.LoadAndPostProcessSizeInfo(args.before)
+    after_size_info = archive.LoadAndPostProcessSizeInfo(args.after)
+    delta_size_info = diff.Diff(before_size_info, after_size_info)
+
+    file_format.SaveDeltaSizeInfo(delta_size_info, args.output_file)
 
 
 def main():
@@ -80,8 +105,11 @@ def main():
       _DiffAction(),
       'Shorthand for console --query "Print(Diff())" (plus highlights static '
       'initializers in diff)')
+  actions['save_diff'] = (
+      _SaveDiffAction(),
+      'Create a stand-alone .sizediff diff report from two .size files.')
 
-  for name, tup in actions.iteritems():
+  for name, tup in actions.items():
     sub_parser = sub_parsers.add_parser(name, help=tup[1])
     _AddCommonArguments(sub_parser)
     tup[0].AddArguments(sub_parser)
@@ -99,19 +127,13 @@ def main():
   logging.basicConfig(level=logging.WARNING - args.verbose * 10,
                       format='%(levelname).1s %(relativeCreated)6d %(message)s')
 
-  if not args.no_pypy and platform.python_implementation() == 'CPython':
-    # Switch to pypy if it's available.
-    pypy_path = distutils.spawn.find_executable('pypy')
-    if pypy_path:
-      logging.debug('Switching to pypy.')
-      os.execv(pypy_path, [pypy_path] + sys.argv)
-    # Running with python: 6s. Running with pypy: 3s
-    logging.warning('This script runs more than 2x faster if you install pypy.')
-
   if logging.getLogger().isEnabledFor(logging.DEBUG):
     atexit.register(_LogPeakRamUsage)
 
-  args.func(args, parser)
+  def on_config_error(*args):
+    parser.error(*args)
+
+  args.func(args, on_config_error)
 
 
 if __name__ == '__main__':

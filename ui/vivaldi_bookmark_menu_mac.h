@@ -7,6 +7,9 @@
 
 #import <Cocoa/Cocoa.h>
 #include <vector>
+#include "ui/base/window_open_disposition.h"
+
+class PrefService;
 
 namespace bookmarks {
 class BookmarkNode;
@@ -14,15 +17,24 @@ class BookmarkNode;
 
 namespace vivaldi {
 
-bool IsBookmarkSeparator(const bookmarks::BookmarkNode* node);
+std::vector<int>& GetBookmarkMenuIds();
+bool IsBookmarkMenuId(int candidate);
+
+unsigned int GetMenuIndex();
+
+void SetContainerState(const std::string& edge, unsigned int menu_index);
 
 void ClearBookmarkMenu();
 
 void GetBookmarkNodes(const bookmarks::BookmarkNode* node,
                       std::vector<bookmarks::BookmarkNode*>& nodes);
-void AddAddTabToBookmarksMenuItem(const bookmarks::BookmarkNode* node,
-								  NSMenu* menu);
+void AddExtraBookmarkMenuItems(NSMenu* menu, unsigned int* menu_index,
+                               const bookmarks::BookmarkNode* node,
+                               bool on_top);
 void OnClearBookmarkMenu(NSMenu* menu, NSMenuItem* item);
+
+WindowOpenDisposition WindowOpenDispositionFromNSEvent(NSEvent* event,
+                                                       PrefService* prefs);
 
 }  // namespace vivaldi
 

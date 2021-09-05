@@ -7,22 +7,19 @@
 #include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
 #include "base/test/trace_event_analyzer.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_dump_request_args.h"
 #include "build/build_config.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-ACTION_P(RunClosure, closure) {
-  closure.Run();
-}
-
+using base::test::RunOnceClosure;
 using ::testing::_;
 using ::testing::AllOf;
 using ::testing::Contains;
@@ -294,7 +291,7 @@ TEST_F(CoordinatorImplTest, SeveralClients) {
 
   MockGlobalMemoryDumpCallback callback;
   EXPECT_CALL(callback, OnCall(true, NotNull()))
-      .WillOnce(RunClosure(run_loop.QuitClosure()));
+      .WillOnce(RunOnceClosure(run_loop.QuitClosure()));
   RequestGlobalMemoryDump(callback.Get());
   run_loop.Run();
 }
@@ -371,7 +368,7 @@ TEST_F(CoordinatorImplTest, MissingChromeDump) {
       callback,
       OnCall(true, Pointee(Field(&mojom::GlobalMemoryDump::process_dumps,
                                  IsEmpty()))))
-      .WillOnce(RunClosure(run_loop.QuitClosure()));
+      .WillOnce(RunOnceClosure(run_loop.QuitClosure()));
   RequestGlobalMemoryDump(callback.Get());
   run_loop.Run();
 }
@@ -395,7 +392,7 @@ TEST_F(CoordinatorImplTest, MissingOsDump) {
       callback,
       OnCall(true, Pointee(Field(&mojom::GlobalMemoryDump::process_dumps,
                                  IsEmpty()))))
-      .WillOnce(RunClosure(run_loop.QuitClosure()));
+      .WillOnce(RunOnceClosure(run_loop.QuitClosure()));
   RequestGlobalMemoryDump(callback.Get());
   run_loop.Run();
 }
@@ -424,7 +421,7 @@ TEST_F(CoordinatorImplTest, TimeOutStuckChild) {
       callback,
       OnCall(false, Pointee(Field(&mojom::GlobalMemoryDump::process_dumps,
                                   IsEmpty()))))
-      .WillOnce(RunClosure(run_loop.QuitClosure()));
+      .WillOnce(RunOnceClosure(run_loop.QuitClosure()));
   ReduceCoordinatorClientProcessTimeout();
   RequestGlobalMemoryDump(callback.Get());
   run_loop.Run();
@@ -535,7 +532,7 @@ TEST_F(CoordinatorImplTest, ClientCrashDuringGlobalDump) {
 
   MockGlobalMemoryDumpCallback callback;
   EXPECT_CALL(callback, OnCall(false, NotNull()))
-      .WillOnce(RunClosure(run_loop.QuitClosure()));
+      .WillOnce(RunOnceClosure(run_loop.QuitClosure()));
   RequestGlobalMemoryDump(callback.Get());
   run_loop.Run();
 }
@@ -561,7 +558,7 @@ TEST_F(CoordinatorImplTest, SingleClientCrashDuringGlobalDump) {
 
   MockGlobalMemoryDumpCallback callback;
   EXPECT_CALL(callback, OnCall(false, NotNull()))
-      .WillOnce(RunClosure(run_loop.QuitClosure()));
+      .WillOnce(RunOnceClosure(run_loop.QuitClosure()));
   RequestGlobalMemoryDump(callback.Get());
   run_loop.Run();
 }
@@ -803,7 +800,7 @@ TEST_F(CoordinatorImplTest, DumpsArentAddedToTraceUnlessRequested) {
       callback,
       OnCall(true, Pointee(Field(&mojom::GlobalMemoryDump::process_dumps,
                                  IsEmpty()))))
-      .WillOnce(RunClosure(run_loop.QuitClosure()));
+      .WillOnce(RunOnceClosure(run_loop.QuitClosure()));
 
   trace_analyzer::Start(MemoryDumpManager::kTraceCategory);
   RequestGlobalMemoryDump(MemoryDumpType::EXPLICITLY_TRIGGERED,
@@ -838,7 +835,7 @@ TEST_F(CoordinatorImplTest, DumpsAreAddedToTraceWhenRequested) {
 
   MockGlobalMemoryDumpAndAppendToTraceCallback callback;
   EXPECT_CALL(callback, OnCall(true, Ne(0ul)))
-      .WillOnce(RunClosure(run_loop.QuitClosure()));
+      .WillOnce(RunOnceClosure(run_loop.QuitClosure()));
 
   trace_analyzer::Start(MemoryDumpManager::kTraceCategory);
   RequestGlobalMemoryDumpAndAppendToTrace(callback.Get());
@@ -954,7 +951,7 @@ TEST_F(CoordinatorImplTest, DumpByPidFailure) {
 
   MockGlobalMemoryDumpCallback callback;
   EXPECT_CALL(callback, OnCall(false, nullptr))
-      .WillOnce(RunClosure(run_loop.QuitClosure()));
+      .WillOnce(RunOnceClosure(run_loop.QuitClosure()));
 
   RequestGlobalMemoryDumpForPid(2, {}, callback.Get());
   run_loop.Run();

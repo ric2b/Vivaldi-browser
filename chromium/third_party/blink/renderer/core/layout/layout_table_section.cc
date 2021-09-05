@@ -1478,7 +1478,7 @@ void LayoutTableSection::MarkAllCellsWidthsDirtyAndOrNeedsLayout(
   for (LayoutTableRow* row = FirstRow(); row; row = row->NextRow()) {
     for (LayoutTableCell* cell = row->FirstCell(); cell;
          cell = cell->NextCell()) {
-      cell->SetPreferredLogicalWidthsDirty();
+      cell->SetIntrinsicLogicalWidthsDirty();
       if (what_to_mark == LayoutTable::kMarkDirtyAndNeedsLayout)
         cell->SetChildNeedsLayout();
     }
@@ -2106,15 +2106,6 @@ bool LayoutTableSection::MapToVisualRectInAncestorSpaceInternal(
   }
   return LayoutTableBoxComponent::MapToVisualRectInAncestorSpaceInternal(
       ancestor, transform_state, flags);
-}
-
-bool LayoutTableSection::PaintedOutputOfObjectHasNoEffectRegardlessOfSize()
-    const {
-  // LayoutTableSection paints background from columns.
-  if (Table()->HasColElements())
-    return false;
-  return LayoutTableBoxComponent::
-      PaintedOutputOfObjectHasNoEffectRegardlessOfSize();
 }
 
 }  // namespace blink

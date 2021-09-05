@@ -39,12 +39,24 @@ void FakeDeviceSync::InvokePendingSetSoftwareFeatureStateCallback(
   set_software_feature_state_callback_queue_.pop();
 }
 
+void FakeDeviceSync::InvokePendingSetFeatureStatusCallback(
+    mojom::NetworkRequestResult result_code) {
+  std::move(set_feature_status_callback_queue_.front()).Run(result_code);
+  set_feature_status_callback_queue_.pop();
+}
+
 void FakeDeviceSync::InvokePendingFindEligibleDevicesCallback(
     mojom::NetworkRequestResult result_code,
     mojom::FindEligibleDevicesResponsePtr find_eligible_devices_response_ptr) {
   std::move(find_eligible_devices_callback_queue_.front())
       .Run(result_code, std::move(find_eligible_devices_response_ptr));
   find_eligible_devices_callback_queue_.pop();
+}
+
+void FakeDeviceSync::InvokePendingNotifyDevicesCallback(
+    mojom::NetworkRequestResult result_code) {
+  std::move(notify_devices_callback_queue_.front()).Run(result_code);
+  notify_devices_callback_queue_.pop();
 }
 
 void FakeDeviceSync::InvokePendingGetDevicesActivityStatusCallback(
@@ -89,10 +101,25 @@ void FakeDeviceSync::SetSoftwareFeatureState(
   set_software_feature_state_callback_queue_.push(std::move(callback));
 }
 
+void FakeDeviceSync::SetFeatureStatus(const std::string& device_instance_id,
+                                      multidevice::SoftwareFeature feature,
+                                      FeatureStatusChange status_change,
+                                      SetFeatureStatusCallback callback) {
+  set_feature_status_callback_queue_.push(std::move(callback));
+}
+
 void FakeDeviceSync::FindEligibleDevices(
     multidevice::SoftwareFeature software_feature,
     FindEligibleDevicesCallback callback) {
   find_eligible_devices_callback_queue_.push(std::move(callback));
+}
+
+void FakeDeviceSync::NotifyDevices(
+    const std::vector<std::string>& device_instance_ids,
+    cryptauthv2::TargetService target_service,
+    multidevice::SoftwareFeature feature,
+    NotifyDevicesCallback callback) {
+  notify_devices_callback_queue_.push(std::move(callback));
 }
 
 void FakeDeviceSync::GetDebugInfo(GetDebugInfoCallback callback) {

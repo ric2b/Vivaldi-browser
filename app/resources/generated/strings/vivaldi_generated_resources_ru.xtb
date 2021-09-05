@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ru">
 <translation id="1017280919048282932">&amp;Добавить в словарь</translation>
+<translation id="1029317248976101138">Масштаб</translation>
 <translation id="1031362278801463162">Загрузка данных для предварительного просмотра</translation>
 <translation id="1047431265488717055">Копировать &amp;текст ссылки</translation>
 <translation id="1049795001945932310">&amp;Настройки языка</translation>
@@ -54,6 +55,7 @@
 <translation id="1886996562706621347">Разрешить запросы на установку обработчиков протоколов (рекомендуется)</translation>
 <translation id="1901303067676059328">Выделить &amp;всё</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Укажите количество копий для печати, используя цифры (от 1 до <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Удалить все</translation>
 <translation id="1994173015038366702">Адрес сайта</translation>
 <translation id="2019718679933488176">&amp;Открыть аудио в новой вкладке</translation>
@@ -66,7 +68,6 @@
 <translation id="2150139952286079145">Поиск мест назначения</translation>
 <translation id="215753907730220065">Выход из полноэкранного режима</translation>
 <translation id="2177950615300672361">Вкладка в приватном режиме: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Укажите цифрами число копий для печати (от 1 до 999).</translation>
 <translation id="219008588003277019">Модуль Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Скрыть кнопку</translation>
 <translation id="2218515861914035131">Вставить как обычный текст</translation>
@@ -78,11 +79,9 @@
 <translation id="2282146716419988068">Процесс GPU</translation>
 <translation id="2301382460326681002">Неверный корневой каталог расширения.</translation>
 <translation id="2318143611928805047">Размер бумаги</translation>
-<translation id="2318923050469484167">Текущая приватная сессия (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Верхние и нижние колонтитулы</translation>
 <translation id="2326931316514688470">&amp;Перезагрузить приложение</translation>
 <translation id="2327492829706409234">Включить приложение</translation>
-<translation id="2344028582131185878">Автоматическая загрузка</translation>
 <translation id="2348176352564285430">Приложение: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Выберите каталог расширения.</translation>
 <translation id="2379281330731083556">Печатать с помощью системного диалогового окна <ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +94,12 @@
 <translation id="2470702053775288986">Неподдерживаемые расширения отключены</translation>
 <translation id="2476578072172137802">Настройки для сайтов</translation>
 <translation id="2482878487686419369">Оповещения</translation>
+<translation id="2498539833203011245">Свернуть</translation>
 <translation id="2509495747794740764">Укажите значение от 10 до 200.</translation>
 <translation id="253557089021624350">Количество соединений keepalive</translation>
 <translation id="2546283357679194313">Cookie и данные сайтов</translation>
 <translation id="2550212893339833758">Память подкачки</translation>
 <translation id="2553440850688409052">Скрыть этот плагин</translation>
-<translation id="2580924999637585241">Всего: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Запретить обработку протоколов на всех сайтах</translation>
 <translation id="2662876636500006917">Интернет-магазин Vivaldi</translation>
 <translation id="2678063897982469759">Включить снова</translation>
@@ -120,7 +119,6 @@
 <translation id="2932883381142163287">Сообщить о нарушении</translation>
 <translation id="2941112035454246133">Низкий</translation>
 <translation id="2972581237482394796">&amp;Повторить</translation>
-<translation id="299483336428448530">Установлено родителями.</translation>
 <translation id="3003623123441819449">Кеш CSS</translation>
 <translation id="3008272652534848354">Сбросить всё</translation>
 <translation id="3012631534724231212">(фрейм)</translation>
@@ -274,7 +272,6 @@
 <translation id="5425042808445046667">Продолжить загрузку</translation>
 <translation id="5427459444770871191">Повернуть по &amp;часовой стрелке</translation>
 <translation id="5431318178759467895">Цвет</translation>
-<translation id="5472133193607270166">При включении опции сайты не смогут отслеживать ваши действия в браузере для показа рекламы. Некоторые сайты могут работать некорректно.</translation>
 <translation id="5483785310822538350">Запретить доступ к файлам и устройствам</translation>
 <translation id="5485102783864353244">Установить</translation>
 <translation id="5486561344817861625">Симулировать перезапуск браузера</translation>
@@ -302,9 +299,8 @@
 <translation id="5804241973901381774">Разрешения</translation>
 <translation id="5828633471261496623">Печать...</translation>
 <translation id="583281660410589416">Неизвестен</translation>
-<translation id="5838456317242088717">Текущая приватная сессия</translation>
 <translation id="5860491529813859533">Включить</translation>
-<translation id="5867841422488265304">Ввести адрес или искать</translation>
+<translation id="5867841422488265304">Ввести адрес или поисковый запрос</translation>
 <translation id="5908769186679515905">Блокировать флэш на сайтах</translation>
 <translation id="5910363049092958439">&amp;Сохранить изображение как...</translation>
 <translation id="5956585768868398362">Установить новую поисковую систему по умолчанию?</translation>
@@ -322,7 +318,6 @@
 <translation id="6147020289383635445">Произошла ошибка предварительного просмотра печати.</translation>
 <translation id="6156863943908443225">Кэш скрипта</translation>
 <translation id="6169666352732958425">Не удается транслировать рабочий стол.</translation>
-<translation id="6196640612572343990">Блокировать сторонние Cookies</translation>
 <translation id="6196854373336333322">Расширение "<ph name="EXTENSION_NAME" />" изменило настройки прокси. Теперь оно может отследить или изменить передаваемые вами данные, а также прервать интернет-соединение. Если вы не знали об этом, вам следует отключить расширение.</translation>
 <translation id="6206311232642889873">&amp;Копировать изображение</translation>
 <translation id="6239558157302047471">Перезагрузить &amp;фрейм</translation>
@@ -335,6 +330,7 @@
 <translation id="6295158916970320988">Все сайты</translation>
 <translation id="6295855836753816081">Сохранение...</translation>
 <translation id="6308937455967653460">Сохранить &amp;ссылку как...</translation>
+<translation id="6315493146179903667">Поднять все на передний план</translation>
 <translation id="6326855256003666642">Количество соединений keepalive</translation>
 <translation id="6374469231428023295">Повторить</translation>
 <translation id="6385543213911723544">Сайты могут сохранять и считывать файлы cookie</translation>
@@ -380,6 +376,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Показать &amp;управление</translation>
 <translation id="7311079019872751559">Доступ к плагинам вне тестовой среды</translation>
+<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">При печати произошла ошибка. Проверьте состояние принтера и повторите попытку.</translation>
 <translation id="7412226954991670867">Память GPU</translation>
 <translation id="7421925624202799674">&amp;Просмотр кода страницы</translation>

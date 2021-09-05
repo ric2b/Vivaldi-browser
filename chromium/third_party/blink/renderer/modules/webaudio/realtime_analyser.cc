@@ -154,11 +154,11 @@ void RealtimeAnalyser::DoFFTAnalysis() {
   // Do the analysis.
   analysis_frame_->DoFFT(temp_p);
 
-  const float* real_p = analysis_frame_->RealData();
-  float* imag_p = analysis_frame_->ImagData();
+  const AudioFloatArray& real = analysis_frame_->RealData();
+  AudioFloatArray& imag = analysis_frame_->ImagData();
 
   // Blow away the packed nyquist component.
-  imag_p[0] = 0;
+  imag[0] = 0;
 
   // Normalize so than an input sine wave at 0dBfs registers as 0dBfs (undo FFT
   // scaling factor).
@@ -174,8 +174,12 @@ void RealtimeAnalyser::DoFFTAnalysis() {
   // previous result.
   float* destination = MagnitudeBuffer().Data();
   size_t n = MagnitudeBuffer().size();
+  DCHECK_GE(real.size(), n);
+  const float* real_p_data = real.Data();
+  DCHECK_GE(imag.size(), n);
+  const float* imag_p_data = imag.Data();
   for (size_t i = 0; i < n; ++i) {
-    std::complex<double> c(real_p[i], imag_p[i]);
+    std::complex<double> c(real_p_data[i], imag_p_data[i]);
     double scalar_magnitude = abs(c) * magnitude_scale;
     destination[i] = float(k * destination[i] + (1 - k) * scalar_magnitude);
   }
@@ -183,8 +187,8 @@ void RealtimeAnalyser::DoFFTAnalysis() {
 
 void RealtimeAnalyser::ConvertFloatToDb(DOMFloat32Array* destination_array) {
   // Convert from linear magnitude to floating-point decibels.
-  unsigned source_length = MagnitudeBuffer().size();
-  size_t len = std::min(source_length, destination_array->length());
+  size_t source_length = MagnitudeBuffer().size();
+  size_t len = std::min(source_length, destination_array->lengthAsSizeT());
   if (len > 0) {
     const float* source = MagnitudeBuffer().Data();
     float* destination = destination_array->Data();
@@ -216,8 +220,8 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
 
 void RealtimeAnalyser::ConvertToByteData(DOMUint8Array* destination_array) {
   // Convert from linear magnitude to unsigned-byte decibels.
-  unsigned source_length = MagnitudeBuffer().size();
-  size_t len = std::min(source_length, destination_array->length());
+  size_t source_length = MagnitudeBuffer().size();
+  size_t len = std::min(source_length, destination_array->lengthAsSizeT());
   if (len > 0) {
     const double range_scale_factor = max_decibels_ == min_decibels_
                                           ? 1
@@ -273,7 +277,8 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
   DCHECK(destination_array);
 
   unsigned fft_size = this->FftSize();
-  size_t len = std::min(fft_size, destination_array->length());
+  size_t len = std::min(static_cast<size_t>(fft_size),
+                        destination_array->lengthAsSizeT());
   if (len > 0) {
     DCHECK_EQ(input_buffer_.size(), kInputBufferSize);
     DCHECK_GT(input_buffer_.size(), fft_size);
@@ -299,7 +304,8 @@ void RealtimeAnalyser::GetByteTimeDomainData(DOMUint8Array* destination_array) {
   DCHECK(destination_array);
 
   unsigned fft_size = this->FftSize();
-  size_t len = std::min(fft_size, destination_array->length());
+  size_t len = std::min(static_cast<size_t>(fft_size),
+                        destination_array->lengthAsSizeT());
   if (len > 0) {
     DCHECK_EQ(input_buffer_.size(), kInputBufferSize);
     DCHECK_GT(input_buffer_.size(), fft_size);

@@ -11,6 +11,11 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
     EXTERNAL_API:
         ['loadAppList', 'setThrobberVisible', 'setWebview', 'showError'],
 
+    /** Initial UI State for screen */
+    getOobeUIInitialState() {
+      return OOBE_UI_STATE.ONBOARDING;
+    },
+
     /**
      * Returns the control which should receive initial focus.
      */
@@ -19,12 +24,28 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
     },
 
     /**
+     * Event handler that is invoked just before the screen is shown.
+     * @param {Object} data Screen init payload.
+     */
+    onBeforeShow(data) {
+      $('recommend-apps-loading').onBeforeShow();
+      $('recommend-apps-screen').onBeforeShow();
+    },
+
+    /*
+     * Executed on language change.
+     */
+    updateLocalizedContent() {
+      $('recommend-apps-screen').i18nUpdateLocale();
+    },
+
+    /**
      * Returns requested element from related part of HTML.
      * @param {string} id Id of an element to find.
      *
      * @private
      */
-    getElement_: function(id) {
+    getElement_(id) {
       return $('recommend-apps-screen').getElement(id);
     },
 
@@ -34,7 +55,7 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
      *
      * @private
      */
-    addClass_: function(className) {
+    addClass_(className) {
       $('recommend-apps-screen')
           .getElement('recommend-apps-dialog')
           .classList.add(className);
@@ -46,7 +67,7 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
      *
      * @private
      */
-    removeClass_: function(className) {
+    removeClass_(className) {
       $('recommend-apps-screen')
           .getElement('recommend-apps-dialog')
           .classList.remove(className);
@@ -57,7 +78,7 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
      *
      * @private
      */
-    ensureInitialized_: function() {
+    ensureInitialized_() {
       $('recommend-apps-screen').screen = this;
       window.addEventListener('message', this.onMessage);
     },
@@ -65,7 +86,7 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
     /**
      * Shows error UI when it fails to load the recommended app list.
      */
-    showError: function() {
+    showError() {
       this.ensureInitialized_();
 
       // Hide the loading throbber and show the error message.
@@ -77,7 +98,7 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
       this.getElement_('recommend-apps-retry-button').focus();
     },
 
-    setWebview: function(contents) {
+    setWebview(contents) {
       const appListView = this.getElement_('app-list-view');
       appListView.src =
           'data:text/html;charset=utf-8,' + encodeURIComponent(contents);
@@ -86,7 +107,7 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
     /**
      * Generate the contents in the webview.
      */
-    loadAppList: function(appList) {
+    loadAppList(appList) {
       this.ensureInitialized_();
 
       // Hide the loading throbber and show the recommend app list.
@@ -136,14 +157,14 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
     /**
      * Handles Skip button click.
      */
-    onSkip: function() {
+    onSkip() {
       chrome.send('recommendAppsSkip');
     },
 
     /**
      * Handles Install button click.
      */
-    onInstall: function() {
+    onInstall() {
       // Only start installation if the button is not disabled.
       if (!this.getElement_('recommend-apps-install-button').disabled) {
         const appListView = this.getElement_('app-list-view');
@@ -158,7 +179,7 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
     /**
      * Handles Retry button click.
      */
-    onRetry: function() {
+    onRetry() {
       this.setThrobberVisible(true);
       this.removeClass_('recommend-apps-loaded');
       this.removeClass_('error');
@@ -170,7 +191,7 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
     /**
      * Handles the message sent from the WebView.
      */
-    onMessage: function(event) {
+    onMessage(event) {
       if (event.data.type && (event.data.type === 'NUM_OF_SELECTED_APPS')) {
         const numOfSelected = event.data.numOfSelected;
         $('recommend-apps-screen')
@@ -183,7 +204,7 @@ login.createScreen('RecommendAppsScreen', 'recommend-apps', function() {
      * This is called to show/hide the loading UI.
      * @param {boolean} visible whether to show loading UI.
      */
-    setThrobberVisible: function(visible) {
+    setThrobberVisible(visible) {
       $('recommend-apps-loading').hidden = !visible;
       $('recommend-apps-screen').hidden = visible;
     },

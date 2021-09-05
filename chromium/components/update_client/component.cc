@@ -15,6 +15,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "components/update_client/action_runner.h"
@@ -22,6 +23,7 @@
 #include "components/update_client/configurator.h"
 #include "components/update_client/network.h"
 #include "components/update_client/patcher.h"
+#include "components/update_client/persisted_data.h"
 #include "components/update_client/protocol_definition.h"
 #include "components/update_client/protocol_serializer.h"
 #include "components/update_client/task_traits.h"
@@ -75,9 +77,8 @@ void InstallComplete(
     InstallOnBlockingTaskRunnerCompleteCallback callback,
     const base::FilePath& unpack_path,
     const CrxInstaller::Result& result) {
-  base::PostTask(
-      FROM_HERE,
-      {base::ThreadPool(), base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
       base::BindOnce(
           [](scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
              InstallOnBlockingTaskRunnerCompleteCallback callback,
@@ -99,6 +100,7 @@ void InstallOnBlockingTaskRunner(
     const base::FilePath& unpack_path,
     const std::string& public_key,
     const std::string& fingerprint,
+    std::unique_ptr<CrxInstaller::InstallParams> install_params,
     scoped_refptr<CrxInstaller> installer,
     InstallOnBlockingTaskRunnerCompleteCallback callback) {
   DCHECK(base::DirectoryExists(unpack_path));
@@ -120,7 +122,7 @@ void InstallOnBlockingTaskRunner(
   }
 
   installer->Install(
-      unpack_path, public_key,
+      unpack_path, public_key, std::move(install_params),
       base::BindOnce(&InstallComplete, main_task_runner, std::move(callback),
                      unpack_path_owner.Take()));
 }
@@ -129,6 +131,7 @@ void UnpackCompleteOnBlockingTaskRunner(
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
     const base::FilePath& crx_path,
     const std::string& fingerprint,
+    std::unique_ptr<CrxInstaller::InstallParams> install_params,
     scoped_refptr<CrxInstaller> installer,
     InstallOnBlockingTaskRunnerCompleteCallback callback,
     const ComponentUnpacker::Result& result) {
@@ -142,10 +145,12 @@ void UnpackCompleteOnBlockingTaskRunner(
     return;
   }
 
-  base::PostTask(FROM_HERE, kTaskTraits,
-                 base::BindOnce(&InstallOnBlockingTaskRunner, main_task_runner,
-                                result.unpack_path, result.public_key,
-                                fingerprint, installer, std::move(callback)));
+  base::ThreadPool::PostTask(
+      FROM_HERE, kTaskTraits,
+      base::BindOnce(&InstallOnBlockingTaskRunner, main_task_runner,
+                     result.unpack_path, result.public_key, fingerprint,
+                     std::move(install_params), installer,
+                     std::move(callback)));
 }
 
 void StartInstallOnBlockingTaskRunner(
@@ -153,6 +158,7 @@ void StartInstallOnBlockingTaskRunner(
     const std::vector<uint8_t>& pk_hash,
     const base::FilePath& crx_path,
     const std::string& fingerprint,
+    std::unique_ptr<CrxInstaller::InstallParams> install_params,
     scoped_refptr<CrxInstaller> installer,
     std::unique_ptr<Unzipper> unzipper_,
     scoped_refptr<Patcher> patcher_,
@@ -162,9 +168,9 @@ void StartInstallOnBlockingTaskRunner(
       pk_hash, crx_path, installer, std::move(unzipper_), std::move(patcher_),
       crx_format);
 
-  unpacker->Unpack(base::BindOnce(&UnpackCompleteOnBlockingTaskRunner,
-                                  main_task_runner, crx_path, fingerprint,
-                                  installer, std::move(callback)));
+  unpacker->Unpack(base::BindOnce(
+      &UnpackCompleteOnBlockingTaskRunner, main_task_runner, crx_path,
+      fingerprint, std::move(install_params), installer, std::move(callback)));
 }
 
 // Returns a string literal corresponding to the value of the downloader |d|.
@@ -186,7 +192,7 @@ Component::Component(const UpdateContext& update_context, const std::string& id)
       state_(std::make_unique<StateNew>(this)),
       update_context_(update_context) {}
 
-Component::~Component() {}
+Component::~Component() = default;
 
 scoped_refptr<Configurator> Component::config() const {
   return update_context_.config;
@@ -237,6 +243,7 @@ CrxUpdateItem Component::GetCrxUpdateItem() const {
   crx_update_item.error_category = error_category_;
   crx_update_item.error_code = error_code_;
   crx_update_item.extra_code1 = extra_code1_;
+  crx_update_item.custom_updatecheck_data = custom_attrs_;
 
   return crx_update_item;
 }
@@ -248,6 +255,7 @@ void Component::SetParseResult(const ProtocolParser::Result& result) {
 
   status_ = result.status;
   action_run_ = result.action_run;
+  custom_attrs_ = result.custom_attributes;
 
   if (result.manifest.packages.empty())
     return;
@@ -270,6 +278,11 @@ void Component::SetParseResult(const ProtocolParser::Result& result) {
 
   hash_sha256_ = package.hash_sha256;
   hashdiff_sha256_ = package.hashdiff_sha256;
+
+  if (!result.manifest.run.empty()) {
+    install_params_ = base::make_optional(CrxInstaller::InstallParams(
+        result.manifest.run, result.manifest.arguments));
+  }
 }
 
 void Component::Uninstall(const base::Version& version, int reason) {
@@ -296,11 +309,17 @@ void Component::SetUpdateCheckResult(
 
   error_category_ = error_category;
   error_code_ = error;
+
   if (result)
     SetParseResult(result.value());
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, std::move(update_check_complete_));
+}
+
+void Component::NotifyWait() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  NotifyObservers(Events::COMPONENT_WAIT);
 }
 
 bool Component::CanDoBackgroundDownload() const {
@@ -316,6 +335,15 @@ void Component::AppendEvent(base::Value event) {
 
 void Component::NotifyObservers(UpdateClient::Observer::Events event) const {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  // There is no corresponding component state for the COMPONENT_WAIT event.
+  if (update_context_.crx_state_change_callback &&
+      event != UpdateClient::Observer::Events::COMPONENT_WAIT) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindRepeating(update_context_.crx_state_change_callback,
+                            GetCrxUpdateItem()));
+  }
   update_context_.notify_observers_callback.Run(event, id_);
 }
 
@@ -429,10 +457,16 @@ std::vector<base::Value> Component::GetEvents() const {
   return events;
 }
 
+std::unique_ptr<CrxInstaller::InstallParams> Component::install_params() const {
+  return install_params_
+             ? std::make_unique<CrxInstaller::InstallParams>(*install_params_)
+             : nullptr;
+}
+
 Component::State::State(Component* component, ComponentState state)
     : state_(state), component_(*component) {}
 
-Component::State::~State() {}
+Component::State::~State() = default;
 
 void Component::State::Handle(CallbackNextState callback_next_state) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -629,8 +663,8 @@ void Component::StateDownloadingDiff::DoHandle() {
 
   const auto& id = component.id_;
   crx_downloader_->set_progress_callback(
-      base::Bind(&Component::StateDownloadingDiff::DownloadProgress,
-                 base::Unretained(this), id));
+      base::BindRepeating(&Component::StateDownloadingDiff::DownloadProgress,
+                          base::Unretained(this), id));
   crx_downloader_->StartDownload(
       component.crx_diffurls_, component.hashdiff_sha256_,
       base::BindOnce(&Component::StateDownloadingDiff::DownloadComplete,
@@ -694,8 +728,8 @@ void Component::StateDownloading::DoHandle() {
 
   const auto& id = component.id_;
   crx_downloader_->set_progress_callback(
-      base::Bind(&Component::StateDownloading::DownloadProgress,
-                 base::Unretained(this), id));
+      base::BindRepeating(&Component::StateDownloading::DownloadProgress,
+                          base::Unretained(this), id));
   crx_downloader_->StartDownload(
       component.crx_urls_, component.hash_sha256_,
       base::BindOnce(&Component::StateDownloading::DownloadComplete,
@@ -756,14 +790,15 @@ void Component::StateUpdatingDiff::DoHandle() {
 
   component.NotifyObservers(Events::COMPONENT_UPDATE_READY);
 
-  base::CreateSequencedTaskRunner(kTaskTraits)
+  base::ThreadPool::CreateSequencedTaskRunner(kTaskTraits)
       ->PostTask(
           FROM_HERE,
           base::BindOnce(
               &update_client::StartInstallOnBlockingTaskRunner,
               base::ThreadTaskRunnerHandle::Get(),
               component.crx_component()->pk_hash, component.crx_path_,
-              component.next_fp_, component.crx_component()->installer,
+              component.next_fp_, component.install_params(),
+              component.crx_component()->installer,
               update_context.config->GetUnzipperFactory()->Create(),
               update_context.config->GetPatcherFactory()->Create(),
               component.crx_component()->crx_format_requirement,
@@ -818,13 +853,14 @@ void Component::StateUpdating::DoHandle() {
 
   component.NotifyObservers(Events::COMPONENT_UPDATE_READY);
 
-  base::CreateSequencedTaskRunner(kTaskTraits)
+  base::ThreadPool::CreateSequencedTaskRunner(kTaskTraits)
       ->PostTask(FROM_HERE,
                  base::BindOnce(
                      &update_client::StartInstallOnBlockingTaskRunner,
                      base::ThreadTaskRunnerHandle::Get(),
                      component.crx_component()->pk_hash, component.crx_path_,
-                     component.next_fp_, component.crx_component()->installer,
+                     component.next_fp_, component.install_params(),
+                     component.crx_component()->installer,
                      update_context.config->GetUnzipperFactory()->Create(),
                      update_context.config->GetPatcherFactory()->Create(),
                      component.crx_component()->crx_format_requirement,
@@ -875,6 +911,11 @@ void Component::StateUpdated::DoHandle() {
 
   component.crx_component_->version = component.next_version_;
   component.crx_component_->fingerprint = component.next_fp_;
+
+  component.update_context_.persisted_data->SetProductVersion(
+      component.id(), component.crx_component_->version);
+  component.update_context_.persisted_data->SetFingerprint(
+      component.id(), component.crx_component_->fingerprint);
 
   component.AppendEvent(component.MakeEventUpdateComplete());
 

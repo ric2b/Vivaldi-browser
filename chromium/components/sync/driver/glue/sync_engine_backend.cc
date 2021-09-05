@@ -7,14 +7,15 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/sequenced_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "components/invalidation/public/invalidation_util.h"
-#include "components/invalidation/public/object_id_invalidation_map.h"
+#include "components/invalidation/public/topic_invalidation_map.h"
 #include "components/sync/base/invalidation_adapter.h"
 #include "components/sync/base/sync_base_switches.h"
 #include "components/sync/driver/configure_context.h"
@@ -62,27 +63,13 @@ namespace {
 const base::FilePath::CharType kNigoriStorageFilename[] =
     FILE_PATH_LITERAL("Nigori.bin");
 
-void RecordPerModelTypeInvalidation(ModelTypeForHistograms value,
-                                    bool is_grouped) {
-  UMA_HISTOGRAM_ENUMERATION("Sync.InvalidationPerModelType", value);
-  if (!is_grouped) {
-    // When recording metrics it's important to distinguish between
-    // many/one case, since "many" aka grouped case is only common in
-    // the deprecated implementation.
-    UMA_HISTOGRAM_ENUMERATION("Sync.NonGroupedInvalidation", value);
-  }
+bool ShouldEnableUSSNigori() {
+  return base::FeatureList::IsEnabled(switches::kSyncUSSNigori);
 }
 
-bool ShouldEnableUSSNigori() {
-  // USS implementation of Nigori is not compatible with Directory
-  // implementations of Passwords and Bookmarks.
-  // |kSyncUSSNigori| should be checked last, since check itself has side
-  // effect (only clients, which have feature-flag checked participate in the
-  // study). Otherwise, we will have different amount of clients in control and
-  // experiment groups.
-  return base::FeatureList::IsEnabled(switches::kSyncUSSBookmarks) &&
-         base::FeatureList::IsEnabled(switches::kSyncUSSPasswords) &&
-         base::FeatureList::IsEnabled(switches::kSyncUSSNigori);
+// Checks if there is at least one experiment for USS is disabled.
+bool ShouldClearDirectoryOnEmptyBirthday() {
+  return !base::FeatureList::IsEnabled(switches::kSyncUSSNigori);
 }
 
 }  // namespace
@@ -92,7 +79,7 @@ SyncEngineBackend::SyncEngineBackend(const std::string& name,
                                      const base::WeakPtr<SyncEngineImpl>& host)
     : name_(name), sync_data_folder_(sync_data_folder), host_(host) {
   DCHECK(host);
-  // This is constructed on the UI thread but used from the sync thread.
+  // This is constructed on the UI thread but used from another thread.
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
@@ -189,8 +176,8 @@ void SyncEngineBackend::OnInitializationComplete(
                                     ModelTypeSet());
   sync_manager_->ConfigureSyncer(
       reason, new_control_types, SyncManager::SyncFeatureState::INITIALIZING,
-      base::Bind(&SyncEngineBackend::DoInitialProcessControlTypes,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&SyncEngineBackend::DoInitialProcessControlTypes,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void SyncEngineBackend::OnConnectionStatusChange(ConnectionStatus status) {
@@ -228,6 +215,11 @@ void SyncEngineBackend::OnStatusCountersUpdated(
       FROM_HERE,
       &SyncEngineImpl::HandleDirectoryStatusCountersUpdatedOnFrontendLoop, type,
       counters);
+}
+
+void SyncEngineBackend::OnSyncStatusChanged(const SyncStatus& status) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  host_.Call(FROM_HERE, &SyncEngineImpl::HandleSyncStatusChanged, status);
 }
 
 void SyncEngineBackend::OnActionableError(const SyncProtocolError& sync_error) {
@@ -283,29 +275,23 @@ bool SyncEngineBackend::ShouldIgnoreRedundantInvalidation(
 }
 
 void SyncEngineBackend::DoOnIncomingInvalidation(
-    const ObjectIdInvalidationMap& invalidation_map) {
+    const TopicInvalidationMap& invalidation_map) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  ObjectIdSet ids = invalidation_map.GetObjectIds();
-  for (const invalidation::ObjectId& object_id : ids) {
+  for (const Topic& topic : invalidation_map.GetTopics()) {
     ModelType type;
-    if (!NotificationTypeToRealModelType(object_id.name(), &type)) {
-      DLOG(WARNING) << "Notification has invalid id: "
-                    << ObjectIdToString(object_id);
+    if (!NotificationTypeToRealModelType(topic, &type)) {
+      DLOG(WARNING) << "Notification has invalid topic: " << topic;
     } else {
-      bool is_grouped = (ids.size() != 1);
-      RecordPerModelTypeInvalidation(ModelTypeHistogramValue(type), is_grouped);
+      UMA_HISTOGRAM_ENUMERATION("Sync.InvalidationPerModelType",
+                                ModelTypeHistogramValue(type));
       SingleObjectInvalidationSet invalidation_set =
-          invalidation_map.ForObject(object_id);
+          invalidation_map.ForTopic(topic);
       for (Invalidation invalidation : invalidation_set) {
         if (ShouldIgnoreRedundantInvalidation(invalidation, type)) {
           continue;
         }
 
-        if (!is_grouped && !invalidation.is_unknown_version()) {
-          UMA_HISTOGRAM_ENUMERATION("Sync.NonGroupedInvalidationKnownVersion",
-                                    ModelTypeHistogramValue(type));
-        }
         std::unique_ptr<InvalidationInterface> inv_adapter(
             new InvalidationAdapter(invalidation));
         sync_manager_->OnIncomingInvalidation(type, std::move(inv_adapter));
@@ -321,6 +307,10 @@ void SyncEngineBackend::DoOnIncomingInvalidation(
 
 void SyncEngineBackend::DoInitialize(SyncEngine::InitParams params) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (params.birthday.empty() && ShouldClearDirectoryOnEmptyBirthday()) {
+    syncable::Directory::DeleteDirectoryFiles(sync_data_folder_);
+  }
 
   // Make sure that the directory exists before initializing the backend.
   // If it already exists, this will do no harm.
@@ -348,7 +338,8 @@ void SyncEngineBackend::DoInitialize(SyncEngine::InitParams params) {
         std::make_unique<NigoriStorageImpl>(
             sync_data_folder_.Append(kNigoriStorageFilename), &encryptor_),
         &encryptor_, base::BindRepeating(&Nigori::GenerateScryptSalt),
-        params.restored_key_for_bootstrapping);
+        params.restored_key_for_bootstrapping,
+        params.restored_keystore_key_for_bootstrapping);
     nigori_handler_proxy_ =
         std::make_unique<syncable::NigoriHandlerProxy>(&user_share_);
     sync_encryption_handler_->AddObserver(nigori_handler_proxy_.get());
@@ -372,11 +363,7 @@ void SyncEngineBackend::DoInitialize(SyncEngine::InitParams params) {
   args.service_url = params.service_url;
   args.enable_local_sync_backend = params.enable_local_sync_backend;
   args.local_sync_backend_folder = params.local_sync_backend_folder;
-  args.post_factory = std::move(params.http_factory_getter)
-                          .Run(&release_request_context_signal_);
-  // Finish initializing the HttpBridgeFactory.  We do this here because
-  // building the user agent may block on some platforms.
-  args.post_factory->Init(params.sync_user_agent);
+  args.post_factory = std::move(params.http_factory_getter).Run();
   registrar_->GetWorkers(&args.workers);
   args.encryption_observer_proxy = std::move(params.encryption_observer_proxy);
   args.extensions_activity = params.extensions_activity.get();
@@ -395,9 +382,11 @@ void SyncEngineBackend::DoInitialize(SyncEngine::InitParams params) {
   args.cache_guid = params.cache_guid;
   args.birthday = params.birthday;
   args.bag_of_chips = params.bag_of_chips;
+  args.sync_status_observers.push_back(this);
   sync_manager_->Init(&args);
-  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-      this, "SyncDirectory", base::ThreadTaskRunnerHandle::Get());
+  base::trace_event::MemoryDumpManager::GetInstance()
+      ->RegisterDumpProviderWithSequencedTaskRunner(
+          this, "SyncDirectory", base::SequencedTaskRunnerHandle::Get(), {});
 }
 
 void SyncEngineBackend::DoUpdateCredentials(
@@ -405,7 +394,7 @@ void SyncEngineBackend::DoUpdateCredentials(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // UpdateCredentials can be called during backend initialization, possibly
   // when backend initialization has failed but hasn't notified the UI thread
-  // yet. In that case, the sync manager may have been destroyed on the sync
+  // yet. In that case, the sync manager may have been destroyed on another
   // thread before this task was executed, so we do nothing.
   if (sync_manager_) {
     sync_manager_->UpdateCredentials(credentials);
@@ -435,7 +424,7 @@ void SyncEngineBackend::DoSetEncryptionPassphrase(
 }
 
 void SyncEngineBackend::DoAddTrustedVaultDecryptionKeys(
-    const std::vector<std::string>& keys) {
+    const std::vector<std::vector<uint8_t>>& keys) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_manager_->GetEncryptionHandler()->AddTrustedVaultDecryptionKeys(keys);
 }
@@ -476,8 +465,7 @@ void SyncEngineBackend::DoInitialProcessControlTypes() {
       FROM_HERE, &SyncEngineImpl::HandleInitializationSuccessOnFrontendLoop,
       registrar_->GetLastConfiguredTypes(), js_backend_, debug_info_listener_,
       base::Passed(sync_manager_->GetModelTypeConnectorProxy()),
-      sync_manager_->cache_guid(), sync_manager_->birthday(),
-      sync_manager_->bag_of_chips(),
+      sync_manager_->birthday(), sync_manager_->bag_of_chips(),
       sync_manager_->GetEncryptionHandler()->GetLastKeystoreKey());
 
   js_backend_.Reset();
@@ -506,14 +494,6 @@ void SyncEngineBackend::ShutdownOnUIThread() {
   // initialized yet.  Those classes will receive the message when the sync
   // thread finally getes around to constructing them.
   stop_syncing_signal_.Signal();
-
-  // This will drop the HttpBridgeFactory's reference to the
-  // RequestContextGetter.  Once this has been called, the HttpBridgeFactory can
-  // no longer be used to create new HttpBridge instances.  We can get away with
-  // this because the stop_syncing_signal_ has already been signalled, which
-  // guarantees that the ServerConnectionManager will no longer attempt to
-  // create new connections.
-  release_request_context_signal_.Signal();
 }
 
 void SyncEngineBackend::DoShutdown(ShutdownReason reason) {
@@ -581,20 +561,21 @@ void SyncEngineBackend::DoConfigureSyncer(
 
   registrar_->ConfigureDataTypes(params.enabled_types, params.disabled_types);
 
-  base::Closure chained_ready_task(base::Bind(
-      &SyncEngineBackend::DoFinishConfigureDataTypes,
-      weak_ptr_factory_.GetWeakPtr(), params.to_download, params.ready_task));
+  base::OnceClosure chained_ready_task(
+      base::BindOnce(&SyncEngineBackend::DoFinishConfigureDataTypes,
+                     weak_ptr_factory_.GetWeakPtr(), params.to_download,
+                     std::move(params.ready_task)));
 
   sync_manager_->ConfigureSyncer(params.reason, params.to_download,
                                  params.is_sync_feature_enabled
                                      ? SyncManager::SyncFeatureState::ON
                                      : SyncManager::SyncFeatureState::OFF,
-                                 chained_ready_task);
+                                 std::move(chained_ready_task));
 }
 
 void SyncEngineBackend::DoFinishConfigureDataTypes(
     ModelTypeSet types_to_config,
-    const base::Callback<void(ModelTypeSet, ModelTypeSet)>& ready_task) {
+    base::OnceCallback<void(ModelTypeSet, ModelTypeSet)> ready_task) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Update the enabled types for the bridge and sync manager.
@@ -609,7 +590,7 @@ void SyncEngineBackend::DoFinishConfigureDataTypes(
       Difference(types_to_config, failed_configuration_types);
   host_.Call(FROM_HERE, &SyncEngineImpl::FinishConfigureDataTypesOnFrontendLoop,
              enabled_types, succeeded_configuration_types,
-             failed_configuration_types, ready_task);
+             failed_configuration_types, std::move(ready_task));
 }
 
 void SyncEngineBackend::SendBufferedProtocolEventsAndEnableForwarding() {
@@ -675,12 +656,12 @@ void SyncEngineBackend::SaveChanges() {
 
 void SyncEngineBackend::DoOnCookieJarChanged(bool account_mismatch,
                                              bool empty_jar,
-                                             const base::Closure& callback) {
+                                             base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_manager_->OnCookieJarChanged(account_mismatch, empty_jar);
   if (!callback.is_null()) {
     host_.Call(FROM_HERE, &SyncEngineImpl::OnCookieJarChangedDoneOnFrontendLoop,
-               callback);
+               std::move(callback));
   }
 }
 

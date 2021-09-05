@@ -71,11 +71,6 @@ struct GpuFeatureData {
   bool fallback_to_software;
 };
 
-bool IsForceGpuRasterizationEnabled() {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  return command_line->HasSwitch(switches::kForceGpuRasterization);
-}
-
 gpu::GpuFeatureStatus SafeGetFeatureStatus(
     const gpu::GpuFeatureInfo& gpu_feature_info,
     gpu::GpuFeatureType feature) {
@@ -87,12 +82,6 @@ gpu::GpuFeatureStatus SafeGetFeatureStatus(
   }
   DCHECK(feature >= 0 && feature < gpu::NUMBER_OF_GPU_FEATURE_TYPES);
   return gpu_feature_info.status_values[feature];
-}
-
-gpu::GpuFeatureStatus GetGpuCompositingStatus(
-    const gpu::GpuFeatureInfo& gpu_feature_info) {
-  return SafeGetFeatureStatus(gpu_feature_info,
-                              gpu::GPU_FEATURE_TYPE_GPU_COMPOSITING);
 }
 
 const GpuFeatureData GetGpuFeatureData(
@@ -111,8 +100,14 @@ const GpuFeatureData GetGpuFeatureData(
          "Accelerated 2D canvas is unavailable: either disabled "
          "via blacklist or the command line."),
      true},
-    {"gpu_compositing", GetGpuCompositingStatus(gpu_feature_info),
-     command_line.HasSwitch(switches::kDisableGpuCompositing),
+    {"gpu_compositing",
+     // TODO(sgilhuly): Replace with a check to see which backend is used for
+     // compositing; do the same for GPU rasterization if it's enabled. For now
+     // assume that if GL is blacklisted, then Vulkan is also. Check GL to see
+     // if GPU compositing is disabled.
+     SafeGetFeatureStatus(gpu_feature_info,
+                          gpu::GPU_FEATURE_TYPE_ACCELERATED_GL),
+     GpuDataManagerImpl::GetInstance()->IsGpuCompositingDisabled(),
      DisableInfo::Problem(
          "Gpu compositing has been disabled, either via blacklist, about:flags "
          "or the command line. The browser will fall back to software "
@@ -165,8 +160,7 @@ const GpuFeatureData GetGpuFeatureData(
     {"rasterization",
      SafeGetFeatureStatus(gpu_feature_info,
                           gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION),
-     (command_line.HasSwitch(switches::kDisableGpuRasterization) &&
-      !IsForceGpuRasterizationEnabled()),
+     (command_line.HasSwitch(switches::kDisableGpuRasterization)),
      DisableInfo::Problem(
          "Accelerated rasterization has been disabled, either via blacklist, "
          "about:flags or the command line."),
@@ -176,6 +170,11 @@ const GpuFeatureData GetGpuFeatureData(
                           gpu::GPU_FEATURE_TYPE_OOP_RASTERIZATION),
      command_line.HasSwitch(switches::kDisableOopRasterization),
      DisableInfo::NotProblem(), false},
+    {"opengl",
+     SafeGetFeatureStatus(gpu_feature_info,
+                          gpu::GPU_FEATURE_TYPE_ACCELERATED_GL),
+     false /* disabled */, DisableInfo::NotProblem(),
+     false /* fallback_to_software */},
 #if defined(OS_MACOSX)
     {"metal",
      SafeGetFeatureStatus(gpu_feature_info, gpu::GPU_FEATURE_TYPE_METAL),
@@ -209,12 +208,6 @@ const GpuFeatureData GetGpuFeatureData(
      DisableInfo::Problem(
          "WebGL2 has been disabled via blacklist or the command line."),
      false},
-    {"viz_display_compositor", gpu::kGpuFeatureStatusEnabled,
-     !features::IsVizDisplayCompositorEnabled(), DisableInfo::NotProblem(),
-     false},
-    {"viz_hit_test_surface_layer", gpu::kGpuFeatureStatusEnabled,
-     !features::IsVizHitTestingSurfaceLayerEnabled(), DisableInfo::NotProblem(),
-     false},
     {"skia_renderer", gpu::kGpuFeatureStatusEnabled,
      !features::IsUsingSkiaRenderer(), DisableInfo::NotProblem(), false},
   };
@@ -242,8 +235,7 @@ std::unique_ptr<base::DictionaryValue> GetFeatureStatusImpl(
         GetGpuFeatureData(gpu_feature_info, i, &eof);
     std::string status;
     // Features undergoing a finch controlled roll out.
-    if (gpu_feature_data.name == "viz_display_compositor" ||
-        gpu_feature_data.name == "skia_renderer" ||
+    if (gpu_feature_data.name == "skia_renderer" ||
         gpu_feature_data.name == "viz_hit_test_surface_layer") {
       status = (gpu_feature_data.disabled ? "disabled_off_ok" : "enabled_on");
     } else if (gpu_feature_data.disabled || gpu_access_blocked ||
@@ -261,11 +253,12 @@ std::unique_ptr<base::DictionaryValue> GetFeatureStatusImpl(
       status = "enabled";
       if ((gpu_feature_data.name == "webgl" ||
            gpu_feature_data.name == "webgl2") &&
-          (GetGpuCompositingStatus(gpu_feature_info) !=
-           gpu::kGpuFeatureStatusEnabled))
+          manager->IsGpuCompositingDisabled())
         status += "_readback";
       if (gpu_feature_data.name == "rasterization") {
-        if (IsForceGpuRasterizationEnabled())
+        const base::CommandLine& command_line =
+            *base::CommandLine::ForCurrentProcess();
+        if (command_line.HasSwitch(switches::kEnableGpuRasterization))
           status += "_force";
       }
       if (gpu_feature_data.name == "multiple_raster_threads") {
@@ -275,7 +268,8 @@ std::unique_ptr<base::DictionaryValue> GetFeatureStatusImpl(
           status += "_force";
         status += "_on";
       }
-      if (gpu_feature_data.name == "metal" ||
+      if (gpu_feature_data.name == "opengl" ||
+          gpu_feature_data.name == "metal" ||
           gpu_feature_data.name == "vulkan" ||
           gpu_feature_data.name == "surface_control") {
         status += "_on";

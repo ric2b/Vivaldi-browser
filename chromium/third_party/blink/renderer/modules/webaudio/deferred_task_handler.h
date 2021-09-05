@@ -28,6 +28,7 @@
 
 #include <atomic>
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
@@ -62,7 +63,8 @@ class AudioSummingJunction;
 // - GC happens and it collects the BaseAudioContext before the task execution.
 //
 class MODULES_EXPORT DeferredTaskHandler final
-    : public ThreadSafeRefCounted<DeferredTaskHandler> {
+    : public ThreadSafeRefCounted<DeferredTaskHandler>,
+      public base::SupportsWeakPtr<DeferredTaskHandler> {
  public:
   static scoped_refptr<DeferredTaskHandler> Create(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
@@ -108,6 +110,9 @@ class MODULES_EXPORT DeferredTaskHandler final
   void AddRenderingOrphanHandler(scoped_refptr<AudioHandler>);
   void RequestToDeleteHandlersOnMainThread();
   void ClearHandlersToBeDeleted();
+
+  // Clear the context from the rendering and deletable orphan handlers.
+  void ClearContextFromOrphanHandlers();
 
   bool AcceptsTailProcessing() const { return accepts_tail_processing_; }
   void StopAcceptingTailProcessing() { accepts_tail_processing_ = false; }
@@ -188,7 +193,7 @@ class MODULES_EXPORT DeferredTaskHandler final
     return &active_source_handlers_;
   }
 
-  Vector<AudioHandler*>* GetFinishedSourceHandlers() {
+  Vector<scoped_refptr<AudioHandler>>* GetFinishedSourceHandlers() {
     return &finished_source_handlers_;
   }
 
@@ -257,12 +262,17 @@ class MODULES_EXPORT DeferredTaskHandler final
   // connection and elements here are removed from |active_source_handlers_|.
   //
   // This must be accessed only from the audio thread.
-  Vector<AudioHandler*> finished_source_handlers_;
+  Vector<scoped_refptr<AudioHandler>> finished_source_handlers_;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   // Graph locking.
   RecursiveMutex context_graph_mutex_;
+
+  // Protects |rendering_automatic_pull_handlers| when updating, processing, and
+  // clearing. (See crbug.com/1061018)
+  mutable Mutex automatic_pull_handlers_lock_;
+
   std::atomic<base::PlatformThreadId> audio_thread_;
 };
 

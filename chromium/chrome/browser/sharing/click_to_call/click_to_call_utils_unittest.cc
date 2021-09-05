@@ -10,8 +10,10 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_utils.h"
 #include "chrome/browser/sharing/click_to_call/feature.h"
+#include "chrome/browser/sharing/mock_sharing_service.h"
 #include "chrome/browser/sharing/sharing_fcm_handler.h"
 #include "chrome/browser/sharing/sharing_fcm_sender.h"
+#include "chrome/browser/sharing/sharing_handler_registry.h"
 #include "chrome/browser/sharing/sharing_service.h"
 #include "chrome/browser/sharing/sharing_service_factory.h"
 #include "chrome/browser/sharing/sharing_sync_preference.h"
@@ -40,44 +42,6 @@ const char kNonTelUrl[] = "https://google.com";
 
 const char kSelectionTextWithNumber[] = "9876543210";
 
-class MockSharingDeviceRegistration : public SharingDeviceRegistration {
- public:
-  explicit MockSharingDeviceRegistration()
-      : SharingDeviceRegistration(/* pref_service_= */ nullptr,
-                                  /* sharing_sync_preference_= */ nullptr,
-                                  /* instance_id_driver_= */ nullptr,
-                                  /* vapid_key_manager_= */ nullptr) {}
-
-  ~MockSharingDeviceRegistration() override = default;
-
-  MOCK_CONST_METHOD0(IsSharedClipboardSupported, bool());
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockSharingDeviceRegistration);
-};
-
-class MockSharingService : public SharingService {
- public:
-  explicit MockSharingService(std::unique_ptr<SharingFCMHandler> fcm_handler)
-      : SharingService(/* sync_prefs= */ nullptr,
-                       /* vapid_key_manager= */ nullptr,
-                       std::make_unique<MockSharingDeviceRegistration>(),
-                       /* fcm_sender= */ nullptr,
-                       std::move(fcm_handler),
-                       /* gcm_driver= */ nullptr,
-                       /* device_info_tracker= */ nullptr,
-                       /* local_device_info_provider= */ nullptr,
-                       /* sync_service */ nullptr,
-                       /* notification_display_service= */ nullptr) {}
-
-  ~MockSharingService() override = default;
-
-  MOCK_CONST_METHOD0(GetState, State());
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockSharingService);
-};
-
 class ClickToCallUtilsTest : public testing::Test {
  public:
   ClickToCallUtilsTest() = default;
@@ -105,11 +69,7 @@ class ClickToCallUtilsTest : public testing::Test {
  protected:
   std::unique_ptr<KeyedService> CreateService(
       content::BrowserContext* context) {
-    if (!create_service_)
-      return nullptr;
-
-    return std::make_unique<NiceMock<MockSharingService>>(
-        std::make_unique<SharingFCMHandler>(nullptr, nullptr, nullptr));
+    return create_service_ ? std::make_unique<MockSharingService>() : nullptr;
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -123,31 +83,27 @@ class ClickToCallUtilsTest : public testing::Test {
 }  // namespace
 
 TEST_F(ClickToCallUtilsTest, NoSharingService_DoNotOfferAnyMenu) {
-  scoped_feature_list_.InitWithFeatures(
-      {kClickToCallUI, kClickToCallContextMenuForSelectedText}, {});
+  scoped_feature_list_.InitAndEnableFeature(kClickToCallUI);
   create_service_ = false;
   EXPECT_FALSE(ShouldOfferClickToCallForURL(&profile_, GURL(kTelUrl)));
   ExpectClickToCallDisabledForSelectionText(kSelectionTextWithNumber);
 }
 
 TEST_F(ClickToCallUtilsTest, UIFlagDisabled_DoNotOfferAnyMenu) {
-  scoped_feature_list_.InitWithFeatures(
-      {kClickToCallContextMenuForSelectedText}, {kClickToCallUI});
+  scoped_feature_list_.InitAndDisableFeature(kClickToCallUI);
   EXPECT_FALSE(ShouldOfferClickToCallForURL(&profile_, GURL(kTelUrl)));
   ExpectClickToCallDisabledForSelectionText(kSelectionTextWithNumber);
 }
 
 TEST_F(ClickToCallUtilsTest, PolicyDisabled_DoNotOfferAnyMenu) {
-  scoped_feature_list_.InitWithFeatures(
-      {kClickToCallContextMenuForSelectedText, kClickToCallUI}, {});
+  scoped_feature_list_.InitAndEnableFeature(kClickToCallUI);
   profile_.GetPrefs()->SetBoolean(prefs::kClickToCallEnabled, false);
   EXPECT_FALSE(ShouldOfferClickToCallForURL(&profile_, GURL(kTelUrl)));
   ExpectClickToCallDisabledForSelectionText(kSelectionTextWithNumber);
 }
 
 TEST_F(ClickToCallUtilsTest, IncognitoProfile_DoNotOfferAnyMenu) {
-  scoped_feature_list_.InitWithFeatures(
-      {kClickToCallUI, kClickToCallContextMenuForSelectedText}, {});
+  scoped_feature_list_.InitAndEnableFeature(kClickToCallUI);
   EXPECT_FALSE(ShouldOfferClickToCallForURL(profile_.GetOffTheRecordProfile(),
                                             GURL(kTelUrl)));
   ExpectClickToCallDisabledForSelectionText(kSelectionTextWithNumber,
@@ -170,16 +126,8 @@ TEST_F(ClickToCallUtilsTest, NonTelLink_DoNotOfferForLink) {
 }
 
 TEST_F(ClickToCallUtilsTest,
-       SelectionTextWithNumber_ContextMenuFlagDisabled_DoNotOfferForSelection) {
-  scoped_feature_list_.InitWithFeatures(
-      {kClickToCallUI}, {kClickToCallContextMenuForSelectedText});
-  ExpectClickToCallDisabledForSelectionText(kSelectionTextWithNumber);
-}
-
-TEST_F(ClickToCallUtilsTest,
        SelectionText_ValidPhoneNumberRegex_OfferForSelection) {
-  scoped_feature_list_.InitWithFeatures(
-      {kClickToCallUI, kClickToCallContextMenuForSelectedText}, {});
+  scoped_feature_list_.InitAndEnableFeature(kClickToCallUI);
 
   // Stores a mapping of selected text to expected phone number parsed.
   std::map<std::string, std::string> expectations;
@@ -196,11 +144,15 @@ TEST_F(ClickToCallUtilsTest,
   // Check for spaces and dashes.
   expectations.emplace("call (+44) 987 654-3210 now", "(+44) 987 654-3210");
   // The first number is always returned.
-  expectations.emplace("9876543210 and 9999888877", "9876543210");
+  expectations.emplace("9876543210 and 12", "9876543210");
   // Spaces are allowed in between numbers.
   expectations.emplace("9 8 7 6 5 4 3 2 1 0", "9 8 7 6 5 4 3 2 1 0");
   // Two spaces in between.
   expectations.emplace("9  8 7 6 5  4 3 2 1 0", "9  8 7 6 5  4 3 2 1 0");
+  // Non breaking spaces around number.
+  expectations.emplace("\u00A09876543210\u00A0", "9876543210");
+  // Chrome version string.
+  expectations.emplace("78.0.3904.108", "78.0.3904.108");
 
   for (auto& expectation : expectations) {
     base::Optional<std::string> phone_number =
@@ -212,29 +164,44 @@ TEST_F(ClickToCallUtilsTest,
 
 TEST_F(ClickToCallUtilsTest,
        SelectionText_InvalidPhoneNumberRegex_DoNotOfferForSelection) {
-  scoped_feature_list_.InitWithFeatures(
-      {kClickToCallUI, kClickToCallContextMenuForSelectedText}, {});
+  scoped_feature_list_.InitAndEnableFeature(kClickToCallUI);
   std::vector<std::string> invalid_selection_texts;
 
   // Does not contain any number.
-  invalid_selection_texts.emplace_back("Call me maybe");
-  // We only parse smaller text sizes to avoid performance impact on Chromium.
-  invalid_selection_texts.emplace_back(
-      "This is a huge text. It also contains a phone number 9876543210");
+  invalid_selection_texts.push_back("Call me maybe");
   // Although this is a valid number, its not caught by the regex.
-  invalid_selection_texts.emplace_back("+44 1800-FLOWERS");
+  invalid_selection_texts.push_back("+44 1800-FLOWERS");
   // Number does not start as new word.
-  invalid_selection_texts.emplace_back("No space9876543210");
+  invalid_selection_texts.push_back("No space9876543210");
   // Minimum length for regex match not satisfied.
-  invalid_selection_texts.emplace_back("Small number 98765");
+  invalid_selection_texts.push_back("Small number 98765");
   // Number does not start as new word.
-  invalid_selection_texts.emplace_back("Buy for $9876543210");
+  invalid_selection_texts.push_back("Buy for $9876543210");
   // More than two spaces in between.
-  invalid_selection_texts.emplace_back(
-      "9   8   7   6   5   4    3   2   1     0");
+  invalid_selection_texts.push_back("9   8   7   6   5   4    3   2");
   // Space dash space formatting.
-  invalid_selection_texts.emplace_back("999 - 999 - 9999");
+  invalid_selection_texts.push_back("999 - 999 - 9999");
 
   for (auto& text : invalid_selection_texts)
     ExpectClickToCallDisabledForSelectionText(text);
+}
+
+TEST_F(ClickToCallUtilsTest, SelectionText_Length) {
+  scoped_feature_list_.InitAndEnableFeature(kClickToCallUI);
+  // Expect text length of 30 to pass.
+  EXPECT_NE(base::nullopt, ExtractPhoneNumberForClickToCall(
+                               &profile_, " +1 2 3 4 5 6 7 8 9 0 1 2 3 45"));
+  // Expect text length of 31 to fail.
+  EXPECT_EQ(base::nullopt, ExtractPhoneNumberForClickToCall(
+                               &profile_, " +1 2 3 4 5 6 7 8 9 0 1 2 3 4 5"));
+}
+
+TEST_F(ClickToCallUtilsTest, SelectionText_Digits) {
+  scoped_feature_list_.InitAndEnableFeature(kClickToCallUI);
+  // Expect text with 15 digits to pass.
+  EXPECT_NE(base::nullopt,
+            ExtractPhoneNumberForClickToCall(&profile_, "+123456789012345"));
+  // Expect text with 16 digits to fail.
+  EXPECT_EQ(base::nullopt,
+            ExtractPhoneNumberForClickToCall(&profile_, "+1234567890123456"));
 }

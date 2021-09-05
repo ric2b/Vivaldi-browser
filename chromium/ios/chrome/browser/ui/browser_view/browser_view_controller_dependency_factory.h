@@ -7,14 +7,12 @@
 
 #import <UIKit/UIKit.h>
 
+
 @class AlertCoordinator;
 @class BrowserViewControllerHelper;
+class ChromeBrowserState;
 @class KeyCommandsProvider;
 class WebStateList;
-
-namespace ios {
-class ChromeBrowserState;
-}
 
 // Creates helper objects needed by BrowserViewController.
 @interface BrowserViewControllerDependencyFactory : NSObject
@@ -22,7 +20,7 @@ class ChromeBrowserState;
 // Creates a new factory backed by |browserState|. This must be the same browser
 // state provided to BrowserViewController (and like BVC, this is a weak
 // reference).
-- (id)initWithBrowserState:(ios::ChromeBrowserState*)browserState
+- (id)initWithBrowserState:(ChromeBrowserState*)browserState
               webStateList:(WebStateList*)webStateList;
 
 - (BrowserViewControllerHelper*)newBrowserViewControllerHelper;

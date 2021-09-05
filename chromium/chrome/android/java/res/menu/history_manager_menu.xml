@@ -21,9 +21,10 @@
             android:visible="false"
             app:showAsAction="ifRoom"
             app:iconTint="?attr/vivaldiIconTint" />
+        <!-- Vivaldi -->
         <item
             android:id="@+id/close_menu_id"
-            android:icon="@drawable/btn_close"
+            android:icon="@drawable/vivaldi_close_mobile_24dp"
             android:title="@string/close"
             app:showAsAction="ifRoom"
             app:iconTint="?attr/vivaldiIconTint" />

@@ -33,11 +33,13 @@ a local W3C repository source directory into a destination directory.
 
 import logging
 
-from blinkpy.common.path_finder import PathFinder
-from blinkpy.web_tests.models.test_expectations import TestExpectationParser
 from blinkpy.w3c.common import is_basename_skipped
+from blinkpy.common import path_finder
+from blinkpy.web_tests.models.test_expectations import TestExpectations
+from blinkpy.web_tests.models.typ_types import ResultType
 
 _log = logging.getLogger(__name__)
+
 
 # Directory for imported tests relative to the web tests base directory.
 DEST_DIR_NAME = 'external'
@@ -57,7 +59,7 @@ class TestCopier(object):
         self.source_repo_path = source_repo_path
 
         self.filesystem = self.host.filesystem
-        self.path_finder = PathFinder(self.filesystem)
+        self.path_finder = path_finder.PathFinder(self.filesystem)
         self.web_tests_dir = self.path_finder.web_tests_dir()
         self.destination_directory = self.filesystem.normpath(
             self.filesystem.join(
@@ -138,14 +140,18 @@ class TestCopier(object):
         port = self.host.port_factory.get()
         w3c_import_expectations_path = self.path_finder.path_from_web_tests('W3CImportExpectations')
         w3c_import_expectations = self.filesystem.read_text_file(w3c_import_expectations_path)
-        parser = TestExpectationParser(port, all_tests=(), is_lint_mode=False)
-        expectation_lines = parser.parse(w3c_import_expectations_path, w3c_import_expectations)
-        for line in expectation_lines:
-            if 'SKIP' in line.expectations:
-                if line.specifiers:
-                    _log.warning('W3CImportExpectations:%s should not have any specifiers', line.line_numbers)
-                    continue
-                paths_to_skip.add(line.name)
+        expectations = TestExpectations(port, {w3c_import_expectations_path: w3c_import_expectations})
+
+        # get test names that should be skipped
+        for line in expectations.get_updated_lines(w3c_import_expectations_path):
+            if line.is_glob:
+                _log.warning('W3CImportExpectations:%d Globs are not allowed in this file.' % line.lineno)
+                continue
+            if ResultType.Skip in line.results:
+                if line.tags:
+                    _log.warning('W3CImportExpectations:%d should not have any specifiers' % line.lineno)
+                paths_to_skip.add(line.test)
+
         return paths_to_skip
 
     def import_tests(self):

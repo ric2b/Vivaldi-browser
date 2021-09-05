@@ -19,13 +19,13 @@
 #include "media/mojo/common/mojo_shared_buffer_video_frame.h"
 #include "media/mojo/mojom/decryptor.mojom.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
-#include "services/service_manager/public/cpp/connect.h"
 
 namespace media {
 
 namespace {
 
-void ReleaseFrameResource(mojom::FrameResourceReleaserPtr releaser) {
+void ReleaseFrameResource(
+    mojo::PendingRemote<mojom::FrameResourceReleaser> releaser) {
   // Close the connection, which will result in the service realizing the frame
   // resource is no longer needed.
   releaser.reset();
@@ -42,8 +42,9 @@ base::OnceCallback<T> ToOnceCallback(const base::RepeatingCallback<T>& cb) {
 
 // TODO(xhwang): Consider adding an Initialize() to reduce the amount of work
 // done in the constructor.
-MojoDecryptor::MojoDecryptor(mojom::DecryptorPtr remote_decryptor,
-                             uint32_t writer_capacity)
+MojoDecryptor::MojoDecryptor(
+    mojo::PendingRemote<mojom::Decryptor> remote_decryptor,
+    uint32_t writer_capacity)
     : remote_decryptor_(std::move(remote_decryptor)) {
   DVLOG(1) << __func__;
 
@@ -75,8 +76,8 @@ MojoDecryptor::MojoDecryptor(mojom::DecryptorPtr remote_decryptor,
       GetDefaultDecoderBufferConverterCapacity(DemuxerStream::VIDEO),
       &decrypted_producer_handle);
 
-  remote_decryptor_.set_connection_error_with_reason_handler(
-      base::Bind(&MojoDecryptor::OnConnectionError, base::Unretained(this)));
+  remote_decryptor_.set_disconnect_with_reason_handler(base::BindOnce(
+      &MojoDecryptor::OnConnectionError, base::Unretained(this)));
 
   // Pass the other end of each pipe to |remote_decryptor_|.
   remote_decryptor_->Initialize(
@@ -90,14 +91,14 @@ MojoDecryptor::~MojoDecryptor() {
 }
 
 void MojoDecryptor::RegisterNewKeyCB(StreamType stream_type,
-                                     const NewKeyCB& key_added_cb) {
+                                     NewKeyCB key_added_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   switch (stream_type) {
     case kAudio:
-      new_audio_key_cb_ = key_added_cb;
+      new_audio_key_cb_ = std::move(key_added_cb);
       break;
     case kVideo:
-      new_video_key_cb_ = key_added_cb;
+      new_video_key_cb_ = std::move(key_added_cb);
       break;
     default:
       NOTREACHED();
@@ -106,14 +107,14 @@ void MojoDecryptor::RegisterNewKeyCB(StreamType stream_type,
 
 void MojoDecryptor::Decrypt(StreamType stream_type,
                             scoped_refptr<DecoderBuffer> encrypted,
-                            const DecryptCB& decrypt_cb) {
+                            DecryptCB decrypt_cb) {
   DVLOG(3) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   mojom::DecoderBufferPtr mojo_buffer =
       decrypt_buffer_writer_->WriteDecoderBuffer(std::move(encrypted));
   if (!mojo_buffer) {
-    decrypt_cb.Run(kError, nullptr);
+    std::move(decrypt_cb).Run(kError, nullptr);
     return;
   }
 
@@ -122,7 +123,7 @@ void MojoDecryptor::Decrypt(StreamType stream_type,
       base::BindOnce(&MojoDecryptor::OnBufferDecrypted,
                      weak_factory_.GetWeakPtr(),
                      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-                         ToOnceCallback(decrypt_cb), kError, nullptr)));
+                         std::move(decrypt_cb), kError, nullptr)));
 }
 
 void MojoDecryptor::CancelDecrypt(StreamType stream_type) {
@@ -133,23 +134,23 @@ void MojoDecryptor::CancelDecrypt(StreamType stream_type) {
 }
 
 void MojoDecryptor::InitializeAudioDecoder(const AudioDecoderConfig& config,
-                                           const DecoderInitCB& init_cb) {
+                                           DecoderInitCB init_cb) {
   DVLOG(1) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   remote_decryptor_->InitializeAudioDecoder(
-      config, mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-                  ToOnceCallback(init_cb), false));
+      config,
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(init_cb), false));
 }
 
 void MojoDecryptor::InitializeVideoDecoder(const VideoDecoderConfig& config,
-                                           const DecoderInitCB& init_cb) {
+                                           DecoderInitCB init_cb) {
   DVLOG(1) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
   remote_decryptor_->InitializeVideoDecoder(
-      config, mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-                  ToOnceCallback(init_cb), false));
+      config,
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(init_cb), false));
 }
 
 void MojoDecryptor::DecryptAndDecodeAudio(
@@ -218,7 +219,7 @@ void MojoDecryptor::OnKeyAdded() {
     new_video_key_cb_.Run();
 }
 
-void MojoDecryptor::OnBufferDecrypted(DecryptOnceCB decrypt_cb,
+void MojoDecryptor::OnBufferDecrypted(DecryptCB decrypt_cb,
                                       Status status,
                                       mojom::DecoderBufferPtr buffer) {
   DVLOG_IF(1, status != kSuccess) << __func__ << "(" << status << ")";
@@ -236,7 +237,7 @@ void MojoDecryptor::OnBufferDecrypted(DecryptOnceCB decrypt_cb,
                      std::move(decrypt_cb), status));
 }
 
-void MojoDecryptor::OnBufferRead(DecryptOnceCB decrypt_cb,
+void MojoDecryptor::OnBufferRead(DecryptCB decrypt_cb,
                                  Status status,
                                  scoped_refptr<DecoderBuffer> buffer) {
   if (!buffer) {
@@ -262,10 +263,11 @@ void MojoDecryptor::OnAudioDecoded(
   std::move(audio_decode_cb).Run(status, audio_frames);
 }
 
-void MojoDecryptor::OnVideoDecoded(VideoDecodeOnceCB video_decode_cb,
-                                   Status status,
-                                   const scoped_refptr<VideoFrame>& video_frame,
-                                   mojom::FrameResourceReleaserPtr releaser) {
+void MojoDecryptor::OnVideoDecoded(
+    VideoDecodeOnceCB video_decode_cb,
+    Status status,
+    const scoped_refptr<VideoFrame>& video_frame,
+    mojo::PendingRemote<mojom::FrameResourceReleaser> releaser) {
   DVLOG_IF(1, status != kSuccess) << __func__ << ": status = " << status;
   DVLOG_IF(3, status == kSuccess) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -274,7 +276,7 @@ void MojoDecryptor::OnVideoDecoded(VideoDecodeOnceCB video_decode_cb,
   // |frame| is destroyed.
   if (video_frame && releaser) {
     video_frame->AddDestructionObserver(
-        base::Bind(&ReleaseFrameResource, base::Passed(&releaser)));
+        base::BindOnce(&ReleaseFrameResource, std::move(releaser)));
   }
 
   std::move(video_decode_cb).Run(status, video_frame);

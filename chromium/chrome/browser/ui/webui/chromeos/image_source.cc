@@ -16,6 +16,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/login/users/avatar/user_image_loader.h"
@@ -29,20 +30,19 @@ namespace {
 const char* const kWhitelistedDirectories[] = {"regulatory_labels"};
 
 // Callback for user_manager::UserImageLoader.
-void ImageLoaded(
-    const content::URLDataSource::GotDataCallback& got_data_callback,
-    std::unique_ptr<user_manager::UserImage> user_image) {
+void ImageLoaded(content::URLDataSource::GotDataCallback got_data_callback,
+                 std::unique_ptr<user_manager::UserImage> user_image) {
   if (user_image->has_image_bytes())
-    got_data_callback.Run(user_image->image_bytes());
+    std::move(got_data_callback).Run(user_image->image_bytes());
   else
-    got_data_callback.Run(nullptr);
+    std::move(got_data_callback).Run(nullptr);
 }
 
 }  // namespace
 
 ImageSource::ImageSource() {
-  task_runner_ = base::CreateSequencedTaskRunner(
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+  task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
@@ -54,37 +54,36 @@ std::string ImageSource::GetSource() {
 }
 
 void ImageSource::StartDataRequest(
-    const std::string& path,
+    const GURL& url,
     const content::WebContents::Getter& wc_getter,
-    const content::URLDataSource::GotDataCallback& got_data_callback) {
+    content::URLDataSource::GotDataCallback got_data_callback) {
+  const std::string path = content::URLDataSource::URLToRequestPath(url);
   if (!IsWhitelisted(path)) {
-    got_data_callback.Run(nullptr);
+    std::move(got_data_callback).Run(nullptr);
     return;
   }
 
   const base::FilePath asset_dir(chrome::kChromeOSAssetPath);
   const base::FilePath image_path = asset_dir.AppendASCII(path);
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&base::PathExists, image_path),
-      base::Bind(&ImageSource::StartDataRequestAfterPathExists,
-                 weak_factory_.GetWeakPtr(), image_path, got_data_callback));
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(&base::PathExists, image_path),
+      base::BindOnce(&ImageSource::StartDataRequestAfterPathExists,
+                     weak_factory_.GetWeakPtr(), image_path,
+                     std::move(got_data_callback)));
 }
 
 void ImageSource::StartDataRequestAfterPathExists(
     const base::FilePath& image_path,
-    const content::URLDataSource::GotDataCallback& got_data_callback,
+    content::URLDataSource::GotDataCallback got_data_callback,
     bool path_exists) {
   if (path_exists) {
     user_image_loader::StartWithFilePath(
-        task_runner_,
-        image_path,
-        ImageDecoder::DEFAULT_CODEC,
+        task_runner_, image_path, ImageDecoder::DEFAULT_CODEC,
         0,  // Do not crop.
-        base::Bind(&ImageLoaded, got_data_callback));
+        base::BindOnce(&ImageLoaded, std::move(got_data_callback)));
   } else {
-    got_data_callback.Run(nullptr);
+    std::move(got_data_callback).Run(nullptr);
   }
 }
 

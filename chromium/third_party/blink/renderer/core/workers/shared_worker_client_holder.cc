@@ -34,18 +34,21 @@
 #include <utility>
 #include "base/logging.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
+#include "third_party/blink/public/common/security_context/insecure_request_policy.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom-blink.h"
+#include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/worker/shared_worker_info.mojom-blink.h"
-#include "third_party/blink/public/platform/web_content_security_policy.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_shared_worker.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/fetch/request.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+#include "third_party/blink/renderer/core/script/script.h"
 #include "third_party/blink/renderer/core/workers/shared_worker.h"
 #include "third_party/blink/renderer/core/workers/shared_worker_client.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object_snapshot.h"
@@ -69,10 +72,11 @@ SharedWorkerClientHolder* SharedWorkerClientHolder::From(Document& document) {
 }
 
 SharedWorkerClientHolder::SharedWorkerClientHolder(Document& document)
-    : ContextLifecycleObserver(&document),
+    : connector_(document.ToExecutionContext()),
+      client_receivers_(document.ToExecutionContext()),
       task_runner_(document.GetTaskRunner(blink::TaskType::kDOMManipulation)) {
   DCHECK(IsMainThread());
-  document.GetInterfaceProvider()->GetInterface(
+  document.GetBrowserInterfaceBroker().GetInterface(
       connector_.BindNewPipeAndPassReceiver(task_runner_));
 }
 
@@ -81,9 +85,9 @@ void SharedWorkerClientHolder::Connect(
     MessagePortChannel port,
     const KURL& url,
     mojo::PendingRemote<mojom::blink::BlobURLToken> blob_url_token,
-    const String& name) {
+    mojom::blink::WorkerOptionsPtr options) {
   DCHECK(IsMainThread());
-  DCHECK(!name.IsNull());
+  DCHECK(options);
 
   // TODO(estark): this is broken, as it only uses the first header
   // when multiple might have been sent. Fix by making the
@@ -92,16 +96,12 @@ void SharedWorkerClientHolder::Connect(
   Vector<CSPHeaderAndType> headers =
       worker->GetExecutionContext()->GetContentSecurityPolicy()->Headers();
   WebString header = "";
-  auto header_type = mojom::ContentSecurityPolicyType::kReport;
+  auto header_type = network::mojom::ContentSecurityPolicyType::kReport;
   if (headers.size() > 0) {
     header = headers[0].first;
-    header_type =
-        static_cast<mojom::ContentSecurityPolicyType>(headers[0].second);
+    header_type = static_cast<network::mojom::ContentSecurityPolicyType>(
+        headers[0].second);
   }
-
-  mojom::blink::SharedWorkerInfoPtr info(mojom::blink::SharedWorkerInfo::New(
-      url, name, header, header_type,
-      worker->GetExecutionContext()->GetSecurityContext().AddressSpace()));
 
   mojo::PendingRemote<mojom::blink::SharedWorkerClient> client;
   client_receivers_.Add(std::make_unique<SharedWorkerClient>(worker),
@@ -115,18 +115,22 @@ void SharedWorkerClientHolder::Connect(
               .GetFetchClientSettingsObject());
 
   mojom::InsecureRequestsPolicy insecure_requests_policy =
-      outside_fetch_client_settings_object->GetInsecureRequestsPolicy() &
-              kUpgradeInsecureRequests
+      (outside_fetch_client_settings_object->GetInsecureRequestsPolicy() &
+       mojom::blink::InsecureRequestPolicy::kUpgradeInsecureRequests) !=
+              mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone
           ? mojom::InsecureRequestsPolicy::kUpgrade
           : mojom::InsecureRequestsPolicy::kDoNotUpgrade;
 
-  connector_->Connect(
-      std::move(info),
+  auto info = mojom::blink::SharedWorkerInfo::New(
+      url, std::move(options), header, header_type,
+      worker->GetExecutionContext()->GetSecurityContext().AddressSpace(),
       mojom::blink::FetchClientSettingsObject::New(
           outside_fetch_client_settings_object->GetReferrerPolicy(),
           KURL(outside_fetch_client_settings_object->GetOutgoingReferrer()),
-          insecure_requests_policy),
-      std::move(client),
+          insecure_requests_policy));
+
+  connector_->Connect(
+      std::move(info), std::move(client),
       worker->GetExecutionContext()->IsSecureContext()
           ? mojom::SharedWorkerCreationContextType::kSecure
           : mojom::SharedWorkerCreationContextType::kNonsecure,
@@ -135,16 +139,10 @@ void SharedWorkerClientHolder::Connect(
           blob_url_token.PassPipe(), mojom::blink::BlobURLToken::Version_));
 }
 
-void SharedWorkerClientHolder::ContextDestroyed(ExecutionContext*) {
-  DCHECK(IsMainThread());
-  // Close mojo connections which will signal disinterest in the associated
-  // shared worker.
-  client_receivers_.Clear();
-}
-
 void SharedWorkerClientHolder::Trace(Visitor* visitor) {
+  visitor->Trace(connector_);
+  visitor->Trace(client_receivers_);
   Supplement<Document>::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

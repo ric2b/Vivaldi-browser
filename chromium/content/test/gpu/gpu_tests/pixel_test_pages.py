@@ -30,13 +30,18 @@ _FOUR_COLOR_VIDEO_240x135_EXPECTED_COLORS = [
 ]
 
 
+CRASH_TYPE_GPU = 'gpu'
+
+
 class PixelTestPage(object):
   """A wrapper class mimicking the functionality of the PixelTestsStorySet
   from the old-style GPU tests.
   """
   def __init__(self, url, name, test_rect, tolerance=2, browser_args=None,
                expected_colors=None, gpu_process_disabled=False,
-               optional_action=None, other_args=None, grace_period_end=None):
+               optional_action=None, restart_browser_after_test=False,
+               other_args=None, grace_period_end=None,
+               expected_per_process_crashes=None):
     super(PixelTestPage, self).__init__()
     self.url = url
     self.name = name
@@ -54,12 +59,16 @@ class PixelTestPage(object):
     # disabled. To prevent regressions, only allow the GPU information
     # to be incomplete in these cases.
     self.gpu_process_disabled = gpu_process_disabled
-    # One of the tests (WebGLSadCanvas) requires custom actions to
-    # be run. These are specified as a string which is the name of a
-    # method to call in PixelIntegrationTest. For example if the
-    # action here is "CrashGpuProcess" then it would be defined in a
+    # Some of the tests require custom actions to be run. These are
+    # specified as a string which is the name of a method to call in
+    # PixelIntegrationTest. For example if the action here is
+    # "CrashGpuProcess" then it would be defined in a
     # "_CrashGpuProcess" method in PixelIntegrationTest.
     self.optional_action = optional_action
+    # Whether the browser should be forcibly restarted after the test
+    # runs. The browser is always restarted after running tests with
+    # optional_actions.
+    self.restart_browser_after_test = restart_browser_after_test
     # These are used to pass additional arguments to the test harness.
     # VideoPathTraceTest and OverlayModeTest support the following boolean
     # arguments: expect_yuy2, zero_copy, video_is_rotated, and no_overlay.
@@ -70,6 +79,10 @@ class PixelTestPage(object):
     # be triaged without turning the bots red.
     # This should be a datetime.date object.
     self.grace_period_end = grace_period_end
+    # This lets the test runner know that one or more crashes are expected as
+    # part of the test. Should be a map of process type (str) to expected number
+    # of crashes (int).
+    self.expected_per_process_crashes = expected_per_process_crashes or {}
 
   def CopyWithNewBrowserArgsAndSuffix(self, browser_args, suffix):
     return PixelTestPage(
@@ -149,6 +162,31 @@ class PixelTestPages(object):
         'pixel_background_image.html',
         base_name + '_BackgroundImage',
         test_rect=[20, 20, 370, 370]),
+
+      PixelTestPage(
+        'pixel_reflected_div.html',
+        base_name + '_ReflectedDiv',
+        test_rect=[0, 0, 100, 300],
+        expected_colors=[
+          {
+            'comment': 'inside original div, orange',
+            'location': [5, 5],
+            'size': [90, 90],
+            'color': [255, 128, 0],
+          },
+          {
+            'comment': 'outside both div and reflection, in between, white',
+            'location': [5, 105],
+            'size': [90, 90],
+            'color': [255, 255, 255],
+          },
+          {
+            'comment': 'inside reflection, orange',
+            'location': [5, 205],
+            'size': [90, 90],
+            'color': [255, 128, 0],
+          }
+        ]),
 
       PixelTestPage(
         'pixel_canvas2d.html',
@@ -438,7 +476,10 @@ class PixelTestPages(object):
         base_name + '_Video_Context_Loss_MP4',
         test_rect=[0, 0, 240, 135],
         tolerance=tolerance,
-        expected_colors=_FOUR_COLOR_VIDEO_240x135_EXPECTED_COLORS),
+        expected_colors=_FOUR_COLOR_VIDEO_240x135_EXPECTED_COLORS,
+        expected_per_process_crashes={
+          CRASH_TYPE_GPU: 1,
+        }),
 
       # The VP9 test clip is primarily software decoded on bots.
       PixelTestPage(
@@ -447,7 +488,10 @@ class PixelTestPages(object):
         base_name + '_Video_Context_Loss_VP9',
         test_rect=[0, 0, 240, 135],
         tolerance=tolerance_vp9,
-        expected_colors=_FOUR_COLOR_VIDEO_240x135_EXPECTED_COLORS),
+        expected_colors=_FOUR_COLOR_VIDEO_240x135_EXPECTED_COLORS,
+        expected_per_process_crashes={
+          CRASH_TYPE_GPU: 1,
+        }),
 
       PixelTestPage(
         'pixel_video_backdrop_filter.html',
@@ -660,6 +704,103 @@ class PixelTestPages(object):
           },
         ]),
 
+        PixelTestPage(
+          'pixel_webgl_read_pixels_tab_switch.html',
+          base_name + '_WebGLReadPixelsTabSwitch',
+          test_rect=[0, 0, 100, 100],
+          optional_action='SwitchTabs',
+          tolerance=3,
+          expected_colors=[
+            {
+              'comment': 'top left, red',
+              'location': [5, 5],
+              'size': [40, 40],
+              'color': [255, 0, 0],
+            },
+            {
+              'comment': 'bottom right, red',
+              'location': [55, 55],
+              'size': [40, 40],
+              'color': [255, 0, 0],
+            },
+            {
+              'comment': 'top right, blue',
+              'location': [55, 5],
+              'size': [40, 40],
+              'color': [0, 0, 255],
+            },
+            {
+              'comment': 'bottom left, green',
+              'location': [5, 55],
+              'size': [40, 40],
+              'color': [0, 255, 0],
+            },
+        ]),
+
+        PixelTestPage(
+          'pixel_webgl_read_pixels_tab_switch.html',
+          base_name + '_WebGLReadPixelsTabSwitch_SoftwareCompositing',
+          test_rect=[0, 0, 100, 100],
+          browser_args=sw_compositing_args,
+          optional_action='SwitchTabs',
+          tolerance=3,
+          expected_colors=[
+            {
+              'comment': 'top left, red',
+              'location': [5, 5],
+              'size': [40, 40],
+              'color': [255, 0, 0],
+            },
+            {
+              'comment': 'bottom right, red',
+              'location': [55, 55],
+              'size': [40, 40],
+              'color': [255, 0, 0],
+            },
+            {
+              'comment': 'top right, blue',
+              'location': [55, 5],
+              'size': [40, 40],
+              'color': [0, 0, 255],
+            },
+            {
+              'comment': 'bottom left, green',
+              'location': [5, 55],
+              'size': [40, 40],
+              'color': [0, 255, 0],
+            },
+        ]),
+
+      PixelTestPage(
+        'pixel_offscreen_canvas_ibrc_webgl_main.html',
+        base_name + '_OffscreenCanvasIBRCWebGLMain',
+        test_rect=[0, 0, 300, 300],
+        tolerance=3,
+        expected_colors=[
+          {
+            'comment': 'solid green',
+            'location': [100, 100],
+            'size': [100, 100],
+            'color': [0, 255, 0],
+          }
+        ],
+        optional_action='RunOffscreenCanvasIBRCWebGLTest'),
+
+      PixelTestPage(
+        'pixel_offscreen_canvas_ibrc_webgl_worker.html',
+        base_name + '_OffscreenCanvasIBRCWebGLWorker',
+        test_rect=[0, 0, 300, 300],
+        tolerance=3,
+        expected_colors=[
+          {
+            'comment': 'solid green',
+            'location': [100, 100],
+            'size': [100, 100],
+            'color': [0, 255, 0],
+          }
+        ],
+        optional_action='RunOffscreenCanvasIBRCWebGLTest'),
+
     ]
 
 
@@ -780,7 +921,28 @@ class PixelTestPages(object):
             'size': [1, 1],
             'color': [255, 215, 0],
           }
-        ])
+        ]),
+      PixelTestPage(
+        'pixel_precision_rounded_corner.html',
+        base_name + '_PrecisionRoundedCorner',
+        test_rect=[0, 0, 400, 400],
+        browser_args=browser_args)
+    ]
+
+  # Pages that should be run with off-thread paint worklet flags.
+  @staticmethod
+  def PaintWorkletPages(base_name):
+    browser_args = [
+      '--enable-blink-features=OffMainThreadCSSPaint',
+      '--enable-gpu-rasterization',
+      '--enable-oop-rasterization']
+
+    return [
+      PixelTestPage(
+        'pixel_paintWorklet_transform.html',
+        base_name + '_PaintWorkletTransform',
+        test_rect=[0, 0, 200, 200],
+        browser_args=browser_args),
     ]
 
   # Pages that should be run with experimental canvas features.
@@ -1167,6 +1329,87 @@ class PixelTestPages(object):
             # 'color': [101, 76, 12],
           },
         ]),
+    ]
+
+  # Pages that should be run only on dual-GPU MacBook Pros (at the
+  # present time, anyway).
+  @staticmethod
+  def DualGPUMacSpecificPages(base_name):
+    return [
+      PixelTestPage(
+        'pixel_webgl_high_to_low_power.html',
+        base_name + '_WebGLHighToLowPower',
+        test_rect=[0, 0, 300, 300],
+        tolerance=3,
+        expected_colors=[
+          {
+            'comment': 'solid green',
+            'location': [100, 100],
+            'size': [100, 100],
+            'color': [0, 255, 0],
+          }
+        ],
+        optional_action='RunTestWithHighPerformanceTab'),
+
+      PixelTestPage(
+        'pixel_webgl_low_to_high_power.html',
+        base_name + '_WebGLLowToHighPower',
+        test_rect=[0, 0, 300, 300],
+        tolerance=3,
+        expected_colors=[
+          {
+            'comment': 'solid green',
+            'location': [100, 100],
+            'size': [100, 100],
+            'color': [0, 255, 0],
+          }
+        ],
+        optional_action='RunLowToHighPowerTest'),
+
+      PixelTestPage(
+        'pixel_webgl_low_to_high_power_alpha_false.html',
+        base_name + '_WebGLLowToHighPowerAlphaFalse',
+        test_rect=[0, 0, 300, 300],
+        tolerance=3,
+        expected_colors=[
+          {
+            'comment': 'solid green',
+            'location': [100, 100],
+            'size': [100, 100],
+            'color': [0, 255, 0],
+          }
+        ],
+        optional_action='RunLowToHighPowerTest'),
+
+      PixelTestPage(
+        'pixel_offscreen_canvas_ibrc_webgl_main.html',
+        base_name + '_OffscreenCanvasIBRCWebGLHighPerfMain',
+        test_rect=[0, 0, 300, 300],
+        tolerance=3,
+        expected_colors=[
+          {
+            'comment': 'solid green',
+            'location': [100, 100],
+            'size': [100, 100],
+            'color': [0, 255, 0],
+          }
+        ],
+        optional_action='RunOffscreenCanvasIBRCWebGLHighPerfTest'),
+
+      PixelTestPage(
+        'pixel_offscreen_canvas_ibrc_webgl_worker.html',
+        base_name + '_OffscreenCanvasIBRCWebGLHighPerfWorker',
+        test_rect=[0, 0, 300, 300],
+        tolerance=3,
+        expected_colors=[
+          {
+            'comment': 'solid green',
+            'location': [100, 100],
+            'size': [100, 100],
+            'color': [0, 255, 0],
+          }
+        ],
+        optional_action='RunOffscreenCanvasIBRCWebGLHighPerfTest'),
     ]
 
   @staticmethod
@@ -1733,3 +1976,20 @@ class PixelTestPages(object):
         tolerance=tolerance_dc,
         expected_colors=_FOUR_COLOR_VIDEO_240x135_EXPECTED_COLORS),
       ]
+
+  @staticmethod
+  def HdrTestPages(base_name):
+    return [
+      PixelTestPage(
+        'pixel_canvas2d.html',
+        base_name + '_Canvas2DRedBoxScrgbLinear',
+        test_rect=[0, 0, 300, 300],
+        browser_args=['--force-color-profile=scrgb-linear']),
+
+      PixelTestPage(
+        'pixel_canvas2d.html',
+        base_name + '_Canvas2DRedBoxHdr10',
+        test_rect=[0, 0, 300, 300],
+        browser_args=['--force-color-profile=hdr10']),
+    ]
+

@@ -8,6 +8,7 @@ source_set("test_support") {
   testonly = true
 
   sources = [
+    "decorators_utils.h",
     "frame_priority.cc",
     "frame_priority.h",
     "graph_impl.h",

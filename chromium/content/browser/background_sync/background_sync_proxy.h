@@ -37,8 +37,14 @@ class CONTENT_EXPORT BackgroundSyncProxy {
       blink::mojom::BackgroundSyncType sync_type,
       base::TimeDelta delay,
       base::OnceClosure delayed_task);
+  virtual void CancelDelayedProcessing(
+      blink::mojom::BackgroundSyncType sync_type);
   void SendSuspendedPeriodicSyncOrigins(
       std::set<url::Origin> suspended_origins);
+  void SendRegisteredPeriodicSyncOrigins(
+      std::set<url::Origin> registered_origins);
+  void AddToTrackedOrigins(url::Origin origin);
+  void RemoveFromTrackedOrigins(url::Origin origin);
 
  private:
   // Constructed on the service worker core thread, lives and dies on the UI

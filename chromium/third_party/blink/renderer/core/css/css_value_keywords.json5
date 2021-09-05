@@ -145,7 +145,6 @@
     "fantasy",
     "monospace",
     "-webkit-body",
-    "-webkit-pictograph",
 
     //
     // font-display
@@ -182,13 +181,18 @@
     "-webkit-activelink",
     "activeborder",
     "activecaption",
+    "activetext",
     "appworkspace",
     "background",
     "buttonface",
     "buttonhighlight",
     "buttonshadow",
     "buttontext",
+    "canvas",
+    "canvastext",
     "captiontext",
+    "field",
+    "fieldtext",
     "graytext",
     "highlight",
     "highlighttext",
@@ -223,9 +227,6 @@
     // Value used to implement the behavior in:
     // https://quirks.spec.whatwg.org/#the-tables-inherit-color-from-body-quirk
     "-internal-quirk-inherit",
-    // The default color value for the root element. Using a keyword to account
-    // for different values for different color schemes like dark mode.
-    "-internal-root-color",
     //
     // background-repeat
     //
@@ -377,6 +378,8 @@
     "inline-flex",
     "grid",
     "inline-grid",
+    "math",
+    "inline-math",
     "contents",
     //none
     "-webkit-flex",
@@ -473,6 +476,8 @@
     "-webkit-isolate",
     "-webkit-isolate-override",
     "-webkit-plaintext",
+    "jis-b5",
+    "jis-b4",
     "landscape",
     "ledger",
     "legal",
@@ -499,6 +504,12 @@
     "underline",
     "wavy",
     "-webkit-nowrap",
+
+    //
+    // math-style
+    //
+    // inline
+    "display",
 
     // CSS3 Values
     // box-align
@@ -612,12 +623,12 @@
     // auto
     // none
 
-    //
-    // -webkit-margin-collapse
-    //
-    // collapse
-    // separate
-    "discard",
+    // text-underline-position
+    // auto
+    "from-font",
+    // under
+    // left
+    // right
 
     //
     // word-break
@@ -1209,5 +1220,16 @@
     // (navigation-controls) media feature
     // none
     "back-button",
+
+    // subtree-visibility
+    "hidden-matchable",
+
+    // -internal-empty-line-height
+    // none
+    "fabricated",
+
+    // @supports selector(...)
+    // https://drafts.csswg.org/css-conditional-4/#typedef-supports-selector-fn
+    "selector",
   ],
 }

@@ -7,9 +7,13 @@
 #import <UIKit/UIKit.h>
 
 #include "base/mac/foundation_util.h"
-#include "base/test/scoped_feature_list.h"
-#include "ios/chrome/browser/app_launcher/app_launcher_flags.h"
+#include "base/test/task_environment.h"
 #import "ios/chrome/browser/app_launcher/app_launcher_tab_helper.h"
+#include "ios/chrome/browser/main/test_browser.h"
+#include "ios/chrome/browser/overlays/public/overlay_request.h"
+#import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
+#import "ios/chrome/browser/overlays/public/web_content_area/app_launcher_alert_overlay.h"
+#import "ios/chrome/browser/ui/dialogs/dialog_features.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/scoped_key_window.h"
 #import "ios/web/public/test/fakes/test_web_state.h"
@@ -30,21 +34,54 @@ class AppLauncherCoordinatorTest : public PlatformTest {
   AppLauncherCoordinatorTest() {
     base_view_controller_ = [[UIViewController alloc] init];
     [scoped_key_window_.Get() setRootViewController:base_view_controller_];
+    browser_ = std::make_unique<TestBrowser>();
     coordinator_ = [[AppLauncherCoordinator alloc]
-        initWithBaseViewController:base_view_controller_];
+        initWithBaseViewController:base_view_controller_
+                           browser:browser_.get()];
     application_ = OCMClassMock([UIApplication class]);
     OCMStub([application_ sharedApplication]).andReturn(application_);
     AppLauncherTabHelper::CreateForWebState(&web_state_, nil, nil);
   }
-  ~AppLauncherCoordinatorTest() override { [application_ stopMocking]; }
+  ~AppLauncherCoordinatorTest() override {
+    [application_ stopMocking];
+    OverlayRequestQueue::FromWebState(&web_state_,
+                                      OverlayModality::kWebContentArea)
+        ->CancelAllRequests();
+  }
 
   AppLauncherTabHelper* tab_helper() {
     return AppLauncherTabHelper::FromWebState(&web_state_);
   }
 
+  bool IsShowingDialog(bool is_repeated_request) {
+    if (base::FeatureList::IsEnabled(dialogs::kNonModalDialogs)) {
+      OverlayRequest* request =
+          OverlayRequestQueue::FromWebState(&web_state_,
+                                            OverlayModality::kWebContentArea)
+              ->front_request();
+      if (!request)
+        return false;
+      AppLauncherAlertOverlayRequestConfig* config =
+          request->GetConfig<AppLauncherAlertOverlayRequestConfig>();
+      return config && config->is_repeated_request() == is_repeated_request;
+    } else {
+      UIAlertController* alert_controller =
+          base::mac::ObjCCastStrict<UIAlertController>(
+              base_view_controller_.presentedViewController);
+      NSString* message =
+          is_repeated_request
+              ? l10n_util::GetNSString(IDS_IOS_OPEN_REPEATEDLY_ANOTHER_APP)
+              : l10n_util::GetNSString(IDS_IOS_OPEN_IN_ANOTHER_APP);
+      return alert_controller.message == message;
+    }
+  }
+
+  base::test::TaskEnvironment task_environment_;
+
   web::TestWebState web_state_;
   UIViewController* base_view_controller_ = nil;
   ScopedKeyWindow scoped_key_window_;
+  std::unique_ptr<Browser> browser_;
   AppLauncherCoordinator* coordinator_ = nil;
   id application_ = nil;
 };
@@ -56,36 +93,12 @@ TEST_F(AppLauncherCoordinatorTest, ItmsUrlShowsAlert) {
                                       launchAppWithURL:GURL("itms://1234")
                                         linkTransition:NO];
   EXPECT_TRUE(app_exists);
-  ASSERT_TRUE([base_view_controller_.presentedViewController
-      isKindOfClass:[UIAlertController class]]);
-  UIAlertController* alert_controller =
-      base::mac::ObjCCastStrict<UIAlertController>(
-          base_view_controller_.presentedViewController);
-  EXPECT_NSEQ(l10n_util::GetNSString(IDS_IOS_OPEN_IN_ANOTHER_APP),
-              alert_controller.message);
-}
-
-// Tests that an app URL attempts to launch the application.
-TEST_F(AppLauncherCoordinatorTest, AppUrlLaunchesApp) {
-  // Make sure that the new AppLauncherRefresh logic is disabled.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(kAppLauncherRefresh);
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  OCMExpect([application_ openURL:[NSURL URLWithString:@"some-app://1234"]]);
-#pragma clang diagnostic pop
-  [coordinator_ appLauncherTabHelper:tab_helper()
-                    launchAppWithURL:GURL("some-app://1234")
-                      linkTransition:NO];
-  [application_ verify];
+  EXPECT_TRUE(IsShowingDialog(/*is_repeated_request=*/false));
 }
 
 // Tests that in the new AppLauncher, an app URL attempts to launch the
 // application.
-TEST_F(AppLauncherCoordinatorTest, AppLauncherRefreshAppUrlLaunchesApp) {
-  // Make sure that the new AppLauncherRefresh logic is enabled.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(kAppLauncherRefresh);
+TEST_F(AppLauncherCoordinatorTest, AppUrlLaunchesApp) {
   OCMExpect([application_ openURL:[NSURL URLWithString:@"some-app://1234"]
                           options:@{}
                 completionHandler:nil]);
@@ -97,38 +110,9 @@ TEST_F(AppLauncherCoordinatorTest, AppLauncherRefreshAppUrlLaunchesApp) {
 
 // Tests that in the new AppLauncher, an app URL shows a prompt if there was no
 // link transition.
-TEST_F(AppLauncherCoordinatorTest, AppLauncherRefreshAppUrlShowsPrompt) {
-  // Make sure that the new AppLauncherRefresh logic is enabled.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(kAppLauncherRefresh);
+TEST_F(AppLauncherCoordinatorTest, AppUrlShowsPrompt) {
   [coordinator_ appLauncherTabHelper:tab_helper()
                     launchAppWithURL:GURL("some-app://1234")
                       linkTransition:NO];
-  ASSERT_TRUE([base_view_controller_.presentedViewController
-      isKindOfClass:[UIAlertController class]]);
-  UIAlertController* alert_controller =
-      base::mac::ObjCCastStrict<UIAlertController>(
-          base_view_controller_.presentedViewController);
-  EXPECT_NSEQ(l10n_util::GetNSString(IDS_IOS_OPEN_IN_ANOTHER_APP),
-              alert_controller.message);
-}
-
-// Tests that |-appLauncherTabHelper:launchAppWithURL:linkTransition:| returns
-// NO if there is no application that corresponds to a given URL.
-TEST_F(AppLauncherCoordinatorTest, NoApplicationForUrl) {
-  // Make sure that the new AppLauncherRefresh logic is disabled.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(kAppLauncherRefresh);
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  OCMStub(
-      [application_ openURL:[NSURL URLWithString:@"no-app-installed://1234"]])
-      .andReturn(NO);
-#pragma clang diagnostic pop
-  BOOL app_exists =
-      [coordinator_ appLauncherTabHelper:tab_helper()
-                        launchAppWithURL:GURL("no-app-installed://1234")
-                          linkTransition:NO];
-  EXPECT_FALSE(app_exists);
+  EXPECT_TRUE(IsShowingDialog(/*is_repeated_request=*/false));
 }

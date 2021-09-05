@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -22,6 +23,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/render_text.h"
@@ -367,8 +369,8 @@ TEST_F(EditableComboboxTest, LeftOrRightKeysMoveInTextfield) {
   EXPECT_EQ(ASCIIToUTF16("abcde"), combobox_->GetText());
 }
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
-// Flaky on Windows and Mac. https://crbug.com/965601
+#if defined(OS_WIN)
+// Flaky on Windows. https://crbug.com/965601
 #define MAYBE_UpOrDownKeysMoveInMenu DISABLED_UpOrDownKeysMoveInMenu
 #else
 #define MAYBE_UpOrDownKeysMoveInMenu UpOrDownKeysMoveInMenu
@@ -509,8 +511,8 @@ TEST_F(EditableComboboxTest, EnterClosesMenuWhileSelectingHighlightedMenuItem) {
   EXPECT_EQ(ASCIIToUTF16("item[0]"), combobox_->GetText());
 }
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
-// Flaky on Windows and Mac. https://crbug.com/965601
+#if defined(OS_WIN)
+// Flaky on Windows. https://crbug.com/965601
 #define MAYBE_F4ClosesMenuWhileSelectingHighlightedMenuItem \
   DISABLED_F4ClosesMenuWhileSelectingHighlightedMenuItem
 #else
@@ -576,8 +578,8 @@ TEST_F(EditableComboboxTest, SpaceIsReflectedInTextfield) {
   EXPECT_EQ(ASCIIToUTF16("a  b"), combobox_->GetText());
 }
 
-#if defined(OS_WIN) || defined(OS_MACOSX)
-// Flaky on Windows and Mac. https://crbug.com/965601
+#if defined(OS_WIN)
+// Flaky on Windows. https://crbug.com/965601
 #define MAYBE_MenuCanAdaptToContentChange DISABLED_MenuCanAdaptToContentChange
 #else
 #define MAYBE_MenuCanAdaptToContentChange MenuCanAdaptToContentChange

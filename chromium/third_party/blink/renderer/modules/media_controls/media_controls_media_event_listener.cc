@@ -62,7 +62,7 @@ void MediaControlsMediaEventListener::Attach() {
       media_controls_->GetDocument()
           .GetSettings()
           ->GetPictureInPictureEnabled() &&
-      GetMediaElement().IsHTMLVideoElement()) {
+      IsA<HTMLVideoElement>(GetMediaElement())) {
     GetMediaElement().addEventListener(event_type_names::kEnterpictureinpicture,
                                        this, false);
     GetMediaElement().addEventListener(event_type_names::kLeavepictureinpicture,
@@ -252,7 +252,7 @@ void MediaControlsMediaEventListener::OnRemotePlaybackAvailabilityChanged() {
   media_controls_->RefreshCastButtonVisibility();
 }
 
-void MediaControlsMediaEventListener::Trace(blink::Visitor* visitor) {
+void MediaControlsMediaEventListener::Trace(Visitor* visitor) {
   NativeEventListener::Trace(visitor);
   visitor->Trace(media_controls_);
 }

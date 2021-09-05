@@ -17,6 +17,11 @@ class CrostiniFeatures {
  public:
   static CrostiniFeatures* Get();
 
+  // Returns true if crostini is allowed to run for |profile|.
+  // Otherwise, returns false, e.g. if crostini is not available on the device,
+  // or it is in the flow to set up managed account creation.
+  virtual bool IsAllowed(Profile* profile);
+
   // When |check_policy| is true, returns true if fully interactive crostini UI
   // may be shown. Implies crostini is allowed to run.
   // When check_policy is false, returns true if crostini UI is not forbidden by
@@ -34,6 +39,14 @@ class CrostiniFeatures {
   // Returns whether user is allowed root access to Crostini. Always returns
   // true when advanced access controls feature flag is disabled.
   virtual bool IsRootAccessAllowed(Profile*);
+
+  // Returns true if container upgrade ui is allowed by flag.
+  virtual bool IsContainerUpgradeUIAllowed(Profile*);
+
+  // Returns whether the user is allowed to enable and disable ADB sideloading
+  // based on whether the user is the owner, whether the user and the device
+  // are managed, and feature flag and policies for managed case.
+  virtual bool CanChangeAdbSideloading(Profile* profile);
 
   // TODO(crbug.com/1004708): Move other functions from crostini_util to here.
 

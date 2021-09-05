@@ -12,7 +12,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_service.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/context_menu_params.h"
+#include "content/public/browser/context_menu_params.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_context_menu.h"
 
@@ -21,9 +21,11 @@ namespace vivaldi {
 ContextMenuController::ContextMenuController(
     Delegate* delegate,
     content::WebContents* web_contents,
+    content::WebContents* window_web_contents,
     std::unique_ptr<Params> params)
   :delegate_(delegate),
    web_contents_(web_contents),
+   window_web_contents_(window_web_contents),
    browser_(FindBrowserForEmbedderWebContents(web_contents)),
    params_(std::move(params)) {
 
@@ -44,12 +46,12 @@ ContextMenuController::ContextMenuController(
   int width = params_->properties.rect.width;
 
   gfx::RectF rect(point.x(), point.y(), width, height);
-  FromUICoordinates(web_contents_, &rect);
+  FromUICoordinates(window_web_contents_, &rect);
   rect_ = gfx::Rect(round(rect.x()), round(rect.y()), round(rect.width()),
                     round(rect.height()));
 
   developertools_controller_.reset(
-      new DeveloperToolsMenuController(web_contents_, rect_.origin()));
+      new DeveloperToolsMenuController(window_web_contents_, rect_.origin()));
 }
 
 ContextMenuController::~ContextMenuController() {
@@ -64,8 +66,7 @@ void ContextMenuController::Show() {
   // Mac needs the views version for certain origins as we can not place the
   // menu properly on mac/cocoa.
   bool force_views = params_->properties.origin != Origin::ORIGIN_POINTER;
-
-  menu_.reset(CreateVivaldiContextMenu(web_contents_, menu_model_, rect_,
+  menu_.reset(CreateVivaldiContextMenu(window_web_contents_, menu_model_, rect_,
                                        force_views,
                                        force_views ? this : nullptr));
   menu_->Show();

@@ -27,6 +27,9 @@ function_registration("generated_api_registration") {
     ":generated_api_json_strings",
     ":generated_api_types",
 
+    "//chrome/common:buildflags",
+    "//chrome/common/extensions/api",
+    "//components/omnibox/browser:buildflags",
     "//content/public/browser",
     "//skia",
   ]

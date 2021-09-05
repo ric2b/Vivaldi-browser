@@ -20,7 +20,7 @@
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "components/renderer_context_menu/render_view_context_menu_observer.h"
 #include "components/renderer_context_menu/render_view_context_menu_proxy.h"
-#include "content/public/common/context_menu_params.h"
+#include "content/public/browser/context_menu_params.h"
 #include "extensions/buildflags/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
@@ -39,6 +39,7 @@ class AccessibilityLabelsMenuObserver;
 class ClickToCallContextMenuObserver;
 class PrintPreviewContextMenuObserver;
 class Profile;
+class QuickAnswersMenuObserver;
 class SharedClipboardContextMenuObserver;
 class SpellingMenuObserver;
 class SpellingOptionsSubMenuObserver;
@@ -58,8 +59,9 @@ class Point;
 }
 
 namespace blink {
-struct PluginAction;
-struct WebMediaPlayerAction;
+namespace mojom {
+class MediaPlayerAction;
+}
 }
 
 class RenderViewContextMenu : public RenderViewContextMenuBase {
@@ -161,6 +163,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void AppendOpenWithLinkItems();
   void AppendSmartSelectionActionItems();
   void AppendOpenInBookmarkAppLinkItems();
+  void AppendQuickAnswersItems();
   void AppendImageItems();
   void AppendAudioItems();
   void AppendCanvasItems();
@@ -176,7 +179,6 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void AppendEditableItems();
   void AppendLanguageSettings();
   void AppendSpellingSuggestionItems();
-  void AppendSharedClipboardItems();
   // Returns true if the items were appended. This might not happen in all
   // cases, e.g. these are only appended if a screen reader is enabled.
   bool AppendAccessibilityLabelsItems();
@@ -190,7 +192,9 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void AppendProtocolHandlerSubMenu();
   void AppendPasswordItems();
   void AppendPictureInPictureItem();
-  void MaybeAppendClickToCallItem();
+  void AppendSharingItems();
+  void AppendClickToCallItem();
+  void AppendSharedClipboardItem();
 
   // Command enabled query functions.
   bool IsReloadEnabled() const;
@@ -236,9 +240,9 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void ExecPictureInPicture();
 
   void MediaPlayerActionAt(const gfx::Point& location,
-                           const blink::WebMediaPlayerAction& action);
+                           const blink::mojom::MediaPlayerAction& action);
   void PluginActionAt(const gfx::Point& location,
-                      const blink::PluginAction& action);
+                      blink::mojom::PluginActionType plugin_action);
 
   // Returns a list of registered ProtocolHandlers that can handle the clicked
   // on URL.
@@ -279,6 +283,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   // An observer that handles smart text selection action items.
   std::unique_ptr<RenderViewContextMenuObserver>
       start_smart_selection_action_menu_observer_;
+  std::unique_ptr<QuickAnswersMenuObserver> quick_answers_menu_observer_;
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)

@@ -12,6 +12,8 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/no_destructor.h"
+#include "base/synchronization/lock.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
@@ -19,8 +21,10 @@
 #include "ui/gl/dc_layer_tree.h"
 #include "ui/gl/direct_composition_child_surface_win.h"
 #include "ui/gl/gl_angle_util_win.h"
+#include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface_presentation_helper.h"
 #include "ui/gl/gl_switches.h"
+#include "ui/gl/gpu_switching_manager.h"
 #include "ui/gl/vsync_thread_win.h"
 
 #ifndef EGL_ANGLE_flexible_surface_compatibility
@@ -30,8 +34,35 @@
 
 namespace gl {
 namespace {
-// Indicates support for either NV12 or YUY2 hardware overlays.
+// Whether the overlay caps are valid or not. GUARDED_BY GetOverlayLock().
+bool g_overlay_caps_valid = false;
+// Indicates support for either NV12 or YUY2 hardware overlays. GUARDED_BY
+// GetOverlayLock().
 bool g_supports_overlays = false;
+
+// The lock to guard g_overlay_caps_valid and g_supports_overlays.
+base::Lock& GetOverlayLock() {
+  static base::NoDestructor<base::Lock> overlay_lock;
+  return *overlay_lock;
+}
+
+bool SupportsOverlays() {
+  base::AutoLock auto_lock(GetOverlayLock());
+  return g_supports_overlays;
+}
+void SetSupportsOverlays(bool support) {
+  base::AutoLock auto_lock(GetOverlayLock());
+  g_supports_overlays = support;
+}
+
+bool OverlayCapsValid() {
+  base::AutoLock auto_lock(GetOverlayLock());
+  return g_overlay_caps_valid;
+}
+void SetOverlayCapsValid(bool valid) {
+  base::AutoLock auto_lock(GetOverlayLock());
+  g_overlay_caps_valid = valid;
+}
 
 // Used for workaround limiting overlay size to monitor size.
 gfx::Size g_overlay_monitor_size;
@@ -51,11 +82,17 @@ bool FlagsSupportsOverlays(UINT flags) {
                    DXGI_OVERLAY_SUPPORT_FLAG_SCALING));
 }
 
-void InitializeHardwareOverlaySupport() {
-  static bool overlay_support_initialized = false;
-  if (overlay_support_initialized)
-    return;
-  overlay_support_initialized = true;
+void GetGpuDriverHardwareOverlayInfo(bool* supports_overlays,
+                                     DXGI_FORMAT* overlay_format_used,
+                                     UINT* nv12_overlay_support_flags,
+                                     UINT* yuy2_overlay_support_flags,
+                                     gfx::Size* overlay_monitor_size) {
+  // Initialization
+  *supports_overlays = false;
+  *overlay_format_used = DXGI_FORMAT_NV12;
+  *nv12_overlay_support_flags = 0;
+  *yuy2_overlay_support_flags = 0;
+  *overlay_monitor_size = gfx::Size();
 
   // Check for DirectComposition support first to prevent likely crashes.
   if (!DirectCompositionSurfaceWin::IsDirectCompositionSupported())
@@ -103,10 +140,10 @@ void InitializeHardwareOverlaySupport() {
       continue;
     DCHECK(output3);
     output3->CheckOverlaySupport(DXGI_FORMAT_NV12, d3d11_device.Get(),
-                                 &g_nv12_overlay_support_flags);
+                                 nv12_overlay_support_flags);
     output3->CheckOverlaySupport(DXGI_FORMAT_YUY2, d3d11_device.Get(),
-                                 &g_yuy2_overlay_support_flags);
-    if (FlagsSupportsOverlays(g_nv12_overlay_support_flags) &&
+                                 yuy2_overlay_support_flags);
+    if (FlagsSupportsOverlays(*nv12_overlay_support_flags) &&
         base::FeatureList::IsEnabled(
             features::kDirectCompositionPreferNV12Overlays)) {
       // NV12 format is preferred if it's supported.
@@ -128,20 +165,20 @@ void InitializeHardwareOverlaySupport() {
         // performing an extra scaling Blt before calling the driver. Even when
         // scaled overlays aren't actually supported, presentation using the
         // overlay path should be relatively efficient.
-        g_overlay_format_used = DXGI_FORMAT_NV12;
-        g_supports_overlays = true;
+        *overlay_format_used = DXGI_FORMAT_NV12;
+        *supports_overlays = true;
       }
     }
-    if (!g_supports_overlays &&
-        FlagsSupportsOverlays(g_yuy2_overlay_support_flags)) {
+    if (!*supports_overlays &&
+        FlagsSupportsOverlays(*yuy2_overlay_support_flags)) {
       // If NV12 isn't supported, fallback to YUY2 if it's supported.
-      g_overlay_format_used = DXGI_FORMAT_YUY2;
-      g_supports_overlays = true;
+      *overlay_format_used = DXGI_FORMAT_YUY2;
+      *supports_overlays = true;
     }
-    if (g_supports_overlays) {
+    if (*supports_overlays) {
       DXGI_OUTPUT_DESC monitor_desc = {};
       if (SUCCEEDED(output3->GetDesc(&monitor_desc))) {
-        g_overlay_monitor_size =
+        *overlay_monitor_size =
             gfx::Rect(monitor_desc.DesktopCoordinates).size();
       }
     }
@@ -151,15 +188,43 @@ void InitializeHardwareOverlaySupport() {
     // https://docs.microsoft.com/en-us/windows-hardware/drivers/display/multiplane-overlay-hardware-requirements
     // TODO(sunnyps): If the above is true, then we can only look at first
     // output instead of iterating over all outputs.
-    if (g_supports_overlays)
+    if (*supports_overlays)
       break;
   }
-  if (g_supports_overlays) {
-    base::UmaHistogramSparse("GPU.DirectComposition.OverlayFormatUsed3",
-                             g_overlay_format_used);
+}
+
+void UpdateHardwareOverlaySupport() {
+  if (OverlayCapsValid())
+    return;
+  SetOverlayCapsValid(true);
+
+  bool supports_overlays = false;
+  DXGI_FORMAT overlay_format_used = DXGI_FORMAT_NV12;
+  UINT nv12_overlay_support_flags = 0;
+  UINT yuy2_overlay_support_flags = 0;
+  gfx::Size overlay_monitor_size = gfx::Size();
+
+  GetGpuDriverHardwareOverlayInfo(
+      &supports_overlays, &overlay_format_used, &nv12_overlay_support_flags,
+      &yuy2_overlay_support_flags, &overlay_monitor_size);
+
+  if (supports_overlays != SupportsOverlays() ||
+      overlay_format_used != g_overlay_format_used) {
+    // Record the new histograms
+    if (supports_overlays) {
+      base::UmaHistogramSparse("GPU.DirectComposition.OverlayFormatUsed3",
+                               overlay_format_used);
+    }
+    UMA_HISTOGRAM_BOOLEAN("GPU.DirectComposition.OverlaysSupported",
+                          supports_overlays);
   }
-  UMA_HISTOGRAM_BOOLEAN("GPU.DirectComposition.OverlaysSupported",
-                        g_supports_overlays);
+
+  // Update global caps
+  SetSupportsOverlays(supports_overlays);
+  g_overlay_format_used = overlay_format_used;
+  g_nv12_overlay_support_flags = nv12_overlay_support_flags;
+  g_yuy2_overlay_support_flags = yuy2_overlay_support_flags;
+  g_overlay_monitor_size = overlay_monitor_size;
 }
 
 bool SupportsPresentationFeedback() {
@@ -207,9 +272,11 @@ DirectCompositionSurfaceWin::DirectCompositionSurfaceWin(
   // Call GetWeakPtr() on main thread before calling on vsync thread so that the
   // internal weak reference is initialized in a thread-safe way.
   weak_ptr_ = weak_factory_.GetWeakPtr();
+  ui::GpuSwitchingManager::GetInstance()->AddObserver(this);
 }
 
 DirectCompositionSurfaceWin::~DirectCompositionSurfaceWin() {
+  ui::GpuSwitchingManager::GetInstance()->RemoveObserver(this);
   Destroy();
 }
 
@@ -218,6 +285,10 @@ bool DirectCompositionSurfaceWin::IsDirectCompositionSupported() {
   static const bool supported = [] {
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
     if (command_line->HasSwitch(switches::kDisableDirectComposition))
+      return false;
+
+    // Direct composition can only be used with ANGLE.
+    if (gl::GetGLImplementation() != gl::kGLImplementationEGLANGLE)
       return false;
 
     // Blacklist direct composition if MCTU.dll or MCTUX.dll are injected. These
@@ -267,7 +338,7 @@ bool DirectCompositionSurfaceWin::IsDirectCompositionSupported() {
 bool DirectCompositionSurfaceWin::AreOverlaysSupported() {
   // Always initialize and record overlay support information irrespective of
   // command line flags.
-  InitializeHardwareOverlaySupport();
+  UpdateHardwareOverlaySupport();
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   // Enable flag should be checked before the disable flag, so we could
@@ -277,14 +348,14 @@ bool DirectCompositionSurfaceWin::AreOverlaysSupported() {
   if (command_line->HasSwitch(switches::kDisableDirectCompositionVideoOverlays))
     return false;
 
-  return g_supports_overlays;
+  return SupportsOverlays();
 }
 
 // static
 bool DirectCompositionSurfaceWin::IsDecodeSwapChainSupported() {
   if (base::FeatureList::IsEnabled(
           features::kDirectCompositionUseNV12DecodeSwapChain)) {
-    InitializeHardwareOverlaySupport();
+    UpdateHardwareOverlaySupport();
     return GetOverlayFormatUsed() == DXGI_FORMAT_NV12;
   }
   return false;
@@ -292,12 +363,17 @@ bool DirectCompositionSurfaceWin::IsDecodeSwapChainSupported() {
 
 // static
 void DirectCompositionSurfaceWin::DisableOverlays() {
-  g_supports_overlays = false;
+  SetSupportsOverlays(false);
+}
+
+// static
+void DirectCompositionSurfaceWin::InvalidateOverlayCaps() {
+  SetOverlayCapsValid(false);
 }
 
 // static
 bool DirectCompositionSurfaceWin::AreScaledOverlaysSupported() {
-  InitializeHardwareOverlaySupport();
+  UpdateHardwareOverlaySupport();
   if (g_overlay_format_used == DXGI_FORMAT_NV12)
     return !!(g_nv12_overlay_support_flags & DXGI_OVERLAY_SUPPORT_FLAG_SCALING);
   DCHECK_EQ(DXGI_FORMAT_YUY2, g_overlay_format_used);
@@ -306,7 +382,7 @@ bool DirectCompositionSurfaceWin::AreScaledOverlaysSupported() {
 
 // static
 UINT DirectCompositionSurfaceWin::GetOverlaySupportFlags(DXGI_FORMAT format) {
-  InitializeHardwareOverlaySupport();
+  UpdateHardwareOverlaySupport();
   if (format == DXGI_FORMAT_NV12)
     return g_nv12_overlay_support_flags;
   DCHECK_EQ(DXGI_FORMAT_YUY2, format);
@@ -326,7 +402,7 @@ DXGI_FORMAT DirectCompositionSurfaceWin::GetOverlayFormatUsed() {
 // static
 void DirectCompositionSurfaceWin::SetScaledOverlaysSupportedForTesting(
     bool supported) {
-  InitializeHardwareOverlaySupport();
+  UpdateHardwareOverlaySupport();
   if (supported) {
     g_nv12_overlay_support_flags |= DXGI_OVERLAY_SUPPORT_FLAG_SCALING;
     g_yuy2_overlay_support_flags |= DXGI_OVERLAY_SUPPORT_FLAG_SCALING;
@@ -341,7 +417,7 @@ void DirectCompositionSurfaceWin::SetScaledOverlaysSupportedForTesting(
 void DirectCompositionSurfaceWin::SetOverlayFormatUsedForTesting(
     DXGI_FORMAT format) {
   DCHECK(format == DXGI_FORMAT_NV12 || format == DXGI_FORMAT_YUY2);
-  InitializeHardwareOverlaySupport();
+  UpdateHardwareOverlaySupport();
   g_overlay_format_used = format;
   DCHECK_EQ(format, GetOverlayFormatUsed());
 }
@@ -350,6 +426,10 @@ void DirectCompositionSurfaceWin::SetOverlayFormatUsedForTesting(
 bool DirectCompositionSurfaceWin::IsHDRSupported() {
   // HDR support was introduced in Windows 10 Creators Update.
   if (base::win::GetVersion() < base::win::Version::WIN10_RS2)
+    return false;
+
+  // Only direct composition surface can allocate HDR swap chains.
+  if (!IsDirectCompositionSupported())
     return false;
 
   HRESULT hr = S_OK;
@@ -444,6 +524,14 @@ bool DirectCompositionSurfaceWin::IsSwapChainTearingSupported() {
   return supported;
 }
 
+// static
+bool DirectCompositionSurfaceWin::AllowTearing() {
+  // Swap chain tearing is used only if vsync is disabled explicitly.
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+             switches::kDisableGpuVsync) &&
+         DirectCompositionSurfaceWin::IsSwapChainTearingSupported();
+}
+
 bool DirectCompositionSurfaceWin::Initialize(GLSurfaceFormat format) {
   d3d11_device_ = QueryD3D11DeviceObjectFromANGLE();
   if (!d3d11_device_) {
@@ -504,7 +592,7 @@ void* DirectCompositionSurfaceWin::GetHandle() {
 
 bool DirectCompositionSurfaceWin::Resize(const gfx::Size& size,
                                          float scale_factor,
-                                         ColorSpace color_space,
+                                         const gfx::ColorSpace& color_space,
                                          bool has_alpha) {
   // Force a resize and redraw (but not a move, activate, etc.).
   if (!SetWindowPos(window_, nullptr, 0, 0, size.width(), size.height(),
@@ -572,8 +660,8 @@ bool DirectCompositionSurfaceWin::SetEnableDCLayers(bool enable) {
   return root_surface_->SetEnableDCLayers(enable);
 }
 
-bool DirectCompositionSurfaceWin::FlipsVertically() const {
-  return true;
+gfx::SurfaceOrigin DirectCompositionSurfaceWin::GetOrigin() const {
+  return gfx::SurfaceOrigin::kTopLeft;
 }
 
 bool DirectCompositionSurfaceWin::SupportsPostSubBuffer() {
@@ -588,10 +676,6 @@ bool DirectCompositionSurfaceWin::OnMakeCurrent(GLContext* context) {
 
 bool DirectCompositionSurfaceWin::SupportsDCLayers() const {
   return true;
-}
-
-bool DirectCompositionSurfaceWin::UseOverlaysForVideo() const {
-  return AreOverlaysSupported();
 }
 
 bool DirectCompositionSurfaceWin::SupportsProtectedVideo() const {
@@ -700,8 +784,8 @@ void DirectCompositionSurfaceWin::OnVSync(base::TimeTicks vsync_time,
   if (SupportsPresentationFeedback()) {
     task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&DirectCompositionSurfaceWin::HandleVSyncOnMainThread,
-                   weak_ptr_, vsync_time, interval));
+        base::BindOnce(&DirectCompositionSurfaceWin::HandleVSyncOnMainThread,
+                       weak_ptr_, vsync_time, interval));
   }
 }
 
@@ -721,6 +805,19 @@ void DirectCompositionSurfaceWin::HandleVSyncOnMainThread(
     DCHECK(vsync_callback_);
     vsync_callback_.Run(vsync_time, interval);
   }
+}
+
+void DirectCompositionSurfaceWin::OnGpuSwitched(
+    gl::GpuPreference active_gpu_heuristic) {}
+
+void DirectCompositionSurfaceWin::OnDisplayAdded() {
+  InvalidateOverlayCaps();
+  UpdateHardwareOverlaySupport();
+}
+
+void DirectCompositionSurfaceWin::OnDisplayRemoved() {
+  InvalidateOverlayCaps();
+  UpdateHardwareOverlaySupport();
 }
 
 scoped_refptr<base::TaskRunner>

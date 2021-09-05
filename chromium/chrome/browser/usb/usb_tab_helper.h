@@ -39,8 +39,8 @@ class UsbTabHelper : public content::WebContentsObserver,
       content::RenderFrameHost* render_frame_host,
       mojo::PendingReceiver<blink::mojom::WebUsbService> receiver);
 
-  void IncrementConnectionCount(content::RenderFrameHost* render_frame_host);
-  void DecrementConnectionCount(content::RenderFrameHost* render_frame_host);
+  void IncrementConnectionCount();
+  void DecrementConnectionCount();
   bool IsDeviceConnected() const;
 
  private:
@@ -60,12 +60,13 @@ class UsbTabHelper : public content::WebContentsObserver,
   base::WeakPtr<WebUsbChooser> GetUsbChooser(
       content::RenderFrameHost* render_frame_host);
 
-  void NotifyTabStateChanged() const;
+  void NotifyIsDeviceConnectedChanged(bool is_device_connected) const;
 
   bool AllowedByFeaturePolicy(
       content::RenderFrameHost* render_frame_host) const;
 
   FrameUsbServicesMap frame_usb_services_;
+  int device_connection_count_ = 0;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 

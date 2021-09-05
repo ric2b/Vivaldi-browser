@@ -9,6 +9,8 @@
 #include "base/feature_list.h"
 #import "base/ios/crb_protocol_observers.h"
 #include "base/strings/sys_string_conversions.h"
+#import "ios/testing/earl_grey/coverage_utils.h"
+#import "ios/testing/earl_grey/earl_grey_test.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -68,49 +70,82 @@ bool LaunchArgumentsAreEqual(NSArray<NSString*>* args1,
 // fails to do so.
 // In EG1, this method is a no-op.
 - (void)ensureAppLaunchedWithArgs:(NSArray<NSString*>*)arguments
-                     forceRestart:(BOOL)forceRestart {
+                   relaunchPolicy:(RelaunchPolicy)relaunchPolicy {
 #if defined(CHROME_EARL_GREY_2)
-  bool appNeedsLaunching =
-      forceRestart || !self.runningApplication ||
-      !LaunchArgumentsAreEqual(arguments, self.currentLaunchArgs);
+  BOOL forceRestart = (relaunchPolicy == ForceRelaunchByKilling) ||
+                      (relaunchPolicy == ForceRelaunchByCleanShutdown);
+  BOOL gracefullyKill = (relaunchPolicy == ForceRelaunchByCleanShutdown);
+  BOOL runResets = (relaunchPolicy == NoForceRelaunchAndResetState);
 
+  // If app has crashed, |self.runningApplication| will be at
+  // |XCUIApplicationStateNotRunning| state and it should be relaunched with
+  // proper resets. The app also needs a relaunch if it's at
+  // |XCUIApplicationStateUnknown| state.
+  BOOL appIsRunning =
+      (self.runningApplication != nil) &&
+      (self.runningApplication.state != XCUIApplicationStateNotRunning) &&
+      (self.runningApplication.state != XCUIApplicationStateUnknown);
+
+  bool appNeedsLaunching =
+      forceRestart || !appIsRunning ||
+      !LaunchArgumentsAreEqual(arguments, self.currentLaunchArgs);
   if (!appNeedsLaunching) {
     [self.runningApplication activate];
     return;
   }
 
+  if (appIsRunning) {
+    if (gracefullyKill) {
+      GREYAssertTrue([EarlGrey backgroundApplication],
+                     @"Failed to background application.");
+    }
+
+    [CoverageUtils writeClangCoverageProfile];
+
+    [self.runningApplication terminate];
+  }
+
   XCUIApplication* application = [[XCUIApplication alloc] init];
   application.launchArguments = arguments;
-
   [application launch];
+
+  [CoverageUtils configureCoverageReportPath];
+
   if (self.runningApplication) {
-    [self.observers appLaunchManagerDidRelaunchApp:self];
+    [self.observers appLaunchManagerDidRelaunchApp:self runResets:runResets];
   }
   self.runningApplication = application;
   self.currentLaunchArgs = arguments;
 #endif
 }
 
-- (void)ensureAppLaunchedWithFeaturesEnabled:
-            (const std::vector<base::Feature>&)featuresEnabled
-                                    disabled:(const std::vector<base::Feature>&)
-                                                 featuresDisabled
-                                forceRestart:(BOOL)forceRestart {
-  NSMutableArray<NSString*>* namesToEnable =
-      [NSMutableArray arrayWithCapacity:featuresEnabled.size()];
-  NSMutableArray<NSString*>* namesToDisable =
-      [NSMutableArray arrayWithCapacity:featuresDisabled.size()];
+- (void)ensureAppLaunchedWithConfiguration:
+    (AppLaunchConfiguration)configuration {
+  NSMutableArray<NSString*>* namesToEnable = [NSMutableArray array];
+  NSMutableArray<NSString*>* namesToDisable = [NSMutableArray array];
+  NSMutableArray<NSString*>* variations = [NSMutableArray array];
 
-  for (const base::Feature& feature : featuresEnabled) {
+  for (const base::Feature& feature : configuration.features_enabled) {
     [namesToEnable addObject:base::SysUTF8ToNSString(feature.name)];
   }
 
-  for (const base::Feature& feature : featuresDisabled) {
+  for (const base::Feature& feature : configuration.features_disabled) {
     [namesToDisable addObject:base::SysUTF8ToNSString(feature.name)];
+  }
+
+  for (const variations::VariationID& variation :
+       configuration.variations_enabled) {
+    [variations addObject:[NSString stringWithFormat:@"%d", variation]];
+  }
+
+  for (const variations::VariationID& variation :
+       configuration.trigger_variations_enabled) {
+    [variations addObject:[NSString stringWithFormat:@"t%d", variation]];
   }
 
   NSString* enabledString = @"";
   NSString* disabledString = @"";
+  NSString* variationString = @"";
   if ([namesToEnable count] > 0) {
     enabledString = [NSString
         stringWithFormat:@"--enable-features=%@",
@@ -121,9 +156,41 @@ bool LaunchArgumentsAreEqual(NSArray<NSString*>* args1,
         stringWithFormat:@"--disable-features=%@",
                          [namesToDisable componentsJoinedByString:@","]];
   }
+  if (variations.count > 0) {
+    variationString =
+        [NSString stringWithFormat:@"--force-variation-ids=%@",
+                                   [variations componentsJoinedByString:@","]];
+  }
 
-  NSArray<NSString*>* arguments = @[ enabledString, disabledString ];
-  [self ensureAppLaunchedWithArgs:arguments forceRestart:forceRestart];
+  NSMutableArray<NSString*>* arguments = [NSMutableArray
+      arrayWithObjects:enabledString, disabledString, variationString, nil];
+
+  for (const std::string& arg : configuration.additional_args) {
+    [arguments addObject:base::SysUTF8ToNSString(arg)];
+  }
+
+  [self ensureAppLaunchedWithArgs:arguments
+                   relaunchPolicy:configuration.relaunch_policy];
+}
+
+- (void)ensureAppLaunchedWithFeaturesEnabled:
+            (std::vector<base::Feature>)featuresEnabled
+                                    disabled:(std::vector<base::Feature>)
+                                                 featuresDisabled
+                              relaunchPolicy:(RelaunchPolicy)relaunchPolicy {
+  AppLaunchConfiguration config;
+  config.features_enabled = std::move(featuresEnabled);
+  config.features_disabled = std::move(featuresDisabled);
+  config.relaunch_policy = relaunchPolicy;
+  [self ensureAppLaunchedWithConfiguration:config];
+}
+
+- (void)backgroundAndForegroundApp {
+#if defined(CHROME_EARL_GREY_2)
+  GREYAssertTrue([EarlGrey backgroundApplication],
+                 @"Failed to background application.");
+  [self.runningApplication activate];
+#endif
 }
 
 - (void)addObserver:(id<AppLaunchManagerObserver>)observer {

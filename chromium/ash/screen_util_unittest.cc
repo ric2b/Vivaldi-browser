@@ -30,11 +30,11 @@ using ScreenUtilTest = AshTestBase;
 
 TEST_F(ScreenUtilTest, Bounds) {
   UpdateDisplay("600x600,500x500");
-  views::Widget* primary = views::Widget::CreateWindowWithContextAndBounds(
-      NULL, CurrentContext(), gfx::Rect(10, 10, 100, 100));
+  views::Widget* primary = views::Widget::CreateWindowWithContext(
+      nullptr, GetContext(), gfx::Rect(10, 10, 100, 100));
   primary->Show();
-  views::Widget* secondary = views::Widget::CreateWindowWithContextAndBounds(
-      NULL, CurrentContext(), gfx::Rect(610, 10, 100, 100));
+  views::Widget* secondary = views::Widget::CreateWindowWithContext(
+      nullptr, GetContext(), gfx::Rect(610, 10, 100, 100));
   secondary->Show();
 
   // Maximized bounds.
@@ -72,8 +72,8 @@ TEST_F(ScreenUtilTest, Bounds) {
 // (crbug.com/226132).
 TEST_F(ScreenUtilTest, StabilityTest) {
   UpdateDisplay("600x600,500x500");
-  views::Widget* secondary = views::Widget::CreateWindowWithContextAndBounds(
-      NULL, CurrentContext(), gfx::Rect(610, 10, 100, 100));
+  views::Widget* secondary = views::Widget::CreateWindowWithContext(
+      nullptr, GetContext(), gfx::Rect(610, 10, 100, 100));
   EXPECT_EQ(Shell::GetAllRootWindows()[1],
             secondary->GetNativeView()->GetRootWindow());
   secondary->Show();
@@ -87,11 +87,11 @@ TEST_F(ScreenUtilTest, StabilityTest) {
 TEST_F(ScreenUtilTest, ConvertRect) {
   UpdateDisplay("600x600,500x500");
 
-  views::Widget* primary = views::Widget::CreateWindowWithContextAndBounds(
-      NULL, CurrentContext(), gfx::Rect(10, 10, 100, 100));
+  views::Widget* primary = views::Widget::CreateWindowWithContext(
+      nullptr, GetContext(), gfx::Rect(10, 10, 100, 100));
   primary->Show();
-  views::Widget* secondary = views::Widget::CreateWindowWithContextAndBounds(
-      NULL, CurrentContext(), gfx::Rect(610, 10, 100, 100));
+  views::Widget* secondary = views::Widget::CreateWindowWithContext(
+      nullptr, GetContext(), gfx::Rect(610, 10, 100, 100));
   secondary->Show();
 
   gfx::Rect r1(10, 10, 100, 100);
@@ -114,8 +114,8 @@ TEST_F(ScreenUtilTest, ConvertRect) {
 TEST_F(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktop) {
   display_manager()->SetUnifiedDesktopEnabled(true);
 
-  views::Widget* widget = views::Widget::CreateWindowWithContextAndBounds(
-      NULL, CurrentContext(), gfx::Rect(10, 10, 100, 100));
+  views::Widget* widget = views::Widget::CreateWindowWithContext(
+      nullptr, GetContext(), gfx::Rect(10, 10, 100, 100));
   aura::Window* window = widget->GetNativeWindow();
 
   UpdateDisplay("500x400");
@@ -143,8 +143,8 @@ TEST_F(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktopGrid) {
   UpdateDisplay("500x400,400x600,300x600,200x300,600x200,350x400");
   display_manager()->SetUnifiedDesktopEnabled(true);
 
-  views::Widget* widget = views::Widget::CreateWindowWithContextAndBounds(
-      NULL, CurrentContext(), gfx::Rect(10, 10, 100, 100));
+  views::Widget* widget = views::Widget::CreateWindowWithContext(
+      nullptr, GetContext(), gfx::Rect(10, 10, 100, 100));
   aura::Window* window = widget->GetNativeWindow();
 
   display::DisplayIdList list = display_manager()->GetCurrentDisplayIdList();
@@ -166,7 +166,7 @@ TEST_F(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktopGrid) {
   EXPECT_EQ(gfx::Size(766, 1254), screen->GetPrimaryDisplay().size());
 
   Shelf* shelf = Shell::GetPrimaryRootWindowController()->shelf();
-  EXPECT_EQ(shelf->alignment(), SHELF_ALIGNMENT_BOTTOM);
+  EXPECT_EQ(shelf->alignment(), ShelfAlignment::kBottom);
 
   // Regardless of where the window is, the shelf with a bottom alignment is
   // always in the bottom left display in the matrix.
@@ -180,20 +180,20 @@ TEST_F(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktopGrid) {
 
   // Change the shelf alignment to left, and expect that it now resides in the
   // top left display in the matrix.
-  shelf->SetAlignment(SHELF_ALIGNMENT_LEFT);
+  shelf->SetAlignment(ShelfAlignment::kLeft);
   EXPECT_EQ(gfx::Rect(0, 0, 499, 400),
             screen_util::GetDisplayBoundsWithShelf(window));
 
   // Change the shelf alignment to right, and expect that it now resides in the
   // top right display in the matrix.
-  shelf->SetAlignment(SHELF_ALIGNMENT_RIGHT);
+  shelf->SetAlignment(ShelfAlignment::kRight);
   EXPECT_EQ(gfx::Rect(499, 0, 267, 400),
             screen_util::GetDisplayBoundsWithShelf(window));
 
   // Change alignment back to bottom and change the unified display zoom factor.
   // Expect that the display with shelf bounds will take into account the zoom
   // factor.
-  shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+  shelf->SetAlignment(ShelfAlignment::kBottom);
   display_manager()->UpdateZoomFactor(display::kUnifiedDisplayId, 3.f);
   const display::Display unified_display =
       display_manager()->GetDisplayForId(display::kUnifiedDisplayId);
@@ -206,8 +206,8 @@ TEST_F(ScreenUtilTest, SnapBoundsToDisplayEdge) {
   UpdateDisplay("2400x1600*1.5");
 
   gfx::Rect bounds(1555, 0, 45, 1066);
-  views::Widget* widget = views::Widget::CreateWindowWithContextAndBounds(
-      NULL, CurrentContext(), bounds);
+  views::Widget* widget =
+      views::Widget::CreateWindowWithContext(nullptr, GetContext(), bounds);
   aura::Window* window = widget->GetNativeWindow();
 
   gfx::Rect snapped_bounds =
@@ -223,6 +223,13 @@ TEST_F(ScreenUtilTest, SnapBoundsToDisplayEdge) {
   bounds = gfx::Rect(0, 552, 800, 48);
   snapped_bounds = screen_util::SnapBoundsToDisplayEdge(bounds, window);
   EXPECT_EQ(snapped_bounds, gfx::Rect(0, 552, 800, 48));
+
+  UpdateDisplay("2400x1800*1.8/r");
+  EXPECT_EQ(gfx::Size(1000, 1333),
+            display::Screen::GetScreen()->GetPrimaryDisplay().size());
+  bounds = gfx::Rect(950, 0, 50, 1333);
+  snapped_bounds = screen_util::SnapBoundsToDisplayEdge(bounds, window);
+  EXPECT_EQ(snapped_bounds, gfx::Rect(950, 0, 50, 1334));
 }
 
 // Tests that making a window fullscreen while the Docked Magnifier is enabled

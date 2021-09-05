@@ -22,51 +22,6 @@ body {
   width: 100%;
 }
 
-.scrollbar-track {
-  padding: 2px;
-  position: fixed;
-}
-
-.scrollbar-track-horizontal {
-  bottom: 0;
-  left: 0;
-  right: 0;
-}
-
-.scrollbar-track-vertical {
-  bottom: 0;
-  right: 0;
-  top: 0;
-}
-
-.scrollbar-thumb {
-  background: white;
-  border: 1px solid #555;
-  border-radius: 3px;
-  box-sizing: border-box;
-  opacity: 0.4;
-  position: absolute;
-  transition: opacity 100ms;
-}
-
-.scrollbar-track .scrollbar-thumb:hover {
-  opacity: 0.6;
-}
-
-.scrollbar-track .scrollbar-thumb:active {
-  opacity: 0.8;
-}
-
-.scrollbar-track-horizontal,
-.scrollbar-track-horizontal .scrollbar-thumb {
-  height: 8px;
-}
-
-.scrollbar-track-vertical,
-.scrollbar-track-vertical .scrollbar-thumb {
-  width: 8px;
-}
-
 button,
 input {
   background-color: transparent;
@@ -95,9 +50,9 @@ body.tab-navigation input:focus::after {
   top: -3px;
 }
 
-#browser .media-wrapper:focus {
-  /* Make elements have the same focus style. */
-  outline: 2px solid rgba(37, 129, 223, 0.7);
+.cancel-animate {
+  animation: none !important;
+  transition: none !important;
 }
 
 .circle button,
@@ -127,22 +82,6 @@ body.tab-navigation .circle input:focus::after {
   flex-shrink: 0;
   height: 40px;
   width: 40px;
-}
-
-#browser-print {
-  background-image: url(../images/browser_button_print.svg);
-}
-
-#browser-export {
-  background-image: url(../images/browser_button_export.svg);
-}
-
-#browser-back {
-  background-image: url(../images/browser_button_back.svg);
-}
-
-#browser-delete {
-  background-image: url(../images/browser_button_delete.svg);
 }
 
 ::-webkit-scrollbar {
@@ -237,7 +176,8 @@ body.tablet-landscape .actions-group {
 }
 
 body:not(.streaming) #modes-group,
-body.taking #modes-group {
+body.taking #modes-group,
+body.taking:not(.video) #shutters-group {
   opacity: 0.38;
 }
 
@@ -298,7 +238,7 @@ body.playing-result-video #play-result-video {
 }
 
 div.mode-item>span {
-  border-radius: 13px / 50%;
+  border-radius: 16px/50%;
   color: white;
   display: inline-block;
   font-family: 'Roboto', sans-serif;
@@ -339,7 +279,7 @@ body.tab-navigation .mode-item>input:focus::after {
 
 body.tab-navigation .mode-item>input:focus + span::after {
   border: 2px solid rgba(37, 129, 223, 0.7);
-  border-radius: 20px/50%;
+  border-radius: 23px/50%;
   bottom: -7px;
   content: '';
   left: -7px;
@@ -355,11 +295,11 @@ button.shutter {
   z-index: 1;  /* On top of transforming switch-mode buttons. */
 }
 
-body.video-mode:not(.taking) #start-recordvideo,
-body.video-mode.taking #stop-recordvideo,
-body:not(.taking):not(.video-mode) #start-takephoto,
-body:not(.timer):not(.video-mode) #start-takephoto,
-body.taking.timer:not(.video-mode) #stop-takephoto {
+body.video:not(.taking) #start-recordvideo,
+body.video.taking #stop-recordvideo,
+body:not(.taking):not(.video) #start-takephoto,
+body:not(.timer):not(.video) #start-takephoto,
+body.taking.timer:not(.video) #stop-takephoto {
   display: inline-block;
 }
 
@@ -399,7 +339,7 @@ body.taking.timer:not(.video-mode) #stop-takephoto {
   background-image: url(../images/camera_shutter_video_stop_hover.svg);
 }
 
-body:not(.video-mode) #toggle-mic,
+body:not(.video) #toggle-mic,
 body:not(.multi-camera) #switch-device {
   visibility: hidden;
 }
@@ -411,15 +351,15 @@ body:not(.multi-camera) #switch-device {
   width: 40px;
 }
 
-body.video-mode #camera-mode {
+body.video #camera-mode {
   background-image: url(../images/camera_mode_video.svg);
 }
 
-body.square-mode #camera-mode {
+body.square #camera-mode {
   background-image: url(../images/camera_mode_square.svg);
 }
 
-body.portrait-mode #camera-mode {
+body.portrait #camera-mode {
   background-image: url(../images/camera_mode_portrait.svg);
 }
 
@@ -458,6 +398,13 @@ body.mode-switching:not(.streaming) #camera-mode {
   100% {
     transform: rotate(-180deg);
   }
+}
+
+body.tab-navigation #switch-device:focus::after {
+  bottom: -8px;
+  left: -8px;
+  right: -8px;
+  top: -8px;
 }
 
 #gallery-enter {
@@ -535,7 +482,8 @@ body._10sec #toggle-timer:checked {
   background-image: url(../images/camera_button_mic_off.svg);
 }
 
-#toggle-fps {
+body:not(.multi-fps) #toggle-fps,
+body:not(.video) #toggle-fps {
   display: none;
 }
 
@@ -555,17 +503,17 @@ body.should-handle-intent-result #open-settings {
   display: none;
 }
 
-#camera,
-#settings,
-#gridsettings,
-#timersettings,
-#resolutionsettings,
-#photoresolutionsettings,
-#videoresolutionsettings,
-#expertsettings,
-#browser,
-#message-dialog,
-#warning {
+#view-camera,
+#view-settings,
+#view-grid-settings,
+#view-timer-settings,
+#view-resolution-settings,
+#view-photo-resolution-settings,
+#view-video-resolution-settings,
+#view-expert-settings,
+#view-message-dialog,
+#view-warning,
+#view-splash {
   bottom: 0;
   left: 0;
   opacity: 0;
@@ -576,52 +524,52 @@ body.should-handle-intent-result #open-settings {
   visibility: hidden;
 }
 
-body.camera #camera,
-body.settings #settings,
-body.gridsettings #gridsettings,
-body.timersettings #timersettings,
-body.resolutionsettings #resolutionsettings,
-body.photoresolutionsettings #photoresolutionsettings,
-body.videoresolutionsettings #videoresolutionsettings,
-body.expertsettings #expertsettings,
-body.browser #browser,
-body.message-dialog #message-dialog,
-body.warning #warning {
+body.view-camera #view-camera,
+body.view-settings #view-settings,
+body.view-grid-settings #view-grid-settings,
+body.view-timer-settings #view-timer-settings,
+body.view-resolution-settings #view-resolution-settings,
+body.view-photo-resolution-settings #view-photo-resolution-settings,
+body.view-video-resolution-settings #view-video-resolution-settings,
+body.view-expert-settings #view-expert-settings,
+body.view-message-dialog #view-message-dialog,
+body.view-warning #view-warning,
+body.view-splash #view-splash {
   opacity: 1;
   transition: opacity 100ms;
   visibility: visible;
 }
 
-body.gridsettings #gridsettings,
-body.timersettings #timersettings,
-body.resolutionsettings #resolutionsettings,
-body.photoresolutionsettings #photoresolutionsettings,
-body.videoresolutionsettings #videoresolutionsettings,
-body.expertsettings #expertsettings,
-body.settings #settings {
+body.view-grid-settings #view-grid-settings,
+body.view-timer-settings #view-timer-settings,
+body.view-resolution-settings #view-resolution-settings,
+body.view-photo-resolution-settings #view-photo-resolution-settings,
+body.view-video-resolution-settings #view-video-resolution-settings,
+body.view-expert-settings #view-expert-settings,
+body.view-settings #view-settings {
   /* Avoid flicking for transition between settings. */
   transition: opacity 0ms;
 }
 
-body.settings .left-stripe,
-body.gridsettings .left-stripe,
-body.gridsettings #settings,
-body.timersettings .left-stripe,
-body.timersettings #settings,
-body.resolutionsettings .left-stripe,
-body.resolutionsettings #settings,
-body.photoresolutionsettings .left-stripe,
-body.photoresolutionsettings #settings,
-body.photoresolutionsettings #resolutionsettings,
-body.videoresolutionsettings .left-stripe,
-body.videoresolutionsettings #settings,
-body.videoresolutionsettings #resolutionsettings,
-body.expertsettings .left-stripe,
-body.expertsettings #settings {
+body.view-settings .left-stripe,
+body.view-grid-settings .left-stripe,
+body.view-grid-settings #view-settings,
+body.view-timer-settings .left-stripe,
+body.view-timer-settings #view-settings,
+body.view-resolution-settings .left-stripe,
+body.view-resolution-settings #view-settings,
+body.view-photo-resolution-settings .left-stripe,
+body.view-photo-resolution-settings #view-settings,
+body.view-photo-resolution-settings #view-resolution-settings,
+body.view-video-resolution-settings .left-stripe,
+body.view-video-resolution-settings #view-settings,
+body.view-video-resolution-settings #view-resolution-settings,
+body.view-expert-settings .left-stripe,
+body.view-expert-settings #view-settings {
   opacity: 0;
 }
 
-#camera,
+#view-camera,
 #preview-wrapper {
   align-items: center;
   display: flex;
@@ -629,7 +577,7 @@ body.expertsettings #settings {
   overflow: hidden;
 }
 
-#camera {
+#view-camera {
   --big-icon: 48px;
   --bottom-line: 40px;
   --mode-item-height: 48px;
@@ -639,29 +587,29 @@ body.expertsettings #settings {
   --small-icon: 40px;
 }
 
-body.max-wnd #camera {
+body.max-wnd #view-camera {
   --bottom-line: 56px;
 }
 
-body.w-letterbox.w-letterbox-s #camera {
+body.w-letterbox.w-letterbox-s #view-camera {
   justify-content: flex-end;
 }
 
-body.w-letterbox.w-letterbox-m #camera,
-body.w-letterbox.w-letterbox-l #camera {
+body.w-letterbox.w-letterbox-m #view-camera,
+body.w-letterbox.w-letterbox-l #view-camera {
   justify-content: flex-start;
 }
 
-body.w-letterbox.w-letterbox-xl #camera {
+body.w-letterbox.w-letterbox-xl #view-camera {
   justify-content: center;
 }
 
-body:not(.w-letterbox) #camera {
+body:not(.w-letterbox) #view-camera {
   flex-direction: column;
   justify-content: center;
 }
 
-body:not(.w-letterbox).preview-vertical-dock #camera {
+body:not(.w-letterbox).preview-vertical-dock #view-camera {
   justify-content: flex-end;
 }
 
@@ -711,6 +659,14 @@ body.mirror #preview-focus {
 #preview-focus-aim {
   position: absolute;
   transform: translate(-50%, -50%);
+}
+
+#preview-video {
+  transition: opacity 200ms ease-in-out;
+}
+
+#preview-video.animate {
+  opacity: 0;
 }
 
 body:not(.streaming) #preview-video {
@@ -815,19 +771,19 @@ body._4x4 #preview-grid-horizontal::before {
 }
 
 body.grid._3x3 #preview-grid-horizontal,
-body.gridsettings._3x3 #preview-grid-horizontal {
+body.view-grid-settings._3x3 #preview-grid-horizontal {
   height: 33.333%;
 }
 
 body.grid.golden #preview-grid-horizontal,
-body.gridsettings.golden #preview-grid-horizontal {
+body.view-grid-settings.golden #preview-grid-horizontal {
   height: 23.607%;
 }
 
 body.grid._4x4 #preview-grid-horizontal,
 body.grid._4x4 #preview-grid-horizontal::before,
-body.gridsettings._4x4 #preview-grid-horizontal,
-body.gridsettings._4x4 #preview-grid-horizontal::before {
+body.view-grid-settings._4x4 #preview-grid-horizontal,
+body.view-grid-settings._4x4 #preview-grid-horizontal::before {
   height: 50%;
 }
 
@@ -853,19 +809,19 @@ body._4x4 #preview-grid-vertical::before {
 }
 
 body.grid._3x3 #preview-grid-vertical,
-body.gridsettings._3x3 #preview-grid-vertical {
+body.view-grid-settings._3x3 #preview-grid-vertical {
   width: 33.333%;
 }
 
 body.grid.golden #preview-grid-vertical,
-body.gridsettings.golden #preview-grid-vertical {
+body.view-grid-settings.golden #preview-grid-vertical {
   width: 23.607%;
 }
 
 body.grid._4x4 #preview-grid-vertical,
 body.grid._4x4 #preview-grid-vertical::before,
-body.gridsettings._4x4 #preview-grid-vertical,
-body.gridsettings._4x4 #preview-grid-vertical::before {
+body.view-grid-settings._4x4 #preview-grid-vertical,
+body.view-grid-settings._4x4 #preview-grid-vertical::before {
   width: 50%;
 }
 
@@ -879,10 +835,10 @@ body.gridsettings._4x4 #preview-grid-vertical::before {
   transition: width 500ms, visibility 500ms;
 }
 
-body:not(.grid):not(.gridsettings) #preview-grid-horizontal,
-body:not(.grid):not(.gridsettings) #preview-grid-horizontal::before,
-body:not(.grid):not(.gridsettings) #preview-grid-vertical,
-body:not(.grid):not(.gridsettings) #preview-grid-vertical::before {
+body:not(.grid):not(.view-grid-settings) #preview-grid-horizontal,
+body:not(.grid):not(.view-grid-settings) #preview-grid-horizontal::before,
+body:not(.grid):not(.view-grid-settings) #preview-grid-vertical,
+body:not(.grid):not(.view-grid-settings) #preview-grid-vertical::before {
   visibility: hidden;
 }
 
@@ -918,47 +874,6 @@ body:not(.grid):not(.gridsettings) #preview-grid-vertical::before {
   margin-left: 8px;
 }
 
-#browser .buttons {
-  left: 10px;
-  position: fixed;
-  top: 10px;
-}
-
-#browser .buttons button {
-  margin: 0 8px;
-}
-
-#browser .buttons button[disabled],
-body.ext-fs #browser-export {
-  display: none;
-}
-
-#browser {
-  background: black;
-}
-
-#browser .padder {
-  align-items: center;
-  display: flex;
-  height: 100%;
-}
-
-#browser div.media-wrapper {
-  align-items: center;
-  display: flex;
-  flex-shrink: 0;
-  justify-content: center;
-  margin: 4%;
-  pointer-events: auto;
-}
-
-#browser div.bounds-padder {
-  display: flex;
-  flex-shrink: 0;
-  height: 1px;  /* Required to make the element visible. */
-  width: 50%;
-}
-
 @media print {
   html {
     height: 100%;  /* Required for printing. */
@@ -972,49 +887,12 @@ body.ext-fs #browser-export {
   }
 
   /* Reset background colors. */
-  body,
-  #browser {
+  body {
     background: transparent;
   }
 
-  /* Hide the buttons and scroll bars. */
-  .buttons,
-  .scrollbar-track {
-    display: none;
-  }
-
-  /* Hide all root elements, except the printed view. */
-  body.browser > :not(#browser) {
-    display: none;
-  }
-
-  /* Hide everything from the browser view, but the selected one(s). */
-  #browser .padder > :not(.selected) {
-    display: none;
-  }
-
-  #browser .padder {
-    align-items: flex-start;
-  }
-
-  /* Set default styles and max-dimensions for printing the browser view. */
-  #browser div.media-wrapper.selected {
-    border: none;
-    box-shadow: none;
-    display: block;  /* Allows to keep aspect ratio of children. */
-    margin: auto;
-    position: absolute;
-  }
-
-  #browser div.media-wrapper.selected img,
-  #browser div.media-wrapper.selected video {
-    height: auto;
-    max-height: 100%;
-    max-width: 100%;
-    width: auto;
-  }
-
-  #browser video::-webkit-media-controls {
+  /* Hide the buttons. */
+  .buttons {
     display: none;
   }
 }
@@ -1227,7 +1105,7 @@ body.no-resolution-settings #settings-resolution {
   background-image: url(../images/settings_button_expand.svg);
 }
 
-#warning,
+#view-warning,
 .dialog {
   align-items: center;
   display: flex;
@@ -1235,12 +1113,12 @@ body.no-resolution-settings #settings-resolution {
   z-index: 1;
 }
 
-#warning {
+#view-warning {
   background: black;
   color: white;
 }
 
-#warning #error-msg {
+#view-warning #error-msg {
   font-family: 'Roboto', sans-serif;
   font-size: 18px;
   line-height: 32px;
@@ -1328,6 +1206,11 @@ body.tab-navigation .dialog-buttons button:focus::after {
   visibility: hidden;
   width: 32px;
   z-index: 1;
+}
+
+#view-splash {
+  background: no-repeat center url(../images/camera_mode_photo.svg), black;
+  z-index: 2;
 }
 
 body:not(.mode-switching):not(.streaming):not(.review-result) #spinner {

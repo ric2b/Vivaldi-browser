@@ -42,6 +42,8 @@
 #include "chrome/browser/ui/webui/extensions/extension_basic_info.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
+#include "chrome/browser/web_applications/components/file_handler_manager.h"
+#include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_finalizer_utils.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
 #include "chrome/common/buildflags.h"
@@ -59,7 +61,6 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_ui.h"
-#include "content/public/common/favicon_url.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -152,9 +153,10 @@ void AppLauncherHandler::CreateAppInfo(const Extension* extension,
            .GetByID(extension->id());
   extensions::GetExtensionBasicInfo(extension, enabled, value);
 
-  value->SetBoolean("mayDisable", extensions::ExtensionSystem::Get(
-      service->profile())->management_policy()->UserMayModifySettings(
-      extension, NULL));
+  value->SetBoolean("mayDisable",
+                    extensions::ExtensionSystem::Get(service->profile())
+                        ->management_policy()
+                        ->UserMayModifySettings(extension, nullptr));
 
   bool is_locally_installed =
       !extension->is_hosted_app() ||
@@ -319,7 +321,7 @@ void AppLauncherHandler::Observe(int type,
                       &app_info);
         web_ui()->CallJavascriptFunctionUnsafe("ntp.appMoved", app_info);
       } else {
-        HandleGetApps(NULL);
+        HandleGetApps(nullptr);
       }
       break;
     }
@@ -470,9 +472,8 @@ void AppLauncherHandler::HandleGetApps(const base::ListValue* args) {
     registrar_.Add(this, chrome::NOTIFICATION_APP_LAUNCHER_REORDERED,
                    content::Source<AppSorting>(
                        ExtensionSystem::Get(profile)->app_sorting()));
-    registrar_.Add(this,
-                   extensions::NOTIFICATION_EXTENSION_INSTALL_ERROR,
-                   content::Source<CrxInstaller>(NULL));
+    registrar_.Add(this, extensions::NOTIFICATION_EXTENSION_INSTALL_ERROR,
+                   content::Source<CrxInstaller>(nullptr));
     registrar_.Add(this,
                    extensions::NOTIFICATION_EXTENSION_LOAD_ERROR,
                    content::Source<Profile>(profile));
@@ -543,7 +544,7 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
     // it automatically.
     Browser* browser = chrome::FindBrowserWithWebContents(
         web_ui()->GetWebContents());
-    WebContents* old_contents = NULL;
+    WebContents* old_contents = nullptr;
     if (browser)
       old_contents = browser->tab_strip_model()->GetActiveWebContents();
 
@@ -597,8 +598,9 @@ void AppLauncherHandler::HandleUninstallApp(const base::ListValue* args) {
   if (!extension)
     return;
 
-  if (!extensions::ExtensionSystem::Get(extension_service_->profile())->
-          management_policy()->UserMayModifySettings(extension, NULL)) {
+  if (!extensions::ExtensionSystem::Get(extension_service_->profile())
+           ->management_policy()
+           ->UserMayModifySettings(extension, nullptr)) {
     LOG(ERROR) << "Attempt to uninstall an extension that is non-usermanagable "
                << "was made. Extension id : " << extension->id();
     return;
@@ -661,7 +663,10 @@ void AppLauncherHandler::HandleInstallAppLocally(const base::ListValue* args) {
   SetBookmarkAppIsLocallyInstalled(profile, extension, true);
   if (extensions::CanBookmarkAppCreateOsShortcuts()) {
     extensions::BookmarkAppCreateOsShortcuts(
-        profile, extension, true /* add_to_desktop */, base::DoNothing());
+        profile, extension, true /* add_to_desktop */,
+        base::BindOnce(&AppLauncherHandler::
+                           OnExtensionShortcutsCreatedRegisterFileHandlers,
+                       weak_ptr_factory_.GetWeakPtr(), extension_id));
   }
 
   // Use the appAdded to update the app icon's color to no longer be greyscale.
@@ -808,16 +813,13 @@ void AppLauncherHandler::HandlePageSelected(const base::ListValue* args) {
 void AppLauncherHandler::OnFaviconForApp(
     std::unique_ptr<AppInstallInfo> install_info,
     const favicon_base::FaviconImageResult& image_result) {
-  std::unique_ptr<WebApplicationInfo> web_app(new WebApplicationInfo());
+  auto web_app = std::make_unique<WebApplicationInfo>();
   web_app->title = install_info->title;
   web_app->app_url = install_info->app_url;
 
   if (!image_result.image.IsEmpty()) {
-    WebApplicationIconInfo icon;
-    icon.data = image_result.image.AsBitmap();
-    icon.width = icon.data.width();
-    icon.height = icon.data.height();
-    web_app->icons.push_back(icon);
+    web_app->icon_bitmaps[image_result.image.Width()] =
+        image_result.image.AsBitmap();
   }
 
   scoped_refptr<CrxInstaller> installer(
@@ -856,6 +858,15 @@ void AppLauncherHandler::PromptToEnableApp(const std::string& extension_id) {
   extension_enable_flow_ = std::make_unique<ExtensionEnableFlow>(
       Profile::FromWebUI(web_ui()), extension_id, this);
   extension_enable_flow_->StartForWebContents(web_ui()->GetWebContents());
+}
+
+void AppLauncherHandler::OnExtensionShortcutsCreatedRegisterFileHandlers(
+    const extensions::ExtensionId& extension_id,
+    bool /*shortcuts_created*/) {
+  auto* provider = web_app::WebAppProviderBase::GetProviderBase(
+      extension_service_->profile());
+  provider->file_handler_manager().EnableAndRegisterOsFileHandlers(
+      extension_id);
 }
 
 void AppLauncherHandler::OnExtensionUninstallDialogClosed(

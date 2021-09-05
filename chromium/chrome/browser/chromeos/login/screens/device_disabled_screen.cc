@@ -21,7 +21,9 @@ system::DeviceDisablingManager* DeviceDisablingManager() {
 }  // namespace
 
 DeviceDisabledScreen::DeviceDisabledScreen(DeviceDisabledScreenView* view)
-    : BaseScreen(DeviceDisabledScreenView::kScreenId), view_(view) {
+    : BaseScreen(DeviceDisabledScreenView::kScreenId,
+                 OobeScreenPriority::SCREEN_DEVICE_DISABLED),
+      view_(view) {
   view_->SetDelegate(this);
 }
 
@@ -47,21 +49,19 @@ const std::string& DeviceDisabledScreen::GetSerialNumber() const {
   return DeviceDisablingManager()->serial_number();
 }
 
-void DeviceDisabledScreen::Show() {
-  if (!view_ || showing_)
+void DeviceDisabledScreen::ShowImpl() {
+  if (!view_ || !is_hidden())
     return;
 
-  showing_ = true;
   view_->Show();
   DeviceDisablingManager()->AddObserver(this);
   if (!DeviceDisablingManager()->disabled_message().empty())
     view_->UpdateMessage(DeviceDisablingManager()->disabled_message());
 }
 
-void DeviceDisabledScreen::Hide() {
-  if (!showing_)
+void DeviceDisabledScreen::HideImpl() {
+  if (is_hidden())
     return;
-  showing_ = false;
 
   if (view_)
     view_->Hide();

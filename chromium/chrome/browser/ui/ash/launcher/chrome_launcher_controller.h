@@ -26,6 +26,7 @@
 #include "components/sync_preferences/pref_service_syncable_observer.h"
 
 class AppIconLoader;
+class AppServiceAppWindowLauncherController;
 class AppWindowLauncherController;
 class BrowserShortcutLauncherItemController;
 class BrowserStatusMonitor;
@@ -78,6 +79,11 @@ class ChromeLauncherController
 
   Profile* profile() const { return profile_; }
   ash::ShelfModel* shelf_model() const { return model_; }
+
+  AppServiceAppWindowLauncherController* app_service_app_window_controller() {
+    return app_service_app_window_controller_;
+  }
+
   CrostiniAppWindowShelfController* crostini_app_window_shelf_controller()
       const {
     return crostini_app_window_shelf_controller_;
@@ -160,9 +166,13 @@ class ChromeLauncherController
   // web page (see IDC_CREATE_SHORTCUT).
   void UpdateV1AppState(const std::string& app_id);
 
-  // Returns ShelfID for |contents|. If |contents| is not an app or is not
+  // Returns associated app ID for |contents|. If |contents| is not an app,
+  // returns the browser app id.
+  std::string GetAppIDForWebContents(content::WebContents* contents);
+
+  // Returns ShelfID for |app_id|. If |app_id| is empty, or the app is not
   // pinned, returns the id of browser shrotcut.
-  ash::ShelfID GetShelfIDForWebContents(content::WebContents* contents);
+  ash::ShelfID GetShelfIDForAppId(const std::string& app_id);
 
   // Limits application refocusing to urls that match |url| for |id|.
   void SetRefocusURLPatternForTest(const ash::ShelfID& id, const GURL& url);
@@ -272,6 +282,8 @@ class ChromeLauncherController
   // LauncherAppUpdater::Delegate:
   void OnAppInstalled(content::BrowserContext* browser_context,
                       const std::string& app_id) override;
+  void OnAppUpdated(content::BrowserContext* browser_context,
+                    const std::string& app_id) override;
   void OnAppUninstalledPrepared(content::BrowserContext* browser_context,
                                 const std::string& app_id) override;
 
@@ -389,6 +401,10 @@ class ChromeLauncherController
 
   // The ShelfModel instance owned by ash::Shell's ShelfController.
   ash::ShelfModel* model_;
+
+  // The AppService app window launcher controller.
+  AppServiceAppWindowLauncherController* app_service_app_window_controller_ =
+      nullptr;
 
   // The shelf controller for Crostini apps.
   CrostiniAppWindowShelfController* crostini_app_window_shelf_controller_ =

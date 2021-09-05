@@ -14,7 +14,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/frame/frame_view.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/screen_orientation_controller.h"
@@ -58,7 +57,7 @@ class MockWebMediaPlayerForOrientationLockDelegate final
  public:
   bool HasVideo() const override { return true; }
 
-  MOCK_CONST_METHOD0(NaturalSize, WebSize());
+  MOCK_CONST_METHOD0(NaturalSize, gfx::Size());
 };
 
 class MockScreenOrientation final
@@ -93,7 +92,7 @@ class MockScreenOrientation final
 
 void DidEnterFullscreen(Document* document) {
   DCHECK(document);
-  Fullscreen::DidEnterFullscreen(*document);
+  Fullscreen::DidResolveEnterFullscreenRequest(*document, true /* granted */);
   document->ServiceScriptedAnimations(base::TimeTicks::Now());
 }
 
@@ -120,7 +119,9 @@ class MockChromeClientForOrientationLockDelegate final
   }
   // The real ChromeClient::EnterFullscreen/ExitFullscreen implementation is
   // async due to IPC, emulate that by posting tasks:
-  void EnterFullscreen(LocalFrame& frame, const FullscreenOptions*) override {
+  void EnterFullscreen(LocalFrame& frame,
+                       const FullscreenOptions*,
+                       bool for_cross_process_descendant) override {
     Thread::Current()->GetTaskRunner()->PostTask(
         FROM_HERE,
         WTF::Bind(DidEnterFullscreen, WrapPersistent(frame.GetDocument())));
@@ -190,7 +191,7 @@ class MediaControlsOrientationLockDelegateTest
         RuntimeEnabledFeatures::OrientationEventEnabled();
 
     GetDocument().write("<body><video></body>");
-    video_ = ToHTMLVideoElement(*GetDocument().QuerySelector("video"));
+    video_ = To<HTMLVideoElement>(*GetDocument().QuerySelector("video"));
   }
 
   void TearDown() override {
@@ -204,8 +205,7 @@ class MediaControlsOrientationLockDelegateTest
   }
 
   void SimulateEnterFullscreen() {
-    std::unique_ptr<UserGestureIndicator> gesture =
-        LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
+    LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
     Fullscreen::RequestFullscreen(Video());
     test::RunPendingTasks();
   }
@@ -396,7 +396,7 @@ class MediaControlsOrientationLockAndRotateToFullscreenDelegateTest
 
     // Set video size.
     EXPECT_CALL(MockWebMediaPlayer(), NaturalSize())
-        .WillRepeatedly(Return(WebSize(video_width, video_height)));
+        .WillRepeatedly(Return(gfx::Size(video_width, video_height)));
 
     // Dispatch an arbitrary Device Orientation event to satisfy
     // MediaControlsRotateToFullscreenDelegate's requirement that the device
@@ -406,11 +406,8 @@ class MediaControlsOrientationLockAndRotateToFullscreenDelegateTest
   }
 
   void PlayVideo() {
-    {
-      std::unique_ptr<UserGestureIndicator> gesture =
-          LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
-      Video().Play();
-    }
+    LocalFrame::NotifyUserActivation(GetDocument().GetFrame());
+    Video().Play();
     test::RunPendingTasks();
   }
 
@@ -574,11 +571,11 @@ TEST_F(MediaControlsOrientationLockDelegateTest, ComputeOrientationLock) {
 
   EXPECT_CALL(MockWebMediaPlayer(), NaturalSize())
       .Times(14)  // Each `computeOrientationLock` calls the method twice.
-      .WillOnce(Return(WebSize(100, 50)))
-      .WillOnce(Return(WebSize(100, 50)))
-      .WillOnce(Return(WebSize(50, 100)))
-      .WillOnce(Return(WebSize(50, 100)))
-      .WillRepeatedly(Return(WebSize(100, 100)));
+      .WillOnce(Return(gfx::Size(100, 50)))
+      .WillOnce(Return(gfx::Size(100, 50)))
+      .WillOnce(Return(gfx::Size(50, 100)))
+      .WillOnce(Return(gfx::Size(50, 100)))
+      .WillRepeatedly(Return(gfx::Size(100, 100)));
 
   // 100x50
   EXPECT_EQ(kWebScreenOrientationLockLandscape, ComputeOrientationLock());
@@ -1479,10 +1476,9 @@ TEST_F(MediaControlsOrientationLockAndRotateToFullscreenDelegateTest,
   // And immediately detach the document by synchronously navigating.
   // One easy way to do this is to replace the document with a JavaScript URL.
   GetFrame().GetSettings()->SetScriptEnabled(true);
-  GetFrame().Navigate(
-      FrameLoadRequest(&GetDocument(),
-                       ResourceRequest("javascript:'Hello, world!'")),
-      WebFrameLoadType::kStandard);
+  FrameLoadRequest request(&GetDocument(),
+                           ResourceRequest("javascript:'Hello, world!'"));
+  GetFrame().Navigate(request, WebFrameLoadType::kStandard);
 
   // We should not crash after the unlock delay.
   test::RunDelayedTasks(GetUnlockDelay());

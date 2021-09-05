@@ -6,6 +6,12 @@ import("//build/compiled_action.gni")
 import("//build/config/nacl/config.gni")
 import("//build/config/ui.gni")
 
+# Reset sources_assignment_filter for the BUILD.gn file to prevent
+# regression during the migration of Chromium away from the feature.
+# See docs/no_sources_assignment_filter.md for more information.
+# TODO(crbug.com/1018739): remove this when migration is done.
+set_sources_assignment_filter([])
+
 if (is_android) {
   import("//build/config/android/rules.gni")
 }
@@ -20,7 +26,7 @@ static_library("test_config") {
   ]
   deps = [
     "//base",
-    "//base:clang_coverage_buildflags",
+    "//base:clang_profiling_buildflags",
   ]
 }
 
@@ -41,17 +47,12 @@ static_library("test_support") {
     "../timer/mock_timer.cc",
     "../timer/mock_timer.h",
     "../trace_event/trace_config_memory_test_util.h",
-    "android/java_handler_thread_helpers.cc",
-    "android/java_handler_thread_helpers.h",
-    "android/url_utils.cc",
-    "android/url_utils.h",
     "bind_test_util.cc",
     "bind_test_util.h",
     "copy_only_int.cc",
     "copy_only_int.h",
-    "do_nothing_promise.cc",
-    "do_nothing_promise.h",
     "gmock_callback_support.h",
+    "gmock_move_support.h",
     "gtest_util.cc",
     "gtest_util.h",
     "gtest_xml_unittest_result_printer.cc",
@@ -60,8 +61,6 @@ static_library("test_support") {
     "gtest_xml_util.h",
     "icu_test_util.cc",
     "icu_test_util.h",
-    "ios/wait_util.h",
-    "ios/wait_util.mm",
     "launcher/test_result.cc",
     "launcher/test_result.h",
     "launcher/test_results_tracker.h",
@@ -73,8 +72,6 @@ static_library("test_support") {
     "metrics/user_action_tester.cc",
     "metrics/user_action_tester.h",
     "mock_callback.h",
-    "mock_chrome_application_mac.h",
-    "mock_chrome_application_mac.mm",
     "mock_devices_changed_observer.cc",
     "mock_devices_changed_observer.h",
     "mock_entropy_provider.cc",
@@ -83,7 +80,6 @@ static_library("test_support") {
     "mock_log.h",
     "move_only_int.h",
     "multiprocess_test.h",
-    "multiprocess_test_android.cc",
     "null_task_runner.cc",
     "null_task_runner.h",
     "perf_log.cc",
@@ -94,21 +90,22 @@ static_library("test_support") {
     "perf_time_logger.h",
     "power_monitor_test_base.cc",
     "power_monitor_test_base.h",
-    "reached_code_profiler_android.cc",
     "scoped_command_line.cc",
     "scoped_command_line.h",
     "scoped_environment_variable_override.cc",
     "scoped_environment_variable_override.h",
     "scoped_feature_list.cc",
     "scoped_feature_list.h",
+    "scoped_field_trial_list_resetter.cc",
+    "scoped_field_trial_list_resetter.h",
     "scoped_mock_clock_override.cc",
     "scoped_mock_clock_override.h",
     "scoped_mock_time_message_loop_task_runner.cc",
     "scoped_mock_time_message_loop_task_runner.h",
-    "scoped_os_info_override_win.cc",
-    "scoped_os_info_override_win.h",
     "scoped_path_override.cc",
     "scoped_path_override.h",
+    "scoped_run_loop_timeout.cc",
+    "scoped_run_loop_timeout.h",
     "sequenced_task_runner_test_template.cc",
     "sequenced_task_runner_test_template.h",
     "simple_test_clock.cc",
@@ -123,35 +120,22 @@ static_library("test_support") {
     "test_discardable_memory_allocator.h",
     "test_file_util.cc",
     "test_file_util.h",
-    "test_file_util_android.cc",
-    "test_file_util_linux.cc",
-    "test_file_util_mac.cc",
-    "test_file_util_win.cc",
     "test_io_thread.cc",
     "test_io_thread.h",
-    "test_listener_ios.h",
-    "test_listener_ios.mm",
     "test_message_loop.cc",
     "test_message_loop.h",
     "test_mock_time_task_runner.cc",
     "test_mock_time_task_runner.h",
     "test_pending_task.cc",
     "test_pending_task.h",
-    "test_reg_util_win.cc",
-    "test_reg_util_win.h",
     "test_shared_memory_util.cc",
     "test_shared_memory_util.h",
-    "test_shortcut_win.cc",
-    "test_shortcut_win.h",
     "test_simple_task_runner.cc",
     "test_simple_task_runner.h",
     "test_suite.cc",
     "test_suite.h",
-    "test_support_android.cc",
-    "test_support_android.h",
-    "test_support_ios.h",
-    "test_support_ios.mm",
-    "thread_pool_test_helpers_android.cc",
+    "test_waitable_event.cc",
+    "test_waitable_event.h",
     "thread_test_helper.cc",
     "thread_test_helper.h",
     "trace_event_analyzer.cc",
@@ -160,23 +144,9 @@ static_library("test_support") {
     "trace_to_file.h",
     "values_test_util.cc",
     "values_test_util.h",
+    "with_feature_override.cc",
+    "with_feature_override.h",
   ]
-
-  if (is_ios) {
-    sources += [ "launcher/unit_test_launcher_ios.cc" ]
-  } else if (!is_nacl_nonsfi) {
-    sources += [
-      "launcher/test_launcher.cc",
-      "launcher/test_launcher.h",
-      "launcher/test_launcher_test_utils.cc",
-      "launcher/test_launcher_test_utils.h",
-      "launcher/test_launcher_tracer.cc",
-      "launcher/test_launcher_tracer.h",
-      "launcher/test_results_tracker.cc",
-      "launcher/unit_test_launcher.cc",
-      "multiprocess_test.cc",
-    ]
-  }
 
   configs += [ "//build/config:precompiled_headers" ]
 
@@ -191,14 +161,83 @@ static_library("test_support") {
     "//base",
     "//base:base_static",
     "//base:i18n",
-  ]
-  deps = [
-    "//base/third_party/dynamic_annotations",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/icu:icuuc",
-    "//third_party/libxml",
   ]
+
+  deps = [
+    "//base/third_party/dynamic_annotations",
+    "//third_party/icu:icuuc",
+    "//third_party/libxml:libxml_utils",
+    "//third_party/libxml:xml_reader",
+  ]
+
+  if (is_win) {
+    sources += [
+      "scoped_os_info_override_win.cc",
+      "scoped_os_info_override_win.h",
+      "test_file_util_win.cc",
+      "test_reg_util_win.cc",
+      "test_reg_util_win.h",
+      "test_shortcut_win.cc",
+      "test_shortcut_win.h",
+    ]
+  }
+
+  if (is_linux) {
+    sources += [ "test_file_util_linux.cc" ]
+    public_deps += [ ":fontconfig_util_linux" ]
+    data_deps = [ "//third_party/test_fonts" ]
+    if (current_toolchain == host_toolchain) {
+      data_deps += [ ":do_generate_fontconfig_caches" ]
+    }
+  }
+
+  if (is_mac) {
+    libs = [ "AppKit.framework" ]
+    sources += [
+      "mock_chrome_application_mac.h",
+      "mock_chrome_application_mac.mm",
+      "test_file_util_mac.cc",
+    ]
+  }
+
+  if (is_android) {
+    sources += [
+      "android/java_handler_thread_helpers.cc",
+      "android/java_handler_thread_helpers.h",
+      "android/url_utils.cc",
+      "android/url_utils.h",
+      "multiprocess_test_android.cc",
+      "reached_code_profiler_android.cc",
+      "test_file_util_android.cc",
+      "test_file_util_linux.cc",
+      "test_support_android.cc",
+      "test_support_android.h",
+      "thread_pool_test_helpers_android.cc",
+    ]
+    deps += [
+      ":base_unittests_jni_headers",
+      ":test_support_jni_headers",
+    ]
+    public_deps += [ ":test_support_java" ]
+  }
+
+  if (is_ios) {
+    sources += [
+      "../ios/weak_nsobject.h",
+      "../ios/weak_nsobject.mm",
+      "ios/wait_util.h",
+      "ios/wait_util.mm",
+      "launcher/unit_test_launcher_ios.cc",
+      "test_file_util_mac.cc",
+      "test_listener_ios.h",
+      "test_listener_ios.mm",
+      "test_support_ios.h",
+      "test_support_ios.mm",
+    ]
+    deps += [ ":google_test_runner_shared_headers" ]
+  }
 
   if (is_posix || is_fuchsia) {
     sources += [
@@ -209,39 +248,12 @@ static_library("test_support") {
   }
 
   if (is_fuchsia) {
-    deps += [ "//third_party/fuchsia-sdk/sdk:zx" ]
-  }
-
-  if (is_linux) {
-    public_deps += [ ":fontconfig_util_linux" ]
-    data_deps = [
-      "//third_party/test_fonts",
+    deps += [ "//third_party/fuchsia-sdk/sdk/pkg/zx" ]
+    public_deps += [ "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp" ]
+    sources += [
+      "../fuchsia/test_component_context_for_process.cc",
+      "../fuchsia/test_component_context_for_process.h",
     ]
-    if (current_toolchain == host_toolchain) {
-      data_deps += [ ":do_generate_fontconfig_caches" ]
-    }
-  }
-
-  if (is_ios) {
-    set_sources_assignment_filter([])
-    sources += [ "test_file_util_mac.cc" ]
-    set_sources_assignment_filter(sources_assignment_filter)
-    deps += [ ":google_test_runner_shared_headers" ]
-  }
-
-  if (is_mac) {
-    libs = [ "AppKit.framework" ]
-  }
-
-  if (is_android) {
-    set_sources_assignment_filter([])
-    sources += [ "test_file_util_linux.cc" ]
-    set_sources_assignment_filter(sources_assignment_filter)
-    deps += [
-      ":base_unittests_jni_headers",
-      ":test_support_jni_headers",
-    ]
-    public_deps += [ ":test_support_java" ]
   }
 
   if (is_nacl_nonsfi) {
@@ -275,7 +287,20 @@ static_library("test_support") {
     public_deps -= [ "//base:i18n" ]
     deps -= [
       "//third_party/icu:icuuc",
-      "//third_party/libxml",
+      "//third_party/libxml:libxml_utils",
+      "//third_party/libxml:xml_reader",
+    ]
+  } else if (!is_ios) {
+    sources += [
+      "launcher/test_launcher.cc",
+      "launcher/test_launcher.h",
+      "launcher/test_launcher_test_utils.cc",
+      "launcher/test_launcher_test_utils.h",
+      "launcher/test_launcher_tracer.cc",
+      "launcher/test_launcher_tracer.h",
+      "launcher/test_results_tracker.cc",
+      "launcher/unit_test_launcher.cc",
+      "multiprocess_test.cc",
     ]
   }
 }
@@ -293,9 +318,7 @@ config("perf_test_config") {
 # this, you always want the object file anyway.
 source_set("test_support_perf") {
   testonly = true
-  sources = [
-    "run_all_perftests.cc",
-  ]
+  sources = [ "run_all_perftests.cc" ]
   deps = [
     ":test_support",
     "//base",
@@ -311,19 +334,13 @@ static_library("test_launcher_nacl_nonsfi") {
     "launcher/test_launcher_nacl_nonsfi.cc",
     "launcher/test_launcher_nacl_nonsfi.h",
   ]
-  deps = [
-    ":test_support",
-  ]
+  deps = [ ":test_support" ]
 }
 
 static_library("run_all_unittests") {
   testonly = true
-  sources = [
-    "run_all_unittests.cc",
-  ]
-  deps = [
-    ":test_support",
-  ]
+  sources = [ "run_all_unittests.cc" ]
+  deps = [ ":test_support" ]
 }
 
 # These sources are linked into both the base_unittests binary and the test
@@ -338,9 +355,7 @@ source_set("native_library_test_utils") {
 
 # This shared library is dynamically loaded by ImmediateCrash unittests.
 shared_library("immediate_crash_test_helper") {
-  sources = [
-    "immediate_crash_test_helper.cc",
-  ]
+  sources = [ "immediate_crash_test_helper.cc" ]
 
   # Note: the helper has a header-only dependency on //base/immediate_helper.h.
   # However, the build rule intentionally omits an explicit //base dependency
@@ -364,13 +379,9 @@ shared_library("immediate_crash_test_helper") {
 # This shared library is dynamically loaded by NativeLibrary unittests.
 shared_library("test_shared_library") {
   testonly = true
-  sources = [
-    "test_shared_library.cc",
-  ]
+  sources = [ "test_shared_library.cc" ]
 
-  deps = [
-    ":native_library_test_utils",
-  ]
+  deps = [ ":native_library_test_utils" ]
 }
 
 static_library("run_all_base_unittests") {
@@ -378,12 +389,8 @@ static_library("run_all_base_unittests") {
   # should depend on run_all_unittests above.
   visibility = [ "//base/*" ]
   testonly = true
-  sources = [
-    "run_all_base_unittests.cc",
-  ]
-  deps = [
-    ":test_support",
-  ]
+  sources = [ "run_all_base_unittests.cc" ]
+  deps = [ ":test_support" ]
 }
 
 if (is_linux) {
@@ -392,9 +399,7 @@ if (is_linux) {
       "fontconfig_util_linux.cc",
       "fontconfig_util_linux.h",
     ]
-    data_deps = [
-      ":fonts_conf",
-    ]
+    data_deps = [ ":fonts_conf" ]
     deps = [
       "//base",
       "//third_party/fontconfig",
@@ -402,20 +407,14 @@ if (is_linux) {
   }
 
   copy("fonts_conf") {
-    sources = [
-      "fonts.conf",
-    ]
-    outputs = [
-      "${root_build_dir}/etc/fonts/{{source_file_part}}",
-    ]
+    sources = [ "fonts.conf" ]
+    outputs = [ "${root_build_dir}/etc/fonts/{{source_file_part}}" ]
   }
 
   if (current_toolchain == host_toolchain) {
     executable("generate_fontconfig_caches") {
       testonly = true
-      sources = [
-        "generate_fontconfig_caches.cc",
-      ]
+      sources = [ "generate_fontconfig_caches.cc" ]
       deps = [
         ":fontconfig_util_linux",
         "//base",
@@ -428,9 +427,7 @@ if (is_linux) {
 
       # The copied test fonts are inputs to generate_fontconfig_caches, so must
       # be listed in deps, not data_deps (https://crbug.com/919422).
-      deps = [
-        "//third_party/test_fonts",
-      ]
+      deps = [ "//third_party/test_fonts" ]
       args = []
       outputs = [
         "$root_out_dir/fontconfig_caches/fb5c91b2895aa445d23aebf7f9e2189c-le64.cache-7",
@@ -443,12 +440,8 @@ if (is_linux) {
 if (is_fuchsia || is_linux) {
   shared_library("malloc_wrapper") {
     testonly = true
-    sources = [
-      "malloc_wrapper.cc",
-    ]
-    deps = [
-      "//base",
-    ]
+    sources = [ "malloc_wrapper.cc" ]
+    deps = [ "//base" ]
   }
 }
 
@@ -482,7 +475,7 @@ if (is_android) {
       "//third_party/jsr-305:jsr_305_javalib",
     ]
     srcjar_deps = [ ":test_support_java_aidl" ]
-    java_files = [
+    sources = [
       "android/java/src/org/chromium/base/GarbageCollectionTestUtils.java",
       "android/java/src/org/chromium/base/MainReturnCodeResult.java",
       "android/java/src/org/chromium/base/MultiprocessTestClientLauncher.java",
@@ -516,15 +509,11 @@ if (is_android) {
 
 if (is_ios) {
   source_set("google_test_runner_shared_headers") {
-    sources = [
-      "ios/google_test_runner_delegate.h",
-    ]
+    sources = [ "ios/google_test_runner_delegate.h" ]
   }
 
   source_set("google_test_runner") {
-    sources = [
-      "ios/google_test_runner.mm",
-    ]
+    sources = [ "ios/google_test_runner.mm" ]
     deps = [
       ":google_test_runner_shared_headers",
       "//base",
@@ -541,7 +530,5 @@ if (is_ios) {
 # used for testing.
 executable("test_child_process") {
   testonly = true
-  sources = [
-    "test_child_process.cc",
-  ]
+  sources = [ "test_child_process.cc" ]
 }

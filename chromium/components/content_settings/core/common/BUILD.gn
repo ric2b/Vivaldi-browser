@@ -4,11 +4,16 @@
 
 import("//build/config/jumbo.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
 
 jumbo_static_library("common") {
   sources = [
     "content_settings.cc",
     "content_settings.h",
+    "content_settings_param_traits.cc",
+    "content_settings_param_traits.h",
     "content_settings_pattern.cc",
     "content_settings_pattern.h",
     "content_settings_pattern_parser.cc",
@@ -24,12 +29,11 @@ jumbo_static_library("common") {
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
-  public_deps = [
-    ":features",
-  ]
+  public_deps = [ ":features" ]
 
   deps = [
     "//base",
+    "//ipc",
     "//mojo/public/cpp/base",
     "//mojo/public/cpp/bindings:struct_traits",
     "//net",
@@ -56,13 +60,10 @@ jumbo_source_set("unit_tests") {
 }
 
 mojom("mojo_bindings") {
-  sources = [
-    "content_settings.mojom",
-  ]
+  generate_java = true
+  sources = [ "content_settings.mojom" ]
 
-  public_deps = [
-    "//mojo/public/mojom/base",
-  ]
+  public_deps = [ "//mojo/public/mojom/base" ]
 }
 
 component("features") {
@@ -75,7 +76,11 @@ component("features") {
     "features.h",
   ]
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
+}
+
+if (is_android) {
+  java_cpp_enum("content_settings_type_javagen") {
+    sources = [ "content_settings_types.h" ]
+  }
 }

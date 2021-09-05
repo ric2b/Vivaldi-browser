@@ -57,6 +57,16 @@ hooks = [
     ],
   },
   {
+    # Check out Linux specific submodules based on chromium/DEPS if linux is the target OS
+    'name': 'checkout_linux_submodules',
+    'pattern': '.',
+    'condition': 'checkout_linux and not checkout_android',
+    'action': [
+      'python', "-u",
+      'scripts/linux_submodules.py',
+    ],
+  },
+  {
     'name': 'sysroot_arm',
     'pattern': '.',
     'condition': 'checkout_linux and checkout_arm',
@@ -110,11 +120,11 @@ hooks = [
     ],
   },
   {
+    # Update the prebuilt clang toolchain.
     # Note: On Win, this should run after win_toolchain, as it may use it.
     'name': 'clang',
     'pattern': '.',
-    'action': ['python', "-u",
-      'chromium/tools/clang/scripts/update.py'],
+    'action': ['python', "-u", 'chromium/tools/clang/scripts/update.py'],
   },
   {
     # Mac doesn't use lld so it's not included in the default clang bundle
@@ -123,7 +133,8 @@ hooks = [
     'name': 'lld/mac',
     'pattern': '.',
     'condition': 'host_os == "mac" and checkout_win',
-    'action': ['python', "-u", 'chromium/tools/clang/scripts/download_lld_mac.py'],
+    'action': ['python', "-u", 'chromium/tools/clang/scripts/update.py',
+               '--package=lld_mac'],
   },
   {
     # Update LASTCHANGE.
@@ -245,6 +256,16 @@ hooks = [
                 '--bucket', 'chromium-fonts',
                 '-s', 'chromium/third_party/test_fonts/test_fonts.tar.gz.sha1',
     ],
+  },
+  # Download test resources for opus, i.e. audio files.
+  {
+    'name': 'opus_test_files',
+    'pattern': '.',
+    'action': ['download_from_google_storage',
+               '--no_auth',
+               '--quiet',
+               '--bucket', 'chromium-webrtc-resources',
+               '-d', 'chromium/third_party/opus/tests/resources'],
   },
   # Pull order files for the win/clang build.
   {
@@ -401,6 +422,17 @@ hooks = [
     'condition': 'checkout_android',
     'action': ['python', "-u",
                'chromium/build/android/download_doclava.py',
+    ],
+  },
+  {
+    'name': 'subresource-filter-ruleset',
+    'pattern': '.',
+    'action': [ 'python', "-u",
+                'chromium/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-ads-detection',
+                '-s', 'chromium/third_party/subresource-filter-ruleset/data/UnindexedRules.sha1',
     ],
   },
   # Download and initialize "vpython" VirtualEnv environment packages.

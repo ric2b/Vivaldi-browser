@@ -16,6 +16,7 @@
 #include "components/variations/variations_associated_data.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 
 namespace safe_browsing {
 
@@ -37,8 +38,7 @@ class TestSafeBrowsingApiHandler : public SafeBrowsingApiHandler {
 
 class RemoteDatabaseManagerTest : public testing::Test {
  protected:
-  RemoteDatabaseManagerTest()
-      : field_trials_(new base::FieldTrialList(nullptr)) {}
+  RemoteDatabaseManagerTest() {}
 
   void SetUp() override {
     SafeBrowsingApiHandler::SetInstance(&api_handler_);
@@ -52,10 +52,6 @@ class RemoteDatabaseManagerTest : public testing::Test {
 
   // Setup the two field trial params.  These are read in db_'s ctor.
   void SetFieldTrialParams(const std::string types_to_check_val) {
-    // Destroy the existing FieldTrialList before creating a new one to avoid
-    // a DCHECK.
-    field_trials_.reset();
-    field_trials_.reset(new base::FieldTrialList(nullptr));
     variations::testing::ClearAllVariationIDs();
     variations::testing::ClearAllVariationParams();
 
@@ -73,7 +69,6 @@ class RemoteDatabaseManagerTest : public testing::Test {
   }
 
   content::BrowserTaskEnvironment task_environment_;
-  std::unique_ptr<base::FieldTrialList> field_trials_;
   TestSafeBrowsingApiHandler api_handler_;
   scoped_refptr<RemoteSafeBrowsingDatabaseManager> db_;
 };
@@ -88,13 +83,15 @@ TEST_F(RemoteDatabaseManagerTest, DisabledViaNull) {
 TEST_F(RemoteDatabaseManagerTest, TypesToCheckDefault) {
   // Most are true, a few are false.
   for (int t_int = 0;
-       t_int <= static_cast<int>(content::ResourceType::kMaxValue); t_int++) {
-    content::ResourceType t = static_cast<content::ResourceType>(t_int);
+       t_int <= static_cast<int>(blink::mojom::ResourceType::kMaxValue);
+       t_int++) {
+    blink::mojom::ResourceType t =
+        static_cast<blink::mojom::ResourceType>(t_int);
     switch (t) {
-      case content::ResourceType::kStylesheet:
-      case content::ResourceType::kImage:
-      case content::ResourceType::kFontResource:
-      case content::ResourceType::kFavicon:
+      case blink::mojom::ResourceType::kStylesheet:
+      case blink::mojom::ResourceType::kImage:
+      case blink::mojom::ResourceType::kFontResource:
+      case blink::mojom::ResourceType::kFavicon:
         EXPECT_FALSE(db_->CanCheckResourceType(t));
         break;
       default:
@@ -108,14 +105,15 @@ TEST_F(RemoteDatabaseManagerTest, TypesToCheckFromTrial) {
   SetFieldTrialParams("1,2,blah, 9");
   db_ = new RemoteSafeBrowsingDatabaseManager();
   EXPECT_TRUE(db_->CanCheckResourceType(
-      content::ResourceType::kMainFrame));  // defaulted
-  EXPECT_TRUE(db_->CanCheckResourceType(content::ResourceType::kSubFrame));
-  EXPECT_TRUE(db_->CanCheckResourceType(content::ResourceType::kStylesheet));
-  EXPECT_FALSE(db_->CanCheckResourceType(content::ResourceType::kScript));
-  EXPECT_FALSE(db_->CanCheckResourceType(content::ResourceType::kImage));
+      blink::mojom::ResourceType::kMainFrame));  // defaulted
+  EXPECT_TRUE(db_->CanCheckResourceType(blink::mojom::ResourceType::kSubFrame));
+  EXPECT_TRUE(
+      db_->CanCheckResourceType(blink::mojom::ResourceType::kStylesheet));
+  EXPECT_FALSE(db_->CanCheckResourceType(blink::mojom::ResourceType::kScript));
+  EXPECT_FALSE(db_->CanCheckResourceType(blink::mojom::ResourceType::kImage));
   // ...
-  EXPECT_FALSE(db_->CanCheckResourceType(content::ResourceType::kMedia));
-  EXPECT_TRUE(db_->CanCheckResourceType(content::ResourceType::kWorker));
+  EXPECT_FALSE(db_->CanCheckResourceType(blink::mojom::ResourceType::kMedia));
+  EXPECT_TRUE(db_->CanCheckResourceType(blink::mojom::ResourceType::kWorker));
 }
 
 }  // namespace safe_browsing

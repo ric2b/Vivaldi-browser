@@ -9,11 +9,17 @@ export class TestTabsApiProxy extends TestBrowserProxy {
     super([
       'activateTab',
       'closeTab',
+      'createNewTab',
+      'getGroupVisualData',
       'getTabs',
+      'groupTab',
+      'moveGroup',
       'moveTab',
-      'trackThumbnailForTab',
+      'setThumbnailTracked',
+      'ungroupTab',
     ]);
 
+    this.groupVisualData_;
     this.tabs_;
   }
 
@@ -22,9 +28,18 @@ export class TestTabsApiProxy extends TestBrowserProxy {
     return Promise.resolve({active: true, id: tabId});
   }
 
-  closeTab(tabId) {
-    this.methodCalled('closeTab', tabId);
+  closeTab(tabId, closeTabAction) {
+    this.methodCalled('closeTab', [tabId, closeTabAction]);
     return Promise.resolve();
+  }
+
+  createNewTab() {
+    this.methodCalled('createNewTab');
+  }
+
+  getGroupVisualData() {
+    this.methodCalled('getGroupVisualData');
+    return Promise.resolve(this.groupVisualData_);
   }
 
   getTabs() {
@@ -32,16 +47,32 @@ export class TestTabsApiProxy extends TestBrowserProxy {
     return Promise.resolve(this.tabs_.slice());
   }
 
-  moveTab(tabId, newIndex) {
-    this.methodCalled('moveTab', [tabId, newIndex]);
+  groupTab(tabId, groupId) {
+    this.methodCalled('groupTab', [tabId, groupId]);
+  }
+
+  moveGroup(groupId, newIndex) {
+    this.methodCalled('moveGroup', [groupId, newIndex]);
+  }
+
+  moveTab(tabId, windowId, newIndex) {
+    this.methodCalled('moveTab', [tabId, windowId, newIndex]);
     return Promise.resolve();
+  }
+
+  setGroupVisualData(groupVisualData) {
+    this.groupVisualData_ = groupVisualData;
   }
 
   setTabs(tabs) {
     this.tabs_ = tabs;
   }
 
-  trackThumbnailForTab(tabId) {
-    this.methodCalled('trackThumbnailForTab', tabId);
+  setThumbnailTracked(tabId, thumbnailTracked) {
+    this.methodCalled('setThumbnailTracked', [tabId, thumbnailTracked]);
+  }
+
+  ungroupTab(tabId) {
+    this.methodCalled('ungroupTab', [tabId]);
   }
 }

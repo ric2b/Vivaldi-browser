@@ -60,6 +60,10 @@ class VIEWS_EXPORT Button : public InkDropHostView,
     STATE_COUNT,
   };
 
+  static constexpr ButtonState kButtonStates[STATE_COUNT] = {
+      ButtonState::STATE_NORMAL, ButtonState::STATE_HOVERED,
+      ButtonState::STATE_PRESSED, ButtonState::STATE_DISABLED};
+
   // An enum describing the events on which a button should be clicked for a
   // given key event.
   enum class KeyClickAction {
@@ -227,6 +231,8 @@ class VIEWS_EXPORT Button : public InkDropHostView,
 
   void SetButtonController(std::unique_ptr<ButtonController> button_controller);
 
+  gfx::Point GetMenuPosition() const;
+
  protected:
   // Construct the Button with a Listener. The listener can be null. This can be
   // true of buttons that don't have a listener - e.g. menubuttons where there's
@@ -306,7 +312,8 @@ class VIEWS_EXPORT Button : public InkDropHostView,
     ~WidgetObserverButtonBridge() override;
 
     // WidgetObserver:
-    void OnWidgetActivationChanged(Widget* widget, bool active) override;
+    void OnWidgetPaintAsActiveChanged(Widget* widget,
+                                      bool paint_as_active) override;
     void OnWidgetDestroying(Widget* widget) override;
 
    private:
@@ -317,7 +324,7 @@ class VIEWS_EXPORT Button : public InkDropHostView,
 
   void OnEnabledChanged();
 
-  void WidgetActivationChanged(Widget* widget, bool active);
+  void WidgetPaintAsActiveChanged(Widget* widget, bool active);
 
   // The text shown in a tooltip.
   base::string16 tooltip_text_;

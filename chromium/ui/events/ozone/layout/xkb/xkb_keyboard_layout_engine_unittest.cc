@@ -13,7 +13,7 @@
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
-#include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
+#include "ui/events/ozone/layout/scoped_keyboard_layout_engine.h"
 
 namespace ui {
 
@@ -70,6 +70,9 @@ class VkTestXkbKeyboardLayoutEngine : public XkbKeyboardLayoutEngine {
       XkbFlagMapEntry e = {kTestFlags[i], kTestFlags[i]};
       xkb_flag_map_.push_back(e);
     }
+
+    shift_mod_mask_ = EF_SHIFT_DOWN;
+    altgr_mod_mask_ = EF_ALTGR_DOWN;
   }
   ~VkTestXkbKeyboardLayoutEngine() override {}
 
@@ -147,20 +150,14 @@ class VkTestXkbKeyboardLayoutEngine : public XkbKeyboardLayoutEngine {
 
 class XkbLayoutEngineVkTest : public testing::Test {
  public:
-  XkbLayoutEngineVkTest() {}
+  XkbLayoutEngineVkTest()
+      : layout_engine_(std::make_unique<VkTestXkbKeyboardLayoutEngine>(
+            keycode_converter_)) {}
   ~XkbLayoutEngineVkTest() override {}
-
-  void SetUp() override {
-    KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-        std::make_unique<VkTestXkbKeyboardLayoutEngine>(keycode_converter_));
-    layout_engine_ = static_cast<VkTestXkbKeyboardLayoutEngine*>(
-        KeyboardLayoutEngineManager::GetKeyboardLayoutEngine());
-  }
-  void TearDown() override {}
 
  protected:
   VkTestXkbKeyCodeConverter keycode_converter_;
-  VkTestXkbKeyboardLayoutEngine* layout_engine_;
+  std::unique_ptr<VkTestXkbKeyboardLayoutEngine> layout_engine_;
 };
 
 TEST_F(XkbLayoutEngineVkTest, KeyboardCodeForPrintable) {
@@ -822,6 +819,7 @@ TEST_F(XkbLayoutEngineVkTest, KeyboardCodeForNonPrintable) {
     // known to XKB.
     {{DomCode::LAUNCH_ASSISTANT, EF_NONE}, VKEY_ASSISTANT},
     {{DomCode::LAUNCH_CONTROL_PANEL, EF_NONE}, VKEY_SETTINGS},
+    {{DomCode::PRIVACY_SCREEN_TOGGLE, EF_NONE}, VKEY_PRIVACY_SCREEN_TOGGLE},
     // Verify that number pad digits produce located VKEY codes.
     {{DomCode::NUMPAD0, EF_NONE, XKB_KEY_KP_0, '0'}, VKEY_NUMPAD0},
     {{DomCode::NUMPAD9, EF_NONE, XKB_KEY_KP_9, '9'}, VKEY_NUMPAD9},

@@ -115,7 +115,7 @@ void GLSurfaceEGLSurfaceControl::Destroy() {
 
 bool GLSurfaceEGLSurfaceControl::Resize(const gfx::Size& size,
                                         float scale_factor,
-                                        ColorSpace color_space,
+                                        const gfx::ColorSpace& color_space,
                                         bool has_alpha) {
   // TODO(khushalsagar): Update GLSurfaceFormat using the |color_space| above?
   // We don't do this for the NativeViewGLSurfaceEGL as well yet.
@@ -209,8 +209,10 @@ void GLSurfaceEGLSurfaceControl::CommitPendingTransaction(
   // the next transaction.
   DCHECK_LE(pending_surfaces_count_, surface_list_.size());
   for (size_t i = pending_surfaces_count_; i < surface_list_.size(); ++i) {
-    pending_transaction_->SetBuffer(*surface_list_[i].surface, nullptr,
+    const auto& surface_state = surface_list_[i];
+    pending_transaction_->SetBuffer(*surface_state.surface, nullptr,
                                     base::ScopedFD());
+    pending_transaction_->SetVisibility(*surface_state.surface, false);
   }
 
   // TODO(khushalsagar): Consider using the SetDamageRect API for partial
@@ -329,12 +331,27 @@ bool GLSurfaceEGLSurfaceControl::ScheduleOverlayPlane(
   if (hardware_buffer) {
     gfx::Rect dst = bounds_rect;
 
+    // Get the crop rectangle from the image which is the actual region of valid
+    // pixels. This region could be smaller than the buffer dimensions. Hence
+    // scale the |crop_rect| according to the valid pixel area rather than
+    // buffer dimensions. crbug.com/1027766 for more details.
+    gfx::Rect valid_pixel_rect = image->GetCropRect();
     gfx::Size buffer_size = GetBufferSize(hardware_buffer);
-    gfx::RectF scaled_rect =
-        gfx::RectF(crop_rect.x() * buffer_size.width(),
-                   crop_rect.y() * buffer_size.height(),
-                   crop_rect.width() * buffer_size.width(),
-                   crop_rect.height() * buffer_size.height());
+
+    // If the image doesn't provide a |valid_pixel_rect|, assume the entire
+    // buffer is valid.
+    if (valid_pixel_rect.IsEmpty()) {
+      valid_pixel_rect.set_size(buffer_size);
+    } else {
+      // Clamp the |valid_pixel_rect| to the buffer dimensions to make sure for
+      // some reason it does not overflows.
+      valid_pixel_rect.Intersect(gfx::Rect(buffer_size));
+    }
+    gfx::RectF scaled_rect = gfx::RectF(
+        crop_rect.x() * valid_pixel_rect.width() + valid_pixel_rect.x(),
+        crop_rect.y() * valid_pixel_rect.height() + valid_pixel_rect.y(),
+        crop_rect.width() * valid_pixel_rect.width(),
+        crop_rect.height() * valid_pixel_rect.height());
     gfx::Rect src = gfx::ToEnclosedRect(scaled_rect);
 
     if (uninitialized || surface_state.src != src || surface_state.dst != dst ||
@@ -399,16 +416,6 @@ void GLSurfaceEGLSurfaceControl::OnTransactionAckOnGpuThread(
 
   transaction_ack_pending_ = false;
 
-  // The presentation feedback callback must run after swap completion.
-  std::move(completion_callback).Run(gfx::SwapResult::SWAP_ACK, nullptr);
-
-  PendingPresentationCallback pending_cb;
-  pending_cb.latch_time = transaction_stats.latch_time;
-  pending_cb.present_fence = std::move(transaction_stats.present_fence);
-  pending_cb.callback = std::move(presentation_callback);
-  pending_presentation_callback_queue_.push(std::move(pending_cb));
-  CheckPendingPresentationCallbacks();
-
   const bool has_context = context_->MakeCurrent(this);
   for (auto& surface_stat : transaction_stats.surface_stats) {
     auto it = released_resources.find(surface_stat.surface);
@@ -435,6 +442,17 @@ void GLSurfaceEGLSurfaceControl::OnTransactionAckOnGpuThread(
   // which were updated in that transaction, the surfaces with no buffer updates
   // won't be present in the ack.
   released_resources.clear();
+
+  // The presentation feedback callback must run after swap completion.
+  std::move(completion_callback).Run(gfx::SwapResult::SWAP_ACK, nullptr);
+
+  PendingPresentationCallback pending_cb;
+  pending_cb.latch_time = transaction_stats.latch_time;
+  pending_cb.present_fence = std::move(transaction_stats.present_fence);
+  pending_cb.callback = std::move(presentation_callback);
+  pending_presentation_callback_queue_.push(std::move(pending_cb));
+
+  CheckPendingPresentationCallbacks();
 
   if (!pending_transaction_queue_.empty()) {
     transaction_ack_pending_ = true;
@@ -496,10 +514,17 @@ void GLSurfaceEGLSurfaceControl::SetDisplayTransform(
   display_transform_ = transform;
 }
 
+gfx::SurfaceOrigin GLSurfaceEGLSurfaceControl::GetOrigin() const {
+  // GLSurfaceEGLSurfaceControl's y-axis is flipped compare to GL - (0,0) is at
+  // top left corner.
+  return gfx::SurfaceOrigin::kTopLeft;
+}
+
 gfx::Rect GLSurfaceEGLSurfaceControl::ApplyDisplayInverse(
     const gfx::Rect& input) const {
   gfx::Transform display_inverse = gfx::OverlayTransformToTransform(
-      gfx::InvertOverlayTransform(display_transform_), window_rect_.size());
+      gfx::InvertOverlayTransform(display_transform_),
+      gfx::SizeF(window_rect_.size()));
   return cc::MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
       display_inverse, input);
 }

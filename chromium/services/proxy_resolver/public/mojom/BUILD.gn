@@ -5,11 +5,11 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
-  sources = [
-    "proxy_resolver.mojom",
-  ]
+  generate_java = true
+  sources = [ "proxy_resolver.mojom" ]
   deps = [
     "//services/network/public/mojom:mojom_ip_address",
+    "//services/network/public/mojom:mojom_network_isolation_key",
     "//url/mojom:url_mojom_gurl",
   ]
 

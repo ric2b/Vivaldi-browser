@@ -4,10 +4,12 @@
 
 #include <utility>
 
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/no_destructor.h"
 #include "base/run_loop.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/test/task_environment.h"
 #include "components/services/font/font_service_app.h"
 #include "components/services/font/public/cpp/font_loader.h"
@@ -25,9 +27,10 @@
 namespace font_service {
 namespace {
 
-bool IsInTestFontDirectory(const char* path) {
-  const char kTestFontsDir[] = "test_fonts";
-  return std::string(path).find(kTestFontsDir) != std::string::npos;
+bool IsInTestFontDirectory(const base::FilePath& path) {
+  const base::FilePath kTestFontsDir(
+      FILE_PATH_LITERAL("./third_party/test_fonts"));
+  return kTestFontsDir.IsParent(path);
 }
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -56,9 +59,9 @@ std::string GetPostscriptNameFromFile(base::File& font_file) {
 
 mojo::PendingRemote<mojom::FontService> ConnectToBackgroundFontService() {
   mojo::PendingRemote<mojom::FontService> remote;
-  base::CreateSequencedTaskRunner({base::ThreadPool(), base::MayBlock(),
-                                   base::WithBaseSyncPrimitives(),
-                                   base::TaskPriority::USER_BLOCKING})
+  base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::WithBaseSyncPrimitives(),
+       base::TaskPriority::USER_BLOCKING})
       ->PostTask(FROM_HERE,
                  base::BindOnce(
                      [](mojo::PendingReceiver<mojom::FontService> receiver) {
@@ -113,7 +116,8 @@ TEST_F(FontLoaderTest, BasicMatchingTest) {
                                      &result_family_name, &result_style);
       EXPECT_EQ(request_family_name[1],
                 std::string(result_family_name.c_str()));
-      EXPECT_TRUE(IsInTestFontDirectory(font_identity.fString.c_str()));
+      EXPECT_TRUE(
+          IsInTestFontDirectory(base::FilePath(font_identity.fString.c_str())));
       EXPECT_EQ(result_style, request_style);
     }
   }
@@ -142,7 +146,8 @@ TEST_F(FontLoaderTest, EmptyFontName) {
                                  &font_identity, &result_family_name,
                                  &result_style);
   EXPECT_EQ(kDefaultFontName, std::string(result_family_name.c_str()));
-  EXPECT_TRUE(IsInTestFontDirectory(font_identity.fString.c_str()));
+  EXPECT_TRUE(
+      IsInTestFontDirectory(base::FilePath(font_identity.fString.c_str())));
 }
 
 TEST_F(FontLoaderTest, CharacterFallback) {
@@ -170,10 +175,9 @@ TEST_F(FontLoaderTest, CharacterFallback) {
     EXPECT_FALSE(is_bold);
     EXPECT_FALSE(is_italic);
     if (character_family.second.size()) {
-      EXPECT_TRUE(
-          IsInTestFontDirectory(font_identity->str_representation.c_str()));
+      EXPECT_TRUE(IsInTestFontDirectory(font_identity->filepath));
     } else {
-      EXPECT_EQ(font_identity->str_representation.size(), 0u);
+      EXPECT_TRUE(font_identity->filepath.empty());
       EXPECT_EQ(result_family_name, "");
     }
   }
@@ -321,8 +325,7 @@ TEST_F(FontLoaderTest, LocalMatching) {
       EXPECT_TRUE(font_loader()->MatchFontByPostscriptNameOrFullFontName(
           unique_font_name, &font_identity));
       EXPECT_FALSE(font_identity.is_null());
-      EXPECT_TRUE(
-          IsInTestFontDirectory(font_identity->str_representation.c_str()));
+      EXPECT_TRUE(IsInTestFontDirectory(font_identity->filepath));
     }
   };
   match_unique_names(full_font_names_test_fonts);

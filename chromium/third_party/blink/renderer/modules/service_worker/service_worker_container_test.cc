@@ -46,7 +46,7 @@ struct StubScriptFunction {
 
   size_t CallCount() { return call_count_; }
   ScriptValue Arg() { return arg_; }
-  void Trace(blink::Visitor* visitor) { visitor->Trace(arg_); }
+  void Trace(Visitor* visitor) { visitor->Trace(arg_); }
 
  private:
   size_t call_count_;
@@ -162,6 +162,7 @@ class NotReachedWebServiceWorkerProvider : public WebServiceWorkerProvider {
       const WebURL& script_url,
       blink::mojom::ScriptType script_type,
       mojom::ServiceWorkerUpdateViaCache update_via_cache,
+      const WebFetchClientSettingsObject& fetch_client_settings_object,
       std::unique_ptr<WebServiceWorkerRegistrationCallbacks> callbacks)
       override {
     ADD_FAILURE()
@@ -192,8 +193,8 @@ class ServiceWorkerContainerTest : public PageTestBase {
     NavigateTo(KURL(NullURL(), url));
 
     if (url.StartsWith("https://") || url.StartsWith("http://localhost/")) {
-      GetDocument().SetSecureContextStateForTesting(
-          SecureContextState::kSecure);
+      GetDocument().SetSecureContextModeForTesting(
+          SecureContextMode::kSecureContext);
     }
   }
 
@@ -313,6 +314,7 @@ class StubWebServiceWorkerProvider {
         const WebURL& script_url,
         blink::mojom::ScriptType script_type,
         mojom::ServiceWorkerUpdateViaCache update_via_cache,
+        const WebFetchClientSettingsObject& fetch_client_settings_object,
         std::unique_ptr<WebServiceWorkerRegistrationCallbacks> callbacks)
         override {
       owner_.register_call_count_++;

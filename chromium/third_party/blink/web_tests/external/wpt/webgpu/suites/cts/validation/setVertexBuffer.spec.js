@@ -10,7 +10,8 @@ import { ValidationTest } from './validation_test.js';
 
 class F extends ValidationTest {
   async init() {
-    await Promise.all([super.init(), this.initGLSL()]);
+    await super.init();
+    await this.initGLSL();
   }
 
   getVertexBuffer() {
@@ -29,11 +30,12 @@ class F extends ValidationTest {
       colorStates: [{
         format: 'rgba8unorm'
       }],
-      vertexInput: {
+      vertexState: {
         vertexBuffers: [{
-          stride: 3 * 4,
-          attributeSet: range(bufferCount, i => ({
+          arrayStride: 3 * 4,
+          attributes: range(bufferCount, i => ({
             format: 'float3',
+            offset: 0,
             shaderLocation: i
           }))
         }]
@@ -51,7 +53,7 @@ class F extends ValidationTest {
        }
     `;
     return {
-      module: this.makeShaderModule('vertex', code),
+      module: this.makeShaderModuleFromGLSL('vertex', code),
       entryPoint: 'main'
     };
   }
@@ -65,7 +67,7 @@ class F extends ValidationTest {
       }
     `;
     return {
-      module: this.makeShaderModule('fragment', code),
+      module: this.makeShaderModuleFromGLSL('fragment', code),
       entryPoint: 'main'
     };
   }
@@ -114,7 +116,7 @@ g.test('vertex buffers inherit from previous pipeline', async t => {
     renderPass.setPipeline(pipeline1);
     renderPass.draw(3, 1, 0, 0);
     renderPass.endPass();
-    await t.expectValidationError(() => {
+    t.expectValidationError(() => {
       commandEncoder.finish();
     });
   }
@@ -174,7 +176,7 @@ g.test('vertex buffers do not inherit between render passes', async t => {
       renderPass.draw(3, 1, 0, 0);
       renderPass.endPass();
     }
-    await t.expectValidationError(() => {
+    t.expectValidationError(() => {
       commandEncoder.finish();
     });
   }

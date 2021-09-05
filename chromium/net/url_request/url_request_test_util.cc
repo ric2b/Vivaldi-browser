@@ -23,7 +23,9 @@
 #include "net/http/http_response_headers.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/transport_security_state.h"
+#include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/proxy_resolution/proxy_retry_info.h"
+#include "net/quic/quic_context.h"
 #include "net/url_request/static_http_user_agent_settings.h"
 #include "net/url_request/url_request_job.h"
 #include "net/url_request/url_request_job_factory_impl.h"
@@ -84,7 +86,8 @@ void TestURLRequestContext::Init() {
     context_storage_.set_host_resolver(
         std::unique_ptr<HostResolver>(new MockCachingHostResolver()));
   if (!proxy_resolution_service())
-    context_storage_.set_proxy_resolution_service(ProxyResolutionService::CreateDirect());
+    context_storage_.set_proxy_resolution_service(
+        ConfiguredProxyResolutionService::CreateDirect());
   if (!cert_verifier()) {
     context_storage_.set_cert_verifier(
         CertVerifier::CreateDefault(/*cert_net_fetcher=*/nullptr));
@@ -112,6 +115,9 @@ void TestURLRequestContext::Init() {
   if (!http_server_properties()) {
     context_storage_.set_http_server_properties(
         std::make_unique<HttpServerProperties>());
+  }
+  if (!quic_context()) {
+    context_storage_.set_quic_context(std::make_unique<QuicContext>());
   }
   // In-memory cookie store.
   if (!cookie_store()) {
@@ -147,6 +153,7 @@ void TestURLRequestContext::Init() {
     session_context.ssl_config_service = ssl_config_service();
     session_context.http_auth_handler_factory = http_auth_handler_factory();
     session_context.http_server_properties = http_server_properties();
+    session_context.quic_context = quic_context();
     session_context.net_log = net_log();
 #if BUILDFLAG(ENABLE_REPORTING)
     session_context.network_error_logging_service =
@@ -162,6 +169,16 @@ void TestURLRequestContext::Init() {
     context_storage_.set_job_factory(
         std::make_unique<URLRequestJobFactoryImpl>());
   }
+}
+
+std::unique_ptr<URLRequest> TestURLRequestContext::CreateFirstPartyRequest(
+    const GURL& url,
+    RequestPriority priority,
+    URLRequest::Delegate* delegate,
+    NetworkTrafficAnnotationTag traffic_annotation) const {
+  auto req = CreateRequest(url, priority, delegate, traffic_annotation);
+  req->set_site_for_cookies(SiteForCookies::FromUrl(url));
+  return req;
 }
 
 TestURLRequestContextGetter::TestURLRequestContextGetter(
@@ -269,6 +286,7 @@ void TestDelegate::OnSSLCertificateError(URLRequest* request,
   // cancel the request.
   have_certificate_errors_ = true;
   certificate_errors_are_fatal_ = fatal;
+  certificate_net_error_ = net_error;
   if (allow_certificate_errors_)
     request->ContinueDespiteLastError();
   else
@@ -371,7 +389,6 @@ TestNetworkDelegate::TestNetworkDelegate()
       blocked_get_cookies_count_(0),
       blocked_set_cookie_count_(0),
       set_cookie_count_(0),
-      before_send_headers_with_proxy_count_(0),
       before_start_transaction_count_(0),
       headers_received_count_(0),
       has_load_timing_info_before_redirect_(false),
@@ -439,28 +456,14 @@ int TestNetworkDelegate::OnBeforeStartTransaction(
   return OK;
 }
 
-void TestNetworkDelegate::OnBeforeSendHeaders(
-    URLRequest* request,
-    const ProxyInfo& proxy_info,
-    const ProxyRetryInfoMap& proxy_retry_info,
-    HttpRequestHeaders* headers) {
-  if (!proxy_info.is_http() && !proxy_info.is_https() && !proxy_info.is_quic())
-    return;
-  if (!request || request->url().SchemeIs("https") ||
-      request->url().SchemeIsWSOrWSS()) {
-    return;
-  }
-  ++before_send_headers_with_proxy_count_;
-  last_observed_proxy_ = proxy_info.proxy_server().host_port_pair();
-}
-
 int TestNetworkDelegate::OnHeadersReceived(
     URLRequest* request,
     CompletionOnceCallback callback,
     const HttpResponseHeaders* original_response_headers,
     scoped_refptr<HttpResponseHeaders>* override_response_headers,
     const IPEndPoint& endpoint,
-    GURL* allowed_unsafe_redirect_url) {
+    base::Optional<GURL>* preserve_fragment_on_redirect_url) {
+  EXPECT_FALSE(preserve_fragment_on_redirect_url->has_value());
   int req_id = GetRequestId(request);
   bool is_first_response =
       event_order_[req_id].find("OnHeadersReceived\n") == std::string::npos;
@@ -487,8 +490,8 @@ int TestNetworkDelegate::OnHeadersReceived(
 
     redirect_on_headers_received_url_ = GURL();
 
-    if (!allowed_unsafe_redirect_url_.is_empty())
-      *allowed_unsafe_redirect_url = allowed_unsafe_redirect_url_;
+    // Since both values are base::Optionals, can just copy this over.
+    *preserve_fragment_on_redirect_url = preserve_fragment_on_redirect_url_;
   } else if (add_header_to_first_response_ && is_first_response) {
     *override_response_headers =
         new HttpResponseHeaders(original_response_headers->raw_headers());

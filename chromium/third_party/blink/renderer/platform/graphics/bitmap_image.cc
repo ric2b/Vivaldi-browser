@@ -115,8 +115,7 @@ PaintImage BitmapImage::PaintImageForTesting() {
 
 PaintImage BitmapImage::CreatePaintImage() {
   sk_sp<PaintImageGenerator> generator =
-      decoder_ ? decoder_->CreateGenerator(PaintImage::kDefaultFrameIndex)
-               : nullptr;
+      decoder_ ? decoder_->CreateGenerator() : nullptr;
   if (!generator)
     return PaintImage();
 
@@ -155,6 +154,11 @@ IntSize BitmapImage::Size() const {
 IntSize BitmapImage::SizeRespectingOrientation() const {
   UpdateSize();
   return size_respecting_orientation_;
+}
+
+bool BitmapImage::HasDefaultOrientation() const {
+  ImageOrientation orientation = CurrentFrameOrientation();
+  return orientation == kDefaultImageOrientation;
 }
 
 bool BitmapImage::GetHotSpot(IntPoint& hot_spot) const {

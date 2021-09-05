@@ -8,7 +8,7 @@
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "third_party/blink/public/mojom/bluetooth/web_bluetooth.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/modules/v8/string_or_unsigned_long.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_device.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
@@ -17,6 +17,7 @@
 namespace blink {
 
 class BluetoothDevice;
+class ExceptionState;
 class ScriptPromise;
 class ScriptPromiseResolver;
 class ScriptState;
@@ -25,7 +26,7 @@ class ScriptState;
 // bluetooth peripheral.
 class BluetoothRemoteGATTServer
     : public ScriptWrappable,
-      public ContextLifecycleObserver,
+      public ExecutionContextLifecycleObserver,
       public mojom::blink::WebBluetoothServerClient {
   USING_PRE_FINALIZER(BluetoothRemoteGATTServer, Dispose);
   DEFINE_WRAPPERTYPEINFO();
@@ -34,8 +35,8 @@ class BluetoothRemoteGATTServer
  public:
   BluetoothRemoteGATTServer(ExecutionContext*, BluetoothDevice*);
 
-  // ContextLifecycleObserver:
-  void ContextDestroyed(ExecutionContext*) override;
+  // ExecutionContextLifecycleObserver:
+  void ContextDestroyed() override;
 
   // mojom::blink::WebBluetoothServerClient:
   void GATTServerDisconnected() override;
@@ -73,7 +74,7 @@ class BluetoothRemoteGATTServer
   void Dispose();
 
   // Interface required by Garbage Collectoin:
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   // IDL exposed interface:
   BluetoothDevice* device() { return device_; }
@@ -91,6 +92,7 @@ class BluetoothRemoteGATTServer
  private:
   ScriptPromise GetPrimaryServicesImpl(
       ScriptState*,
+      ExceptionState&,
       mojom::blink::WebBluetoothGATTQueryQuantity,
       String service_uuid = String());
 

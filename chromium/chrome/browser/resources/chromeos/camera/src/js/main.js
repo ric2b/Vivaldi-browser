@@ -2,262 +2,312 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-'use strict';
-
-/**
- * Namespace for the Camera app.
- */
-var cca = cca || {};
+import {
+  BackgroundOps,  // eslint-disable-line no-unused-vars
+  ForegroundOps,  // eslint-disable-line no-unused-vars
+} from './background_ops.js';
+import {browserProxy} from './browser_proxy/browser_proxy.js';
+import {assert, assertInstanceof} from './chrome_util.js';
+import {
+  PhotoConstraintsPreferrer,
+  VideoConstraintsPreferrer,
+} from './device/constraints_preferrer.js';
+import {DeviceInfoUpdater} from './device/device_info_updater.js';
+import {GalleryButton} from './gallerybutton.js';
+import * as metrics from './metrics.js';
+import * as filesystem from './models/filesystem.js';
+import * as nav from './nav.js';
+import {PerfEvent} from './perf.js';
+import * as state from './state.js';
+import * as tooltip from './tooltip.js';
+import {Mode} from './type.js';
+import * as util from './util.js';
+import {Camera} from './views/camera.js';
+import {CameraIntent} from './views/camera_intent.js';
+import {Dialog} from './views/dialog.js';
+import {
+  BaseSettings,
+  MasterSettings,
+  ResolutionSettings,
+} from './views/settings.js';
+import {View, ViewName} from './views/view.js';
+import {Warning} from './views/warning.js';
 
 /**
  * Creates the Camera App main object.
- * @constructor
+ * @implements {ForegroundOps}
  */
-cca.App = function() {
-  const shouldHandleIntentResult =
-      window.intent !== null && window.intent.shouldHandleResult;
-  cca.state.set('should-handle-intent-result', shouldHandleIntentResult);
-
+export class App {
   /**
-   * @type {cca.models.Gallery}
-   * @private
+   * @param {!BackgroundOps} backgroundOps
    */
-  this.gallery_ = new cca.models.Gallery();
+  constructor(backgroundOps) {
+    /**
+     * @type {!BackgroundOps}
+     * @private
+     */
+    this.backgroundOps_ = backgroundOps;
 
-  /**
-   * @type {cca.ResolutionEventBroker}
-   * @private
-   */
-  this.resolBroker_ = new cca.ResolutionEventBroker();
+    /**
+     * @type {!PhotoConstraintsPreferrer}
+     * @private
+     */
+    this.photoPreferrer_ =
+        new PhotoConstraintsPreferrer(() => this.cameraView_.start());
 
-  /**
-   * @type {cca.device.PhotoResolPreferrer}
-   * @private
-   */
-  this.photoPreferrer_ = new cca.device.PhotoResolPreferrer(
-      this.resolBroker_, () => this.cameraView_.restart());
+    /**
+     * @type {!VideoConstraintsPreferrer}
+     * @private
+     */
+    this.videoPreferrer_ =
+        new VideoConstraintsPreferrer(() => this.cameraView_.start());
 
-  /**
-   * @type {cca.device.VideoConstraintsPreferrer}
-   * @private
-   */
-  this.videoPreferrer_ = new cca.device.VideoConstraintsPreferrer(
-      this.resolBroker_, () => this.cameraView_.restart());
+    /**
+     * @type {!DeviceInfoUpdater}
+     * @private
+     */
+    this.infoUpdater_ =
+        new DeviceInfoUpdater(this.photoPreferrer_, this.videoPreferrer_);
 
-  /**
-   * @type {cca.device.DeviceInfoUpdater}
-   * @private
-   */
-  this.infoUpdater_ = new cca.device.DeviceInfoUpdater(
-      this.photoPreferrer_, this.videoPreferrer_);
+    /**
+     * @type {!GalleryButton}
+     * @private
+     */
+    this.galleryButton_ = new GalleryButton();
 
-  /**
-   * @type {cca.GalleryButton}
-   * @private
-   */
-  this.galleryButton_ = new cca.GalleryButton(this.gallery_);
-
-  /**
-   * @type {cca.views.Browser}
-   * @private
-   */
-  this.browserView_ = new cca.views.Browser(this.gallery_);
-
-  /**
-   * @type {cca.views.Camera}
-   * @private
-   */
-  this.cameraView_ = shouldHandleIntentResult ?
-      new cca.views.CameraIntent(
-          window.intent, this.infoUpdater_, this.photoPreferrer_,
-          this.videoPreferrer_) :
-      new cca.views.Camera(
-          this.gallery_, this.infoUpdater_, this.photoPreferrer_,
-          this.videoPreferrer_);
-
-  // End of properties. Seal the object.
-  Object.seal(this);
-
-  document.body.addEventListener('keydown', this.onKeyPressed_.bind(this));
-
-  document.title = chrome.i18n.getMessage('name');
-  cca.util.setupI18nElements(document);
-  this.setupToggles_();
-
-  // Set up views navigation by their DOM z-order.
-  cca.nav.setup([
-    this.cameraView_,
-    new cca.views.MasterSettings(),
-    new cca.views.BaseSettings('#gridsettings'),
-    new cca.views.BaseSettings('#timersettings'),
-    new cca.views.ResolutionSettings(
-        this.infoUpdater_, this.photoPreferrer_, this.videoPreferrer_,
-        this.resolBroker_),
-    new cca.views.BaseSettings('#photoresolutionsettings'),
-    new cca.views.BaseSettings('#videoresolutionsettings'),
-    new cca.views.BaseSettings('#expertsettings'),
-    this.browserView_,
-    new cca.views.Warning(),
-    new cca.views.Dialog('#message-dialog'),
-  ]);
-};
-
-/*
- * Checks if it is applicable to use CrOS gallery app.
- * @return {boolean} Whether applicable or not.
- */
-cca.App.useGalleryApp = function() {
-  return chrome.fileManagerPrivate && cca.state.get('ext-fs');
-};
-
-/**
- * Sets up toggles (checkbox and radio) by data attributes.
- * @private
- */
-cca.App.prototype.setupToggles_ = function() {
-  cca.proxy.browserProxy.localStorageGet(
-      {expert: false}, ({expert}) => cca.state.set('expert', expert));
-  document.querySelectorAll('input').forEach((element) => {
-    element.addEventListener(
-        'keypress',
-        (event) => cca.util.getShortcutIdentifier(event) == 'Enter' &&
-            element.click());
-
-    var css = element.getAttribute('data-state');
-    var key = element.getAttribute('data-key');
-    var payload = () => {
-      var keys = {};
-      keys[key] = element.checked;
-      return keys;
-    };
-    element.addEventListener('change', (event) => {
-      if (css) {
-        cca.state.set(css, element.checked);
+    /**
+     * @type {!Camera}
+     * @private
+     */
+    this.cameraView_ = (() => {
+      const intent = this.backgroundOps_.getIntent();
+      const perfLogger = this.backgroundOps_.getPerfLogger();
+      if (intent !== null && intent.shouldHandleResult) {
+        state.set(state.State.SHOULD_HANDLE_INTENT_RESULT, true);
+        return new CameraIntent(
+            intent, this.infoUpdater_, this.photoPreferrer_,
+            this.videoPreferrer_, perfLogger);
+      } else {
+        const mode = intent !== null ? intent.mode : Mode.PHOTO;
+        return new Camera(
+            this.galleryButton_, this.infoUpdater_, this.photoPreferrer_,
+            this.videoPreferrer_, mode, perfLogger);
       }
-      if (event.isTrusted) {
-        element.save();
-        if (element.type == 'radio' && element.checked) {
-          // Handle unchecked grouped sibling radios.
-          var grouped = `input[type=radio][name=${element.name}]:not(:checked)`;
-          document.querySelectorAll(grouped).forEach(
-              (radio) =>
-                  radio.dispatchEvent(new Event('change')) && radio.save());
+    })();
+
+    document.body.addEventListener('keydown', this.onKeyPressed_.bind(this));
+
+    document.title = browserProxy.getI18nMessage('name');
+    util.setupI18nElements(document.body);
+    this.setupToggles_();
+
+    const resolutionSettings = new ResolutionSettings(
+        this.infoUpdater_, this.photoPreferrer_, this.videoPreferrer_);
+
+    // Set up views navigation by their DOM z-order.
+    nav.setup([
+      this.cameraView_,
+      new MasterSettings(),
+      new BaseSettings(ViewName.GRID_SETTINGS),
+      new BaseSettings(ViewName.TIMER_SETTINGS),
+      resolutionSettings,
+      resolutionSettings.photoResolutionSettings,
+      resolutionSettings.videoResolutionSettings,
+      new BaseSettings(ViewName.EXPERT_SETTINGS),
+      new Warning(),
+      new Dialog(ViewName.MESSAGE_DIALOG),
+      new View(ViewName.SPLASH),
+    ]);
+
+    nav.open(ViewName.SPLASH);
+    this.backgroundOps_.bindForegroundOps(this);
+  }
+
+  /**
+   * Sets up toggles (checkbox and radio) by data attributes.
+   * @private
+   */
+  setupToggles_() {
+    browserProxy.localStorageGet({expert: false})
+        .then(({expert}) => state.set(state.State.EXPERT, expert));
+    document.querySelectorAll('input').forEach((element) => {
+      element.addEventListener(
+          'keypress',
+          (event) =>
+              util.getShortcutIdentifier(event) === 'Enter' && element.click());
+
+      const payload = (element) => ({[element.dataset.key]: element.checked});
+      const save = (element) => {
+        if (element.dataset.key !== undefined) {
+          browserProxy.localStorageSet(payload(element));
         }
+      };
+      element.addEventListener('change', (event) => {
+        if (element.dataset.state !== undefined) {
+          state.set(state.assertState(element.dataset.state), element.checked);
+        }
+        if (event.isTrusted) {
+          save(element);
+          if (element.type === 'radio' && element.checked) {
+            // Handle unchecked grouped sibling radios.
+            const grouped =
+                `input[type=radio][name=${element.name}]:not(:checked)`;
+            document.querySelectorAll(grouped).forEach(
+                (radio) =>
+                    radio.dispatchEvent(new Event('change')) && save(radio));
+          }
+        }
+      });
+      if (element.dataset.key !== undefined) {
+        // Restore the previously saved state on startup.
+        browserProxy.localStorageGet(payload(element))
+            .then(
+                (values) => util.toggleChecked(
+                    assertInstanceof(element, HTMLInputElement),
+                    values[element.dataset.key]));
       }
     });
-    element.toggleChecked = (checked) => {
-      element.checked = checked;
-      element.dispatchEvent(new Event('change'));  // Trigger toggling css.
-    };
-    element.save = () => {
-      return key && cca.proxy.browserProxy.localStorageSet(payload());
-    };
-    if (key) {
-      // Restore the previously saved state on startup.
-      cca.proxy.browserProxy.localStorageGet(
-          payload(), (values) => element.toggleChecked(values[key]));
-    }
-  });
-};
+  }
 
-/**
- * Starts the app by loading the model and opening the camera-view.
- */
-cca.App.prototype.start = function() {
-  var ackMigrate = false;
-  cca.models.FileSystem
-      .initialize(() => {
-        // Prompt to migrate pictures if needed.
-        var message = chrome.i18n.getMessage('migrate_pictures_msg');
-        return cca.nav.open('message-dialog', {message, cancellable: false})
-            .then((acked) => {
-              if (!acked) {
-                throw new Error('no-migrate');
-              }
-              ackMigrate = true;
-            });
-      })
-      .then((external) => {
-        cca.state.set('ext-fs', external);
-        this.gallery_.addObserver(this.galleryButton_);
-        if (!cca.App.useGalleryApp()) {
-          this.gallery_.addObserver(this.browserView_);
-        }
-        this.gallery_.load();
-        cca.nav.open('camera');
-      })
-      .catch((error) => {
-        console.error(error);
-        if (error && error.message == 'no-migrate') {
-          chrome.app.window.current().close();
-          return;
-        }
-        cca.nav.open('warning', 'filesystem-failure');
-      })
-      .finally(() => {
-        cca.metrics.log(cca.metrics.Type.LAUNCH, ackMigrate);
-      });
-};
+  /**
+   * Starts the app by loading the model and opening the camera-view.
+   * @return {!Promise}
+   */
+  async start() {
+    let ackMigrate = false;
+    filesystem
+        .initialize(() => {
+          // Prompt to migrate pictures if needed.
+          const message = browserProxy.getI18nMessage('migrate_pictures_msg');
+          return nav
+              .open(ViewName.MESSAGE_DIALOG, {message, cancellable: false})
+              .then((acked) => {
+                if (!acked) {
+                  throw new Error('no-migrate');
+                }
+                ackMigrate = true;
+              });
+        })
+        .then(() => {
+          const externalDir = filesystem.getExternalDirectory();
+          assert(externalDir !== null);
+          this.galleryButton_.initialize(externalDir);
+        })
+        .catch((error) => {
+          console.error(error);
+          if (error && error.message === 'no-migrate') {
+            chrome.app.window.current().close();
+            return;
+          }
+          nav.open(ViewName.WARNING, 'filesystem-failure');
+        })
+        .finally(() => {
+          metrics.log(metrics.Type.LAUNCH, ackMigrate);
+        });
+    const showWindow = (async () => {
+      await util.fitWindow();
+      chrome.app.window.current().show();
+      this.backgroundOps_.notifyActivation();
+    })();
+    const startCamera = (async () => {
+      const isSuccess = await this.cameraView_.start();
+      nav.close(ViewName.SPLASH);
+      nav.open(ViewName.CAMERA);
+      this.backgroundOps_.getPerfLogger().stopLaunch({hasError: !isSuccess});
+    })();
+    return Promise.all([showWindow, startCamera]);
+  }
 
-/**
- * Handles pressed keys.
- * @param {Event} event Key press event.
- * @private
- */
-cca.App.prototype.onKeyPressed_ = function(event) {
-  cca.tooltip.hide();  // Hide shown tooltip on any keypress.
-  cca.nav.onKeyPressed(event);
-};
+  /**
+   * Handles pressed keys.
+   * @param {Event} event Key press event.
+   * @private
+   */
+  onKeyPressed_(event) {
+    tooltip.hide();  // Hide shown tooltip on any keypress.
+    nav.onKeyPressed(event);
+  }
 
-/**
- * Suspends app and hides app window.
- * @return {!Promise}
- */
-cca.App.prototype.suspend = async function() {
-  cca.state.set('suspend', true);
-  await this.cameraView_.restart();
-  chrome.app.window.current().hide();
-};
+  /**
+   * Suspends app and hides app window.
+   * @return {!Promise}
+   */
+  async suspend() {
+    state.set(state.State.SUSPEND, true);
+    await this.cameraView_.start();
+    chrome.app.window.current().hide();
+    this.backgroundOps_.notifySuspension();
+  }
 
-/**
- * Resumes app from suspension and shows app window.
- */
-cca.App.prototype.resume = function() {
-  cca.state.set('suspend', false);
-  chrome.app.window.current().show();
-};
+  /**
+   * Resumes app from suspension and shows app window.
+   */
+  resume() {
+    state.set(state.State.SUSPEND, false);
+    chrome.app.window.current().show();
+    this.backgroundOps_.notifyActivation();
+  }
+}
 
 /**
  * Singleton of the App object.
- * @type {cca.App}
- * @private
+ * @type {?App}
  */
-cca.App.instance_ = null;
-
-/**
- * Intent associated with current app window.
- * @type {?cca.intent.Intent}
- */
-window.intent = window.intent || null;
+let instance = null;
 
 /**
  * Creates the App object and starts camera stream.
  */
 document.addEventListener('DOMContentLoaded', async () => {
-  if (!cca.App.instance_) {
-    cca.App.instance_ = new cca.App();
+  if (instance !== null) {
+    return;
   }
-  cca.App.instance_.start();
-  // Register methods called from background.
-  window.ops = {
-    suspend: () => {
-      cca.App.instance_.suspend().then(window.onSuspended);
-    },
-    resume: () => {
-      cca.App.instance_.resume();
-      window.onActive();
-    },
-  };
-  chrome.app.window.current().show();
-  window.onActive();
+  assert(window['backgroundOps'] !== undefined);
+  const /** !BackgroundOps */ bgOps = window['backgroundOps'];
+
+  metrics.initMetrics(bgOps.isTesting());
+
+  const perfLogger = bgOps.getPerfLogger();
+
+  // Setup listener for performance events.
+  perfLogger.addListener((event, duration, extras) => {
+    metrics.log(metrics.Type.PERF, event, duration, extras);
+  });
+  const states = Object.values(PerfEvent);
+  states.push(state.State.TAKING);
+  states.forEach((s) => {
+    state.addObserver(s, (val, extras) => {
+      let event = s;
+      if (s === state.State.TAKING) {
+        // 'taking' state indicates either taking photo or video. Skips for
+        // video-taking case since we only want to collect the metrics of
+        // photo-taking.
+        if (state.get(Mode.VIDEO)) {
+          return;
+        }
+        event = PerfEvent.PHOTO_TAKING;
+      }
+
+      if (val) {
+        perfLogger.start(event);
+      } else {
+        perfLogger.stop(event, extras);
+      }
+    });
+  });
+
+  // Setup for console perf logger.
+  perfLogger.addListener((event, duration, extras) => {
+    if (state.get(state.State.PRINT_PERFORMANCE_LOGS)) {
+      // eslint-disable-next-line no-console
+      console.log(
+          '%c%s %s ms %s', 'color: #4E4F97; font-weight: bold;',
+          event.padEnd(40), duration.toFixed(0).padStart(4),
+          JSON.stringify(extras));
+    }
+  });
+
+  instance = new App(
+      /** @type {!BackgroundOps} */ (bgOps));
+  await instance.start();
 });

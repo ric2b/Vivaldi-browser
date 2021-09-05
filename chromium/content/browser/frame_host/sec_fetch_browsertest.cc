@@ -31,12 +31,7 @@ namespace content {
 class SecFetchBrowserTest : public ContentBrowserTest {
  public:
   SecFetchBrowserTest()
-      : https_test_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
-    feature_list_.InitWithFeatures(
-        {network::features::kFetchMetadata,
-         network::features::kFetchMetadataDestination},
-        {});
-  }
+      : https_test_server_(net::EmbeddedTestServer::TYPE_HTTPS) {}
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -137,7 +132,7 @@ IN_PROC_BROWSER_TEST_F(SecFetchBrowserTest, CrossPortNavigation) {
 // This is a regression test for https://crbug.com/946503.
 //
 // This test is slightly redundant with
-// wpt/fetch/sec-metadata/history.tentative.https.sub.html
+// wpt/fetch/metadata/history.tentative.https.sub.html
 // but it tests history navigations that are browser-initiated
 // (e.g. as-if they were initiated by Chrome UI, not by javascript).
 IN_PROC_BROWSER_TEST_F(SecFetchBrowserTest, BackNavigation) {

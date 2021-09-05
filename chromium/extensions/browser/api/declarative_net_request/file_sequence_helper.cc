@@ -4,24 +4,29 @@
 
 #include "extensions/browser/api/declarative_net_request/file_sequence_helper.h"
 
+#include <algorithm>
+#include <set>
 #include <utility>
 
+#include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/system_connector.h"
 #include "extensions/browser/api/declarative_net_request/constants.h"
 #include "extensions/browser/api/declarative_net_request/parse_info.h"
 #include "extensions/browser/api/declarative_net_request/utils.h"
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/common/api/declarative_net_request.h"
-#include "services/service_manager/public/cpp/connector.h"
+#include "extensions/common/error_utils.h"
+#include "services/data_decoder/public/cpp/data_decoder.h"
 
 namespace extensions {
 namespace declarative_net_request {
@@ -31,53 +36,56 @@ namespace {
 namespace dnr_api = extensions::api::declarative_net_request;
 
 // A class to help in re-indexing multiple rulesets.
-class ReindexHelper {
+class ReindexHelper : public base::RefCountedThreadSafe<ReindexHelper> {
  public:
-  // Starts re-indexing rulesets. Must be called on the extension file task
-  // runner.
   using ReindexCallback = base::OnceCallback<void(LoadRequestData)>;
-  static void Start(service_manager::Connector* connector,
-                    LoadRequestData data,
-                    ReindexCallback callback) {
-    auto* helper = new ReindexHelper(std::move(data), std::move(callback));
-    helper->Start(connector);
-  }
-
- private:
-  // We manage our own lifetime.
   ReindexHelper(LoadRequestData data, ReindexCallback callback)
       : data_(std::move(data)), callback_(std::move(callback)) {}
-  ~ReindexHelper() = default;
 
-  void Start(service_manager::Connector* connector) {
+  // Starts re-indexing rulesets. Must be called on the extension file task
+  // runner.
+  void Start() {
     DCHECK(GetExtensionFileTaskRunner()->RunsTasksInCurrentSequence());
 
-    base::Token token = base::Token::CreateRandom();
-
-    // Post tasks to reindex individual rulesets.
-    bool did_post_task = false;
+    std::vector<RulesetInfo*> rulesets_to_reindex;
     for (auto& ruleset : data_.rulesets) {
       if (ruleset.did_load_successfully())
         continue;
 
-      // Using Unretained is safe since this class manages its own lifetime and
-      // |this| won't be deleted until the |callback| returns.
-      auto callback = base::BindOnce(&ReindexHelper::OnReindexCompleted,
-                                     base::Unretained(this), &ruleset);
-      callback_count_++;
-      did_post_task = true;
-      ruleset.source().IndexAndPersistJSONRuleset(connector, token,
-                                                  std::move(callback));
+      rulesets_to_reindex.push_back(&ruleset);
     }
 
-    // It's possible that the callbacks return synchronously and we are deleted
-    // at this point. Hence don't use any member variables here. Also, if we
-    // don't post any task, we'll leak. Ensure that's not the case.
-    DCHECK(did_post_task);
+    // |done_closure| will be invoked once |barrier_closure| is run
+    // |rulesets_to_reindex.size()| times.
+    base::OnceClosure done_closure =
+        base::BindOnce(&ReindexHelper::OnAllRulesetsReindexed, this);
+    base::RepeatingClosure barrier_closure = base::BarrierClosure(
+        rulesets_to_reindex.size(), std::move(done_closure));
+
+    // Post tasks to reindex individual rulesets.
+    for (RulesetInfo* ruleset : rulesets_to_reindex) {
+      auto callback = base::BindOnce(&ReindexHelper::OnReindexCompleted, this,
+                                     ruleset, barrier_closure);
+      ruleset->source().IndexAndPersistJSONRuleset(&decoder_,
+                                                   std::move(callback));
+    }
+  }
+
+ private:
+  friend class base::RefCountedThreadSafe<ReindexHelper>;
+  ~ReindexHelper() = default;
+
+  // Callback invoked when reindexing of all rulesets is completed.
+  void OnAllRulesetsReindexed() {
+    DCHECK(GetExtensionFileTaskRunner()->RunsTasksInCurrentSequence());
+
+    // Our job is done.
+    std::move(callback_).Run(std::move(data_));
   }
 
   // Callback invoked when a single ruleset is re-indexed.
   void OnReindexCompleted(RulesetInfo* ruleset,
+                          base::OnceClosure done_closure,
                           IndexAndPersistJSONRulesetResult result) {
     DCHECK(ruleset);
 
@@ -109,46 +117,18 @@ class ReindexHelper {
         "Extensions.DeclarativeNetRequest.RulesetReindexSuccessful",
         reindexing_success);
 
-    callback_count_--;
-    DCHECK_GE(callback_count_, 0);
-
-    if (callback_count_ == 0) {
-      // Our job is done.
-      std::move(callback_).Run(std::move(data_));
-      delete this;
-    }
+    std::move(done_closure).Run();
   }
 
   LoadRequestData data_;
   ReindexCallback callback_;
-  int callback_count_ = 0;
+
+  // We use a single shared Data Decoder service instance to process all of the
+  // rulesets for this ReindexHelper.
+  data_decoder::DataDecoder decoder_;
 
   DISALLOW_COPY_AND_ASSIGN(ReindexHelper);
 };
-
-std::vector<dnr_api::Rule> AddRulesToVector(
-    std::vector<dnr_api::Rule> current_rules,
-    std::vector<dnr_api::Rule> new_rules) {
-  std::vector<dnr_api::Rule> result = std::move(current_rules);
-  result.insert(result.end(), std::make_move_iterator(new_rules.begin()),
-                std::make_move_iterator(new_rules.end()));
-  return result;
-}
-
-std::vector<dnr_api::Rule> RemoveRulesFromVector(
-    std::vector<dnr_api::Rule> current_rules,
-    std::vector<dnr_api::Rule> to_remove_rules) {
-  std::set<int> ids_to_remove;
-  for (const auto& rule : to_remove_rules)
-    ids_to_remove.insert(rule.id);
-
-  std::vector<dnr_api::Rule> result = std::move(current_rules);
-  base::EraseIf(result, [&ids_to_remove](const dnr_api::Rule& rule) {
-    return base::Contains(ids_to_remove, rule.id);
-  });
-
-  return result;
-}
 
 UpdateDynamicRulesStatus GetStatusForLoadRulesetError(
     RulesetMatcher::LoadRulesetResult result) {
@@ -175,8 +155,8 @@ UpdateDynamicRulesStatus GetStatusForLoadRulesetError(
 // Helper to create the new list of dynamic rules. Returns false on failure and
 // populates |error| and |status|.
 bool GetNewDynamicRules(const RulesetSource& source,
-                        std::vector<dnr_api::Rule> rules,
-                        DynamicRuleUpdateAction action,
+                        std::vector<int> rule_ids_to_remove,
+                        std::vector<dnr_api::Rule> rules_to_add,
                         std::vector<dnr_api::Rule>* new_rules,
                         std::string* error,
                         UpdateDynamicRulesStatus* status) {
@@ -204,19 +184,31 @@ bool GetNewDynamicRules(const RulesetSource& source,
     return false;
   }
 
-  switch (action) {
-    case DynamicRuleUpdateAction::kAdd:
-      *new_rules = AddRulesToVector(std::move(result.rules), std::move(rules));
-      break;
-    case DynamicRuleUpdateAction::kRemove:
-      *new_rules =
-          RemoveRulesFromVector(std::move(result.rules), std::move(rules));
-      break;
-  }
+  *new_rules = std::move(result.rules);
+
+  // Remove old rules
+  std::set<int> ids_to_remove(rule_ids_to_remove.begin(), rule_ids_to_remove.end());
+  base::EraseIf(*new_rules, [&ids_to_remove](const dnr_api::Rule& rule) {
+    return base::Contains(ids_to_remove, rule.id);
+  });
+
+  // Add new rules
+  new_rules->insert(new_rules->end(),
+                    std::make_move_iterator(rules_to_add.begin()),
+                    std::make_move_iterator(rules_to_add.end()));
 
   if (new_rules->size() > source.rule_count_limit()) {
     *status = UpdateDynamicRulesStatus::kErrorRuleCountExceeded;
     *error = kDynamicRuleCountExceeded;
+    return false;
+  }
+
+  int regex_rule_count = std::count_if(
+      new_rules->begin(), new_rules->end(),
+      [](const dnr_api::Rule& rule) { return !!rule.condition.regex_filter; });
+  if (regex_rule_count > dnr_api::MAX_NUMBER_OF_REGEX_RULES) {
+    *status = UpdateDynamicRulesStatus::kErrorRegexRuleCountExceeded;
+    *error = kDynamicRegexRuleCountExceeded;
     return false;
   }
 
@@ -225,27 +217,30 @@ bool GetNewDynamicRules(const RulesetSource& source,
 
 // Returns true on success and populates |ruleset_checksum|. Returns false on
 // failure and populates |error| and |status|.
-bool UpdateAndIndexDynamicRules(
-    const RulesetSource& source,
-    std::vector<api::declarative_net_request::Rule> rules,
-    DynamicRuleUpdateAction action,
-    int* ruleset_checksum,
-    std::string* error,
-    UpdateDynamicRulesStatus* status) {
+bool UpdateAndIndexDynamicRules(const RulesetSource& source,
+                                std::vector<int> rule_ids_to_remove,
+                                std::vector<dnr_api::Rule> rules_to_add,
+                                int* ruleset_checksum,
+                                std::string* error,
+                                UpdateDynamicRulesStatus* status) {
   DCHECK(ruleset_checksum);
   DCHECK(error);
   DCHECK(status);
 
+  std::set<int> rule_ids_to_add;
+  for (const dnr_api::Rule& rule : rules_to_add)
+    rule_ids_to_add.insert(rule.id);
+
   std::vector<dnr_api::Rule> new_rules;
-  if (!GetNewDynamicRules(source, std::move(rules), action, &new_rules, error,
-                          status)) {
+  if (!GetNewDynamicRules(source, std::move(rule_ids_to_remove),
+                          std::move(rules_to_add), &new_rules, error, status)) {
     return false;  // |error| and |status| already populated.
   }
 
   // Initially write the new JSON and indexed rulesets to temporary files to
   // ensure we don't leave the actual files in an inconsistent state.
   std::unique_ptr<RulesetSource> temporary_source =
-      RulesetSource::CreateTemporarySource(source.id(), source.priority(),
+      RulesetSource::CreateTemporarySource(source.id(), source.type(),
                                            source.rule_count_limit(),
                                            source.extension_id());
   if (!temporary_source) {
@@ -264,11 +259,27 @@ bool UpdateAndIndexDynamicRules(
   // Index and persist the indexed ruleset.
   ParseInfo info = temporary_source->IndexAndPersistRules(std::move(new_rules),
                                                           ruleset_checksum);
-  if (info.result() != ParseResult::SUCCESS) {
-    *error = info.GetErrorDescription();
-    *status = info.result() == ParseResult::ERROR_PERSISTING_RULESET
+  if (info.has_error()) {
+    *error = info.error();
+    *status = info.error_reason() == ParseResult::ERROR_PERSISTING_RULESET
                   ? UpdateDynamicRulesStatus::kErrorWriteTemporaryIndexedRuleset
                   : UpdateDynamicRulesStatus::kErrorInvalidRules;
+    return false;
+  }
+
+  // Treat rules which exceed the regex memory limit as errors if these are new
+  // rules. Just surface an error for the first such rule.
+  for (int rule_id : info.regex_limit_exceeded_rules()) {
+    if (!base::Contains(rule_ids_to_add, rule_id)) {
+      // Any rule added earlier which is ignored now (say due to exceeding the
+      // regex memory limit), will be silently ignored.
+      // TODO(crbug.com/1050780): Notify the extension about the same.
+      continue;
+    }
+
+    *error = ErrorUtils::FormatErrorMessage(
+        kErrorRegexTooLarge, base::NumberToString(rule_id), kRegexFilterKey);
+    *status = UpdateDynamicRulesStatus::kErrorRegexTooLarge;
     return false;
   }
 
@@ -349,8 +360,7 @@ LoadRequestData::~LoadRequestData() = default;
 LoadRequestData::LoadRequestData(LoadRequestData&&) = default;
 LoadRequestData& LoadRequestData::operator=(LoadRequestData&&) = default;
 
-FileSequenceHelper::FileSequenceHelper()
-    : connector_(content::GetSystemConnector()->Clone()) {}
+FileSequenceHelper::FileSequenceHelper() = default;
 
 FileSequenceHelper::~FileSequenceHelper() {
   DCHECK(GetExtensionFileTaskRunner()->RunsTasksInCurrentSequence());
@@ -369,8 +379,10 @@ void FileSequenceHelper::LoadRulesets(
   }
 
   if (success) {
+    // Set priority explicitly to avoid unwanted task priority inheritance.
     base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
+        FROM_HERE,
+        {content::BrowserThread::UI, base::TaskPriority::USER_BLOCKING},
         base::BindOnce(std::move(ui_callback), std::move(load_data)));
     return;
   }
@@ -382,14 +394,16 @@ void FileSequenceHelper::LoadRulesets(
   auto reindex_callback =
       base::BindOnce(&FileSequenceHelper::OnRulesetsReindexed,
                      weak_factory_.GetWeakPtr(), std::move(ui_callback));
-  ReindexHelper::Start(connector_.get(), std::move(load_data),
-                       std::move(reindex_callback));
+
+  auto reindex_helper = base::MakeRefCounted<ReindexHelper>(
+      std::move(load_data), std::move(reindex_callback));
+  reindex_helper->Start();
 }
 
 void FileSequenceHelper::UpdateDynamicRules(
     LoadRequestData load_data,
-    std::vector<api::declarative_net_request::Rule> rules,
-    DynamicRuleUpdateAction action,
+    std::vector<int> rule_ids_to_remove,
+    std::vector<api::declarative_net_request::Rule> rules_to_add,
     UpdateDynamicRulesUICallback ui_callback) const {
   DCHECK(GetExtensionFileTaskRunner()->RunsTasksInCurrentSequence());
   DCHECK_EQ(1u, load_data.rulesets.size());
@@ -402,17 +416,20 @@ void FileSequenceHelper::UpdateDynamicRules(
                                               UpdateDynamicRulesStatus status) {
     base::UmaHistogramEnumeration(kUpdateDynamicRulesStatusHistogram, status);
 
-    base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                   base::BindOnce(std::move(ui_callback), std::move(load_data),
-                                  std::move(error)));
+    // Set priority explicitly to avoid unwanted task priority inheritance.
+    base::PostTask(
+        FROM_HERE,
+        {content::BrowserThread::UI, base::TaskPriority::USER_BLOCKING},
+        base::BindOnce(std::move(ui_callback), std::move(load_data),
+                       std::move(error)));
   };
 
   int new_ruleset_checksum = -1;
   std::string error;
   UpdateDynamicRulesStatus status = UpdateDynamicRulesStatus::kSuccess;
-  if (!UpdateAndIndexDynamicRules(dynamic_ruleset.source(), std::move(rules),
-                                  action, &new_ruleset_checksum, &error,
-                                  &status)) {
+  if (!UpdateAndIndexDynamicRules(
+          dynamic_ruleset.source(), std::move(rule_ids_to_remove),
+          std::move(rules_to_add), &new_ruleset_checksum, &error, &status)) {
     DCHECK(!error.empty());
     log_status_and_dispatch_callback(std::move(error), status);
     return;
@@ -449,8 +466,10 @@ void FileSequenceHelper::OnRulesetsReindexed(LoadRulesetsUICallback ui_callback,
   }
 
   // The UI thread will handle success or failure.
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(std::move(ui_callback), std::move(load_data)));
+  base::PostTask(
+      FROM_HERE,
+      {content::BrowserThread::UI, base::TaskPriority::USER_BLOCKING},
+      base::BindOnce(std::move(ui_callback), std::move(load_data)));
 }
 
 }  // namespace declarative_net_request

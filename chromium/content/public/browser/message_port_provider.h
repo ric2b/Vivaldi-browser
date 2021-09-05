@@ -12,13 +12,15 @@
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "build/chromecast_buildflags.h"
 #include "content/common/content_export.h"
+#include "third_party/blink/public/common/messaging/web_message_port.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/scoped_java_ref.h"
 #endif
 
-#if defined(OS_FUCHSIA) || defined(IS_CHROMECAST)
+#if defined(OS_FUCHSIA) || BUILDFLAG(IS_CHROMECAST)
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #endif
 
@@ -49,7 +51,8 @@ class CONTENT_EXPORT MessagePortProvider {
       const base::android::JavaParamRef<jobjectArray>& ports);
 #endif  // OS_ANDROID
 
-#if defined(OS_FUCHSIA) || defined(IS_CHROMECAST)
+#if defined(OS_FUCHSIA) || BUILDFLAG(IS_CHROMECAST)
+  // TODO(crbug.com/803242): Deprecated and will be shortly removed.
   // If |target_origin| is unset, then no origin scoping is applied.
   static void PostMessageToFrame(
       WebContents* web_contents,
@@ -57,7 +60,14 @@ class CONTENT_EXPORT MessagePortProvider {
       const base::Optional<base::string16>& target_origin,
       const base::string16& data,
       std::vector<mojo::ScopedMessagePipeHandle> channels);
-#endif  // OS_FUCHSIA || IS_CHROMECAST
+  // If |target_origin| is unset, then no origin scoping is applied.
+  static void PostMessageToFrame(
+      WebContents* web_contents,
+      const base::string16& source_origin,
+      const base::Optional<base::string16>& target_origin,
+      const base::string16& data,
+      std::vector<blink::WebMessagePort> ports);
+#endif  // OS_FUCHSIA || BUILDFLAG(IS_CHROMECAST)
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(MessagePortProvider);

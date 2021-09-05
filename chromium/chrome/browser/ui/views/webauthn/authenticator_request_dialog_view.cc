@@ -24,7 +24,6 @@
 #include "ui/views/border.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/vector_icons.h"
-#include "ui/views/window/dialog_client_view.h"
 
 namespace {
 
@@ -74,6 +73,10 @@ AuthenticatorRequestDialogView::AuthenticatorRequestDialogView(
   DCHECK(!model_->should_dialog_be_closed());
   model_->AddObserver(this);
 
+  DialogDelegate::SetCloseCallback(
+      base::BindOnce(&AuthenticatorRequestDialogView::OnDialogClosing,
+                     base::Unretained(this)));
+
   // Currently, all sheets have a label on top and controls at the bottom.
   // Consider moving this to AuthenticatorRequestSheetView if this changes.
   SetLayoutManager(std::make_unique<views::FillLayout>());
@@ -114,7 +117,7 @@ bool AuthenticatorRequestDialogView::Cancel() {
   return false;
 }
 
-bool AuthenticatorRequestDialogView::Close() {
+void AuthenticatorRequestDialogView::OnDialogClosing() {
   // To keep the UI responsive, always allow immediately closing the dialog when
   // desired; but still trigger cancelling the AuthenticatorRequest unless it is
   // already complete.
@@ -142,31 +145,6 @@ bool AuthenticatorRequestDialogView::Close() {
   // over observers in SetCurrentStep().
   if (!model_->should_dialog_be_closed())
     Cancel();
-
-  return true;
-}
-
-int AuthenticatorRequestDialogView::GetDialogButtons() const {
-  int button_mask = 0;
-  if (sheet()->model()->IsAcceptButtonVisible())
-    button_mask |= ui::DIALOG_BUTTON_OK;
-  if (sheet()->model()->IsCancelButtonVisible())
-    button_mask |= ui::DIALOG_BUTTON_CANCEL;
-  return button_mask;
-}
-
-base::string16 AuthenticatorRequestDialogView::GetDialogButtonLabel(
-    ui::DialogButton button) const {
-  switch (button) {
-    case ui::DIALOG_BUTTON_NONE:
-      break;
-    case ui::DIALOG_BUTTON_OK:
-      return sheet()->model()->GetAcceptButtonLabel();
-    case ui::DIALOG_BUTTON_CANCEL:
-      return sheet()->model()->GetCancelButtonLabel();
-  }
-  NOTREACHED();
-  return base::string16();
 }
 
 bool AuthenticatorRequestDialogView::IsDialogButtonEnabled(
@@ -198,14 +176,14 @@ views::View* AuthenticatorRequestDialogView::GetInitiallyFocusedView() {
 
   if (sheet()->model()->IsAcceptButtonVisible() &&
       sheet()->model()->IsAcceptButtonEnabled()) {
-    return GetDialogClientView()->ok_button();
+    return GetOkButton();
   }
 
   if (ShouldOtherTransportsButtonBeVisible())
     return other_transports_button_;
 
   if (sheet()->model()->IsCancelButtonVisible())
-    return GetDialogClientView()->cancel_button();
+    return GetCancelButton();
 
   return nullptr;
 }
@@ -335,9 +313,20 @@ void AuthenticatorRequestDialogView::UpdateUIForCurrentSheet() {
   }
 
   sheet_->ReInitChildViews();
-  DialogDelegate::set_default_button(sheet_->model()->IsAcceptButtonVisible()
+
+  int buttons = ui::DIALOG_BUTTON_NONE;
+  if (sheet()->model()->IsAcceptButtonVisible())
+    buttons |= ui::DIALOG_BUTTON_OK;
+  if (sheet()->model()->IsCancelButtonVisible())
+    buttons |= ui::DIALOG_BUTTON_CANCEL;
+  DialogDelegate::SetButtons(buttons);
+  DialogDelegate::SetDefaultButton((buttons & ui::DIALOG_BUTTON_OK)
                                          ? ui::DIALOG_BUTTON_OK
                                          : ui::DIALOG_BUTTON_NONE);
+  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_OK,
+                                   sheet_->model()->GetAcceptButtonLabel());
+  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
+                                   sheet_->model()->GetCancelButtonLabel());
 
   // Whether to show the `Choose another option` button, or other dialog
   // configuration is delegated to the |sheet_|, and the new sheet likely wants
@@ -352,8 +341,8 @@ void AuthenticatorRequestDialogView::UpdateUIForCurrentSheet() {
 
   // Force re-layout of the entire dialog client view, which includes the sheet
   // content as well as the button row on the bottom.
-  DCHECK(GetDialogClientView());
-  GetDialogClientView()->Layout();
+  // TODO(ellyjones): Why is this necessary?
+  GetWidget()->GetRootView()->Layout();
 
   // The accessibility title is also sourced from the |sheet_|'s step title.
   GetWidget()->UpdateWindowTitle();

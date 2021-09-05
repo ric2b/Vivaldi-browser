@@ -15,7 +15,6 @@
 static void GL_BINDING_CALL Mock_glActiveShaderProgram(GLuint pipeline,
                                                        GLuint program);
 static void GL_BINDING_CALL Mock_glActiveTexture(GLenum texture);
-static void GL_BINDING_CALL Mock_glApplyFramebufferAttachmentCMAAINTEL(void);
 static void GL_BINDING_CALL Mock_glAttachShader(GLuint program, GLuint shader);
 static void GL_BINDING_CALL Mock_glBeginQuery(GLenum target, GLuint id);
 static void GL_BINDING_CALL Mock_glBeginQueryARB(GLenum target, GLuint id);
@@ -447,6 +446,8 @@ static void GL_BINDING_CALL
 Mock_glDeleteFramebuffers(GLsizei n, const GLuint* framebuffers);
 static void GL_BINDING_CALL
 Mock_glDeleteFramebuffersEXT(GLsizei n, const GLuint* framebuffers);
+static void GL_BINDING_CALL
+Mock_glDeleteMemoryObjectsEXT(GLsizei n, const GLuint* memoryObjects);
 static void GL_BINDING_CALL Mock_glDeletePathsCHROMIUM(GLuint path,
                                                        GLsizei range);
 static void GL_BINDING_CALL Mock_glDeletePathsNV(GLuint path, GLsizei range);
@@ -512,6 +513,24 @@ static void GL_BINDING_CALL Mock_glDrawArraysInstancedARB(GLenum mode,
                                                           GLint first,
                                                           GLsizei count,
                                                           GLsizei primcount);
+static void GL_BINDING_CALL
+Mock_glDrawArraysInstancedBaseInstance(GLenum mode,
+                                       GLint first,
+                                       GLsizei count,
+                                       GLsizei primcount,
+                                       GLuint baseinstance);
+static void GL_BINDING_CALL
+Mock_glDrawArraysInstancedBaseInstanceANGLE(GLenum mode,
+                                            GLint first,
+                                            GLsizei count,
+                                            GLsizei primcount,
+                                            GLuint baseinstance);
+static void GL_BINDING_CALL
+Mock_glDrawArraysInstancedBaseInstanceEXT(GLenum mode,
+                                          GLint first,
+                                          GLsizei count,
+                                          GLsizei primcount,
+                                          GLuint baseinstance);
 static void GL_BINDING_CALL Mock_glDrawBuffer(GLenum mode);
 static void GL_BINDING_CALL Mock_glDrawBuffers(GLsizei n, const GLenum* bufs);
 static void GL_BINDING_CALL Mock_glDrawBuffersARB(GLsizei n,
@@ -541,6 +560,30 @@ static void GL_BINDING_CALL Mock_glDrawElementsInstancedARB(GLenum mode,
                                                             GLenum type,
                                                             const void* indices,
                                                             GLsizei primcount);
+static void GL_BINDING_CALL
+Mock_glDrawElementsInstancedBaseVertexBaseInstance(GLenum mode,
+                                                   GLsizei count,
+                                                   GLenum type,
+                                                   const void* indices,
+                                                   GLsizei primcount,
+                                                   GLint baseVertex,
+                                                   GLuint baseInstance);
+static void GL_BINDING_CALL
+Mock_glDrawElementsInstancedBaseVertexBaseInstanceANGLE(GLenum mode,
+                                                        GLsizei count,
+                                                        GLenum type,
+                                                        const void* indices,
+                                                        GLsizei primcount,
+                                                        GLint baseVertex,
+                                                        GLuint baseInstance);
+static void GL_BINDING_CALL
+Mock_glDrawElementsInstancedBaseVertexBaseInstanceEXT(GLenum mode,
+                                                      GLsizei count,
+                                                      GLenum type,
+                                                      const void* indices,
+                                                      GLsizei primcount,
+                                                      GLint baseVertex,
+                                                      GLuint baseInstance);
 static void GL_BINDING_CALL Mock_glDrawRangeElements(GLenum mode,
                                                      GLuint start,
                                                      GLuint end,
@@ -1236,9 +1279,18 @@ static void GL_BINDING_CALL Mock_glImportMemoryFdEXT(GLuint memory,
                                                      GLuint64 size,
                                                      GLenum handleType,
                                                      GLint fd);
+static void GL_BINDING_CALL
+Mock_glImportMemoryZirconHandleANGLE(GLuint memory,
+                                     GLuint64 size,
+                                     GLenum handleType,
+                                     GLuint handle);
 static void GL_BINDING_CALL Mock_glImportSemaphoreFdEXT(GLuint semaphore,
                                                         GLenum handleType,
                                                         GLint fd);
+static void GL_BINDING_CALL
+Mock_glImportSemaphoreZirconHandleANGLE(GLuint semaphore,
+                                        GLenum handleType,
+                                        GLuint handle);
 static void GL_BINDING_CALL Mock_glInsertEventMarkerEXT(GLsizei length,
                                                         const char* marker);
 static void GL_BINDING_CALL
@@ -1301,6 +1353,10 @@ static void GL_BINDING_CALL Mock_glMaxShaderCompilerThreadsKHR(GLuint count);
 static void GL_BINDING_CALL Mock_glMemoryBarrier(GLbitfield barriers);
 static void GL_BINDING_CALL Mock_glMemoryBarrierByRegion(GLbitfield barriers);
 static void GL_BINDING_CALL Mock_glMemoryBarrierEXT(GLbitfield barriers);
+static void GL_BINDING_CALL
+Mock_glMemoryObjectParameterivEXT(GLuint memoryObject,
+                                  GLenum pname,
+                                  const GLint* param);
 static void GL_BINDING_CALL Mock_glMinSampleShading(GLfloat value);
 static void GL_BINDING_CALL Mock_glMultiDrawArraysANGLE(GLenum mode,
                                                         const GLint* firsts,
@@ -1312,6 +1368,13 @@ Mock_glMultiDrawArraysInstancedANGLE(GLenum mode,
                                      const GLsizei* counts,
                                      const GLsizei* instanceCounts,
                                      GLsizei drawcount);
+static void GL_BINDING_CALL
+Mock_glMultiDrawArraysInstancedBaseInstanceANGLE(GLenum mode,
+                                                 const GLint* firsts,
+                                                 const GLsizei* counts,
+                                                 const GLsizei* instanceCounts,
+                                                 const GLuint* baseInstances,
+                                                 GLsizei drawcount);
 static void GL_BINDING_CALL
 Mock_glMultiDrawElementsANGLE(GLenum mode,
                               const GLsizei* counts,
@@ -1325,6 +1388,16 @@ Mock_glMultiDrawElementsInstancedANGLE(GLenum mode,
                                        const GLvoid* const* indices,
                                        const GLsizei* instanceCounts,
                                        GLsizei drawcount);
+static void GL_BINDING_CALL
+Mock_glMultiDrawElementsInstancedBaseVertexBaseInstanceANGLE(
+    GLenum mode,
+    const GLsizei* counts,
+    GLenum type,
+    const GLvoid* const* indices,
+    const GLsizei* instanceCounts,
+    const GLint* baseVertices,
+    const GLuint* baseInstances,
+    GLsizei drawcount);
 static void GL_BINDING_CALL Mock_glObjectLabel(GLenum identifier,
                                                GLuint name,
                                                GLsizei length,

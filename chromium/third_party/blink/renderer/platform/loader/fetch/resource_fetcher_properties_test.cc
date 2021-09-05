@@ -6,6 +6,7 @@
 
 #include "services/network/public/mojom/ip_address_space.mojom-blink.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker_mode.mojom-blink.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object_snapshot.h"
@@ -26,9 +27,8 @@ class DetachableResourceFetcherPropertiesTest : public testing::Test {
         network::mojom::ReferrerPolicy::kDefault,
         "https://example.com/foo.html", HttpsState::kModern,
         AllowedByNosniff::MimeTypeCheck::kStrict, address_space,
-        kLeaveInsecureRequestsAlone,
-        FetchClientSettingsObject::InsecureNavigationsSet(),
-        false /* mixed_autoupgrade_opt_out */);
+        mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone,
+        FetchClientSettingsObject::InsecureNavigationsSet());
   }
 };
 

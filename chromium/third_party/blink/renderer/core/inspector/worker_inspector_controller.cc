@@ -87,9 +87,10 @@ WorkerInspectorController::WorkerInspectorController(
     agent_ = MakeGarbageCollected<DevToolsAgent>(
         this, inspected_frames_.Get(), probe_sink_.Get(),
         std::move(inspector_task_runner), std::move(io_task_runner));
-    agent_->BindReceiver(std::move(devtools_params->agent_host_remote),
-                         std::move(devtools_params->agent_receiver),
-                         thread->GetTaskRunner(TaskType::kInternalInspector));
+    agent_->BindReceiverForWorker(
+        std::move(devtools_params->agent_host_remote),
+        std::move(devtools_params->agent_receiver),
+        thread->GetTaskRunner(TaskType::kInternalInspector));
   }
   trace_event::AddEnabledStateObserver(this);
   EmitTraceEvent();
@@ -122,7 +123,7 @@ void WorkerInspectorController::DetachSession(DevToolsSession*) {
     thread_->GetWorkerBackingThread().BackingThread().RemoveTaskObserver(this);
 }
 
-void WorkerInspectorController::InspectElement(const WebPoint&) {
+void WorkerInspectorController::InspectElement(const gfx::Point&) {
   NOTREACHED();
 }
 
@@ -153,7 +154,8 @@ void WorkerInspectorController::WaitForDebuggerIfNeeded() {
 }
 
 void WorkerInspectorController::WillProcessTask(
-    const base::PendingTask& pending_task) {}
+    const base::PendingTask& pending_task,
+    bool was_blocked_or_low_priority) {}
 
 void WorkerInspectorController::DidProcessTask(
     const base::PendingTask& pending_task) {
@@ -177,7 +179,7 @@ void WorkerInspectorController::EmitTraceEvent() {
                            worker_thread_id_));
 }
 
-void WorkerInspectorController::Trace(blink::Visitor* visitor) {
+void WorkerInspectorController::Trace(Visitor* visitor) {
   visitor->Trace(agent_);
   visitor->Trace(inspected_frames_);
   visitor->Trace(probe_sink_);

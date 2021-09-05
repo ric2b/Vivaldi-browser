@@ -47,7 +47,6 @@ class GlobalEventHandlers {
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(activateinvisible, kActivateinvisible)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(auxclick, kAuxclick)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(blur, kBlur)
-  DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(beforeactivate, kBeforeactivate)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(cancel, kCancel)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(canplay, kCanplay)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(canplaythrough, kCanplaythrough)
@@ -105,6 +104,8 @@ class GlobalEventHandlers {
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(pointerup, kPointerup)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(progress, kProgress)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(ratechange, kRatechange)
+  DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(rendersubtreeactivation,
+                                         kRendersubtreeactivation)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(reset, kReset)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(resize, kResize)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(scroll, kScroll)
@@ -126,6 +127,14 @@ class GlobalEventHandlers {
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(touchstart, kTouchstart)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(volumechange, kVolumechange)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(waiting, kWaiting)
+  DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(webkitanimationend,
+                                         kWebkitAnimationEnd)
+  DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(webkitanimationiteration,
+                                         kWebkitAnimationIteration)
+  DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(webkitanimationstart,
+                                         kWebkitAnimationStart)
+  DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(webkittransitionend,
+                                         kWebkitTransitionEnd)
   DEFINE_STATIC_ATTRIBUTE_EVENT_LISTENER(wheel, kWheel)
 };
 

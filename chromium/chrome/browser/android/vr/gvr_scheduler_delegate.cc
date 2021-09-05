@@ -220,10 +220,7 @@ GvrSchedulerDelegate::GetWebXrFrameTransportOptions(
   // ClientWait.
   if (gl::GLFence::IsGpuFenceSupported()) {
     webxr_use_gpu_fence_ = true;
-    if (base::AndroidHardwareBufferCompat::IsSupportAvailable() &&
-        !options->is_legacy_webvr) {
-      // Currently, SharedBuffer mode is only supported for WebXR via
-      // XRWebGlDrawingBuffer, WebVR 1.1 doesn't use that.
+    if (base::AndroidHardwareBufferCompat::IsSupportAvailable()) {
       webxr_use_shared_buffer_draw_ = true;
       render_path = MetricsUtilAndroid::XRRenderPath::kSharedBuffer;
     } else {
@@ -552,7 +549,7 @@ void GvrSchedulerDelegate::SubmitDrawnFrame(FrameType frame_type,
                             base::Unretained(this)));
     task_runner()->PostTask(
         FROM_HERE, base::BindOnce(webxr_delayed_gvr_submit_.callback(),
-                                  frame_type, head_pose, base::Passed(&fence)));
+                                  frame_type, head_pose, std::move(fence)));
   } else {
     // Continue with submit immediately.
     DrawFrameSubmitNow(frame_type, head_pose);
@@ -587,13 +584,12 @@ void GvrSchedulerDelegate::DrawFrameSubmitWhenReady(
         task_runner()->PostDelayedTask(
             FROM_HERE,
             base::BindOnce(webxr_delayed_gvr_submit_.callback(), frame_type,
-                           head_pose, base::Passed(&fence)),
+                           head_pose, std::move(fence)),
             kWebVRFenceCheckPollInterval);
       } else {
         task_runner()->PostTask(
-            FROM_HERE,
-            base::BindOnce(webxr_delayed_gvr_submit_.callback(), frame_type,
-                           head_pose, base::Passed(&fence)));
+            FROM_HERE, base::BindOnce(webxr_delayed_gvr_submit_.callback(),
+                                      frame_type, head_pose, std::move(fence)));
       }
       return;
     }
@@ -678,7 +674,7 @@ void GvrSchedulerDelegate::DrawFrameSubmitNow(FrameType frame_type,
   // After saving the timestamp, fps will be available via GetFPS().
   // TODO(vollick): enable rendering of this framerate in a HUD.
   vr_ui_fps_meter_.AddFrame(base::TimeTicks::Now());
-  DVLOG(1) << "fps: " << vr_ui_fps_meter_.GetFPS();
+  DVLOG(2) << "fps: " << vr_ui_fps_meter_.GetFPS();
   TRACE_COUNTER1("gpu", "VR UI FPS", vr_ui_fps_meter_.GetFPS());
 
   if (frame_type == kWebXrFrame) {
@@ -933,11 +929,11 @@ void GvrSchedulerDelegate::SendVSync(device::mojom::VRPosePtr pose,
   // Process all events. Check for ones we wish to react to.
   gvr::Event last_event;
   while (gvr_api_->PollEvent(&last_event)) {
-    pose->pose_reset |= last_event.type == GVR_EVENT_RECENTER;
+    frame_data->mojo_space_reset |= last_event.type == GVR_EVENT_RECENTER;
   }
 
   TRACE_EVENT0("gpu", "GvrSchedulerDelegate::XRInput");
-  pose->input_state = std::move(input_states_);
+  frame_data->input_state = std::move(input_states_);
 
   frame_data->pose = std::move(pose);
 
@@ -1124,7 +1120,7 @@ void GvrSchedulerDelegate::SubmitFrame(int16_t frame_index,
 
 void GvrSchedulerDelegate::SubmitFrameWithTextureHandle(
     int16_t frame_index,
-    mojo::ScopedHandle texture_handle) {
+    mojo::PlatformHandle texture_handle) {
   NOTREACHED();
 }
 

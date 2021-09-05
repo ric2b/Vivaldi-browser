@@ -8,42 +8,24 @@
 
 namespace media {
 
-GStreamerMediaPipeline::GStreamerMediaPipeline(DataSource* data_source,
-                                               const AudioConfigChangedCB& audio_config_changed_cb,
-                                               const VideoConfigChangedCB& video_config_changed_cb) :
-  data_source_(data_source),
-  audio_config_changed_cb_(audio_config_changed_cb),
-  video_config_changed_cb_(video_config_changed_cb)
-{
+GStreamerMediaPipeline::GStreamerMediaPipeline() = default;
+GStreamerMediaPipeline::~GStreamerMediaPipeline() = default;
 
+void GStreamerMediaPipeline::Initialize(ipc_data_source::Reader source_reader,
+                                        ipc_data_source::Info source_info,
+                                        InitializeCB initialize_cb) {
+  LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " mime type "
+            << source_info.mime_type;
 }
 
-GStreamerMediaPipeline::~GStreamerMediaPipeline() {
+void GStreamerMediaPipeline::ReadAudioData(
+    const ReadDataCB& read_audio_data_cb) {}
 
-}
+void GStreamerMediaPipeline::ReadVideoData(
+    const ReadDataCB& read_video_data_cb) {}
 
-void GStreamerMediaPipeline::Initialize(const std::string& mime_type,
-                                        const InitializeCB& initialize_cb) {
-  DCHECK(data_source_);
+void GStreamerMediaPipeline::WillSeek() {}
 
-  LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " mime type " << mime_type;
-}
+void GStreamerMediaPipeline::Seek(base::TimeDelta time, SeekCB seek_cb) {}
 
-void GStreamerMediaPipeline::ReadAudioData(const ReadDataCB& read_audio_data_cb)  {
-
-}
-
-void GStreamerMediaPipeline::ReadVideoData(const ReadDataCB& read_video_data_cb)  {
-
-}
-
-void GStreamerMediaPipeline::WillSeek()  {
-
-}
-
-void GStreamerMediaPipeline::Seek(base::TimeDelta time, const SeekCB& seek_cb)  {
-
-}
-
-}
+}  // namespace media

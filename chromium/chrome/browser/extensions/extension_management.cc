@@ -44,21 +44,34 @@
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/extensions/default_web_app_ids.h"
+#include "chrome/browser/chromeos/policy/system_features_disable_list_policy_handler.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "components/policy/core/common/policy_pref_names.h"
+#include "extensions/common/constants.h"
 #endif
 
 namespace extensions {
 
 ExtensionManagement::ExtensionManagement(Profile* profile)
-    : profile_(profile), pref_service_(profile_->GetPrefs()) {
+    : profile_(profile),
+      pref_service_(profile_->GetPrefs()),
+      is_child_(profile_->IsChild()) {
   TRACE_EVENT0("browser,startup",
                "ExtensionManagement::ExtensionManagement::ctor");
-#if defined(OS_CHROMEOS)
-  is_signin_profile_ = chromeos::ProfileHelper::IsSigninProfile(profile);
-#endif
-  pref_change_registrar_.Init(pref_service_);
   base::Closure pref_change_callback = base::Bind(
       &ExtensionManagement::OnExtensionPrefChanged, base::Unretained(this));
+#if defined(OS_CHROMEOS)
+  is_signin_profile_ = chromeos::ProfileHelper::IsSigninProfile(profile);
+  PrefService* const local_state = g_browser_process->local_state();
+  if (local_state) {  // Sometimes it's not available in tests.
+    local_state_pref_change_registrar_.Init(local_state);
+    local_state_pref_change_registrar_.Add(
+        policy::policy_prefs::kSystemFeaturesDisableList, pref_change_callback);
+  }
+#endif
+  pref_change_registrar_.Init(pref_service_);
   pref_change_registrar_.Add(pref_names::kInstallAllowList,
                              pref_change_callback);
   pref_change_registrar_.Add(pref_names::kInstallDenyList,
@@ -71,6 +84,8 @@ ExtensionManagement::ExtensionManagement(Profile* profile)
                              pref_change_callback);
   pref_change_registrar_.Add(pref_names::kAllowedTypes, pref_change_callback);
   pref_change_registrar_.Add(pref_names::kExtensionManagement,
+                             pref_change_callback);
+  pref_change_registrar_.Add(prefs::kCloudExtensionRequestEnabled,
                              pref_change_callback);
 #if !defined(OS_CHROMEOS)
   pref_change_registrar_.Add(prefs::kCloudReportingEnabled,
@@ -91,6 +106,7 @@ ExtensionManagement::~ExtensionManagement() {
 
 void ExtensionManagement::Shutdown() {
   pref_change_registrar_.RemoveAll();
+  local_state_pref_change_registrar_.RemoveAll();
   pref_service_ = nullptr;
 }
 
@@ -114,14 +130,21 @@ bool ExtensionManagement::BlacklistedByDefault() const {
 
 ExtensionManagement::InstallationMode ExtensionManagement::GetInstallationMode(
     const Extension* extension) const {
+  std::string update_url;
+  if (extension->manifest()->GetString(manifest_keys::kUpdateURL, &update_url))
+    return GetInstallationMode(extension->id(), update_url);
+  return GetInstallationMode(extension->id(), std::string());
+}
+
+ExtensionManagement::InstallationMode ExtensionManagement::GetInstallationMode(
+    const ExtensionId& extension_id,
+    const std::string& update_url) const {
   // Check per-extension installation mode setting first.
-  auto iter_id = settings_by_id_.find(extension->id());
+  auto iter_id = settings_by_id_.find(extension_id);
   if (iter_id != settings_by_id_.end())
     return iter_id->second->installation_mode;
-  std::string update_url;
   // Check per-update-url installation mode setting.
-  if (extension->manifest()->GetString(manifest_keys::kUpdateURL,
-                                       &update_url)) {
+  if (!update_url.empty()) {
     auto iter_update_url = settings_by_update_url_.find(update_url);
     if (iter_update_url != settings_by_update_url_.end())
       return iter_update_url->second->installation_mode;
@@ -166,6 +189,17 @@ bool ExtensionManagement::IsInstallationExplicitlyAllowed(
          mode == INSTALLATION_ALLOWED;
 }
 
+bool ExtensionManagement::IsInstallationExplicitlyBlocked(
+    const ExtensionId& id) const {
+  auto it = settings_by_id_.find(id);
+  // No settings explicitly specified for |id|.
+  if (it == settings_by_id_.end())
+    return false;
+  // Checks if the extension is on the black list or removed list.
+  InstallationMode mode = it->second->installation_mode;
+  return mode == INSTALLATION_BLOCKED || mode == INSTALLATION_REMOVED;
+}
+
 bool ExtensionManagement::IsOffstoreInstallAllowed(
     const GURL& url,
     const GURL& referrer_url) const {
@@ -186,11 +220,6 @@ bool ExtensionManagement::IsOffstoreInstallAllowed(
 bool ExtensionManagement::IsAllowedManifestType(
     Manifest::Type manifest_type,
     const std::string& extension_id) const {
-  if (extension_id == extension_misc::kCloudReportingExtensionId &&
-      IsCloudReportingPolicyEnabled()) {
-    return true;
-  }
-
   if (!global_settings_->has_restricted_allowed_types)
     return true;
   const std::vector<Manifest::Type>& allowed_types =
@@ -200,13 +229,6 @@ bool ExtensionManagement::IsAllowedManifestType(
 
 APIPermissionSet ExtensionManagement::GetBlockedAPIPermissions(
     const Extension* extension) const {
-  // The Chrome Reporting extension is sideloaded via the CloudReportingEnabled
-  // policy and is not subject to permission withholding.
-  if (extension->id() == extension_misc::kCloudReportingExtensionId &&
-      IsCloudReportingPolicyEnabled()) {
-    return APIPermissionSet();
-  }
-
   // Fetch per-extension blocked permissions setting.
   auto iter_id = settings_by_id_.find(extension->id());
 
@@ -346,6 +368,8 @@ void ExtensionManagement::Refresh() {
           LoadPreference(pref_names::kExtensionManagement,
                          true,
                          base::Value::Type::DICTIONARY));
+  const base::Value* extension_request_pref = LoadPreference(
+      prefs::kCloudExtensionRequestEnabled, false, base::Value::Type::BOOLEAN);
 
   // Reset all settings.
   global_settings_.reset(new internal::GlobalSettings());
@@ -354,8 +378,9 @@ void ExtensionManagement::Refresh() {
 
   // Parse default settings.
   const base::Value wildcard("*");
-  if (denied_list_pref &&
-      denied_list_pref->Find(wildcard) != denied_list_pref->end()) {
+  if ((denied_list_pref &&
+       denied_list_pref->Find(wildcard) != denied_list_pref->end()) ||
+      (extension_request_pref && extension_request_pref->GetBool())) {
     default_settings_->installation_mode = INSTALLATION_BLOCKED;
   }
 
@@ -484,7 +509,29 @@ void ExtensionManagement::Refresh() {
     }
   }
 
-  UpdateForcedCloudReportingExtension();
+#if defined(OS_CHROMEOS)
+  const base::Value* system_features_disable_list_pref = nullptr;
+  PrefService* const local_state = g_browser_process->local_state();
+  if (local_state) {  // Sometimes it's not available in tests.
+    system_features_disable_list_pref =
+        local_state->GetList(policy::policy_prefs::kSystemFeaturesDisableList);
+  }
+
+  if (system_features_disable_list_pref) {
+    for (const auto& entry : system_features_disable_list_pref->GetList()) {
+      switch (entry.GetInt()) {
+        case policy::SystemFeature::CAMERA:
+          AccessById(extension_misc::kCameraAppId)->installation_mode =
+              INSTALLATION_BLOCKED;
+          break;
+        case policy::SystemFeature::SETTINGS:
+          AccessById(chromeos::default_web_apps::kOsSettingsAppId)
+              ->installation_mode = INSTALLATION_BLOCKED;
+          break;
+      }
+    }
+  }
+#endif
 }
 
 const base::Value* ExtensionManagement::LoadPreference(
@@ -568,34 +615,6 @@ void ExtensionManagement::UpdateForcedExtensions(
           it.key(), InstallationReporter::FailureReason::NO_UPDATE_URL);
     }
   }
-}
-
-void ExtensionManagement::UpdateForcedCloudReportingExtension() {
-  if (!IsCloudReportingPolicyEnabled())
-    return;
-
-  // Adds the Chrome Reporting extension to the force install list if
-  // CloudReportingEnabled policy is set to True. Overrides any existing setting
-  // for that extension from other policies.
-  internal::IndividualSettings* settings =
-      AccessById(extension_misc::kCloudReportingExtensionId);
-  settings->Reset();
-  settings->minimum_version_required.reset();
-  settings->installation_mode = INSTALLATION_FORCED;
-  settings->update_url = extension_urls::kChromeWebstoreUpdateURL;
-}
-
-bool ExtensionManagement::IsCloudReportingPolicyEnabled() const {
-#if !defined(OS_CHROMEOS)
-  if (base::FeatureList::IsEnabled(features::kEnterpriseReportingInBrowser))
-    return false;
-  const base::Value* policy_value =
-      LoadPreference(prefs::kCloudReportingEnabled,
-                     /* force_managed = */ true, base::Value::Type::BOOLEAN);
-  return policy_value && policy_value->GetBool();
-#else
-  return false;
-#endif
 }
 
 internal::IndividualSettings* ExtensionManagement::AccessById(

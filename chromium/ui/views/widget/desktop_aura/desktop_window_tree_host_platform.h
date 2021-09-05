@@ -5,11 +5,15 @@
 #ifndef UI_VIEWS_WIDGET_DESKTOP_AURA_DESKTOP_WINDOW_TREE_HOST_PLATFORM_H_
 #define UI_VIEWS_WIDGET_DESKTOP_AURA_DESKTOP_WINDOW_TREE_HOST_PLATFORM_H_
 
+#include <memory>
+#include <set>
+#include <string>
 #include <vector>
 
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "ui/aura/window_tree_host_platform.h"
+#include "ui/platform_window/extensions/workspace_extension_delegate.h"
 #include "ui/views/views_export.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
 
@@ -17,7 +21,8 @@ namespace views {
 
 class VIEWS_EXPORT DesktopWindowTreeHostPlatform
     : public aura::WindowTreeHostPlatform,
-      public DesktopWindowTreeHost {
+      public DesktopWindowTreeHost,
+      public ui::WorkspaceExtensionDelegate {
  public:
   DesktopWindowTreeHostPlatform(
       internal::NativeWidgetDelegate* native_widget_delegate,
@@ -99,13 +104,16 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   void ShowImpl() override;
   void HideImpl() override;
 
-  // PlatformWindowDelegateBase:
+  // PlatformWindowDelegate:
   void OnClosed() override;
   void OnWindowStateChanged(ui::PlatformWindowState new_state) override;
   void OnCloseRequest() override;
   void OnActivationChanged(bool active) override;
   base::Optional<gfx::Size> GetMinimumSizeForWindow() override;
   base::Optional<gfx::Size> GetMaximumSizeForWindow() override;
+
+  // ui::WorkspaceExtensionDelegate:
+  void OnWorkspaceChanged() override;
 
  protected:
   // TODO(https://crbug.com/990756): move these methods back to private
@@ -123,7 +131,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
   gfx::Rect ToPixelRect(const gfx::Rect& rect_in_dip) const;
 
  private:
-  void Relayout();
+  void ScheduleRelayout();
 
   Widget* GetWidget();
   const Widget* GetWidget() const;
@@ -155,7 +163,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostPlatform
 
   base::WeakPtrFactory<DesktopWindowTreeHostPlatform> close_widget_factory_{
       this};
-  base::WeakPtrFactory<DesktopWindowTreeHostPlatform> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(DesktopWindowTreeHostPlatform);
 };

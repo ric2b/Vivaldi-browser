@@ -17,7 +17,6 @@ import unittest
 import mock
 
 from core.results_processor import command_line
-from core.results_processor import formatters
 
 
 # To easily mock module level symbols within the command_line module.
@@ -27,7 +26,6 @@ def module(symbol):
 
 class ProcessOptionsTestCase(unittest.TestCase):
   def setUp(self):
-    self.legacy_formats = []
     self.standalone = False
 
     # Mock os module within results_processor so path manipulations do not
@@ -48,13 +46,14 @@ class ProcessOptionsTestCase(unittest.TestCase):
 
     mock.patch(module('_DefaultOutputDir'),
                return_value='/path/to/output_dir').start()
+    mock.patch(module('path_util.GetChromiumSrcDir'),
+               return_value='/path/to/chromium').start()
 
   def tearDown(self):
     mock.patch.stopall()
 
   def ParseArgs(self, args):
-    parser = command_line.ArgumentParser(
-        standalone=self.standalone, legacy_formats=self.legacy_formats)
+    parser = command_line.ArgumentParser(standalone=self.standalone)
     options = parser.parse_args(args)
     command_line.ProcessOptions(options)
     return options
@@ -124,31 +123,61 @@ class TestProcessOptions(ProcessOptionsTestCase):
     self.assertEqual(options.upload_bucket, 'some-special-bucket')
 
   def testDefaultOutputFormat(self):
-    self.legacy_formats = ['html']
     options = self.ParseArgs([])
-    self.assertEqual(options.output_formats, [])
-    self.assertEqual(options.legacy_output_formats, ['html'])
+    self.assertEqual(options.output_formats, ['html'])
 
   def testUnkownOutputFormatRaises(self):
     with self.assertRaises(SystemExit):
       self.ParseArgs(['--output-format', 'unknown'])
 
-  @mock.patch(module('HANDLED_NATIVELY'), ['new-format'])
-  def testOutputFormatsSplit(self):
-    self.legacy_formats = ['old-format']
-    options = self.ParseArgs(
-        ['--output-format', 'new-format', '--output-format', 'old-format'])
-    self.assertEqual(options.output_formats, ['new-format'])
-    self.assertEqual(options.legacy_output_formats, ['old-format'])
-
-  @mock.patch(module('HANDLED_NATIVELY'), ['new-format'])
   def testNoDuplicateOutputFormats(self):
-    self.legacy_formats = ['old-format']
     options = self.ParseArgs(
-        ['--output-format', 'new-format', '--output-format', 'old-format',
-         '--output-format', 'new-format', '--output-format', 'old-format'])
-    self.assertEqual(options.output_formats, ['new-format'])
-    self.assertEqual(options.legacy_output_formats, ['old-format'])
+        ['--output-format', 'html', '--output-format', 'csv',
+         '--output-format', 'html', '--output-format', 'csv'])
+    self.assertEqual(options.output_formats, ['csv', 'html'])
+
+  def testTraceProcessorPath_noBuildDir(self):
+    with mock.patch(module('os.environ.get'), return_value=None):
+      options = self.ParseArgs([])
+    self.assertIsNone(options.trace_processor_path)
+
+  def testTraceProcessorPath_chromiumOutputDir(self):
+    def isfile(path):
+      return path == '/path/to/chromium/out_test/Debug/trace_processor_shell'
+
+    def env_get(name):
+      if name == 'CHROMIUM_OUTPUT_DIR':
+        return '/path/to/chromium/out_test/Debug'
+
+    with mock.patch(module('os.path.isfile')) as isfile_patch:
+      with mock.patch(module('os.environ.get')) as env_patch:
+        isfile_patch.side_effect = isfile
+        env_patch.side_effect = env_get
+        options = self.ParseArgs([])
+    self.assertEqual(options.trace_processor_path,
+                     '/path/to/chromium/out_test/Debug/trace_processor_shell')
+
+  def testTraceProcessorPath_oneBuildDir(self):
+    def isfile(path):
+      return path == '/path/to/chromium/out/Release/trace_processor_shell'
+
+    with mock.patch(module('os.path.isfile')) as isfile_patch:
+      isfile_patch.side_effect = isfile
+      options = self.ParseArgs([])
+
+    self.assertEqual(options.trace_processor_path,
+                     '/path/to/chromium/out/Release/trace_processor_shell')
+
+  def testTraceProcessorPath_twoBuildDirs(self):
+    def isfile(path):
+      return path in ['/path/to/chromium/out/Release/trace_processor_shell',
+                      '/path/to/chromium/out/Debug/trace_processor_shell']
+
+    with mock.patch(module('os.path.isfile')) as isfile_patch:
+      isfile_patch.side_effect = isfile
+      options = self.ParseArgs([])
+
+    self.assertIsNone(options.trace_processor_path)
 
 
 class StandaloneTestProcessOptions(ProcessOptionsTestCase):
@@ -171,11 +200,3 @@ class StandaloneTestProcessOptions(ProcessOptionsTestCase):
     self.assertEqual(options.output_formats, ['json-test-results'])
     self.assertEqual(options.intermediate_dir, '/path/to/curdir/some_dir')
     self.assertEqual(options.output_dir, '/path/to/output_dir')
-
-
-class TestNativelyHandledFormats(unittest.TestCase):
-  def testNativelyHandledFormatsHaveFormatters(self):
-    for output_format in command_line.HANDLED_NATIVELY:
-      if output_format == 'none':
-        continue
-      self.assertIn(output_format, formatters.FORMATTERS)

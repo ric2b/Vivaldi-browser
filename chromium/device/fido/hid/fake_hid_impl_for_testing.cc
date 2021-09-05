@@ -6,11 +6,12 @@
 
 #include <utility>
 
+#include "base/bind_helpers.h"
 #include "device/fido/fido_parsing_utils.h"
-#include "services/device/public/mojom/constants.mojom.h"
+#include "device/fido/hid/fido_hid_discovery.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/device/public/mojom/hid.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
-#include "services/service_manager/public/mojom/connector.mojom.h"
 
 namespace device {
 
@@ -127,12 +128,7 @@ FakeFidoHidManager::FakeFidoHidManager() = default;
 
 FakeFidoHidManager::~FakeFidoHidManager() = default;
 
-void FakeFidoHidManager::AddReceiver(mojo::ScopedMessagePipeHandle handle) {
-  receivers_.Add(this, mojo::PendingReceiver<device::mojom::HidManager>(
-                           std::move(handle)));
-}
-
-void FakeFidoHidManager::AddReceiver2(
+void FakeFidoHidManager::AddReceiver(
     mojo::PendingReceiver<device::mojom::HidManager> receiver) {
   receivers_.Add(this, std::move(receiver));
 }
@@ -152,7 +148,7 @@ void FakeFidoHidManager::AddFidoHidDevice(std::string guid) {
 }
 
 void FakeFidoHidManager::GetDevicesAndSetClient(
-    device::mojom::HidManagerClientAssociatedPtrInfo client,
+    mojo::PendingAssociatedRemote<device::mojom::HidManagerClient> client,
     GetDevicesCallback callback) {
   GetDevices(std::move(callback));
 
@@ -170,6 +166,7 @@ void FakeFidoHidManager::GetDevices(GetDevicesCallback callback) {
 void FakeFidoHidManager::Connect(
     const std::string& device_guid,
     mojo::PendingRemote<mojom::HidConnectionClient> connection_client,
+    mojo::PendingRemote<mojom::HidConnectionWatcher> watcher,
     ConnectCallback callback) {
   auto device_it = devices_.find(device_guid);
   auto connection_it = connections_.find(device_guid);
@@ -208,15 +205,12 @@ void FakeFidoHidManager::RemoveDevice(const std::string device_guid) {
 }
 
 ScopedFakeFidoHidManager::ScopedFakeFidoHidManager() {
-  service_manager::mojom::ConnectorRequest request;
-  connector_ = service_manager::Connector::Create(&request);
-  connector_->OverrideBinderForTesting(
-      service_manager::ServiceFilter::ByName(device::mojom::kServiceName),
-      device::mojom::HidManager::Name_,
-      base::BindRepeating(&FakeFidoHidManager::AddReceiver,
-                          base::Unretained(this)));
+  FidoHidDiscovery::SetHidManagerBinder(base::BindRepeating(
+      &FakeFidoHidManager::AddReceiver, base::Unretained(this)));
 }
 
-ScopedFakeFidoHidManager::~ScopedFakeFidoHidManager() = default;
+ScopedFakeFidoHidManager::~ScopedFakeFidoHidManager() {
+  FidoHidDiscovery::SetHidManagerBinder(base::NullCallback());
+}
 
 }  // namespace device

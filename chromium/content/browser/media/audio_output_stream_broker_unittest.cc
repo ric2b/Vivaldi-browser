@@ -17,10 +17,9 @@
 #include "media/base/audio_parameters.h"
 #include "media/mojo/mojom/audio_data_pipe.mojom.h"
 #include "media/mojo/mojom/audio_output_stream.mojom.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "services/audio/public/cpp/fake_stream_factory.h"
@@ -100,8 +99,9 @@ class MockStreamFactory : public audio::FakeStreamFactory {
 
     bool requested = false;
     mojo::PendingReceiver<media::mojom::AudioOutputStream> stream_receiver;
-    media::mojom::AudioOutputStreamObserverAssociatedPtrInfo observer_info;
-    media::mojom::AudioLogPtr log;
+    mojo::PendingAssociatedRemote<media::mojom::AudioOutputStreamObserver>
+        observer_remote;
+    mojo::Remote<media::mojom::AudioLog> log;
     const std::string output_device_id;
     const media::AudioParameters params;
     const base::UnguessableToken group_id;
@@ -130,7 +130,7 @@ class MockStreamFactory : public audio::FakeStreamFactory {
     EXPECT_EQ(stream_request_data_->group_id, group_id);
     stream_request_data_->requested = true;
     stream_request_data_->stream_receiver = std::move(stream_receiver);
-    stream_request_data_->observer_info = std::move(observer);
+    stream_request_data_->observer_remote = std::move(observer);
     stream_request_data_->log.Bind(std ::move(log));
     stream_request_data_->created_callback = std::move(created_callback);
   }
@@ -207,7 +207,7 @@ TEST(AudioOutputStreamBrokerTest, StreamCreationSuccess_Propagates) {
   base::SyncSocket::CreatePair(&socket1, &socket2);
   std::move(stream_request_data.created_callback)
       .Run({base::in_place, base::UnsafeSharedMemoryRegion::Create(kShMemSize),
-            mojo::WrapPlatformFile(socket1.Release())});
+            mojo::PlatformHandle(socket1.Take())});
 
   EXPECT_CALL(env.provider_client, OnCreated());
 
@@ -261,11 +261,11 @@ TEST(AudioOutputStreamBrokerTest,
   EXPECT_CALL(env.deleter, Run(env.broker.release()))
       .WillOnce(testing::DeleteArg<0>());
 
-  // This results in a connection error.
-  stream_request_data.observer_info.PassHandle();
+  // This results in a disconnect.
+  stream_request_data.observer_remote.PassHandle();
 
   env.RunUntilIdle();
-  env.stream_factory.CloseBinding();
+  env.stream_factory.ResetReceiver();
   env.RunUntilIdle();
 }
 
@@ -274,7 +274,7 @@ TEST(AudioOutputStreamBrokerTest,
   TestEnvironment env;
 
   env.broker->CreateStream(env.factory_ptr.get());
-  env.stream_factory.CloseBinding();
+  env.stream_factory.ResetReceiver();
 
   EXPECT_CALL(env.deleter, Run(env.broker.release()))
       .WillOnce(testing::DeleteArg<0>());

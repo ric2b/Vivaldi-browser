@@ -10,14 +10,18 @@ import android.os.Bundle;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ThreadUtils;
+import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.compositor.CompositorViewHolder;
+import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * A handler that provides Autofill Assistant actions for a specific activity.
@@ -25,37 +29,62 @@ import java.util.Set;
 class AutofillAssistantActionHandlerImpl implements AutofillAssistantActionHandler {
     private final Context mContext;
     private final BottomSheetController mBottomSheetController;
+    private final ChromeFullscreenManager mFullscreenManager;
+    private final CompositorViewHolder mCompositorViewHolder;
+    private final ActivityTabProvider mActivityTabProvider;
     private final ScrimView mScrimView;
-    private final GetCurrentTab mGetCurrentTab;
 
     AutofillAssistantActionHandlerImpl(Context context, BottomSheetController bottomSheetController,
-            ScrimView scrimView, GetCurrentTab getCurrentTab) {
+            ChromeFullscreenManager fullscreenManager, CompositorViewHolder compositorViewHolder,
+            ActivityTabProvider activityTabProvider, ScrimView scrimView) {
         mContext = context;
         mBottomSheetController = bottomSheetController;
+        mFullscreenManager = fullscreenManager;
+        mCompositorViewHolder = compositorViewHolder;
+        mActivityTabProvider = activityTabProvider;
         mScrimView = scrimView;
-        mGetCurrentTab = getCurrentTab;
     }
 
     @Override
-    public void listActions(String userName, String experimentIds, Bundle arguments,
-            Callback<Set<String>> callback) {
+    public void fetchWebsiteActions(
+            String userName, String experimentIds, Bundle arguments, Callback<Boolean> callback) {
         if (!AutofillAssistantPreferencesUtil.isAutofillOnboardingAccepted()) {
-            callback.onResult(Collections.emptySet());
+            callback.onResult(false);
             return;
         }
         AutofillAssistantClient client = getOrCreateClient();
         if (client == null) {
-            callback.onResult(Collections.emptySet());
+            callback.onResult(false);
             return;
         }
 
-        client.listDirectActions(userName, experimentIds, toArgumentMap(arguments), callback);
+        client.fetchWebsiteActions(userName, experimentIds, toArgumentMap(arguments), callback);
     }
 
     @Override
-    public void performOnboarding(String experimentIds, Callback<Boolean> callback) {
+    public boolean hasRunFirstCheck() {
+        if (!AutofillAssistantPreferencesUtil.isAutofillOnboardingAccepted()) return false;
+        AutofillAssistantClient client = getOrCreateClient();
+        if (client == null) return false;
+        return client.hasRunFirstCheck();
+    }
+
+    @Override
+    public List<AutofillAssistantDirectAction> getActions() {
+        AutofillAssistantClient client = getOrCreateClient();
+        if (client == null) {
+            return Collections.emptyList();
+        }
+        return client.getDirectActions();
+    }
+
+    @Override
+    public void performOnboarding(
+            String experimentIds, Bundle arguments, Callback<Boolean> callback) {
+        Map<String, String> parameters = toArgumentMap(arguments);
         AssistantOnboardingCoordinator coordinator = new AssistantOnboardingCoordinator(
-                experimentIds, mContext, mBottomSheetController, mGetCurrentTab.get());
+                experimentIds, parameters, mContext, mBottomSheetController, mFullscreenManager,
+                mCompositorViewHolder, mScrimView);
         coordinator.show(accepted -> {
             coordinator.hide();
             callback.onResult(accepted);
@@ -71,20 +100,16 @@ class AutofillAssistantActionHandlerImpl implements AutofillAssistantActionHandl
             return;
         }
 
+        Map<String, String> argumentMap = toArgumentMap(arguments);
         Callback<AssistantOnboardingCoordinator> afterOnboarding = (onboardingCoordinator) -> {
-            Map<String, String> argumentMap = toArgumentMap(arguments);
-            if (name.isEmpty()) {
-                callback.onResult(client.start(/* initialUrl= */ "", argumentMap, experimentIds,
-                        Bundle.EMPTY, onboardingCoordinator));
-                return;
-            }
             callback.onResult(client.performDirectAction(
                     name, experimentIds, argumentMap, onboardingCoordinator));
         };
 
         if (!AutofillAssistantPreferencesUtil.isAutofillOnboardingAccepted()) {
             AssistantOnboardingCoordinator coordinator = new AssistantOnboardingCoordinator(
-                    experimentIds, mContext, mBottomSheetController, mGetCurrentTab.get());
+                    experimentIds, argumentMap, mContext, mBottomSheetController,
+                    mFullscreenManager, mCompositorViewHolder, mScrimView);
             coordinator.show(accepted -> {
                 if (!accepted) {
                     coordinator.hide();
@@ -104,7 +129,8 @@ class AutofillAssistantActionHandlerImpl implements AutofillAssistantActionHandl
      */
     @Nullable
     private AutofillAssistantClient getOrCreateClient() {
-        Tab tab = mGetCurrentTab.get();
+        ThreadUtils.assertOnUiThread();
+        Tab tab = mActivityTabProvider.get();
 
         if (tab == null || tab.getWebContents() == null) return null;
 

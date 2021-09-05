@@ -34,9 +34,13 @@
 #include "base/test/gtest_xml_util.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/launcher/unit_test_launcher.h"
+#include "base/test/mock_entropy_provider.h"
 #include "base/test/multiprocess_test.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -51,14 +55,10 @@
 #endif  // OS_IOS
 #endif  // OS_MACOSX
 
-#if !defined(OS_WIN)
 #include "base/i18n/rtl.h"
 #if !defined(OS_IOS)
 #include "base/strings/string_util.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
-#endif
-#else
-#include "base/i18n/rtl.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -120,29 +120,94 @@ class ResetCommandLineBetweenTests : public testing::EmptyTestEventListener {
   DISALLOW_COPY_AND_ASSIGN(ResetCommandLineBetweenTests);
 };
 
+// Initializes a base::test::ScopedFeatureList for each individual test, which
+// involves a FeatureList and a FieldTrialList, such that unit test don't need
+// to initialize them manually.
+class FeatureListScopedToEachTest : public testing::EmptyTestEventListener {
+ public:
+  FeatureListScopedToEachTest() = default;
+  ~FeatureListScopedToEachTest() override = default;
+
+  FeatureListScopedToEachTest(const FeatureListScopedToEachTest&) = delete;
+  FeatureListScopedToEachTest& operator=(const FeatureListScopedToEachTest&) =
+      delete;
+
+  void OnTestStart(const testing::TestInfo& test_info) override {
+    field_trial_list_ = std::make_unique<FieldTrialList>(
+        std::make_unique<MockEntropyProvider>());
+
+    const CommandLine* command_line = CommandLine::ForCurrentProcess();
+
+    // Set up a FeatureList instance, so that code using that API will not hit a
+    // an error that it's not set. It will be cleared automatically.
+    // TestFeatureForBrowserTest1 and TestFeatureForBrowserTest2 used in
+    // ContentBrowserTestScopedFeatureListTest to ensure ScopedFeatureList keeps
+    // features from command line.
+    std::string enabled =
+        command_line->GetSwitchValueASCII(switches::kEnableFeatures);
+    std::string disabled =
+        command_line->GetSwitchValueASCII(switches::kDisableFeatures);
+    enabled += ",TestFeatureForBrowserTest1";
+    disabled += ",TestFeatureForBrowserTest2";
+    scoped_feature_list_.InitFromCommandLine(enabled, disabled);
+
+    // The enable-features and disable-features flags were just slurped into a
+    // FeatureList, so remove them from the command line. Tests should enable
+    // and disable features via the ScopedFeatureList API rather than
+    // command-line flags.
+    CommandLine new_command_line(command_line->GetProgram());
+    CommandLine::SwitchMap switches = command_line->GetSwitches();
+
+    switches.erase(switches::kEnableFeatures);
+    switches.erase(switches::kDisableFeatures);
+
+    for (const auto& iter : switches)
+      new_command_line.AppendSwitchNative(iter.first, iter.second);
+
+    *CommandLine::ForCurrentProcess() = new_command_line;
+  }
+
+  void OnTestEnd(const testing::TestInfo& test_info) override {
+    scoped_feature_list_.Reset();
+    field_trial_list_.reset();
+  }
+
+ private:
+  std::unique_ptr<FieldTrialList> field_trial_list_;
+  test::ScopedFeatureList scoped_feature_list_;
+};
+
 class CheckForLeakedGlobals : public testing::EmptyTestEventListener {
  public:
   CheckForLeakedGlobals() = default;
 
   // Check for leaks in individual tests.
   void OnTestStart(const testing::TestInfo& test) override {
+    feature_list_set_before_test_ = FeatureList::GetInstance();
     thread_pool_set_before_test_ = ThreadPoolInstance::Get();
   }
   void OnTestEnd(const testing::TestInfo& test) override {
+    DCHECK_EQ(feature_list_set_before_test_, FeatureList::GetInstance())
+        << " in test " << test.test_case_name() << "." << test.name();
     DCHECK_EQ(thread_pool_set_before_test_, ThreadPoolInstance::Get())
         << " in test " << test.test_case_name() << "." << test.name();
   }
 
   // Check for leaks in test cases (consisting of one or more tests).
   void OnTestCaseStart(const testing::TestCase& test_case) override {
+    feature_list_set_before_case_ = FeatureList::GetInstance();
     thread_pool_set_before_case_ = ThreadPoolInstance::Get();
   }
   void OnTestCaseEnd(const testing::TestCase& test_case) override {
+    DCHECK_EQ(feature_list_set_before_case_, FeatureList::GetInstance())
+        << " in case " << test_case.name();
     DCHECK_EQ(thread_pool_set_before_case_, ThreadPoolInstance::Get())
         << " in case " << test_case.name();
   }
 
  private:
+  FeatureList* feature_list_set_before_test_ = nullptr;
+  FeatureList* feature_list_set_before_case_ = nullptr;
   ThreadPoolInstance* thread_pool_set_before_test_ = nullptr;
   ThreadPoolInstance* thread_pool_set_before_case_ = nullptr;
 
@@ -189,6 +254,37 @@ class CheckProcessPriority : public testing::EmptyTestEventListener {
   DISALLOW_COPY_AND_ASSIGN(CheckProcessPriority);
 };
 #endif  // !defined(OS_IOS)
+
+class CheckThreadPriority : public testing::EmptyTestEventListener {
+ public:
+  CheckThreadPriority(bool check_thread_priority_at_test_end)
+      : check_thread_priority_at_test_end_(check_thread_priority_at_test_end) {
+    CHECK_EQ(base::PlatformThread::GetCurrentThreadPriority(),
+             base::ThreadPriority::NORMAL)
+        << " -- The thread priority of this process is not the default. This "
+           "usually indicates nice has been used, which is not supported.";
+  }
+
+  void OnTestStart(const testing::TestInfo& test) override {
+    EXPECT_EQ(base::PlatformThread::GetCurrentThreadPriority(),
+              base::ThreadPriority::NORMAL)
+        << " -- The thread priority of this process is not the default. This "
+           "usually indicates nice has been used, which is not supported.";
+  }
+  void OnTestEnd(const testing::TestInfo& test) override {
+    if (check_thread_priority_at_test_end_) {
+      EXPECT_EQ(base::PlatformThread::GetCurrentThreadPriority(),
+                base::ThreadPriority::NORMAL)
+          << " -- The thread priority of this process is not the default. This "
+             "usually indicates nice has been used, which is not supported.";
+    }
+  }
+
+ private:
+  const bool check_thread_priority_at_test_end_;
+
+  DISALLOW_COPY_AND_ASSIGN(CheckThreadPriority);
+};
 
 const std::string& GetProfileName() {
   static const NoDestructor<std::string> profile_name([]() {
@@ -380,9 +476,14 @@ void TestSuite::DisableCheckForLeakedGlobals() {
   check_for_leaked_globals_ = false;
 }
 
-void TestSuite::DisableCheckForProcessPriority() {
+void TestSuite::DisableCheckForThreadAndProcessPriority() {
   DCHECK(!is_initialized_);
-  check_for_process_priority_ = false;
+  check_for_thread_and_process_priority_ = false;
+}
+
+void TestSuite::DisableCheckForThreadPriorityAtTestEnd() {
+  DCHECK(!is_initialized_);
+  check_for_thread_priority_at_test_end_ = false;
 }
 
 void TestSuite::UnitTestAssertHandler(const char* file,
@@ -482,39 +583,14 @@ void TestSuite::SuppressErrorDialogs() {
 void TestSuite::Initialize() {
   DCHECK(!is_initialized_);
 
+  test::ScopedRunLoopTimeout::SetAddGTestFailureOnTimeout();
+
   const CommandLine* command_line = CommandLine::ForCurrentProcess();
 #if !defined(OS_IOS)
   if (command_line->HasSwitch(switches::kWaitForDebugger)) {
     debug::WaitForDebugger(60, true);
   }
 #endif
-  // Set up a FeatureList instance, so that code using that API will not hit a
-  // an error that it's not set. It will be cleared automatically.
-  // TestFeatureForBrowserTest1 and TestFeatureForBrowserTest2 used in
-  // ContentBrowserTestScopedFeatureListTest to ensure ScopedFeatureList keeps
-  // features from command line.
-  std::string enabled =
-      command_line->GetSwitchValueASCII(switches::kEnableFeatures);
-  std::string disabled =
-      command_line->GetSwitchValueASCII(switches::kDisableFeatures);
-  enabled += ",TestFeatureForBrowserTest1";
-  disabled += ",TestFeatureForBrowserTest2";
-  scoped_feature_list_.InitFromCommandLine(enabled, disabled);
-
-  // The enable-features and disable-features flags were just slurped into a
-  // FeatureList, so remove them from the command line. Tests should enable and
-  // disable features via the ScopedFeatureList API rather than command-line
-  // flags.
-  CommandLine new_command_line(command_line->GetProgram());
-  CommandLine::SwitchMap switches = command_line->GetSwitches();
-
-  switches.erase(switches::kEnableFeatures);
-  switches.erase(switches::kDisableFeatures);
-
-  for (const auto& iter : switches)
-    new_command_line.AppendSwitchNative(iter.first, iter.second);
-
-  *CommandLine::ForCurrentProcess() = new_command_line;
 
 #if defined(OS_IOS)
   InitIOSTestMessageLoop();
@@ -543,24 +619,11 @@ void TestSuite::Initialize() {
 
   test::InitializeICUForTesting();
 
-  // On the Mac OS X command line, the default locale is *_POSIX. In Chromium,
-  // the locale is set via an OS X locale API and is never *_POSIX.
-  // Some tests (such as those involving word break iterator) will behave
-  // differently and fail if we use *POSIX locale. Setting it to en_US here
+  // A number of tests only work if the locale is en_US. This can be an issue
+  // on all platforms. To fix this we force the default locale to en_US. This
   // does not affect tests that explicitly overrides the locale for testing.
-  // This can be an issue on all platforms other than Windows.
   // TODO(jshin): Should we set the locale via an OS X locale API here?
-#if !defined(OS_WIN)
-#if defined(OS_IOS)
   i18n::SetICUDefaultLocale("en_US");
-#else
-  std::string default_locale(uloc_getDefault());
-  if (EndsWith(default_locale, "POSIX", CompareCase::INSENSITIVE_ASCII))
-    i18n::SetICUDefaultLocale("en_US");
-#endif
-#else
-  i18n::SetICUDefaultLocale("en_US");
-#endif
 
 #if defined(OS_LINUX)
   SetUpFontconfig();
@@ -571,12 +634,19 @@ void TestSuite::Initialize() {
       testing::UnitTest::GetInstance()->listeners();
   listeners.Append(new DisableMaybeTests);
   listeners.Append(new ResetCommandLineBetweenTests);
+  listeners.Append(new FeatureListScopedToEachTest);
   if (check_for_leaked_globals_)
     listeners.Append(new CheckForLeakedGlobals);
+  if (check_for_thread_and_process_priority_) {
+#if !defined(OS_ANDROID)
+    // TODO(https://crbug.com/931706): Check thread priority on Android.
+    listeners.Append(
+        new CheckThreadPriority(check_for_thread_priority_at_test_end_));
+#endif
 #if !defined(OS_IOS)
-  if (check_for_process_priority_)
     listeners.Append(new CheckProcessPriority);
 #endif
+  }
 
   AddTestLauncherResultPrinter();
 

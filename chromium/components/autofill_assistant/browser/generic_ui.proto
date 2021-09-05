@@ -1,0 +1,24 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto2";
+
+option optimize_for = LITE_RUNTIME;
+option java_package = "org.chromium.chrome.browser.autofill_assistant.proto";
+option java_multiple_files = true;
+
+package autofill_assistant;
+
+import "model.proto";
+import "interactions.proto";
+import "view_layout.proto";
+
+message GenericUserInterfaceProto {
+  // The root view, usually a view container.
+  optional ViewProto root_view = 1;
+  // The interactions for this generic user interface.
+  optional InteractionsProto interactions = 2;
+  // The model containing initial values for interactive UI.
+  optional ModelProto model = 3;
+}

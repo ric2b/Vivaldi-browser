@@ -510,7 +510,7 @@ TEST_F(ManagePasswordsStateTest, BackgroundAutofilledAddBlacklisted) {
 }
 
 TEST_F(ManagePasswordsStateTest, PasswordUpdateAddBlacklisted) {
-  std::vector<const PasswordForm*> best_matches;
+  std::vector<const PasswordForm*> best_matches = {&saved_match()};
   std::unique_ptr<MockPasswordFormManagerForUI> test_form_manager(
       CreateFormManager(&best_matches, {}));
   passwords_data().OnUpdatePassword(std::move(test_form_manager));
@@ -626,6 +626,17 @@ TEST_F(ManagePasswordsStateTest, AutofillCausedByInternalFormManager) {
               UnorderedElementsAre(Pointee(local_federated_form()),
                                    Pointee(saved_match())));
   EXPECT_EQ(saved_match().origin, passwords_data().origin());
+}
+
+TEST_F(ManagePasswordsStateTest, ProcessUnsyncedCredentialsWillBeDeleted) {
+  std::vector<PasswordForm> unsynced_credentials(1);
+  unsynced_credentials[0].username_value = ASCIIToUTF16("user");
+  unsynced_credentials[0].password_value = ASCIIToUTF16("password");
+  passwords_data().ProcessUnsyncedCredentialsWillBeDeleted(
+      unsynced_credentials);
+  EXPECT_EQ(passwords_data().state(),
+            password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE);
+  EXPECT_EQ(passwords_data().unsynced_credentials(), unsynced_credentials);
 }
 
 }  // namespace

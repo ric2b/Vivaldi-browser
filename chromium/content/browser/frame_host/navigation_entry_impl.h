@@ -35,8 +35,6 @@
 
 namespace content {
 
-class BundledExchangesNavigationInfo;
-
 class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
  public:
   // Represents a tree of FrameNavigationEntries that make up this joint session
@@ -81,9 +79,6 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
       const NavigationEntry* entry);
   static std::unique_ptr<NavigationEntryImpl> FromNavigationEntry(
       std::unique_ptr<NavigationEntry> entry);
-
-  // The value of bindings() before it is set during commit.
-  enum : int { kInvalidBindings = -1 };
 
   NavigationEntryImpl();
   NavigationEntryImpl(
@@ -150,6 +145,7 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   std::string GetExtraHeaders() override;
   void AddExtraHeaders(const std::string& extra_headers) override;
   int64_t GetMainFrameDocumentSequenceNumber() override;
+  void InitRestoredEntry(BrowserContext* browser_context) override;
 
   // Creates a copy of this NavigationEntryImpl that can be modified
   // independently from the original.  Does not copy any value that would be
@@ -194,7 +190,8 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
       bool intended_as_new_entry,
       int pending_offset_to_send,
       int current_offset_to_send,
-      int current_length_to_send);
+      int current_length_to_send,
+      const blink::FramePolicy& frame_policy);
 
   // Once a navigation entry is committed, we should no longer track several
   // pieces of non-persisted state, as documented on the members below.
@@ -293,12 +290,6 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
     root_node()->frame_entry->set_source_site_instance(
         source_site_instance.get());
   }
-
-  // Remember the set of bindings granted to this NavigationEntry at the time
-  // of commit, to ensure that we do not grant it additional bindings if we
-  // navigate back to it in the future.  This can only be changed once.
-  void SetBindings(int bindings);
-  int bindings() const { return bindings_; }
 
   void set_page_type(PageType page_type) { page_type_ = page_type; }
 
@@ -411,11 +402,6 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
     back_forward_cache_metrics_ = metrics;
   }
 
-  void set_bundled_exchanges_navigation_info(
-      std::unique_ptr<BundledExchangesNavigationInfo>
-          bundled_exchanges_navigation_info);
-  BundledExchangesNavigationInfo* bundled_exchanges_navigation_info() const;
-
  private:
   // WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING
   // Session/Tab restore save portions of this class so that it can be recreated
@@ -433,8 +419,6 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
 
   // See the accessors above for descriptions.
   int unique_id_;
-  // TODO(creis): Persist bindings_. http://crbug.com/173672.
-  int bindings_;
   PageType page_type_;
   GURL virtual_url_;
   bool update_virtual_url_with_url_;
@@ -551,16 +535,6 @@ class CONTENT_EXPORT NavigationEntryImpl : public NavigationEntry {
   // with implement back-forward cache.
   // It is preserved at commit but not persisted.
   scoped_refptr<BackForwardCacheMetrics> back_forward_cache_metrics_;
-
-  // Keeps the bundled exchanges related information when |this| is for a
-  // navigation within a bundled exchanges file. Used when
-  // BundledHTTPExchanges feature is enabled or
-  // TrustableBundledExchangesFileUrl switch is set.
-  // TODO(995177): Support Session/Tab restore.
-  // TODO(995177): Consider if this should be here or in FrameNavigationEntry
-  // for a correct iframe support.
-  std::unique_ptr<BundledExchangesNavigationInfo>
-      bundled_exchanges_navigation_info_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationEntryImpl);
 };

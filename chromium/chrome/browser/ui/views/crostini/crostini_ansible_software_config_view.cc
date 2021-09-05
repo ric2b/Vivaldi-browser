@@ -4,17 +4,19 @@
 
 #include "chrome/browser/ui/views/crostini/crostini_ansible_software_config_view.h"
 
+#include "base/bind_helpers.h"
+#include "base/logging.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
+#include "content/public/browser/network_service_instance.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/views/controls/label.h"
-#include "ui/views/controls/progress_bar.h"
+#include "ui/chromeos/devicetype_utils.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/view_class_properties.h"
-#include "ui/views/window/dialog_client_view.h"
 
 namespace {
 
@@ -36,25 +38,55 @@ void ShowCrostiniAnsibleSoftwareConfigView(Profile* profile) {
   g_crostini_ansible_software_configuration_view->GetWidget()->Show();
 }
 
+void CloseCrostiniAnsibleSoftwareConfigViewForTesting() {
+  if (g_crostini_ansible_software_configuration_view) {
+    g_crostini_ansible_software_configuration_view->GetWidget()
+        ->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
+  }
+  g_crostini_ansible_software_configuration_view = nullptr;
+}
+
 }  // namespace crostini
 
-int CrostiniAnsibleSoftwareConfigView::GetDialogButtons() const {
-  if (state_ == State::ERROR) {
-    return ui::DIALOG_BUTTON_OK;
+bool CrostiniAnsibleSoftwareConfigView::Accept() {
+  if (state_ == State::ERROR_OFFLINE) {
+    state_ = State::CONFIGURING;
+    OnStateChanged();
+
+    ansible_management_service_->ConfigureDefaultContainer(base::DoNothing());
+    return false;
   }
-  return ui::DIALOG_BUTTON_NONE;
+  DCHECK_EQ(state_, State::ERROR);
+  return true;
 }
 
 base::string16 CrostiniAnsibleSoftwareConfigView::GetWindowTitle() const {
-  if (state_ == State::ERROR) {
-    return l10n_util::GetStringUTF16(
-        IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_LABEL);
+  switch (state_) {
+    case State::CONFIGURING:
+      return l10n_util::GetStringUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_LABEL);
+    case State::ERROR:
+      return l10n_util::GetStringUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_LABEL);
+    case State::ERROR_OFFLINE:
+      return l10n_util::GetStringFUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_OFFLINE_LABEL,
+          ui::GetChromeOSDeviceName());
   }
-  return l10n_util::GetStringUTF16(IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_LABEL);
 }
 
-bool CrostiniAnsibleSoftwareConfigView::ShouldShowCloseButton() const {
-  return false;
+base::string16 CrostiniAnsibleSoftwareConfigView::GetSubtextLabel() const {
+  switch (state_) {
+    case State::CONFIGURING:
+      return l10n_util::GetStringUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_SUBTEXT);
+    case State::ERROR:
+      return l10n_util::GetStringUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_SUBTEXT);
+    case State::ERROR_OFFLINE:
+      return l10n_util::GetStringUTF16(
+          IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_OFFLINE_SUBTEXT);
+  }
 }
 
 gfx::Size CrostiniAnsibleSoftwareConfigView::CalculatePreferredSize() const {
@@ -64,37 +96,25 @@ gfx::Size CrostiniAnsibleSoftwareConfigView::CalculatePreferredSize() const {
   return gfx::Size(dialog_width, GetHeightForWidth(dialog_width));
 }
 
-void CrostiniAnsibleSoftwareConfigView::OnApplicationStarted() {
-  DCHECK_EQ(state_, State::INSTALLING);
+void CrostiniAnsibleSoftwareConfigView::
+    OnAnsibleSoftwareConfigurationStarted() {}
 
-  state_ = State::APPLYING;
-}
+void CrostiniAnsibleSoftwareConfigView::OnAnsibleSoftwareConfigurationFinished(
+    bool success) {
+  DCHECK_EQ(state_, State::CONFIGURING);
 
-void CrostiniAnsibleSoftwareConfigView::OnApplicationFinished() {
-  DCHECK_EQ(state_, State::APPLYING);
+  if (!success) {
+    if (content::GetNetworkConnectionTracker()->IsOffline())
+      state_ = State::ERROR_OFFLINE;
+    else
+      state_ = State::ERROR;
 
-  ansible_management_service_->RemoveObserver(this);
+    OnStateChanged();
+    return;
+  }
   // TODO(crbug.com/1005774): We should preferably add another ClosedReason
   // instead of passing kUnspecified.
   GetWidget()->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
-}
-
-void CrostiniAnsibleSoftwareConfigView::OnError() {
-  DCHECK(state_ == State::APPLYING || state_ == State::INSTALLING);
-  state_ = State::ERROR;
-
-  ansible_management_service_->RemoveObserver(this);
-
-  // Bring dialog to front.
-  GetWidget()->Show();
-
-  GetWidget()->UpdateWindowTitle();
-  subtext_label_->SetText(l10n_util::GetStringUTF16(
-      IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_SUBTEXT));
-
-  progress_bar_->SetVisible(false);
-
-  DialogModelChanged();
 }
 
 base::string16
@@ -139,8 +159,34 @@ CrostiniAnsibleSoftwareConfigView::CrostiniAnsibleSoftwareConfigView(
 
   chrome::RecordDialogCreation(
       chrome::DialogIdentifier::CROSTINI_ANSIBLE_SOFTWARE_CONFIG);
+
+  // In the initial state (CONFIGURING), there are no buttons and hence no set
+  // labels.
+  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
 }
 
 CrostiniAnsibleSoftwareConfigView::~CrostiniAnsibleSoftwareConfigView() {
+  ansible_management_service_->RemoveObserver(this);
   g_crostini_ansible_software_configuration_view = nullptr;
+}
+
+void CrostiniAnsibleSoftwareConfigView::OnStateChanged() {
+  progress_bar_->SetVisible(state_ == State::CONFIGURING);
+  subtext_label_->SetText(GetSubtextLabel());
+  DialogDelegate::SetButtons(
+      state_ == State::CONFIGURING
+          ? ui::DIALOG_BUTTON_NONE
+          : (state_ == State::ERROR
+                 ? ui::DIALOG_BUTTON_OK
+                 : ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL));
+  // The cancel button, even when present, always uses the default text.
+  DialogDelegate::SetButtonLabel(
+      ui::DIALOG_BUTTON_OK,
+      state_ == State::ERROR
+          ? l10n_util::GetStringUTF16(IDS_APP_OK)
+          : l10n_util::GetStringUTF16(
+                IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_RETRY_BUTTON));
+  DialogModelChanged();
+  GetWidget()->UpdateWindowTitle();
+  GetWidget()->SetSize(GetWidget()->non_client_view()->GetPreferredSize());
 }

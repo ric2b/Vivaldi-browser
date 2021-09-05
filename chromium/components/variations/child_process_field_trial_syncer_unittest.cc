@@ -26,7 +26,7 @@ class TestFieldTrialObserver : public base::FieldTrialList::Observer {
   TestFieldTrialObserver() {}
   ~TestFieldTrialObserver() override { ClearCrashKeysInstanceForTesting(); }
 
-  // base::FieldTrial::Observer:
+  // base::FieldTrialList::Observer:
   void OnFieldTrialGroupFinalized(const std::string& trial_name,
                                   const std::string& group_name) override {
     observed_entries_.push_back(std::make_pair(trial_name, group_name));
@@ -54,7 +54,7 @@ std::pair<std::string, std::string> MakeStringPair(const std::string& a,
 
 TEST(ChildProcessFieldTrialSyncerTest, FieldTrialState) {
   base::test::SingleThreadTaskEnvironment task_environment;
-  base::FieldTrialList field_trial_list(nullptr);
+
   // We don't use the descriptor here anyways so it's ok to pass -1.
   base::FieldTrialList::CreateTrialsFromCommandLine(
       *base::CommandLine::ForCurrentProcess(), "field_trial_handle_switch", -1);

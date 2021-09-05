@@ -22,11 +22,11 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "calendar/calendar_typedefs.h"
 #include "url/gurl.h"
 
 namespace calendar {
 
-typedef int64_t CalendarID;
 // Bit flags determing which fields should be updated in the
 // UpdateCalendar API method
 enum UpdateCalendarFields {
@@ -43,6 +43,7 @@ enum UpdateCalendarFields {
   CALENDAR_TYPE = 1 << 10,
   CALENDAR_INTERVAL = 1 << 11,
   CALENDAR_LAST_CHECKED = 1 << 12,
+  CALENDAR_TIMEZONE = 1 << 13,
 };
 
 // Holds all information associated with a specific Calendar.
@@ -50,6 +51,7 @@ class CalendarRow {
  public:
   CalendarRow();
   CalendarRow(CalendarID id,
+              AccountID account_id,
               base::string16 name,
               base::string16 description,
               GURL url,
@@ -63,6 +65,7 @@ class CalendarRow {
               int type,
               int interval,
               base::Time last_checked,
+              std::string timezone,
               base::Time created,
               base::Time lastmodified);
   ~CalendarRow();
@@ -71,6 +74,9 @@ class CalendarRow {
 
   CalendarID id() const { return id_; }
   void set_id(CalendarID id) { id_ = id; }
+
+  AccountID account_id() const { return account_id_; }
+  void set_account_id(AccountID account_id) { account_id_ = account_id; }
 
   base::string16 name() const { return name_; }
   void set_name(base::string16 name) { name_ = name; }
@@ -115,6 +121,9 @@ class CalendarRow {
     last_checked_ = last_checked;
   }
 
+  std::string timezone() const { return timezone_; }
+  void set_timezone(std::string timezone) { timezone_ = timezone; }
+
   base::Time created() const { return created_; }
   void set_created(base::Time created) { created_ = created; }
 
@@ -125,6 +134,7 @@ class CalendarRow {
   void Swap(CalendarRow* other);
 
   CalendarID id_;
+  AccountID account_id_;
   base::string16 name_;
   base::string16 description_;
   GURL url_;
@@ -138,6 +148,7 @@ class CalendarRow {
   int type_;
   int interval_;
   base::Time last_checked_;
+  std::string timezone_;
   base::Time created_;
   base::Time lastmodified_;
 };
@@ -160,6 +171,7 @@ struct Calendar {
   Calendar(const Calendar& calendar);
 
   CalendarID id;
+  AccountID account_id;
   base::string16 name;
   base::string16 description;
   GURL url;
@@ -173,6 +185,7 @@ struct Calendar {
   int type;
   int interval;
   base::Time last_checked;
+  std::string timezone;
   base::Time created;
   base::Time lastmodified;
   int updateFields;

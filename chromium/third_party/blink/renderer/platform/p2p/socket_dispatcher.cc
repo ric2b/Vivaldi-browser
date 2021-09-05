@@ -4,13 +4,14 @@
 
 #include "third_party/blink/renderer/platform/p2p/socket_dispatcher.h"
 
-#include "base/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "services/network/public/cpp/p2p_param_traits.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/p2p/network_list_observer.h"
 #include "third_party/blink/renderer/platform/p2p/socket_client_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 
 namespace blink {
 
@@ -24,10 +25,10 @@ P2PSocketDispatcher::~P2PSocketDispatcher() {}
 void P2PSocketDispatcher::AddNetworkListObserver(
     blink::NetworkListObserver* network_list_observer) {
   network_list_observers_->AddObserver(network_list_observer);
-  main_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&P2PSocketDispatcher::RequestNetworkEventsIfNecessary,
-                     this));
+  PostCrossThreadTask(
+      *main_task_runner_.get(), FROM_HERE,
+      CrossThreadBindOnce(&P2PSocketDispatcher::RequestNetworkEventsIfNecessary,
+                          scoped_refptr<P2PSocketDispatcher>(this)));
 }
 
 void P2PSocketDispatcher::RemoveNetworkListObserver(
@@ -35,22 +36,27 @@ void P2PSocketDispatcher::RemoveNetworkListObserver(
   network_list_observers_->RemoveObserver(network_list_observer);
 }
 
-scoped_refptr<network::mojom::blink::ThreadSafeP2PSocketManagerPtr>
+network::mojom::blink::P2PSocketManager*
 P2PSocketDispatcher::GetP2PSocketManager() {
   base::AutoLock lock(p2p_socket_manager_lock_);
-  if (!thread_safe_p2p_socket_manager_) {
-    network::mojom::blink::P2PSocketManagerPtr p2p_socket_manager;
-    p2p_socket_manager_request_ = mojo::MakeRequest(&p2p_socket_manager);
-    p2p_socket_manager.set_connection_error_handler(base::BindOnce(
-        &P2PSocketDispatcher::OnConnectionError, base::Unretained(this)));
-    thread_safe_p2p_socket_manager_ =
-        network::mojom::blink::ThreadSafeP2PSocketManagerPtr::Create(
+  if (!p2p_socket_manager_) {
+    mojo::PendingRemote<network::mojom::blink::P2PSocketManager>
+        p2p_socket_manager;
+    p2p_socket_manager_receiver_ =
+        p2p_socket_manager.InitWithNewPipeAndPassReceiver();
+    p2p_socket_manager_ =
+        mojo::SharedRemote<network::mojom::blink::P2PSocketManager>(
             std::move(p2p_socket_manager));
+    p2p_socket_manager_.set_disconnect_handler(
+        WTF::Bind(&P2PSocketDispatcher::OnConnectionError,
+                  WTF::Unretained(this)),
+        main_task_runner_);
   }
-  main_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&P2PSocketDispatcher::RequestInterfaceIfNecessary, this));
-  return thread_safe_p2p_socket_manager_;
+  PostCrossThreadTask(
+      *main_task_runner_.get(), FROM_HERE,
+      CrossThreadBindOnce(&P2PSocketDispatcher::RequestInterfaceIfNecessary,
+                          scoped_refptr<P2PSocketDispatcher>(this)));
+  return p2p_socket_manager_.get();
 }
 
 void P2PSocketDispatcher::NetworkListChanged(
@@ -75,11 +81,11 @@ void P2PSocketDispatcher::NetworkListChanged(
 }
 
 void P2PSocketDispatcher::RequestInterfaceIfNecessary() {
-  if (!p2p_socket_manager_request_.is_pending())
+  if (!p2p_socket_manager_receiver_.is_valid())
     return;
 
-  blink::Platform::Current()->GetBrowserInterfaceBrokerProxy()->GetInterface(
-      std::move(p2p_socket_manager_request_));
+  blink::Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
+      std::move(p2p_socket_manager_receiver_));
 }
 
 void P2PSocketDispatcher::RequestNetworkEventsIfNecessary() {
@@ -96,14 +102,14 @@ void P2PSocketDispatcher::RequestNetworkEventsIfNecessary() {
         std::move(copy), default_ipv4_local_address_,
         default_ipv6_local_address_);
   } else {
-    GetP2PSocketManager()->get()->StartNetworkNotifications(
+    GetP2PSocketManager()->StartNetworkNotifications(
         network_notification_client_receiver_.BindNewPipeAndPassRemote());
   }
 }
 
 void P2PSocketDispatcher::OnConnectionError() {
   base::AutoLock lock(p2p_socket_manager_lock_);
-  thread_safe_p2p_socket_manager_.reset();
+  p2p_socket_manager_.reset();
 }
 
 }  // namespace blink

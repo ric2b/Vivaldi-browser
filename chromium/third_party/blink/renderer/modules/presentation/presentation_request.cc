@@ -34,7 +34,7 @@ namespace {
 Settings* GetSettings(ExecutionContext* execution_context) {
   DCHECK(execution_context);
 
-  Document* document = To<Document>(execution_context);
+  Document* document = Document::From(execution_context);
   return document->GetSettings();
 }
 
@@ -59,8 +59,9 @@ PresentationRequest* PresentationRequest::Create(
     ExecutionContext* execution_context,
     const Vector<String>& urls,
     ExceptionState& exception_state) {
-  if (To<Document>(execution_context)
-          ->IsSandboxed(WebSandboxFlags::kPresentationController)) {
+  if (Document::From(execution_context)
+          ->IsSandboxed(
+              mojom::blink::WebSandboxFlags::kPresentationController)) {
     exception_state.ThrowSecurityError(
         "The document is sandboxed and lacks the 'allow-presentation' flag.");
     return nullptr;
@@ -105,7 +106,7 @@ const AtomicString& PresentationRequest::InterfaceName() const {
 }
 
 ExecutionContext* PresentationRequest::GetExecutionContext() const {
-  return ContextClient::GetExecutionContext();
+  return ExecutionContextClient::GetExecutionContext();
 }
 
 void PresentationRequest::AddedEventListener(
@@ -129,35 +130,37 @@ bool PresentationRequest::HasPendingActivity() const {
   if (HasEventListeners())
     return true;
 
-  return availability_property_ && availability_property_->GetState() ==
-                                       ScriptPromisePropertyBase::kPending;
+  return availability_property_ &&
+         availability_property_->GetState() ==
+             PresentationAvailabilityProperty::kPending;
 }
 
-ScriptPromise PresentationRequest::start(ScriptState* script_state) {
+ScriptPromise PresentationRequest::start(ScriptState* script_state,
+                                         ExceptionState& exception_state) {
   ExecutionContext* execution_context = GetExecutionContext();
   Settings* context_settings = GetSettings(execution_context);
-  Document* doc = To<Document>(execution_context);
+  Document* doc = Document::From(execution_context);
 
   bool is_user_gesture_required =
       !context_settings ||
       context_settings->GetPresentationRequiresUserGesture();
 
   if (is_user_gesture_required &&
-      !LocalFrame::HasTransientUserActivation(doc->GetFrame()))
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kInvalidAccessError,
-            "PresentationRequest::start() requires user gesture."));
+      !LocalFrame::HasTransientUserActivation(doc->GetFrame())) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidAccessError,
+        "PresentationRequest::start() requires user gesture.");
+    return ScriptPromise();
+  }
 
   PresentationController* controller =
       PresentationController::FromContext(GetExecutionContext());
-  if (!controller)
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kInvalidStateError,
-            "The PresentationRequest is no longer associated to a frame."));
+  if (!controller) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "The PresentationRequest is no longer associated to a frame.");
+    return ScriptPromise();
+  }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
 
@@ -170,15 +173,16 @@ ScriptPromise PresentationRequest::start(ScriptState* script_state) {
 }
 
 ScriptPromise PresentationRequest::reconnect(ScriptState* script_state,
-                                             const String& id) {
+                                             const String& id,
+                                             ExceptionState& exception_state) {
   PresentationController* controller =
       PresentationController::FromContext(GetExecutionContext());
-  if (!controller)
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kInvalidStateError,
-            "The PresentationRequest is no longer associated to a frame."));
+  if (!controller) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "The PresentationRequest is no longer associated to a frame.");
+    return ScriptPromise();
+  }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
 
@@ -200,21 +204,22 @@ ScriptPromise PresentationRequest::reconnect(ScriptState* script_state,
   return resolver->Promise();
 }
 
-ScriptPromise PresentationRequest::getAvailability(ScriptState* script_state) {
+ScriptPromise PresentationRequest::getAvailability(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
   PresentationController* controller =
       PresentationController::FromContext(GetExecutionContext());
-  if (!controller)
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kInvalidStateError,
-            "The PresentationRequest is no longer associated to a frame."));
+  if (!controller) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "The PresentationRequest is no longer associated to a frame.");
+    return ScriptPromise();
+  }
 
   if (!availability_property_) {
     availability_property_ =
         MakeGarbageCollected<PresentationAvailabilityProperty>(
-            ExecutionContext::From(script_state), this,
-            PresentationAvailabilityProperty::kReady);
+            ExecutionContext::From(script_state));
 
     controller->GetAvailabilityState()->RequestAvailability(
         urls_, MakeGarbageCollected<PresentationAvailabilityCallbacks>(
@@ -227,14 +232,14 @@ const Vector<KURL>& PresentationRequest::Urls() const {
   return urls_;
 }
 
-void PresentationRequest::Trace(blink::Visitor* visitor) {
+void PresentationRequest::Trace(Visitor* visitor) {
   visitor->Trace(availability_property_);
   EventTargetWithInlineData::Trace(visitor);
-  ContextClient::Trace(visitor);
+  ExecutionContextClient::Trace(visitor);
 }
 
 PresentationRequest::PresentationRequest(ExecutionContext* execution_context,
                                          const Vector<KURL>& urls)
-    : ContextClient(execution_context), urls_(urls) {}
+    : ExecutionContextClient(execution_context), urls_(urls) {}
 
 }  // namespace blink

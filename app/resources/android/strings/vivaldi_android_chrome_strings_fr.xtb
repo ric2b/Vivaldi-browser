@@ -1,18 +1,22 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fr">
+<translation id="1169602411434249000">Bloquer les traqueurs</translation>
 <translation id="1397811292916898096">Rechercher avec <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Basculer entre les onglets privés et normaux</translation>
 <translation id="1644574205037202324">Historique</translation>
 <translation id="17513872634828108">Onglets ouverts</translation>
-<translation id="1829244130665387512">Recherchez sur la page</translation>
-<translation id="2038563949887743358">Activer « Voir version ordinateur »</translation>
+<translation id="1829244130665387512">Rechercher sur la page</translation>
+<translation id="2038563949887743358">Activer la requête pour la « version ordinateur »</translation>
 <translation id="2433507940547922241">Apparence</translation>
 <translation id="2633278372998075009">Onglets privés</translation>
 <translation id="3076631378407175873">Copyright Vivaldi Inc. <ph name="YEAR" />. Tous droits réservés.</translation>
 <translation id="3234355010754616171">Nouvel onglet privé</translation>
+<translation id="3518985090088779359">Accepter et continuer</translation>
 <translation id="3700829948786686853">Bienvenue dans Vivaldi</translation>
 <translation id="4121750346708795461">En utilisant cette application, vous acceptez les <ph name="BEGIN_LINK1" />conditions d’utilisation<ph name="END_LINK1" /> et la <ph name="BEGIN_LINK2" />charte de confidentialité<ph name="END_LINK2" /> de Vivaldi.</translation>
 <translation id="4243710787042215766">Ouvrir dans un onglet privé</translation>
+<translation id="4526803704855831732">Onglets privés</translation>
 <translation id="4883379392681899581">Quitter le mode navigation privée</translation>
 <translation id="4943872375798546930">Aucun résultat</translation>
 <translation id="5118676864324397542">Stockage <ph name="APP_NAME" /></translation>
@@ -31,8 +35,7 @@ Pour modifier le terme de recherche, appuyez dessus de manière prolongée afin 
 <translation id="7519434535192513364">La fonctionnalité « Appuyer pour rechercher » transmet le mot sélectionné et la page actuelle en tant que contexte à la recherche Google. Vous pouvez la désactiver dans les <ph name="BEGIN_LINK" />paramètres<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Aide</translation>
 <translation id="804786196054284061">Conditions d’utilisation de Vivaldi</translation>
-<translation id="8428213095426709021">Paramètres</translation>
-<translation id="8820817407110198400">Favoris</translation>
-<translation id="9063523880881406963">Désactiver « Voir version ordinateur »</translation>
-<translation id="9080642952018487277">Entrer en mode navigation privée</translation>
+<translation id="8820817407110198400">Signets</translation>
+<translation id="9063523880881406963">Désactiver la requête pour la « version ordinateur »</translation>
+<translation id="9080642952018487277">Passer en mode de navigation privée</translation>
 </translationbundle>

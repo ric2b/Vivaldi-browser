@@ -59,7 +59,7 @@ std::string GetFileNameForPageNumber(const std::string& name, int page_number) {
 
 std::unique_ptr<ENHMETAHEADER> GetEmfHeader(const std::string& emf_data) {
   Emf emf;
-  if (!emf.InitFromData(emf_data.data(), emf_data.size()))
+  if (!emf.InitFromData(base::as_bytes(base::make_span(emf_data))))
     return nullptr;
 
   auto meta_header = std::make_unique<ENHMETAHEADER>();
@@ -359,6 +359,26 @@ IN_PROC_BROWSER_TEST_F(PdfToEmfConverterBrowserTest,
       PdfRenderSettings::Mode::POSTSCRIPT_LEVEL3);
   RunSinglePagePdfToPostScriptConverterTest(pdf_settings, "bug_806746.pdf",
                                             "bug_806746.emf");
+}
+
+IN_PROC_BROWSER_TEST_F(PdfToEmfConverterBrowserTest,
+                       PostScriptLevel2WithLineCapLineJoin) {
+  const PdfRenderSettings pdf_settings(
+      kLetter200DpiRect, gfx::Point(0, 0), k200DpiSize,
+      /*autorotate=*/false, /*use_color=*/true,
+      PdfRenderSettings::Mode::POSTSCRIPT_LEVEL2);
+  RunSinglePagePdfToPostScriptConverterTest(pdf_settings, "bug_1030689.pdf",
+                                            "bug_1030689.emf");
+}
+
+IN_PROC_BROWSER_TEST_F(PdfToEmfConverterBrowserTest,
+                       PostScriptLevel3WithLineCapLineJoin) {
+  const PdfRenderSettings pdf_settings(
+      kLetter200DpiRect, gfx::Point(0, 0), k200DpiSize,
+      /*autorotate=*/false, /*use_color=*/true,
+      PdfRenderSettings::Mode::POSTSCRIPT_LEVEL3);
+  RunSinglePagePdfToPostScriptConverterTest(pdf_settings, "bug_1030689.pdf",
+                                            "bug_1030689.emf");
 }
 
 }  // namespace printing

@@ -18,7 +18,7 @@
 #include "net/base/completion_repeating_callback.h"
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_task.h"
-#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom-forward.h"
 #include "url/origin.h"
 
 namespace content {
@@ -31,12 +31,12 @@ class AppCacheStorageImpl;
 // used on the IO thread by the quota manager. This class deletes
 // itself when both the quota manager and the appcache service have
 // been destroyed.
-class AppCacheQuotaClient : public storage::QuotaClient,
-                            public base::SupportsWeakPtr<AppCacheQuotaClient> {
+class AppCacheQuotaClient : public storage::QuotaClient {
  public:
   using RequestQueue = base::circular_deque<base::OnceClosure>;
 
-  ~AppCacheQuotaClient() override;
+  CONTENT_EXPORT
+  explicit AppCacheQuotaClient(base::WeakPtr<AppCacheServiceImpl> service);
 
   // QuotaClient method overrides
   ID id() const override;
@@ -52,6 +52,8 @@ class AppCacheQuotaClient : public storage::QuotaClient,
   void DeleteOriginData(const url::Origin& origin,
                         blink::mojom::StorageType type,
                         DeletionCallback callback) override;
+  void PerformStorageCleanup(blink::mojom::StorageType type,
+                             base::OnceClosure callback) override;
   bool DoesSupport(blink::mojom::StorageType type) const override;
 
  private:
@@ -59,8 +61,7 @@ class AppCacheQuotaClient : public storage::QuotaClient,
   friend class AppCacheServiceImpl;  // for NotifyAppCacheIsDestroyed
   friend class AppCacheStorageImpl;  // for NotifyAppCacheIsReady
 
-  CONTENT_EXPORT
-  explicit AppCacheQuotaClient(base::WeakPtr<AppCacheServiceImpl> service);
+  ~AppCacheQuotaClient() override;
 
   void DidDeleteAppCachesForOrigin(int rv);
   void GetOriginsHelper(blink::mojom::StorageType type,
@@ -88,9 +89,6 @@ class AppCacheQuotaClient : public storage::QuotaClient,
   base::WeakPtr<AppCacheServiceImpl> service_;
   bool appcache_is_ready_ = false;
   bool service_is_destroyed_ = false;
-  // This is used to prevent this object from being deleted in
-  // OnQuotaManagerDestroyed() while NotifyAppCacheDestroyed() is still running.
-  bool keep_alive_ = false;
   SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(AppCacheQuotaClient);

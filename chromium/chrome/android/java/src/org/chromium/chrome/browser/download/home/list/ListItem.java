@@ -4,9 +4,11 @@
 
 package org.chromium.chrome.browser.download.home.list;
 
+import android.util.Pair;
 import android.view.View;
 
-import org.chromium.base.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.chrome.browser.download.home.StableIds;
 import org.chromium.components.offline_items_collection.OfflineItem;
 
@@ -40,6 +42,14 @@ public abstract class ListItem {
         }
     }
 
+    /** A {@link ListItem} representing a pagination header. */
+    public static class PaginationListItem extends ListItem {
+        /** Creates a {@link PaginationListItem} instance. */
+        public PaginationListItem() {
+            super(StableIds.PAGINATION_HEADER);
+        }
+    }
+
     /** A {@link ListItem} that involves a {@link Date}. */
     private abstract static class DateListItem extends ListItem {
         public final Date date;
@@ -54,19 +64,80 @@ public abstract class ListItem {
         }
     }
 
+    /** A {@link ListItem} representing group card decoration such as header or footer. */
+    private static class CardDecorationListItem extends ListItem {
+        public final Pair<Date, String> dateAndDomain;
+
+        /** Creates a {@link CardDecorationListItem} instance. */
+        public CardDecorationListItem(Pair<Date, String> dateAndDomain, boolean isHeader) {
+            super(generateStableId(dateAndDomain, isHeader));
+            this.dateAndDomain = dateAndDomain;
+        }
+
+        @VisibleForTesting
+        static long generateStableId(Pair<Date, String> dateAndDomain, boolean isHeader) {
+            return isHeader ? dateAndDomain.hashCode() : ~dateAndDomain.hashCode();
+        }
+    }
+
+    /** A {@link ListItem} representing a card header. */
+    public static class CardHeaderListItem extends CardDecorationListItem {
+        public String faviconUrl;
+
+        /** Creates a {@link CardHeaderListItem} instance. */
+        public CardHeaderListItem(Pair<Date, String> dateAndDomain, String faviconUrl) {
+            super(dateAndDomain, true);
+            this.faviconUrl = faviconUrl;
+        }
+    }
+
+    /** A {@link ListItem} representing a card footer. */
+    public static class CardFooterListItem extends CardDecorationListItem {
+        /** Creates a {@link CardFooterListItem} instance. */
+        public CardFooterListItem(Pair<Date, String> dateAndDomain) {
+            super(dateAndDomain, false);
+        }
+    }
+
+    /** A {@link ListItem} representing a divider in a group card. */
+    public static class CardDividerListItem extends ListItem {
+        /** The position of the divider in a group card. */
+        public enum Position {
+            /** Represents the curved border at the top of a group card. */
+            TOP,
+
+            /**
+               Represents the line divider between two items in a group card. It also contains
+               two side bars on left and right to make up for the padding between two items.
+             */
+            MIDDLE,
+
+            /** Represents the curved border at the bottom of a group card. */
+            BOTTOM
+        }
+
+        public final Position position;
+
+        /** Creates a {@link CardDividerListItem} instance for a given position. */
+        public CardDividerListItem(long stableId, Position position) {
+            super(stableId);
+            this.position = position;
+        }
+    }
+
     /** A {@link ListItem} representing a section header. */
     public static class SectionHeaderListItem extends DateListItem {
         public boolean isJustNow;
-        public boolean showDivider;
+        public boolean showTopDivider;
 
         /**
          * Creates a {@link SectionHeaderListItem} instance for a given {@code timestamp}.
          */
-        public SectionHeaderListItem(long timestamp, boolean isJustNow, boolean showDivider) {
+        public SectionHeaderListItem(long timestamp, boolean isJustNow, boolean showTopDivider) {
             super(isJustNow ? StableIds.JUST_NOW_SECTION : generateStableId(timestamp),
                     new Date(timestamp));
             this.isJustNow = isJustNow;
-            this.showDivider = showDivider;
+            this.showTopDivider = showTopDivider;
         }
 
         @VisibleForTesting
@@ -80,6 +151,7 @@ public abstract class ListItem {
     public static class OfflineItemListItem extends DateListItem {
         public OfflineItem item;
         public boolean spanFullWidth;
+        public boolean isGrouped;
 
         /** Creates an {@link OfflineItemListItem} wrapping {@code item}. */
         public OfflineItemListItem(OfflineItem item) {

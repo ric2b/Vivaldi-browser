@@ -4,16 +4,16 @@
 
 #include "third_party/blink/renderer/modules/quota/quota_utils.h"
 
-#include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 
 namespace blink {
 
-void ConnectToQuotaDispatcherHost(
+void ConnectToQuotaManagerHost(
     ExecutionContext* execution_context,
-    mojo::PendingReceiver<mojom::blink::QuotaDispatcherHost> receiver) {
-  if (auto* interface_provider = execution_context->GetInterfaceProvider())
-    interface_provider->GetInterface(std::move(receiver));
+    mojo::PendingReceiver<mojom::blink::QuotaManagerHost> receiver) {
+  execution_context->GetBrowserInterfaceBroker().GetInterface(
+      std::move(receiver));
 }
 
 }  // namespace blink

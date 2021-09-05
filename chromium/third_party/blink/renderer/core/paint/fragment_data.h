@@ -16,8 +16,6 @@ namespace blink {
 class PaintLayer;
 
 // Represents the data for a particular fragment of a LayoutObject.
-// Only LayoutObjects with a self-painting PaintLayer may have more than one
-// FragmentData, and even then only when they are inside of multicol.
 // See README.md.
 class CORE_EXPORT FragmentData {
   USING_FAST_MALLOC(FragmentData);
@@ -39,8 +37,6 @@ class CORE_EXPORT FragmentData {
   }
 
   // The visual rect computed by the latest paint invalidation.
-  // This rect does *not* account for composited scrolling. See LayoutObject::
-  // AdjustVisualRectForCompositedScrolling().
   // It's location may be different from PaintOffset when there is visual (ink)
   // overflow to the top and/or the left.
   IntRect VisualRect() const { return visual_rect_; }
@@ -104,15 +100,16 @@ class CORE_EXPORT FragmentData {
       EnsureRareData().logical_top_in_flow_thread = top;
   }
 
-  // The pagination offset is the additional factor to add in to map
-  // from flow thread coordinates relative to the enclosing pagination
-  // layer, to visual coordiantes relative to that pagination layer.
-  PhysicalOffset PaginationOffset() const {
-    return rare_data_ ? rare_data_->pagination_offset : PhysicalOffset();
+  // The pagination offset is the additional factor to add in to map from flow
+  // thread coordinates relative to the enclosing pagination layer, to visual
+  // coordinates relative to that pagination layer. Not to be used in LayoutNG
+  // fragment painting.
+  PhysicalOffset LegacyPaginationOffset() const {
+    return rare_data_ ? rare_data_->legacy_pagination_offset : PhysicalOffset();
   }
-  void SetPaginationOffset(const PhysicalOffset& pagination_offset) {
+  void SetLegacyPaginationOffset(const PhysicalOffset& pagination_offset) {
     if (rare_data_ || pagination_offset != PhysicalOffset())
-      EnsureRareData().pagination_offset = pagination_offset;
+      EnsureRareData().legacy_pagination_offset = pagination_offset;
   }
 
   bool IsClipPathCacheValid() const {
@@ -260,7 +257,7 @@ class CORE_EXPORT FragmentData {
     IntRect partial_invalidation_visual_rect;
 
     // Fragment specific data.
-    PhysicalOffset pagination_offset;
+    PhysicalOffset legacy_pagination_offset;
     LayoutUnit logical_top_in_flow_thread;
     std::unique_ptr<ObjectPaintProperties> paint_properties;
     std::unique_ptr<RefCountedPropertyTreeState> local_border_box_properties;

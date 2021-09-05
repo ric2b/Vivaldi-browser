@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/hash/hash.h"
-#include "base/mac/sdk_forward_declarations.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -73,7 +72,8 @@ uint32_t BluetoothClassicDeviceMac::GetBluetoothClass() const {
   return [device_ classOfDevice];
 }
 
-void BluetoothClassicDeviceMac::CreateGattConnectionImpl() {
+void BluetoothClassicDeviceMac::CreateGattConnectionImpl(
+    base::Optional<BluetoothUUID> service_uuid) {
   // Classic devices do not support GATT connection.
   DidFailToConnectGatt(ERROR_UNSUPPORTED_DEVICE);
 }
@@ -202,10 +202,9 @@ void BluetoothClassicDeviceMac::SetConnectionLatency(
   NOTIMPLEMENTED();
 }
 
-void BluetoothClassicDeviceMac::Connect(
-    PairingDelegate* pairing_delegate,
-    const base::Closure& callback,
-    const ConnectErrorCallback& error_callback) {
+void BluetoothClassicDeviceMac::Connect(PairingDelegate* pairing_delegate,
+                                        base::OnceClosure callback,
+                                        ConnectErrorCallback error_callback) {
   NOTIMPLEMENTED();
 }
 
@@ -245,7 +244,7 @@ void BluetoothClassicDeviceMac::ConnectToService(
     const ConnectToServiceCallback& callback,
     const ConnectToServiceErrorCallback& error_callback) {
   scoped_refptr<BluetoothSocketMac> socket = BluetoothSocketMac::CreateSocket();
-  socket->Connect(device_.get(), uuid, base::Bind(callback, socket),
+  socket->Connect(device_.get(), uuid, base::BindOnce(callback, socket),
                   error_callback);
 }
 
@@ -254,13 +253,6 @@ void BluetoothClassicDeviceMac::ConnectToServiceInsecurely(
     const ConnectToServiceCallback& callback,
     const ConnectToServiceErrorCallback& error_callback) {
   error_callback.Run(kApiUnavailable);
-}
-
-void BluetoothClassicDeviceMac::CreateGattConnection(
-    const GattConnectionCallback& callback,
-    const ConnectErrorCallback& error_callback) {
-  // TODO(armansito): Implement.
-  error_callback.Run(ERROR_UNSUPPORTED_DEVICE);
 }
 
 base::Time BluetoothClassicDeviceMac::GetLastUpdateTime() const {

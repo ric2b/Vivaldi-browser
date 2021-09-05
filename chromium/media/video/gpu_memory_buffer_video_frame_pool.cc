@@ -38,6 +38,11 @@
 #include "ui/gfx/color_space.h"
 #include "ui/gl/trace_util.h"
 
+#if defined(OS_MACOSX)
+#include "base/mac/mac_util.h"
+#include "ui/gfx/mac/io_surface.h"
+#endif
+
 namespace media {
 
 // Implementation of a pool of GpuMemoryBuffers used to back VideoFrames.
@@ -241,10 +246,10 @@ gfx::BufferFormat GpuMemoryBufferFormat(
       return plane == 0 ? gfx::BufferFormat::R_8 : gfx::BufferFormat::RG_88;
     case GpuVideoAcceleratorFactories::OutputFormat::XR30:
       DCHECK_EQ(0u, plane);
-      return gfx::BufferFormat::BGRX_1010102;
+      return gfx::BufferFormat::BGRA_1010102;
     case GpuVideoAcceleratorFactories::OutputFormat::XB30:
       DCHECK_EQ(0u, plane);
-      return gfx::BufferFormat::RGBX_1010102;
+      return gfx::BufferFormat::RGBA_1010102;
     case GpuVideoAcceleratorFactories::OutputFormat::RGBA:
       DCHECK_EQ(0u, plane);
       return gfx::BufferFormat::RGBA_8888;
@@ -453,7 +458,17 @@ void CopyRowsToRGB10Buffer(bool is_argb,
                          v_plane, v_plane_stride, dest_rgb10, dest_stride,
                          width, rows);
     }
-  } else {
+  } else if (skyuv == kBT2020_SkYUVColorSpace) {
+    if (is_argb) {
+      libyuv::U010ToAR30(y_plane, y_plane_stride, u_plane, u_plane_stride,
+                         v_plane, v_plane_stride, dest_rgb10, dest_stride,
+                         width, rows);
+    } else {
+      libyuv::U010ToAB30(y_plane, y_plane_stride, u_plane, u_plane_stride,
+                         v_plane, v_plane_stride, dest_rgb10, dest_stride,
+                         width, rows);
+    }
+  } else {  // BT.709
     if (is_argb) {
       libyuv::H010ToAR30(y_plane, y_plane_stride, u_plane, u_plane_stride,
                          v_plane, v_plane_stride, dest_rgb10, dest_stride,
@@ -563,14 +578,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
 
   bool passthrough = false;
 #if defined(OS_MACOSX)
-  // GPU memory buffers do not support full-range YUV video on mac.
-  // Fortunately, the hardware decoders never produce full-range video.
-  // https://crbug/882627
-  gfx::ColorSpace color_space = video_frame->ColorSpace();
-  gfx::ColorSpace as_rgb = color_space.GetAsRGB();
-  gfx::ColorSpace as_full_range_rgb = color_space.GetAsFullRangeRGB();
-
-  if (color_space != as_rgb && as_rgb == as_full_range_rgb)
+  if (!IOSurfaceCanSetColorSpace(video_frame->ColorSpace()))
     passthrough = true;
 #endif
   if (output_format_ == GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED)
@@ -589,6 +597,7 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
     case PIXEL_FORMAT_I444:
     case PIXEL_FORMAT_NV12:
     case PIXEL_FORMAT_NV21:
+    case PIXEL_FORMAT_UYVY:
     case PIXEL_FORMAT_YUY2:
     case PIXEL_FORMAT_ARGB:
     case PIXEL_FORMAT_BGRA:
@@ -937,6 +946,9 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
     case GpuVideoAcceleratorFactories::OutputFormat::XB30:
       // TODO(mcasas): Enable this for ChromeOS https://crbug.com/776093.
       allow_overlay = false;
+#if defined(OS_MACOSX)
+      allow_overlay = IOSurfaceCanSetColorSpace(video_frame->ColorSpace());
+#endif
       // We've converted the YUV to RGB, fix the color space.
       // TODO(hubbe): The libyuv YUV to RGB conversion may not have
       // honored the color space conversion 100%. We should either fix

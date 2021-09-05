@@ -63,8 +63,6 @@ const char kShowStateValueMinimized[] = "minimized";
 const char kShowStateValueMaximized[] = "maximized";
 const char kShowStateValueFullscreen[] = "fullscreen";
 const char kShowStateValueLockedFullscreen[] = "locked-fullscreen";
-const char kStatusValueComplete[] = "complete";
-const char kStatusValueLoading[] = "loading";
 
 const char kWindowTypeValueNormal[] = "normal";
 const char kWindowTypeValuePopup[] = "popup";
@@ -118,6 +116,8 @@ const char kJavaScriptUrlsNotAllowedInTabsUpdate[] =
     "JavaScript URLs are not allowed in chrome.tabs.update. Use "
     "chrome.tabs.executeScript instead.";
 const char kBrowserWindowNotAllowed[] = "Browser windows not allowed.";
+const char kLockedFullscreenModeNewTabError[] =
+    "You cannot create new tabs while in locked fullscreen mode.";
 
 }  // namespace tabs_constants
 }  // namespace extensions

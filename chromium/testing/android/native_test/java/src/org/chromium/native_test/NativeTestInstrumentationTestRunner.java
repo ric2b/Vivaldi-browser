@@ -47,7 +47,7 @@ public class NativeTestInstrumentationTestRunner extends Instrumentation {
     public static final String EXTRA_TEST =
             "org.chromium.native_test.NativeTestInstrumentationTestRunner.Test";
 
-    private static final String TAG = "cr_NativeTest";
+    private static final String TAG = "NativeTest";
 
     private static final long DEFAULT_SHARD_NANO_TIMEOUT = 60 * 1000000000L;
     // Default to no size limit.
@@ -228,21 +228,25 @@ public class NativeTestInstrumentationTestRunner extends Instrumentation {
         return false;
     }
 
+    protected Intent createShardMainIntent() {
+        Intent i = new Intent(Intent.ACTION_MAIN);
+        i.setComponent(new ComponentName(getContext().getPackageName(), mNativeTestActivity));
+        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        i.putExtras(mTransparentArguments);
+        if (mShards != null && !mShards.isEmpty()) {
+            ArrayList<String> shard = mShards.remove();
+            i.putStringArrayListExtra(NativeTest.EXTRA_SHARD, shard);
+        }
+        i.putExtra(NativeTest.EXTRA_STDOUT_FILE, mStdoutFile.getAbsolutePath());
+        return i;
+    }
+
     /** Starts the NativeTest Activity.
      */
     private class ShardStarter implements Runnable {
         @Override
         public void run() {
-            Intent i = new Intent(Intent.ACTION_MAIN);
-            i.setComponent(new ComponentName(getContext().getPackageName(), mNativeTestActivity));
-            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            i.putExtras(mTransparentArguments);
-            if (mShards != null && !mShards.isEmpty()) {
-                ArrayList<String> shard = mShards.remove();
-                i.putStringArrayListExtra(NativeTest.EXTRA_SHARD, shard);
-            }
-            i.putExtra(NativeTest.EXTRA_STDOUT_FILE, mStdoutFile.getAbsolutePath());
-            getContext().startActivity(i);
+            getContext().startActivity(createShardMainIntent());
         }
     }
 

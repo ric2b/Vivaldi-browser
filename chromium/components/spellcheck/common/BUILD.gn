@@ -34,23 +34,17 @@ source_set("spellcheck_result") {
     "spellcheck_result.h",
   ]
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 }
 
 mojom("interfaces") {
-  sources = [
-    "spellcheck.mojom",
-  ]
+  sources = [ "spellcheck.mojom" ]
 
   if (has_spellcheck_panel) {
     sources += [ "spellcheck_panel.mojom" ]
   }
 
-  public_deps = [
-    "//mojo/public/mojom/base",
-  ]
+  public_deps = [ "//mojo/public/mojom/base" ]
 
   enabled_features = []
   if (use_browser_spellchecker) {
@@ -59,5 +53,9 @@ mojom("interfaces") {
 
   if (use_renderer_spellchecker) {
     enabled_features += [ "USE_RENDERER_SPELLCHECKER" ]
+  }
+
+  if (use_win_hybrid_spellchecker) {
+    enabled_features += [ "USE_WIN_HYBRID_SPELLCHECKER" ]
   }
 }

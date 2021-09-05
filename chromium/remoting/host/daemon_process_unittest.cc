@@ -23,7 +23,6 @@
 #include "remoting/host/chromoting_messages.h"
 #include "remoting/host/desktop_session.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "testing/gmock_mutant.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using testing::_;
@@ -166,7 +165,8 @@ DaemonProcessTest::~DaemonProcessTest() = default;
 void DaemonProcessTest::SetUp() {
   scoped_refptr<AutoThreadTaskRunner> task_runner = new AutoThreadTaskRunner(
       task_environment_.GetMainThreadTaskRunner(),
-      base::Bind(&DaemonProcessTest::QuitMessageLoop, base::Unretained(this)));
+      base::BindOnce(&DaemonProcessTest::QuitMessageLoop,
+                     base::Unretained(this)));
   daemon_process_.reset(
       new MockDaemonProcess(task_runner, task_runner,
                             base::Bind(&DaemonProcessTest::DeleteDaemonProcess,

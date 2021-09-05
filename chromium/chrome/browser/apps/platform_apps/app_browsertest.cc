@@ -230,7 +230,7 @@ class PlatformAppWithFileBrowserTest : public PlatformAppBrowserTest {
 
     base::FilePath extension_path = test_data_dir_.AppendASCII(extension_name);
     const extensions::Extension* extension =
-        LoadExtensionWithFlags(extension_path, ExtensionBrowserTest::kFlagNone);
+        LoadExtensionWithFlags(extension_path, kFlagNone);
     if (!extension) {
       message_ = "Failed to load extension.";
       return false;
@@ -454,10 +454,12 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
       << message_;
   observer.Wait();
   ASSERT_EQ(kExpectedNumberOfTabs, observer.tabs().size());
-  content::WaitForLoadStop(observer.tabs()[kExpectedNumberOfTabs - 1]);
+  EXPECT_FALSE(
+      content::WaitForLoadStop(observer.tabs()[kExpectedNumberOfTabs - 1]));
   EXPECT_EQ(GURL(kChromiumURL),
             observer.tabs()[kExpectedNumberOfTabs - 1]->GetURL());
-  content::WaitForLoadStop(observer.tabs()[kExpectedNumberOfTabs - 2]);
+  EXPECT_FALSE(
+      content::WaitForLoadStop(observer.tabs()[kExpectedNumberOfTabs - 2]));
   EXPECT_EQ(GURL(kChromiumURL),
             observer.tabs()[kExpectedNumberOfTabs - 2]->GetURL());
 }

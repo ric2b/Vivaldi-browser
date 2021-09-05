@@ -7,42 +7,48 @@
 
 #include <memory>
 
-#include "base/compiler_specific.h"
-#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "content/public/renderer/render_thread_observer.h"
-#include "ipc/ipc_platform_file.h"
-
-namespace base {
-class DictionaryValue;
-}
+#include "content/shell/common/web_test.mojom.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 
 namespace test_runner {
-class WebTestInterfaces;
+class TestInterfaces;
 }
 
 namespace content {
 
-class WebTestRenderThreadObserver : public RenderThreadObserver {
+class WebTestRenderThreadObserver : public RenderThreadObserver,
+                                    public mojom::WebTestControl {
  public:
   static WebTestRenderThreadObserver* GetInstance();
 
   WebTestRenderThreadObserver();
   ~WebTestRenderThreadObserver() override;
 
-  // RenderThreadObserver implementation.
-  bool OnControlMessageReceived(const IPC::Message& message) override;
-
-  test_runner::WebTestInterfaces* test_interfaces() const {
+  test_runner::TestInterfaces* test_interfaces() const {
     return test_interfaces_.get();
   }
 
- private:
-  // Message handlers.
-  void OnReplicateWebTestRuntimeFlagsChanges(
-      const base::DictionaryValue& changed_layout_test_runtime_flags);
+  // content::RenderThreadObserver:
+  void RegisterMojoInterfaces(
+      blink::AssociatedInterfaceRegistry* associated_interfaces) override;
+  void UnregisterMojoInterfaces(
+      blink::AssociatedInterfaceRegistry* associated_interfaces) override;
 
-  std::unique_ptr<test_runner::WebTestInterfaces> test_interfaces_;
+ private:
+  // mojom::WebTestControl implementation.
+  void ReplicateWebTestRuntimeFlagsChanges(
+      base::Value changed_layout_test_runtime_flags) override;
+
+  // Helper to bind this class as the mojom::WebTestControl.
+  void OnWebTestControlAssociatedRequest(
+      mojo::PendingAssociatedReceiver<mojom::WebTestControl> receiver);
+
+  std::unique_ptr<test_runner::TestInterfaces> test_interfaces_;
+
+  mojo::AssociatedReceiver<mojom::WebTestControl> receiver_{this};
 
   DISALLOW_COPY_AND_ASSIGN(WebTestRenderThreadObserver);
 };

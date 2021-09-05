@@ -152,6 +152,29 @@ public class WebappRegistryTest {
         assertEquals(secondExpected, WebappRegistry.getRegisteredWebappIdsForTesting());
     }
 
+    /**
+     * Test behaviour when there is a webapp with a null id registered. See crbug.com/1055566
+     * for details of the bug which caused this to occur.
+     */
+    @Test
+    @Feature({"Webapp"})
+    public void testWebappNullId() throws Exception {
+        addWebappsToRegistry(new String[] {null});
+        registerWebapp(null, createShortcutWebappInfo("https://www.google.ca"));
+        assertEquals(1, WebappRegistry.getRegisteredWebappIdsForTesting().size());
+
+        WebappRegistry.refreshSharedPrefsForTesting();
+
+        // Does not crash.
+        assertEquals(null,
+                WebappRegistry.getInstance().getWebappDataStorageForUrl("https://www.google.ca/"));
+
+        long currentTime = System.currentTimeMillis();
+        WebappRegistry.getInstance().unregisterOldWebapps(
+                currentTime + WebappRegistry.FULL_CLEANUP_DURATION);
+        assertTrue(WebappRegistry.getRegisteredWebappIdsForTesting().isEmpty());
+    }
+
     @Test
     @Feature({"Webapp"})
     public void testUnregisterClearsRegistry() throws Exception {
@@ -643,19 +666,19 @@ public class WebappRegistryTest {
 
     @Test
     @Feature({"WebApk"})
-    public void testHasWebApkForUrl() throws Exception {
-        final String startUrl = START_URL;
-        final String testUrl = START_URL + "/index.html";
+    public void testHasWebApkForOrigin() throws Exception {
+        final String startUrl = START_URL + "/test_page.html";
+        final String testOrigin = START_URL;
 
-        assertFalse(WebappRegistry.getInstance().hasWebApkForUrl(testUrl));
+        assertFalse(WebappRegistry.getInstance().hasAtLeastOneWebApkForOrigin(testOrigin));
 
         String webappId = "webapp";
         registerWebapp(webappId, createShortcutWebappInfo(startUrl));
-        assertFalse(WebappRegistry.getInstance().hasWebApkForUrl(testUrl));
+        assertFalse(WebappRegistry.getInstance().hasAtLeastOneWebApkForOrigin(testOrigin));
 
         WebApkInfo webApkInfo = new WebApkInfoBuilder("org.chromium.webapk", startUrl).build();
         registerWebapp(webApkInfo.id(), webApkInfo);
-        assertTrue(WebappRegistry.getInstance().hasWebApkForUrl(testUrl));
+        assertTrue(WebappRegistry.getInstance().hasAtLeastOneWebApkForOrigin(testOrigin));
     }
 
     private Set<String> addWebappsToRegistry(String... webapps) {

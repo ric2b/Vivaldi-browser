@@ -48,6 +48,15 @@ def replace_end(s, old, new):
     return s[:-len(old)] + new
 
 
+def domains_are_distinct(a, b):
+    a_parts = a.split(".")
+    b_parts = b.split(".")
+    min_length = min(len(a_parts), len(b_parts))
+    slice_index = -1 * min_length
+
+    return a_parts[slice_index:] != b_parts[slice_index:]
+
+
 class WrapperHandler(object):
 
     __meta__ = abc.ABCMeta
@@ -342,7 +351,7 @@ class RoutesBuilder(object):
         if headers is None:
             headers = {}
         handler = handlers.StaticHandler(path, format_args, content_type, **headers)
-        self.add_handler(b"GET", str(route), handler)
+        self.add_handler("GET", str(route), handler)
 
     def add_mount_point(self, url_base, path):
         url_base = "/%s/" % url_base.strip("/") if url_base != "/" else "/"
@@ -357,6 +366,7 @@ class RoutesBuilder(object):
             ("GET", "*.any.serviceworker.html", ServiceWorkersHandler),
             ("GET", "*.any.worker.js", AnyWorkerHandler),
             ("GET", "*.asis", handlers.AsIsHandler),
+            ("GET", "/.well-known/origin-policy", handlers.PythonScriptHandler),
             ("*", "*.py", handlers.PythonScriptHandler),
             ("GET", "*", handlers.FileHandler)
         ]
@@ -582,21 +592,9 @@ class WebSocketDaemon(object):
                     "-w", handlers_root]
 
         if ssl_config is not None:
-            # This is usually done through pywebsocket.main, however we're
-            # working around that to get the server instance and manually
-            # setup the wss server.
-            if pywebsocket._import_ssl():
-                tls_module = pywebsocket._TLS_BY_STANDARD_MODULE
-            elif pywebsocket._import_pyopenssl():
-                tls_module = pywebsocket._TLS_BY_PYOPENSSL
-            else:
-                print("No SSL module available")
-                sys.exit(1)
-
             cmd_args += ["--tls",
                          "--private-key", ssl_config["key_path"],
-                         "--certificate", ssl_config["cert_path"],
-                         "--tls-module", tls_module]
+                         "--certificate", ssl_config["cert_path"]]
 
         if (bind_address):
             cmd_args = ["-H", host] + cmd_args
@@ -730,6 +728,9 @@ def build_config(override_path=None, **kwargs):
 def _make_subdomains_product(s, depth=2):
     return {u".".join(x) for x in chain(*(product(s, repeat=i) for i in range(1, depth+1)))}
 
+def _make_origin_policy_subdomains(limit):
+    return {u"op%d" % x for x in range(1,limit+1)}
+
 
 _subdomains = {u"www",
                u"www1",
@@ -740,6 +741,12 @@ _subdomains = {u"www",
 _not_subdomains = {u"nonexistent"}
 
 _subdomains = _make_subdomains_product(_subdomains)
+
+# Origin policy subdomains need to not be reused by any other tests, since origin policies have
+# origin-wide impacts like installing a CSP or Feature Policy that could interfere with features
+# under test.
+# See https://github.com/web-platform-tests/rfcs/pull/44.
+_subdomains |= _make_origin_policy_subdomains(99)
 
 _not_subdomains = _make_subdomains_product(_not_subdomains)
 
@@ -798,6 +805,14 @@ class ConfigBuilder(config.ConfigBuilder):
             *args,
             **kwargs
         )
+        with self as c:
+            browser_host = c.get("browser_host")
+            alternate_host = c.get("alternate_hosts", {}).get("alt")
+
+            if not domains_are_distinct(browser_host, alternate_host):
+                raise ValueError(
+                    "Alternate host must be distinct from browser host"
+                )
 
     def _get_ws_doc_root(self, data):
         if data["ws_doc_root"] is not None:

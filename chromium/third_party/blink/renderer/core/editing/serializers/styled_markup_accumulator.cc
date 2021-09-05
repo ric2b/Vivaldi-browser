@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/iterators/text_iterator.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
@@ -49,23 +50,18 @@ wtf_size_t TotalLength(const Vector<String>& strings) {
 
 }  // namespace
 
-using namespace html_names;
-
 StyledMarkupAccumulator::StyledMarkupAccumulator(
-    AbsoluteURLs should_resolve_urls,
     const TextOffset& start,
     const TextOffset& end,
     Document* document,
-    AnnotateForInterchange should_annotate,
-    ConvertBlocksToInlines convert_blocks_to_inlines)
-    : formatter_(should_resolve_urls,
-                 document->IsHTMLDocument() ? SerializationType::kHTML
-                                            : SerializationType::kXML),
+    const CreateMarkupOptions& options)
+    : formatter_(options.ShouldResolveURLs(),
+                 IsA<HTMLDocument>(document) ? SerializationType::kHTML
+                                             : SerializationType::kXML),
       start_(start),
       end_(end),
       document_(document),
-      should_annotate_(should_annotate),
-      convert_blocks_to_inlines_(convert_blocks_to_inlines) {}
+      options_(options) {}
 
 void StyledMarkupAccumulator::AppendEndTag(const Element& element) {
   AppendEndMarkup(result_, element);
@@ -112,20 +108,25 @@ void StyledMarkupAccumulator::AppendTextWithInlineStyle(
 
     result_.Append("<span style=\"");
     MarkupFormatter::AppendAttributeValue(
-        result_, inline_style->Style()->AsText(), document_->IsHTMLDocument());
+        result_, inline_style->Style()->AsText(), IsA<HTMLDocument>(document_));
     result_.Append("\">");
   }
   if (!ShouldAnnotate()) {
     AppendText(text);
   } else {
     const bool use_rendered_text = !EnclosingElementWithTag(
-        Position::FirstPositionInNode(text), kSelectTag);
+        Position::FirstPositionInNode(text), html_names::kSelectTag);
     String content =
         use_rendered_text ? RenderedText(text) : StringValueForRange(text);
     StringBuilder buffer;
     MarkupFormatter::AppendCharactersReplacingEntities(
         buffer, content, 0, content.length(), kEntityMaskInPCDATA);
-    result_.Append(ConvertHTMLTextToInterchangeFormat(buffer.ToString(), text));
+    // Keep collapsible white spaces as is during markup sanitization.
+    const String text_to_append =
+        IsForMarkupSanitization()
+            ? buffer.ToString()
+            : ConvertHTMLTextToInterchangeFormat(buffer.ToString(), text);
+    result_.Append(text_to_append);
   }
   if (inline_style)
     result_.Append("</span>");
@@ -141,12 +142,12 @@ void StyledMarkupAccumulator::AppendElementWithInlineStyle(
     StringBuilder& out,
     const Element& element,
     EditingStyle* style) {
-  const bool document_is_html = element.GetDocument().IsHTMLDocument();
+  const bool document_is_html = IsA<HTMLDocument>(element.GetDocument());
   formatter_.AppendStartTagOpen(out, element);
   AttributeCollection attributes = element.Attributes();
   for (const auto& attribute : attributes) {
     // We'll handle the style attribute separately, below.
-    if (attribute.GetName() == kStyleAttr)
+    if (attribute.GetName() == html_names::kStyleAttr)
       continue;
     AppendAttribute(out, element, attribute);
   }
@@ -194,7 +195,7 @@ void StyledMarkupAccumulator::WrapWithStyleNode(CSSPropertyValueSet* style) {
   StringBuilder open_tag;
   open_tag.Append("<div style=\"");
   MarkupFormatter::AppendAttributeValue(open_tag, style->AsText(),
-                                        document_->IsHTMLDocument());
+                                        IsA<HTMLDocument>(document_));
   open_tag.Append("\">");
   reversed_preceding_markup_.push_back(open_tag.ToString());
 
@@ -240,7 +241,7 @@ String StyledMarkupAccumulator::StringValueForRange(const Text& node) {
 }
 
 bool StyledMarkupAccumulator::ShouldAnnotate() const {
-  return should_annotate_ == kAnnotateForInterchange;
+  return options_.ShouldAnnotateForInterchange();
 }
 
 void StyledMarkupAccumulator::PushMarkup(const String& str) {

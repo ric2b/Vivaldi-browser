@@ -22,6 +22,7 @@
 #include "extensions/browser/extension_registry_observer.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/infobar_container_web_proxy.h"
+#include "ui/vivaldi_app_window_contents.h"
 #include "ui/vivaldi_location_bar.h"
 
 #if defined(OS_WIN)
@@ -83,6 +84,10 @@ class VivaldiAutofillBubbleHandler : public autofill::AutofillBubbleHandler {
       autofill::LocalCardMigrationBubbleController* controller,
       bool is_user_gesture) override;
 
+  autofill::SaveUPIBubble* ShowSaveUPIBubble(
+      content::WebContents* contents,
+      autofill::SaveUPIBubbleController* controller) override;
+
   void OnPasswordSaved() override {}
 
   void HideSignInPromo() override {}
@@ -93,77 +98,6 @@ class VivaldiAutofillBubbleHandler : public autofill::AutofillBubbleHandler {
 
 class VivaldiNativeAppWindowViews;
 
-// AppWindowContents class specific to vivaldi app windows. It maintains a
-// WebContents instance and observes it for the purpose of passing
-// messages to the extensions system.
-class VivaldiAppWindowContentsImpl : public content::WebContentsDelegate,
-                                     public content::WebContentsObserver {
- public:
-  VivaldiAppWindowContentsImpl(VivaldiBrowserWindow* host);
-  ~VivaldiAppWindowContentsImpl() override;
-
-  content::WebContents* web_contents() const { return web_contents_.get(); }
-
-  // AppWindowContents
-  void Initialize(std::unique_ptr<content::WebContents> web_contents);
-  void NativeWindowClosed();
-
-  // Overridden from WebContentsDelegate
-  bool HandleKeyboardEvent(
-    content::WebContents* source,
-    const content::NativeWebKeyboardEvent& event) override;
-  bool PreHandleGestureEvent(content::WebContents* source,
-                             const blink::WebGestureEvent& event) override;
-  content::ColorChooser* OpenColorChooser(
-    content::WebContents* web_contents,
-    SkColor color,
-    const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) override;
-  void RunFileChooser(content::RenderFrameHost* render_frame_host,
-                      std::unique_ptr<content::FileSelectListener> listener,
-                      const blink::mojom::FileChooserParams& params) override;
-  void NavigationStateChanged(content::WebContents* source,
-                              content::InvalidateTypes changed_flags) override;
-  void RequestMediaAccessPermission(
-      content::WebContents* web_contents,
-      const content::MediaStreamRequest& request,
-      content::MediaResponseCallback callback) override;
-  bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
-                                  const GURL& security_origin,
-                                  blink::mojom::MediaStreamType type) override;
-  content::PictureInPictureResult EnterPictureInPicture(
-      content::WebContents* web_contents,
-      const viz::SurfaceId& surface_id,
-      const gfx::Size& natural_size) override;
-  void ExitPictureInPicture() override;
-  void PrintCrossProcessSubframe(
-      content::WebContents* web_contents,
-      const gfx::Rect& rect,
-      int document_cookie,
-      content::RenderFrameHost* subframe_host) const override;
-  void ActivateContents(content::WebContents* contents) override;
-
- private:
-  // content::WebContentsObserver
-  void RenderViewCreated(content::RenderViewHost* render_view_host) override;
-  void RenderProcessGone(base::TerminationStatus status) override;
-  bool OnMessageReceived(const IPC::Message& message,
-                         content::RenderFrameHost* sender) override;
-  void DidFinishNavigation(
-      content::NavigationHandle* navigation_handle) override;
-  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
-                     const GURL& validated_url) override;
-
-  void UpdateDraggableRegions(
-      content::RenderFrameHost* sender,
-      const std::vector<extensions::DraggableRegion>& regions);
-
-  extensions::AppDelegate* GetAppDelegate();
-
-  VivaldiBrowserWindow* host_;  // This class is owned by |host_|
-  std::unique_ptr<content::WebContents> web_contents_;
-
-  DISALLOW_COPY_AND_ASSIGN(VivaldiAppWindowContentsImpl);
-};
 
 // An implementation of BrowserWindow used for Vivaldi.
 class VivaldiBrowserWindow
@@ -182,6 +116,8 @@ class VivaldiBrowserWindow
     NORMAL,
     SETTINGS,
   };
+
+  static base::TimeTicks GetFirstWindowCreationTime();
 
   // Returns the BrowserView used for the specified Browser.
   static VivaldiBrowserWindow* GetBrowserWindowForBrowser(
@@ -224,6 +160,8 @@ class VivaldiBrowserWindow
 
   // infobars::InfoBarContainer::Delegate
   void InfoBarContainerStateChanged(bool is_animating) override;
+
+  void HandleMouseChange(bool motion);
 
   //
   // BrowserWindow overrides
@@ -269,7 +207,6 @@ class VivaldiBrowserWindow
   void UpdateReloadStopState(bool is_loading, bool force) override {}
   void UpdateToolbar(content::WebContents* contents) override;
   void FocusToolbar() override {}
-  ToolbarActionsBar* GetToolbarActionsBar() override;
   void ToolbarSizeChanged(bool is_animating) override {}
   void FocusAppMenu() override {}
   void FocusBookmarksToolbar() override {}
@@ -282,7 +219,7 @@ class VivaldiBrowserWindow
       const content::NativeWebKeyboardEvent& event) override;
   gfx::Size GetContentsSize() const override;
   void SetContentsSize(const gfx::Size& size) override {}
-  bool UpdatePageActionIcon(PageActionIconType type) override;
+  void UpdatePageActionIcon(PageActionIconType type) override;
   autofill::AutofillBubbleHandler* GetAutofillBubbleHandler() override;
   void ExecutePageActionIconForTesting(PageActionIconType type) override {}
   void ShowEmojiPanel() override;
@@ -315,8 +252,6 @@ class VivaldiBrowserWindow
       Profile* profile,
       content::WebContents* web_contents,
       const GURL& url,
-      security_state::SecurityLevel security_level,
-      const security_state::VisibleSecurityState& visible_security_state,
       gfx::Point pos) override;
   void CutCopyPaste(int command_id) override {}
   bool IsOnCurrentWorkspace() const override;
@@ -380,7 +315,8 @@ class VivaldiBrowserWindow
   // Overridden from ExclusiveAccessContext
   Profile* GetProfile() override;
   void EnterFullscreen(const GURL& url,
-                       ExclusiveAccessBubbleType bubble_type) override;
+                       ExclusiveAccessBubbleType bubble_type,
+                       int64_t display_id) override;
   void ExitFullscreen() override;
   void UpdateExclusiveAccessExitBubbleContent(
       const GURL& url,
@@ -442,6 +378,17 @@ class VivaldiBrowserWindow
   WindowType type() {
     return window_type_;
   }
+
+  using DidFinishFirstNavigationCallback =
+      base::OnceCallback<void(bool did_finish)>;
+  std::vector<DidFinishFirstNavigationCallback>
+      on_did_finish_first_navigation_callbacks_;
+  bool did_finish_first_navigation_ = false;
+
+  void AddOnDidFinishFirstNavigationCallback(
+      DidFinishFirstNavigationCallback callback);
+
+  void OnDidFinishFirstNavigation();
 
  protected:
   void DestroyBrowser() override;
@@ -531,7 +478,7 @@ class VivaldiBrowserWindow
   // Last key code received in HandleKeyboardEvent(). For auto repeat detection.
   int last_key_code_ = -1;
 #endif  // !defined(OS_MACOSX)
-
+  bool last_motion_ = false;
   WindowStateData window_state_data_;
 
   // Used to timeout the main document loading and force show the window.

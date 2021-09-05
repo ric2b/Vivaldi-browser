@@ -26,13 +26,23 @@ CSSModsDataClassHandler::~CSSModsDataClassHandler() {
 
 bool CSSModsDataClassHandler::GetData(
     const std::string& data_id,
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   base::FilePath custom_css_path = profile_->GetPrefs()->GetFilePath(
       vivaldiprefs::kAppearanceCssUiModsDirectory);
-  if (custom_css_path.empty())
-    return false;
+  if (custom_css_path.empty()) {
+    std::string data = "{}";
+
+    scoped_refptr<base::RefCountedMemory> memory =
+        base::MakeRefCounted<base::RefCountedBytes>(
+            reinterpret_cast<const unsigned char*>(data.data()),
+            (size_t)data.length());
+
+    std::move(callback).Run(std::move(memory));
+
+    return true;
+  }
 
   // If callback was OnceCallback, we could pass it directly as the result
   // argument to PostTask. But it is RepeatingCallback. Thus we use a helper
@@ -43,7 +53,7 @@ bool CSSModsDataClassHandler::GetData(
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&CSSModsDataClassHandler::GetDataForIdOnBlockingThread,
                      custom_css_path, data_id),
-      base::BindOnce(&CSSModsDataClassHandler::PostResultsOnThread, callback));
+      base::BindOnce(&CSSModsDataClassHandler::PostResultsOnThread, std::move(callback)));
 }
 
 // static
@@ -88,7 +98,7 @@ CSSModsDataClassHandler::GetDataForIdOnBlockingThread(base::FilePath dir_path,
 
 // static
 void CSSModsDataClassHandler::PostResultsOnThread(
-    const content::URLDataSource::GotDataCallback& callback,
+    content::URLDataSource::GotDataCallback callback,
     scoped_refptr<base::RefCountedMemory> data) {
-  callback.Run(std::move(data));
+  std::move(callback).Run(std::move(data));
 }

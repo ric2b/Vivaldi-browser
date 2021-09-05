@@ -4,6 +4,8 @@
 
 #include "components/sync/test/fake_sync_encryption_handler.h"
 
+#include "base/base64.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/base/passphrase_enums.h"
 #include "components/sync/protocol/nigori_specifics.pb.h"
 #include "components/sync/syncable/nigori_util.h"
@@ -11,7 +13,7 @@
 namespace syncer {
 
 FakeSyncEncryptionHandler::FakeSyncEncryptionHandler()
-    : encrypted_types_(SensitiveTypes()),
+    : encrypted_types_(AlwaysEncryptedUserTypes()),
       encrypt_everything_(false),
       passphrase_type_(PassphraseType::kImplicitPassphrase) {}
 FakeSyncEncryptionHandler::~FakeSyncEncryptionHandler() {}
@@ -70,17 +72,18 @@ bool FakeSyncEncryptionHandler::NeedKeystoreKey() const {
 }
 
 bool FakeSyncEncryptionHandler::SetKeystoreKeys(
-    const std::vector<std::string>& keys) {
+    const std::vector<std::vector<uint8_t>>& keys) {
   if (keys.empty())
     return false;
-  std::string new_key = keys.back();
+  std::vector<uint8_t> new_key = keys.back();
   if (new_key.empty())
     return false;
   keystore_key_ = new_key;
 
   DVLOG(1) << "Keystore bootstrap token updated.";
   for (auto& observer : observers_)
-    observer.OnBootstrapTokenUpdated(keystore_key_, KEYSTORE_BOOTSTRAP_TOKEN);
+    observer.OnBootstrapTokenUpdated(base::Base64Encode(keystore_key_),
+                                     KEYSTORE_BOOTSTRAP_TOKEN);
 
   return true;
 }
@@ -120,7 +123,7 @@ void FakeSyncEncryptionHandler::SetDecryptionPassphrase(
 }
 
 void FakeSyncEncryptionHandler::AddTrustedVaultDecryptionKeys(
-    const std::vector<std::string>& encryption_keys) {
+    const std::vector<std::vector<uint8_t>>& encryption_keys) {
   // Do nothing.
 }
 

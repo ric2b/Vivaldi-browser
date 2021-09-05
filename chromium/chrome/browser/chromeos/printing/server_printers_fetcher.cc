@@ -14,6 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "components/device_event_log/device_event_log.h"
@@ -50,8 +51,8 @@ class ServerPrintersFetcher::PrivateImplementation
         server_url_(server_url),
         server_name_(server_name),
         callback_(std::move(cb)),
-        task_runner_(base::CreateSequencedTaskRunner(
-            {base::ThreadPool(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN})) {
+        task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+            {base::TaskShutdownBehavior::BLOCK_SHUTDOWN})) {
     DETACH_FROM_SEQUENCE(sequence_checker_);
     CHECK(base::SequencedTaskRunnerHandle::IsSet());
     task_runner_for_callback_ = base::SequencedTaskRunnerHandle::Get();
@@ -79,10 +80,17 @@ class ServerPrintersFetcher::PrivateImplementation
   void OnComplete(bool success) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     if (!success) {
+      const int net_error = simple_url_loader_->NetError();
       PRINTER_LOG(ERROR) << "Error when querying the print server "
-                         << server_name_
-                         << ": NetError=" << simple_url_loader_->NetError();
-      // Some error occurred. Call the callback with an empty vector.
+                         << server_name_ << ": NetError=" << net_error;
+      // Set last_error_, call the callback with an empty vector and exit.
+      if (net_error >= -399 && net_error <= -303) {
+        last_error_ = PrintServerQueryResult::kHttpError;
+      } else if (net_error >= -302 && net_error <= -300) {
+        last_error_ = PrintServerQueryResult::kIncorrectUrl;
+      } else {
+        last_error_ = PrintServerQueryResult::kConnectionError;
+      }
       PostResponse({});
       return;
     }
@@ -101,7 +109,8 @@ class ServerPrintersFetcher::PrivateImplementation
       LOG(WARNING) << message;
       PRINTER_LOG(ERROR) << "Error when querying the print server "
                          << server_name_ << ": unparsable IPP response.";
-      // Call the callback with an empty vector and exit.
+      // Set last_error_, call the callback with an empty vector and exit.
+      last_error_ = PrintServerQueryResult::kCannotParseIppResponse;
       PostResponse({});
       return;
     }
@@ -127,6 +136,8 @@ class ServerPrintersFetcher::PrivateImplementation
     std::move(start_retry).Run();
   }
 
+  PrintServerQueryResult last_error() const { return last_error_; }
+
  private:
   // The main task. It is scheduled in the constructor.
   void SendQuery() {
@@ -148,12 +159,12 @@ class ServerPrintersFetcher::PrivateImplementation
     resource_request->headers.SetHeader(net::HttpRequestHeaders::kContentType,
                                         "application/ipp");
     resource_request->load_flags =
-        net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE |
-        net::LOAD_DO_NOT_SAVE_COOKIES | net::LOAD_DO_NOT_SEND_COOKIES;
+        net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE;
     resource_request->request_body =
         network::ResourceRequestBody::CreateFromBytes(
             reinterpret_cast<char*>(request_frame.data()),
             request_frame.size());
+    resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
     // TODO(pawliczek): create a traffic annotation for printing network traffic
     simple_url_loader_ = network::SimpleURLLoader::Create(
         std::move(resource_request), MISSING_TRAFFIC_ANNOTATION);
@@ -190,6 +201,9 @@ class ServerPrintersFetcher::PrivateImplementation
     url += server_url_.HostNoBrackets();
     url += ":";
     url += base::NumberToString(server_url_.EffectiveIntPort());
+    // Save the server URI.
+    printer->set_print_server_uri(url);
+    // Complete building the printer's URI.
     url += "/printers/" + name;
     printer->set_uri(url);
     printer->set_id(ServerPrinterId(url));
@@ -204,6 +218,8 @@ class ServerPrintersFetcher::PrivateImplementation
 
   // Raw payload of the HTTP response.
   std::string response_;
+
+  PrintServerQueryResult last_error_ = PrintServerQueryResult::kNoErrors;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
@@ -227,5 +243,9 @@ void ServerPrintersFetcher::PimDeleter::operator()(
 }
 
 ServerPrintersFetcher::~ServerPrintersFetcher() = default;
+
+PrintServerQueryResult ServerPrintersFetcher::GetLastError() const {
+  return pim_->last_error();
+}
 
 }  // namespace chromeos

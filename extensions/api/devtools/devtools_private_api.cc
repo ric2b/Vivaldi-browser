@@ -7,9 +7,9 @@
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/url_util.h"
 #include "ui/devtools/devtools_connector.h"
@@ -79,7 +79,7 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
             DevToolsWindow::GetInstanceForInspectedWebContents(contents);
           if (window) {
             window->ForceCloseWindow();
-            int tab_id = SessionTabHelper::IdForTab(contents).id();
+            int tab_id = sessions::SessionTabHelper::IdForTab(contents).id();
             DevtoolsConnectorAPI::SendClosed(browser_context(), tab_id);
           }
         }
@@ -118,12 +118,17 @@ ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
       dispatcher()->GetAssociatedWebContents());
   content::WebContents* current_tab =
       browser->tab_strip_model()->GetActiveWebContents();
-  std::string host = net::GetHostOrSpecFromURL(current_tab->GetURL());
   DevToolsWindow* window =
       DevToolsWindow::GetInstanceForInspectedWebContents(current_tab);
   if (window) {
-    window->ForceCloseWindow();
+    if (window->IsDocked()) {
+      window->ForceCloseWindow();
+    } else {
+      // Will activate the existing devtools.
+      DevToolsWindow::OpenDevToolsWindow(current_tab);
+    }
   } else {
+    std::string host = net::GetHostOrSpecFromURL(current_tab->GetURL());
     // Trying to inspect the Vivaldi app using shortcuts or the menu. We fake a
     // inspect element to get into the code path that leads to a
     // separate window.

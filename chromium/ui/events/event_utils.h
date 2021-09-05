@@ -18,6 +18,7 @@
 #include "ui/events/events_export.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/platform_event.h"
+#include "ui/events/types/event_type.h"
 #include "ui/gfx/native_widget_types.h"
 
 #if defined(OS_WIN)
@@ -42,6 +43,9 @@ enum class DomCode;
 
 // Key used to store keyboard 'group' values in Event::Properties
 constexpr char kPropertyKeyboardGroup[] = "_keyevent_kbd_group_";
+
+// Key used to store 'hardware key code' values in Event::Properties
+constexpr char kPropertyKeyboardHwKeyCode[] = "_keyevent_kbd_hw_keycode_";
 
 // IBus specific Event::Properties constants. ibus-gtk in async mode uses
 // gtk-specific XKeyEvent::state bits 24 and 25 for its key events.
@@ -72,11 +76,6 @@ EVENTS_EXPORT int EventFlagsFromNative(const PlatformEvent& native_event);
 EVENTS_EXPORT base::TimeTicks EventTimeFromNative(
     const PlatformEvent& native_event);
 
-// Ensures that the event timestamp values are coming from the same underlying
-// monotonic clock as base::TimeTicks::Now() and if it is not then falls
-// back to using the current ticks for event timestamp.
-EVENTS_EXPORT void ValidateEventTimeClock(base::TimeTicks* timestamp);
-
 // Get the location from a native event.  The coordinate system of the resultant
 // |Point| has the origin at top-left of the "root window".  The nature of
 // this "root window" and how it maps to platform-specific drawing surfaces is
@@ -87,14 +86,6 @@ EVENTS_EXPORT gfx::PointF EventLocationFromNative(
 // Gets the location in native system coordinate space.
 EVENTS_EXPORT gfx::Point EventSystemLocationFromNative(
     const PlatformEvent& native_event);
-
-#if defined(USE_X11)
-// Returns the 'real' button for an event. The button reported in slave events
-// does not take into account any remapping (e.g. using xmodmap), while the
-// button reported in master events do. This is a utility function to always
-// return the mapped button.
-EVENTS_EXPORT int EventButtonFromNative(const PlatformEvent& native_event);
-#endif
 
 // Returns the KeyboardCode from a native event.
 EVENTS_EXPORT KeyboardCode
@@ -130,9 +121,6 @@ void ReleaseCopiedNativeEvent(const PlatformEvent& native_event);
 // Returns the detailed pointer information for touch events.
 EVENTS_EXPORT PointerDetails
 GetTouchPointerDetailsFromNative(const PlatformEvent& native_event);
-
-// Gets the touch id from a native event.
-EVENTS_EXPORT int GetTouchId(const PlatformEvent& native_event);
 
 // Gets the fling velocity from a native event. is_cancel is set to true if
 // this was a tap down, intended to stop an ongoing fling.

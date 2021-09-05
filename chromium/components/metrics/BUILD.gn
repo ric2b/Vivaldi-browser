@@ -5,15 +5,17 @@
 import("//build/config/jumbo.gni")
 import("//testing/test.gni")
 
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
 static_library("demographic_metrics_provider") {
   sources = [
     "demographic_metrics_provider.cc",
     "demographic_metrics_provider.h",
   ]
 
-  public_deps = [
-    "//third_party/metrics_proto",
-  ]
+  public_deps = [ "//third_party/metrics_proto" ]
 
   deps = [
     ":metrics",
@@ -25,6 +27,8 @@ static_library("demographic_metrics_provider") {
 
 jumbo_static_library("metrics") {
   sources = [
+    "android_metrics_provider.cc",
+    "android_metrics_provider.h",
     "call_stack_profile_metrics_provider.cc",
     "call_stack_profile_metrics_provider.h",
     "clean_exit_beacon.cc",
@@ -50,6 +54,10 @@ jumbo_static_library("metrics") {
     "drive_metrics_provider_win.cc",
     "enabled_state_provider.cc",
     "enabled_state_provider.h",
+    "entropy_state.cc",
+    "entropy_state.h",
+    "entropy_state_provider.cc",
+    "entropy_state_provider.h",
     "environment_recorder.cc",
     "environment_recorder.h",
     "expired_histogram_util.cc",
@@ -66,7 +74,7 @@ jumbo_static_library("metrics") {
     "log_decoder.h",
     "log_store.h",
     "machine_id_provider.h",
-    "machine_id_provider_stub.cc",
+    "machine_id_provider_nonwin.cc",
     "machine_id_provider_win.cc",
     "metrics_log.cc",
     "metrics_log.h",
@@ -127,6 +135,7 @@ jumbo_static_library("metrics") {
 
   public_deps = [
     "//third_party/metrics_proto",
+    "//third_party/zlib/google:compression_utils",
   ]
 
   deps = [
@@ -138,7 +147,6 @@ jumbo_static_library("metrics") {
     "//components/version_info:version_info",
     "//crypto",
     "//extensions/buildflags",
-    "//third_party/zlib/google:compression_utils",
     "//url",
   ]
 
@@ -157,13 +165,29 @@ jumbo_static_library("metrics") {
   }
 
   if (is_win) {
-    sources -= [ "machine_id_provider_stub.cc" ]
+    sources -= [ "machine_id_provider_nonwin.cc" ]
     deps += [ "//components/browser_watcher:stability_client" ]
     libs = [ "wevtapi.lib" ]
   }
 
   if (is_fuchsia) {
     sources += [ "drive_metrics_provider_fuchsia.cc" ]
+  }
+}
+
+if (is_android) {
+  java_cpp_strings("java_switches_srcjar") {
+    # External code should depend on ":metrics_java" instead.
+    visibility = [ ":*" ]
+    sources = [ "//components/metrics/metrics_switches.cc" ]
+    template =
+        "//components/metrics/android/java_templates/MetricsSwitches.java.tmpl"
+  }
+
+  android_library("metrics_java") {
+    # Right now, this only includes the Java switches. But if we need more Java
+    # files, they should be added here as necessary.
+    srcjar_deps = [ ":java_switches_srcjar" ]
   }
 }
 
@@ -176,9 +200,7 @@ static_library("component_metrics") {
     "component_metrics_provider.h",
   ]
 
-  public_deps = [
-    "//third_party/metrics_proto",
-  ]
+  public_deps = [ "//third_party/metrics_proto" ]
 
   deps = [
     ":metrics",
@@ -192,11 +214,11 @@ if (!is_ios) {
     sources = [
       "gpu/gpu_metrics_provider.cc",
       "gpu/gpu_metrics_provider.h",
+      "gpu/rendering_perf_metrics_provider.cc",
+      "gpu/rendering_perf_metrics_provider.h",
     ]
 
-    public_deps = [
-      ":metrics",
-    ]
+    public_deps = [ ":metrics" ]
     deps = [
       "//base",
       "//content/public/browser",
@@ -217,9 +239,7 @@ jumbo_static_library("net") {
     "net/wifi_access_point_info_provider.h",
   ]
 
-  public_deps = [
-    ":metrics",
-  ]
+  public_deps = [ ":metrics" ]
   allow_circular_includes_from = [ ":metrics" ]
 
   deps = [
@@ -249,9 +269,7 @@ static_library("ui") {
     "ui/screen_info_metrics_provider.h",
   ]
 
-  public_deps = [
-    ":metrics",
-  ]
+  public_deps = [ ":metrics" ]
   deps = [
     "//base",
     "//ui/display",
@@ -284,9 +302,7 @@ source_set("call_stack_profile_params") {
     "call_stack_profile_encoding.h",
     "call_stack_profile_params.h",
   ]
-  sources = [
-    "call_stack_profile_encoding.cc",
-  ]
+  sources = [ "call_stack_profile_encoding.cc" ]
 
   deps = [
     "//base:base",
@@ -298,15 +314,15 @@ source_set("call_stack_profile_params") {
 source_set("child_call_stack_profile_builder") {
   public = [
     "call_stack_profile_builder.h",
+    "call_stack_profile_metadata.h",
     "child_call_stack_profile_collector.h",
   ]
   sources = [
     "call_stack_profile_builder.cc",
+    "call_stack_profile_metadata.cc",
     "child_call_stack_profile_collector.cc",
   ]
-  public_deps = [
-    ":call_stack_profile_params",
-  ]
+  public_deps = [ ":call_stack_profile_params" ]
   deps = [
     "//base",
     "//components/metrics/public/mojom:call_stack_mojo_bindings",
@@ -320,12 +336,8 @@ source_set("child_call_stack_profile_builder") {
 
 # Dependency for browser process use of the CallStackProfileBuilder.
 source_set("call_stack_profile_builder") {
-  deps = [
-    ":metrics",
-  ]
-  public_deps = [
-    ":child_call_stack_profile_builder",
-  ]
+  deps = [ ":metrics" ]
+  public_deps = [ ":child_call_stack_profile_builder" ]
 }
 
 # The browser process mojo service for collecting profiles from child
@@ -355,12 +367,8 @@ jumbo_static_library("test_support") {
     "test_metrics_service_client.h",
   ]
 
-  public_deps = [
-    ":metrics",
-  ]
-  deps = [
-    "//base",
-  ]
+  public_deps = [ ":metrics" ]
+  deps = [ "//base" ]
 }
 
 if (is_linux) {
@@ -371,16 +379,16 @@ if (is_linux) {
       "serialization/serialization_utils.cc",
       "serialization/serialization_utils.h",
     ]
-    deps = [
-      "//base",
-    ]
+    deps = [ "//base" ]
   }
 }
 
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "android_metrics_provider_unittest.cc",
     "call_stack_profile_builder_unittest.cc",
+    "call_stack_profile_metadata_unittest.cc",
     "call_stack_profile_metrics_provider_unittest.cc",
     "child_call_stack_profile_collector_unittest.cc",
     "cloned_install_detector_unittest.cc",
@@ -389,12 +397,14 @@ source_set("unit_tests") {
     "data_use_tracker_unittest.cc",
     "demographic_metrics_provider_unittest.cc",
     "drive_metrics_provider_unittest.cc",
+    "entropy_state_provider_unittest.cc",
+    "entropy_state_unittest.cc",
     "environment_recorder_unittest.cc",
     "expired_histograms_checker_unittest.cc",
     "field_trials_provider_unittest.cc",
     "file_metrics_provider_unittest.cc",
     "histogram_encoder_unittest.cc",
-    "machine_id_provider_win_unittest.cc",
+    "machine_id_provider_nonwin_unittest.cc",
     "metrics_log_manager_unittest.cc",
     "metrics_log_store_unittest.cc",
     "metrics_log_unittest.cc",
@@ -440,6 +450,11 @@ source_set("unit_tests") {
     "//ui/gfx/geometry",
   ]
 
+  if (is_win) {
+    sources -= [ "machine_id_provider_nonwin_unittest.cc" ]
+    sources += [ "machine_id_provider_win_unittest.cc" ]
+  }
+
   if (is_linux) {
     sources += [ "serialization/serialization_utils_unittest.cc" ]
     deps += [ ":serialization" ]
@@ -469,9 +484,7 @@ source_set("unit_tests") {
 
 # Convenience testing target
 test("metrics_unittests") {
-  sources = [
-    "//components/test/run_all_unittests.cc",
-  ]
+  sources = [ "//components/test/run_all_unittests.cc" ]
   deps = [
     ":unit_tests",
     "//components/test:test_support",

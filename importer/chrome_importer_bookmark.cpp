@@ -82,7 +82,6 @@ void ChromeBookmarkReader::AddBookmark(
 #endif
 
   double created_time = 0;
-  double visited_time = 0;
 
   if (!is_folder && !entries.GetString("url", &url))
     url = base::string16();
@@ -106,10 +105,6 @@ void ChromeBookmarkReader::AddBookmark(
     created_time = 0;
   }
 
-  if (!entries.GetString("visited", &temp) ||
-      !base::StringToDouble(temp, &visited_time)) {
-    visited_time = 0;
-  }
   const base::Value* meta_info;
   if (entries.Get("meta_info", &meta_info)) {
     const base::DictionaryValue* dict;
@@ -129,7 +124,6 @@ void ChromeBookmarkReader::AddBookmark(
   entry.path = current_folder;
   entry.url = GURL(url);
   entry.creation_time = base::Time::FromTimeT(created_time);
-  entry.visited_time = base::Time::FromTimeT(visited_time);
 
   bookmarks_.push_back(entry);
 }

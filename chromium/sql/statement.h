@@ -56,7 +56,7 @@ class COMPONENT_EXPORT(SQL) Statement {
   // be valid. Use is_valid() to check if it's OK.
   void Assign(scoped_refptr<Database::StatementRef> ref);
 
-  // Resets the statement to an uninitialized state corrosponding to
+  // Resets the statement to an uninitialized state corresponding to
   // the default constructor, releasing the StatementRef.
   void Clear();
 
@@ -106,6 +106,7 @@ class COMPONENT_EXPORT(SQL) Statement {
   bool BindNull(int col);
   bool BindBool(int col, bool val);
   bool BindInt(int col, int val);
+  bool BindInt(int col, int64_t val) = delete;  // Call BindInt64() instead.
   bool BindInt64(int col, int64_t val);
   bool BindDouble(int col, double val);
   bool BindCString(int col, const char* val);

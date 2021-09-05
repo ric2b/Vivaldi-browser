@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "chrome/browser/sharing/sharing_metrics.h"
+#include "chrome/browser/sharing/click_to_call/click_to_call_metrics.h"
 #include "chrome/browser/sharing/sharing_service.h"
 #include "chrome/browser/sharing/sharing_ui_controller.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
@@ -52,7 +52,6 @@ class ClickToCallUiController
   const gfx::VectorIcon& GetVectorIcon() const override;
   base::string16 GetTextForTooltipAndAccessibleName() const override;
   SharingFeatureName GetFeatureMetricsPrefix() const override;
-  void OnHelpTextClicked(SharingDialogType dialog_type) override;
   void OnDialogShown(bool has_devices, bool has_apps) override;
 
  protected:
@@ -69,7 +68,8 @@ class ClickToCallUiController
 
   // Sends |phone_number| to |device| as a SharingMessage.
   void SendNumberToDevice(const syncer::DeviceInfo& device,
-                          const std::string& phone_number);
+                          const std::string& phone_number,
+                          SharingClickToCallEntryPoint entry_point);
 
   UKMRecorderCallback ukm_recorder_;
   GURL phone_url_;

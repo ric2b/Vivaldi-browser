@@ -12,7 +12,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/mojom/presentation/presentation.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_state_observer.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -34,7 +34,7 @@ class PresentationRequest;
 class WebString;
 
 class PresentationConnection : public EventTargetWithInlineData,
-                               public ContextLifecycleObserver,
+                               public ExecutionContextLifecycleStateObserver,
                                public mojom::blink::PresentationConnection {
   USING_GARBAGE_COLLECTED_MIXIN(PresentationConnection);
   DEFINE_WRAPPERTYPEINFO();
@@ -46,7 +46,7 @@ class PresentationConnection : public EventTargetWithInlineData,
   const AtomicString& InterfaceName() const override;
   ExecutionContext* GetExecutionContext() const override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   const String& id() const { return id_; }
   const String& url() const { return url_; }
@@ -96,8 +96,11 @@ class PresentationConnection : public EventTargetWithInlineData,
   void AddedEventListener(const AtomicString& event_type,
                           RegisteredEventListener&) override;
 
-  // ContextLifecycleObserver implementation.
-  void ContextDestroyed(ExecutionContext*) override;
+  // ExecutionContextLifecycleObserver implementation.
+  void ContextDestroyed() override;
+
+  // ExecutionContextLifecycleStateObserver implementation.
+  void ContextLifecycleStateChanged(mojom::FrameLifecycleState state) override;
 
   String id_;
   KURL url_;
@@ -111,6 +114,8 @@ class PresentationConnection : public EventTargetWithInlineData,
   // connections, this currently only points to another renderer. This remote
   // can be used to send messages directly to the other end.
   mojo::Remote<mojom::blink::PresentationConnection> target_connection_;
+
+  void CloseConnection();
 
  private:
   class BlobLoader;
@@ -181,7 +186,7 @@ class ControllerPresentationConnection final : public PresentationConnection {
                                    const KURL&);
   ~ControllerPresentationConnection() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   // Initializes Mojo message pipes and registers with the PresentationService.
   void Init(mojo::PendingRemote<mojom::blink::PresentationConnection>
@@ -217,7 +222,7 @@ class ReceiverPresentationConnection final : public PresentationConnection {
                                  const KURL&);
   ~ReceiverPresentationConnection() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   void Init(mojo::PendingRemote<mojom::blink::PresentationConnection>
                 controller_connection_remote,

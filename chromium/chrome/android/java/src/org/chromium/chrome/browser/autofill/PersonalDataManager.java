@@ -7,15 +7,16 @@ package org.chromium.chrome.browser.autofill;
 import android.content.Context;
 import android.text.format.DateUtils;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ResourceId;
-import org.chromium.chrome.browser.preferences.MainPreferences;
+import org.chromium.chrome.browser.autofill.settings.AutofillEditorBase;
 import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.content_public.browser.WebContents;
 
 import java.util.ArrayList;
@@ -158,7 +159,7 @@ public class PersonalDataManager {
          * locale. All other fields are empty strings, because JNI does not handle null strings.
          */
         public AutofillProfile() {
-            this("" /* guid */, MainPreferences.SETTINGS_ORIGIN /* origin */, true /* isLocal */,
+            this("" /* guid */, AutofillEditorBase.SETTINGS_ORIGIN /* origin */, true /* isLocal */,
                     "" /* fullName */, "" /* companyName */, "" /* streetAddress */,
                     "" /* region */, "" /* locality */, "" /* dependentLocality */,
                     "" /* postalCode */, "" /* sortingCode */,
@@ -356,8 +357,6 @@ public class PersonalDataManager {
     public static class CreditCard {
         // Note that while some of these fields are numbers, they're predominantly read,
         // marshaled and compared as strings. To save conversions, we sometimes use strings.
-        @CardType
-        private final int mCardType;
         private String mGUID;
         private String mOrigin;
         private boolean mIsLocal;
@@ -375,18 +374,16 @@ public class PersonalDataManager {
         @CalledByNative("CreditCard")
         public static CreditCard create(String guid, String origin, boolean isLocal,
                 boolean isCached, String name, String number, String obfuscatedNumber, String month,
-                String year, String basicCardIssuerNetwork, int enumeratedIconId,
-                @CardType int cardType, String billingAddressId, String serverId) {
+                String year, String basicCardIssuerNetwork, int iconId, String billingAddressId,
+                String serverId) {
             return new CreditCard(guid, origin, isLocal, isCached, name, number, obfuscatedNumber,
-                    month, year, basicCardIssuerNetwork,
-                    ResourceId.mapToDrawableId(enumeratedIconId), cardType, billingAddressId,
-                    serverId);
+                    month, year, basicCardIssuerNetwork, iconId, billingAddressId, serverId);
         }
 
         public CreditCard(String guid, String origin, boolean isLocal, boolean isCached,
                 String name, String number, String obfuscatedNumber, String month, String year,
-                String basicCardIssuerNetwork, int issuerIconDrawableId, @CardType int cardType,
-                String billingAddressId, String serverId) {
+                String basicCardIssuerNetwork, int issuerIconDrawableId, String billingAddressId,
+                String serverId) {
             mGUID = guid;
             mOrigin = origin;
             mIsLocal = isLocal;
@@ -398,17 +395,15 @@ public class PersonalDataManager {
             mYear = year;
             mBasicCardIssuerNetwork = basicCardIssuerNetwork;
             mIssuerIconDrawableId = issuerIconDrawableId;
-            mCardType = cardType;
             mBillingAddressId = billingAddressId;
             mServerId = serverId;
         }
 
         public CreditCard() {
-            this("" /* guid */, MainPreferences.SETTINGS_ORIGIN /*origin */, true /* isLocal */,
+            this("" /* guid */, AutofillEditorBase.SETTINGS_ORIGIN /*origin */, true /* isLocal */,
                     false /* isCached */, "" /* name */, "" /* number */, "" /* obfuscatedNumber */,
                     "" /* month */, "" /* year */, "" /* basicCardIssuerNetwork */,
-                    0 /* issuerIconDrawableId */, CardType.UNKNOWN, "" /* billingAddressId */,
-                    "" /* serverId */);
+                    0 /* issuerIconDrawableId */, "" /* billingAddressId */, "" /* serverId */);
         }
 
         /** TODO(estade): remove this constructor. */
@@ -417,8 +412,7 @@ public class PersonalDataManager {
                 String obfuscatedNumber, String month, String year) {
             this(guid, origin, true /* isLocal */, false /* isCached */, name, number,
                     obfuscatedNumber, month, year, "" /* basicCardIssuerNetwork */,
-                    0 /* issuerIconDrawableId */, CardType.UNKNOWN, "" /* billingAddressId */,
-                    "" /* serverId */);
+                    0 /* issuerIconDrawableId */, "" /* billingAddressId */, "" /* serverId */);
         }
 
         @CalledByNative("CreditCard")
@@ -478,12 +472,6 @@ public class PersonalDataManager {
 
         public int getIssuerIconDrawableId() {
             return mIssuerIconDrawableId;
-        }
-
-        @CardType
-        @CalledByNative("CreditCard")
-        public int getCardType() {
-            return mCardType;
         }
 
         @CalledByNative("CreditCard")
@@ -958,17 +946,26 @@ public class PersonalDataManager {
     }
 
     /**
+     * @return Whether FIDO authentication is available.
+     */
+    public boolean isFidoAuthenticationAvailable() {
+        return isAutofillCreditCardEnabled()
+                && PersonalDataManagerJni.get().isFidoAuthenticationAvailable(
+                        mPersonalDataManagerAndroid);
+    }
+
+    /**
      * @return Whether the Autofill feature for Profiles (addresses) is enabled.
      */
     public static boolean isAutofillProfileEnabled() {
-        return PersonalDataManagerJni.get().getPref(Pref.AUTOFILL_PROFILE_ENABLED);
+        return PrefServiceBridge.getInstance().getBoolean(Pref.AUTOFILL_PROFILE_ENABLED);
     }
 
     /**
      * @return Whether the Autofill feature for Credit Cards is enabled.
      */
     public static boolean isAutofillCreditCardEnabled() {
-        return PersonalDataManagerJni.get().getPref(Pref.AUTOFILL_CREDIT_CARD_ENABLED);
+        return PrefServiceBridge.getInstance().getBoolean(Pref.AUTOFILL_CREDIT_CARD_ENABLED);
     }
 
     /**
@@ -976,7 +973,7 @@ public class PersonalDataManager {
      * @param enable True to disable profile Autofill, false otherwise.
      */
     public static void setAutofillProfileEnabled(boolean enable) {
-        PersonalDataManagerJni.get().setPref(Pref.AUTOFILL_PROFILE_ENABLED, enable);
+        PrefServiceBridge.getInstance().setBoolean(Pref.AUTOFILL_PROFILE_ENABLED, enable);
     }
 
     /**
@@ -984,7 +981,26 @@ public class PersonalDataManager {
      * @param enable True to disable credit card Autofill, false otherwise.
      */
     public static void setAutofillCreditCardEnabled(boolean enable) {
-        PersonalDataManagerJni.get().setPref(Pref.AUTOFILL_CREDIT_CARD_ENABLED, enable);
+        PrefServiceBridge.getInstance().setBoolean(Pref.AUTOFILL_CREDIT_CARD_ENABLED, enable);
+    }
+
+    /**
+     * @return Whether the Autofill feature for FIDO authentication is enabled.
+     */
+    public static boolean isAutofillCreditCardFidoAuthEnabled() {
+        return PrefServiceBridge.getInstance().getBoolean(
+                Pref.AUTOFILL_CREDIT_CARD_FIDO_AUTH_ENABLED);
+    }
+
+    /**
+     * Enables or disables the Autofill feature for FIDO authentication.
+     * We are trying to align this pref with the server's source of truth, but any mismatches
+     * between this pref and the server should imply the user's intention to opt in/out.
+     * @param enable True to enable credit card FIDO authentication, false otherwise.
+     */
+    public static void setAutofillCreditCardFidoAuthEnabled(boolean enable) {
+        PrefServiceBridge.getInstance().setBoolean(
+                Pref.AUTOFILL_CREDIT_CARD_FIDO_AUTH_ENABLED, enable);
     }
 
     /**
@@ -1120,6 +1136,7 @@ public class PersonalDataManager {
                 GetSubKeysRequestDelegate delegate);
         boolean hasProfiles(long nativePersonalDataManagerAndroid);
         boolean hasCreditCards(long nativePersonalDataManagerAndroid);
+        boolean isFidoAuthenticationAvailable(long nativePersonalDataManagerAndroid);
         boolean isAutofillManaged();
         boolean isAutofillProfileManaged();
         boolean isAutofillCreditCardManaged();
@@ -1128,7 +1145,5 @@ public class PersonalDataManager {
         String toCountryCode(String countryName);
         void cancelPendingGetSubKeys(long nativePersonalDataManagerAndroid);
         void setSyncServiceForTesting(long nativePersonalDataManagerAndroid);
-        boolean getPref(int preference);
-        void setPref(int preference, boolean enable);
     }
 }

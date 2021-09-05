@@ -29,32 +29,45 @@ if (optimize_webui) {
       "lazy_load.crisper.js",
     ]
     excludes = [
+      # TODO(calamity): Update optimize_webui to handle generated files.
+      "chrome://resources/css/cros_colors.generated.css",
+      "chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom.html",
       "chrome://os-settings/app-management/app_management.mojom-lite.js",
       "chrome://os-settings/app-management/bitmap.mojom-lite.js",
+      "chrome://os-settings/app-management/file_path.mojom-lite.js",
       "chrome://os-settings/app-management/image_info.mojom-lite.js",
       "chrome://os-settings/app-management/image.mojom-lite.js",
       "chrome://os-settings/app-management/types.mojom-lite.js",
+      "chrome://os-settings/search/search.mojom-lite.js",
+      "chrome://os-settings/search/search_result_icon.mojom-lite.js",
+      "chrome://os-settings/search/user_action_recorder.mojom-lite.js",
+      "chrome://resources/mojo/mojo/public/mojom/base/big_buffer.mojom.html",
+      "chrome://resources/mojo/mojo/public/mojom/base/string16.mojom.html",
+      "chrome://resources/mojo/mojo/public/mojom/base/time.mojom.html",
     ]
 
-    deps = [
-      ":unpak",
-    ]
+    deps = [ ":unpak" ]
   }
 
   unpak("unpak") {
     pak_file = settings_pak_file
     out_folder = unpak_folder
 
-    deps = [
-      ":flattened_resources",
-    ]
+    deps = [ ":flattened_resources" ]
   }
 
   grit("flattened_resources") {
     source = "../os_settings_resources.grd"
 
-    # The .grd contains references to generated files.
-    source_is_generated = true
+    deps = [
+      "//chrome/browser/ui/webui/app_management:mojo_bindings_js",
+      "//chrome/browser/ui/webui/settings/chromeos/search:mojo_bindings_js",
+    ]
+
+    grit_flags = [
+      "-E",
+      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+    ]
 
     defines = chrome_grit_defines
     outputs = [
@@ -69,8 +82,23 @@ if (optimize_webui) {
 
 group("closure_compile") {
   deps = [
+    ":metrics_recorder",
+    ":os_page_visibility",
+    ":os_route",
+    ":os_settings_routes",
+    ":route_origin_behavior",
+    "ambient_mode_page:closure_compile",
+    "bluetooth_page:closure_compile",
+    "crostini_page:closure_compile",
+    "date_time_page:closure_compile",
+    "device_page:closure_compile",
+    "google_assistant_page:closure_compile",
+    "internet_page:closure_compile",
+    "localized_link:closure_compile",
+    "multidevice_page:closure_compile",
     "os_a11y_page:closure_compile",
     "os_apps_page:closure_compile",
+    "os_apps_page/app_management_page:closure_compile",
     "os_files_page:closure_compile",
     "os_languages_page:closure_compile",
     "os_people_page:closure_compile",
@@ -81,7 +109,47 @@ group("closure_compile") {
     "os_settings_main:closure_compile",
     "os_settings_menu:closure_compile",
     "os_settings_page:closure_compile",
+    "os_settings_search_box:closure_compile",
     "os_settings_ui:closure_compile",
+    "parental_controls_page:closure_compile",
     "personalization_page:closure_compile",
+    "plugin_vm_page:closure_compile",
+  ]
+}
+
+js_library("os_page_visibility") {
+  deps = [
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js:load_time_data",
+  ]
+}
+
+js_library("os_route") {
+  deps = [
+    ":os_settings_routes",
+    "..:router",
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js:load_time_data",
+  ]
+}
+
+js_library("os_settings_routes") {
+  deps = [
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js:load_time_data",
+  ]
+}
+
+js_library("route_origin_behavior") {
+  deps = [
+    ":os_route",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("metrics_recorder") {
+  deps = [
+    "//chrome/browser/ui/webui/settings/chromeos/search:mojo_bindings_js_library_for_compile",
+    "//ui/webui/resources/js:cr",
   ]
 }

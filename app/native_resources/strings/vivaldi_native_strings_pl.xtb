@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Otwórz link w nowym oknie</translation>
 <translation id="3588820906588687999">Otwórz obraz w nowej karcie</translation>
 <translation id="3601066750251199488">Potwór 3</translation>
-<translation id="366643050267431920">Dodaj jako wydarzenie</translation>
 <translation id="3732157130969736834">Dodaj link do zakładek</translation>
 <translation id="3732388226447288666">Zwierzę 2</translation>
 <translation id="3732439195215136813">Zwierzę 5</translation>
@@ -68,8 +67,7 @@
 <translation id="4636708767492582204">Wyślij pocztą e-mail</translation>
 <translation id="4677434526832593569">Zwierzę 8</translation>
 <translation id="4881695831933465202">Otwórz</translation>
-<translation id="4973311370126107785">Uruchamianie skryptów JavaScript poprzez AppleScript jest wyłączone. Aby włączyć wykonywanie skryptów, wybierz na pasku menu Narzędzia &gt; Pozwalaj na JavaScript ze zdarzeń Apple.</translation>
-<translation id="5014281392052865061">Zaimportowane Szybkie wybieranie</translation>
+<translation id="5014281392052865061">Zaimportowane szybkie wybieranie</translation>
 <translation id="5092656712000637858">Dodaj stronę jako panel www</translation>
 <translation id="5177818338935286353">Potwór 7</translation>
 <translation id="5213743983876949565">Zwierzę 1</translation>
@@ -89,6 +87,7 @@
 <translation id="6229528619562190452">Kliknij tutaj, aby zaktualizować przeglądarkę Vivaldi.</translation>
 <translation id="6234173136417926046">Użyj obrazu jako tła szybkiego wybierania</translation>
 <translation id="630690498669249215">Plik z zakładkami Opery</translation>
+<translation id="6339818817272922368">Konto lokalne</translation>
 <translation id="6438786710866753178">Krajobraz 4</translation>
 <translation id="6477028720702061455">Wybierz folder profilu przeglądarki Opera, z którego chcesz zaimportować dane</translation>
 <translation id="6510706699590490869">Aktualizuj Vivaldi</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">Przeglądarka Vivaldi powstała dzięki otwartemu projektowi <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> oraz innego <ph name="BEGIN_LINK_OSS" />oprogramowania open source<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">Ignoruj aktualizację</translation>
 <translation id="7724603315864178912">Wytnij</translation>
+<translation id="7793738202466490491">Dodaj jako wydarzenie kalendarza</translation>
 <translation id="7865983598101744945">Potwierdź zamknięcie</translation>
 <translation id="7957213167373139414">Mój kalendarz</translation>
 <translation id="8027581147000338959">Otwórz w nowym oknie</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">Otwórz w nowej karcie w tle</translation>
 <translation id="8373293945112511707">Krajobraz 1</translation>
 <translation id="8427094907586191051">Krajobraz 17</translation>
+<translation id="8446668873108041390">Wykonywanie skryptów JavaScript przez AppleScript jest wyłączone. Możesz zezwolić na wykonywanie skryptów JavaScript przez zdarzenia Apple Events w Ustawieniach &gt; Prywatność &gt; Zdarzenia Apple Events.</translation>
 <translation id="8539196077526389150">Krajobraz 13</translation>
 <translation id="8624587806981488221">&amp;Przeładuj obraz</translation>
 <translation id="864444594187862076">Opera 15+ (Developer)</translation>

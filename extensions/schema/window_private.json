@@ -91,10 +91,13 @@
         "description": "The type of this browser window.",
         "enum": [{
           "name": "normal",
-          "description": "This is a normal window."
+          "description": "This is a normal browser window."
         }, {
           "name": "settings",
           "description": "This is a settings window."
+        }, {
+          "name": "popup",
+          "description": "This is a popup window."
         }]
       }
     ],
@@ -127,6 +130,14 @@
                 "name": "windowId",
                 "type": "integer",
                 "description": "The window id of the created window if successful."
+              },
+              {
+                "name": "contentWindow",
+                "optional": true,
+                "type": "object",
+                "isInstanceOf": "Window",
+                "additionalProperties": { "type": "any" },
+                "description": "The JavaScript 'window' object for the ui."
               }
             ]
           }

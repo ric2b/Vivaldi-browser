@@ -22,7 +22,8 @@ VivaldiAccountPasswordHandler::VivaldiAccountPasswordHandler(Profile* profile,
           ServiceAccessType::IMPLICIT_ACCESS)) {
 
   UpdatePassword();
-  password_store_->AddObserver(this);
+  if (password_store_)
+    password_store_->AddObserver(this);
 }
 
 VivaldiAccountPasswordHandler::~VivaldiAccountPasswordHandler() {}
@@ -36,6 +37,9 @@ void VivaldiAccountPasswordHandler::RemoveObserver(Observer* observer) {
 }
 
 void VivaldiAccountPasswordHandler::SetPassword(const std::string& password) {
+  if (!password_store_)
+    return;
+
   DCHECK(!password.empty());
 
   autofill::PasswordForm password_form = {};
@@ -50,6 +54,9 @@ void VivaldiAccountPasswordHandler::SetPassword(const std::string& password) {
 }
 
 void VivaldiAccountPasswordHandler::ForgetPassword() {
+  if (!password_store_)
+    return;
+
   autofill::PasswordForm password_form = {};
   password_form.scheme = autofill::PasswordForm::Scheme::kOther;
   password_form.signon_realm = kSyncSignonRealm;
@@ -84,6 +91,9 @@ void VivaldiAccountPasswordHandler::OnLoginsChanged(
 }
 
 void VivaldiAccountPasswordHandler::UpdatePassword() {
+  if (!password_store_)
+    return;
+
   password_manager::PasswordStore::FormDigest form_digest(
       autofill::PasswordForm::Scheme::kOther, kSyncSignonRealm,
       GURL(kSyncOrigin));

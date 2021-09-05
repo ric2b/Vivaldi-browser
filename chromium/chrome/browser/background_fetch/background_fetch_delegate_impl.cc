@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/guid.h"
 #include "base/logging.h"
@@ -269,6 +270,7 @@ void BackgroundFetchDelegateImpl::GetPermissionForOrigin(
     // used as the URL, and the |request_method| is set to GET.
     limiter->CanDownload(
         wc_getter, origin.GetURL(), "GET", base::nullopt,
+        false /* from_download_cross_origin_redirect */,
         base::AdaptCallbackForRepeating(base::BindOnce(
             &BackgroundFetchDelegateImpl::
                 DidGetPermissionFromDownloadRequestLimiter,
@@ -284,7 +286,7 @@ void BackgroundFetchDelegateImpl::GetPermissionForOrigin(
   // content setting.
   ContentSetting content_setting = host_content_settings_map->GetContentSetting(
       origin.GetURL(), origin.GetURL(),
-      CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
+      ContentSettingsType::AUTOMATIC_DOWNLOADS,
       std::string() /* resource_identifier */);
 
   // The set of valid settings for automatic downloads is set to
@@ -346,8 +348,9 @@ void BackgroundFetchDelegateImpl::DownloadUrl(
   params.request_params.method = method;
   params.request_params.url = url;
   params.request_params.request_headers = headers;
-  params.callback = base::Bind(&BackgroundFetchDelegateImpl::OnDownloadReceived,
-                               weak_ptr_factory_.GetWeakPtr());
+  params.callback =
+      base::BindRepeating(&BackgroundFetchDelegateImpl::OnDownloadReceived,
+                          weak_ptr_factory_.GetWeakPtr());
   params.traffic_annotation =
       net::MutableNetworkTrafficAnnotationTag(traffic_annotation);
 
@@ -657,7 +660,7 @@ void BackgroundFetchDelegateImpl::UpdateOfflineItemAndUpdateObservers(
 }
 
 void BackgroundFetchDelegateImpl::OpenItem(
-    offline_items_collection::LaunchLocation location,
+    const offline_items_collection::OpenParams& open_params,
     const offline_items_collection::ContentId& id) {
   auto job_details_iter = job_details_map_.find(id.id);
   if (job_details_iter == job_details_map_.end())

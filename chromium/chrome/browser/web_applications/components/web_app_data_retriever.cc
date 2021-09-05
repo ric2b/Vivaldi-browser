@@ -168,9 +168,14 @@ void WebAppDataRetriever::OnDidPerformInstallableCheck(
   DCHECK(data.manifest_url.is_valid() || data.manifest->IsEmpty());
 
   const bool is_installable = data.errors.empty();
+  DCHECK(!is_installable || data.valid_manifest);
+  DCHECK(!data.valid_manifest || !data.manifest->IsEmpty());
+  base::Optional<blink::Manifest> opt_manifest;
+  if (data.valid_manifest)
+    opt_manifest = *data.manifest;
 
   std::move(check_installability_callback_)
-      .Run(*data.manifest, data.valid_manifest, is_installable);
+      .Run(opt_manifest, data.valid_manifest, is_installable);
 }
 
 void WebAppDataRetriever::OnIconsDownloaded(bool success, IconsMap icons_map) {
@@ -191,7 +196,7 @@ void WebAppDataRetriever::CallCallbackOnError() {
     std::move(get_web_app_info_callback_).Run(nullptr);
   } else if (check_installability_callback_) {
     std::move(check_installability_callback_)
-        .Run(blink::Manifest{}, /*valid_manifest_for_web_app=*/false,
+        .Run(base::nullopt, /*valid_manifest_for_web_app=*/false,
              /*is_installable=*/false);
   } else if (get_icons_callback_) {
     std::move(get_icons_callback_).Run(IconsMap{});

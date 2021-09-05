@@ -37,7 +37,7 @@ SVGPathElement::SVGPathElement(Document& document)
   AddToPropertyMap(path_);
 }
 
-void SVGPathElement::Trace(blink::Visitor* visitor) {
+void SVGPathElement::Trace(Visitor* visitor) {
   visitor->Trace(path_);
   SVGGeometryElement::Trace(visitor);
 }
@@ -65,12 +65,14 @@ Path SVGPathElement::AsPath() const {
 }
 
 float SVGPathElement::getTotalLength(ExceptionState& exception_state) {
-  GetDocument().UpdateStyleAndLayoutForNode(this);
+  GetDocument().UpdateStyleAndLayoutForNode(this,
+                                            DocumentUpdateReason::kJavaScript);
   return SVGPathQuery(PathByteStream()).GetTotalLength();
 }
 
 SVGPointTearOff* SVGPathElement::getPointAtLength(float length) {
-  GetDocument().UpdateStyleAndLayoutForNode(this);
+  GetDocument().UpdateStyleAndLayoutForNode(this,
+                                            DocumentUpdateReason::kJavaScript);
   SVGPathQuery path_query(PathByteStream());
   if (length < 0) {
     length = 0;
@@ -103,7 +105,7 @@ void SVGPathElement::CollectStyleForPresentationAttribute(
     // If this is a <use> instance, return the referenced path to maximize
     // geometry sharing.
     if (const SVGElement* element = CorrespondingElement())
-      path = ToSVGPathElement(element)->GetPath();
+      path = To<SVGPathElement>(element)->GetPath();
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
                                             path->CssValue());
     return;
@@ -117,7 +119,7 @@ void SVGPathElement::InvalidateMPathDependencies() {
   // dependencies manually.
   if (SVGElementSet* dependencies = SetOfIncomingReferences()) {
     for (SVGElement* element : *dependencies) {
-      if (auto* mpath = ToSVGMPathElementOrNull(*element))
+      if (auto* mpath = DynamicTo<SVGMPathElement>(*element))
         mpath->TargetPathChanged();
     }
   }

@@ -10,26 +10,26 @@
 #include "third_party/blink/public/mojom/keyboard_lock/keyboard_lock.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 
 namespace blink {
 
+class ExceptionState;
 class ScriptPromiseResolver;
 
 class KeyboardLock final : public GarbageCollected<KeyboardLock>,
-                           public ContextLifecycleObserver {
+                           public ExecutionContextClient {
   USING_GARBAGE_COLLECTED_MIXIN(KeyboardLock);
 
  public:
   explicit KeyboardLock(ExecutionContext*);
   ~KeyboardLock();
 
-  ScriptPromise lock(ScriptState*, const Vector<String>&);
+  ScriptPromise lock(ScriptState*, const Vector<String>&, ExceptionState&);
   void unlock(ScriptState*);
 
-  // ContextLifecycleObserver override.
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   // Returns true if the local frame is attached to the renderer.

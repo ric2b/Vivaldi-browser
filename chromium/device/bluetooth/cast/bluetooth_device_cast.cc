@@ -170,19 +170,19 @@ void BluetoothDeviceCast::SetConnectionLatency(
 }
 
 void BluetoothDeviceCast::Connect(PairingDelegate* pairing_delegate,
-                                  const base::Closure& callback,
-                                  const ConnectErrorCallback& error_callback) {
+                                  base::OnceClosure callback,
+                                  ConnectErrorCallback error_callback) {
   // This method is used only for Bluetooth classic.
   NOTIMPLEMENTED() << __func__ << " Only BLE functionality is supported.";
-  error_callback.Run(BluetoothDevice::ERROR_UNSUPPORTED_DEVICE);
+  std::move(error_callback).Run(BluetoothDevice::ERROR_UNSUPPORTED_DEVICE);
 }
 
 void BluetoothDeviceCast::Pair(PairingDelegate* pairing_delegate,
-                               const base::Closure& callback,
-                               const ConnectErrorCallback& error_callback) {
+                               base::OnceClosure callback,
+                               ConnectErrorCallback error_callback) {
   // TODO(slan): Implement this or delegate to lower level.
   NOTIMPLEMENTED();
-  error_callback.Run(BluetoothDevice::ERROR_UNSUPPORTED_DEVICE);
+  std::move(error_callback).Run(BluetoothDevice::ERROR_UNSUPPORTED_DEVICE);
 }
 
 void BluetoothDeviceCast::SetPinCode(const std::string& pincode) {
@@ -342,7 +342,8 @@ bool BluetoothDeviceCast::UpdateCharacteristicValue(
   return false;
 }
 
-void BluetoothDeviceCast::CreateGattConnectionImpl() {
+void BluetoothDeviceCast::CreateGattConnectionImpl(
+    base::Optional<BluetoothUUID> service_uuid) {
   DVLOG(2) << __func__ << " " << pending_connect_;
   if (pending_connect_)
     return;

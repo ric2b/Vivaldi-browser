@@ -5,10 +5,13 @@
 #ifndef ASH_PUBLIC_CPP_ASSISTANT_ASSISTANT_STATE_BASE_H_
 #define ASH_PUBLIC_CPP_ASSISTANT_ASSISTANT_STATE_BASE_H_
 
+#include <memory>
 #include <string>
 
 #include "ash/public/mojom/assistant_state_controller.mojom.h"
 #include "base/macros.h"
+#include "base/observer_list.h"
+#include "base/observer_list_types.h"
 #include "base/optional.h"
 #include "chromeos/services/assistant/public/cpp/assistant_prefs.h"
 
@@ -32,11 +35,12 @@ class ASH_PUBLIC_EXPORT AssistantStateObserver
   virtual void OnAssistantHotwordEnabled(bool enabled) {}
   virtual void OnAssistantLaunchWithMicOpen(bool launch_with_mic_open) {}
   virtual void OnAssistantNotificationEnabled(bool notification_enabled) {}
+  virtual void OnAssistantStateDestroyed() {}
 
   // mojom::AssistantStateObserver:
-  void OnAssistantStatusChanged(ash::mojom::AssistantState state) override {}
+  void OnAssistantStatusChanged(mojom::AssistantState state) override {}
   void OnAssistantFeatureAllowedChanged(
-      ash::mojom::AssistantAllowedState state) override {}
+      mojom::AssistantAllowedState state) override {}
   void OnArcPlayStoreEnabledChanged(bool enabled) override {}
   void OnLocaleChanged(const std::string& locale) override {}
   void OnLockedFullScreenStateChanged(bool enabled) override {}
@@ -103,6 +107,8 @@ class ASH_PUBLIC_EXPORT AssistantStateBase {
   void RemoveObserver(AssistantStateObserver* observer);
 
   void RegisterPrefChanges(PrefService* pref_service);
+
+  bool IsScreenContextAllowed() const;
 
  protected:
   void InitializeObserver(AssistantStateObserver* observer);

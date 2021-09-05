@@ -26,14 +26,15 @@
 #include "third_party/blink/renderer/modules/webaudio/media_element_audio_source_node.h"
 
 #include "third_party/blink/public/platform/task_type.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_element_audio_source_options.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_context.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_output.h"
-#include "third_party/blink/renderer/modules/webaudio/media_element_audio_source_options.h"
 #include "third_party/blink/renderer/platform/audio/audio_utilities.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 
@@ -106,6 +107,13 @@ void MediaElementAudioSourceHandler::SetFormat(uint32_t number_of_channels,
     PrintCorsMessage(MediaElement()->currentSrc().GetString());
   }
 
+  {
+    // Make sure |is_origin_tainted_| matches |is_tainted|.  But need to
+    // synchronize with process() to set this.
+    MediaElementAudioSourceHandlerLocker locker(*this);
+    is_origin_tainted_ = is_tainted;
+  }
+
   if (number_of_channels != source_number_of_channels_ ||
       source_sample_rate != source_sample_rate_) {
     if (!number_of_channels ||
@@ -118,23 +126,24 @@ void MediaElementAudioSourceHandler::SetFormat(uint32_t number_of_channels,
       MediaElementAudioSourceHandlerLocker locker(*this);
       source_number_of_channels_ = 0;
       source_sample_rate_ = 0;
-      is_origin_tainted_ = is_tainted;
       return;
     }
 
     // Synchronize with process() to protect |source_number_of_channels_|,
-    // |source_sample_rate_|, |multi_channel_resampler_|. and
-    // |is_origin_tainted_|.
+    // |source_sample_rate_|, |multi_channel_resampler_|.
     MediaElementAudioSourceHandlerLocker locker(*this);
 
-    is_origin_tainted_ = is_tainted;
     source_number_of_channels_ = number_of_channels;
     source_sample_rate_ = source_sample_rate;
 
     if (source_sample_rate != Context()->sampleRate()) {
       double scale_factor = source_sample_rate / Context()->sampleRate();
-      multi_channel_resampler_ = std::make_unique<MultiChannelResampler>(
-          scale_factor, number_of_channels);
+      multi_channel_resampler_.reset(new MediaMultiChannelResampler(
+          number_of_channels, scale_factor,
+          audio_utilities::kRenderQuantumFrames,
+          CrossThreadBindRepeating(
+              &MediaElementAudioSourceHandler::ProvideResamplerInput,
+              CrossThreadUnretained(this))));
     } else {
       // Bypass resampling.
       multi_channel_resampler_.reset();
@@ -158,12 +167,22 @@ bool MediaElementAudioSourceHandler::WouldTaintOrigin() {
 void MediaElementAudioSourceHandler::PrintCorsMessage(const String& message) {
   if (Context()->GetExecutionContext()) {
     Context()->GetExecutionContext()->AddConsoleMessage(
-        ConsoleMessage::Create(mojom::ConsoleMessageSource::kSecurity,
-                               mojom::ConsoleMessageLevel::kInfo,
-                               "MediaElementAudioSource outputs zeroes due to "
-                               "CORS access restrictions for " +
-                                   message));
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::ConsoleMessageSource::kSecurity,
+            mojom::ConsoleMessageLevel::kInfo,
+            "MediaElementAudioSource outputs zeroes due to "
+            "CORS access restrictions for " +
+                message));
   }
+}
+
+void MediaElementAudioSourceHandler::ProvideResamplerInput(
+    int resampler_frame_delay,
+    AudioBus* dest) {
+  DCHECK(Context()->IsAudioThread());
+  DCHECK(MediaElement());
+  DCHECK(dest);
+  MediaElement()->GetAudioSourceProvider().ProvideInput(dest, dest->length());
 }
 
 void MediaElementAudioSourceHandler::Process(uint32_t number_of_frames) {
@@ -193,8 +212,7 @@ void MediaElementAudioSourceHandler::Process(uint32_t number_of_frames) {
     // progress, even if we're going to output silence anyway.
     if (multi_channel_resampler_.get()) {
       DCHECK_NE(source_sample_rate_, Context()->sampleRate());
-      multi_channel_resampler_->Process(&provider, output_bus,
-                                        number_of_frames);
+      multi_channel_resampler_->Resample(number_of_frames, output_bus);
     } else {
       // Bypass the resampler completely if the source is at the context's
       // sample-rate.
@@ -267,7 +285,7 @@ MediaElementAudioSourceNode* MediaElementAudioSourceNode::Create(
   return Create(*context, *options->mediaElement(), exception_state);
 }
 
-void MediaElementAudioSourceNode::Trace(blink::Visitor* visitor) {
+void MediaElementAudioSourceNode::Trace(Visitor* visitor) {
   visitor->Trace(media_element_);
   AudioSourceProviderClient::Trace(visitor);
   AudioNode::Trace(visitor);

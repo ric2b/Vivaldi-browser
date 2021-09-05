@@ -39,7 +39,8 @@ void PassThroughDecoderImpl<StreamType>::Initialize(
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Media Config not accepted for codec : "
             << GetCodecName(config.codec());
-    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), false));
+    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb),
+            media::Status(media::StatusCode::kDecoderUnsupportedConfig)));
     return;
   } else {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -50,7 +51,7 @@ void PassThroughDecoderImpl<StreamType>::Initialize(
   config_ = config;
   output_cb_ = output_cb;
 
-  task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), true));
+  task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), media::Status()));
 }
 
 template <DemuxerStream::Type StreamType>

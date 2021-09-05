@@ -13,12 +13,13 @@
 #import <AVFoundation/AVFoundation.h>
 
 #include "base/mac/scoped_nsobject.h"
+#include "base/mac/scoped_dispatch_object.h"
 #include "base/memory/ref_counted.h"
-#include "media/base/data_source.h"
+
+#include "platform_media/gpu/data_source/ipc_data_source.h"
 
 namespace media {
 class DataRequestHandler;
-class IPCDataSource;
 }  // namespace media
 
 /**
@@ -30,18 +31,29 @@ class IPCDataSource;
 
 @interface DataSourceLoader : NSObject<AVAssetResourceLoaderDelegate> {
  @private
+  base::ScopedDispatchObject<dispatch_queue_t> dispatch_queue_;
   base::scoped_nsobject<NSString> contentType_;
-  media::DataSource* dataSource_;
-  dispatch_queue_t queue_;
   scoped_refptr<media::DataRequestHandler> handler_;
-  base::scoped_nsobject<AVAssetResourceLoadingRequest> lastRequest_;
+  base::scoped_nsobject<AVURLAsset> url_asset_;
+  int64_t dataSize_;
+  bool isStreaming_;
 }
-- (id)initWithDataSource:(media::DataSource*)dataSource
-            withMIMEType:(NSString*)mimeType;
+- (id)initWithDataSource:(ipc_data_source::Reader)data_source
+          withSourceInfo:(ipc_data_source::Info)sourceInfo
+       withDispatchQueue:(dispatch_queue_t)dispatch_queue;
 
+- (AVAsset*)asset;
+
+// This must be called from the main thread.
 - (void)stop;
 
-  // Asks the delegate if it wants to load the requested resource.
+// This must be called from the main thread.
+- (void)suspend;
+
+// This must be called from the main thread.
+- (void)resume;
+
+// Asks the delegate if it wants to load the requested resource.
 - (BOOL)resourceLoader:(AVAssetResourceLoader*)resourceLoader
     shouldWaitForLoadingOfRequestedResource:
         (AVAssetResourceLoadingRequest*)loadingRequest;
@@ -49,7 +61,6 @@ class IPCDataSource;
   // Invoked to inform the delegate that a prior loading request has been cancelled
 - (void)resourceLoader:(AVAssetResourceLoader*)resourceLoader
     didCancelLoadingRequest:(AVAssetResourceLoadingRequest*)loadingRequest;
-- (dispatch_queue_t)dispatchQueue;
 
 @end
 

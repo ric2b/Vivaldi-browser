@@ -12,6 +12,7 @@
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #include "net/http/http_status_code.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -35,6 +36,11 @@ using base::test::ios::kWaitForDownloadTimeout;
 using base::test::ios::kWaitForUIElementTimeout;
 
 namespace {
+
+#if defined(CHROME_EARL_GREY_2)
+// Use separate timeout for EG2 tests to accomodate for IPC delays.
+const NSTimeInterval kWaitForARPresentationTimeout = 30.0;
+#endif  // CHROME_EARL_GREY_2
 
 // USDZ landing page and download request handler.
 std::unique_ptr<net::test_server::HttpResponse> GetResponse(
@@ -110,8 +116,9 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
   // presentation.
   XCUIApplication* app = [[XCUIApplication alloc] init];
   XCUIElement* goodTitle = app.staticTexts[@"good"];
-  GREYAssert([goodTitle waitForExistenceWithTimeout:kWaitForDownloadTimeout],
-             @"AR preview dialog UI was not presented");
+  GREYAssert(
+      [goodTitle waitForExistenceWithTimeout:kWaitForARPresentationTimeout],
+      @"AR preview dialog UI was not presented");
 #else
 #error Must define either CHROME_EARL_GREY_1 or CHROME_EARL_GREY_2.
 #endif
@@ -142,7 +149,7 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
   XCUIApplication* app = [[XCUIApplication alloc] init];
   XCUIElement* goodTitle = app.staticTexts[@"good"];
   GREYAssertFalse(
-      [goodTitle waitForExistenceWithTimeout:kWaitForDownloadTimeout],
+      [goodTitle waitForExistenceWithTimeout:kWaitForARPresentationTimeout],
       @"AR preview dialog UI was presented");
 #else
 #error Must define either CHROME_EARL_GREY_1 or CHROME_EARL_GREY_2.
@@ -174,7 +181,7 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
   XCUIApplication* app = [[XCUIApplication alloc] init];
   XCUIElement* goodTitle = app.staticTexts[@"good"];
   GREYAssertFalse(
-      [goodTitle waitForExistenceWithTimeout:kWaitForDownloadTimeout],
+      [goodTitle waitForExistenceWithTimeout:kWaitForARPresentationTimeout],
       @"AR preview dialog UI was presented");
 #else
 #error Must define either CHROME_EARL_GREY_1 or CHROME_EARL_GREY_2.
@@ -206,7 +213,7 @@ std::unique_ptr<net::test_server::HttpResponse> GetResponse(
   XCUIApplication* app = [[XCUIApplication alloc] init];
   XCUIElement* goodTitle = app.staticTexts[@"good"];
   GREYAssertFalse(
-      [goodTitle waitForExistenceWithTimeout:kWaitForDownloadTimeout],
+      [goodTitle waitForExistenceWithTimeout:kWaitForARPresentationTimeout],
       @"AR preview dialog UI was presented");
 #else
 #error Must define either CHROME_EARL_GREY_1 or CHROME_EARL_GREY_2.

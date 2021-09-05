@@ -2,8 +2,21 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="de-CH">
 <translation id="1368832886055348810">Rechtsläufig</translation>
+<translation id="1761785978543082658"><ph name="QUANTITY" /> Byte</translation>
+<translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1859234291848436338">Schribrechtig</translation>
+<translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
 <translation id="3618849550573277856"><ph name="LOOKUP_STRING" /> sueche</translation>
+<translation id="3740362395218339114"><ph name="QUANTITY" /> Gigabyte/s</translation>
+<translation id="3757388668994797779"><ph name="QUANTITY" /> Gigabyte</translation>
+<translation id="5076340679995252485">&amp;Ihfüege</translation>
+<translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
+<translation id="6142413573757616983"><ph name="QUANTITY" /> Byte/s</translation>
+<translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6974053822202609517">Lenksläufig</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
+<translation id="8677655579646609597"><ph name="QUANTITY" /> Kilobyte/s</translation>
 <translation id="8798099450830957504">Standard</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" /> Kilobyte</translation>
 </translationbundle>

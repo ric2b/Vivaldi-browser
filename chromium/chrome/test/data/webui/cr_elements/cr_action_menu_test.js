@@ -247,10 +247,31 @@ suite('CrActionMenu', function() {
       menu.showAt(dots);
       assertTrue(dialog.open);
 
+      let anchorHasFocus = false;
+      let tabkeyCloseEventFired = false;
+
+      const checkTestDone = () => {
+        assertFalse(dialog.open);
+        if (key !== 'Tab') {
+          resolve();
+        } else if (anchorHasFocus && tabkeyCloseEventFired) {
+          resolve();
+        }
+      };
+
       // Check that focus returns to the anchor element.
-      dots.addEventListener('focus', resolve);
+      dots.addEventListener('focus', () => {
+        anchorHasFocus = true;
+        checkTestDone();
+      });
+
+      // Check that a Tab key close fires a custom event.
+      menu.addEventListener('tabkeyclose', () => {
+        tabkeyCloseEventFired = true;
+        checkTestDone();
+      });
+
       MockInteractions.keyDownOn(menu, key, [], key);
-      assertFalse(dialog.open);
     });
   }
 
@@ -274,7 +295,7 @@ suite('CrActionMenu', function() {
     menu.showAt(dots);
     items[0].focus();
     dispatchMouseoverEvent(menu);
-    assertEquals(dialog, getDeepActiveElement());
+    assertEquals(dialog.querySelector('[role="menu"]'), getDeepActiveElement());
   });
 
   test('moving mouse on a disabled item should focus the menu', () => {
@@ -282,7 +303,7 @@ suite('CrActionMenu', function() {
     items[2].toggleAttribute('disabled', true);
     items[0].focus();
     dispatchMouseoverEvent(items[2]);
-    assertEquals(dialog, getDeepActiveElement());
+    assertEquals(dialog.querySelector('[role="menu"]'), getDeepActiveElement());
   });
 
   test('mouse movements should override keyboard focus', () => {
@@ -408,7 +429,7 @@ suite('CrActionMenu', function() {
 
         dots.style.marginLeft = '800px';
 
-        let dotsRect = dots.getBoundingClientRect();
+        const dotsRect = dots.getBoundingClientRect();
 
         // Anchored at right-top by default.
         menu.showAt(dots);

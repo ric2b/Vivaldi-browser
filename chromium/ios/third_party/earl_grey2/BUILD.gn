@@ -40,6 +40,7 @@ config("config") {
     "//ios/third_party/earl_grey2/src/TestLib/Condition",
     "//ios/third_party/earl_grey2/src/TestLib/Config",
     "//ios/third_party/earl_grey2/src/TestLib/Exception",
+    "//ios/third_party/earl_grey2/src/TestLib/Execution",
     "//ios/third_party/earl_grey2/src/TestLib/DistantObject",
     "//ios/third_party/earl_grey2/src/TestLib/XCTestCase",
     "//ios/third_party/edo/src",
@@ -160,6 +161,7 @@ source_set("ui_lib_shared_headers") {
     "src/UILib/GREYElementHierarchy.h",
     "src/UILib/GREYScreenshotter.h",
     "src/UILib/VisibilityChecker/GREYVisibilityChecker.h",
+    "src/UILib/VisibilityChecker/GREYVisibilityCheckerDuration.h",
   ]
 }
 
@@ -194,13 +196,9 @@ source_set("ui_lib") {
     "src/UILib/VisibilityChecker/GREYVisibilityChecker.m",
   ]
 
-  deps = [
-    ":common_lib",
-  ]
+  deps = [ ":common_lib" ]
 
-  public_deps = [
-    ":ui_lib_shared_headers",
-  ]
+  public_deps = [ ":ui_lib_shared_headers" ]
 
   public_configs = [ ":config" ]
 
@@ -389,9 +387,7 @@ ios_framework_bundle("app_framework") {
     "//ios/third_party/webkit",
   ]
 
-  public_deps = [
-    ":app_framework_shared_headers",
-  ]
+  public_deps = [ ":app_framework_shared_headers" ]
 
   public_headers = [ "src/AppFramework/EarlGreyApp/EarlGreyApp.h" ]
 
@@ -435,6 +431,8 @@ source_set("test_lib") {
     "src/TestLib/AlertHandling/XCTestCase+GREYSystemAlertHandler.m",
     "src/TestLib/AppleInternals/GREYXCTestAppleInternals.h",
     "src/TestLib/Assertion/GREYAssertionDefines.h",
+    "src/TestLib/Assertion/GREYWaitFunctions.h",
+    "src/TestLib/Assertion/GREYWaitFunctions.m",
     "src/TestLib/Condition/GREYCondition.h",
     "src/TestLib/Condition/GREYCondition.m",
     "src/TestLib/Config/GREYTestConfiguration.h",
@@ -451,8 +449,6 @@ source_set("test_lib") {
     "src/TestLib/EarlGreyImpl/GREYElementInteractionErrorHandler.m",
     "src/TestLib/EarlGreyImpl/GREYElementInteractionProxy.h",
     "src/TestLib/EarlGreyImpl/GREYElementInteractionProxy.m",
-    "src/TestLib/EarlGreyImpl/GREYRemoteExecutor.h",
-    "src/TestLib/EarlGreyImpl/GREYRemoteExecutor.m",
     "src/TestLib/EarlGreyImpl/XCUIApplication+GREYTest.h",
     "src/TestLib/EarlGreyImpl/XCUIApplication+GREYTest.m",
     "src/TestLib/Exception/GREYDefaultFailureHandler.h",
@@ -461,6 +457,8 @@ source_set("test_lib") {
     "src/TestLib/Exception/GREYFailureFormatter.m",
     "src/TestLib/Exception/GREYFailureScreenshotSaver.h",
     "src/TestLib/Exception/GREYFailureScreenshotSaver.m",
+    "src/TestLib/Execution/GREYRemoteExecutor.h",
+    "src/TestLib/Execution/GREYRemoteExecutor.m",
     "src/TestLib/XCTestCase/GREYTestCaseInvocation.h",
     "src/TestLib/XCTestCase/GREYTestCaseInvocation.m",
     "src/TestLib/XCTestCase/XCTestCase+GREYTest.h",

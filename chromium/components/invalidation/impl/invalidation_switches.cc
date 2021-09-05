@@ -7,20 +7,13 @@
 namespace invalidation {
 namespace switches {
 
-#if defined(OS_CHROMEOS)
-// Device invalidation service should use GCM network channel.
-const char kInvalidationUseGCMChannel[] = "invalidation-use-gcm-channel";
-#endif  // OS_CHROMEOS
+namespace {
 
-// Overrides the default host:port used for notifications.
-const char kSyncNotificationHostPort[] = "sync-notification-host-port";
+// Default TTL (if the SyncInstanceIDTokenTTL/PolicyInstanceIDTokenTTL feature
+// is enabled) is 4 weeks. Exposed for testing.
+const int kDefaultInstanceIDTokenTTLSeconds = 28 * 24 * 60 * 60;
 
-// Allows insecure XMPP connections for sync (for testing).
-const char kSyncAllowInsecureXmppConnection[] =
-    "sync-allow-insecure-xmpp-connection";
-
-const base::Feature kFCMInvalidationsConservativeEnabling = {
-    "FCMInvalidationsConservativeEnabling", base::FEATURE_ENABLED_BY_DEFAULT};
+}  // namespace
 
 // This feature affects only Android.
 const base::Feature kFCMInvalidationsStartOnceActiveAccountAvailable = {
@@ -38,6 +31,20 @@ const base::Feature kFCMInvalidationsForSyncDontCheckVersion = {
 const base::Feature kTiclInvalidationsStartInvalidatorOnActiveHandler = {
     "TiclInvalidationsStartInvalidatorOnActiveHandler",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSyncInstanceIDTokenTTL{"SyncInstanceIDTokenTTL",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::FeatureParam<int> kSyncInstanceIDTokenTTLSeconds{
+    &kSyncInstanceIDTokenTTL, "time_to_live_seconds",
+    kDefaultInstanceIDTokenTTLSeconds};
+
+const base::Feature kPolicyInstanceIDTokenTTL{
+    "PolicyInstanceIDTokenTTL", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::FeatureParam<int> kPolicyInstanceIDTokenTTLSeconds{
+    &kPolicyInstanceIDTokenTTL, "time_to_live_seconds",
+    kDefaultInstanceIDTokenTTLSeconds};
 
 }  // namespace switches
 }  // namespace invalidation

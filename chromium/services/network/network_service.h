@@ -27,7 +27,6 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/dns/dns_config.h"
-#include "net/http/http_auth_preferences.h"
 #include "net/log/net_log.h"
 #include "net/log/trace_net_log_observer.h"
 #include "services/network/keepalive_statistics_recorder.h"
@@ -39,6 +38,8 @@
 #include "services/network/public/mojom/network_change_manager.mojom.h"
 #include "services/network/public/mojom/network_quality_estimator_manager.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/trust_tokens.mojom.h"
+#include "services/network/trust_tokens/trust_token_key_commitments.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace net {
@@ -55,12 +56,16 @@ namespace network {
 class CRLSetDistributor;
 class DnsConfigChangeManager;
 class HttpAuthCacheCopier;
+class LegacyTLSConfigDistributor;
+class NetLogProxySink;
 class NetworkContext;
 class NetworkUsageAccumulator;
 
 class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
     : public mojom::NetworkService {
  public:
+  static const base::TimeDelta kInitialDohProbeTimeout;
+
   NetworkService(std::unique_ptr<service_manager::BinderRegistry> registry,
                  mojo::PendingReceiver<mojom::NetworkService> receiver =
                      mojo::NullReceiver(),
@@ -112,6 +117,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   void StartNetLog(base::File file,
                    net::NetLogCaptureMode capture_mode,
                    base::Value constants) override;
+  void AttachNetLogProxy(
+      mojo::PendingRemote<mojom::NetLogProxySource> proxy_source,
+      mojo::PendingReceiver<mojom::NetLogProxySink>) override;
   void SetSSLKeyLogFile(base::File file) override;
   void CreateNetworkContext(
       mojo::PendingReceiver<mojom::NetworkContext> receiver,
@@ -126,7 +134,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
       mojom::HttpAuthStaticParamsPtr http_auth_static_params) override;
   void ConfigureHttpAuthPrefs(
       mojom::HttpAuthDynamicParamsPtr http_auth_dynamic_params) override;
-  void SetRawHeadersAccess(uint32_t process_id,
+  void SetRawHeadersAccess(int32_t process_id,
                            const std::vector<url::Origin>& origins) override;
   void SetMaxConnectionsPerProxy(int32_t max_connections) override;
   void GetNetworkChangeManager(
@@ -141,18 +149,24 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   void GetNetworkList(
       uint32_t policy,
       mojom::NetworkService::GetNetworkListCallback callback) override;
-  void UpdateCRLSet(base::span<const uint8_t> crl_set) override;
+  void UpdateCRLSet(
+      base::span<const uint8_t> crl_set,
+      mojom::NetworkService::UpdateCRLSetCallback callback) override;
+  void UpdateLegacyTLSConfig(
+      base::span<const uint8_t> config,
+      mojom::NetworkService::UpdateLegacyTLSConfigCallback callback) override;
   void OnCertDBChanged() override;
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   void SetCryptConfig(mojom::CryptConfigPtr crypt_config) override;
 #endif
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
   void SetEncryptionKey(const std::string& encryption_key) override;
 #endif
-  void AddCorbExceptionForPlugin(uint32_t process_id) override;
-  void RemoveCorbExceptionForPlugin(uint32_t process_id) override;
-  void AddExtraMimeTypesForCorb(
-      const std::vector<std::string>& mime_types) override;
+  void AddCorbExceptionForPlugin(int32_t process_id) override;
+  void AddAllowedRequestInitiatorForPlugin(
+      int32_t process_id,
+      const url::Origin& allowed_request_initiator) override;
+  void RemoveSecurityExceptionsForPlugin(int32_t process_id) override;
   void OnMemoryPressure(base::MemoryPressureListener::MemoryPressureLevel
                             memory_pressure_level) override;
   void OnPeerToPeerConnectionsCountChange(uint32_t count) override;
@@ -161,6 +175,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 #endif
   void SetEnvironment(
       std::vector<mojom::EnvironmentVariablePtr> environment) override;
+  void SetTrustTokenKeyCommitments(
+      base::flat_map<url::Origin, mojom::TrustTokenKeyCommitmentResultPtr>
+          commitments) override;
+
 #if defined(OS_ANDROID)
   void DumpWithoutCrashing(base::Time dump_request_time) override;
 #endif
@@ -175,7 +193,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   void OnBeforeURLRequest();
 
   bool quic_disabled() const { return quic_disabled_; }
-  bool HasRawHeadersAccess(uint32_t process_id, const GURL& resource_url) const;
+  bool HasRawHeadersAccess(int32_t process_id, const GURL& resource_url) const;
+
+  bool IsInitiatorAllowedForPlugin(int process_id,
+                                   const url::Origin& request_initiator);
 
   mojom::NetworkServiceClient* client() {
     return client_.is_bound() ? client_.get() : nullptr;
@@ -204,6 +225,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
     return crl_set_distributor_.get();
   }
 
+  LegacyTLSConfigDistributor* legacy_tls_config_distributor() {
+    return legacy_tls_config_distributor_.get();
+  }
+
   bool os_crypt_config_set() const { return os_crypt_config_set_; }
 
   void set_host_resolver_factory_for_testing(
@@ -211,9 +236,19 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
     host_resolver_factory_ = std::move(host_resolver_factory);
   }
 
+  bool split_auth_cache_by_network_isolation_key() const {
+    return split_auth_cache_by_network_isolation_key_;
+  }
+
+  const TrustTokenKeyCommitments* trust_token_key_commitments() const {
+    return trust_token_key_commitments_.get();
+  }
+
   static NetworkService* GetNetworkServiceForTesting();
 
  private:
+  class DelayedDohProbeActivator;
+
   void DestroyNetworkContexts();
 
   // Called by a NetworkContext when its mojo pipe is closed. Deletes the
@@ -236,6 +271,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   bool initialized_ = false;
 
   net::NetLog* net_log_;
+
+  std::unique_ptr<NetLogProxySink> net_log_proxy_sink_;
 
   std::unique_ptr<net::FileNetLogObserver> file_net_log_observer_;
   net::TraceNetLogObserver trace_net_log_observer_;
@@ -264,10 +301,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   std::unique_ptr<net::HostResolverManager> host_resolver_manager_;
   std::unique_ptr<net::HostResolver::Factory> host_resolver_factory_;
   std::unique_ptr<NetworkUsageAccumulator> network_usage_accumulator_;
-
-  net::HttpAuthPreferences http_auth_preferences_;
-  mojom::HttpAuthStaticParamsPtr http_auth_static_params_;
   std::unique_ptr<HttpAuthCacheCopier> http_auth_cache_copier_;
+
+  // Members that would store the http auth network_service related params.
+  // These Params are later used by NetworkContext to create
+  // HttpAuthPreferences.
+  mojom::HttpAuthDynamicParamsPtr http_auth_dynamic_network_service_params_;
+  mojom::HttpAuthStaticParamsPtr http_auth_static_network_service_params_;
 
   // NetworkContexts created by CreateNetworkContext(). They call into the
   // NetworkService when their connection is closed so that it can delete
@@ -289,7 +329,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 
   // A per-process_id map of origins that are white-listed to allow
   // them to request raw headers for resources they request.
-  std::map<uint32_t, base::flat_set<url::Origin>>
+  std::map<int32_t, base::flat_set<url::Origin>>
       raw_headers_access_origins_by_pid_;
 
   bool quic_disabled_ = false;
@@ -297,6 +337,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   bool os_crypt_config_set_ = false;
 
   std::unique_ptr<CRLSetDistributor> crl_set_distributor_;
+
+  std::unique_ptr<LegacyTLSConfigDistributor> legacy_tls_config_distributor_;
 
   // A timer that periodically calls UpdateLoadInfo while there are pending
   // loads and not waiting on an ACK from the client for the last sent
@@ -308,6 +350,22 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 
   // A timer that periodically calls ReportMetrics every hour.
   base::RepeatingTimer metrics_trigger_timer_;
+
+  // Whether new NetworkContexts will be configured to partition their
+  // HttpAuthCaches by NetworkIsolationKey.
+  bool split_auth_cache_by_network_isolation_key_ = false;
+
+  // Globally-scoped cryptographic state for the Trust Tokens protocol
+  // (https://github.com/wicg/trust-token-api), updated via a Mojo IPC and
+  // provided to NetworkContexts via the getter.
+  std::unique_ptr<TrustTokenKeyCommitments> trust_token_key_commitments_;
+
+  std::unique_ptr<DelayedDohProbeActivator> doh_probe_activator_;
+
+  // Map from a renderer process id, to the set of plugin origins embedded by
+  // that renderer process (the renderer will proxy requests from PPAPI - such
+  // requests should have their initiator origin within the set stored here).
+  std::map<int, std::set<url::Origin>> plugin_origins_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkService);
 };

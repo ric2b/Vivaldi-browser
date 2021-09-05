@@ -36,7 +36,7 @@ void TestBackgroundSyncManager::StoreDataInBackend(
     const url::Origin& origin,
     const std::string& key,
     const std::string& data,
-    ServiceWorkerStorage::StatusCallback callback) {
+    ServiceWorkerRegistry::StatusCallback callback) {
   EXPECT_FALSE(continuation_);
   if (corrupt_backend_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -57,7 +57,7 @@ void TestBackgroundSyncManager::StoreDataInBackend(
 
 void TestBackgroundSyncManager::GetDataFromBackend(
     const std::string& key,
-    ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback callback) {
+    ServiceWorkerRegistry::GetUserDataForAllRegistrationsCallback callback) {
   EXPECT_FALSE(continuation_);
   if (corrupt_backend_) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -94,10 +94,10 @@ void TestBackgroundSyncManager::DispatchPeriodicSyncEvent(
   dispatch_periodic_sync_callback_.Run(active_version, std::move(callback));
 }
 
-void TestBackgroundSyncManager::HasMainFrameProviderHost(
+void TestBackgroundSyncManager::HasMainFrameWindowClient(
     const url::Origin& origin,
     BoolCallback callback) {
-  std::move(callback).Run(has_main_frame_provider_host_);
+  std::move(callback).Run(has_main_frame_window_client_);
 }
 
 void TestBackgroundSyncManager::FireReadyEvents(
@@ -119,14 +119,14 @@ void TestBackgroundSyncManager::StoreDataInBackendContinue(
     const url::Origin& origin,
     const std::string& key,
     const std::string& data,
-    ServiceWorkerStorage::StatusCallback callback) {
+    ServiceWorkerRegistry::StatusCallback callback) {
   BackgroundSyncManager::StoreDataInBackend(sw_registration_id, origin, key,
                                             data, std::move(callback));
 }
 
 void TestBackgroundSyncManager::GetDataFromBackendContinue(
     const std::string& key,
-    ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback callback) {
+    ServiceWorkerRegistry::GetUserDataForAllRegistrationsCallback callback) {
   BackgroundSyncManager::GetDataFromBackend(key, std::move(callback));
 }
 

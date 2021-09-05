@@ -24,22 +24,6 @@ if (is_android) {
   import("//build/config/android/abi.gni")
 }
 
-declare_args() {
-  # When set (the default) enables C++ iterator debugging in debug builds.
-  # Iterator debugging is always off in release builds (technically, this flag
-  # affects the "debug" config, which is always available but applied by
-  # default only in debug builds).
-  #
-  # Iterator debugging is generally useful for catching bugs. But it can
-  # introduce extra locking to check the state of an iterator against the state
-  # of the current object. For iterator- and thread-heavy code, this can
-  # significantly slow execution - two orders of magnitude slowdown has been
-  # seen (crbug.com/903553) and iterator debugging also slows builds by making
-  # generation of snapshot_blob.bin take ~40-60 s longer. Therefore this
-  # defaults to off.
-  enable_iterator_debugging = false
-}
-
 # ==============================================
 #   PLEASE DO NOT ADD MORE THINGS TO THIS LIST
 # ==============================================
@@ -286,15 +270,14 @@ group("common_deps") {
   }
 
   if (is_fuchsia) {
-    public_deps += [ "//third_party/fuchsia-sdk:runtime_library" ]
+    public_deps +=
+        [ "//third_party/fuchsia-sdk/sdk/build/config:runtime_library_group" ]
   }
 }
 
 # Only the executable template in BUILDCONFIG.gn should reference this.
 group("executable_deps") {
-  public_deps = [
-    ":common_deps",
-  ]
+  public_deps = [ ":common_deps" ]
   if (export_libcxxabi_from_executables) {
     public_deps += [ "//buildtools/third_party/libc++abi" ]
   }
@@ -302,16 +285,12 @@ group("executable_deps") {
 
 # Only the loadable_module template in BUILDCONFIG.gn should reference this.
 group("loadable_module_deps") {
-  public_deps = [
-    ":common_deps",
-  ]
+  public_deps = [ ":common_deps" ]
 }
 
 # Only the shared_library template in BUILDCONFIG.gn should reference this.
 group("shared_library_deps") {
-  public_deps = [
-    ":common_deps",
-  ]
+  public_deps = [ ":common_deps" ]
 }
 
 # Executable configs -----------------------------------------------------------

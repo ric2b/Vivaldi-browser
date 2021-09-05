@@ -69,9 +69,8 @@ void DecryptingMediaResource::Initialize(InitCB init_cb, WaitingCB waiting_cb) {
     // trampolined to the |task_runner_|."
     decrypting_demuxer_stream->Initialize(
         stream, cdm_context_,
-        base::BindRepeating(
-            &DecryptingMediaResource::OnDecryptingDemuxerInitialized,
-            weak_factory_.GetWeakPtr()));
+        base::BindOnce(&DecryptingMediaResource::OnDecryptingDemuxerInitialized,
+                       weak_factory_.GetWeakPtr()));
 
     streams_.push_back(decrypting_demuxer_stream.get());
     owned_streams_.push_back(std::move(decrypting_demuxer_stream));
@@ -85,7 +84,7 @@ int DecryptingMediaResource::DecryptingDemuxerStreamCountForTesting() const {
 void DecryptingMediaResource::OnDecryptingDemuxerInitialized(
     PipelineStatus status) {
   DVLOG(2) << __func__ << ": DecryptingDemuxerStream initialization ended "
-           << "with the status: " << MediaLog::PipelineStatusToString(status);
+           << "with the status: " << status;
 
   // Decrement the count of DecryptingDemuxerStreams that need to be
   // initialized.

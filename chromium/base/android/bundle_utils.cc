@@ -47,26 +47,34 @@ const void* ReadRelPtr(const int32_t* relptr) {
   return reinterpret_cast<const char*>(relptr) + *relptr;
 }
 
-std::string ResolveLibraryPath(const std::string& library_name) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jstring> java_path = Java_BundleUtils_getNativeLibraryPath(
-      env, base::android::ConvertUTF8ToJavaString(env, library_name));
-  DCHECK(java_path);
-  return base::android::ConvertJavaStringToUTF8(env, java_path);
-}
-
 }  // namespace
 
 // static
-bool BundleUtils::IsBundle() {
-  return Java_BundleUtils_isBundle(base::android::AttachCurrentThread());
+std::string BundleUtils::ResolveLibraryPath(const std::string& library_name) {
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> java_path = Java_BundleUtils_getNativeLibraryPath(
+      env, base::android::ConvertUTF8ToJavaString(env, library_name));
+  // TODO(https://crbug.com/1019853): Remove this tolerance.
+  if (!java_path) {
+    return std::string();
+  }
+  return base::android::ConvertJavaStringToUTF8(env, java_path);
 }
 
 // static
-void* BundleUtils::DlOpenModuleLibraryPartition(
-    const std::string& library_name) {
+bool BundleUtils::IsBundle() {
+  return Java_BundleUtils_isBundleForNative(
+      base::android::AttachCurrentThread());
+}
+
+// static
+void* BundleUtils::DlOpenModuleLibraryPartition(const std::string& library_name,
+                                                const std::string& partition) {
+  // TODO(https://crbug.com/1019853): Remove this tolerance.
   std::string library_path = ResolveLibraryPath(library_name);
-  std::string partition = base::FilePath(library_path).BaseName().value();
+  if (library_path.empty()) {
+    return nullptr;
+  }
 
   // Linear search is required here because the partition descriptors are not
   // ordered. If a large number of partitions come into existence, lld could be

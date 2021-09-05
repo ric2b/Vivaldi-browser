@@ -12,6 +12,8 @@
 #include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/blink/renderer/bindings/core/v8/callback_promise_adapter.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_capabilities.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_constraints.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -21,8 +23,6 @@
 #include "third_party/blink/renderer/modules/imagecapture/media_settings_range.h"
 #include "third_party/blink/renderer/modules/imagecapture/photo_capabilities.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track.h"
-#include "third_party/blink/renderer/modules/mediastream/media_track_capabilities.h"
-#include "third_party/blink/renderer/modules/mediastream/media_track_constraints.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -109,14 +109,14 @@ const AtomicString& ImageCapture::InterfaceName() const {
 }
 
 ExecutionContext* ImageCapture::GetExecutionContext() const {
-  return ContextLifecycleObserver::GetExecutionContext();
+  return ExecutionContextLifecycleObserver::GetExecutionContext();
 }
 
 bool ImageCapture::HasPendingActivity() const {
   return GetExecutionContext() && HasEventListeners();
 }
 
-void ImageCapture::ContextDestroyed(ExecutionContext*) {
+void ImageCapture::ContextDestroyed() {
   RemoveAllEventListeners();
   service_requests_.clear();
   DCHECK(!HasEventListeners());
@@ -689,7 +689,7 @@ void ImageCapture::GetMediaTrackSettings(MediaTrackSettings* settings) const {
 }
 
 ImageCapture::ImageCapture(ExecutionContext* context, MediaStreamTrack* track)
-    : ContextLifecycleObserver(context),
+    : ExecutionContextLifecycleObserver(context),
       stream_track_(track),
       capabilities_(MediaTrackCapabilities::Create()),
       settings_(MediaTrackSettings::Create()),
@@ -955,7 +955,7 @@ void ImageCapture::ResolveWithPhotoCapabilities(
   resolver->Resolve(photo_capabilities_);
 }
 
-void ImageCapture::Trace(blink::Visitor* visitor) {
+void ImageCapture::Trace(Visitor* visitor) {
   visitor->Trace(stream_track_);
   visitor->Trace(capabilities_);
   visitor->Trace(settings_);
@@ -964,7 +964,7 @@ void ImageCapture::Trace(blink::Visitor* visitor) {
   visitor->Trace(photo_capabilities_);
   visitor->Trace(service_requests_);
   EventTargetWithInlineData::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

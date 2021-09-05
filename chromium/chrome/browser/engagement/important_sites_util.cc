@@ -13,12 +13,12 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
-#include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/engagement/site_engagement_details.mojom.h"
 #include "chrome/browser/engagement/site_engagement_score.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -38,6 +38,10 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
+#else
+#include "chrome/browser/web_applications/components/web_app_id.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #endif
 
 namespace {
@@ -145,6 +149,7 @@ void MaybePopulateImportantInfoForReason(
     const GURL& origin,
     std::set<GURL>* visited_origins,
     ImportantReason reason,
+    base::Optional<std::string> app_name,
     std::map<std::string, ImportantDomainInfo>* output) {
   if (!origin.is_valid() || !visited_origins->insert(origin).second)
     return;
@@ -156,6 +161,7 @@ void MaybePopulateImportantInfoForReason(
     info.registerable_domain = registerable_domain;
     info.example_origin = origin;
   }
+  info.app_name = app_name;
 }
 
 // Returns the score associated with the given reason. The order of
@@ -207,7 +213,7 @@ std::unordered_set<std::string> GetBlacklistedImportantDomains(
   ContentSettingsForOneType content_settings_list;
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile);
-  map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_IMPORTANT_SITE_INFO,
+  map->GetSettingsForOneType(ContentSettingsType::IMPORTANT_SITE_INFO,
                              content_settings::ResourceIdentifier(),
                              &content_settings_list);
   std::unordered_set<std::string> ignoring_domains;
@@ -219,7 +225,7 @@ std::unordered_set<std::string> GetBlacklistedImportantDomains(
 
     std::unique_ptr<base::DictionaryValue> dict =
         base::DictionaryValue::From(map->GetWebsiteSetting(
-            origin, origin, CONTENT_SETTINGS_TYPE_IMPORTANT_SITE_INFO, "",
+            origin, origin, ContentSettingsType::IMPORTANT_SITE_INFO, "",
             nullptr));
 
     if (!dict)
@@ -249,7 +255,8 @@ void PopulateInfoMapWithEngagement(
     if (detail.installed_bonus > 0) {
       // This origin was recently launched from the home screen.
       MaybePopulateImportantInfoForReason(detail.origin, &content_origins,
-                                          ImportantReason::HOME_SCREEN, output);
+                                          ImportantReason::HOME_SCREEN,
+                                          base::nullopt, output);
     }
 
     (*engagement_map)[detail.origin] = detail.total_score;
@@ -301,7 +308,8 @@ void PopulateInfoMapWithContentTypeAllowed(
     }
 #endif
 
-    MaybePopulateImportantInfoForReason(url, &content_origins, reason, output);
+    MaybePopulateImportantInfoForReason(url, &content_origins, reason,
+                                        base::nullopt, output);
   }
 }
 
@@ -348,11 +356,59 @@ void PopulateInfoMapWithBookmarks(
   std::set<GURL> content_origins;
   for (const UrlAndTitle& bookmark : result_bookmarks) {
     MaybePopulateImportantInfoForReason(bookmark.url, &content_origins,
-                                        ImportantReason::BOOKMARKS, output);
+                                        ImportantReason::BOOKMARKS,
+                                        base::nullopt, output);
   }
 }
 
+// WebAppRegistrar is desktop specific, but Android does not warn users
+// about clearing data for installed apps, so this and any functions explicitly
+// used to warn about clearing data for installed apps can be excluded from the
+// Android build.
+#if !defined(OS_ANDROID)
+void PopulateInfoMapWithInstalled(
+    browsing_data::TimePeriod time_period,
+    Profile* profile,
+    std::map<std::string, ImportantDomainInfo>* output) {
+  SiteEngagementService* service = SiteEngagementService::Get(profile);
+  std::vector<mojom::SiteEngagementDetails> engagement_details =
+      service->GetAllDetailsEngagedInTimePeriod(time_period);
+  std::set<GURL> content_origins;
+
+  // Check with AppRegistrar to make sure the apps have not yet been
+  // uninstalled.
+  const web_app::AppRegistrar& registrar =
+      web_app::WebAppProvider::Get(profile)->registrar();
+  auto app_ids = registrar.GetAppIds();
+  std::map<std::string, std::string> installed_origins_map;
+  for (auto& app_id : app_ids) {
+    GURL scope = registrar.GetAppScope(app_id);
+    DCHECK(scope.is_valid());
+    auto app_name = registrar.GetAppShortName(app_id);
+    installed_origins_map.emplace(
+        std::make_pair(scope.GetOrigin().spec(), app_name));
+  }
+
+  for (const auto& detail : engagement_details) {
+    if (detail.installed_bonus > 0) {
+      auto origin_pair = installed_origins_map.find(detail.origin.spec());
+      if (origin_pair != installed_origins_map.end()) {
+        MaybePopulateImportantInfoForReason(detail.origin, &content_origins,
+                                            ImportantReason::HOME_SCREEN,
+                                            origin_pair->second, output);
+      }
+    }
+  }
+}
+#endif
+
 }  // namespace
+
+ImportantDomainInfo::ImportantDomainInfo() = default;
+ImportantDomainInfo::~ImportantDomainInfo() = default;
+ImportantDomainInfo::ImportantDomainInfo(ImportantDomainInfo&&) = default;
+ImportantDomainInfo& ImportantDomainInfo::operator=(ImportantDomainInfo&&) =
+    default;
 
 std::string ImportantSitesUtil::GetRegisterableDomainOrIP(const GURL& url) {
   return GetRegisterableDomainOrIPFromHost(url.host_piece());
@@ -391,11 +447,11 @@ ImportantSitesUtil::GetImportantRegisterableDomains(Profile* profile,
                                 &engagement_map, &important_info);
 
   PopulateInfoMapWithContentTypeAllowed(
-      profile, CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+      profile, ContentSettingsType::NOTIFICATIONS,
       ImportantReason::NOTIFICATIONS, &important_info);
 
   PopulateInfoMapWithContentTypeAllowed(
-      profile, CONTENT_SETTINGS_TYPE_DURABLE_STORAGE, ImportantReason::DURABLE,
+      profile, ContentSettingsType::DURABLE_STORAGE, ImportantReason::DURABLE,
       &important_info);
 
   PopulateInfoMapWithBookmarks(profile, engagement_map, &important_info);
@@ -403,8 +459,9 @@ ImportantSitesUtil::GetImportantRegisterableDomains(Profile* profile,
   std::unordered_set<std::string> blacklisted_domains =
       GetBlacklistedImportantDomains(profile);
 
-  std::vector<std::pair<std::string, ImportantDomainInfo>> items(
-      important_info.begin(), important_info.end());
+  std::vector<std::pair<std::string, ImportantDomainInfo>> items;
+  for (auto& item : important_info)
+    items.emplace_back(std::move(item));
   std::sort(items.begin(), items.end(), &CompareDescendingImportantInfo);
 
   std::vector<ImportantDomainInfo> final_list;
@@ -415,7 +472,7 @@ ImportantSitesUtil::GetImportantRegisterableDomains(Profile* profile,
         blacklisted_domains.end()) {
       continue;
     }
-    final_list.push_back(domain_info.second);
+    final_list.push_back(std::move(domain_info.second));
     RECORD_UMA_FOR_IMPORTANT_REASON(
         "Storage.ImportantSites.GeneratedReason",
         "Storage.ImportantSites.GeneratedReasonCount",
@@ -424,6 +481,35 @@ ImportantSitesUtil::GetImportantRegisterableDomains(Profile* profile,
 
   return final_list;
 }
+
+#if !defined(OS_ANDROID)
+std::vector<ImportantDomainInfo>
+ImportantSitesUtil::GetInstalledRegisterableDomains(
+    browsing_data::TimePeriod time_period,
+    Profile* profile,
+    size_t max_results) {
+  std::vector<ImportantDomainInfo> installed_domains;
+  std::map<std::string, ImportantDomainInfo> installed_app_info;
+  PopulateInfoMapWithInstalled(time_period, profile, &installed_app_info);
+
+  std::unordered_set<std::string> excluded_domains =
+      GetBlacklistedImportantDomains(profile);
+
+  std::vector<std::pair<std::string, ImportantDomainInfo>> items;
+  for (auto& item : installed_app_info)
+    items.emplace_back(std::move(item));
+  std::sort(items.begin(), items.end(), &CompareDescendingImportantInfo);
+
+  for (std::pair<std::string, ImportantDomainInfo>& domain_info : items) {
+    if (installed_domains.size() >= max_results)
+      break;
+    if (excluded_domains.find(domain_info.first) != excluded_domains.end())
+      continue;
+    installed_domains.push_back(std::move(domain_info.second));
+  }
+  return installed_domains;
+}
+#endif
 
 void ImportantSitesUtil::RecordBlacklistedAndIgnoredImportantSites(
     Profile* profile,
@@ -453,7 +539,7 @@ void ImportantSitesUtil::RecordBlacklistedAndIgnoredImportantSites(
       GURL origin("http://" + ignored_site);
       std::unique_ptr<base::DictionaryValue> dict =
           base::DictionaryValue::From(map->GetWebsiteSetting(
-              origin, origin, CONTENT_SETTINGS_TYPE_IMPORTANT_SITE_INFO, "",
+              origin, origin, ContentSettingsType::IMPORTANT_SITE_INFO, "",
               nullptr));
 
       if (!dict)
@@ -462,7 +548,7 @@ void ImportantSitesUtil::RecordBlacklistedAndIgnoredImportantSites(
       RecordIgnore(dict.get());
 
       map->SetWebsiteSettingDefaultScope(
-          origin, origin, CONTENT_SETTINGS_TYPE_IMPORTANT_SITE_INFO, "",
+          origin, origin, ContentSettingsType::IMPORTANT_SITE_INFO, "",
           std::move(dict));
     }
   } else {
@@ -478,9 +564,9 @@ void ImportantSitesUtil::RecordBlacklistedAndIgnoredImportantSites(
     std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
     dict->SetInteger(kNumTimesIgnoredName, 0);
     dict->Remove(kTimeLastIgnored, nullptr);
-    map->SetWebsiteSettingDefaultScope(
-        origin, origin, CONTENT_SETTINGS_TYPE_IMPORTANT_SITE_INFO, "",
-        std::move(dict));
+    map->SetWebsiteSettingDefaultScope(origin, origin,
+                                       ContentSettingsType::IMPORTANT_SITE_INFO,
+                                       "", std::move(dict));
   }
 
   // Finally, record our old crossed-stats.

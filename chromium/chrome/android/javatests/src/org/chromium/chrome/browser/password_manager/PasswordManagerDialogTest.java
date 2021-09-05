@@ -32,7 +32,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
@@ -67,17 +67,16 @@ public class PasswordManagerDialogTest {
     public void setUp() throws InterruptedException {
         mActivityTestRule.startMainActivityOnBlankPage();
         ChromeActivity activity = (ChromeActivity) mActivityTestRule.getActivity();
-        mCoordinator = new PasswordManagerDialogCoordinator(
-                activity.getWindowAndroid().getContext().get(), activity.getModalDialogManager(),
+        mCoordinator = new PasswordManagerDialogCoordinator(activity.getModalDialogManager(),
                 activity.findViewById(android.R.id.content), activity.getFullscreenManager(),
-                activity.getControlContainerHeightResource(), false);
+                activity.getControlContainerHeightResource());
+        PasswordManagerDialogContents contents = new PasswordManagerDialogContents(TITLE, DETAILS,
+                R.drawable.data_reduction_illustration, OK_BUTTON, CANCEL_BUTTON, mOnClick);
+        contents.setDialogType(ModalDialogManager.ModalDialogType.TAB);
+        mCoordinator.initialize(activity.getWindowAndroid().getContext().get(), contents);
         mMediator = mCoordinator.getMediatorForTesting();
         mModel = mMediator.getModelForTesting();
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mCoordinator.showDialog(TITLE, DETAILS, R.drawable.data_reduction_illustration,
-                    OK_BUTTON, CANCEL_BUTTON, mOnClick, false,
-                    ModalDialogManager.ModalDialogType.TAB);
-        });
+        TestThreadUtils.runOnUiThreadBlocking(() -> { mCoordinator.showDialog(); });
     }
 
     @Test

@@ -5,6 +5,7 @@
 #ifndef SERVICES_TRACING_PERFETTO_PERFETTO_SERVICE_H_
 #define SERVICES_TRACING_PERFETTO_PERFETTO_SERVICE_H_
 
+#include <map>
 #include <memory>
 #include <set>
 
@@ -12,7 +13,6 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
-#include "services/service_manager/public/cpp/identity.h"
 #include "services/tracing/perfetto/consumer_host.h"
 #include "services/tracing/public/cpp/perfetto/task_runner.h"
 #include "services/tracing/public/mojom/perfetto_service.mojom.h"
@@ -43,8 +43,9 @@ class PerfettoService : public mojom::PerfettoService {
   // mojom::PerfettoService implementation.
   void ConnectToProducerHost(
       mojo::PendingRemote<mojom::ProducerClient> producer_client,
-      mojo::PendingReceiver<mojom::ProducerHost> producer_host_receiver)
-      override;
+      mojo::PendingReceiver<mojom::ProducerHost> producer_host_receiver,
+      mojo::ScopedSharedBufferHandle shared_memory,
+      uint64_t shared_memory_buffer_page_size_bytes) override;
 
   perfetto::TracingService* GetService() const;
 
@@ -74,16 +75,22 @@ class PerfettoService : public mojom::PerfettoService {
     return active_service_pids_initialized_;
   }
 
+  PerfettoTaskRunner* perfetto_task_runner() { return &perfetto_task_runner_; }
+
  private:
   void BindOnSequence(mojo::PendingReceiver<mojom::PerfettoService> receiver);
   void CreateServiceOnSequence();
+  void OnProducerHostDisconnect();
+  void OnServiceDisconnect();
+  void OnDisconnectFromProcess(base::ProcessId pid);
 
   PerfettoTaskRunner perfetto_task_runner_;
   std::unique_ptr<perfetto::TracingService> service_;
   mojo::ReceiverSet<mojom::PerfettoService, uint32_t> receivers_;
-  mojo::UniqueReceiverSet<mojom::ProducerHost> producer_receivers_;
+  mojo::UniqueReceiverSet<mojom::ProducerHost, uint32_t> producer_receivers_;
   std::set<ConsumerHost::TracingSession*> tracing_sessions_;  // Not owned.
   std::set<base::ProcessId> active_service_pids_;
+  std::map<base::ProcessId, int> num_active_connections_;
   bool active_service_pids_initialized_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(PerfettoService);

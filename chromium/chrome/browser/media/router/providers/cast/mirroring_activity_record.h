@@ -9,6 +9,8 @@
 
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
+#include "base/time/time.h"
 #include "chrome/browser/media/router/providers/cast/activity_record.h"
 #include "chrome/browser/media/router/providers/cast/cast_session_tracker.h"
 #include "chrome/common/media_router/media_route.h"
@@ -21,6 +23,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/openscreen/src/cast/common/channel/proto/cast_channel.pb.h"
 
 namespace media_router {
 
@@ -32,11 +35,18 @@ class MirroringActivityRecord : public ActivityRecord,
  public:
   using OnStopCallback = base::OnceClosure;
 
+  enum class MirroringType {
+    kTab,           // Mirror a single tab.
+    kDesktop,       // Mirror the whole desktop.
+    kOffscreenTab,  // Used for Presentation API 1UA mode.
+    kNonLocal,      // Activity started by other sender devices.
+    kMaxValue = kNonLocal,
+  };
+
   MirroringActivityRecord(const MediaRoute& route,
                           const std::string& app_id,
                           cast_channel::CastMessageHandler* message_handler,
                           CastSessionTracker* session_tracker,
-                          DataDecoder* data_decoder,
                           int target_tab_id,
                           const CastSinkExtraData& cast_data,
                           mojom::MediaRouter* media_router,
@@ -52,31 +62,7 @@ class MirroringActivityRecord : public ActivityRecord,
   void Send(mirroring::mojom::CastMessagePtr message) override;
 
   // ActivityRecord implementation
-  cast_channel::Result SendAppMessageToReceiver(
-      const CastInternalMessage& cast_message) override;
-  base::Optional<int> SendMediaRequestToReceiver(
-      const CastInternalMessage& cast_message) override;
-  void SendSetVolumeRequestToReceiver(
-      const CastInternalMessage& cast_message,
-      cast_channel::ResultCallback callback) override;
-  void SendStopSessionMessageToReceiver(
-      const base::Optional<std::string>& client_id,
-      const std::string& hash_token,
-      mojom::MediaRouteProvider::TerminateRouteCallback callback) override;
-  void HandleLeaveSession(const std::string& client_id) override;
-  mojom::RoutePresentationConnectionPtr AddClient(const CastMediaSource& source,
-                                                  const url::Origin& origin,
-                                                  int tab_id) override;
-  void RemoveClient(const std::string& client_id) override;
-  void SendMessageToClient(
-      const std::string& client_id,
-      blink::mojom::PresentationConnectionMessagePtr message) override;
-  void SendMediaStatusToClients(const base::Value& media_status,
-                                base::Optional<int> request_id) override;
-  void ClosePresentationConnections(
-      blink::mojom::PresentationConnectionCloseReason close_reason) override;
-  void TerminatePresentationConnections() override;
-  void OnAppMessage(const cast_channel::CastMessage& message) override;
+  void OnAppMessage(const cast::channel::CastMessage& message) override;
   void OnInternalMessage(const cast_channel::InternalMessage& message) override;
 
  protected:
@@ -85,13 +71,12 @@ class MirroringActivityRecord : public ActivityRecord,
       mojo::PendingRemote<mojom::MediaStatusObserver> observer) override;
 
  private:
-  enum class MirroringType {
-    kTab,           // Mirror a single tab.
-    kDesktop,       // Mirror the whole desktop.
-    kOffscreenTab,  // Used for Presentation API 1UA mode.
-    kMaxValue = kOffscreenTab,
-  };
+  void HandleParseJsonResult(const std::string& route_id,
+                             data_decoder::DataDecoder::ValueOrError result);
 
+  void StartMirroring(
+      mirroring::mojom::SessionParametersPtr session_params,
+      mojo::PendingReceiver<CastMessageChannel> channel_to_service);
   void StopMirroring();
 
   mojo::Remote<mirroring::mojom::MirroringServiceHost> host_;
@@ -104,6 +89,10 @@ class MirroringActivityRecord : public ActivityRecord,
   // To handle Cast messages from the mirroring service to the mirroring
   // receiver.
   mojo::Receiver<mirroring::mojom::CastMessageChannel> channel_receiver_{this};
+
+  // Set before and after a mirroring session is established, for metrics.
+  base::Optional<base::Time> will_start_mirroring_timestamp_;
+  base::Optional<base::Time> did_start_mirroring_timestamp_;
 
   const int channel_id_;
   const MirroringType mirroring_type_;

@@ -115,23 +115,23 @@ TEST_F(ShelfContextMenuModelTest, Invocation) {
 
   // Check the shelf auto-hide behavior and menu interaction.
   ShelfContextMenuModel menu1(nullptr, primary_id);
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever, shelf->auto_hide_behavior());
   menu1.ActivatedAt(0);
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
 
   // Recreate the menu, auto-hide should still be enabled.
   ShelfContextMenuModel menu2(nullptr, primary_id);
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
 
   // By default the shelf should be on bottom, shelf alignment options in order:
   // Left, Bottom, Right. Bottom should be checked.
   ui::MenuModel* submenu = menu2.GetSubmenuModelAt(1);
   EXPECT_TRUE(submenu->IsItemCheckedAt(1));
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
+  EXPECT_EQ(ShelfAlignment::kBottom, shelf->alignment());
 
   // Activate the left shelf alignment option.
   submenu->ActivatedAt(0);
-  EXPECT_EQ(SHELF_ALIGNMENT_LEFT, shelf->alignment());
+  EXPECT_EQ(ShelfAlignment::kLeft, shelf->alignment());
 
   // Recreate the menu, it should show left alignment checked.
   ShelfContextMenuModel menu3(nullptr, primary_id);

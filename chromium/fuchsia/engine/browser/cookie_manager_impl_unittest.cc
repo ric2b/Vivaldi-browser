@@ -39,7 +39,7 @@ std::unique_ptr<net::CanonicalCookie> CreateCookie(base::StringPiece name,
       GURL(kTestCookieUrl), name.as_string(), value.as_string(), /*domain=*/"",
       /*path=*/"", /*creation_time=*/base::Time(),
       /*expiration_time=*/base::Time(), /*last_access_time=*/base::Time(),
-      /*secure=*/false,
+      /*secure=*/true,
       /*httponly*/ false, net::CookieSameSite::NO_RESTRICTION,
       net::COOKIE_PRIORITY_MEDIUM);
 }
@@ -61,8 +61,7 @@ class CookieManagerImplTest : public testing::Test {
       network_service_->CreateNetworkContext(
           network_context_.BindNewPipeAndPassReceiver(),
           network::mojom::NetworkContextParams::New());
-      network_context_.set_disconnect_handler(
-          base::BindLambdaForTesting([&]() { network_context_.reset(); }));
+      network_context_.reset_on_disconnect();
     }
     return network_context_.get();
   }
@@ -75,7 +74,7 @@ class CookieManagerImplTest : public testing::Test {
     net::CookieOptions options;
     mojo_cookie_manager_->SetCanonicalCookie(
         *CreateCookie(name, value), "https", options,
-        base::Bind([](net::CanonicalCookie::CookieInclusionStatus status) {
+        base::BindOnce([](net::CanonicalCookie::CookieInclusionStatus status) {
           EXPECT_TRUE(status.IsInclude());
         }));
   }
@@ -86,7 +85,7 @@ class CookieManagerImplTest : public testing::Test {
 
     mojo_cookie_manager_->DeleteCanonicalCookie(
         *CreateCookie(name, value),
-        base::Bind([](bool success) { EXPECT_TRUE(success); }));
+        base::BindOnce([](bool success) { EXPECT_TRUE(success); }));
   }
 
   // Synchronously fetches all cookies via the |cookie_manager_|.
@@ -329,8 +328,19 @@ TEST_F(CookieManagerImplTest, UpdateBatching) {
     CreateAndSetCookieAsync(kCookieName1, kCookieValue1);
     CreateAndSetCookieAsync(kCookieName2, kCookieValue2);
     CreateAndSetCookieAsync(kCookieName1, kCookieValue3);
+
+    // Flush the Cookie Manager so that all cookie changes are processed.
     mojo_cookie_manager_.FlushForTesting();
 
+    // Run all pending tasks so that CookiesIteratorImpl receives all cookie
+    // changes through network::mojom::CookieChangeListener::OnCookieChange().
+    // This is important because fuchsia::web::CookiesIterator::GetNext() only
+    // returns cookie updates that have already been received by the iterator
+    // implementation.
+    base::RunLoop().RunUntilIdle();
+
+    // Request cookie updates through fuchsia::web::CookiesIterator::GetNext().
+    // Multiple updates to the same cookie should be coalesced.
     GetNextCookiesIteratorResult global_updates(global_changes.get());
     global_updates.ExpectCookieUpdates(
         {{kCookieName1, kCookieValue3}, {kCookieName2, kCookieValue2}});
@@ -351,26 +361,23 @@ TEST_F(CookieManagerImplTest, UpdateBatching) {
 TEST_F(CookieManagerImplTest, ReconnectToNetworkContext) {
   // Attach a cookie observer, which we expect should become disconnected with
   // an appropriate error if the NetworkService goes away.
-  base::RunLoop global_changes_disconnect_loop;
-  fuchsia::web::CookiesIteratorPtr global_changes;
-  global_changes.set_error_handler([&](zx_status_t status) {
-    EXPECT_EQ(ZX_ERR_UNAVAILABLE, status);
-    global_changes_disconnect_loop.Quit();
-  });
-  cookie_manager_.ObserveCookieChanges(nullptr, nullptr,
-                                       global_changes.NewRequest());
+  base::RunLoop mojo_disconnect_loop;
+  cookie_manager_.set_on_mojo_disconnected_for_test(
+      mojo_disconnect_loop.QuitClosure());
 
   // Verify that GetAllCookies() returns a valid list of cookies (as opposed to
   // not returning a list at all) initially.
   EXPECT_TRUE(GetAllCookies().has_value());
 
-  // Tear-down and re-create the NetworkService, causing the CookieManager's
-  // connection to it to be dropped.
+  // Tear-down and re-create the NetworkService and |network_context_|, causing
+  // the CookieManager's connection to it to be dropped.
   network_service_.reset();
+  network_context_.reset();
   network_service_ = network::NetworkService::CreateForTesting();
 
-  // Expect that |global_changes| is disconnected at this point.
-  global_changes_disconnect_loop.Run();
+  // Wait for the |cookie_manager_| to observe the NetworkContext disconnect,
+  // so that GetAllCookies() can re-connect.
+  mojo_disconnect_loop.Run();
 
   // If the CookieManager fails to re-connect then GetAllCookies() will receive
   // no data (as opposed to receiving an empty list of cookies).

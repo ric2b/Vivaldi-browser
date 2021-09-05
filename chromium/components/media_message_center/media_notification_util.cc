@@ -18,9 +18,14 @@ namespace {
 // show all the action buttons then this is used to determine which will be
 // shown.
 constexpr MediaSessionAction kPreferredActions[] = {
-    MediaSessionAction::kPlay,          MediaSessionAction::kPause,
-    MediaSessionAction::kPreviousTrack, MediaSessionAction::kNextTrack,
-    MediaSessionAction::kSeekBackward,  MediaSessionAction::kSeekForward,
+    MediaSessionAction::kPlay,
+    MediaSessionAction::kPause,
+    MediaSessionAction::kPreviousTrack,
+    MediaSessionAction::kNextTrack,
+    MediaSessionAction::kSeekBackward,
+    MediaSessionAction::kSeekForward,
+    MediaSessionAction::kEnterPictureInPicture,
+    MediaSessionAction::kExitPictureInPicture,
 };
 
 // The maximum number of media notifications to count when recording the
@@ -31,6 +36,7 @@ const int kMediaNotificationCountHistogramMax = 20;
 }  // namespace
 
 const char kCountHistogramName[] = "Media.Notification.Count";
+const char kCastCountHistogramName[] = "Media.Notification.Cast.Count";
 
 base::string16 GetAccessibleNameFromMetadata(
     media_session::MediaMetadata session_metadata) {
@@ -50,11 +56,11 @@ base::string16 GetAccessibleNameFromMetadata(
   return accessible_name;
 }
 
-std::set<MediaSessionAction> GetTopVisibleActions(
-    const std::set<MediaSessionAction>& enabled_actions,
-    const std::set<MediaSessionAction>& ignored_actions,
+base::flat_set<MediaSessionAction> GetTopVisibleActions(
+    const base::flat_set<MediaSessionAction>& enabled_actions,
+    const base::flat_set<MediaSessionAction>& ignored_actions,
     size_t max_actions) {
-  std::set<MediaSessionAction> visible_actions;
+  base::flat_set<MediaSessionAction> visible_actions;
 
   for (auto& action : kPreferredActions) {
     if (visible_actions.size() >= max_actions)
@@ -81,8 +87,20 @@ MediaSessionAction GetPlayPauseIgnoredAction(
              : MediaSessionAction::kPlay;
 }
 
+MediaSessionAction GetPictureInPictureIgnoredAction(
+    MediaSessionAction current_action) {
+  return current_action == MediaSessionAction::kEnterPictureInPicture
+             ? MediaSessionAction::kExitPictureInPicture
+             : MediaSessionAction::kEnterPictureInPicture;
+}
+
 void RecordConcurrentNotificationCount(size_t count) {
   UMA_HISTOGRAM_EXACT_LINEAR(kCountHistogramName, count,
+                             kMediaNotificationCountHistogramMax);
+}
+
+void RecordConcurrentCastNotificationCount(size_t count) {
+  UMA_HISTOGRAM_EXACT_LINEAR(kCastCountHistogramName, count,
                              kMediaNotificationCountHistogramMax);
 }
 

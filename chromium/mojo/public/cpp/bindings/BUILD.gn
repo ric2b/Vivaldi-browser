@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
+import("//build/config/compiler/compiler.gni")
 import("//build/config/nacl/config.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
@@ -88,7 +89,6 @@ component("bindings_base") {
     "lib/validation_errors.h",
     "lib/validation_util.cc",
     "lib/validation_util.h",
-    "map.h",
     "map_data_view.h",
     "map_traits.h",
     "map_traits_flat_map.h",
@@ -96,6 +96,8 @@ component("bindings_base") {
     "message.h",
     "message_header_validator.h",
     "scoped_interface_endpoint_handle.h",
+    "scoped_message_error_crash_key.cc",
+    "scoped_message_error_crash_key.h",
     "string_data_view.h",
     "string_traits.h",
     "string_traits_stl.h",
@@ -118,6 +120,11 @@ component("bindings_base") {
   if (enable_ipc_fuzzer) {
     all_dependent_configs = [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
   }
+
+  if (!is_debug && !optimize_for_size) {
+    configs -= [ "//build/config/compiler:default_optimization" ]
+    configs += [ "//build/config/compiler:optimize_max" ]
+  }
 }
 
 component("bindings") {
@@ -130,6 +137,10 @@ component("bindings") {
     "associated_receiver.h",
     "associated_receiver_set.h",
     "associated_remote.h",
+    "async_flusher.cc",
+    "async_flusher.h",
+    "binder_map.cc",
+    "binder_map.h",
     "binding.h",
     "binding_set.h",
     "callback_helpers.h",
@@ -154,11 +165,15 @@ component("bindings") {
     "lib/control_message_handler.h",
     "lib/control_message_proxy.cc",
     "lib/control_message_proxy.h",
+    "lib/generated_code_util.cc",
+    "lib/generated_code_util.h",
     "lib/interface_endpoint_client.cc",
     "lib/interface_ptr_state.cc",
     "lib/interface_ptr_state.h",
     "lib/interface_serialization.h",
     "lib/message_dispatcher.cc",
+    "lib/message_quota_checker.cc",
+    "lib/message_quota_checker.h",
     "lib/multiplex_router.cc",
     "lib/multiplex_router.h",
     "lib/native_enum_data.h",
@@ -178,6 +193,8 @@ component("bindings") {
     "native_enum.h",
     "pending_associated_receiver.h",
     "pending_associated_remote.h",
+    "pending_flush.cc",
+    "pending_flush.h",
     "pending_receiver.h",
     "pending_remote.h",
     "pipe_control_message_handler.h",
@@ -202,6 +219,8 @@ component("bindings") {
     "sync_event_watcher.h",
     "sync_handle_registry.h",
     "sync_handle_watcher.h",
+    "thread_safe_forwarder_base.cc",
+    "thread_safe_forwarder_base.h",
     "thread_safe_interface_ptr.h",
     "unique_associated_receiver_set.h",
     "unique_ptr_impl_ref_traits.h",
@@ -233,9 +252,7 @@ component("bindings") {
     "//mojo/public/interfaces/bindings",
   ]
 
-  deps = [
-    "//ipc:native_handle_type_converters",
-  ]
+  deps = [ "//ipc:native_handle_type_converters" ]
 
   defines = [ "IS_MOJO_CPP_BINDINGS_IMPL" ]
 }
@@ -253,8 +270,7 @@ source_set("struct_traits") {
 }
 
 if (!is_ios) {
-  # TODO(yzshen): crbug.com/617718 Consider moving this into blink.
-  source_set("wtf_support") {
+  component("wtf_support") {
     sources = [
       "array_traits_web_vector.h",
       "array_traits_wtf_vector.h",
@@ -266,8 +282,11 @@ if (!is_ios) {
       "string_traits_wtf.h",
     ]
 
+    defines = [ "IS_MOJO_CPP_BINDINGS_BASE_IMPL" ]
+
     public_deps = [
       ":bindings",
+      "//base",
       "//third_party/blink/public:blink_headers",
       "//third_party/blink/renderer/platform:platform_export",
       "//third_party/blink/renderer/platform/wtf",

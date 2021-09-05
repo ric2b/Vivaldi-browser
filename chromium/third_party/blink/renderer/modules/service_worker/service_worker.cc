@@ -37,11 +37,11 @@
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_post_message_options.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/messaging/blink_transferable_message.h"
 #include "third_party/blink/renderer/core/messaging/message_port.h"
-#include "third_party/blink/renderer/core/messaging/post_message_options.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_container.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_global_scope.h"
@@ -87,11 +87,19 @@ void ServiceWorker::postMessage(ScriptState* script_state,
 
   BlinkTransferableMessage msg;
   msg.message = serialized_message;
+  msg.sender_origin =
+      GetExecutionContext()->GetSecurityOrigin()->IsolatedCopy();
   msg.ports = MessagePort::DisentanglePorts(
       ExecutionContext::From(script_state), transferables.message_ports,
       exception_state);
   if (exception_state.HadException())
     return;
+
+  if (msg.message->IsLockedToAgentCluster()) {
+    msg.locked_agent_cluster_id = GetExecutionContext()->GetAgentClusterID();
+  } else {
+    msg.locked_agent_cluster_id = base::nullopt;
+  }
 
   host_->PostMessageToServiceWorker(std::move(msg));
 }
@@ -155,7 +163,7 @@ ServiceWorker* ServiceWorker::From(ExecutionContext* context,
     return scope->GetOrCreateServiceWorker(std::move(info));
   }
 
-  return ServiceWorkerContainer::From(To<Document>(context))
+  return ServiceWorkerContainer::From(Document::From(context))
       ->GetOrCreateServiceWorker(std::move(info));
 }
 
@@ -168,7 +176,7 @@ bool ServiceWorker::HasPendingActivity() const {
 void ServiceWorker::ContextLifecycleStateChanged(
     mojom::FrameLifecycleState state) {}
 
-void ServiceWorker::ContextDestroyed(ExecutionContext*) {
+void ServiceWorker::ContextDestroyed() {
   was_stopped_ = true;
 }
 
@@ -197,7 +205,7 @@ void ServiceWorker::Dispose() {
   receiver_.reset();
 }
 
-void ServiceWorker::Trace(blink::Visitor* visitor) {
+void ServiceWorker::Trace(Visitor* visitor) {
   AbstractWorker::Trace(visitor);
 }
 

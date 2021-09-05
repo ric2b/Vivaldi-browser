@@ -30,7 +30,6 @@ jumbo_static_library("browser") {
     "address_rewriter.h",
     "autocomplete_history_manager.cc",
     "autocomplete_history_manager.h",
-    "autofill-inl.h",
     "autofill_address_util.cc",
     "autofill_address_util.h",
     "autofill_browser_util.cc",
@@ -89,6 +88,10 @@ jumbo_static_library("browser") {
     "data_model/contact_info.h",
     "data_model/credit_card.cc",
     "data_model/credit_card.h",
+    "data_model/credit_card_cloud_token_data.cc",
+    "data_model/credit_card_cloud_token_data.h",
+    "data_model/data_model_utils.cc",
+    "data_model/data_model_utils.h",
     "data_model/form_group.cc",
     "data_model/form_group.h",
     "data_model/phone_number.cc",
@@ -194,8 +197,7 @@ jumbo_static_library("browser") {
     "payments/strike_database_integrator_base.h",
     "payments/strike_database_integrator_test_strike_database.cc",
     "payments/strike_database_integrator_test_strike_database.h",
-    "payments/upi_vpa_save_manager.cc",
-    "payments/upi_vpa_save_manager.h",
+    "payments/webauthn_callback_types.h",
     "personal_data_manager.cc",
     "personal_data_manager.h",
     "personal_data_manager_observer.h",
@@ -293,8 +295,10 @@ jumbo_static_library("browser") {
       "payments/autofill_save_card_infobar_mobile.h",
       "ui/mobile_label_formatter.cc",
       "ui/mobile_label_formatter.h",
-      "ui/payments/card_expiration_date_fix_flow_view_delegate_mobile.cc",
-      "ui/payments/card_expiration_date_fix_flow_view_delegate_mobile.h",
+      "ui/payments/card_expiration_date_fix_flow_controller.h",
+      "ui/payments/card_expiration_date_fix_flow_controller_impl.cc",
+      "ui/payments/card_expiration_date_fix_flow_controller_impl.h",
+      "ui/payments/card_expiration_date_fix_flow_view.h",
       "ui/payments/card_name_fix_flow_controller.h",
       "ui/payments/card_name_fix_flow_controller_impl.cc",
       "ui/payments/card_name_fix_flow_controller_impl.h",
@@ -321,6 +325,7 @@ jumbo_static_library("browser") {
       "payments/credit_card_fido_authenticator.h",
       "payments/fido_authentication_strike_database.cc",
       "payments/fido_authentication_strike_database.h",
+      "payments/internal_authenticator.h",
     ]
   }
 
@@ -356,6 +361,7 @@ jumbo_static_library("browser") {
     "//components/strings",
     "//components/sync",
     "//components/variations/net",
+    "//components/variations/service:service",
     "//components/version_info",
     "//components/webdata/common",
     "//crypto",
@@ -387,6 +393,10 @@ jumbo_static_library("browser") {
   }
 
   if (!is_android && !is_ios) {
+    sources += [
+      "payments/upi_vpa_save_manager.cc",
+      "payments/upi_vpa_save_manager.h",
+    ]
     deps += [
       "//ui/native_theme",
       "//ui/native_theme:native_theme_browser",
@@ -458,11 +468,11 @@ jumbo_static_library("test_support") {
     "webdata/autofill_sync_bridge_test_util.h",
     "webdata/mock_autofill_webdata_backend.cc",
     "webdata/mock_autofill_webdata_backend.h",
+    "webdata/mock_autofill_webdata_service.cc",
+    "webdata/mock_autofill_webdata_service.h",
   ]
 
-  public_deps = [
-    ":browser",
-  ]
+  public_deps = [ ":browser" ]
 
   deps = [
     ":autofill_address_rewriter_resources",
@@ -496,6 +506,7 @@ jumbo_static_library("test_support") {
     sources += [
       "payments/test_credit_card_fido_authenticator.cc",
       "payments/test_credit_card_fido_authenticator.h",
+      "payments/test_internal_authenticator.h",
     ]
 
     deps += [ "//third_party/blink/public/common" ]
@@ -519,10 +530,8 @@ bundle_data("unit_tests_bundle_data") {
     "//components/test/data/autofill/merge/output/singlemerge.out",
     "//components/test/data/autofill/merge/output/validation.out",
   ]
-  outputs = [
-    "{{bundle_resources_dir}}/" +
-        "{{source_root_relative_dir}}/{{source_file_part}}",
-  ]
+  outputs = [ "{{bundle_resources_dir}}/" +
+              "{{source_root_relative_dir}}/{{source_file_part}}" ]
 }
 
 source_set("unit_tests") {
@@ -607,6 +616,7 @@ source_set("unit_tests") {
     sources += [
       "autofill_assistant_unittest.cc",
       "ui/mobile_label_formatter_unittest.cc",
+      "ui/payments/card_expiration_date_fix_flow_controller_impl_unittest.cc",
       "ui/payments/card_name_fix_flow_controller_impl_unittest.cc",
     ]
   }
@@ -643,6 +653,7 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/autofill/core/common",
+    "//components/infobars/core:feature_flags",
     "//components/leveldb_proto",
     "//components/os_crypt",
     "//components/os_crypt:test_support",
@@ -687,9 +698,7 @@ source_set("unit_tests") {
 }
 
 fuzzer_test("form_structure_fuzzer") {
-  sources = [
-    "form_structure_fuzzer.cc",
-  ]
+  sources = [ "form_structure_fuzzer.cc" ]
   deps = [
     # TODO(crbug.com/896313): Reduce the dependency on "browser".
     ":browser",
@@ -702,9 +711,7 @@ fuzzer_test("form_structure_fuzzer") {
 
 if (use_libfuzzer) {
   fuzzer_test("form_structure_process_query_response_fuzzer") {
-    sources = [
-      "form_structure_process_query_response_fuzzer.cc",
-    ]
+    sources = [ "form_structure_process_query_response_fuzzer.cc" ]
     deps = [
       # TODO(crbug.com/896313): Reduce the dependency on "browser".
       ":browser",
@@ -717,9 +724,7 @@ if (use_libfuzzer) {
 }
 
 fuzzer_test("autofill_phone_number_i18n_fuzzer") {
-  sources = [
-    "geo/phone_number_i18n_fuzzer.cc",
-  ]
+  sources = [ "geo/phone_number_i18n_fuzzer.cc" ]
 
   deps = [
     # TODO(crbug.com/896313): Reduce the dependency on "browser".

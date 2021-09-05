@@ -18,16 +18,16 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -134,15 +134,5 @@ public class TabTest {
         });
         Assert.assertFalse(mTab.needsReload());
         Assert.assertFalse(isShowingSadTab());
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Tab"})
-    public void testTabSecurityLevel() {
-        TestThreadUtils.runOnUiThreadBlocking(
-                (Runnable) ()
-                        -> Assert.assertEquals(
-                                ConnectionSecurityLevel.NONE, mTab.getSecurityLevel()));
     }
 }

@@ -38,7 +38,9 @@ syncer::SyncAccountInfo ToSyncAccountInfo(
   // Email is the closest thing to a username that the chromium account info
   // takes. It isn't really used for anything else than disply purposes anyway.
   chromium_account_info.email = account_info.username;
-  chromium_account_info.account_id = account_info.account_id;
+  chromium_account_info.gaia = account_info.username;
+  chromium_account_info.account_id =
+      CoreAccountId::FromString(account_info.account_id);
 
   return syncer::SyncAccountInfo(chromium_account_info, true);
 }

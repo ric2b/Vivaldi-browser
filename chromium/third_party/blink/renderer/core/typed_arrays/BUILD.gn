@@ -6,6 +6,8 @@ import("//third_party/blink/renderer/core/core.gni")
 
 blink_core_sources("typed_arrays") {
   sources = [
+    "array_buffer/array_buffer_contents.cc",
+    "array_buffer/array_buffer_contents.h",
     "array_buffer_view_helpers.h",
     "dom_array_buffer.cc",
     "dom_array_buffer.h",

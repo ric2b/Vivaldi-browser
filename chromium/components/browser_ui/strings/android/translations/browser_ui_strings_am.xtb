@@ -1,0 +1,67 @@
+<?xml version="1.0" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="am">
+<translation id="1124772482545689468">ተጠቃሚ</translation>
+<translation id="1181037720776840403">አስወግድ</translation>
+<translation id="1201402288615127009">ቀጣይ</translation>
+<translation id="1383876407941801731">ፍለጋ </translation>
+<translation id="2079545284768500474">ቀልብስ</translation>
+<translation id="2148716181193084225">ዛሬ</translation>
+<translation id="2359808026110333948">ቀጥል</translation>
+<translation id="2501278716633472235">ወደ ኋላ ተመለስ</translation>
+<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 ኩኪ ታግዷል}one{# ኩኪዎች ታግደዋል}other{# ኩኪዎች ታግደዋል}}</translation>
+<translation id="257931822824936280">ተዘርግቷል - ለመሰብሰብ ጠቅ ያድርጉ</translation>
+<translation id="2653659639078652383">አስገባ</translation>
+<translation id="2704606927547763573">ተቀድቷል</translation>
+<translation id="2968755619301702150">የእውቅና ማረጋገጫ መመልከቻ</translation>
+<translation id="3115898365077584848">መረጃ አሳይ</translation>
+<translation id="3295602654194328831">መረጃ ደብቅ</translation>
+<translation id="3479552764303398839">አሁን አይደለም</translation>
+<translation id="385051799172605136">ተመለስ</translation>
+<translation id="3987993985790029246">አገናኝ ቅዳ</translation>
+<translation id="4002066346123236978">ርዕስ</translation>
+<translation id="4570913071927164677">ዝርዝሮች</translation>
+<translation id="4645575059429386691">በእርስዎ ወላጅ የሚቀናበር</translation>
+<translation id="4883854917563148705">የሚተዳደሩ ቅንብሮች ዳግም ሊጀመሩ አይችሉም</translation>
+<translation id="497421865427891073">ወደ ፊት ሂድ</translation>
+<translation id="5100237604440890931">ተሰብስቧል - ለመዘርጋት ጠቅ ያድርጉ</translation>
+<translation id="5300589172476337783">አሳይ</translation>
+<translation id="5301954838959518834">እሺ፣ ገባኝ</translation>
+<translation id="5317780077021120954">አስቀምጥ</translation>
+<translation id="5391532827096253100">ወደዚህ ጣቢያ ያልዎት ግንኙነት ደህንነቱ የተጠበቀ አይደለም። የጣቢያ መረጃ</translation>
+<translation id="5556459405103347317">ዳግም ጫን</translation>
+<translation id="5596627076506792578">ተጨማሪ አማራጮች</translation>
+<translation id="5860033963881614850">አጥፋ</translation>
+<translation id="5916664084637901428">በርቷል</translation>
+<translation id="5939518447894949180">ዳግም አስጀምር</translation>
+<translation id="6040143037577758943">ዝጋ</translation>
+<translation id="6042308850641462728">ተጨማሪ</translation>
+<translation id="6165508094623778733">የበለጠ ለመረዳት</translation>
+<translation id="6206551242102657620">ግንኙነት ደህንነቱ የተጠበቀ ነው። የጣቢያ መረጃ</translation>
+<translation id="6216432067784365534">የ<ph name="NAME_OF_LIST_ITEM" /> አማራጮች</translation>
+<translation id="6527303717912515753">አጋራ</translation>
+<translation id="6746124502594467657">ወደታች አውርድ</translation>
+<translation id="6818926723028410516">ንጥሎችን ይምረጡ</translation>
+<translation id="6910211073230771657">ተሰርዟል</translation>
+<translation id="6945221475159498467">ይምረጡ</translation>
+<translation id="6963642900430330478">ይህ ገጽ አደገኛ ነው። የጣቢያ መረጃ</translation>
+<translation id="6965382102122355670">እሺ</translation>
+<translation id="7066151586745993502">{NUM_SELECTED,plural, =1{1 ተመርጧል}one{# ተመርጠዋል}other{# ተመርጠዋል}}</translation>
+<translation id="7087918508125750058"><ph name="ITEM_COUNT" /> ተመርጠዋል።  አማራጮች ከማያ ገጹ አናት አጠገብ ይገኛሉ</translation>
+<translation id="7250468141469952378"><ph name="ITEM_COUNT" /> ተመርጠዋል</translation>
+<translation id="7649070708921625228">እገዛ</translation>
+<translation id="7658239707568436148">ይቅር</translation>
+<translation id="7781829728241885113">ትናንት</translation>
+<translation id="7791543448312431591">አክል</translation>
+<translation id="780301667611848630">አይ፣ አመሰግናለሁ</translation>
+<translation id="7846076177841592234">ምርጫ ሰርዝ</translation>
+<translation id="8131740175452115882">አረጋግጥ</translation>
+<translation id="8206354486702514201">ይህ ቅንብር በአስተዳዳሪዎ ነው በግዳጅ እንዲፈጸም የተደረገው።</translation>
+<translation id="8249310407154411074">ወደ ላይ ውሰድ</translation>
+<translation id="8261506727792406068">ሰርዝ</translation>
+<translation id="8609465669617005112">ወደላይ አውጣ</translation>
+<translation id="8676374126336081632">ግቤቱን አጽዳ</translation>
+<translation id="8725066075913043281">እንደገና ይሞክሩ</translation>
+<translation id="8730621377337864115">ተከናውኗል</translation>
+<translation id="9019902583201351841">በእርስዎ ወላጆች የሚቀናበር</translation>
+</translationbundle>

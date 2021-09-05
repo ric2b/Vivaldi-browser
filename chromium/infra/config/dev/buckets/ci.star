@@ -21,6 +21,13 @@ luci.bucket(
     ],
 )
 
+luci.gitiles_poller(
+    name = 'master-gitiles-trigger',
+    bucket = 'ci',
+    repo = 'https://chromium.googlesource.com/chromium/src',
+)
+
+
 luci.recipe.defaults.cipd_package.set(
     'infra/recipe_bundles/chromium.googlesource.com/chromium/tools/build')
 
@@ -31,35 +38,45 @@ defaults.builderless.set(None)
 defaults.cpu.set(cpu.X86_64)
 defaults.executable.set(luci.recipe(name = 'swarming/staging'))
 defaults.execution_timeout.set(3 * time.hour)
-defaults.mastername.set('chromium.swarm')
+defaults.mastername.set('chromium.dev')
 defaults.os.set(os.LINUX_DEFAULT)
 defaults.service_account.set(
     'chromium-ci-builder-dev@chops-service-accounts.iam.gserviceaccount.com')
 defaults.swarming_tags.set(['vpython:native-python-wrapper'])
 
 
-builder(
-    name = 'Android N5 Swarm',
+def ci_builder(*, name, **kwargs):
+  return builder(
+      name = name,
+      triggered_by = ['master-gitiles-trigger'],
+      **kwargs
+  )
+
+ci_builder(
+    name = 'android-kitkat-arm-rel-swarming',
 )
 
-builder(
-    name = 'Android N5X Swarm',
+ci_builder(
+    name = 'android-marshmallow-arm64-rel-swarming',
 )
 
-builder(
-    name = 'ChromeOS Swarm',
+ci_builder(
+    name = 'linux-rel-swarming',
 )
 
-builder(
-    name = 'Linux Swarm',
-)
-
-builder(
-    name = 'Mac Swarm',
+ci_builder(
+    name = 'mac-rel-swarming',
     os = os.MAC_DEFAULT,
 )
 
-builder(
-    name = 'Windows Swarm',
+ci_builder(
+    name = 'win-rel-swarming',
     os = os.WINDOWS_DEFAULT,
+)
+
+## builders using swarming staging instance
+
+ci_builder(
+    name = 'linux-rel-swarming-staging',
+    swarming_host = 'chromium-swarm-staging.appspot.com',
 )

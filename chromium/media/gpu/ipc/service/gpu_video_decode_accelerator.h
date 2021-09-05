@@ -14,7 +14,6 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/shared_memory.h"
 #include "base/synchronization/waitable_event.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/config/gpu_info.h"
@@ -59,7 +58,7 @@ class GpuVideoDecodeAccelerator
   bool OnMessageReceived(const IPC::Message& message) override;
 
   // VideoDecodeAccelerator::Client implementation.
-  void NotifyInitializationComplete(bool success) override;
+  void NotifyInitializationComplete(Status status) override;
   void ProvidePictureBuffers(uint32_t requested_num_of_buffers,
                              VideoPixelFormat format,
                              uint32_t textures_per_buffer,

@@ -125,11 +125,18 @@ The text `set noparent` will stop owner propagation from parent directories.
 This should be rarely used. If you want to use `set noparent` except for IPC
 related files, please first reach out to chrome-eng-review@google.com.
 
-In this example, only the two listed people are owners:
+You have to use `set noparent` together with a reference to a file that lists
+the owners for the given use case. Approved use cases are listed in
+`//build/OWNERS.setnoparent`. Owners listed in those files are expected to
+execute special governance functions such as eng review or ipc security review.
+Every set of owners should implement their own means of auditing membership. The
+minimum expectation is that membership in those files is reevaluated on
+project, or affiliation changes.
+
+In this example, only the eng reviewers are owners:
 ```
 set noparent
-a@chromium.org
-b@chromium.org
+file://ENG_REVIEW_OWNERS
 ```
 
 The `per-file` directive allows owners to be added that apply only to files
@@ -179,8 +186,8 @@ Otherwise the reviewer won't know to review the patch.
   * Add the reviewer's email address in the code review tool's reviewer field
     like normal.
 
-  * Add a line "TBR=<reviewer's email>" to the bottom of the change list
-    description. e.g. `TBR=reviewer1@chromium.org,reviewer2@chromium.org`
+  * Add a line "Tbr:<reviewer's email>" to the bottom of the change list
+    description. e.g. `Tbr:reviewer1@chromium.org,reviewer2@chromium.org`
 
   * Type a message so that the owners in the TBR list can understand who is
     responsible for reviewing what, as part of their post-commit review

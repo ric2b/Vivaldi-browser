@@ -6,17 +6,26 @@
 
 #include "cc/layers/layer.h"
 #include "cc/layers/picture_layer.h"
+#include "cc/trees/layer_tree_host.h"
+#include "cc/trees/property_tree.h"
+#include "cc/trees/scroll_node.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
+#include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 
 namespace blink {
 
+// TODO(wangxianzhu): Though these tests don't directly apply in
+// CompositeAfterPaint, we should ensure the cases are tested in
+// CompositeAfterPaint mode if applicable.
 class CompositedLayerMappingTest : public RenderingTest {
  public:
   CompositedLayerMappingTest()
@@ -60,7 +69,8 @@ TEST_F(CompositedLayerMappingTest, SubpixelAccumulationChange) {
   Element* target = GetDocument().getElementById("target");
   target->SetInlineStyleProperty(CSSPropertyID::kLeft, "0.6px");
 
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
 
   PaintLayer* paint_layer =
       ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
@@ -82,7 +92,8 @@ TEST_F(CompositedLayerMappingTest,
   Element* target = GetDocument().getElementById("target");
   target->SetInlineStyleProperty(CSSPropertyID::kLeft, "0.6px");
 
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
 
   PaintLayer* paint_layer =
       ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
@@ -125,7 +136,8 @@ TEST_F(CompositedLayerMappingTest,
   Element* target = GetDocument().getElementById("target");
   target->SetInlineStyleProperty(CSSPropertyID::kLeft, "0.6px");
 
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
 
   PaintLayer* paint_layer =
       ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
@@ -177,8 +189,8 @@ TEST_F(CompositedLayerMappingTest, TallCompositedScrolledLayerInterestRect) {
   )HTML");
 
   UpdateAllLifecyclePhasesForTest();
-  GetDocument().View()->LayoutViewport()->SetScrollOffset(ScrollOffset(0, 8000),
-                                                          kProgrammaticScroll);
+  GetDocument().View()->LayoutViewport()->SetScrollOffset(
+      ScrollOffset(0, 8000), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
 
   Element* element = GetDocument().getElementById("target");
@@ -195,8 +207,8 @@ TEST_F(CompositedLayerMappingTest, TallNonCompositedScrolledLayerInterestRect) {
   )HTML");
 
   UpdateAllLifecyclePhasesForTest();
-  GetDocument().View()->LayoutViewport()->SetScrollOffset(ScrollOffset(0, 8000),
-                                                          kProgrammaticScroll);
+  GetDocument().View()->LayoutViewport()->SetScrollOffset(
+      ScrollOffset(0, 8000), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
 
   PaintLayer* paint_layer = GetDocument().GetLayoutView()->Layer();
@@ -235,7 +247,7 @@ TEST_F(CompositedLayerMappingTest, VerticalRightLeftWritingModeDocument) {
 
   UpdateAllLifecyclePhasesForTest();
   GetDocument().View()->LayoutViewport()->SetScrollOffset(
-      ScrollOffset(-5000, 0), kProgrammaticScroll);
+      ScrollOffset(-5000, 0), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
 
   PaintLayer* paint_layer = GetDocument().GetLayoutView()->Layer();
@@ -406,7 +418,7 @@ TEST_F(CompositedLayerMappingTest, 3D45DegRotatedTallInterestRect) {
   PaintLayer* paint_layer =
       ToLayoutBoxModelObject(element->GetLayoutObject())->Layer();
   ASSERT_TRUE(!!paint_layer->GraphicsLayerBacking());
-  EXPECT_EQ(IntRect(0, 0, 200, 6249),
+  EXPECT_EQ(IntRect(0, 0, 200, 6226),
             RecomputeInterestRect(paint_layer->GraphicsLayerBacking()));
 }
 
@@ -614,8 +626,8 @@ TEST_F(CompositedLayerMappingTest, InterestRectChangeOnViewportScroll) {
   EXPECT_EQ(IntRect(0, 0, 800, 4600),
             PreviousInterestRect(root_scrolling_layer));
 
-  GetDocument().View()->LayoutViewport()->SetScrollOffset(ScrollOffset(0, 300),
-                                                          kProgrammaticScroll);
+  GetDocument().View()->LayoutViewport()->SetScrollOffset(
+      ScrollOffset(0, 300), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
   // Still use the previous interest rect because the recomputed rect hasn't
   // changed enough.
@@ -624,8 +636,8 @@ TEST_F(CompositedLayerMappingTest, InterestRectChangeOnViewportScroll) {
   EXPECT_EQ(IntRect(0, 0, 800, 4600),
             PreviousInterestRect(root_scrolling_layer));
 
-  GetDocument().View()->LayoutViewport()->SetScrollOffset(ScrollOffset(0, 600),
-                                                          kProgrammaticScroll);
+  GetDocument().View()->LayoutViewport()->SetScrollOffset(
+      ScrollOffset(0, 600), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
   // Use recomputed interest rect because it changed enough.
   EXPECT_EQ(IntRect(0, 0, 800, 5200),
@@ -633,16 +645,16 @@ TEST_F(CompositedLayerMappingTest, InterestRectChangeOnViewportScroll) {
   EXPECT_EQ(IntRect(0, 0, 800, 5200),
             PreviousInterestRect(root_scrolling_layer));
 
-  GetDocument().View()->LayoutViewport()->SetScrollOffset(ScrollOffset(0, 5400),
-                                                          kProgrammaticScroll);
+  GetDocument().View()->LayoutViewport()->SetScrollOffset(
+      ScrollOffset(0, 5400), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(IntRect(0, 1400, 800, 8600),
             RecomputeInterestRect(root_scrolling_layer));
   EXPECT_EQ(IntRect(0, 1400, 800, 8600),
             PreviousInterestRect(root_scrolling_layer));
 
-  GetDocument().View()->LayoutViewport()->SetScrollOffset(ScrollOffset(0, 9000),
-                                                          kProgrammaticScroll);
+  GetDocument().View()->LayoutViewport()->SetScrollOffset(
+      ScrollOffset(0, 9000), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
   // Still use the previous interest rect because it contains the recomputed
   // interest rect.
@@ -651,8 +663,8 @@ TEST_F(CompositedLayerMappingTest, InterestRectChangeOnViewportScroll) {
   EXPECT_EQ(IntRect(0, 1400, 800, 8600),
             PreviousInterestRect(root_scrolling_layer));
 
-  GetDocument().View()->LayoutViewport()->SetScrollOffset(ScrollOffset(0, 2000),
-                                                          kProgrammaticScroll);
+  GetDocument().View()->LayoutViewport()->SetScrollOffset(
+      ScrollOffset(0, 2000), mojom::blink::ScrollType::kProgrammatic);
   // Use recomputed interest rect because it changed enough.
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(IntRect(0, 0, 800, 6600),
@@ -852,7 +864,7 @@ TEST_F(CompositedLayerMappingTest, InterestRectOfIframeInScrolledDiv) {
 
   // Scroll 8000 pixels down to move the iframe into view.
   GetDocument().View()->LayoutViewport()->SetScrollOffset(
-      ScrollOffset(0.0, 8000.0), kProgrammaticScroll);
+      ScrollOffset(0.0, 8000.0), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
 
   Element* target = ChildDocument().getElementById("target");
@@ -883,7 +895,7 @@ TEST_F(CompositedLayerMappingTest, InterestRectOfScrolledIframe) {
 
   // Scroll 7500 pixels down to bring the scrollable area to the bottom.
   ChildDocument().View()->LayoutViewport()->SetScrollOffset(
-      ScrollOffset(0.0, 7500.0), kProgrammaticScroll);
+      ScrollOffset(0.0, 7500.0), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
 
   ASSERT_TRUE(ChildDocument().View()->GetLayoutView()->HasLayer());
@@ -917,7 +929,7 @@ TEST_F(CompositedLayerMappingTest, InterestRectOfIframeWithContentBoxOffset) {
   // Scroll 3000 pixels down to bring the scrollable area to somewhere in the
   // middle.
   ChildDocument().View()->LayoutViewport()->SetScrollOffset(
-      ScrollOffset(0.0, 3000.0), kProgrammaticScroll);
+      ScrollOffset(0.0, 3000.0), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
 
   ASSERT_TRUE(ChildDocument().View()->GetLayoutView()->HasLayer());
@@ -959,7 +971,7 @@ TEST_F(CompositedLayerMappingTest, InterestRectOfIframeWithFixedContents) {
   EXPECT_EQ(IntRect(1000, 0, 4400, 300), RecomputeInterestRect(graphics_layer));
 
   ChildDocument().View()->LayoutViewport()->SetScrollOffset(
-      ScrollOffset(0.0, 3000.0), kProgrammaticScroll);
+      ScrollOffset(0.0, 3000.0), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
 
   // Because the fixed element does not scroll, the interest rect is unchanged.
@@ -985,7 +997,7 @@ TEST_F(CompositedLayerMappingTest, ScrolledFixedPositionInterestRect) {
   EXPECT_EQ(IntRect(0, 500, 100, 4030), RecomputeInterestRect(graphics_layer));
 
   GetDocument().View()->LayoutViewport()->SetScrollOffset(
-      ScrollOffset(0.0, 200.0), kProgrammaticScroll);
+      ScrollOffset(0.0, 200.0), mojom::blink::ScrollType::kProgrammatic);
   UpdateAllLifecyclePhasesForTest();
 
   // Because the fixed element does not scroll, the interest rect is unchanged.
@@ -998,12 +1010,12 @@ TEST_F(CompositedLayerMappingTest,
       true);
   SetBodyInnerHTML(R"HTML(
     <div id='container' style='position: relative; z-index: 1; overflow:
-    scroll; width: 300px; height: 300px'>
-        <div id='negative-composited-child' style='background-color: red;
-    width: 1px; height: 1px; position: absolute; backface-visibility:
-    hidden; z-index: -1'></div>
-        <div style='background-color: blue; width: 2000px; height: 2000px;
-    position: relative; top: 10px'></div>
+                               scroll; width: 300px; height: 300px'>
+      <div id='negative-composited-child' style='background-color: red;
+               width: 1px; height: 1px; position: absolute;
+               backface-visibility: hidden; z-index: -1'></div>
+      <div style='background-color: blue; width: 2000px; height: 2000px;
+                  position: relative; top: 10px'></div>
     </div>
   )HTML");
 
@@ -1138,7 +1150,7 @@ TEST_F(CompositedLayerMappingTest,
 
   const auto* container = ToLayoutBox(GetLayoutObjectByElementId("container"));
   EXPECT_EQ(kBackgroundPaintInScrollingContents,
-            container->GetBackgroundPaintLocation());
+            container->ComputeBackgroundPaintLocationIfComposited());
 
   // We currently don't use composited scrolling when the container has a
   // border-radius so even though we can paint the background onto the scrolling
@@ -1146,7 +1158,8 @@ TEST_F(CompositedLayerMappingTest,
   // this case.
   const auto* mapping = container->Layer()->GetCompositedLayerMapping();
   EXPECT_FALSE(mapping->HasScrollingLayer());
-  EXPECT_FALSE(mapping->BackgroundPaintsOntoScrollingContentsLayer());
+  EXPECT_EQ(kBackgroundPaintInGraphicsLayer,
+            container->GetBackgroundPaintLocation());
 }
 
 TEST_F(CompositedLayerMappingTest, StickyPositionMainThreadOffset) {
@@ -1180,7 +1193,8 @@ TEST_F(CompositedLayerMappingTest, StickyPositionMainThreadOffset) {
 
   sticky_layer->SetNeedsCompositingInputsUpdate();
   EXPECT_TRUE(sticky_layer->NeedsCompositingInputsUpdate());
-  GetDocument().View()->UpdateLifecycleToCompositingCleanPlusScrolling();
+  GetDocument().View()->UpdateLifecycleToCompositingCleanPlusScrolling(
+      DocumentUpdateReason::kTest);
   EXPECT_FALSE(sticky_layer->NeedsCompositingInputsUpdate());
 }
 
@@ -1251,10 +1265,22 @@ TEST_F(CompositedLayerMappingTest,
   // the sticky element.
   EXPECT_EQ(PhysicalOffset(0, 100), sticky->StickyPositionOffset());
 
-  // On the CompositedLayerMapping side however, the offset should have been
-  // removed so that the compositor can take care of it.
-  EXPECT_FLOAT_EQ(0, main_graphics_layer->GetPosition().x());
-  EXPECT_FLOAT_EQ(0, main_graphics_layer->GetPosition().y());
+  GraphicsLayer* root_scrolling_layer =
+      GetDocument().GetLayoutView()->Layer()->GraphicsLayerBacking();
+  const PropertyTreeState& root_layer_state =
+      root_scrolling_layer->GetPropertyTreeState();
+  const PropertyTreeState& sticky_layer_state =
+      main_graphics_layer->GetPropertyTreeState();
+  auto transform_from_sticky_to_root =
+      GeometryMapper::SourceToDestinationProjection(
+          sticky_layer_state.Transform(), root_layer_state.Transform());
+  // Irrespective of if the ancestor scroller is composited or not, the sticky
+  // position element should be at the same location.
+  auto sticky_position_relative_to_root =
+      transform_from_sticky_to_root.MapPoint(
+          FloatPoint(main_graphics_layer->GetOffsetFromTransformNode()));
+  EXPECT_FLOAT_EQ(8, sticky_position_relative_to_root.X());
+  EXPECT_FLOAT_EQ(8, sticky_position_relative_to_root.Y());
 }
 
 TEST_F(CompositedLayerMappingTest,
@@ -1287,8 +1313,22 @@ TEST_F(CompositedLayerMappingTest,
       FloatPoint(scrollable_area->ScrollPosition().Y(), 100));
   UpdateAllLifecyclePhasesForTest();
 
-  EXPECT_FLOAT_EQ(0, main_graphics_layer->GetPosition().x());
-  EXPECT_FLOAT_EQ(100, main_graphics_layer->GetPosition().y());
+  GraphicsLayer* root_scrolling_layer =
+      GetDocument().GetLayoutView()->Layer()->GraphicsLayerBacking();
+  const PropertyTreeState& root_layer_state =
+      root_scrolling_layer->GetPropertyTreeState();
+  const PropertyTreeState& sticky_layer_state =
+      main_graphics_layer->GetPropertyTreeState();
+  auto transform_from_sticky_to_root =
+      GeometryMapper::SourceToDestinationProjection(
+          sticky_layer_state.Transform(), root_layer_state.Transform());
+  // Irrespective of if the ancestor scroller is composited or not, the sticky
+  // position element should be at the same location.
+  auto sticky_position_relative_to_root =
+      transform_from_sticky_to_root.MapPoint(
+          FloatPoint(main_graphics_layer->GetOffsetFromTransformNode()));
+  EXPECT_FLOAT_EQ(8, sticky_position_relative_to_root.X());
+  EXPECT_FLOAT_EQ(8, sticky_position_relative_to_root.Y());
 }
 
 TEST_F(CompositedLayerMappingTest,
@@ -1381,23 +1421,29 @@ TEST_F(CompositedLayerMappingTest, ScrollingContainerBoundsChange) {
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("scroller"));
   PaintLayerScrollableArea* scrollable_area = scroller->GetScrollableArea();
 
-  cc::Layer* scrolling_layer = scrollable_area->LayerForScrolling()->CcLayer();
-  EXPECT_EQ(0, scrolling_layer->CurrentScrollOffset().y());
+  cc::Layer* scrolling_layer = scrollable_area->LayerForScrolling();
+  auto element_id = scrollable_area->GetScrollElementId();
+  auto& scroll_tree =
+      scrolling_layer->layer_tree_host()->property_trees()->scroll_tree;
+  EXPECT_EQ(0, scroll_tree.current_scroll_offset(element_id).y());
   EXPECT_EQ(150, scrolling_layer->bounds().height());
-  EXPECT_EQ(100, scrolling_layer->scroll_container_bounds().height());
+  auto* scroll_node = scroll_tree.FindNodeFromElementId(element_id);
+  EXPECT_EQ(100, scroll_node->container_bounds.height());
 
   scrollerElement->setScrollTop(300);
   scrollerElement->setAttribute(html_names::kStyleAttr, "max-height: 25px;");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(50, scrolling_layer->CurrentScrollOffset().y());
+  EXPECT_EQ(50, scroll_tree.current_scroll_offset(element_id).y());
   EXPECT_EQ(150, scrolling_layer->bounds().height());
-  EXPECT_EQ(25, scrolling_layer->scroll_container_bounds().height());
+  scroll_node = scroll_tree.FindNodeFromElementId(element_id);
+  EXPECT_EQ(25, scroll_node->container_bounds.height());
 
   scrollerElement->setAttribute(html_names::kStyleAttr, "max-height: 300px;");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(50, scrolling_layer->CurrentScrollOffset().y());
+  EXPECT_EQ(50, scroll_tree.current_scroll_offset(element_id).y());
   EXPECT_EQ(150, scrolling_layer->bounds().height());
-  EXPECT_EQ(100, scrolling_layer->scroll_container_bounds().height());
+  scroll_node = scroll_tree.FindNodeFromElementId(element_id);
+  EXPECT_EQ(100, scroll_node->container_bounds.height());
 }
 
 TEST_F(CompositedLayerMappingTest, MainFrameLayerBackgroundColor) {
@@ -1485,32 +1531,7 @@ TEST_F(CompositedLayerMappingTest, ScrollLayerSizingSubpixelAccumulation) {
             mapping->ScrollingContentsLayer()->Size().height());
 }
 
-TEST_F(CompositedLayerMappingTest, SquashingScroll) {
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-  SetHtmlInnerHTML(R"HTML(
-    <style>
-      * { margin: 0 }
-    </style>
-    <div id=target
-        style='width: 200px; height: 200px; position: relative; will-change: transform'></div>
-    <div id=squashed
-        style='width: 200px; height: 200px; top: -200px; position: relative;'></div>
-    <div style='width: 10px; height: 3000px'></div>
-  )HTML");
-
-  auto* squashed =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("squashed"))->Layer();
-  EXPECT_EQ(kPaintsIntoGroupedBacking, squashed->GetCompositingState());
-
-  GetDocument().View()->LayoutViewport()->ScrollBy(ScrollOffset(0, 25),
-                                                   kUserScroll);
-  UpdateAllLifecyclePhasesForTest();
-}
-
 TEST_F(CompositedLayerMappingTest, SquashingScrollInterestRect) {
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
   SetHtmlInnerHTML(R"HTML(
     <style>
       * { margin: 0 }
@@ -1525,8 +1546,8 @@ TEST_F(CompositedLayerMappingTest, SquashingScrollInterestRect) {
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("squashed"))->Layer();
   EXPECT_EQ(kPaintsIntoGroupedBacking, squashed->GetCompositingState());
 
-  GetDocument().View()->LayoutViewport()->ScrollBy(ScrollOffset(0, 5000),
-                                                   kUserScroll);
+  GetDocument().View()->LayoutViewport()->ScrollBy(
+      ScrollOffset(0, 5000), mojom::blink::ScrollType::kUser);
   UpdateAllLifecyclePhasesForTest();
 
   EXPECT_EQ(IntRect(0, 1000, 200, 5000),
@@ -1535,9 +1556,6 @@ TEST_F(CompositedLayerMappingTest, SquashingScrollInterestRect) {
 
 TEST_F(CompositedLayerMappingTest,
        SquashingBoundsUnderCompositedScrollingWithTransform) {
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
   SetHtmlInnerHTML(R"HTML(
     <div id=scroller style="will-change: transform; overflow: scroll;
         width: 200px; height: 400px;">
@@ -1565,14 +1583,11 @@ TEST_F(CompositedLayerMappingTest,
   UpdateAllLifecyclePhasesForTest();
 
   // 100px down from squashing's main graphics layer.
-  EXPECT_EQ(FloatPoint(0, 100),
-            squashed->GraphicsLayerBacking()->GetPosition());
+  EXPECT_EQ(IntPoint(0, 100),
+            squashed->GraphicsLayerBacking()->GetOffsetFromTransformNode());
 }
 
 TEST_F(CompositedLayerMappingTest, ContentsNotOpaqueWithForegroundLayer) {
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
   SetHtmlInnerHTML(R"HTML(
     <style>
       div {
@@ -1595,9 +1610,6 @@ TEST_F(CompositedLayerMappingTest, ContentsNotOpaqueWithForegroundLayer) {
 }
 
 TEST_F(CompositedLayerMappingTest, EmptyBoundsDoesntDrawContent) {
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
   SetHtmlInnerHTML(R"HTML(
     <style>
       div {
@@ -1617,9 +1629,6 @@ TEST_F(CompositedLayerMappingTest, EmptyBoundsDoesntDrawContent) {
 }
 
 TEST_F(CompositedLayerMappingTest, TouchActionRectsWithoutContent) {
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
   SetBodyInnerHTML(
       "<div id='target' style='will-change: transform; width: 100px;"
       "    height: 100px; touch-action: none;'></div>");
@@ -1639,9 +1648,6 @@ TEST_F(CompositedLayerMappingTest, TouchActionRectsWithoutContent) {
 }
 
 TEST_F(CompositedLayerMappingTest, ContentsOpaque) {
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
   SetHtmlInnerHTML(R"HTML(
     <style>
       div {
@@ -1663,15 +1669,203 @@ TEST_F(CompositedLayerMappingTest, ContentsOpaque) {
 }
 
 TEST_F(CompositedLayerMappingTest, NullOverflowControlsHostLayer) {
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
   SetHtmlInnerHTML("<div id='target' style='will-change: transform'></div>");
   CompositedLayerMapping* mapping =
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))
           ->Layer()
           ->GetCompositedLayerMapping();
   EXPECT_FALSE(mapping->DetachLayerForOverflowControls());
+}
+
+TEST_F(CompositedLayerMappingTest, CompositedHiddenAnimatingLayer) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+    @keyframes slide {
+      0% { transform: translate3d(0px, 0px, 0px); }
+      100% { transform: translate3d(100px, 0px, 1px); }
+    }
+
+    div {
+      width: 123px;
+      height: 234px;
+      animation-duration: 2s;
+      animation-name: slide;
+      animation-iteration-count: infinite;
+      animation-direction: alternate;
+    }
+    </style>
+    <div id="animated"></div>
+  )HTML");
+
+  PaintLayer* animated =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("animated"))->Layer();
+  CompositedLayerMapping* mapping = animated->GetCompositedLayerMapping();
+  ASSERT_TRUE(mapping);
+  EXPECT_TRUE(mapping->MainGraphicsLayer()->GetCompositingReasons() &
+              CompositingReason::kActiveTransformAnimation);
+
+  // We still composite the animated layer even if visibility: hidden.
+  // TODO(crbug.com/937573): Is this necessary?
+  GetDocument()
+      .getElementById("animated")
+      ->setAttribute(html_names::kStyleAttr, "visibility: hidden");
+  UpdateAllLifecyclePhasesForTest();
+  mapping = animated->GetCompositedLayerMapping();
+  ASSERT_TRUE(mapping);
+  EXPECT_TRUE(mapping->MainGraphicsLayer()->GetCompositingReasons() &
+              CompositingReason::kActiveTransformAnimation);
+}
+
+TEST_F(CompositedLayerMappingTest,
+       RepaintScrollableAreaLayersInMainThreadScrolling) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      #scroller {
+        width: 200px;
+        height: 100px;
+        overflow: scroll;
+        opacity: 0.8; /*MainThreadScrollingReason::kHasOpacityAndLCDText*/
+      }
+      #child {
+        width: 100px;
+        height: 200px;
+        transform: translate3d(0, 0, 0);
+      }
+      #uncorrelated {
+        transform: translate3d(0, 0, 0);
+        height: 100px;
+        width: 100px;
+        background-color: red;
+      }
+    </style>
+    <div id="scroller">
+      <div id="child">
+      </div>
+    </div>
+    <div id="uncorrelated"></div>
+  )HTML");
+
+  PaintLayer* scroller =
+      ToLayoutBoxModelObject(GetLayoutObjectByElementId("scroller"))->Layer();
+
+  PaintLayerScrollableArea* scrollable_area = scroller->GetScrollableArea();
+  ASSERT_TRUE(scrollable_area);
+  ASSERT_TRUE(scrollable_area->VerticalScrollbar()->IsOverlayScrollbar());
+
+  ASSERT_FALSE(scrollable_area->NeedsCompositedScrolling());
+  EXPECT_FALSE(scrollable_area->VerticalScrollbar()->VisualRect().IsEmpty());
+
+  GraphicsLayer* vertical_scrollbar_layer =
+      scrollable_area->GraphicsLayerForVerticalScrollbar();
+  ASSERT_TRUE(vertical_scrollbar_layer);
+
+  CompositedLayerMapping* mapping = scroller->GetCompositedLayerMapping();
+  ASSERT_TRUE(mapping);
+
+  // Input events, animations and DOM changes, etc, can trigger cc::ProxyMain::
+  // BeginMainFrame, which may check if all graphics layers need repaint.
+  //
+  // We shouldn't repaint scrollable area layer which has no paint invalidation
+  // in many uncorrelated BeginMainFrame scenes, such as moving mouse over the
+  // non-scrollbar area, animating or DOM changes in another composited layer.
+  GetDocument()
+      .getElementById("uncorrelated")
+      ->setAttribute(html_names::kStyleAttr, "width: 200px");
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
+  EXPECT_FALSE(mapping->NeedsRepaint(*vertical_scrollbar_layer));
+
+  GetDocument().getElementById("child")->setAttribute(html_names::kStyleAttr,
+                                                      "height: 50px");
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
+  EXPECT_TRUE(mapping->NeedsRepaint(*vertical_scrollbar_layer));
+}
+
+TEST_F(CompositedLayerMappingTest, IsolationClippingContainer) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      #hideable {
+        overflow: hidden;
+        height: 10px;
+      }
+      .isolation {
+        contain: style layout;
+        height: 100px;
+      }
+      .squash-container {
+        will-change: transform;
+      }
+      .squashed {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100px;
+        height: 100px;
+      }
+    </style>
+    <div id="hideable">
+      <div class="isolation" id="isolation_a">
+        <div class="squash-container" id="squash_container_a">a</div>
+        <div class="squashed"></div>
+      </div>
+      <div class="isolation">
+        <div class="squash-container">b</div>
+        <div class="squashed"></div>
+      </div>
+    </div>
+  )HTML");
+
+  Element* hideable = GetDocument().getElementById("hideable");
+  hideable->SetInlineStyleProperty(CSSPropertyID::kOverflow, "visible");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  auto* isolation_a = GetDocument().getElementById("isolation_a");
+  auto* isolation_a_object = isolation_a->GetLayoutObject();
+
+  auto* squash_container_a = GetDocument().getElementById("squash_container_a");
+  PaintLayer* squash_container_a_layer =
+      ToLayoutBoxModelObject(squash_container_a->GetLayoutObject())->Layer();
+  EXPECT_EQ(squash_container_a_layer->ClippingContainer(), isolation_a_object);
+}
+
+TEST_F(CompositedLayerMappingTest, FrameAttribution) {
+  SetBodyInnerHTML(R"HTML(
+    <div id='child' style='will-change: transform;'></div>
+    <iframe id='subframe' style='will-change: transform;'></iframe>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  // Ensure that we correctly attribute child layers in the main frame to their
+  // containing document.
+  Element* child = GetDocument().getElementById("child");
+  PaintLayer* child_paint_layer =
+      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+  auto* child_layer = child_paint_layer->GraphicsLayerBacking()->CcLayer();
+  EXPECT_TRUE(child_layer->frame_element_id());
+
+  EXPECT_EQ(child_layer->frame_element_id(),
+            CompositorElementIdFromUniqueObjectId(
+                DOMNodeIds::IdForNode(&GetDocument()),
+                CompositorElementIdNamespace::kDOMNodeId));
+
+  // Test that a layerized subframe's element ID is that of its containing
+  // document.
+  auto* subframe =
+      To<HTMLFrameOwnerElement>(GetDocument().getElementById("subframe"));
+  EXPECT_TRUE(subframe);
+  PaintLayer* subframe_paint_layer =
+      ToLayoutBoxModelObject(subframe->GetLayoutObject())->Layer();
+  auto* subframe_layer =
+      subframe_paint_layer->GraphicsLayerBacking()->CcLayer();
+  EXPECT_TRUE(subframe_layer->frame_element_id());
+
+  EXPECT_EQ(subframe_layer->frame_element_id(),
+            CompositorElementIdFromUniqueObjectId(
+                DOMNodeIds::IdForNode(subframe->contentDocument()),
+                CompositorElementIdNamespace::kDOMNodeId));
 }
 
 }  // namespace blink

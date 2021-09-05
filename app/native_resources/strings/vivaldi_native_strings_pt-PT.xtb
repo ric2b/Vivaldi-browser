@@ -29,7 +29,7 @@
 <translation id="2923448633003185837">Colar e ir</translation>
 <translation id="2977472760057091832">Abrir ligação numa nova janela privada</translation>
 <translation id="2989805286512600854">Abrir num novo separador</translation>
-<translation id="3027988479108856431">Infelizmente, as suas definições do Yandex não estão disponíveis enquanto o navegador estiver em execução. Para importar essas definições para o Vivaldi, grave o seu trabalho e feche todas as janelas do Yandex. Depois, clique em Continuar.</translation>
+<translation id="3027988479108856431">Infelizmente, as suas definições do Yandex não estão disponíveis enquanto o navegador estiver em execução. Para importar essas definições para o Vivaldi, guarde o seu trabalho e feche todas as janelas do Yandex. Depois, clique em Continuar.</translation>
 <translation id="3084011186245865060">Paisagem 6</translation>
 <translation id="3127383884976966729">Animal 7</translation>
 <translation id="3156398087075132709">Novo favorito</translation>
@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Abrir ligação numa nova janela</translation>
 <translation id="3588820906588687999">Abrir imagem num novo separador</translation>
 <translation id="3601066750251199488">Monstro 3</translation>
-<translation id="366643050267431920">Adicionar como evento</translation>
 <translation id="3732157130969736834">Adicionar ligação aos favoritos</translation>
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
@@ -68,7 +67,6 @@
 <translation id="4636708767492582204">Enviar por correio eletrónico</translation>
 <translation id="4677434526832593569">Animal 8</translation>
 <translation id="4881695831933465202">Abrir</translation>
-<translation id="4973311370126107785">A execução de Javascript via AppleScript está desativada. Para a ativar, no menu, vá a Ferramentas &gt; Permitir JavaScript de Apple Events.</translation>
 <translation id="5014281392052865061">Speed Dial importada</translation>
 <translation id="5092656712000637858">Adicionar página aos Painéis Web</translation>
 <translation id="5177818338935286353">Monstro 7</translation>
@@ -85,17 +83,18 @@
 <translation id="5770433027661640693">Paisagem 10</translation>
 <translation id="5857090052475505287">Nova pasta</translation>
 <translation id="588258955323874662">Ecrã inteiro</translation>
-<translation id="5916080360077521750">Infelizmente, as suas definições do Chrome não estão disponíveis enquanto o navegador estiver em execução. Para importar essas definições para o Vivaldi, grave o seu trabalho e feche todas as janelas do Chrome. Depois, clique em Continuar.</translation>
+<translation id="5916080360077521750">Infelizmente, as suas definições do Chrome não estão disponíveis enquanto o navegador estiver em execução. Para importar essas definições para o Vivaldi, guarde o seu trabalho e feche todas as janelas do Chrome. Depois, clique em Continuar.</translation>
 <translation id="6229528619562190452">Clique aqui para atualizar o Vivaldi.</translation>
 <translation id="6234173136417926046">Usar imagem como fundo da Speed Dial</translation>
 <translation id="630690498669249215">Ficheiro de favoritos do Opera</translation>
+<translation id="6339818817272922368">Conta local</translation>
 <translation id="6438786710866753178">Paisagem 4</translation>
 <translation id="6477028720702061455">Selecionar a pasta do perfil do Opera para importar</translation>
 <translation id="6510706699590490869">&amp;Atualizar Vivaldi</translation>
 <translation id="6538338088414940408">Abrir ligação num novo separador em segundo plano</translation>
 <translation id="6551219277044048123">Adicionar como motor de &amp;busca...</translation>
 <translation id="6630781781151951863">Paisagem 18</translation>
-<translation id="6804831687363620480">Infelizmente, as suas definições do Opera 15+ não estão disponíveis enquanto o navegador estiver em execução. Para importar essas definições para o Vivaldi, grave o seu trabalho e feche todas as janelas do Opera 15+. Depois, clique em Continuar.</translation>
+<translation id="6804831687363620480">Infelizmente, as suas definições do Opera 15+ não estão disponíveis enquanto o navegador estiver em execução. Para importar essas definições para o Vivaldi, guarde o seu trabalho e feche todas as janelas do Opera 15+. Depois, clique em Continuar.</translation>
 <translation id="6896758677409633944">Copiar</translation>
 <translation id="7086554968911045110">Paisagem 7</translation>
 <translation id="7111492742514999492">Paisagem 9</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">O Vivaldi existe graças ao projeto open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> e outro <ph name="BEGIN_LINK_OSS" />software open source<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Ignorar atualização</translation>
 <translation id="7724603315864178912">Cortar</translation>
+<translation id="7793738202466490491">Adicionar como evento de calendário</translation>
 <translation id="7865983598101744945">Confirmar saída</translation>
 <translation id="7957213167373139414">O meu calendário</translation>
 <translation id="8027581147000338959">Abrir numa nova janela</translation>
@@ -112,9 +112,10 @@
 <translation id="8331671104904436324">Abrir num separador em segundo plano</translation>
 <translation id="8373293945112511707">Paisagem 1</translation>
 <translation id="8427094907586191051">Paisagem 17</translation>
+<translation id="8446668873108041390">A execução de JavaScript através de AppleScript está desativada. Em Definições &gt; Privacidade &gt; Eventos Apple, há uma definição para autorizar JavaScript a partir de eventos Apple.</translation>
 <translation id="8539196077526389150">Paisagem 13</translation>
 <translation id="8624587806981488221">&amp;Recarregar imagem</translation>
-<translation id="864444594187862076">Opera 15+ (Developer)</translation>
+<translation id="864444594187862076">Opera 15+ (Programador)</translation>
 <translation id="8651348004684669199">Adicionar separador ativo</translation>
 <translation id="8669345741879513971">Monstro 10</translation>
 <translation id="867544375504146191">Yandex</translation>

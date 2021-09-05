@@ -19,6 +19,7 @@
 #include "net/base/net_errors.h"
 #include "net/cert/x509_util.h"
 #include "net/dns/host_resolver.h"
+#include "net/http/http_auth.h"
 #include "net/http/http_auth_filter.h"
 #include "net/http/http_auth_preferences.h"
 #include "net/log/net_log_capture_mode.h"
@@ -47,21 +48,21 @@ base::Value NetLogParameterChannelBindings(
 
 // Uses |negotiate_auth_system_factory| to create the auth system, otherwise
 // creates the default auth system for each platform.
-std::unique_ptr<HttpNegotiateAuthSystem> CreateAuthSystem(
+std::unique_ptr<HttpAuthMechanism> CreateAuthSystem(
 #if !defined(OS_ANDROID)
     HttpAuthHandlerNegotiate::AuthLibrary* auth_library,
 #endif
     const HttpAuthPreferences* prefs,
-    HttpAuthHandlerFactory::NegotiateAuthSystemFactory
-        negotiate_auth_system_factory) {
+    HttpAuthMechanismFactory negotiate_auth_system_factory) {
   if (negotiate_auth_system_factory)
     return negotiate_auth_system_factory.Run(prefs);
 #if defined(OS_ANDROID)
   return std::make_unique<net::android::HttpAuthNegotiateAndroid>(prefs);
 #elif defined(OS_WIN)
-  return std::make_unique<HttpAuthSSPI>(auth_library, "Negotiate");
+  return std::make_unique<HttpAuthSSPI>(auth_library,
+                                        HttpAuth::AUTH_SCHEME_NEGOTIATE);
 #elif defined(OS_POSIX)
-  return std::make_unique<HttpAuthGSSAPI>(auth_library, "Negotiate",
+  return std::make_unique<HttpAuthGSSAPI>(auth_library,
                                           CHROME_GSS_SPNEGO_MECH_OID_DESC);
 #endif
 }
@@ -69,7 +70,7 @@ std::unique_ptr<HttpNegotiateAuthSystem> CreateAuthSystem(
 }  // namespace
 
 HttpAuthHandlerNegotiate::Factory::Factory(
-    NegotiateAuthSystemFactory negotiate_auth_system_factory)
+    HttpAuthMechanismFactory negotiate_auth_system_factory)
     : negotiate_auth_system_factory_(negotiate_auth_system_factory) {}
 
 HttpAuthHandlerNegotiate::Factory::~Factory() = default;
@@ -138,7 +139,7 @@ int HttpAuthHandlerNegotiate::Factory::CreateAuthHandler(
 }
 
 HttpAuthHandlerNegotiate::HttpAuthHandlerNegotiate(
-    std::unique_ptr<HttpNegotiateAuthSystem> auth_system,
+    std::unique_ptr<HttpAuthMechanism> auth_system,
     const HttpAuthPreferences* prefs,
     HostResolver* resolver)
     : auth_system_(std::move(auth_system)),

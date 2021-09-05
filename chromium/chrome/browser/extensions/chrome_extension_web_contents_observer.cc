@@ -4,6 +4,9 @@
 
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 
+#include <memory>
+#include <string>
+
 #include "base/command_line.h"
 #include "base/metrics/field_trial.h"
 #include "chrome/browser/browser_process.h"
@@ -12,7 +15,6 @@
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/common/url_constants.h"
-#include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/navigation_handle.h"
@@ -77,6 +79,13 @@ void ChromeExtensionWebContentsObserver::RenderFrameCreated(
         process_id, url::Origin::Create(GURL(content::kChromeUIResourcesURL)));
     policy->GrantRequestOrigin(
         process_id, url::Origin::Create(GURL(chrome::kChromeUIThemeURL)));
+  }
+  if (vivaldi::IsVivaldiApp(extension->id())) {
+    // The vivaldi app always has these permissions.
+    policy->GrantRequestOrigin(
+      process_id, url::Origin::Create(GURL(content::kChromeUIResourcesURL)));
+    policy->GrantRequestOrigin(
+      process_id, url::Origin::Create(GURL(chrome::kChromeUIThemeURL)));
   }
 
   // Extensions, legacy packaged apps, and component platform apps are allowed

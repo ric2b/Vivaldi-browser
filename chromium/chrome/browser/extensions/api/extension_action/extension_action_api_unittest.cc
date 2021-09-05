@@ -2,35 +2,38 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/files/file_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_with_install.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
+#include "chrome/common/extensions/extension_test_util.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/test/test_extension_dir.h"
 
 namespace extensions {
 namespace {
 
-enum class TestActionType {
-  kBrowser,
-  kPage,
-};
-
 class ExtensionActionAPIUnitTest
     : public ExtensionServiceTestWithInstall,
-      public ::testing::WithParamInterface<TestActionType> {
+      public ::testing::WithParamInterface<ActionInfo::Type> {
  public:
-  ExtensionActionAPIUnitTest() {}
+  ExtensionActionAPIUnitTest()
+      : current_channel_(
+            extension_test_util::GetOverrideChannelForActionType(GetParam())) {}
   ~ExtensionActionAPIUnitTest() override {}
 
   const char* GetManifestKey() {
     switch (GetParam()) {
-      case TestActionType::kBrowser:
+      case ActionInfo::TYPE_BROWSER:
         return manifest_keys::kBrowserAction;
-      case TestActionType::kPage:
+      case ActionInfo::TYPE_PAGE:
         return manifest_keys::kPageAction;
+      case ActionInfo::TYPE_ACTION:
+        return manifest_keys::kAction;
     }
     NOTREACHED();
     return nullptr;
@@ -38,16 +41,20 @@ class ExtensionActionAPIUnitTest
 
   const ActionInfo* GetActionInfo(const Extension& extension) {
     switch (GetParam()) {
-      case TestActionType::kBrowser:
+      case ActionInfo::TYPE_BROWSER:
         return ActionInfo::GetBrowserActionInfo(&extension);
-      case TestActionType::kPage:
+      case ActionInfo::TYPE_PAGE:
         return ActionInfo::GetPageActionInfo(&extension);
+      case ActionInfo::TYPE_ACTION:
+        return ActionInfo::GetExtensionActionInfo(&extension);
     }
     NOTREACHED();
     return nullptr;
   }
 
  private:
+  std::unique_ptr<ScopedCurrentChannel> current_channel_;
+
   DISALLOW_COPY_AND_ASSIGN(ExtensionActionAPIUnitTest);
 };
 
@@ -101,10 +108,11 @@ TEST_P(ExtensionActionAPIUnitTest, MultiIcons) {
   EXPECT_EQ("icon38.png", icons.Get(38, ExtensionIconSet::MATCH_EXACTLY));
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          ExtensionActionAPIUnitTest,
-                         testing::Values(TestActionType::kBrowser,
-                                         TestActionType::kPage));
+                         testing::Values(ActionInfo::TYPE_BROWSER,
+                                         ActionInfo::TYPE_PAGE,
+                                         ActionInfo::TYPE_ACTION));
 
 }  // namespace
 }  // namespace extensions

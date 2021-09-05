@@ -6,6 +6,8 @@ import("//third_party/blink/renderer/modules/modules.gni")
 
 blink_modules_sources("webgpu") {
   sources = [
+    "client_validation.cc",
+    "client_validation.h",
     "dawn_callback.h",
     "dawn_conversions.cc",
     "dawn_conversions.h",
@@ -43,6 +45,8 @@ blink_modules_sources("webgpu") {
     "gpu_out_of_memory_error.h",
     "gpu_pipeline_layout.cc",
     "gpu_pipeline_layout.h",
+    "gpu_programmable_pass_encoder.cc",
+    "gpu_programmable_pass_encoder.h",
     "gpu_queue.cc",
     "gpu_queue.h",
     "gpu_render_bundle.cc",
@@ -71,8 +75,8 @@ blink_modules_sources("webgpu") {
     "gpu_validation_error.h",
     "navigator_gpu.cc",
     "navigator_gpu.h",
+    "worker_navigator_gpu.cc",
+    "worker_navigator_gpu.h",
   ]
-  deps = [
-    "//third_party/dawn/src/dawn:dawn_headers",
-  ]
+  deps = [ "//third_party/dawn/src/dawn:dawn_headers" ]
 }

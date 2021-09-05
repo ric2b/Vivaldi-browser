@@ -138,12 +138,12 @@ AppSorting* ShellExtensionSystem::app_sorting() {
 
 void ShellExtensionSystem::RegisterExtensionWithRequestContexts(
     const Extension* extension,
-    const base::Closure& callback) {
-  base::PostTaskAndReply(
-      FROM_HERE, {BrowserThread::IO},
-      base::Bind(&InfoMap::AddExtension, info_map(),
-                 base::RetainedRef(extension), base::Time::Now(), false, false),
-      callback);
+    base::OnceClosure callback) {
+  base::PostTaskAndReply(FROM_HERE, {BrowserThread::IO},
+                         base::BindOnce(&InfoMap::AddExtension, info_map(),
+                                        base::RetainedRef(extension),
+                                        base::Time::Now(), false, false),
+                         std::move(callback));
 }
 
 void ShellExtensionSystem::UnregisterExtensionWithRequestContexts(
@@ -170,7 +170,7 @@ void ShellExtensionSystem::InstallUpdate(
     bool install_immediately,
     InstallUpdateCallback install_update_callback) {
   NOTREACHED();
-  base::DeleteFile(temp_dir, true /* recursive */);
+  base::DeleteFileRecursively(temp_dir);
 }
 
 bool ShellExtensionSystem::FinishDelayedInstallationIfReady(

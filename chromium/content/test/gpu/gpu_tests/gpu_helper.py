@@ -8,9 +8,12 @@ import mock
 # This set must be the union of the driver tags used in WebGL and WebGL2
 # expectations files.
 EXPECTATIONS_DRIVER_TAGS = frozenset([
-    'angle_lt_25.20.100.6444',
-    'angle_lt_25.20.100.6577',
-    'mesa_lt_19.1.2'
+    'intel_lt_25.20.100.6444',
+    'intel_lt_25.20.100.6577',
+    'intel_lt_26.20.100.7000',
+    'intel_lt_26.20.100.7323',
+    'mesa_eq_18.0.5',
+    'mesa_lt_19.1.2',
 ])
 
 
@@ -45,9 +48,9 @@ def _GetANGLEGpuDeviceId(device_string):
     return None
 
 
-def GetGpuVendorString(gpu_info):
+def GetGpuVendorString(gpu_info, index):
   if gpu_info:
-    primary_gpu = gpu_info.devices[0]
+    primary_gpu = gpu_info.devices[index]
     if primary_gpu:
       vendor_string = primary_gpu.vendor_string
       angle_vendor_string = _ParseANGLEGpuVendorString(
@@ -66,9 +69,9 @@ def GetGpuVendorString(gpu_info):
   return 'unknown_gpu'
 
 
-def GetGpuDeviceId(gpu_info):
+def GetGpuDeviceId(gpu_info, index):
   if gpu_info:
-    primary_gpu = gpu_info.devices[0]
+    primary_gpu = gpu_info.devices[index]
     if primary_gpu:
       return (
           primary_gpu.device_id
@@ -106,6 +109,9 @@ def GetANGLERenderer(gpu_info):
         return 'opengles'
       elif 'OpenGL' in gl_renderer:
         return 'opengl'
+      # SwiftShader first because it also contains Vulkan
+      elif 'SwiftShader' in gl_renderer:
+        return 'swiftshader'
       elif 'Vulkan' in gl_renderer:
         return 'vulkan'
   return 'no_angle'
@@ -157,7 +163,9 @@ def GetMockArgs(is_asan=False, webgl_version='1.0.0'):
   args.is_asan = is_asan
   args.webgl_conformance_version = webgl_version
   args.webgl2_only = False
-  args.url = 'https://www.google.com'
+  # for power_measurement_integration_test.py, .url has to be None to
+  # generate the correct test lists for bots.
+  args.url = None
   args.duration = 10
   args.delay = 10
   args.resolution = 100
@@ -177,7 +185,8 @@ def MatchDriverTag(tag):
   return DRIVER_TAG_MATCHER.match(tag.lower())
 
 
-def EvaluateVersionComparison(version1, operation, version2):
+def EvaluateVersionComparison(version, operation, ref_version,
+                              os_name=None, driver_vendor=None):
   def parse_version(ver):
     if ver.isdigit():
       return int(ver), ''
@@ -185,8 +194,32 @@ def EvaluateVersionComparison(version1, operation, version2):
       if not ver[i].isdigit():
         return int(ver[:i]) if i > 0 else 0, ver[i:]
 
-  ver_list1 = version1.split('.')
-  ver_list2 = version2.split('.')
+  def is_old_intel_driver(ver_list):
+    assert len(ver_list) == 4
+    num, suffix = parse_version(ver_list[2])
+    assert not suffix
+    return num < 100
+
+  ver_list1 = version.split('.')
+  ver_list2 = ref_version.split('.')
+  # On Windows, if the driver vendor is Intel, the driver version should be
+  # compared based on the Intel graphics driver version schema.
+  # https://www.intel.com/content/www/us/en/support/articles/000005654/graphics-drivers.html
+  if os_name == 'win' and driver_vendor == 'intel':
+    # If either of the two versions doesn't match the Intel driver version
+    # schema, or they belong to different generation of version schema, they
+    # should not be compared.
+    if len(ver_list1) != 4 or len(ver_list2) != 4:
+      return operation == 'ne'
+    if is_old_intel_driver(ver_list1) != is_old_intel_driver(ver_list2):
+      return operation == 'ne'
+    if is_old_intel_driver(ver_list1):
+      ver_list1 = ver_list1[3:]
+      ver_list2 = ver_list2[3:]
+    else:
+      ver_list1 = ver_list1[2:]
+      ver_list2 = ver_list2[2:]
+
   for i in range(0, max(len(ver_list1), len(ver_list2))):
     ver1 = ver_list1[i] if i < len(ver_list1) else '0'
     ver2 = ver_list2[i] if i < len(ver_list2) else '0'

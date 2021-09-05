@@ -4,10 +4,11 @@
 
 #include "chrome/browser/signin/chrome_signin_url_loader_throttle.h"
 
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/signin/header_modification_delegate.h"
 #include "components/signin/core/browser/signin_header_helper.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace signin {
 
@@ -29,7 +30,7 @@ class URLLoaderThrottle::ThrottleRequestAdapter : public ChromeRequestAdapter {
     return throttle_->web_contents_getter_;
   }
 
-  content::ResourceType GetResourceType() const override {
+  blink::mojom::ResourceType GetResourceType() const override {
     return throttle_->request_resource_type_;
   }
 
@@ -90,7 +91,7 @@ class URLLoaderThrottle::ThrottleResponseAdapter : public ResponseAdapter {
 
   bool IsMainFrame() const override {
     return throttle_->request_resource_type_ ==
-           content::ResourceType::kMainFrame;
+           blink::mojom::ResourceType::kMainFrame;
   }
 
   GURL GetOrigin() const override {
@@ -125,9 +126,8 @@ class URLLoaderThrottle::ThrottleResponseAdapter : public ResponseAdapter {
 // static
 std::unique_ptr<URLLoaderThrottle> URLLoaderThrottle::MaybeCreate(
     std::unique_ptr<HeaderModificationDelegate> delegate,
-    content::NavigationUIData* navigation_ui_data,
     content::WebContents::Getter web_contents_getter) {
-  if (!delegate->ShouldInterceptNavigation(navigation_ui_data))
+  if (!delegate->ShouldInterceptNavigation(web_contents_getter.Run()))
     return nullptr;
 
   return base::WrapUnique(new URLLoaderThrottle(
@@ -144,7 +144,7 @@ void URLLoaderThrottle::WillStartRequest(network::ResourceRequest* request,
   request_url_ = request->url;
   request_referrer_ = request->referrer;
   request_resource_type_ =
-      static_cast<content::ResourceType>(request->resource_type);
+      static_cast<blink::mojom::ResourceType>(request->resource_type);
 
   net::HttpRequestHeaders modified_request_headers;
   std::vector<std::string> to_be_removed_request_headers;
@@ -166,7 +166,7 @@ void URLLoaderThrottle::WillStartRequest(network::ResourceRequest* request,
 
 void URLLoaderThrottle::WillRedirectRequest(
     net::RedirectInfo* redirect_info,
-    const network::ResourceResponseHead& response_head,
+    const network::mojom::URLResponseHead& response_head,
     bool* /* defer */,
     std::vector<std::string>* to_be_removed_request_headers,
     net::HttpRequestHeaders* modified_request_headers) {
@@ -190,7 +190,7 @@ void URLLoaderThrottle::WillRedirectRequest(
 
 void URLLoaderThrottle::WillProcessResponse(
     const GURL& response_url,
-    network::ResourceResponseHead* response_head,
+    network::mojom::URLResponseHead* response_head,
     bool* defer) {
   ThrottleResponseAdapter adapter(this, response_head->headers.get());
   delegate_->ProcessResponse(&adapter, GURL() /* redirect_url */);

@@ -3,20 +3,23 @@
 #include "chrome/browser/importer/profile_writer.h"
 
 #include "app/vivaldi_resources.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "importer/imported_notes_entry.h"
 #include "importer/imported_speeddial_entry.h"
-#include "notes/notesnode.h"
+#include "notes/note_node.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
-using vivaldi::Notes_Model;
-using vivaldi::Notes_Node;
+using vivaldi::NotesModel;
+using vivaldi::NoteNode;
 using vivaldi::NotesModelFactory;
 
 namespace {
@@ -84,15 +87,15 @@ void ProfileWriter::AddSpeedDial(
 
 void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry>& notes,
                              const base::string16& top_level_folder_name) {
-  Notes_Model* model = NotesModelFactory::GetForBrowserContext(profile_);
+  NotesModel* model = NotesModelFactory::GetForBrowserContext(profile_);
 
   model->BeginExtensiveChanges();
 
-  std::set<const Notes_Node*> folders_added_to;
-  const Notes_Node* top_level_folder = NULL;
+  std::set<const NoteNode*> folders_added_to;
+  const NoteNode* top_level_folder = NULL;
   for (std::vector<ImportedNotesEntry>::const_iterator note = notes.begin();
        note != notes.end(); ++note) {
-    const Notes_Node* parent = NULL;
+    const NoteNode* parent = NULL;
     // Add to a folder that will contain all the imported notes.
     // The first time we do so, create the folder.
     if (!top_level_folder) {
@@ -109,9 +112,9 @@ void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry>& notes,
     for (std::vector<base::string16>::const_iterator folder_name =
              note->path.begin();
          folder_name != note->path.end(); ++folder_name) {
-      const Notes_Node* child = NULL;
+      const NoteNode* child = NULL;
       for (size_t index = 0; index < parent->children().size(); ++index) {
-        const Notes_Node* node = parent->children()[index].get();
+        const NoteNode* node = parent->children()[index].get();
         if (node->is_folder() && node->GetTitle() == *folder_name) {
           child = node;
           break;
@@ -125,7 +128,7 @@ void ProfileWriter::AddNotes(const std::vector<ImportedNotesEntry>& notes,
     }
 
     folders_added_to.insert(parent);
-    model->AddNote(parent, parent->children().size(), note->is_folder, *note);
+    model->ImportNote(parent, parent->children().size(), *note);
   }
   model->EndExtensiveChanges();
 }

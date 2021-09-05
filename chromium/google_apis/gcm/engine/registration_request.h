@@ -22,12 +22,12 @@
 
 namespace net {
 class HttpRequestHeaders;
-}
+}  // namespace net
 
 namespace network {
 class SharedURLLoaderFactory;
 class SimpleURLLoader;
-}
+}  // namespace network
 
 namespace gcm {
 
@@ -36,7 +36,7 @@ class GCMStatsRecorder;
 // Registration request is used to obtain registration IDs for applications that
 // want to use GCM. It requires a set of parameters to be specified to identify
 // the Chrome instance, the user, the application and a set of senders that will
-// be authorized to address the application using it's assigned registration ID.
+// be authorized to address the application using its assigned registration ID.
 class GCM_EXPORT RegistrationRequest {
  public:
   // This enum is also used in an UMA histogram (GCMRegistrationRequestStatus
@@ -65,9 +65,9 @@ class GCM_EXPORT RegistrationRequest {
   };
 
   // Callback completing the registration request.
-  typedef base::Callback<void(Status status,
-                              const std::string& registration_id)>
-      RegistrationCallback;
+  using RegistrationCallback =
+      base::OnceCallback<void(Status status,
+                              const std::string& registration_id)>;
 
   // Defines the common info about a registration/token request. All parameters
   // are mandatory.
@@ -106,8 +106,11 @@ class GCM_EXPORT RegistrationRequest {
     // |body|. Note that the request body is encoded in HTTP form format.
     virtual void BuildRequestBody(std::string* body) = 0;
 
-    // Reports various UMAs.
-    virtual void ReportUMAs(Status status) = 0;
+    // Reports the status of a request.
+    virtual void ReportStatusToUMA(Status status) = 0;
+
+    // Reports the net error code from a request.
+    virtual void ReportNetErrorCodeToUMA(int net_error_code) = 0;
   };
 
   RegistrationRequest(
@@ -115,7 +118,7 @@ class GCM_EXPORT RegistrationRequest {
       const RequestInfo& request_info,
       std::unique_ptr<CustomRequestHandler> custom_request_handler,
       const net::BackoffEntry::Policy& backoff_policy,
-      const RegistrationCallback& callback,
+      RegistrationCallback callback,
       int max_retry_count,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       scoped_refptr<base::SequencedTaskRunner> io_task_runner,

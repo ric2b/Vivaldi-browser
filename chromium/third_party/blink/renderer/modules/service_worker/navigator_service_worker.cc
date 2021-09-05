@@ -90,7 +90,8 @@ ServiceWorkerContainer* NavigatorServiceWorker::GetOrCreateContainer(
            ->GetSecurityOrigin()
            ->CanAccessServiceWorkers()) {
     String error_message;
-    if (frame->GetSecurityContext()->IsSandboxed(WebSandboxFlags::kOrigin)) {
+    if (frame->GetSecurityContext()->IsSandboxed(
+            mojom::blink::WebSandboxFlags::kOrigin)) {
       error_message =
           "Service worker is disabled because the context is sandboxed and "
           "lacks the 'allow-same-origin' flag.";
@@ -108,10 +109,10 @@ ServiceWorkerContainer* NavigatorServiceWorker::GetOrCreateContainer(
   }
 
   return ServiceWorkerContainer::From(
-      To<Document>(frame->DomWindow()->GetExecutionContext()));
+      Document::From(frame->DomWindow()->GetExecutionContext()));
 }
 
-void NavigatorServiceWorker::Trace(blink::Visitor* visitor) {
+void NavigatorServiceWorker::Trace(Visitor* visitor) {
   Supplement<Navigator>::Trace(visitor);
 }
 

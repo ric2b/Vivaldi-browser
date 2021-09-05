@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_ASH_SESSION_CONTROLLER_CLIENT_IMPL_H_
 
 #include <memory>
+#include <set>
 #include <vector>
 
 #include "ash/public/cpp/session/session_controller_client.h"
@@ -91,10 +92,12 @@ class SessionControllerClientImpl
   void UserAddedToSession(const user_manager::User* added_user) override;
 
   // user_manager::UserManager::Observer
+  void LocalStateChanged(user_manager::UserManager* user_manager) override;
   void OnUserImageChanged(const user_manager::User& user) override;
 
   // session_manager::SessionManagerObserver:
   void OnSessionStateChanged() override;
+  void OnUserProfileLoaded(const AccountId& account_id) override;
 
   // SupervisedUserServiceObserver:
   void OnCustodianInfoChanged() override;
@@ -128,9 +131,6 @@ class SessionControllerClientImpl
   // Called when the login profile is ready.
   void OnLoginUserProfilePrepared(Profile* profile);
 
-  // Sends the user session info for a given profile.
-  void SendUserSessionForProfile(Profile* profile);
-
   // Sends session info to ash.
   void SendSessionInfoIfChanged();
 
@@ -152,8 +152,8 @@ class SessionControllerClientImpl
   // SessionController instance in ash.
   ash::SessionController* session_controller_ = nullptr;
 
-  // Whether the primary user session info is sent to ash.
-  bool primary_user_session_sent_ = false;
+  // Tracks users whose profiles are being loaded.
+  std::set<AccountId> pending_users_;
 
   // If the session is for a supervised user, the profile of that user.
   // Chrome OS only supports a single supervised user in a session.

@@ -165,15 +165,15 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, SaveFile_NonExistingFile) {
             EvalJs(shell(),
                    "(async () => {"
                    "  let e = await self.chooseFileSystemEntries("
-                   "      {type: 'saveFile'});"
+                   "      {type: 'save-file'});"
                    "  self.entry = e;"
                    "  return e.name; })()"));
   EXPECT_EQ(ui::SelectFileDialog::SELECT_SAVEAS_FILE, dialog_params.type);
   EXPECT_EQ(int{file_contents.size()},
             EvalJs(shell(),
                    JsReplace("(async () => {"
-                             "  const w = await self.entry.createWriter();"
-                             "  await w.write(0, new Blob([$1]));"
+                             "  const w = await self.entry.createWritable();"
+                             "  await w.write(new Blob([$1]));"
                              "  await w.close();"
                              "  return (await self.entry.getFile()).size; })()",
                              file_contents)));
@@ -198,7 +198,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
             EvalJs(shell(),
                    "(async () => {"
                    "  let e = await self.chooseFileSystemEntries("
-                   "      {type: 'saveFile'});"
+                   "      {type: 'save-file'});"
                    "  self.entry = e;"
                    "  return e.name; })()"));
   EXPECT_EQ(ui::SelectFileDialog::SELECT_SAVEAS_FILE, dialog_params.type);
@@ -224,14 +224,14 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
       ->SetPermissionContextForTesting(&permission_context);
 
   EXPECT_CALL(permission_context,
-              CanRequestWritePermission(url::Origin::Create(
+              CanObtainWritePermission(url::Origin::Create(
                   embedded_test_server()->GetURL("/title1.html"))))
       .WillOnce(testing::Return(false));
 
   ASSERT_TRUE(
       NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
   auto result =
-      EvalJs(shell(), "self.chooseFileSystemEntries({type: 'saveFile'})");
+      EvalJs(shell(), "self.chooseFileSystemEntries({type: 'save-file'})");
   EXPECT_TRUE(result.error.find("not allowed") != std::string::npos)
       << result.error;
   EXPECT_EQ(ui::SelectFileDialog::SELECT_NONE, dialog_params.type);
@@ -250,7 +250,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, FullscreenSaveFile) {
             EvalJs(shell(),
                    "(async () => {"
                    "  let e = await self.chooseFileSystemEntries("
-                   "      {type: 'saveFile'});"
+                   "      {type: 'save-file'});"
                    "  self.entry = e;"
                    "  return e.name; })()"));
   EXPECT_FALSE(IsFullscreen());
@@ -305,7 +305,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, OpenDirectory) {
             EvalJs(shell(),
                    "(async () => {"
                    "  let e = await self.chooseFileSystemEntries("
-                   "      {type: 'openDirectory'});"
+                   "      {type: 'open-directory'});"
                    "  self.selected_entry = e;"
                    "  return e.name; })()"));
   EXPECT_EQ(ui::SelectFileDialog::SELECT_FOLDER, dialog_params.type);
@@ -323,7 +323,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, FullscreenOpenDirectory) {
             EvalJs(shell(),
                    "(async () => {"
                    "  let e = await self.chooseFileSystemEntries("
-                   "      {type: 'openDirectory'});"
+                   "      {type: 'open-directory'});"
                    "  self.selected_entry = e;"
                    "  return e.name; })()"));
   EXPECT_FALSE(IsFullscreen());
@@ -360,7 +360,7 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, OpenDirectory_DenyAccess) {
   ASSERT_TRUE(
       NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
   auto result =
-      EvalJs(shell(), "self.chooseFileSystemEntries({type: 'openDirectory'})");
+      EvalJs(shell(), "self.chooseFileSystemEntries({type: 'open-directory'})");
   EXPECT_TRUE(result.error.find("aborted") != std::string::npos)
       << result.error;
 }
@@ -388,14 +388,14 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
       .WillOnce(RunOnceCallback<5>(SensitiveDirectoryResult::kAbort));
 
   EXPECT_CALL(permission_context,
-              CanRequestWritePermission(url::Origin::Create(
+              CanObtainWritePermission(url::Origin::Create(
                   embedded_test_server()->GetURL("/title1.html"))))
       .WillOnce(testing::Return(true));
 
   ASSERT_TRUE(
       NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
   auto result =
-      EvalJs(shell(), "self.chooseFileSystemEntries({type: 'saveFile'})");
+      EvalJs(shell(), "self.chooseFileSystemEntries({type: 'save-file'})");
   EXPECT_TRUE(result.error.find("aborted") != std::string::npos)
       << result.error;
 
@@ -436,14 +436,14 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
       .WillOnce(RunOnceCallback<5>(SensitiveDirectoryResult::kAbort));
 
   EXPECT_CALL(permission_context,
-              CanRequestWritePermission(url::Origin::Create(
+              CanObtainWritePermission(url::Origin::Create(
                   embedded_test_server()->GetURL("/title1.html"))))
       .WillOnce(testing::Return(true));
 
   ASSERT_TRUE(
       NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
   auto result =
-      EvalJs(shell(), "self.chooseFileSystemEntries({type: 'saveFile'})");
+      EvalJs(shell(), "self.chooseFileSystemEntries({type: 'save-file'})");
   EXPECT_TRUE(result.error.find("aborted") != std::string::npos)
       << result.error;
 

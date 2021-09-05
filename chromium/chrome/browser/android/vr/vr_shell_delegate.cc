@@ -16,14 +16,13 @@
 #include "chrome/browser/component_updater/vr_assets_component_installer.h"
 #include "chrome/browser/vr/assets_loader.h"
 #include "chrome/browser/vr/metrics/metrics_helper.h"
-#include "chrome/browser/vr/service/browser_xr_runtime.h"
-#include "chrome/browser/vr/service/vr_service_impl.h"
-#include "chrome/browser/vr/service/xr_runtime_manager.h"
+#include "chrome/browser/vr/xr_runtime_manager_statics.h"
+#include "content/public/browser/browser_xr_runtime.h"
 #include "content/public/browser/webvr_service_provider.h"
+#include "content/public/browser/xr_runtime_manager.h"
 #include "device/vr/android/gvr/gvr_delegate_provider_factory.h"
 #include "device/vr/android/gvr/gvr_device.h"
 #include "device/vr/buildflags/buildflags.h"
-#include "device/vr/public/cpp/session_mode.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr.h"
 
@@ -36,10 +35,13 @@ namespace vr {
 
 namespace {
 
-void SetInlineVrEnabled(XRRuntimeManager& runtime_manager, bool enable) {
-  runtime_manager.ForEachRuntime([enable](BrowserXRRuntime* runtime) {
-    runtime->GetRuntime()->SetInlinePosesEnabled(enable);
-  });
+void SetInlineVrEnabled(content::XRRuntimeManager& runtime_manager,
+                        bool enable) {
+  runtime_manager.ForEachRuntime(base::BindRepeating(
+      [](bool enable, content::BrowserXRRuntime* runtime) {
+        runtime->SetInlinePosesEnabled(enable);
+      },
+      enable));
 }
 
 class VrShellDelegateProviderFactory
@@ -64,12 +66,12 @@ VrShellDelegate::VrShellDelegate(JNIEnv* env, jobject obj)
     : task_runner_(base::ThreadTaskRunnerHandle::Get()) {
   DVLOG(1) << __FUNCTION__ << "=" << this;
   j_vr_shell_delegate_.Reset(env, obj);
-  XRRuntimeManager::AddObserver(this);
+  XRRuntimeManagerStatics::AddObserver(this);
 }
 
 VrShellDelegate::~VrShellDelegate() {
   DVLOG(1) << __FUNCTION__ << "=" << this;
-  XRRuntimeManager::RemoveObserver(this);
+  XRRuntimeManagerStatics::RemoveObserver(this);
   device::GvrDevice* gvr_device = GetGvrDevice();
   if (gvr_device)
     gvr_device->OnExitPresent();
@@ -99,10 +101,10 @@ void VrShellDelegate::SetDelegate(VrShell* vr_shell,
   // When VrShell is created, we disable magic window mode as the user is inside
   // the headset. As currently implemented, orientation-based magic window
   // doesn't make sense when the window is fixed and the user is moving.
-  auto* xr_runtime_manager = XRRuntimeManager::GetInstanceIfCreated();
+  auto* xr_runtime_manager = XRRuntimeManagerStatics::GetInstanceIfCreated();
   if (xr_runtime_manager) {
     // If the XRRuntimeManager singleton currently exists, this will disable
-    // inline VR. Otherwise, the callback for 'XRRuntimeManagerObserver'
+    // inline VR. Otherwise, the callback for 'XRRuntimeManager::Observer'
     // ('OnRuntimeAdded') will take care of it.
     SetInlineVrEnabled(*xr_runtime_manager, false);
   }
@@ -111,11 +113,6 @@ void VrShellDelegate::SetDelegate(VrShell* vr_shell,
     CHECK(!on_present_result_callback_.is_null());
     pending_successful_present_request_ = false;
     std::move(on_present_result_callback_).Run(true);
-  }
-
-  if (pending_vr_start_action_) {
-    vr_shell_->RecordVrStartAction(*pending_vr_start_action_);
-    pending_vr_start_action_ = base::nullopt;
   }
 
   JNIEnv* env = AttachCurrentThread();
@@ -131,7 +128,7 @@ void VrShellDelegate::RemoveDelegate() {
     std::move(on_present_result_callback_).Run(false);
   }
 
-  auto* xr_runtime_manager = XRRuntimeManager::GetInstanceIfCreated();
+  auto* xr_runtime_manager = XRRuntimeManagerStatics::GetInstanceIfCreated();
   if (xr_runtime_manager) {
     SetInlineVrEnabled(*xr_runtime_manager, true);
   }
@@ -148,19 +145,6 @@ void VrShellDelegate::SetPresentResult(JNIEnv* env,
   std::move(on_present_result_callback_).Run(static_cast<bool>(success));
 }
 
-void VrShellDelegate::RecordVrStartAction(
-    JNIEnv* env,
-    jint start_action) {
-  VrStartAction action = static_cast<VrStartAction>(start_action);
-
-  if (!vr_shell_) {
-    pending_vr_start_action_ = action;
-    return;
-  }
-
-  vr_shell_->RecordVrStartAction(action);
-}
-
 void VrShellDelegate::OnPresentResult(
     device::mojom::VRDisplayInfoPtr display_info,
     device::mojom::XRRuntimeSessionOptionsPtr options,
@@ -171,7 +155,6 @@ void VrShellDelegate::OnPresentResult(
 
   if (!success) {
     std::move(callback).Run(nullptr);
-    possible_presentation_start_action_ = base::nullopt;
     return;
   }
 
@@ -183,15 +166,6 @@ void VrShellDelegate::OnPresentResult(
         &VrShellDelegate::OnPresentResult, base::Unretained(this),
         std::move(display_info), std::move(options), std::move(callback));
     return;
-  }
-
-  // If possible_presentation_start_action_ is not set at this point, then this
-  // request present probably came from blink, and has already been reported
-  // from there.
-  if (possible_presentation_start_action_) {
-    vr_shell_->RecordPresentationStartAction(
-        *possible_presentation_start_action_, *options);
-    possible_presentation_start_action_ = base::nullopt;
   }
 
   DVLOG(1) << __FUNCTION__ << ": connecting presenting service";
@@ -209,23 +183,6 @@ void VrShellDelegate::SendRequestPresentReply(
   }
 
   std::move(request_present_response_callback_).Run(std::move(session));
-}
-
-void VrShellDelegate::DisplayActivate(JNIEnv* env,
-                                      const JavaParamRef<jobject>& obj) {
-  device::GvrDevice* gvr_device = GetGvrDevice();
-  if (gvr_device) {
-    // The only possible source for DisplayActivate is HeadsetActivation.
-    possible_presentation_start_action_ =
-        PresentationStartAction::kHeadsetActivation;
-
-    gvr_device->Activate(
-        device::mojom::VRDisplayEventReason::MOUNTED,
-        base::BindRepeating(&VrShellDelegate::OnActivateDisplayHandled,
-                            weak_ptr_factory_.GetWeakPtr()));
-  } else {
-    OnActivateDisplayHandled(true /* will_not_present */);
-  }
 }
 
 void VrShellDelegate::OnPause(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -289,28 +246,12 @@ std::unique_ptr<VrCoreInfo> VrShellDelegate::MakeVrCoreInfo(JNIEnv* env) {
       Java_VrShellDelegate_getVrCoreInfo(env, j_vr_shell_delegate_)));
 }
 
-void VrShellDelegate::OnActivateDisplayHandled(bool will_not_present) {
-  if (will_not_present) {
-    // WebVR page didn't request presentation in the vrdisplayactivate handler.
-    // Tell VrShell that we are in VR Browsing Mode.
-    ExitWebVRPresent();
-    // Reset possible_presentation_start_action_ as it may have been set.
-    possible_presentation_start_action_ = base::nullopt;
-  }
-}
-
-void VrShellDelegate::OnListeningForActivateChanged(bool listening) {
-  JNIEnv* env = AttachCurrentThread();
-  Java_VrShellDelegate_setListeningForWebVrActivate(env, j_vr_shell_delegate_,
-                                                    listening);
-}
-
-void VrShellDelegate::OnRuntimeAdded(vr::BrowserXRRuntime* runtime) {
+void VrShellDelegate::OnRuntimeAdded(content::BrowserXRRuntime* runtime) {
   if (vr_shell_) {
     // See comment in VrShellDelegate::SetDelegate. This handles the case where
     // VrShell is created before the device code is initialized (like when
     // entering VR browsing on a non-webVR page).
-    runtime->GetRuntime()->SetInlinePosesEnabled(false);
+    runtime->SetInlinePosesEnabled(false);
   }
 }
 

@@ -4,29 +4,51 @@
 
 #include "chrome/browser/sync/test/integration/status_change_checker.h"
 
+#include <sstream>
+
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/logging.h"
-#include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
 
-constexpr base::TimeDelta kTimeout = base::TimeDelta::FromSeconds(30);
+constexpr base::TimeDelta kDefaultTimeout = base::TimeDelta::FromSeconds(30);
+
+base::TimeDelta GetTimeoutFromCommandLineOrDefault() {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          "sync-status-change-checker-timeout")) {
+    return kDefaultTimeout;
+  }
+  std::string timeout_string(
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          "sync-status-change-checker-timeout"));
+  int timeout_in_seconds = 0;
+  if (!base::StringToInt(timeout_string, &timeout_in_seconds)) {
+    LOG(FATAL) << "Timeout value \"" << timeout_string << "\" was parsed as "
+               << timeout_in_seconds;
+  }
+  return base::TimeDelta::FromSeconds(timeout_in_seconds);
+}
 
 }  // namespace
 
 StatusChangeChecker::StatusChangeChecker()
-    : run_loop_(base::RunLoop::Type::kNestableTasksAllowed),
+    : timeout_(GetTimeoutFromCommandLineOrDefault()),
+      run_loop_(base::RunLoop::Type::kNestableTasksAllowed),
       timed_out_(false) {}
 
 StatusChangeChecker::~StatusChangeChecker() {}
 
 bool StatusChangeChecker::Wait() {
-  if (IsExitConditionSatisfied()) {
-    DVLOG(1) << "Already satisfied: " << GetDebugMessage();
+  std::ostringstream s;
+  if (IsExitConditionSatisfied(&s)) {
+    DVLOG(1) << "Already satisfied: " << s.str();
   } else {
-    DVLOG(1) << "Blocking: " << GetDebugMessage();
+    DVLOG(1) << "Blocking: " << s.str();
     StartBlockingWait();
   }
   return !TimedOut();
@@ -42,10 +64,16 @@ void StatusChangeChecker::StopWaiting() {
 }
 
 void StatusChangeChecker::CheckExitCondition() {
-  DVLOG(1) << "Await -> Checking Condition: " << GetDebugMessage();
-  if (IsExitConditionSatisfied()) {
-    DVLOG(1) << "Await -> Condition met: " << GetDebugMessage();
+  if (!run_loop_.running()) {
+    return;
+  }
+
+  std::ostringstream s;
+  if (IsExitConditionSatisfied(&s)) {
+    DVLOG(1) << "Await -> Condition met: " << s.str();
     StopWaiting();
+  } else {
+    DVLOG(1) << "Await -> Condition not met: " << s.str();
   }
 }
 
@@ -53,7 +81,7 @@ void StatusChangeChecker::StartBlockingWait() {
   DCHECK(!run_loop_.running());
 
   base::OneShotTimer timer;
-  timer.Start(FROM_HERE, kTimeout,
+  timer.Start(FROM_HERE, timeout_,
               base::BindRepeating(&StatusChangeChecker::OnTimeout,
                                   base::Unretained(this)));
 
@@ -61,7 +89,14 @@ void StatusChangeChecker::StartBlockingWait() {
 }
 
 void StatusChangeChecker::OnTimeout() {
-  ADD_FAILURE() << "Await -> Timed out: " << GetDebugMessage();
   timed_out_ = true;
+
+  std::ostringstream s;
+  if (IsExitConditionSatisfied(&s)) {
+    ADD_FAILURE() << "Await -> Timed out despite conditions being satisfied.";
+  } else {
+    ADD_FAILURE() << "Await -> Timed out: " << s.str();
+  }
+
   StopWaiting();
 }

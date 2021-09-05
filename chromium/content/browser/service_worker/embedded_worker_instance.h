@@ -41,10 +41,12 @@
 
 namespace content {
 
+class CrossOriginEmbedderPolicyReporter;
 class RenderProcessHost;
 class ServiceWorkerContentSettingsProxyImpl;
 class ServiceWorkerContextCore;
 class ServiceWorkerVersion;
+class CrossOriginEmbedderPolicyReporter;
 
 namespace service_worker_new_script_loader_unittest {
 class ServiceWorkerNewScriptLoaderTest;
@@ -73,10 +75,8 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
     SCRIPT_LOADED = 5,
     // SCRIPT_EVALUATED = 6,  // Obsolete
     // THREAD_STARTED = 7,  // Obsolete
-    // Script read happens after SENT_START_WORKER and before SCRIPT_LOADED
-    // (installed scripts only)
-    SCRIPT_READ_STARTED = 8,
-    SCRIPT_READ_FINISHED = 9,
+    // SCRIPT_READ_STARTED = 8,  // Obsolete
+    // SCRIPT_READ_FINISHED = 9,  // Obsolete
     SCRIPT_STREAMING = 10,
     SCRIPT_EVALUATION = 11,
     // Add new values here and update enums.xml.
@@ -94,7 +94,8 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
     virtual void OnRegisteredToDevToolsManager() {}
     virtual void OnStartWorkerMessageSent() {}
     virtual void OnScriptEvaluationStart() {}
-    virtual void OnStarted(blink::mojom::ServiceWorkerStartStatus status) {}
+    virtual void OnStarted(blink::mojom::ServiceWorkerStartStatus status,
+                           bool has_fetch_handler) {}
 
     // Called when status changed to STOPPING. The renderer has been sent a Stop
     // IPC message and OnStopped() will be called upon successful completion.
@@ -155,9 +156,6 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // idle workers.
   void StopIfNotAttachedToDevTools();
 
-  // Resumes the worker if it paused after download.
-  void ResumeAfterDownload();
-
   int embedded_worker_id() const { return embedded_worker_id_; }
   EmbeddedWorkerStatus status() const { return status_; }
   StartingPhase starting_phase() const {
@@ -195,11 +193,6 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // Called when the main script load accessed the network.
   void OnNetworkAccessedForScriptLoad();
 
-  // Called when reading the main script from the service worker script cache
-  // begins and ends.
-  void OnScriptReadStarted();
-  void OnScriptReadFinished();
-
   // Called when the worker is installed.
   void OnWorkerVersionInstalled();
 
@@ -208,16 +201,6 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
 
   static std::string StatusToString(EmbeddedWorkerStatus status);
   static std::string StartingPhaseToString(StartingPhase phase);
-
-  using CreateNetworkFactoryCallback = base::RepeatingCallback<void(
-      mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
-      int process_id,
-      network::mojom::URLLoaderFactoryPtrInfo original_factory)>;
-  // Allows overriding the URLLoaderFactory creation for loading subresources
-  // from service workers (i.e., fetch()) and for loading non-installed service
-  // worker scripts.
-  static void SetNetworkFactoryForTesting(
-      const CreateNetworkFactoryCallback& url_loader_factory_callback);
 
   // Forces this instance into STOPPED status and releases any state about the
   // running worker. Called when connection with the renderer died or the
@@ -231,22 +214,38 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // changes such that the decision might change.
   void UpdateForegroundPriority();
 
-  // Pushes updated URL loader factories to the worker -- e.g. when DevTools
-  // network interception is enabled.
+  // Pushes updated URL loader factories to the worker. Called during new worker
+  // startup. Also called when DevTools network interception is enabled.
+  // |subresource_bundle| is set to nullptr when only |script_bundle| is needed
+  // to be updated.
   void UpdateLoaderFactories(
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> script_bundle,
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> subresource_bundle);
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> script_bundle,
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> subresource_bundle);
+
+  void BindCacheStorage(
+      mojo::PendingReceiver<blink::mojom::CacheStorage> receiver);
 
   base::WeakPtr<EmbeddedWorkerInstance> AsWeakPtr();
 
   // The below can only be called on the UI thread. The returned factory may be
   // later supplied to UpdateLoaderFactories().
-  static std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
+  static std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
   CreateFactoryBundleOnUI(
       RenderProcessHost* rph,
       int routing_id,
       const url::Origin& origin,
+      const base::Optional<network::CrossOriginEmbedderPolicy>&
+          cross_origin_embedder_policy,
+      mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
+          coep_reporter,
       ContentBrowserClient::URLLoaderFactoryType factory_type);
+
+  // Creates a set of factory bundles for scripts and subresources. This must be
+  // called after the COEP value for the worker script is known.
+  using CreateFactoryBundlesCallback = base::OnceCallback<void(
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> script_bundle,
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> subresouce_bundle)>;
+  void CreateFactoryBundles(CreateFactoryBundlesCallback callback);
 
  private:
   typedef base::ObserverList<Listener>::Unchecked ListenerList;
@@ -286,6 +285,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // Changes the internal worker status from STARTING to RUNNING.
   void OnStarted(
       blink::mojom::ServiceWorkerStartStatus status,
+      bool has_fetch_handler,
       int thread_id,
       blink::mojom::EmbeddedWorkerStartTimingPtr start_timing) override;
   // Resets the embedded worker instance to the initial state. Changes
@@ -315,8 +315,18 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   void NotifyForegroundServiceWorkerAdded();
   void NotifyForegroundServiceWorkerRemoved();
 
-  network::mojom::URLLoaderFactoryPtrInfo MakeScriptLoaderFactoryPtrInfo(
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> script_bundle);
+  mojo::PendingRemote<network::mojom::URLLoaderFactory>
+  MakeScriptLoaderFactoryRemote(
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> script_bundle);
+
+  void BindCacheStorageInternal();
+
+  void OnCreatedFactoryBundles(
+      CreateFactoryBundlesCallback callback,
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> script_bundle,
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> subresouce_bundle,
+      mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
+          coep_reporter);
 
   base::WeakPtr<ServiceWorkerContextCore> context_;
   ServiceWorkerVersion* owner_version_;
@@ -375,6 +385,17 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // subresource loader factories in the service worker.
   mojo::Remote<blink::mojom::SubresourceLoaderUpdater>
       subresource_loader_updater_;
+
+  // Hold in-flight CacheStorage requests. They will be bound when the
+  // ServiceWorker COEP header will be known.
+  std::vector<mojo::PendingReceiver<blink::mojom::CacheStorage>>
+      pending_cache_storage_receivers_;
+
+  // COEP Reporter connected to the URLLoaderFactories that handles subresource
+  // requests initiated from the service worker. The impl lives on the UI
+  // thread, and |coep_reporter_| has the ownership of the impl instance.
+  mojo::Remote<network::mojom::CrossOriginEmbedderPolicyReporter>
+      coep_reporter_;
 
   base::WeakPtrFactory<EmbeddedWorkerInstance> weak_factory_{this};
 

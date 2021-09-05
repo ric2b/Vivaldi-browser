@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">Ձեր մուտքն ինտերնետ արգելափակված է</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />-ը պահանջում է օգտվողի անուն և գաղտնաբառ։</translation>
 <translation id="2337852623177822836">Կարգավորումը կառավարվում է Ձեր ադմինիստրատորի կողմից</translation>
+<translation id="2344028582131185878">Ավտոմատ ներբեռնումներ</translation>
 <translation id="2355395290879513365">Հարձակվողները կարող են տեսնել այս կայքում Ձեզ երևացող պատկերները և փոխել դրանք՝ Ձեզ մոլորեցնելու նպատակով։</translation>
 <translation id="2356070529366658676">Հարցնել</translation>
 <translation id="2359808026110333948">Շարունակել</translation>
@@ -74,6 +75,7 @@
 <translation id="3447661539832366887">Այս սարքի տերն անջատել է դինոզավրով խաղը։</translation>
 <translation id="3447884698081792621">Ցույց տալ հավաստագիրը (թողարկող. <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Թաքցնել մանրամասները</translation>
+<translation id="3484560055331845446">Դուք կարող եք կորցնել մուտքը դեպի Ձեր Google-ի հաշիվ։ Chrome-ը խորհուրդ է տալիս անհապաղ փոխել Ձեր գաղտնաբառը։ Դրանից հետո կպահանջվի նորից մուտք գործել։</translation>
 <translation id="3566021033012934673">Ձեր միացումն անվտանգ չէ</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Թաքցնել մանրամասները</translation>
@@ -87,7 +89,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" />-ն արգելափակված է</translation>
 <translation id="3987940399970879459">1 ՄԲ-ից պակաս</translation>
 <translation id="4075732493274867456">Սպասառուի և սերվերի կողմից չի աջակցվում SSL պրոտոկոլի ընդհանուր տարբերակը կամ ծածկագրման մեթոդը։</translation>
-<translation id="410351446219883937">Ավտոմատ վերարտադրում</translation>
 <translation id="4116663294526079822">Միշտ թույլատրել այս կայքում</translation>
 <translation id="4130226655945681476">Ստուգել ցանցային մալուխները, մոդեմը և երթուղիչը</translation>
 <translation id="4151403195736952345">Կիրառել գլոբալ ստանդարտը (հայտնաբերել)</translation>
@@ -117,6 +118,7 @@
 <translation id="4974590756084640048">Նորից միացնել զգուշացումները</translation>
 <translation id="5023310440958281426">Ստուգեք Ձեր ադմինիստրատորի կողմից սահմանված դրույթները</translation>
 <translation id="5039804452771397117">Թույլատրել</translation>
+<translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(օգտագործվում է 1 հատը)} other {(օգտագործվում է # հատը)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Ստուգել պրոքսի հասցեն<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 բիթ)</translation>
 <translation id="5287240709317226393">Ցույց տալ քուքիները</translation>
@@ -206,6 +208,7 @@
 <translation id="8225771182978767009">Նա, ով կարգավորել է այս համակարգիչը, արգելափակել է այս կայքը։</translation>
 <translation id="8241707690549784388">Էջը, որը բացում եք, օգտագործել է Ձեր կողմից մուտքագրված տվյալներ։ Այդ էջ վերադառնալը կարող հանգեցնել նախկինում Ձեր կատարած գործողությունների կրկնման։ Ցանկանո՞ւմ եք շարունակել։</translation>
 <translation id="8241712895048303527">Արգելափակել այս կայքում</translation>
+<translation id="8286036467436129157">Մուտք</translation>
 <translation id="8288807391153049143">Ցույց տալ հավաստագիրը</translation>
 <translation id="8289355894181816810">Լրացուցիչ տեղեկությունների համար կապվեք Ձեր ցանցային ադմինիստրատորի հետ։</translation>
 <translation id="8332188693563227489">Մուտքը <ph name="HOST_NAME" /> արգելված է</translation>

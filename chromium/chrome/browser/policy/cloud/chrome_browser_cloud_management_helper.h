@@ -11,6 +11,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
+#include "chrome/browser/policy/browser_dm_token_storage.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_service.h"
 
@@ -73,8 +74,17 @@ class MachineLevelUserCloudPolicyFetcher : public CloudPolicyService::Observer {
 
   // Initialize the cloud policy client and policy store then fetch
   // the policy based on the |dm_token|. It should be called only once.
-  void SetupRegistrationAndFetchPolicy(const std::string& dm_token,
+  void SetupRegistrationAndFetchPolicy(const DMToken& dm_token,
                                        const std::string& client_id);
+
+  // Add or remove |observer| to/from the CloudPolicyClient embedded in
+  // |policy_manager_|.
+  void AddClientObserver(CloudPolicyClient::Observer* observer);
+  void RemoveClientObserver(CloudPolicyClient::Observer* observer);
+
+  // Shuts down |policy_manager_| (removes and stops refreshing the cached cloud
+  // policy).
+  void Disconnect();
 
   // CloudPolicyService::Observer:
   void OnCloudPolicyServiceInitializationCompleted() override;

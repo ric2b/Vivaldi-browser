@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
@@ -27,6 +28,7 @@
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/url_constants.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -615,6 +617,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, AccessiblePopup) {
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
   OmniboxViewViews* omnibox_view_views =
       static_cast<OmniboxViewViews*>(omnibox_view);
+  chrome::FocusLocationBar(browser());
 
   base::string16 match_url = base::ASCIIToUTF16("https://google.com");
   AutocompleteMatch match(nullptr, 500, false,
@@ -654,7 +657,6 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, AccessiblePopup) {
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()));
 
   // The omnibox popup should open with suggestions displayed.
-  chrome::FocusLocationBar(browser());
   omnibox_view->model()->popup_model()->OnResultChanged();
   EXPECT_TRUE(omnibox_view->model()->popup_model()->IsOpen());
   ui::AXNodeData popup_node_data_2;
@@ -662,6 +664,36 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, AccessiblePopup) {
   EXPECT_TRUE(popup_node_data_2.HasState(ax::mojom::State::kExpanded));
   EXPECT_FALSE(popup_node_data_2.HasState(ax::mojom::State::kCollapsed));
   EXPECT_FALSE(popup_node_data_2.HasState(ax::mojom::State::kInvisible));
+}
+
+// Omnibox returns to clean state after chrome://kill and reload.
+// https://crbug.com/993701 left the URL and icon as chrome://kill after reload.
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, ReloadAfterKill) {
+  OmniboxView* omnibox_view = nullptr;
+  ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
+  OmniboxViewViews* omnibox_view_views =
+      static_cast<OmniboxViewViews*>(omnibox_view);
+
+  // Open new tab page.
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
+
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  // Kill the tab with chrome://kill
+  {
+    content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes;
+    ui_test_utils::NavigateToURL(browser(), GURL(content::kChromeUIKillURL));
+    EXPECT_TRUE(tab->IsCrashed());
+  }
+
+  // Reload the tab.
+  tab->GetController().Reload(content::ReloadType::NORMAL, false);
+  content::WaitForLoadStop(tab);
+
+  // Verify the omnibox contents, URL and icon.
+  EXPECT_EQ(base::ASCIIToUTF16(""), omnibox_view_views->GetText());
+  EXPECT_EQ(GURL(url::kAboutBlankURL),
+            browser()->location_bar_model()->GetURL());
 }
 
 // The following set of tests require UIA accessibility support, which only
@@ -683,6 +715,7 @@ class OmniboxViewViewsUIATest : public OmniboxViewViewsTest {
 IN_PROC_BROWSER_TEST_F(OmniboxViewViewsUIATest, AccessibleOmnibox) {
   OmniboxView* omnibox_view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
+  chrome::FocusLocationBar(browser());
 
   base::string16 match_url = base::ASCIIToUTF16("https://example.com");
   AutocompleteMatch match(nullptr, 500, false,
@@ -718,7 +751,6 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsUIATest, AccessibleOmnibox) {
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()));
 
   // The omnibox popup should open with suggestions displayed.
-  chrome::FocusLocationBar(browser());
   omnibox_view->model()->popup_model()->OnResultChanged();
 
   // Wait for ControllerFor property changed event.

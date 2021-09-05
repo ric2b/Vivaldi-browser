@@ -8,31 +8,16 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/settings/settings_controller_protocol.h"
 
 class Browser;
 @protocol BrowserCommands;
+@protocol BrowsingDataCommands;
 @protocol ImportDataControllerDelegate;
 @protocol UserFeedbackDataSource;
 
-namespace ios {
-class ChromeBrowserState;
-}  // namespace ios
-
 // The accessibility identifier for the settings' "Done" button.
 extern NSString* const kSettingsDoneButtonId;
-
-@protocol SettingsControllerProtocol<NSObject>
-
-@optional
-
-// Notifies the controller that the settings screen is being dismissed.
-- (void)settingsWillBeDismissed;
-
-// Notifies the controller that is popped out from the settings navigation
-// controller.
-- (void)viewControllerWasPopped;
-
-@end
 
 @protocol SettingsNavigationControllerDelegate<NSObject>
 
@@ -45,18 +30,16 @@ extern NSString* const kSettingsDoneButtonId;
 // need to perform some clean up tasks.
 - (void)settingsWasDismissed;
 
-// Asks the delegate for a dispatcher that can be passed into child view
+// Asks the delegate for a handler that can be passed into child view
 // controllers when they are created.
-- (id<ApplicationCommands, BrowserCommands>)dispatcherForSettings;
+- (id<ApplicationCommands, BrowserCommands, BrowsingDataCommands>)
+    handlerForSettings;
 
 @end
 
 // Controller to modify user settings.
 @interface SettingsNavigationController
     : UINavigationController<ApplicationSettingsCommands>
-
-// Returns the  browser state associated with this view controller;
-@property(nonatomic, readonly) ios::ChromeBrowserState* mainBrowserState;
 
 // Creates a new SettingsTableViewController and the chrome around it.
 // |browser| is the browser where settings are being displayed and should not be
@@ -112,18 +95,18 @@ extern NSString* const kSettingsDoneButtonId;
                   feedbackDataSource:(id<UserFeedbackDataSource>)dataSource
                           dispatcher:(id<ApplicationCommands>)dispatcher;
 
-// Creates and displays a new ImportDataTableViewController. |browser|
+// Creates and displays a new ImportDataTableViewController. |browserState|
 // should not be nil.
+// TODO(crbug.com/1018746) pass Browser instead of BrowserState
 + (instancetype)
-    importDataControllerForBrowserState:(ios::ChromeBrowserState*)browserState
-                               delegate:
-                                   (id<SettingsNavigationControllerDelegate>)
-                                       delegate
-                     importDataDelegate:
-                         (id<ImportDataControllerDelegate>)importDataDelegate
-                              fromEmail:(NSString*)fromEmail
-                                toEmail:(NSString*)toEmail
-                             isSignedIn:(BOOL)isSignedIn;
+    importDataControllerForBrowser:(Browser*)browser
+                          delegate:
+                              (id<SettingsNavigationControllerDelegate>)delegate
+                importDataDelegate:
+                    (id<ImportDataControllerDelegate>)importDataDelegate
+                         fromEmail:(NSString*)fromEmail
+                           toEmail:(NSString*)toEmail
+                        isSignedIn:(BOOL)isSignedIn;
 
 // Creates a new AutofillProfileTableViewController and the chrome around
 // it. |browser| is the browser where settings are being displayed and should
@@ -144,12 +127,11 @@ extern NSString* const kSettingsDoneButtonId;
                                           delegate;
 
 // Initializes the UINavigationController with |rootViewController|.
-- (instancetype)
-    initWithRootViewController:(UIViewController*)rootViewController
-                  browserState:(ios::ChromeBrowserState*)browserState
-                      delegate:
-                          (id<SettingsNavigationControllerDelegate>)delegate
-    NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithRootViewController:(UIViewController*)rootViewController
+                                   browser:(Browser*)browser
+                                  delegate:
+                                      (id<SettingsNavigationControllerDelegate>)
+                                          delegate NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithRootViewController:(UIViewController*)rootViewController
     NS_UNAVAILABLE;

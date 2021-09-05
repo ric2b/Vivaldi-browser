@@ -114,7 +114,7 @@ class WebTestRunnerTests(unittest.TestCase):
         test_names = ['passes/text.html', 'passes/image.html']
         runner._test_inputs = [TestInput(test_name, timeout_ms=6000) for test_name in test_names]
 
-        run_results = TestRunResults(TestExpectations(runner._port, test_names), len(test_names))
+        run_results = TestRunResults(TestExpectations(runner._port), len(test_names))
         run_results.unexpected_failures = 100
         run_results.unexpected_crashes = 50
         run_results.unexpected_timeouts = 50
@@ -130,8 +130,8 @@ class WebTestRunnerTests(unittest.TestCase):
         runner._options.exit_after_n_crashes_or_timeouts = 10
         with self.assertRaises(TestRunInterruptedException):
             runner._interrupt_if_at_failure_limits(run_results)
-        self.assertEqual(run_results.results_by_name['passes/text.html'].type, test_expectations.SKIP)
-        self.assertEqual(run_results.results_by_name['passes/image.html'].type, test_expectations.SKIP)
+        self.assertEqual(run_results.results_by_name['passes/text.html'].type, 'SKIP')
+        self.assertEqual(run_results.results_by_name['passes/image.html'].type, 'SKIP')
 
         runner._options.exit_after_n_crashes_or_timeouts = None
         runner._options.exit_after_n_failures = 10
@@ -141,7 +141,7 @@ class WebTestRunnerTests(unittest.TestCase):
     def test_update_summary_with_result(self):
         runner = self._runner()
         test = 'failures/expected/reftest.html'
-        expectations = TestExpectations(runner._port, tests=[test])
+        expectations = TestExpectations(runner._port)
         runner._expectations = expectations
 
         run_results = TestRunResults(expectations, 1)
@@ -185,7 +185,7 @@ class SharderTests(unittest.TestCase):
         self.sharder = Sharder(port.split_test, max_locked_shards)
         test_list = test_list or self.test_list
         return self.sharder.shard_tests([self.get_test_input(test) for test in test_list],
-                                        num_workers, fully_parallel, run_singly)
+                                        num_workers, fully_parallel, False, run_singly)
 
     def assert_shards(self, actual_shards, expected_shard_names):
         self.assertEqual(len(actual_shards), len(expected_shard_names))

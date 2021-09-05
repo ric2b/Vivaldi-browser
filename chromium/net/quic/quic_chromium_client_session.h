@@ -89,13 +89,14 @@ enum class ConnectionMigrationMode {
 // Cause of a migration.
 enum MigrationCause {
   UNKNOWN_CAUSE,
-  ON_NETWORK_CONNECTED,                // No probing.
-  ON_NETWORK_DISCONNECTED,             // No probing.
-  ON_WRITE_ERROR,                      // No probing.
-  ON_NETWORK_MADE_DEFAULT,             // With probing.
-  ON_MIGRATE_BACK_TO_DEFAULT_NETWORK,  // With probing.
-  CHANGE_NETWORK_ON_PATH_DEGRADING,    // With probing.
-  CHANGE_PORT_ON_PATH_DEGRADING,       // With probing.
+  ON_NETWORK_CONNECTED,                       // No probing.
+  ON_NETWORK_DISCONNECTED,                    // No probing.
+  ON_WRITE_ERROR,                             // No probing.
+  ON_NETWORK_MADE_DEFAULT,                    // With probing.
+  ON_MIGRATE_BACK_TO_DEFAULT_NETWORK,         // With probing.
+  CHANGE_NETWORK_ON_PATH_DEGRADING,           // With probing.
+  CHANGE_PORT_ON_PATH_DEGRADING,              // With probing.
+  NEW_NETWORK_CONNECTED_POST_PATH_DEGRADING,  // With probing.
   MIGRATION_CAUSE_MAX
 };
 
@@ -156,7 +157,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     bool IsConnected() const;
 
     // Returns true if the handshake has been confirmed.
-    bool IsCryptoHandshakeConfirmed() const;
+    bool OneRttKeysAvailable() const;
 
     // Starts a request to rendezvous with a promised a stream.  If OK is
     // returned, then |push_stream_| will be updated with the promised
@@ -202,7 +203,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     bool SharesSameSession(const Handle& other) const;
 
     // Returns the QUIC version used by the session.
-    quic::QuicTransportVersion GetQuicVersion() const;
+    quic::ParsedQuicVersion GetQuicVersion() const;
 
     // Copies the remote udp address into |address| and returns a net error
     // code.
@@ -253,7 +254,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     void OnCryptoHandshakeConfirmed();
 
     // Called when the session is closed with a net error.
-    void OnSessionClosed(quic::QuicTransportVersion quic_version,
+    void OnSessionClosed(quic::ParsedQuicVersion quic_version,
                          int net_error,
                          quic::QuicErrorCode quic_error,
                          bool port_migration_detected,
@@ -282,7 +283,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     quic::QuicErrorCode quic_error_;
     bool port_migration_detected_;
     quic::QuicServerId server_id_;
-    quic::QuicTransportVersion quic_version_;
+    quic::ParsedQuicVersion quic_version_;
     LoadTimingInfo::ConnectTiming connect_timing_;
     quic::QuicClientPushPromiseIndex* push_promise_index_;
 
@@ -381,7 +382,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       std::unique_ptr<DatagramClientSocket> socket,
       QuicStreamFactory* stream_factory,
       QuicCryptoClientStreamFactory* crypto_client_stream_factory,
-      quic::QuicClock* clock,
+      const quic::QuicClock* clock,
       TransportSecurityState* transport_security_state,
       SSLConfigService* ssl_config_service,
       std::unique_ptr<QuicServerInfo> server_info,
@@ -493,7 +494,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   void SendRstStream(quic::QuicStreamId id,
                      quic::QuicRstStreamErrorCode error,
                      quic::QuicStreamOffset bytes_written) override;
-  void OnCryptoHandshakeEvent(CryptoHandshakeEvent event) override;
+  void SetDefaultEncryptionLevel(quic::EncryptionLevel level) override;
+  void OnOneRttKeysAvailable() override;
   void OnCryptoHandshakeMessageSent(
       const quic::CryptoHandshakeMessage& message) override;
   void OnCryptoHandshakeMessageReceived(
@@ -660,7 +662,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   const LoadTimingInfo::ConnectTiming& GetConnectTiming();
 
-  quic::QuicTransportVersion GetQuicVersion() const;
+  quic::ParsedQuicVersion GetQuicVersion() const;
 
   // Returns the estimate of dynamically allocated memory in bytes.
   // See base/trace_event/memory_usage_estimator.h.
@@ -771,6 +773,9 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // delete |this|.
   void NotifyFactoryOfSessionClosed();
 
+  // Called when default encryption level switches to forward secure.
+  void OnCryptoHandshakeComplete();
+
   QuicSessionKey session_key_;
   bool require_confirmation_;
   bool migrate_session_early_v2_;
@@ -788,7 +793,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // path degrading per default network.
   int max_migrations_to_non_default_network_on_path_degrading_;
   int current_migrations_to_non_default_network_on_path_degrading_;
-  quic::QuicClock* clock_;  // Unowned.
+  const quic::QuicClock* clock_;  // Unowned.
   int yield_after_packets_;
   quic::QuicTime::Delta yield_after_duration_;
   bool go_away_on_path_degrading_;
@@ -863,6 +868,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // from spdy::SpdyStreamPrecedence.
   bool headers_include_h2_stream_dependency_;
   Http2PriorityDependencies priority_dependency_state_;
+
+  quic::QuicStreamId max_allowed_push_id_;
 
   base::WeakPtrFactory<QuicChromiumClientSession> weak_factory_{this};
 

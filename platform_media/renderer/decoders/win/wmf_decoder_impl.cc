@@ -25,7 +25,6 @@
 #include "media/base/decoder_buffer.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_mime_util.h"
-#include "media/base/win/mf_initializer.h"
 #include "platform_media/common/win/mf_util.h"
 
 namespace media {
@@ -101,15 +100,13 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Media Config not accepted for codec : "
             << GetCodecName(config.codec());
-    std::move(init_cb).Run(false);
+    std::move(init_cb).Run(media::Status(media::StatusCode::kDecoderUnsupportedConfig));
     return;
   } else {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Supported decoder config for codec : "
             << Loggable(config);
   }
-
-  InitializeMediaFoundation();
 
   config_ = config;
 
@@ -119,7 +116,7 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
             << " Creating/Configuring failed for codec : "
             << GetCodecName(config.codec());
     ReportInitResult<StreamType>(false);
-    std::move(init_cb).Run(false);
+    std::move(init_cb).Run(media::Status(media::StatusCode::kDecoderFailedCreation));
     return;
   }
 
@@ -129,7 +126,7 @@ void WMFDecoderImpl<StreamType>::Initialize(const DecoderConfig& config,
   ResetTimestampState();
 
   ReportInitResult<StreamType>(true);
-  std::move(init_cb).Run(true);
+  std::move(init_cb).Run(media::Status());
 }
 
 template <DemuxerStream::Type StreamType>

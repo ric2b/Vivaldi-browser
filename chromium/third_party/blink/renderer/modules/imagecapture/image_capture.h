@@ -10,13 +10,13 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_capabilities.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_constraint_set.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_track_settings.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_photo_settings.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
-#include "third_party/blink/renderer/modules/imagecapture/photo_settings.h"
-#include "third_party/blink/renderer/modules/mediastream/media_track_capabilities.h"
-#include "third_party/blink/renderer/modules/mediastream/media_track_constraint_set.h"
-#include "third_party/blink/renderer/modules/mediastream/media_track_settings.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 
 namespace blink {
@@ -32,7 +32,7 @@ class ScriptPromiseResolver;
 class MODULES_EXPORT ImageCapture final
     : public EventTargetWithInlineData,
       public ActiveScriptWrappable<ImageCapture>,
-      public ContextLifecycleObserver {
+      public ExecutionContextLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(ImageCapture);
   DEFINE_WRAPPERTYPEINFO();
 
@@ -51,8 +51,8 @@ class MODULES_EXPORT ImageCapture final
   // ScriptWrappable implementation.
   bool HasPendingActivity() const final;
 
-  // ContextLifecycleObserver
-  void ContextDestroyed(ExecutionContext*) override;
+  // ExecutionContextLifecycleObserver
+  void ContextDestroyed() override;
 
   MediaStreamTrack* videoStreamTrack() const { return stream_track_.Get(); }
 
@@ -76,7 +76,7 @@ class MODULES_EXPORT ImageCapture final
   void ClearMediaTrackConstraints();
   void GetMediaTrackSettings(MediaTrackSettings*) const;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   using PromiseResolverFunction =

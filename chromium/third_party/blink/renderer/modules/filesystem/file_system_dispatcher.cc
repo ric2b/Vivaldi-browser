@@ -8,7 +8,6 @@
 
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -573,13 +572,7 @@ void FileSystemDispatcher::DidCreateSnapshotFile(
     FileMetadata file_metadata = FileMetadata::From(file_info);
     file_metadata.platform_path = FilePathToWebString(platform_path);
 
-    auto blob_data = std::make_unique<BlobData>();
-    blob_data->AppendFile(file_metadata.platform_path, 0, file_metadata.length,
-                          InvalidFileTime());
-    scoped_refptr<BlobDataHandle> snapshot_blob =
-        BlobDataHandle::Create(std::move(blob_data), file_metadata.length);
-
-    callbacks->DidCreateSnapshotFile(file_metadata, snapshot_blob);
+    callbacks->DidCreateSnapshotFile(file_metadata);
 
     if (listener) {
       mojo::Remote<mojom::blink::ReceivedSnapshotListener>(std::move(listener))

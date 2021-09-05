@@ -2,6 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {AppearanceBrowserProxy, AppearanceBrowserProxyImpl} from 'chrome://settings/settings.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {isLinux, isChromeOS} from 'chrome://resources/js/cr.m.js';
+// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
+// clang-format on
+
 /** @implements {settings.AppearanceBrowserProxy} */
 class TestAppearanceBrowserProxy extends TestBrowserProxy {
   constructor() {
@@ -81,14 +88,8 @@ let appearancePage = null;
 /** @type {?TestAppearanceBrowserProxy} */
 let appearanceBrowserProxy = null;
 
-/** @type {?TestWallpaperBrowserProxy} */
-let wallpaperBrowserProxy = null;
-
 function createAppearancePage() {
   appearanceBrowserProxy.reset();
-  if (cr.isChromeOS) {
-    wallpaperBrowserProxy.reset();
-  }
   PolymerTest.clearBody();
 
   appearancePage = document.createElement('settings-appearance-page');
@@ -117,66 +118,12 @@ suite('AppearanceHandler', function() {
   setup(function() {
     appearanceBrowserProxy = new TestAppearanceBrowserProxy();
     settings.AppearanceBrowserProxyImpl.instance_ = appearanceBrowserProxy;
-
-    if (cr.isChromeOS) {
-      wallpaperBrowserProxy = new TestWallpaperBrowserProxy();
-      settings.WallpaperBrowserProxyImpl.instance_ = wallpaperBrowserProxy;
-    }
-
     createAppearancePage();
   });
 
   teardown(function() {
     appearancePage.remove();
   });
-
-  if (cr.isChromeOS) {
-    // TODO(crbug/950007): Remove when SplitSettings is complete.
-    test('wallpaperManager', function() {
-      wallpaperBrowserProxy.setIsWallpaperPolicyControlled(false);
-      // TODO(dschuyler): This should notice the policy change without needing
-      // the page to be recreated.
-      createAppearancePage();
-      return wallpaperBrowserProxy.whenCalled('isWallpaperPolicyControlled')
-          .then(() => {
-            const button = appearancePage.$.wallpaperButton;
-            assertTrue(!!button);
-            assertFalse(button.disabled);
-            button.click();
-            return wallpaperBrowserProxy.whenCalled('openWallpaperManager');
-          });
-    });
-
-    // TODO(crbug/950007): Remove when SplitSettings is complete.
-    test('wallpaperSettingVisible', function() {
-      appearancePage.set('pageVisibility.setWallpaper', false);
-      return wallpaperBrowserProxy.whenCalled('isWallpaperSettingVisible')
-          .then(function() {
-            Polymer.dom.flush();
-            assertTrue(appearancePage.$$('#wallpaperButton').hidden);
-          });
-    });
-
-    // TODO(crbug/950007): Remove when SplitSettings is complete.
-    test('wallpaperPolicyControlled', function() {
-      // Should show the wallpaper policy indicator and disable the toggle
-      // button if the wallpaper is policy controlled.
-      wallpaperBrowserProxy.setIsWallpaperPolicyControlled(true);
-      createAppearancePage();
-      return wallpaperBrowserProxy.whenCalled('isWallpaperPolicyControlled')
-          .then(function() {
-            Polymer.dom.flush();
-            assertFalse(appearancePage.$$('#wallpaperPolicyIndicator').hidden);
-            assertTrue(appearancePage.$$('#wallpaperButton').disabled);
-          });
-    });
-  } else {
-    test('noWallpaperManager', function() {
-      // The wallpaper button should not be present.
-      const button = appearancePage.$.wallpaperButton;
-      assertFalse(!!button);
-    });
-  }
 
   const THEME_ID_PREF = 'prefs.extensions.theme.id.value';
 

@@ -226,7 +226,6 @@ Layer::~Layer() {
 
   if (content_layer_)
     content_layer_->ClearClient();
-  cc_layer_->SetLayerClient(nullptr);
   cc_layer_->RemoveFromParent();
   if (transfer_release_callback_)
     transfer_release_callback_->Run(gpu::SyncToken(), false);
@@ -278,7 +277,7 @@ std::unique_ptr<Layer> Layer::Clone() const {
   clone->SetFillsBoundsCompletely(fills_bounds_completely_);
   clone->SetRoundedCornerRadius(rounded_corner_radii());
   clone->SetIsFastRoundedCorner(is_fast_rounded_corner());
-  clone->set_name(name_);
+  clone->SetName(name_);
 
   return clone;
 }
@@ -713,19 +712,17 @@ bool Layer::GetTargetTransformRelativeTo(const Layer* ancestor,
 }
 
 void Layer::SetFillsBoundsOpaquely(bool fills_bounds_opaquely) {
-  if (fills_bounds_opaquely_ == fills_bounds_opaquely)
-    return;
-
-  fills_bounds_opaquely_ = fills_bounds_opaquely;
-
-  cc_layer_->SetContentsOpaque(fills_bounds_opaquely);
-
-  if (delegate_)
-    delegate_->OnLayerFillsBoundsOpaquelyChanged();
+  SetFillsBoundsOpaquelyWithReason(fills_bounds_opaquely,
+                                   PropertyChangeReason::NOT_FROM_ANIMATION);
 }
 
 void Layer::SetFillsBoundsCompletely(bool fills_bounds_completely) {
   fills_bounds_completely_ = fills_bounds_completely;
+}
+
+void Layer::SetName(const std::string& name) {
+  name_ = name;
+  cc_layer_->SetDebugName(name);
 }
 
 void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
@@ -745,7 +742,8 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   if (cc_layer_->parent()) {
     cc_layer_->parent()->ReplaceChild(cc_layer_, new_layer);
   }
-  cc_layer_->SetLayerClient(nullptr);
+  cc_layer_->ClearDebugInfo();
+
   new_layer->SetOpacity(cc_layer_->opacity());
   new_layer->SetTransform(cc_layer_->transform());
   new_layer->SetPosition(cc_layer_->position());
@@ -772,7 +770,6 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
     DCHECK(child->cc_layer_);
     cc_layer_->AddChild(child->cc_layer_);
   }
-  cc_layer_->SetLayerClient(weak_ptr_factory_.GetWeakPtr());
   cc_layer_->SetTransformOrigin(gfx::Point3F());
   cc_layer_->SetContentsOpaque(fills_bounds_opaquely_);
   cc_layer_->SetIsDrawable(type_ != LAYER_NOT_DRAWN);
@@ -780,6 +777,7 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   cc_layer_->SetHideLayerAndSubtree(!visible_);
   cc_layer_->SetBackdropFilterQuality(backdrop_filter_quality_);
   cc_layer_->SetElementId(cc::ElementId(cc_layer_->id()));
+  cc_layer_->SetDebugName(name_);
 
   SetLayerFilters();
   SetLayerBackgroundFilters();
@@ -1169,14 +1167,29 @@ void Layer::OnDeviceScaleFactorChanged(float device_scale_factor) {
 
   base::WeakPtr<Layer> weak_this = weak_ptr_factory_.GetWeakPtr();
 
-  // NOTE: Some animation observers destroy the layer when the animation ends.
-  if (animator_) {
-    animator_->StopAnimatingProperty(LayerAnimationElement::TRANSFORM);
+  // Some animation observers may mutate the tree (e.g. destroy the layer,
+  // change ancestor/sibling z-order etc) when the animation ends. This break
+  // the tree traversal and could lead to a crash. Collect all descendants (and
+  // their mask layers) in a flattened WeakPtr list at the root level then stop
+  // animations to let potential tree mutations happen before traversing the
+  // tree. See https://crbug.com/1037852.
+  const bool is_root_layer = !parent();
+  if (is_root_layer) {
+    std::vector<base::WeakPtr<Layer>> flattened;
+    GetFlattenedWeakList(&flattened);
+    for (auto& weak_layer : flattened) {
+      // Skip if layer is gone or not animating.
+      if (!weak_layer || !weak_layer->animator_)
+        continue;
 
-    // Do not proceed if the layer was destroyed due to an animation
-    // observer.
-    if (!weak_this)
-      return;
+      weak_layer->animator_->StopAnimatingProperty(
+          LayerAnimationElement::TRANSFORM);
+
+      // Do not proceed if the root layer was destroyed due to an animation
+      // observer.
+      if (!weak_this)
+        return;
+    }
   }
 
   const float old_device_scale_factor = device_scale_factor_;
@@ -1208,7 +1221,7 @@ void Layer::OnDeviceScaleFactorChanged(float device_scale_factor) {
 void Layer::SetDidScrollCallback(
     base::RepeatingCallback<void(const gfx::ScrollOffset&,
                                  const cc::ElementId&)> callback) {
-  cc_layer_->set_did_scroll_callback(std::move(callback));
+  cc_layer_->SetDidScrollCallback(std::move(callback));
 }
 
 void Layer::SetScrollable(const gfx::Size& container_bounds) {
@@ -1222,7 +1235,7 @@ gfx::ScrollOffset Layer::CurrentScrollOffset() const {
   if (compositor &&
       compositor->GetScrollOffsetForLayer(cc_layer_->element_id(), &offset))
     return offset;
-  return cc_layer_->CurrentScrollOffset();
+  return cc_layer_->scroll_offset();
 }
 
 void Layer::SetScrollOffset(const gfx::ScrollOffset& offset) {
@@ -1284,19 +1297,6 @@ bool Layer::PrepareTransferableResource(
   *release_callback = std::move(transfer_release_callback_);
   return true;
 }
-
-std::unique_ptr<base::trace_event::TracedValue> Layer::TakeDebugInfo(
-    const cc::Layer* layer) {
-  auto value = std::make_unique<base::trace_event::TracedValue>();
-  value->SetString("layer_name", name_);
-  return value;
-}
-
-std::string Layer::LayerDebugName(const cc::Layer* layer) const {
-  return name_;
-}
-
-void Layer::DidChangeScrollbarsHiddenIfOverlay(bool) {}
 
 void Layer::CollectAnimators(
     std::vector<scoped_refptr<LayerAnimator>>* animators) {
@@ -1439,7 +1439,7 @@ void Layer::SetColorFromAnimation(SkColor color, PropertyChangeReason reason) {
   DCHECK_EQ(type_, LAYER_SOLID_COLOR);
   cc_layer_->SetBackgroundColor(color);
   cc_layer_->SetSafeOpaqueBackgroundColor(color);
-  SetFillsBoundsOpaquely(SkColorGetA(color) == 0xFF);
+  SetFillsBoundsOpaquelyWithReason(SkColorGetA(color) == 0xFF, reason);
 }
 
 void Layer::SetClipRectFromAnimation(const gfx::Rect& clip_rect,
@@ -1510,9 +1510,12 @@ LayerAnimatorCollection* Layer::GetLayerAnimatorCollection() {
   return compositor ? compositor->layer_animator_collection() : nullptr;
 }
 
-int Layer::GetFrameNumber() const {
-  const Compositor* compositor = GetCompositor();
-  return compositor ? compositor->activated_frame_count() : 0;
+base::Optional<int> Layer::GetFrameNumber() const {
+  if (const Compositor* compositor = GetCompositor()) {
+    return compositor->activated_frame_count();
+  }
+
+  return base::nullopt;
 }
 
 float Layer::GetRefreshRate() const {
@@ -1549,7 +1552,6 @@ void Layer::CreateCcLayer() {
   cc_layer_->SetSafeOpaqueBackgroundColor(SK_ColorWHITE);
   cc_layer_->SetIsDrawable(type_ != LAYER_NOT_DRAWN);
   cc_layer_->SetHitTestable(IsHitTestableForCC());
-  cc_layer_->SetLayerClient(weak_ptr_factory_.GetWeakPtr());
   cc_layer_->SetElementId(cc::ElementId(cc_layer_->id()));
   RecomputePosition();
 }
@@ -1635,6 +1637,29 @@ void Layer::ResetSubtreeReflectedLayer() {
       subtree_reflected_layer_->subtree_reflecting_layers_.erase(this);
   DCHECK_EQ(1u, result);
   subtree_reflected_layer_ = nullptr;
+}
+
+void Layer::GetFlattenedWeakList(
+    std::vector<base::WeakPtr<Layer>>* flattened_list) {
+  flattened_list->emplace_back(weak_ptr_factory_.GetWeakPtr());
+  if (layer_mask_)
+    flattened_list->emplace_back(layer_mask_->weak_ptr_factory_.GetWeakPtr());
+
+  for (auto* child : children_)
+    child->GetFlattenedWeakList(flattened_list);
+}
+
+void Layer::SetFillsBoundsOpaquelyWithReason(bool fills_bounds_opaquely,
+                                             PropertyChangeReason reason) {
+  if (fills_bounds_opaquely_ == fills_bounds_opaquely)
+    return;
+
+  fills_bounds_opaquely_ = fills_bounds_opaquely;
+
+  cc_layer_->SetContentsOpaque(fills_bounds_opaquely);
+
+  if (delegate_)
+    delegate_->OnLayerFillsBoundsOpaquelyChanged(reason);
 }
 
 }  // namespace ui

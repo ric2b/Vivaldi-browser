@@ -9,8 +9,7 @@
 #include "base/bind.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/process/process.h"
-#include "mojo/public/cpp/system/platform_handle.h"
-#include "ui/ozone/common/linux/drm_util_linux.h"
+#include "ui/gfx/linux/drm_util_linux.h"
 #include "ui/ozone/platform/wayland/gpu/wayland_surface_gpu.h"
 
 namespace ui {
@@ -43,8 +42,8 @@ void WaylandBufferManagerGpu::OnSubmission(gfx::AcceleratedWidget widget,
   // Return back to the same thread where the commit request came from.
   commit_thread_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&WaylandBufferManagerGpu::SubmitSwapResultOnOriginThread,
-                 base::Unretained(this), widget, buffer_id, swap_result));
+      base::BindOnce(&WaylandBufferManagerGpu::SubmitSwapResultOnOriginThread,
+                     base::Unretained(this), widget, buffer_id, swap_result));
 }
 
 void WaylandBufferManagerGpu::OnPresentation(
@@ -55,8 +54,9 @@ void WaylandBufferManagerGpu::OnPresentation(
   // Return back to the same thread where the commit request came from.
   commit_thread_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&WaylandBufferManagerGpu::SubmitPresentationtOnOriginThread,
-                 base::Unretained(this), widget, buffer_id, feedback));
+      base::BindOnce(
+          &WaylandBufferManagerGpu::SubmitPresentationtOnOriginThread,
+          base::Unretained(this), widget, buffer_id, feedback));
 }
 
 void WaylandBufferManagerGpu::RegisterSurface(gfx::AcceleratedWidget widget,
@@ -81,7 +81,6 @@ WaylandSurfaceGpu* WaylandBufferManagerGpu::GetSurface(
 }
 
 void WaylandBufferManagerGpu::CreateDmabufBasedBuffer(
-    gfx::AcceleratedWidget widget,
     base::ScopedFD dmabuf_fd,
     gfx::Size size,
     const std::vector<uint32_t>& strides,
@@ -96,14 +95,13 @@ void WaylandBufferManagerGpu::CreateDmabufBasedBuffer(
   io_thread_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&WaylandBufferManagerGpu::CreateDmabufBasedBufferInternal,
-                     base::Unretained(this), widget, std::move(dmabuf_fd),
+                     base::Unretained(this), std::move(dmabuf_fd),
                      std::move(size), std::move(strides), std::move(offsets),
                      std::move(modifiers), current_format, planes_count,
                      buffer_id));
 }
 
 void WaylandBufferManagerGpu::CreateShmBasedBuffer(
-    gfx::AcceleratedWidget widget,
     base::ScopedFD shm_fd,
     size_t length,
     gfx::Size size,
@@ -114,7 +112,7 @@ void WaylandBufferManagerGpu::CreateShmBasedBuffer(
   io_thread_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&WaylandBufferManagerGpu::CreateShmBasedBufferInternal,
-                     base::Unretained(this), widget, std::move(shm_fd), length,
+                     base::Unretained(this), std::move(shm_fd), length,
                      std::move(size), buffer_id));
 }
 
@@ -159,8 +157,11 @@ WaylandBufferManagerGpu::GetModifiersForBufferFormat(
   return dummy;
 }
 
+uint32_t WaylandBufferManagerGpu::AllocateBufferID() {
+  return ++next_buffer_id_;
+}
+
 void WaylandBufferManagerGpu::CreateDmabufBasedBufferInternal(
-    gfx::AcceleratedWidget widget,
     base::ScopedFD dmabuf_fd,
     gfx::Size size,
     const std::vector<uint32_t>& strides,
@@ -172,23 +173,19 @@ void WaylandBufferManagerGpu::CreateDmabufBasedBufferInternal(
   DCHECK(io_thread_runner_->BelongsToCurrentThread());
   DCHECK(remote_host_);
   remote_host_->CreateDmabufBasedBuffer(
-      widget,
-      mojo::WrapPlatformHandle(mojo::PlatformHandle(std::move(dmabuf_fd))),
-      size, strides, offsets, modifiers, current_format, planes_count,
-      buffer_id);
+      mojo::PlatformHandle(std::move(dmabuf_fd)), size, strides, offsets,
+      modifiers, current_format, planes_count, buffer_id);
 }
 
 void WaylandBufferManagerGpu::CreateShmBasedBufferInternal(
-    gfx::AcceleratedWidget widget,
     base::ScopedFD shm_fd,
     size_t length,
     gfx::Size size,
     uint32_t buffer_id) {
   DCHECK(io_thread_runner_->BelongsToCurrentThread());
   DCHECK(remote_host_);
-  remote_host_->CreateShmBasedBuffer(
-      widget, mojo::WrapPlatformHandle(mojo::PlatformHandle(std::move(shm_fd))),
-      length, size, buffer_id);
+  remote_host_->CreateShmBasedBuffer(mojo::PlatformHandle(std::move(shm_fd)),
+                                     length, size, buffer_id);
 }
 
 void WaylandBufferManagerGpu::CommitBufferInternal(

@@ -3,23 +3,21 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/optimization_guide/prediction/decision_tree_prediction_model.h"
-#include "chrome/browser/optimization_guide/prediction/prediction_model.h"
+
+#include <utility>
 
 namespace optimization_guide {
 
 DecisionTreePredictionModel::DecisionTreePredictionModel(
     std::unique_ptr<optimization_guide::proto::PredictionModel>
-        prediction_model,
-    const base::flat_set<std::string>& host_model_features)
-    : PredictionModel(std::move(prediction_model), host_model_features) {}
+        prediction_model)
+    : PredictionModel(std::move(prediction_model)) {}
 
 DecisionTreePredictionModel::~DecisionTreePredictionModel() = default;
 
 bool DecisionTreePredictionModel::ValidatePredictionModel() const {
   // Only the top-level ensemble or decision tree must have a threshold. Any
   // submodels of an ensemble will have model weights but no threshold.
-  // TODO(mcrouse): Add metrics to record if the validation is successful or
-  // not.
   if (!model_->has_threshold())
     return false;
   return ValidateModel(*model_.get());
@@ -123,14 +121,15 @@ bool DecisionTreePredictionModel::ValidateTreeNode(
 
 optimization_guide::OptimizationTargetDecision
 DecisionTreePredictionModel::Predict(
-    const base::flat_map<std::string, float>& model_features) {
+    const base::flat_map<std::string, float>& model_features,
+    double* prediction_score) {
   SEQUENCE_CHECKER(sequence_checker_);
 
-  double result = 0.0;
+  *prediction_score = 0.0;
   // TODO(mcrouse): Add metrics to record if the model evaluation fails.
-  if (!EvaluateModel(*model_.get(), model_features, &result))
+  if (!EvaluateModel(*model_.get(), model_features, prediction_score))
     return optimization_guide::OptimizationTargetDecision::kUnknown;
-  if (result > model_->threshold().value())
+  if (*prediction_score > model_->threshold().value())
     return optimization_guide::OptimizationTargetDecision::kPageLoadMatches;
   return optimization_guide::OptimizationTargetDecision::kPageLoadDoesNotMatch;
 }

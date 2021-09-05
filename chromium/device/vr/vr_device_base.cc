@@ -27,13 +27,25 @@ mojom::VRDisplayInfoPtr VRDeviceBase::GetVRDisplayInfo() {
   return display_info_.Clone();
 }
 
+void VRDeviceBase::ShutdownSession(base::OnceClosure on_completed) {
+  DVLOG(2) << __func__;
+  // TODO(https://crbug.com/1015594): The default implementation of running the
+  // callback immediately is backwards compatible, but runtimes should be
+  // updated to override this, calling the callback at the appropriate time
+  // after any necessary cleanup has been completed. Once that's done, make this
+  // method abstract.
+  std::move(on_completed).Run();
+}
+
 void VRDeviceBase::OnExitPresent() {
+  DVLOG(2) << __func__ << ": !!listener_=" << !!listener_;
   if (listener_)
     listener_->OnExitPresent();
   presenting_ = false;
 }
 
 void VRDeviceBase::OnStartPresenting() {
+  DVLOG(2) << __func__;
   presenting_ = true;
 }
 
@@ -57,12 +69,6 @@ void VRDeviceBase::SetVRDisplayInfo(mojom::VRDisplayInfoPtr display_info) {
     listener_->OnDisplayInfoChanged(display_info_.Clone());
 }
 
-void VRDeviceBase::OnActivate(mojom::VRDisplayEventReason reason,
-                              base::Callback<void(bool)> on_handled) {
-  if (listener_)
-    listener_->OnDeviceActivated(reason, std::move(on_handled));
-}
-
 void VRDeviceBase::OnVisibilityStateChanged(
     mojom::XRVisibilityState visibility_state) {
   if (listener_)
@@ -70,28 +76,12 @@ void VRDeviceBase::OnVisibilityStateChanged(
 }
 
 mojo::PendingRemote<mojom::XRRuntime> VRDeviceBase::BindXRRuntime() {
+  DVLOG(2) << __func__;
   return runtime_receiver_.BindNewPipeAndPassRemote();
-}
-
-void VRDeviceBase::OnListeningForActivate(bool listening) {}
-
-void VRDeviceBase::SetListeningForActivate(bool is_listening) {
-  OnListeningForActivate(is_listening);
-}
-
-void VRDeviceBase::EnsureInitialized(EnsureInitializedCallback callback) {
-  std::move(callback).Run();
 }
 
 void VRDeviceBase::SetInlinePosesEnabled(bool enable) {
   inline_poses_enabled_ = enable;
-}
-
-void VRDeviceBase::RequestHitTest(
-    mojom::XRRayPtr ray,
-    mojom::XREnvironmentIntegrationProvider::RequestHitTestCallback callback) {
-  NOTREACHED() << "Unexpected call to a device without hit-test support";
-  std::move(callback).Run(base::nullopt);
 }
 
 void LogViewerType(VrViewerType type) {

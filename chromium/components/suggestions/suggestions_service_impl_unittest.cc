@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -42,7 +43,7 @@ using testing::StrictMock;
 
 namespace {
 
-const char kEmail[] = "foo_email";
+const char kEmail[] = "foo_email@gmail.com";
 const char kSuggestionsUrlPath[] = "/chromesuggestions";
 const char kBlacklistUrlPath[] = "/chromesuggestions/blacklist";
 const char kBlacklistClearUrlPath[] = "/chromesuggestions/blacklist/clear";

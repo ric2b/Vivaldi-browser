@@ -298,36 +298,44 @@ bool GetFallbackFont(const Font& font,
   for (const auto& entry : cache_entry->second) {
     // Validate that every character has a known glyph in the font.
     size_t missing_glyphs = 0;
+    size_t matching_glyphs = 0;
     size_t i = 0;
     while (i < text.length()) {
       UChar32 c = 0;
       U16_NEXT(text.data(), i, text.length(), c);
-      if (!entry.HasGlyphForCharacter(c))
+      if (entry.HasGlyphForCharacter(c)) {
+        ++matching_glyphs;
+      } else {
         ++missing_glyphs;
+      }
     }
 
-    if (missing_glyphs < fewest_missing_glyphs) {
+    if (matching_glyphs > 0 && missing_glyphs < fewest_missing_glyphs) {
       fewest_missing_glyphs = missing_glyphs;
       prefered_entry = &entry;
     }
 
-    // The font is a valid fallback font for the given text.
+    // The font has coverage for the given text and is a valid fallback font.
     if (missing_glyphs == 0)
       break;
   }
 
-  if (prefered_entry) {
-    sk_sp<SkTypeface> typeface = GetSkTypefaceFromPathAndIndex(
-        prefered_entry->font_path(), prefered_entry->ttc_index());
+  // No fonts can be used as font fallback.
+  if (!prefered_entry)
+    return false;
 
-    Font fallback_font(PlatformFont::CreateFromSkTypeface(
-        typeface, font.GetFontSize(), prefered_entry->font_params()));
+  sk_sp<SkTypeface> typeface = GetSkTypefaceFromPathAndIndex(
+      prefered_entry->font_path(), prefered_entry->ttc_index());
+  // The file can't be parsed (e.g. corrupt). This font can't be used as a
+  // fallback font.
+  if (!typeface)
+    return false;
 
-    *result = fallback_font;
-    return true;
-  }
+  Font fallback_font(PlatformFont::CreateFromSkTypeface(
+      typeface, font.GetFontSize(), prefered_entry->font_params()));
 
-  return false;
+  *result = fallback_font;
+  return true;
 }
 
 std::vector<Font> GetFallbackFonts(const Font& font) {
@@ -389,7 +397,7 @@ class CachedFont {
     DCHECK(pattern);
     DCHECK(char_set);
     fallback_font_.name = GetFontName(pattern);
-    fallback_font_.filename = GetFontPath(pattern).AsUTF8Unsafe();
+    fallback_font_.filepath = GetFontPath(pattern);
     fallback_font_.ttc_index = GetFontTtcIndex(pattern);
     fallback_font_.is_bold = IsFontBold(pattern);
     fallback_font_.is_italic = IsFontItalic(pattern);
@@ -422,17 +430,16 @@ class CachedFontSet {
     FcFontSetDestroy(font_set_);
   }
 
-  FallbackFontData GetFallbackFontForChar(UChar32 c) {
+  bool GetFallbackFontForChar(UChar32 c, FallbackFontData* fallback_font) {
     TRACE_EVENT0("fonts", "gfx::CachedFontSet::GetFallbackFontForChar");
 
     for (const auto& cached_font : fallback_list_) {
-      if (cached_font.HasGlyphForCharacter(c))
-        return cached_font.fallback_font();
+      if (cached_font.HasGlyphForCharacter(c)) {
+        *fallback_font = cached_font.fallback_font();
+        return true;
+      }
     }
-    // The previous code just returned garbage if the user didn't
-    // have the necessary fonts, this seems better than garbage.
-    // Current callers happen to ignore any values with an empty family string.
-    return FallbackFontData();
+    return false;
   }
 
  private:
@@ -505,11 +512,16 @@ base::LazyInstance<FontSetCache>::Leaky g_font_sets_by_locale =
 
 }  // namespace
 
-FallbackFontData GetFallbackFontForChar(UChar32 c, const std::string& locale) {
+FallbackFontData::FallbackFontData() = default;
+FallbackFontData::FallbackFontData(const FallbackFontData& other) = default;
+
+bool GetFallbackFontForChar(UChar32 c,
+                            const std::string& locale,
+                            FallbackFontData* fallback_font) {
   auto& cached_font_set = g_font_sets_by_locale.Get()[locale];
   if (!cached_font_set)
     cached_font_set = CachedFontSet::CreateForLocale(locale);
-  return cached_font_set->GetFallbackFontForChar(c);
+  return cached_font_set->GetFallbackFontForChar(c, fallback_font);
 }
 
 }  // namespace gfx

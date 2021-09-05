@@ -90,13 +90,13 @@ class TestList(object):
             test.__dict__[key] = value
         self.tests[name] = test
 
-    def add_reference(self, name, actual_checksum='checksum', actual_image='IMAGE'):
+    def add_reference(self, name, actual_checksum='checksum', actual_image='FAIL'):
         self.add(name, actual_checksum=actual_checksum, actual_image=actual_image,
                  actual_text=None, expected_text=None, expected_image=None)
 
     def add_reftest(self, name, reference_name, same_image=True,
                     actual_text=None, expected_text=None, crash=False, error=''):
-        self.add(name, actual_checksum='checksum', actual_image='IMAGE', expected_image=None,
+        self.add(name, actual_checksum='checksum', actual_image='FAIL', expected_image=None,
                  actual_text=actual_text, expected_text=expected_text,
                  crash=crash, error=error)
         if same_image:
@@ -116,14 +116,14 @@ class TestList(object):
 #
 # These numbers may need to be updated whenever we add or delete tests. This includes virtual tests.
 #
-TOTAL_TESTS = 151
+TOTAL_TESTS = 154
 TOTAL_WONTFIX = 3
 TOTAL_SKIPS = 20 + TOTAL_WONTFIX
 TOTAL_CRASHES = 78
 
 UNEXPECTED_PASSES = 1
-UNEXPECTED_NON_VIRTUAL_FAILURES = 33
-UNEXPECTED_FAILURES = 65
+UNEXPECTED_NON_VIRTUAL_FAILURES = 34
+UNEXPECTED_FAILURES = 67
 
 
 def unit_test_list():
@@ -168,13 +168,12 @@ def unit_test_list():
               actual_text=None, expected_text=None,
               actual_image=None, expected_image=None,
               actual_checksum=None)
-    tests.add('failures/unexpected/text-mismatch-overlay.html',
-              actual_text='"paintInvalidations": [\nfail',
-              expected_text='"paintInvalidations": [\npass')
-    tests.add('failures/unexpected/no-text-baseline.html',
-              actual_text='"paintInvalidations": [\nfail', expected_text=None)
-    tests.add('failures/unexpected/no-text-generated.html',
-              actual_text=None, expected_text='"paintInvalidations": [\npass')
+    tests.add(
+        'failures/unexpected/text-mismatch-overlay.html',
+        actual_text='"invalidations": [\nfail',
+        expected_text='"invalidations": [\npass')
+    tests.add('failures/unexpected/no-text-baseline.html', actual_text='"invalidations": [\nfail', expected_text=None)
+    tests.add('failures/unexpected/no-text-generated.html', actual_text=None, expected_text='"invalidations": [\npass')
     tests.add('failures/expected/keyboard.html', keyboard=True)
     tests.add('failures/expected/newlines_leading.html',
               expected_text='\nfoo\n', actual_text='foo\n')
@@ -186,6 +185,7 @@ def unit_test_list():
     tests.add('failures/expected/crash_then_text.html')
     tests.add('failures/expected/skip_text.html', actual_text='text diff')
     tests.add('failures/flaky/text.html')
+    tests.add('failures/unexpected/*/text.html', actual_text='text_fail-png')
     tests.add('failures/unexpected/missing_text.html', expected_text=None)
     tests.add('failures/unexpected/missing_check.html', expected_image='missing-check-png')
     tests.add('failures/unexpected/missing_image.html', expected_image=None)
@@ -308,6 +308,9 @@ layer at (0,0) size 800x34
               actual_checksum=None, actual_image=None,
               expected_checksum=None, expected_image=None)
 
+    tests.add('virtual/virtual_empty_bases/physical1.html')
+    tests.add('virtual/virtual_empty_bases/dir/physical2.html')
+
     return tests
 
 
@@ -319,35 +322,37 @@ def add_unit_tests_to_mock_filesystem(filesystem):
     filesystem.maybe_make_directory(WEB_TEST_DIR)
     if not filesystem.exists(WEB_TEST_DIR + '/TestExpectations'):
         filesystem.write_text_file(WEB_TEST_DIR + '/TestExpectations', """
-Bug(test) failures/expected/audio.html [ Failure ]
-Bug(test) failures/expected/crash.html [ Crash ]
-Bug(test) failures/expected/crash_then_text.html [ Failure ]
-Bug(test) failures/expected/device_failure.html [ Crash ]
-Bug(test) failures/expected/exception.html [ Crash ]
-Bug(test) failures/expected/image.html [ Failure ]
-Bug(test) failures/expected/image_checksum.html [ Failure ]
-Bug(test) failures/expected/keyboard.html [ Crash ]
-Bug(test) failures/expected/leak.html [ Leak ]
-Bug(test) failures/expected/mismatch.html [ Failure ]
-Bug(test) failures/expected/newlines_leading.html [ Failure ]
-Bug(test) failures/expected/newlines_trailing.html [ Failure ]
-Bug(test) failures/expected/newlines_with_excess_CR.html [ Failure ]
-Bug(test) failures/expected/reftest.html [ Failure ]
-Bug(test) failures/expected/skip_text.html [ Skip ]
-Bug(test) failures/expected/text.html [ Failure ]
-Bug(test) failures/expected/timeout.html [ Timeout ]
-Bug(test) failures/unexpected/pass.html [ Failure ]
-Bug(test) failures/unexpected/skip_pass.html [ Skip ]
-Bug(test) passes/skipped/skip.html [ Skip ]
-Bug(test) passes/text.html [ Pass ]
-Bug(test) virtual/skipped/failures/expected [ Skip ]
+# results: [ Pass Failure Crash Timeout Skip ]
+failures/expected/audio.html [ Failure ]
+failures/expected/crash.html [ Crash ]
+failures/expected/crash_then_text.html [ Failure ]
+failures/expected/device_failure.html [ Crash ]
+failures/expected/exception.html [ Crash ]
+failures/expected/image.html [ Failure ]
+failures/expected/image_checksum.html [ Failure ]
+failures/expected/keyboard.html [ Crash ]
+failures/expected/leak.html [ Failure ]
+failures/expected/mismatch.html [ Failure ]
+failures/expected/newlines_leading.html [ Failure ]
+failures/expected/newlines_trailing.html [ Failure ]
+failures/expected/newlines_with_excess_CR.html [ Failure ]
+failures/expected/reftest.html [ Failure ]
+failures/expected/skip_text.html [ Skip ]
+failures/expected/text.html [ Failure ]
+failures/expected/timeout.html [ Timeout ]
+failures/unexpected/pass.html [ Failure ]
+failures/unexpected/skip_pass.html [ Skip ]
+crbug.com/123 passes/skipped/skip.html [ Skip ]
+passes/text.html [ Pass ]
+virtual/skipped/failures/expected* [ Skip ]
 """)
 
     if not filesystem.exists(WEB_TEST_DIR + '/NeverFixTests'):
         filesystem.write_text_file(WEB_TEST_DIR + '/NeverFixTests', """
-Bug(test) failures/expected/keyboard.html [ WontFix ]
-Bug(test) failures/expected/exception.html [ WontFix ]
-Bug(test) failures/expected/device_failure.html [ WontFix ]
+# results: [ Pass Failure Crash Timeout Skip ]
+failures/expected/keyboard.html [ Skip ]
+failures/expected/exception.html [ Skip ]
+failures/expected/device_failure.html [ Skip ]
 """)
 
     # FIXME: This test was only being ignored because of missing a leading '/'.
@@ -425,6 +430,8 @@ class TestPort(Port):
         elif self._name.startswith('test-linux'):
             self._operating_system = 'linux'
 
+        self.port_name = self._operating_system
+
         version_map = {
             'test-win-win7': 'win7',
             'test-win-win10': 'win10',
@@ -466,6 +473,12 @@ class TestPort(Port):
                 self._filesystem.write_binary_file(sample_file, 'crash sample file')
                 sample_files[cp[0]] = sample_file
         return sample_files
+
+    def _flag_specific_expectations_path(self):
+        flags = [f[2:] for f in self._specified_additional_driver_flags()]
+        if not flags:
+            return None
+        return self._filesystem.join(self.web_tests_dir(), 'FlagExpectations', flags[0])
 
     def look_for_new_crash_logs(self, crashed_processes, start_time):
         del start_time
@@ -515,7 +528,7 @@ class TestPort(Port):
         return self._operating_system
 
     def default_results_directory(self):
-        return '/tmp/layout-test-results'
+        return '/tmp'
 
     def setup_test_run(self):
         pass
@@ -568,15 +581,12 @@ class TestPort(Port):
 
     def virtual_test_suites(self):
         return [
-            VirtualTestSuite(prefix='virtual_passes', base='passes', args=['--virtual-arg']),
-            VirtualTestSuite(prefix='virtual_passes', base='passes_two', args=['--virtual-arg']),
-            VirtualTestSuite(prefix='skipped', base='failures/expected', args=['--virtual-arg2']),
-            VirtualTestSuite(prefix='virtual_failures', base='failures/unexpected', args=['--virtual-arg3']),
-            VirtualTestSuite(prefix='references_use_default_args', base='passes/reftest.html',
-                             args=['--virtual-arg'], references_use_default_args=True),
-            VirtualTestSuite(prefix='virtual_wpt', base='external/wpt', args=['--virtual-arg']),
-            VirtualTestSuite(prefix='virtual_wpt_dom', base='external/wpt/dom', args=['--virtual-arg']),
-            VirtualTestSuite(prefix='virtual_wpt_dom', base='wpt_internal/dom', args=['--virtual-arg']),
+            VirtualTestSuite(prefix='virtual_passes', bases=['passes', 'passes_two'], args=['--virtual-arg']),
+            VirtualTestSuite(prefix='skipped', bases=['failures/expected'], args=['--virtual-arg-skipped']),
+            VirtualTestSuite(prefix='virtual_failures', bases=['failures/unexpected'], args=['--virtual-arg-failures']),
+            VirtualTestSuite(prefix='virtual_wpt', bases=['external/wpt'], args=['--virtual-arg-wpt']),
+            VirtualTestSuite(prefix='virtual_wpt_dom', bases=['external/wpt/dom', 'wpt_internal/dom'], args=['--virtual-arg-wpt-dom']),
+            VirtualTestSuite(prefix='virtual_empty_bases', bases=[], args=['--virtual-arg-empty-bases']),
         ]
 
 

@@ -1,9 +1,11 @@
-document
-++group
-++++link Name='unread '
-++++link Name='read '
-++++++img
-++++link Name='read '
-++++++img
-++++link Name='read'
-++++++img
+Document
+++Group IsControlElement=false
+++++Hyperlink Name='unread '
+++++++Text Name='unread ' IsControlElement=false
+++++Hyperlink Name='read '
+++++++Text Name='read ' IsControlElement=false
+++++Hyperlink Name='read '
+++++++Text Name='read ' IsControlElement=false
+++++Hyperlink Name='read'
+++++++Image
+++++++Text Name='read' IsControlElement=false

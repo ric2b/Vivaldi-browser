@@ -8,33 +8,34 @@
 #import <UIKit/UIKit.h>
 
 #import "base/ios/block_types.h"
+#import "ios/chrome/browser/ui/find_bar/find_bar_coordinator.h"
 #import "ios/chrome/browser/ui/page_info/requirements/page_info_presentation.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_presenter.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinator_delegate.h"
 #import "ios/public/provider/chrome/browser/voice/logo_animation_controller.h"
 
 class Browser;
+class ChromeBrowserState;
+class FullscreenController;
 @protocol ApplicationCommands;
 @protocol BrowserCommands;
+@protocol BrowsingDataCommands;
 @class BrowserContainerViewController;
 @class BrowserViewControllerDependencyFactory;
-@class CommandDispatcher;
-@protocol OmniboxFocuser;
+@protocol FindInPageCommands;
 @protocol PasswordBreachCommands;
 @protocol PopupMenuCommands;
 @protocol FakeboxFocuser;
 @protocol SnackbarCommands;
 @class TabModel;
+@class ToolbarAccessoryPresenter;
 @protocol ToolbarCommands;
-
-namespace ios {
-class ChromeBrowserState;
-}
 
 // The top-level view controller for the browser UI. Manages other controllers
 // which implement the interface.
 @interface BrowserViewController
     : UIViewController <LogoAnimationControllerOwnerOwner,
+                        FindBarPresentationDelegate,
                         PageInfoPresentation,
                         SyncPresenter,
                         ToolbarCoordinatorDelegate>
@@ -47,9 +48,6 @@ class ChromeBrowserState;
 - (instancetype)initWithBrowser:(Browser*)browser
                  dependencyFactory:
                      (BrowserViewControllerDependencyFactory*)factory
-        applicationCommandEndpoint:
-            (id<ApplicationCommands>)applicationCommandEndpoint
-                 commandDispatcher:(CommandDispatcher*)commandDispatcher
     browserContainerViewController:
         (BrowserContainerViewController*)browserContainerViewController
     NS_DESIGNATED_INITIALIZER;
@@ -61,7 +59,8 @@ class ChromeBrowserState;
 
 @property(nonatomic, readonly) id<ApplicationCommands,
                                   BrowserCommands,
-                                  OmniboxFocuser,
+                                  BrowsingDataCommands,
+                                  FindInPageCommands,
                                   PasswordBreachCommands,
                                   PopupMenuCommands,
                                   FakeboxFocuser,
@@ -82,7 +81,22 @@ class ChromeBrowserState;
 @property(nonatomic, weak, readonly) TabModel* tabModel;
 
 // The Browser's ChromeBrowserState.
-@property(nonatomic, assign, readonly) ios::ChromeBrowserState* browserState;
+@property(nonatomic, assign, readonly) ChromeBrowserState* browserState;
+
+// The FullscreenController.
+@property(nonatomic, assign) FullscreenController* fullscreenController;
+
+// The container used for infobar banner overlays.
+@property(nonatomic, strong)
+    UIViewController* infobarBannerOverlayContainerViewController;
+
+// The container used for infobar modal overlays.
+@property(nonatomic, strong)
+    UIViewController* infobarModalOverlayContainerViewController;
+
+// Presenter used to display accessories over the toolbar (e.g. Find In Page).
+@property(nonatomic, strong)
+    ToolbarAccessoryPresenter* toolbarAccessoryPresenter;
 
 // Whether the receiver is currently the primary BVC.
 - (void)setPrimary:(BOOL)primary;
@@ -92,12 +106,6 @@ class ChromeBrowserState;
 
 // Called when the user explicitly opens the tab switcher.
 - (void)userEnteredTabSwitcher;
-
-// Presents either in-product help bubbles if the the user is in a valid state
-// to see one of them. At most one bubble will be shown. If the feature
-// engagement tracker determines it is not valid to see one of the bubbles, that
-// bubble will not be shown.
-- (void)presentBubblesIfEligible;
 
 // Opens a new tab as if originating from |originPoint| and |focusOmnibox|.
 - (void)openNewTabFromOriginPoint:(CGPoint)originPoint

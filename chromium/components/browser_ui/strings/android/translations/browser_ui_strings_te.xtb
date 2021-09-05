@@ -1,0 +1,67 @@
+<?xml version="1.0" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="te">
+<translation id="1124772482545689468">వినియోగదారు</translation>
+<translation id="1181037720776840403">తీసివేయి</translation>
+<translation id="1201402288615127009">తరువాత</translation>
+<translation id="1383876407941801731">వెతుకు</translation>
+<translation id="2079545284768500474">చర్య రద్దు</translation>
+<translation id="2148716181193084225">ఈ రోజు</translation>
+<translation id="2359808026110333948">కొనసాగించు</translation>
+<translation id="2501278716633472235">వెనుకకు వెళ్ళు</translation>
+<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 కుక్కీ బ్లాక్ చేయబడింది}other{# కుక్కీలు బ్లాక్ చేయబడ్డాయి}}</translation>
+<translation id="257931822824936280">విస్తరింపబడింది - కుదించడానికి క్లిక్ చేయండి.</translation>
+<translation id="2653659639078652383">సమర్పించు</translation>
+<translation id="2704606927547763573">కాపీ చేయబడింది</translation>
+<translation id="2968755619301702150">ప్రమాణపత్రం వ్యూయర్</translation>
+<translation id="3115898365077584848">సమాచారాన్ని చూపు</translation>
+<translation id="3295602654194328831">సమాచారాన్ని దాచు</translation>
+<translation id="3479552764303398839">ఇప్పుడు కాదు</translation>
+<translation id="385051799172605136">వెనుకకు</translation>
+<translation id="3987993985790029246">లింక్‌ను కాపీ చేయి</translation>
+<translation id="4002066346123236978">శీర్షిక</translation>
+<translation id="4570913071927164677">వివరాలు</translation>
+<translation id="4645575059429386691">మీ తల్లి/తండ్రి ద్వారా నిర్వహించబడుతోంది</translation>
+<translation id="4883854917563148705">నిర్వహిత సెట్టింగ్‌లు రీసెట్ చేయబడవు</translation>
+<translation id="497421865427891073">ముందుకు వెళ్ళు</translation>
+<translation id="5100237604440890931">కుదించబడింది - విస్తరింపజేయడానికి క్లిక్ చేయండి.</translation>
+<translation id="5300589172476337783">చూపించు</translation>
+<translation id="5301954838959518834">సరే, అర్థమైంది</translation>
+<translation id="5317780077021120954">సేవ్ చేయి</translation>
+<translation id="5391532827096253100">ఈ సైట్‌కి మీ కనెక్షన్ సురక్షితంగా లేదు. సైట్ సమాచారం</translation>
+<translation id="5556459405103347317">మళ్లీ లోడ్ చేయి</translation>
+<translation id="5596627076506792578">మరిన్ని ఎంపికలు</translation>
+<translation id="5860033963881614850">ఆఫ్ అయ్యింది</translation>
+<translation id="5916664084637901428">ఆన్ చేయి</translation>
+<translation id="5939518447894949180">రీసెట్ చేయి</translation>
+<translation id="6040143037577758943">మూసివేయి</translation>
+<translation id="6042308850641462728">మరింత</translation>
+<translation id="6165508094623778733">మరింత తెలుసుకోండి</translation>
+<translation id="6206551242102657620">కనెక్షన్ సురక్షితం. సైట్ సమాచారం</translation>
+<translation id="6216432067784365534"><ph name="NAME_OF_LIST_ITEM" /> ఎంపికలు</translation>
+<translation id="6527303717912515753">భాగస్వామ్యం చేయి</translation>
+<translation id="6746124502594467657">క్రిందికి తరలించు</translation>
+<translation id="6818926723028410516">అంశాలను ఎంచుకోండి</translation>
+<translation id="6910211073230771657">తొలగించబడింది</translation>
+<translation id="6945221475159498467">ఎంచుకోండి</translation>
+<translation id="6963642900430330478">ఈ పేజీ ప్రమాదకరమైనది. సైట్ సమాచారం</translation>
+<translation id="6965382102122355670">సరే</translation>
+<translation id="7066151586745993502">{NUM_SELECTED,plural, =1{1 ఎంచుకోబడింది}other{# ఎంచుకోబడ్డాయి}}</translation>
+<translation id="7087918508125750058"><ph name="ITEM_COUNT" /> ఎంచుకోబడ్డాయి.  ఎంపికలు స్క్రీన్ పైభాగానికి సమీపంలో అందుబాటులో ఉన్నాయి</translation>
+<translation id="7250468141469952378"><ph name="ITEM_COUNT" /> ఎంచుకోబడ్డాయి</translation>
+<translation id="7649070708921625228">సహాయం</translation>
+<translation id="7658239707568436148">రద్దు చేయి</translation>
+<translation id="7781829728241885113">నిన్న</translation>
+<translation id="7791543448312431591">జోడించు</translation>
+<translation id="780301667611848630">వద్దు , ధన్యవాదాలు</translation>
+<translation id="7846076177841592234">ఎంపికను రద్దు చేయి</translation>
+<translation id="8131740175452115882">నిర్ధారించు</translation>
+<translation id="8206354486702514201">ఈ సెట్టింగ్ మీ నిర్వాహకుడి ద్వారా అమలు చేయబడింది.</translation>
+<translation id="8249310407154411074">ఎగువకు తరలించు</translation>
+<translation id="8261506727792406068">తొలగించు</translation>
+<translation id="8609465669617005112">పైకి తరలించు</translation>
+<translation id="8676374126336081632">ఇన్‌పుట్‌ను తీసివేయండి</translation>
+<translation id="8725066075913043281">మళ్ళీ ప్రయత్నించండి</translation>
+<translation id="8730621377337864115">పూర్తయింది</translation>
+<translation id="9019902583201351841">మీ తల్లిదండ్రుల ద్వారా నిర్వహించబడుతోంది</translation>
+</translationbundle>

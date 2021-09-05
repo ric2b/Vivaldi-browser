@@ -38,9 +38,10 @@ class FakeRemoteDeviceProviderFactory
   ~FakeRemoteDeviceProviderFactory() override = default;
 
   // device_sync::RemoteDeviceProviderImpl::Factory:
-  std::unique_ptr<device_sync::RemoteDeviceProvider> BuildInstance(
+  std::unique_ptr<device_sync::RemoteDeviceProvider> CreateInstance(
       device_sync::CryptAuthDeviceManager* device_manager,
-      const std::string& user_id,
+      device_sync::CryptAuthV2DeviceManager* v2_device_manager,
+      const std::string& user_email,
       const std::string& user_private_key) override {
     return std::make_unique<device_sync::FakeRemoteDeviceProvider>();
   }
@@ -58,7 +59,7 @@ class AsynchronousShutdownObjectContainerImplTest : public testing::Test {
 
     fake_remote_device_provider_factory_ =
         base::WrapUnique(new FakeRemoteDeviceProviderFactory());
-    device_sync::RemoteDeviceProviderImpl::Factory::SetInstanceForTesting(
+    device_sync::RemoteDeviceProviderImpl::Factory::SetFactoryForTesting(
         fake_remote_device_provider_factory_.get());
 
     fake_device_sync_client_ =

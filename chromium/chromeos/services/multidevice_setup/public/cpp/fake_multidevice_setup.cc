@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "chromeos/services/multidevice_setup/public/cpp/fake_multidevice_setup.h"
 
 #include "base/containers/flat_map.h"
@@ -20,6 +22,13 @@ FakeMultiDeviceSetup::~FakeMultiDeviceSetup() {
   for (auto& get_eligible_hosts_arg : get_eligible_hosts_args_) {
     if (get_eligible_hosts_arg)
       std::move(get_eligible_hosts_arg).Run(multidevice::RemoteDeviceList());
+  }
+
+  for (auto& get_eligible_active_hosts_arg : get_eligible_active_hosts_args_) {
+    if (get_eligible_active_hosts_arg) {
+      std::move(get_eligible_active_hosts_arg)
+          .Run(std::vector<mojom::HostDevicePtr>());
+    }
   }
 
   for (auto& set_host_arg : set_host_args_) {
@@ -63,11 +72,6 @@ FakeMultiDeviceSetup::~FakeMultiDeviceSetup() {
   }
 }
 
-void FakeMultiDeviceSetup::BindHandle(mojo::ScopedMessagePipeHandle handle) {
-  BindReceiver(
-      mojo::PendingReceiver<mojom::MultiDeviceSetup>(std::move(handle)));
-}
-
 void FakeMultiDeviceSetup::FlushForTesting() {
   host_status_observers_.FlushForTesting();
   feature_state_observers_.FlushForTesting();
@@ -97,6 +101,7 @@ void FakeMultiDeviceSetup::NotifyFeatureStateChanged(
 
 void FakeMultiDeviceSetup::SetAccountStatusChangeDelegate(
     mojo::PendingRemote<mojom::AccountStatusChangeDelegate> delegate) {
+  delegate_.reset();
   delegate_.Bind(std::move(delegate));
 }
 
@@ -115,10 +120,17 @@ void FakeMultiDeviceSetup::GetEligibleHostDevices(
   get_eligible_hosts_args_.push_back(std::move(callback));
 }
 
-void FakeMultiDeviceSetup::SetHostDevice(const std::string& host_device_id,
-                                         const std::string& auth_token,
-                                         SetHostDeviceCallback callback) {
-  set_host_args_.emplace_back(host_device_id, auth_token, std::move(callback));
+void FakeMultiDeviceSetup::GetEligibleActiveHostDevices(
+    GetEligibleActiveHostDevicesCallback callback) {
+  get_eligible_active_hosts_args_.push_back(std::move(callback));
+}
+
+void FakeMultiDeviceSetup::SetHostDevice(
+    const std::string& host_instance_id_or_legacy_device_id,
+    const std::string& auth_token,
+    SetHostDeviceCallback callback) {
+  set_host_args_.emplace_back(host_instance_id_or_legacy_device_id, auth_token,
+                              std::move(callback));
 }
 
 void FakeMultiDeviceSetup::RemoveHostDevice() {
@@ -153,9 +165,10 @@ void FakeMultiDeviceSetup::TriggerEventForDebugging(
 }
 
 void FakeMultiDeviceSetup::SetHostDeviceWithoutAuthToken(
-    const std::string& host_device_id,
+    const std::string& host_instance_id_or_legacy_device_id,
     mojom::PrivilegedHostDeviceSetter::SetHostDeviceCallback callback) {
-  set_host_without_auth_args_.emplace_back(host_device_id, std::move(callback));
+  set_host_without_auth_args_.emplace_back(host_instance_id_or_legacy_device_id,
+                                           std::move(callback));
 }
 
 }  // namespace multidevice_setup

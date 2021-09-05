@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.bookmarks;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -15,13 +14,15 @@ import android.view.View.OnClickListener;
 import android.widget.EditText;
 import android.widget.TextView;
 
+import androidx.appcompat.widget.Toolbar;
+
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.SynchronousInitializationActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
-import org.chromium.chrome.browser.ui.widget.TintedDrawable;
 import org.chromium.components.bookmarks.BookmarkId;
+import org.chromium.components.browser_ui.widget.TintedDrawable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -201,7 +202,6 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
                                     R.drawable.bookmark_check_gray, R.color.default_icon_color))
                             .setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_IF_ROOM);
         } else {
-            if (!ChromeApplication.isVivaldi())
             mDeleteButton = menu.add(R.string.bookmark_action_bar_delete)
                                     .setIcon(TintedDrawable.constructTintedDrawable(
                                             this, R.drawable.ic_delete_white_24dp))
@@ -226,7 +226,6 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
             }
 
             BookmarkId newFolder = mModel.addFolder(mParentId, 0, mFolderTitle.getTrimmedText());
-            if (ChromeApplication.isVivaldi()) updateIsSpeedDial(newFolder);
             Intent intent = new Intent();
             intent.putExtra(INTENT_CREATED_BOOKMARK, newFolder.toString());
             setResult(RESULT_OK, intent);
@@ -238,7 +237,6 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
             // When deleting, wait till the model has done its job and notified us via model
             // observer, and then we finish this activity.
             mModel.deleteBookmarks(mFolderId);
-            if (ChromeApplication.isVivaldi()) finish();
             return true;
         }
 

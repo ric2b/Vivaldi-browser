@@ -5,6 +5,7 @@
 #include "ui/events/blink/web_input_event_builders_win.h"
 
 #include "base/win/windowsx_shim.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/display/win/screen_win.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/event_utils.h"
@@ -18,6 +19,7 @@ namespace ui {
 
 static const unsigned long kDefaultScrollLinesPerWheelDelta = 3;
 static const unsigned long kDefaultScrollCharsPerWheelDelta = 1;
+static const unsigned long kScrollPercentPerLineOrChar = 5;
 
 // WebMouseEvent --------------------------------------------------------------
 
@@ -133,8 +135,8 @@ WebMouseEvent WebMouseEventBuilder::Build(
   // set position fields:
   result.SetPositionInWidget(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
 
-  POINT global_point = {result.PositionInWidget().x,
-                        result.PositionInWidget().y};
+  POINT global_point = {result.PositionInWidget().x(),
+                        result.PositionInWidget().y()};
   ClientToScreen(hwnd, &global_point);
 
   // We need to convert the global point back to DIP before using it.
@@ -153,9 +155,9 @@ WebMouseEvent WebMouseEventBuilder::Build(
 
   base::TimeTicks current_time = result.TimeStamp();
   bool cancel_previous_click =
-      (abs(last_click_position_x - result.PositionInWidget().x) >
+      (abs(last_click_position_x - result.PositionInWidget().x()) >
        (::GetSystemMetrics(SM_CXDOUBLECLK) / 2)) ||
-      (abs(last_click_position_y - result.PositionInWidget().y) >
+      (abs(last_click_position_y - result.PositionInWidget().y()) >
        (::GetSystemMetrics(SM_CYDOUBLECLK) / 2)) ||
       ((current_time - g_last_click_time).InMilliseconds() >
        ::GetDoubleClickTime());
@@ -165,8 +167,8 @@ WebMouseEvent WebMouseEventBuilder::Build(
       ++g_last_click_count;
     } else {
       g_last_click_count = 1;
-      last_click_position_x = result.PositionInWidget().x;
-      last_click_position_y = result.PositionInWidget().y;
+      last_click_position_x = result.PositionInWidget().x();
+      last_click_position_y = result.PositionInWidget().y();
     }
     g_last_click_time = current_time;
     last_click_button = result.button;
@@ -230,11 +232,11 @@ WebMouseWheelEvent WebMouseWheelEventBuilder::Build(
         break;
       case SB_PAGEUP:
         wheel_delta = 1;
-        result.delta_units = ui::input_types::ScrollGranularity::kScrollByPage;
+        result.delta_units = ui::ScrollGranularity::kScrollByPage;
         break;
       case SB_PAGEDOWN:
         wheel_delta = -1;
-        result.delta_units = ui::input_types::ScrollGranularity::kScrollByPage;
+        result.delta_units = ui::ScrollGranularity::kScrollByPage;
         break;
       default:  // We don't supoprt SB_THUMBPOSITION or SB_THUMBTRACK here.
         wheel_delta = 0;
@@ -275,43 +277,54 @@ WebMouseWheelEvent WebMouseWheelEventBuilder::Build(
   result.SetModifiers(modifiers);
 
   // Set coordinates by translating event coordinates from screen to client.
-  POINT client_point = {result.PositionInScreen().x,
-                        result.PositionInScreen().y};
+  POINT client_point = {result.PositionInScreen().x(),
+                        result.PositionInScreen().y()};
   MapWindowPoints(0, hwnd, &client_point, 1);
   result.SetPositionInWidget(client_point.x, client_point.y);
 
-  // Convert wheel delta amount to a number of pixels to scroll.
-  //
-  // How many pixels should we scroll per line?  Gecko uses the height of the
-  // current line, which means scroll distance changes as you go through the
-  // page or go to different pages.  IE 8 is ~60 px/line, although the value
-  // seems to vary slightly by page and zoom level.  Also, IE defaults to
-  // smooth scrolling while Firefox doesn't, so it can get away with somewhat
-  // larger scroll values without feeling as jerky.  Here we use 100 px per
-  // three lines (the default scroll amount is three lines per wheel tick).
-  // Even though we have smooth scrolling, we don't make this as large as IE
-  // because subjectively IE feels like it scrolls farther than you want while
-  // reading articles.
-  static const float kScrollbarPixelsPerLine = 100.0f / 3.0f;
-  wheel_delta /= WHEEL_DELTA;
-  float scroll_delta = wheel_delta;
+  // |wheel_delta| is expressed in multiples or divisions of WHEEL_DELTA,
+  // divide this out here to get the number of wheel ticks.
+  float num_ticks = wheel_delta / WHEEL_DELTA;
+  float scroll_delta = num_ticks;
   if (horizontal_scroll) {
     unsigned long scroll_chars = kDefaultScrollCharsPerWheelDelta;
     SystemParametersInfo(SPI_GETWHEELSCROLLCHARS, 0, &scroll_chars, 0);
-    // TODO(pkasting): Should probably have a different multiplier
-    // scrollbarPixelsPerChar here.
-    scroll_delta *= static_cast<float>(scroll_chars) * kScrollbarPixelsPerLine;
+    scroll_delta *= static_cast<float>(scroll_chars);
   } else {
     unsigned long scroll_lines = kDefaultScrollLinesPerWheelDelta;
     SystemParametersInfo(SPI_GETWHEELSCROLLLINES, 0, &scroll_lines, 0);
-    if (scroll_lines == WHEEL_PAGESCROLL) {
-      result.delta_units = ui::input_types::ScrollGranularity::kScrollByPage;
-    }
+    if (scroll_lines == WHEEL_PAGESCROLL)
+      result.delta_units = ui::ScrollGranularity::kScrollByPage;
+    else
+      scroll_delta *= static_cast<float>(scroll_lines);
+  }
 
-    if (result.delta_units !=
-        ui::input_types::ScrollGranularity::kScrollByPage) {
-      scroll_delta *=
-          static_cast<float>(scroll_lines) * kScrollbarPixelsPerLine;
+  if (result.delta_units != ui::ScrollGranularity::kScrollByPage) {
+    if (base::FeatureList::IsEnabled(features::kPercentBasedScrolling)) {
+      // If percent-based scrolling is enabled, the scroll_delta represents
+      // the percentage amount (out of 1, i.e. 1 == 100%) the targeted scroller
+      // should scroll. This percentage will be resolved against the size of
+      // the scroller in the renderer process.
+      scroll_delta *= kScrollPercentPerLineOrChar / 100.f;
+      result.delta_units = ui::ScrollGranularity::kScrollByPercentage;
+    } else {
+      // Convert wheel delta amount to a number of pixels to scroll.
+      //
+      // How many pixels should we scroll per line?  Gecko uses the height of
+      // the current line, which means scroll distance changes as you go through
+      // the page or go to different pages.  IE 8 is ~60 px/line, although the
+      // value seems to vary slightly by page and zoom level.  Also, IE defaults
+      // to smooth scrolling while Firefox doesn't, so it can get away with
+      // somewhat larger scroll values without feeling as jerky.  Here we use
+      // 100 px per three lines (the default scroll amount is three lines per
+      // wheel tick). Even though we have smooth scrolling, we don't make this
+      // as large as IE because subjectively IE feels like it scrolls farther
+      // than you want while reading articles.
+      static const float kScrollbarPixelsPerLine = 100.0f / 3.0f;
+
+      // TODO(pkasting): Should probably have a different multiplier for
+      // horizontal scrolls here.
+      scroll_delta *= kScrollbarPixelsPerLine;
     }
   }
 
@@ -319,10 +332,10 @@ WebMouseWheelEvent WebMouseWheelEventBuilder::Build(
   // deltaY to mean "scroll up" and positive deltaX to mean "scroll left".
   if (horizontal_scroll) {
     result.delta_x = scroll_delta;
-    result.wheel_ticks_x = wheel_delta;
+    result.wheel_ticks_x = num_ticks;
   } else {
     result.delta_y = scroll_delta;
-    result.wheel_ticks_y = wheel_delta;
+    result.wheel_ticks_y = num_ticks;
   }
 
   return result;

@@ -20,9 +20,16 @@ namespace ui {
 // be used to predict one dimension (x, y).
 class KalmanPredictor : public InputPredictor {
  public:
-  enum class HeuristicsMode { kHeuristicsDisabled, kHeuristicsEnabled };
+  // Heuristic option enables changing the influence of acceleration based on
+  // change of direction. Direction cut off enables discarding the prediction if
+  // the predicted direction is opposite from the current direction.
+  enum PredictionOptions {
+    kNone = 0x0,
+    kHeuristicsEnabled = 0x1,
+    kDirectionCutOffEnabled = 0x2
+  };
 
-  explicit KalmanPredictor(HeuristicsMode heuristics_mode);
+  explicit KalmanPredictor(unsigned int prediction_options);
   ~KalmanPredictor() override;
 
   const char* GetName() const override;
@@ -38,8 +45,8 @@ class KalmanPredictor : public InputPredictor {
 
   // Generate the prediction based on stored points and given time_stamp.
   // Return false if no prediction available.
-  bool GeneratePrediction(base::TimeTicks predict_time,
-                          InputData* result) const override;
+  std::unique_ptr<InputData> GeneratePrediction(
+      base::TimeTicks predict_time) const override;
 
   // Return the filtered value of time intervals.
   base::TimeDelta TimeInterval() const override;
@@ -64,9 +71,8 @@ class KalmanPredictor : public InputPredictor {
   static constexpr base::TimeDelta kMaxTimeInQueue =
       base::TimeDelta::FromMilliseconds(40);
 
-  // Flag to determine heuristic behavior based on the accumulated angle between
-  // the last set of points.
-  const HeuristicsMode heuristics_mode_;
+  // Flags to determine the enabled prediction options.
+  const unsigned int prediction_options_;
 
   DISALLOW_COPY_AND_ASSIGN(KalmanPredictor);
 };

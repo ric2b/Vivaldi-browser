@@ -35,7 +35,6 @@
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/load_error_reporter.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
-#include "chrome/browser/extensions/updater/extension_cache_fake.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -69,6 +68,7 @@
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/browser/uninstall_reason.h"
+#include "extensions/browser/updater/extension_cache_fake.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/file_test_util.h"
@@ -111,8 +111,7 @@ void ExtensionProtocolTestResourcesHandler(const base::FilePath& test_dir_root,
 }  // namespace
 
 ExtensionBrowserTest::ExtensionBrowserTest()
-    : loaded_(false),
-      installed_(false),
+    :
 #if defined(OS_CHROMEOS)
       set_chromeos_user_(true),
 #endif
@@ -257,14 +256,22 @@ const Extension* ExtensionBrowserTest::LoadExtensionWithInstallParam(
     const base::FilePath& path,
     int flags,
     const std::string& install_param) {
+  // Make sure there aren't any stray bits in "flags." This could happen
+  // if someone inadvertently used any of the ExtensionApiTest flag values.
+  CHECK_LT(flags, kFlagNextValue);
   ChromeTestExtensionLoader loader(profile());
   loader.set_require_modern_manifest_version(
       (flags & kFlagAllowOldManifestVersions) == 0);
-  loader.set_ignore_manifest_warnings(
-      (flags & kFlagIgnoreManifestWarnings) != 0);
-  loader.set_allow_incognito_access((flags & kFlagEnableIncognito) != 0);
-  loader.set_allow_file_access((flags & kFlagEnableFileAccess) != 0);
+  loader.set_ignore_manifest_warnings(flags & kFlagIgnoreManifestWarnings);
+  loader.set_allow_incognito_access(flags & kFlagEnableIncognito);
+  loader.set_allow_file_access(flags & kFlagEnableFileAccess);
   loader.set_install_param(install_param);
+
+  // Note: Rely on the default value to wait for renderers unless otherwise
+  // specified.
+  if (flags & kFlagDontWaitForExtensionRenderers)
+    loader.set_wait_for_renderers(false);
+
   if ((flags & kFlagLoadForLoginScreen) != 0) {
     loader.add_creation_flag(Extension::FOR_LOGIN_SCREEN);
     loader.set_location(Manifest::EXTERNAL_POLICY);
@@ -339,7 +346,7 @@ bool ExtensionBrowserTest::CreateServiceWorkerBasedExtension(
   }
 
   // Number of JS scripts must be > 1.
-  base::Value::ListStorage& scripts_list = background_scripts_list->GetList();
+  base::Value::ConstListView scripts_list = background_scripts_list->GetList();
   if (scripts_list.size() < 1) {
     ADD_FAILURE() << path.value()
                   << ": Only event pages with JS script(s) can be loaded "
@@ -437,11 +444,6 @@ const Extension* ExtensionBrowserTest::LoadAndLaunchApp(
 
 Browser* ExtensionBrowserTest::LaunchAppBrowser(const Extension* extension) {
   return browsertest_util::LaunchAppBrowser(profile(), extension);
-}
-
-Browser* ExtensionBrowserTest::LaunchBrowserForAppInTab(
-    const Extension* extension) {
-  return browsertest_util::LaunchBrowserForAppInTab(profile(), extension);
 }
 
 base::FilePath ExtensionBrowserTest::PackExtension(

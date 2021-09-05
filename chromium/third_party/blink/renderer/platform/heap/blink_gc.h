@@ -14,21 +14,23 @@
 
 namespace blink {
 
+class WeakCallbackInfo;
 class MarkingVisitor;
 class Visitor;
 
 using Address = uint8_t*;
+using ConstAddress = const uint8_t*;
 
 using FinalizationCallback = void (*)(void*);
-using VisitorCallback = void (*)(Visitor*, void*);
-using MarkingVisitorCallback = void (*)(MarkingVisitor*, void*);
+using VisitorCallback = void (*)(Visitor*, const void*);
+using MarkingVisitorCallback = void (*)(MarkingVisitor*, const void*);
 using TraceCallback = VisitorCallback;
-using WeakCallback = VisitorCallback;
+using WeakCallback = void (*)(const WeakCallbackInfo&, const void*);
 using EphemeronCallback = VisitorCallback;
 
 // Simple alias to avoid heap compaction type signatures turning into
 // a sea of generic |void*|s.
-using MovableReference = void*;
+using MovableReference = const void*;
 
 // Heap compaction supports registering callbacks that are to be invoked
 // when an object is moved during compaction. This is to support internal
@@ -47,11 +49,7 @@ using MovingObjectCallback = void (*)(MovableReference from,
   H(NormalPage2)          \
   H(NormalPage3)          \
   H(NormalPage4)          \
-  H(Vector1)              \
-  H(Vector2)              \
-  H(Vector3)              \
-  H(Vector4)              \
-  H(InlineVector)         \
+  H(Vector)               \
   H(HashTable)            \
   H(Node)                 \
   H(CSSValue)             \
@@ -67,6 +65,11 @@ class PLATFORM_EXPORT BlinkGC final {
   STATIC_ONLY(BlinkGC);
 
  public:
+  // CollectionType represents generational collection. kMinor collects objects
+  // in the young generation (i.e. allocated since the previous collection
+  // cycle, since we use sticky bits), kMajor collects the entire heap.
+  enum class CollectionType { kMinor, kMajor };
+
   // When garbage collecting we need to know whether or not there
   // can be pointers to Blink GC managed objects on the stack for
   // each thread. When threads reach a safe point they record

@@ -14,6 +14,8 @@
 #include "ui/android/resources/resource_manager.h"
 #include "ui/base/l10n/l10n_util_android.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace android {
 
 // static
@@ -167,6 +169,8 @@ void TabHandleLayer::SetProperties(
     close_button_->SetPosition(gfx::PointF(close_x, close_y));
     close_button_->SetOpacity(close_button_alpha);
   }
+  if (vivaldi::IsVivaldiRunning())
+    layer_->SetOpacity(foreground_ ? 1.f : 0.5f);
 }
 
 scoped_refptr<cc::Layer> TabHandleLayer::layer() {

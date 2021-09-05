@@ -18,6 +18,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/numerics/ranges.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkUnPreMultiply.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -637,7 +638,7 @@ SkColor CalculateKMeanColorOfBitmap(const SkBitmap& bitmap,
   // we can end up creating a larger buffer than we have data for, and the end
   // of the buffer will remain uninitialized after we copy/UnPreMultiply the
   // image data into it).
-  height = std::min(height, bitmap.height());
+  height = base::ClampToRange(height, 0, bitmap.height());
 
   // SkBitmap uses pre-multiplied alpha but the KMean clustering function
   // above uses non-pre-multiplied alpha. Transform the bitmap before we
@@ -960,22 +961,6 @@ bool ApplyColorReduction(const SkBitmap& source_bitmap,
   }
 
   return true;
-}
-
-bool ComputePrincipalComponentImage(const SkBitmap& source_bitmap,
-                                    SkBitmap* target_bitmap) {
-  if (!target_bitmap) {
-    NOTREACHED();
-    return false;
-  }
-
-  gfx::Matrix3F covariance = ComputeColorCovariance(source_bitmap);
-  gfx::Matrix3F eigenvectors = gfx::Matrix3F::Zeros();
-  gfx::Vector3dF eigenvals = covariance.SolveEigenproblem(&eigenvectors);
-  gfx::Vector3dF principal = eigenvectors.get_column(0);
-  if (eigenvals == gfx::Vector3dF() || principal == gfx::Vector3dF())
-    return false;  // This may happen for some edge cases.
-  return ApplyColorReduction(source_bitmap, principal, true, target_bitmap);
 }
 
 }  // color_utils

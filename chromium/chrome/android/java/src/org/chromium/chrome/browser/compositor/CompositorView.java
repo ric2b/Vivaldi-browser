@@ -13,7 +13,6 @@ import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -32,7 +31,7 @@ import org.chromium.chrome.browser.compositor.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.externalnav.IntentWithGesturesHandler;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.tabmodel.TabModelImpl;
-import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.resources.AndroidResourceType;
@@ -143,7 +142,7 @@ public class CompositorView
         // Cover the black surface before it has valid content.  Set this placeholder view to
         // visible, but don't yet make SurfaceView visible, in order to delay
         // surfaceCreate/surfaceChanged calls until the native library is loaded.
-        setBackgroundColor(ColorUtils.getPrimaryBackgroundColor(getResources(), false));
+        setBackgroundColor(ChromeColors.getPrimaryBackgroundColor(getResources(), false));
         super.setVisibility(View.VISIBLE);
 
         // Request the opaque surface.  We might need the translucent one, but
@@ -321,11 +320,6 @@ public class CompositorView
         mWindowAndroid = windowAndroid;
         mWindowAndroid.addSelectionHandlesObserver(this);
         onWindowVisibilityChangedInternal(getWindowVisibility());
-    }
-
-    @Override
-    public boolean onTouchEvent(MotionEvent e) {
-        return super.onTouchEvent(e);
     }
 
     /**
@@ -614,6 +608,14 @@ public class CompositorView
         mCompositorSurfaceManager.setVisibility(getVisibility());
     }
 
+    /**
+     * Notifies the native compositor that a tab change has occurred. This
+     * should be called when changing to a valid tab.
+     */
+    public void onTabChanged() {
+        CompositorViewJni.get().onTabChanged(mNativeCompositorView, CompositorView.this);
+    }
+
     @NativeMethods
     interface Natives {
         long init(CompositorView caller, boolean lowMemDevice, WindowAndroid windowAndroid,
@@ -637,5 +639,6 @@ public class CompositorView
                 long nativeCompositorView, CompositorView caller, WindowAndroid window);
         void cacheBackBufferForCurrentSurface(long nativeCompositorView, CompositorView caller);
         void evictCachedBackBuffer(long nativeCompositorView, CompositorView caller);
+        void onTabChanged(long nativeCompositorView, CompositorView caller);
     }
 }

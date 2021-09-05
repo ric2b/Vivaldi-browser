@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/execution_context/remote_security_context.h"
 
+#include "third_party/blink/renderer/core/execution_context/security_context_init.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -11,7 +12,8 @@
 
 namespace blink {
 
-RemoteSecurityContext::RemoteSecurityContext() : SecurityContext() {
+RemoteSecurityContext::RemoteSecurityContext()
+    : SecurityContext(SecurityContextInit(), kRemote) {
   // RemoteSecurityContext's origin is expected to stay uninitialized until
   // we set it using replicated origin data from the browser process.
   DCHECK(!GetSecurityOrigin());
@@ -22,10 +24,6 @@ RemoteSecurityContext::RemoteSecurityContext() : SecurityContext() {
   // FIXME: Document::initSecurityContext has a few other things we may
   // eventually want here, such as enforcing a setting to
   // grantUniversalAccess().
-}
-
-void RemoteSecurityContext::Trace(blink::Visitor* visitor) {
-  SecurityContext::Trace(visitor);
 }
 
 void RemoteSecurityContext::SetReplicatedOrigin(
@@ -41,11 +39,12 @@ void RemoteSecurityContext::ResetReplicatedContentSecurityPolicy() {
   GetContentSecurityPolicy()->SetupSelf(*GetSecurityOrigin());
 }
 
-void RemoteSecurityContext::ResetAndEnforceSandboxFlags(WebSandboxFlags flags) {
+void RemoteSecurityContext::ResetAndEnforceSandboxFlags(
+    mojom::blink::WebSandboxFlags flags) {
   sandbox_flags_ = flags;
 
-  if (IsSandboxed(WebSandboxFlags::kOrigin) && GetSecurityOrigin() &&
-      !GetSecurityOrigin()->IsOpaque()) {
+  if (IsSandboxed(mojom::blink::WebSandboxFlags::kOrigin) &&
+      GetSecurityOrigin() && !GetSecurityOrigin()->IsOpaque()) {
     SetSecurityOrigin(GetSecurityOrigin()->DeriveNewOpaqueOrigin());
   }
 }

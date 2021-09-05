@@ -16,15 +16,10 @@ import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.support.v4.content.ContextCompat;
-import android.support.v4.graphics.drawable.DrawableCompat;
-import android.support.v4.widget.ImageViewCompat;
-import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.PopupWindow;
@@ -33,14 +28,17 @@ import android.widget.TextView;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
-import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.ui.widget.animation.Interpolators;
 import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 
 import java.lang.annotation.Retention;
@@ -64,37 +62,10 @@ public class TabGridDialogParent
         int NUM_ENTRIES = 3;
     }
 
-    /** Params that define information about the origin tab grid card of the show/hide animation. */
-    public static class AnimationParams {
-        /**
-         * The {@link Rect} of origin tab grid card of the current tab, relative to the
-         * {@link TabListRecyclerView} coordinates.
-         */
-        public final Rect sourceRect;
-        /**
-         * The {@link View} that is the item view of origin tab grid card in the {@link
-         * TabListRecyclerView}.
-         */
-        public final View sourceView;
-        /**
-         * Build a new set of params to setup the animation.
-         * @param sourceRect The {@link Rect} that is the origin rect relative to the {@link
-         *         TabListRecyclerView} coordinates.
-         * @param sourceView The {@link View} that is the item view of origin tab grid card in the
-         *         {@link TabListRecyclerView}.
-         */
-        AnimationParams(Rect sourceRect, View sourceView) {
-            this.sourceRect = sourceRect;
-            this.sourceView = sourceView;
-        }
-    }
-
     private final ComponentCallbacks mComponentCallbacks;
     private final FrameLayout.LayoutParams mContainerParams;
     private final ViewGroup mParent;
     private final int mToolbarHeight;
-    private final int mScreenHeight;
-    private final int mScreenWidth;
     private final int mUngroupBarHeight;
     private final float mTabGridCardPadding;
     private PopupWindow mPopupWindow;
@@ -120,13 +91,11 @@ public class TabGridDialogParent
     private AnimatorListenerAdapter mHideDialogAnimationListener;
     private int mSideMargin;
     private int mTopMargin;
-    private int mCurrentScreenHeight;
-    private int mCurrentScreenWidth;
     private int mOrientation;
     private int mUngroupBarStatus = UngroupBarStatus.HIDE;
     private int mUngroupBarBackgroundColorResourceId = R.color.tab_grid_dialog_background_color;
     private int mUngroupBarHoveredBackgroundColorResourceId = R.color.tab_grid_card_selected_color;
-    private int mUngroupBarTextAppearance = R.style.TextAppearance_BlueTitle2;
+    private int mUngroupBarTextAppearance = R.style.TextAppearance_TextMediumThick_Blue;
     private int mBackgroundDrawableResourceId = R.drawable.tab_grid_dialog_background;
 
     TabGridDialogParent(Context context, ViewGroup parent) {
@@ -140,13 +109,6 @@ public class TabGridDialogParent
                 (int) context.getResources().getDimension(R.dimen.bottom_sheet_peek_height);
         mContainerParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        DisplayMetrics displayMetrics = new DisplayMetrics();
-        ((WindowManager) context.getSystemService(Context.WINDOW_SERVICE))
-                .getDefaultDisplay()
-                .getMetrics(displayMetrics);
-        // Screen height and width when in portrait mode.
-        mScreenHeight = Math.max(displayMetrics.heightPixels, displayMetrics.widthPixels);
-        mScreenWidth = Math.min(displayMetrics.heightPixels, displayMetrics.widthPixels);
 
         mComponentCallbacks = new ComponentCallbacks() {
             @Override
@@ -306,9 +268,8 @@ public class TabGridDialogParent
         updateAnimationCardView(mItemView);
 
         // Calculate dialog size.
-        int statusBarHeight = mCurrentScreenHeight - mParent.getHeight();
-        int dialogHeight = mCurrentScreenHeight - 2 * mTopMargin - statusBarHeight;
-        int dialogWidth = mCurrentScreenWidth - 2 * mSideMargin;
+        int dialogHeight = mParent.getHeight() - 2 * mTopMargin;
+        int dialogWidth = mParent.getWidth() - 2 * mSideMargin;
 
         // Calculate position and size info about the original tab grid card.
         float sourceLeft = rect.left + mTabGridCardPadding;
@@ -558,15 +519,11 @@ public class TabGridDialogParent
                     (int) context.getResources().getDimension(R.dimen.tab_grid_dialog_side_margin);
             mTopMargin =
                     (int) context.getResources().getDimension(R.dimen.tab_grid_dialog_top_margin);
-            mCurrentScreenHeight = mScreenHeight;
-            mCurrentScreenWidth = mScreenWidth;
         } else {
             mSideMargin =
                     (int) context.getResources().getDimension(R.dimen.tab_grid_dialog_top_margin);
             mTopMargin =
                     (int) context.getResources().getDimension(R.dimen.tab_grid_dialog_side_margin);
-            mCurrentScreenWidth = mScreenHeight;
-            mCurrentScreenHeight = mScreenWidth;
         }
         mContainerParams.setMargins(mSideMargin, mTopMargin, mSideMargin, mTopMargin);
         mOrientation = orientation;
@@ -675,8 +632,8 @@ public class TabGridDialogParent
         // Get the status bar height as offset.
         Rect parentRect = new Rect();
         mParent.getGlobalVisibleRect(parentRect);
-        return new Rect(mSideMargin, mTopMargin + parentRect.top, mCurrentScreenWidth - mSideMargin,
-                mCurrentScreenHeight - mTopMargin);
+        return new Rect(mSideMargin, mTopMargin + parentRect.top, mParent.getWidth() - mSideMargin,
+                mParent.getHeight() - mTopMargin + parentRect.top);
     }
 
     /**
@@ -725,7 +682,8 @@ public class TabGridDialogParent
                 isHovered ? mUngroupBarHoveredBackgroundColorResourceId
                           : mUngroupBarBackgroundColorResourceId));
         mUngroupBarTextView.setTextAppearance(context,
-                isHovered ? R.style.TextAppearance_WhiteTitle2 : mUngroupBarTextAppearance);
+                isHovered ? R.style.TextAppearance_TextMediumThick_Primary_Light
+                          : mUngroupBarTextAppearance);
     }
 
     /**

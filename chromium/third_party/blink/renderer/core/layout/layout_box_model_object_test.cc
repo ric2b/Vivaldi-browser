@@ -421,10 +421,10 @@ TEST_F(LayoutBoxModelObjectTest, StickyPositionConstraintInvalidation) {
       scrollable_area->GetStickyConstraintsMap().Contains(sticky->Layer()));
   EXPECT_EQ(25.f, scrollable_area->GetStickyConstraintsMap()
                       .at(sticky->Layer())
-                      .scroll_container_relative_sticky_box_rect.Location()
-                      .X());
+                      .scroll_container_relative_sticky_box_rect.X());
   To<HTMLElement>(target->GetNode())->classList().Add("hide");
-  GetDocument().View()->UpdateLifecycleToLayoutClean();
+  GetDocument().View()->UpdateLifecycleToLayoutClean(
+      DocumentUpdateReason::kTest);
   // Layout should invalidate the sticky constraints of the sticky element and
   // mark it as needing a compositing inputs update.
   EXPECT_FALSE(
@@ -435,8 +435,7 @@ TEST_F(LayoutBoxModelObjectTest, StickyPositionConstraintInvalidation) {
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(50.f, scrollable_area->GetStickyConstraintsMap()
                       .at(sticky->Layer())
-                      .scroll_container_relative_sticky_box_rect.Location()
-                      .X());
+                      .scroll_container_relative_sticky_box_rect.X());
 }
 
 // Verifies that the correct sticky-box shifting ancestor is found when
@@ -1077,21 +1076,23 @@ TEST_F(LayoutBoxModelObjectTest, InvalidatePaintLayerOnStackedChange) {
   EXPECT_NE(parent, original_compositing_container->GetLayoutObject());
 
   target_element->setAttribute(html_names::kClassAttr, "non-stacked");
-  GetDocument().View()->UpdateLifecycleToLayoutClean();
+  GetDocument().View()->UpdateLifecycleToLayoutClean(
+      DocumentUpdateReason::kTest);
 
   EXPECT_FALSE(target->StyleRef().IsStacked());
-  EXPECT_TRUE(target->Layer()->NeedsRepaint());
-  EXPECT_TRUE(original_compositing_container->NeedsRepaint());
+  EXPECT_TRUE(target->Layer()->SelfNeedsRepaint());
+  EXPECT_TRUE(original_compositing_container->DescendantNeedsRepaint());
   auto* new_compositing_container = target->Layer()->CompositingContainer();
   EXPECT_EQ(parent, new_compositing_container->GetLayoutObject());
 
   UpdateAllLifecyclePhasesForTest();
   target_element->setAttribute(html_names::kClassAttr, "stacked");
-  GetDocument().View()->UpdateLifecycleToLayoutClean();
+  GetDocument().View()->UpdateLifecycleToLayoutClean(
+      DocumentUpdateReason::kTest);
 
   EXPECT_TRUE(target->StyleRef().IsStacked());
-  EXPECT_TRUE(target->Layer()->NeedsRepaint());
-  EXPECT_TRUE(new_compositing_container->NeedsRepaint());
+  EXPECT_TRUE(target->Layer()->SelfNeedsRepaint());
+  EXPECT_TRUE(new_compositing_container->DescendantNeedsRepaint());
   EXPECT_EQ(original_compositing_container,
             target->Layer()->CompositingContainer());
 }
@@ -1154,20 +1155,22 @@ TEST_F(LayoutBoxModelObjectTest, BackfaceVisibilityChange) {
   auto* target_layer =
       ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
   ASSERT_NE(nullptr, target_layer);
-  EXPECT_FALSE(target_layer->NeedsRepaint());
+  EXPECT_FALSE(target_layer->SelfNeedsRepaint());
 
   target->setAttribute(html_names::kStyleAttr,
                        base_style + "; backface-visibility: hidden");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
-  EXPECT_TRUE(target_layer->NeedsRepaint());
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
+  EXPECT_TRUE(target_layer->SelfNeedsRepaint());
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_FALSE(target_layer->NeedsRepaint());
+  EXPECT_FALSE(target_layer->SelfNeedsRepaint());
 
   target->setAttribute(html_names::kStyleAttr, base_style);
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
-  EXPECT_TRUE(target_layer->NeedsRepaint());
+  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kTest);
+  EXPECT_TRUE(target_layer->SelfNeedsRepaint());
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_FALSE(target_layer->NeedsRepaint());
+  EXPECT_FALSE(target_layer->SelfNeedsRepaint());
 }
 
 TEST_F(LayoutBoxModelObjectTest, UpdateStackingContextForOption) {
@@ -1218,7 +1221,8 @@ TEST_F(LayoutBoxModelObjectTest,
   EXPECT_EQ(target->Layer(), target->Layer()->NearestContainedLayoutLayer());
 
   To<HTMLElement>(target->GetNode())->classList().Remove("contained");
-  GetDocument().View()->UpdateLifecycleToLayoutClean();
+  GetDocument().View()->UpdateLifecycleToLayoutClean(
+      DocumentUpdateReason::kTest);
 
   EXPECT_TRUE(target->Layer()->NeedsCompositingInputsUpdate());
 

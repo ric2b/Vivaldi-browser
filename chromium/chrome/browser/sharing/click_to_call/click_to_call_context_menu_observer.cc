@@ -9,10 +9,10 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
+#include "chrome/browser/sharing/click_to_call/click_to_call_metrics.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_ui_controller.h"
 #include "chrome/browser/sharing/click_to_call/feature.h"
 #include "chrome/browser/sharing/sharing_constants.h"
-#include "chrome/browser/sharing/sharing_metrics.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/vector_icons/vector_icons.h"
@@ -52,10 +52,12 @@ ClickToCallContextMenuObserver::~ClickToCallContextMenuObserver() = default;
 
 void ClickToCallContextMenuObserver::BuildMenu(
     const std::string& phone_number,
+    const std::string& selection_text,
     SharingClickToCallEntryPoint entry_point) {
   DCHECK(!phone_number.empty());
 
   phone_number_ = phone_number;
+  selection_text_ = selection_text;
   entry_point_ = entry_point;
   devices_ = controller_->GetDevices();
   LogSharingDevicesToShow(controller_->GetFeatureMetricsPrefix(),
@@ -63,7 +65,6 @@ void ClickToCallContextMenuObserver::BuildMenu(
   if (devices_.empty())
     return;
 
-  proxy_->AddSeparator();
   if (devices_.size() == 1) {
 #if defined(OS_MACOSX)
     proxy_->AddMenuItem(
@@ -94,7 +95,6 @@ void ClickToCallContextMenuObserver::BuildMenu(
         sub_menu_model_.get(), vector_icons::kCallIcon);
 #endif
   }
-  proxy_->AddSeparator();
 }
 
 void ClickToCallContextMenuObserver::BuildSubMenu() {

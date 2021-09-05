@@ -145,7 +145,8 @@ bool IsViewVisibleOnScreen(views::View* view) {
 class TestStartPageSearchResult : public TestSearchResult {
  public:
   TestStartPageSearchResult() {
-    set_display_type(ash::SearchResultDisplayType::kRecommendation);
+    set_display_type(ash::SearchResultDisplayType::kTile);
+    set_is_recommendation(true);
   }
   ~TestStartPageSearchResult() override = default;
 
@@ -259,7 +260,15 @@ class AppListViewTest : public views::ViewsTestBase,
            view_->search_box_view()->GetWidget()->GetWindowBoundsInScreen();
   }
 
-  int ShelfHeight() const { return delegate_->GetShelfHeight(); }
+  void SetTextInSearchBox(const std::string& text) {
+    views::Textfield* search_box =
+        view_->app_list_main_view()->search_box_view()->search_box();
+    // Set new text as if it is typed by a user.
+    search_box->SetText(base::string16());
+    search_box->InsertText(base::UTF8ToUTF16(text));
+  }
+
+  int ShelfSize() const { return delegate_->GetShelfSize(); }
 
   // Gets the PaginationModel owned by |view_|.
   ash::PaginationModel* GetPaginationModel() const {
@@ -280,6 +289,12 @@ class AppListViewTest : public views::ViewsTestBase,
 
   PageSwitcher* page_switcher_view() {
     return contents_view()->GetAppsContainerView()->page_switcher();
+  }
+
+  views::View* assistant_page_view() {
+    const int assistant_page_index = contents_view()->GetPageIndexForState(
+        ash::AppListState::kStateEmbeddedAssistant);
+    return contents_view()->GetPageView(assistant_page_index);
   }
 
   gfx::Point GetPointBetweenTwoApps() {
@@ -308,7 +323,7 @@ class AppListViewTest : public views::ViewsTestBase,
         container_size.width() - 2 * expected_horizontal_margin;
 
     const int search_box_and_suggestion_chip_height =
-        container_size.height() < 600 + ShelfHeight()
+        container_size.height() < 600 + ShelfSize()
             ? kSearchBoxAndSuggestionChipsHeightDense
             : kSearchBoxAndSuggestionChipsHeightDefault;
 
@@ -317,7 +332,7 @@ class AppListViewTest : public views::ViewsTestBase,
                                  kGridVerticalMargin;
     const int kExpectedGridHeight =
         container_size.height() - kExpectedGridTop -
-        (expected_vertical_margin - kGridVerticalInset) - ShelfHeight();
+        (expected_vertical_margin - kGridVerticalInset) - ShelfSize();
 
     EXPECT_EQ(gfx::Rect(expected_horizontal_margin, kExpectedGridTop,
                         kExpectedGridWidth, kExpectedGridHeight),
@@ -809,7 +824,7 @@ class AppListViewFocusTest : public views::ViewsTestBase,
   DISALLOW_COPY_AND_ASSIGN(AppListViewFocusTest);
 };
 
-INSTANTIATE_TEST_SUITE_P(, AppListViewFocusTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, AppListViewFocusTest, testing::Bool());
 
 }  // namespace
 
@@ -858,8 +873,8 @@ TEST_P(AppListViewFocusTest, LinearFocusTraversalInFullscreenAllAppsState) {
     forward_view_list.push_back(v);
   const views::ViewModelT<AppListItemView>* view_model =
       apps_grid_view()->view_model();
-  for (int i = 0; i < view_model->view_size(); ++i)
-    forward_view_list.push_back(view_model->view_at(i));
+  for (const auto& entry : view_model->entries())
+    forward_view_list.push_back(entry.view);
   forward_view_list.push_back(search_box_view()->search_box());
   std::vector<views::View*> backward_view_list = forward_view_list;
   std::reverse(backward_view_list.begin(), backward_view_list.end());
@@ -1001,8 +1016,8 @@ TEST_F(AppListViewFocusTest, CloseButtonClearsSearchOnEnter) {
   forward_view_list.push_back(search_box_view()->search_box());
   const views::ViewModelT<AppListItemView>* view_model =
       app_list_folder_view()->items_grid_view()->view_model();
-  for (int i = 0; i < view_model->view_size(); ++i)
-    forward_view_list.push_back(view_model->view_at(i));
+  for (const auto& entry : view_model->entries())
+    forward_view_list.push_back(entry.view);
   TestFocusTraversal(forward_view_list, ui::VKEY_TAB, false);
 }
 
@@ -1097,8 +1112,8 @@ TEST_P(AppListViewFocusTest, LinearFocusTraversalInFolder) {
   std::vector<views::View*> forward_view_list;
   const views::ViewModelT<AppListItemView>* view_model =
       app_list_folder_view()->items_grid_view()->view_model();
-  for (int i = 0; i < view_model->view_size(); ++i)
-    forward_view_list.push_back(view_model->view_at(i));
+  for (const auto& entry : view_model->entries())
+    forward_view_list.push_back(entry.view);
   forward_view_list.push_back(
       app_list_folder_view()->folder_header_view()->GetFolderNameViewForTest());
   forward_view_list.push_back(search_box_view()->search_box());
@@ -1224,7 +1239,7 @@ TEST_F(AppListViewFocusTest, VerticalFocusTraversalInHalfState) {
     contents_view()
         ->search_results_page_view()
         ->result_selection_controller()
-        ->ResetSelection(nullptr);
+        ->ResetSelection(nullptr, false);
   }
 
   if (app_list_features::IsSearchBoxSelectionEnabled()) {
@@ -1932,7 +1947,7 @@ TEST_F(AppListViewTest, ShowFullscreenWhenInSideShelfMode) {
   EXPECT_EQ(ash::AppListViewState::kFullscreenAllApps, view_->app_list_state());
   // The rounded corners should be off screen in side shelf.
   gfx::Transform translation;
-  translation.Translate(0, -(delegate_->GetShelfHeight() / 2));
+  translation.Translate(0, -(delegate_->GetShelfSize() / 2));
   // The rounded corners should be off screen in side shelf.
   EXPECT_EQ(translation,
             view_->GetAppListBackgroundShieldForTest()->GetTransform());
@@ -2042,12 +2057,9 @@ TEST_F(AppListViewTest, EscapeKeyPeekingToClosed) {
 // Tests that pressing escape when in half screen changes the state to peeking.
 TEST_F(AppListViewTest, EscapeKeyHalfToPeeking) {
   Initialize(false /*is_tablet_mode*/);
-  views::Textfield* search_box =
-      view_->app_list_main_view()->search_box_view()->search_box();
 
   Show();
-  search_box->SetText(base::string16());
-  search_box->InsertText(base::UTF8ToUTF16("doggie"));
+  SetTextInSearchBox("doggie");
   view_->AcceleratorPressed(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
 
   ASSERT_EQ(ash::AppListViewState::kPeeking, view_->app_list_state());
@@ -2075,7 +2087,7 @@ TEST_F(AppListViewTest, EscapeKeySideShelfFullscreenToClosed) {
   ASSERT_EQ(1, delegate_->dismiss_count());
 }
 
-// Tests that pressing escape when in tablet mode closes the app list.
+// Tests that pressing escape when in tablet mode keeps app list in fullscreen.
 TEST_F(AppListViewTest, EscapeKeyTabletModeStayFullscreen) {
   // Put into fullscreen by using tablet mode.
   Initialize(true /*is_tablet_mode*/);
@@ -2091,11 +2103,8 @@ TEST_F(AppListViewTest, EscapeKeyFullscreenSearchToFullscreen) {
   Initialize(false /*is_tablet_mode*/);
   Show();
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
-  views::Textfield* search_box =
-      view_->app_list_main_view()->search_box_view()->search_box();
 
-  search_box->SetText(base::string16());
-  search_box->InsertText(base::UTF8ToUTF16("https://youtu.be/dQw4w9WgXcQ"));
+  SetTextInSearchBox("https://youtu.be/dQw4w9WgXcQ");
   view_->AcceleratorPressed(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
 
   ASSERT_EQ(ash::AppListViewState::kFullscreenAllApps, view_->app_list_state());
@@ -2105,12 +2114,9 @@ TEST_F(AppListViewTest, EscapeKeyFullscreenSearchToFullscreen) {
 TEST_F(AppListViewTest, EscapeKeySideShelfSearchToFullscreen) {
   // Put into fullscreen using side-shelf.
   Initialize(false /*is_tablet_mode*/);
-  views::Textfield* search_box =
-      view_->app_list_main_view()->search_box_view()->search_box();
 
   Show(false /*is_tablet_mode*/, true /*is_side_shelf*/);
-  search_box->SetText(base::string16());
-  search_box->InsertText(base::UTF8ToUTF16("kitty"));
+  SetTextInSearchBox("kitty");
   view_->AcceleratorPressed(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
 
   ASSERT_EQ(ash::AppListViewState::kFullscreenAllApps, view_->app_list_state());
@@ -2130,12 +2136,9 @@ TEST_F(AppListViewTest, PopulateAppsCreatesAnotherPage) {
 TEST_F(AppListViewTest, EscapeKeyTabletModeSearchToFullscreen) {
   // Put into fullscreen using tablet mode.
   Initialize(true /*is_tablet_mode*/);
-  views::Textfield* search_box =
-      view_->app_list_main_view()->search_box_view()->search_box();
 
   Show(true /*is_tablet_mode*/);
-  search_box->SetText(base::string16());
-  search_box->InsertText(base::UTF8ToUTF16("yay"));
+  SetTextInSearchBox("yay");
   view_->AcceleratorPressed(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
 
   ASSERT_EQ(ash::AppListViewState::kFullscreenAllApps, view_->app_list_state());
@@ -2647,10 +2650,58 @@ TEST_F(AppListViewTest, BackAction) {
   EXPECT_EQ(0, apps_grid_view()->pagination_model()->selected_page());
 }
 
+// Tests that, in clamshell mode, the current app list page resets to the
+// initial page when app list is closed and re-opened.
+TEST_F(AppListViewTest, InitialPageResetClamshellModeTest) {
+  Initialize(false /*is_tablet_mode*/);
+
+  AppListTestModel* model = delegate_->GetTestModel();
+  const int kAppListItemNum = test_api_->TilesPerPage(0) + 1;
+  model->PopulateApps(kAppListItemNum);
+
+  Show(false /*is_tablet_mode*/);
+  view_->SetState(ash::AppListViewState::kFullscreenAllApps);
+
+  apps_grid_view()->pagination_model()->SelectPage(1, false /* animate */);
+
+  // Close and re-open the app list to ensure the current page doesn't persist.
+  view_->SetState(ash::AppListViewState::kClosed);
+  Show();
+  view_->SetState(ash::AppListViewState::kFullscreenAllApps);
+
+  EXPECT_EQ(0, apps_grid_view()->pagination_model()->selected_page());
+}
+
+// Tests that, in tablet mode, the current app list page doesn't immediately
+// reset to the initial page when app list is closed and re-opened.
+TEST_F(AppListViewTest, PagePersistanceTabletModeTest) {
+  Initialize(true /*is_tablet_mode*/);
+
+  AppListTestModel* model = delegate_->GetTestModel();
+  const int kAppListItemNum = test_api_->TilesPerPage(0) + 1;
+  model->PopulateApps(kAppListItemNum);
+
+  Show(true /*is_tablet_mode*/);
+  EXPECT_EQ(ash::AppListViewState::kFullscreenAllApps, view_->app_list_state());
+
+  apps_grid_view()->pagination_model()->SelectPage(1, false /* animate */);
+
+  // Close and re-open the app list to ensure the current page persists.
+  view_->SetState(ash::AppListViewState::kClosed);
+  Show(true);
+  EXPECT_EQ(ash::AppListViewState::kFullscreenAllApps, view_->app_list_state());
+
+  // The current page should not be reset for the tablet mode app list.
+  EXPECT_EQ(1, apps_grid_view()->pagination_model()->selected_page());
+}
+
 // Tests selecting search result to show embedded Assistant UI.
 TEST_F(AppListViewFocusTest, ShowEmbeddedAssistantUI) {
-  scoped_feature_list_.InitWithFeatures(
-      {app_list_features::kEnableEmbeddedAssistantUI}, {});
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {app_list_features::kEnableAssistantSearch}, {});
+  ASSERT_TRUE(app_list_features::IsAssistantSearchEnabled());
+
   Show();
 
   // Initially the search box is inactive, hitting Enter to activate it.
@@ -2681,33 +2732,27 @@ TEST_F(AppListViewFocusTest, ShowEmbeddedAssistantUI) {
 // Tests that the correct contents is visible in the contents_view upon
 // reshowing. See b/142069648 for the details.
 TEST_F(AppListViewTest, AppsGridVisibilityOnResetForShow) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {app_list_features::kEnableEmbeddedAssistantUI}, {});
   Initialize(true /*is_tablet_mode*/);
   Show(true /*is_tablet_mode*/);
 
   contents_view()->ShowEmbeddedAssistantUI(true);
   EXPECT_FALSE(contents_view()->horizontal_page_container()->GetVisible());
   EXPECT_FALSE(contents_view()->search_results_page_view()->GetVisible());
-  const int assistant_page_index = contents_view()->GetPageIndexForState(
-      ash::AppListState::kStateEmbeddedAssistant);
-  EXPECT_TRUE(contents_view()->GetPageView(assistant_page_index)->GetVisible());
+  EXPECT_TRUE(assistant_page_view()->GetVisible());
 
   view_->OnTabletModeChanged(false);
   Show(false /*is_tablet_mode*/);
   EXPECT_TRUE(contents_view()->horizontal_page_container()->GetVisible());
   EXPECT_FALSE(contents_view()->search_results_page_view()->GetVisible());
-  EXPECT_FALSE(
-      contents_view()->GetPageView(assistant_page_index)->GetVisible());
+  EXPECT_FALSE(assistant_page_view()->GetVisible());
 }
 
-// Tests that no answer card view when kEnableEmbeddedAssistantUI is enabled.
+// Tests that no answer card view when kEnableAssistantSearch is enabled.
 TEST_F(AppListViewTest, NoAnswerCardWhenEmbeddedAssistantUIEnabled) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitWithFeatures(
-      {app_list_features::kEnableEmbeddedAssistantUI}, {});
-  ASSERT_TRUE(app_list_features::IsEmbeddedAssistantUIEnabled());
+      {app_list_features::kEnableAssistantSearch}, {});
+  ASSERT_TRUE(app_list_features::IsAssistantSearchEnabled());
 
   Initialize(false /*is_tablet_mode*/);
   Show();
@@ -2715,36 +2760,49 @@ TEST_F(AppListViewTest, NoAnswerCardWhenEmbeddedAssistantUIEnabled) {
   EXPECT_FALSE(contents_view()->search_result_answer_card_view_for_test());
 }
 
-// Tests that pressing escape when in embedded Assistant UI results in showing
-// the search page view.
-TEST_F(AppListViewTest, EscapeKeyEmbeddedAssistantUIToSearch) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {app_list_features::kEnableEmbeddedAssistantUI}, {});
-  ASSERT_TRUE(app_list_features::IsEmbeddedAssistantUIEnabled());
-
+// Tests that pressing escape in embedded Assistant UI returns to fullscreen
+// if the Assistant UI was launched from fullscreen app list.
+TEST_F(AppListViewTest, EscapeKeyInEmbeddedAssistantUIReturnsToAppList) {
   Initialize(false /*is_tablet_mode*/);
   Show();
 
-  // Set search_box_view active.
-  ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_RETURN, ui::EF_NONE);
-  view_->GetWidget()->OnKeyEvent(&key_event);
-
+  // First we're in the fullscreen app list
+  view_->SetState(ash::AppListViewState::kFullscreenAllApps);
+  // Then we go to search by entering text
+  SetTextInSearchBox("search query");
+  // From there we launch the Assistant UI
   contents_view()->ShowEmbeddedAssistantUI(true);
-  EXPECT_TRUE(contents_view()->IsShowingEmbeddedAssistantUI());
 
+  // We press escape to leave the Assistant UI
   view_->AcceleratorPressed(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
-  EXPECT_TRUE(contents_view()->IsShowingSearchResults());
+
+  // And we should be back in the fullscreen app list
+  EXPECT_FALSE(contents_view()->IsShowingSearchResults());
+  EXPECT_EQ(ash::AppListViewState::kFullscreenAllApps, view_->app_list_state());
+}
+
+// Tests that pressing escape in embedded Assistant UI returns to peeking
+// if the Assistant UI was launched from half screen.
+TEST_F(AppListViewTest, EscapeKeyInEmbeddedAssistantUIReturnsToPeeking) {
+  Initialize(false /*is_tablet_mode*/);
+  Show();
+
+  // Enter half screen search by entering text
+  SetTextInSearchBox("search query");
+  // From there we launch the Assistant UI
+  contents_view()->ShowEmbeddedAssistantUI(true);
+
+  // We press escape to leave the Assistant UI
+  view_->AcceleratorPressed(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
+
+  // And we should be back in the peeking state
+  EXPECT_FALSE(contents_view()->IsShowingSearchResults());
+  EXPECT_EQ(ash::AppListViewState::kPeeking, view_->app_list_state());
 }
 
 // Tests that clicking empty region in AppListview when showing Assistant UI
 // should go back to peeking state.
 TEST_F(AppListViewTest, ClickOutsideEmbeddedAssistantUIToPeeking) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {app_list_features::kEnableEmbeddedAssistantUI}, {});
-  ASSERT_TRUE(app_list_features::IsEmbeddedAssistantUIEnabled());
-
   Initialize(false /*is_tablet_mode*/);
   Show();
 
@@ -2775,11 +2833,6 @@ TEST_F(AppListViewTest, ClickOutsideEmbeddedAssistantUIToPeeking) {
 
 // Tests that expand arrow is not visible when showing embedded Assistant UI.
 TEST_F(AppListViewTest, ExpandArrowNotVisibleInEmbeddedAssistantUI) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {app_list_features::kEnableEmbeddedAssistantUI}, {});
-  ASSERT_TRUE(app_list_features::IsEmbeddedAssistantUIEnabled());
-
   Initialize(false /*is_tablet_mode*/);
   Show();
 
@@ -2794,11 +2847,6 @@ TEST_F(AppListViewTest, ExpandArrowNotVisibleInEmbeddedAssistantUI) {
 
 // Tests that search box is not visible when showing embedded Assistant UI.
 TEST_F(AppListViewTest, SearchBoxViewNotVisibleInEmbeddedAssistantUI) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {app_list_features::kEnableAssistantLauncherUI}, {});
-  ASSERT_TRUE(app_list_features::IsAssistantLauncherUIEnabled());
-
   Initialize(false /*is_tablet_mode*/);
   Show();
 
@@ -2824,10 +2872,10 @@ TEST_F(AppListViewScalableLayoutTest,
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   VerifyAppsContainerLayout(
       window_size, 5 /*column_count*/, 4 /*row_count*/,
-      window_size.width() / 16 /*expected_horizontal_margin*/,
+      window_size.width() / 12 /*expected_horizontal_margin*/,
       expected_vertical_margin, 80 /*expected_item_size*/);
 }
 
@@ -2844,11 +2892,11 @@ TEST_F(AppListViewScalableLayoutTest, AppListViewLayoutForSmallPortraitScreen) {
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
-  VerifyAppsContainerLayout(
-      window_size, 4 /*column_count*/, 5 /*row_count*/,
-      window_size.width() / 12 /*expected_horizontal_margin*/,
-      expected_vertical_margin, 80 /*expected_item_size*/);
+      (window_size.height() - ShelfSize()) / 16;
+  VerifyAppsContainerLayout(window_size, 4 /*column_count*/, 5 /*row_count*/,
+                            56 /*expected_horizontal_margin*/,
+                            expected_vertical_margin,
+                            80 /*expected_item_size*/);
 }
 
 // Tests fullscreen apps grid sizing and layout for medium sized screens
@@ -2868,7 +2916,7 @@ TEST_F(AppListViewScalableLayoutTest,
   const int expected_horizontal_margin =
       (window_size.width() - GetItemGridSizeWithMaxItemMargins(88, 5)) / 2;
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   VerifyAppsContainerLayout(window_size, 5 /*column_count*/, 4 /*row_count*/,
                             expected_horizontal_margin,
                             expected_vertical_margin,
@@ -2889,10 +2937,10 @@ TEST_F(AppListViewScalableLayoutTest,
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   VerifyAppsContainerLayout(
       window_size, 4 /*column_count*/, 5 /*row_count*/,
-      window_size.width() / 16 /*expected_horizontal_margin*/,
+      window_size.width() / 12 /*expected_horizontal_margin*/,
       expected_vertical_margin, 88 /*expected_item_size*/);
 }
 
@@ -2913,7 +2961,7 @@ TEST_F(AppListViewScalableLayoutTest,
   const int expected_horizontal_margin =
       (window_size.width() - GetItemGridSizeWithMaxItemMargins(120, 5)) / 2;
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   VerifyAppsContainerLayout(window_size, 5 /*column_count*/, 4 /*row_count*/,
                             expected_horizontal_margin,
                             expected_vertical_margin,
@@ -2933,17 +2981,17 @@ TEST_F(AppListViewScalableLayoutTest, AppListViewLayoutForLargePortraitScreen) {
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   VerifyAppsContainerLayout(
       window_size, 4 /*column_count*/, 5 /*row_count*/,
-      window_size.width() / 16 /*expected_horizontal_margin*/,
+      window_size.width() / 12 /*expected_horizontal_margin*/,
       expected_vertical_margin, 120 /*expected_item_size*/);
 }
 
 // Tests that apps grid horizontal margin have minimum that ensures the page
 // switcher view can fit next to the apps grid.
 TEST_F(AppListViewScalableLayoutTest, EnsurePageSwitcherFitsAppsGridMargin) {
-  const gfx::Size window_size = gfx::Size(400, 800);
+  const gfx::Size window_size = gfx::Size(440, 800);
   gfx::NativeView parent = GetContext();
   parent->SetBounds(gfx::Rect(window_size));
 
@@ -2953,12 +3001,12 @@ TEST_F(AppListViewScalableLayoutTest, EnsurePageSwitcherFitsAppsGridMargin) {
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight()) / 16;
+      (window_size.height() - ShelfSize()) / 16;
   // The horizontal margin is selected so the page switcher fits the margin
-  // space (note that 400 / 12, which is how the margin is normally calculated
+  // space (note that 440 / 12, which is how the margin is normally calculated
   // is smaller than the width required by page switcher).
   VerifyAppsContainerLayout(window_size, 4 /*column_count*/, 5 /*row_count*/,
-                            40 /*expected_horizontal_margin*/,
+                            56 /*expected_horizontal_margin*/,
                             expected_vertical_margin,
                             80 /*expected_item_size*/);
 }
@@ -2980,7 +3028,7 @@ TEST_F(AppListViewScalableLayoutTest, VerticalAppsGridItemSpacingIsBounded) {
   const int expected_horizontal_margin =
       (window_size.width() - GetItemGridSizeWithMaxItemMargins(120, 4)) / 2;
   const int expected_vertical_margin =
-      (window_size.height() - ShelfHeight() - kGridVerticalInset -
+      (window_size.height() - ShelfSize() - kGridVerticalInset -
        kSearchBoxAndSuggestionChipsHeightDefault - kGridVerticalMargin -
        GetItemGridSizeWithMaxItemMargins(120, 5)) /
       2;
@@ -3003,11 +3051,43 @@ TEST_F(AppListViewScalableLayoutTest,
   Show();
   view_->SetState(ash::AppListViewState::kFullscreenAllApps);
 
+  // The horizontal margin is selected so the page switcher fits the margin
+  // space (note that 650 / 12, which is how the margin is normally calculated
+  // is smaller than the width required by page switcher).
   VerifyAppsContainerLayout(
       window_size, 5 /*column_count*/, 4 /*row_count*/,
-      window_size.width() / 16 /*expected_horizontal_margin*/,
+      56 /*expected_horizontal_margin*/,
       kGridVerticalInset + kGridVerticalMargin /*expected_vertical_margin*/,
       80 /*expected_item_size*/);
+}
+
+// Tests fullscreen apps grid sizing and layout gets updated to correct bounds
+// when app list config changes.
+TEST_F(AppListViewScalableLayoutTest, AppListViewLayoutAfterConfigChage) {
+  const gfx::Size window_size = gfx::Size(500, 800);
+  gfx::NativeView parent = GetContext();
+  parent->SetBounds(gfx::Rect(window_size));
+
+  Initialize(false /*is_tablet_mode*/);
+  delegate_->GetTestModel()->PopulateApps(kInitialItems);
+  Show();
+  view_->SetState(ash::AppListViewState::kFullscreenAllApps);
+
+  int expected_vertical_margin = (window_size.height() - ShelfSize()) / 16;
+  VerifyAppsContainerLayout(window_size, 4 /*column_count*/, 5 /*row_count*/,
+                            56 /*expected_horizontal_margin*/,
+                            expected_vertical_margin,
+                            80 /*expected_item_size*/);
+
+  const gfx::Size updated_window_size = gfx::Size(800, 1200);
+  parent->SetBounds(gfx::Rect(updated_window_size));
+  view_->OnParentWindowBoundsChanged();
+
+  expected_vertical_margin = (updated_window_size.height() - ShelfSize()) / 16;
+  VerifyAppsContainerLayout(
+      updated_window_size, 4 /*column_count*/, 5 /*row_count*/,
+      updated_window_size.width() / 12 /*expected_horizontal_margin*/,
+      expected_vertical_margin, 120 /*expected_item_size*/);
 }
 
 // Tests that page switching in folder doesn't record AppListPageSwitcherSource

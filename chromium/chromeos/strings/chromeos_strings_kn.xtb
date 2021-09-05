@@ -1,17 +1,23 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="kn">
+<translation id="1195447618553298278">ಅಪರಿಚಿತ ದೋಷ.</translation>
+<translation id="1468664791493211953">ಆಫರ್‌ಗಳು</translation>
 <translation id="1482734542997480527">ಈ ಸಾಧನವನ್ನು <ph name="ENROLLMENT_DOMAIN" /> ನಿರ್ವಹಿಸುತ್ತದೆ ಮತ್ತು ನಿಮ್ಮ ಚಟುವಟಿಕೆಯ ಮೇಲೆ ಗಮನವಿಡಲು ಇದಕ್ಕೆ ಸಾಧ್ಯವಾಗಬಹುದು.</translation>
+<translation id="150962533380566081">ಅಮಾನ್ಯ PUK.</translation>
 <translation id="1510238584712386396">ಲಾಂಚರ್</translation>
+<translation id="159973520823200404">Discover</translation>
 <translation id="1734367976349034509">ಈ ಸಾಧನವನ್ನು ಎಂಟರ್‌ಪ್ರೈಸ್ ನಿರ್ವಹಣೆ ಮಾಡುತ್ತಿದೆ</translation>
+<translation id="1905710495812624430">ಅನುಮತಿಸಲಾದ ಗರಿಷ್ಟ ಪ್ರಯತ್ನಗಳು ಮೀರಿವೆ.</translation>
 <translation id="1930797645656624981">Chrome OS ಇನ್‌ಪುಟ್ ವಿಧಾನ ಸೇವೆ</translation>
 <translation id="1979103255016296513">ಪಾಸ್‌ವರ್ಡ್ ಬದಲಾವಣೆ ಮಾಡಲು ತೀರಾ ತಡವಾಗಿದೆ</translation>
 <translation id="2049639323467105390">ಈ ಸಾಧನವು <ph name="DOMAIN" /> ನಿಂದ ನಿರ್ವಹಿಸಲ್ಪಟ್ಟಿದೆ.</translation>
-<translation id="2083960536266308407">ಸ್ಕ್ರೀನ್‌ ಮೇಲೆ ಏನೂ ಕಾಣಿಸಿಲ್ಲ</translation>
 <translation id="2338501278241028356">ಸಮೀಪದ ಸಾಧನಗಳನ್ನು ಅನ್ವೇಷಿಸಲು ಬ್ಲೂಟೂತ್ ಆನ್ ಮಾಡಿ</translation>
+<translation id="2375079107209812402"><ph name="ATTEMPTS_LEFT" /> ಪ್ರಯತ್ನಗಳು ಬಾಕಿ ಉಳಿದಿವೆ</translation>
 <translation id="2805756323405976993">ಆಪ್ಸ್‌‌</translation>
 <translation id="2872961005593481000">ಮುಚ್ಚಿಬಿಡಿ </translation>
 <translation id="3008341117444806826">ರಿಫ್ರೆಶ್ ಮಾಡಿ</translation>
+<translation id="3820172043799983114">ಅಮಾನ್ಯ ಪಿನ್.</translation>
 <translation id="3838338534323494292">ಹೊಸ ಪಾಸ್‌ವರ್ಡ್</translation>
 <translation id="4003259559679196451">ಈ ಸಾಧನವನ್ನು <ph name="ENROLLMENT_DOMAIN" /> ನಿರ್ವಹಿಸುತ್ತದೆ ಮತ್ತು ಬಳಕೆದಾರರು ಭೇಟಿ ನೀಡಿದ ವೆಬ್‌ಪುಟಗಳು, ಪಾಸ್‌ವರ್ಡ್‌ಗಳು ಹಾಗೂ ಇಮೇಲ್ ಸೇರಿದಂತೆ ಅವರ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಗಳಿಗೆ ಪ್ರವೇಶ ಹೊಂದಿರುತ್ತದೆ.</translation>
 <translation id="4227825898293920515"><ph name="TIME" /> ಸಮಯದಲ್ಲಿ ಪಾಸ್‌ವರ್ಡ್‌ನ ಅವಧಿ ಮುಗಿಯಲಿದೆ</translation>
@@ -34,7 +40,9 @@
 <translation id="7658239707568436148">ರದ್ದುಮಾಡಿ</translation>
 <translation id="7690294790491645610">ಹೊಸ ಪಾಸ್‌ವರ್ಡ್ ಖಚಿತಪಡಿಸಿ</translation>
 <translation id="808894953321890993">ಪಾಸ್‌ವರ್ಡ್ ಬದಲಿಸಿ</translation>
+<translation id="8208861521865154048">ಪರ್ಕ್‌ಗಳು</translation>
 <translation id="8747900814994928677">ಬದಲಾವಣೆಯನ್ನು ದೃಢೀಕರಿಸಿ</translation>
+<translation id="89415009803968170"><ph name="ERROR_MESSAGE" /> <ph name="ATTEMPTS_LEFT" /> ಪ್ರಯತ್ನಗಳು ಬಾಕಿ ಉಳಿದಿವೆ</translation>
 <translation id="910415269708673980"><ph name="PRINCIPAL_NAME" /> ಗಾಗಿ ಟಿಕೆಟ್ ರಿಫ್ರೆಶ್ ಮಾಡಿ</translation>
 <translation id="9111102763498581341">ಅನ್‌ಲಾಕ್</translation>
 </translationbundle>

@@ -53,7 +53,7 @@ class CONTENT_EXPORT InputEventPrediction {
   // UpdateSinglePointer for each pointer.
   void UpdatePrediction(const WebInputEvent& event);
   // Cast events from WebInputEvent to WebPointerProperties. Call
-  // ResamplingSinglePointer for each poitner.
+  // ResamplingSinglePointer for each pointer.
   void ApplyResampling(base::TimeTicks frame_time, WebInputEvent* event);
   // Reset predictor for each pointer in WebInputEvent by  ResetSinglePredictor.
   void ResetPredictor(const WebInputEvent& event);
@@ -83,11 +83,6 @@ class CONTENT_EXPORT InputEventPrediction {
   // Get single predictor based on event id and type. For mouse, reset the
   // predictor, for other pointer type, remove it from mapping.
   void ResetSinglePredictor(const WebPointerProperties& event);
-
-  // Reports UMA histograms for prediction accuracy. Use the previous prediction
-  // states to calculate position in current event time and compute the
-  // distance between real event and predicted event.
-  void ComputeAccuracy(const WebInputEvent& event) const;
 
   std::unordered_map<ui::PointerId, std::unique_ptr<ui::InputPredictor>>
       pointer_id_predictor_map_;

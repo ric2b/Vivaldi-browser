@@ -17,12 +17,12 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/gl/test/gl_surface_test_support.h"
-#include "ui/views/test/platform_test_helper.h"
+#include "ui/views/buildflags.h"
 #include "ui/views/test/test_platform_native_widget.h"
 
 #if defined(USE_AURA)
 #include "ui/views/widget/native_widget_aura.h"
-#if !defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_DESKTOP_AURA)
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #endif
 #elif defined(OS_MACOSX)
@@ -64,13 +64,8 @@ bool InitializeVisuals() {
 }  // namespace
 
 ViewsTestBase::ViewsTestBase(
-    ViewsTestBase::SubclassManagesTaskEnvironment /* tag */)
-    : task_environment_(base::nullopt) {
-  // MaterialDesignController is initialized here instead of in SetUp because
-  // a subclass might construct a MaterialDesignControllerTestAPI as a member to
-  // override the value, and this must happen first.
-  ui::MaterialDesignController::Initialize();
-}
+    std::unique_ptr<base::test::TaskEnvironment> task_environment)
+    : task_environment_(std::move(task_environment)) {}
 
 ViewsTestBase::~ViewsTestBase() {
   CHECK(setup_called_)
@@ -84,16 +79,14 @@ void ViewsTestBase::SetUp() {
 
   testing::Test::SetUp();
   setup_called_ = true;
-  if (!views_delegate_for_setup_)
-    views_delegate_for_setup_ = std::make_unique<TestViewsDelegate>();
 
+  base::Optional<ViewsDelegate::NativeWidgetFactory> factory;
   if (native_widget_type_ == NativeWidgetType::kDesktop) {
-    ViewsDelegate::GetInstance()->set_native_widget_factory(base::BindRepeating(
-        &ViewsTestBase::CreateNativeWidgetForTest, base::Unretained(this)));
+    factory = base::BindRepeating(&ViewsTestBase::CreateNativeWidgetForTest,
+                                  base::Unretained(this));
   }
-
   test_helper_ = std::make_unique<ScopedViewsTestHelper>(
-      std::move(views_delegate_for_setup_));
+      std::move(views_delegate_for_setup_), std::move(factory));
 }
 
 void ViewsTestBase::TearDown() {
@@ -130,11 +123,18 @@ void ViewsTestBase::RunPendingMessages() {
   run_loop.RunUntilIdle();
 }
 
-Widget::InitParams ViewsTestBase::CreateParams(
-    Widget::InitParams::Type type) {
+Widget::InitParams ViewsTestBase::CreateParams(Widget::InitParams::Type type) {
   Widget::InitParams params(type);
   params.context = GetContext();
   return params;
+}
+
+std::unique_ptr<Widget> ViewsTestBase::CreateTestWidget(
+    Widget::InitParams::Type type) {
+  Widget::InitParams params = CreateParamsForTestWidget(type);
+  auto widget = std::make_unique<Widget>();
+  widget->Init(std::move(params));
+  return widget;
 }
 
 bool ViewsTestBase::HasCompositingManager() const {
@@ -142,7 +142,7 @@ bool ViewsTestBase::HasCompositingManager() const {
 }
 
 void ViewsTestBase::SimulateNativeDestroy(Widget* widget) {
-  test_helper_->platform_test_helper()->SimulateNativeDestroy(widget);
+  test_helper_->SimulateNativeDestroy(widget);
 }
 
 gfx::NativeWindow ViewsTestBase::GetContext() {
@@ -158,16 +158,15 @@ NativeWidget* ViewsTestBase::CreateNativeWidgetForTest(
 #elif defined(USE_AURA)
   // For widgets that have a modal parent, don't force a native widget type.
   // This logic matches DesktopTestViewsDelegate as well as ChromeViewsDelegate.
-  if (init_params.parent &&
-      init_params.type != views::Widget::InitParams::TYPE_MENU &&
-      init_params.type != views::Widget::InitParams::TYPE_TOOLTIP) {
+  if (init_params.parent && init_params.type != Widget::InitParams::TYPE_MENU &&
+      init_params.type != Widget::InitParams::TYPE_TOOLTIP) {
     // Returning null results in using the platform default, which is
     // NativeWidgetAura.
     return nullptr;
   }
 
   if (native_widget_type_ == NativeWidgetType::kDesktop) {
-#if !defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_DESKTOP_AURA)
     return new test::TestPlatformNativeWidget<DesktopNativeWidgetAura>(
         delegate, false, nullptr);
 #else
@@ -182,6 +181,14 @@ NativeWidget* ViewsTestBase::CreateNativeWidgetForTest(
   NOTREACHED();
   return nullptr;
 #endif
+}
+
+Widget::InitParams ViewsTestBase::CreateParamsForTestWidget(
+    Widget::InitParams::Type type) {
+  Widget::InitParams params = CreateParams(type);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.bounds = gfx::Rect(0, 0, 400, 400);
+  return params;
 }
 
 void ViewsTestBaseWithNativeWidgetType::SetUp() {

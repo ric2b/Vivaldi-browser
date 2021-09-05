@@ -38,13 +38,12 @@
 #include "build/build_config.h"
 #include "cc/layers/picture_layer.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_scroll_into_view_params.h"
 #include "third_party/blink/public/web/web_autofill_client.h"
 #include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_range.h"
 #include "third_party/blink/public/web/web_widget_client.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
@@ -83,7 +82,9 @@
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
+#include "third_party/blink/renderer/platform/widget/widget_base.h"
 
 namespace blink {
 namespace {
@@ -104,8 +105,17 @@ FloatRect NormalizeRect(const IntRect& to_normalize, const IntRect& base_rect) {
 
 // WebFrameWidget ------------------------------------------------------------
 
-WebFrameWidget* WebFrameWidget::CreateForMainFrame(WebWidgetClient* client,
-                                                   WebLocalFrame* main_frame) {
+WebFrameWidget* WebFrameWidget::CreateForMainFrame(
+    WebWidgetClient* client,
+    WebLocalFrame* main_frame,
+    CrossVariantMojoAssociatedRemote<mojom::blink::FrameWidgetHostInterfaceBase>
+        mojo_frame_widget_host,
+    CrossVariantMojoAssociatedReceiver<mojom::blink::FrameWidgetInterfaceBase>
+        mojo_frame_widget,
+    CrossVariantMojoAssociatedRemote<mojom::blink::WidgetHostInterfaceBase>
+        mojo_widget_host,
+    CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
+        mojo_widget) {
   DCHECK(client) << "A valid WebWidgetClient must be supplied.";
   DCHECK(!main_frame->Parent());  // This is the main frame.
 
@@ -121,15 +131,25 @@ WebFrameWidget* WebFrameWidget::CreateForMainFrame(WebWidgetClient* client,
   // Note: this isn't a leak, as the object has a self-reference that the
   // caller needs to release by calling Close().
   // TODO(dcheng): Remove the special bridge class for main frame widgets.
-  WebFrameWidgetBase* widget =
-      MakeGarbageCollected<WebViewFrameWidget>(*client, web_view_impl);
+  auto* widget = MakeGarbageCollected<WebViewFrameWidget>(
+      util::PassKey<WebFrameWidget>(), *client, web_view_impl,
+      std::move(mojo_frame_widget_host), std::move(mojo_frame_widget),
+      std::move(mojo_widget_host), std::move(mojo_widget));
   widget->BindLocalRoot(*main_frame);
   return widget;
 }
 
 WebFrameWidget* WebFrameWidget::CreateForChildLocalRoot(
     WebWidgetClient* client,
-    WebLocalFrame* local_root) {
+    WebLocalFrame* local_root,
+    CrossVariantMojoAssociatedRemote<mojom::blink::FrameWidgetHostInterfaceBase>
+        mojo_frame_widget_host,
+    CrossVariantMojoAssociatedReceiver<mojom::blink::FrameWidgetInterfaceBase>
+        mojo_frame_widget,
+    CrossVariantMojoAssociatedRemote<mojom::blink::WidgetHostInterfaceBase>
+        mojo_widget_host,
+    CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
+        mojo_widget) {
   DCHECK(client) << "A valid WebWidgetClient must be supplied.";
   DCHECK(local_root->Parent());  // This is not the main frame.
   // Frames whose direct ancestor is a remote frame are local roots. Verify this
@@ -139,18 +159,35 @@ WebFrameWidget* WebFrameWidget::CreateForChildLocalRoot(
 
   // Note: this isn't a leak, as the object has a self-reference that the
   // caller needs to release by calling Close().
-  auto* widget = MakeGarbageCollected<WebFrameWidgetImpl>(*client);
+  auto* widget = MakeGarbageCollected<WebFrameWidgetImpl>(
+      util::PassKey<WebFrameWidget>(), *client,
+      std::move(mojo_frame_widget_host), std::move(mojo_frame_widget),
+      std::move(mojo_widget_host), std::move(mojo_widget));
   widget->BindLocalRoot(*local_root);
   return widget;
 }
 
-WebFrameWidgetImpl::WebFrameWidgetImpl(WebWidgetClient& client)
-    : WebFrameWidgetBase(client),
+WebFrameWidgetImpl::WebFrameWidgetImpl(
+    util::PassKey<WebFrameWidget>,
+    WebWidgetClient& client,
+    CrossVariantMojoAssociatedRemote<mojom::blink::FrameWidgetHostInterfaceBase>
+        frame_widget_host,
+    CrossVariantMojoAssociatedReceiver<mojom::blink::FrameWidgetInterfaceBase>
+        frame_widget,
+    CrossVariantMojoAssociatedRemote<mojom::blink::WidgetHostInterfaceBase>
+        widget_host,
+    CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
+        widget)
+    : WebFrameWidgetBase(client,
+                         std::move(frame_widget_host),
+                         std::move(frame_widget),
+                         std::move(widget_host),
+                         std::move(widget)),
       self_keep_alive_(PERSISTENT_FROM_HERE, this) {}
 
 WebFrameWidgetImpl::~WebFrameWidgetImpl() = default;
 
-void WebFrameWidgetImpl::Trace(blink::Visitor* visitor) {
+void WebFrameWidgetImpl::Trace(Visitor* visitor) {
   visitor->Trace(mouse_capture_element_);
   WebFrameWidgetBase::Trace(visitor);
 }
@@ -161,10 +198,6 @@ void WebFrameWidgetImpl::Close() {
   GetPage()->WillCloseAnimationHost(LocalRootImpl()->GetFrame()->View());
 
   WebFrameWidgetBase::Close();
-
-  animation_host_ = nullptr;
-  root_layer_ = nullptr;
-  root_graphics_layer_ = nullptr;
 
   self_keep_alive_.Clear();
 }
@@ -253,8 +286,8 @@ void WebFrameWidgetImpl::SetSuppressFrameRequestsWorkaroundFor704763Only(
   GetPage()->Animator().SetSuppressFrameRequestsWorkaroundFor704763Only(
       suppress_frame_requests);
 }
-void WebFrameWidgetImpl::BeginFrame(base::TimeTicks last_frame_time,
-                                    bool record_main_frame_metrics) {
+
+void WebFrameWidgetImpl::BeginMainFrame(base::TimeTicks last_frame_time) {
   TRACE_EVENT1("blink", "WebFrameWidgetImpl::beginFrame", "frameTime",
                last_frame_time);
   DCHECK(!last_frame_time.is_null());
@@ -264,7 +297,7 @@ void WebFrameWidgetImpl::BeginFrame(base::TimeTicks last_frame_time,
 
   DocumentLifecycle::AllowThrottlingScope throttling_scope(
       LocalRootImpl()->GetFrame()->GetDocument()->Lifecycle());
-  if (record_main_frame_metrics) {
+  if (WidgetBase::ShouldRecordBeginMainFrameMetrics()) {
     SCOPED_UMA_AND_UKM_TIMER(
         LocalRootImpl()->GetFrame()->View()->EnsureUkmAggregator(),
         LocalFrameUkmAggregator::kAnimate);
@@ -280,22 +313,6 @@ void WebFrameWidgetImpl::BeginFrame(base::TimeTicks last_frame_time,
 void WebFrameWidgetImpl::DidBeginFrame() {
   DCHECK(LocalRootImpl()->GetFrame());
   PageWidgetDelegate::DidBeginFrame(*LocalRootImpl()->GetFrame());
-}
-
-void WebFrameWidgetImpl::BeginRafAlignedInput() {
-  if (LocalRootImpl()) {
-    raf_aligned_input_start_time_.emplace(base::TimeTicks::Now());
-  }
-}
-
-void WebFrameWidgetImpl::EndRafAlignedInput() {
-  if (LocalRootImpl()) {
-    DCHECK(raf_aligned_input_start_time_);
-    LocalRootImpl()->GetFrame()->View()->EnsureUkmAggregator().RecordSample(
-        LocalFrameUkmAggregator::kHandleInputEvents,
-        raf_aligned_input_start_time_.value(), base::TimeTicks::Now());
-  }
-  raf_aligned_input_start_time_.reset();
 }
 
 void WebFrameWidgetImpl::BeginUpdateLayers() {
@@ -320,13 +337,15 @@ void WebFrameWidgetImpl::BeginCommitCompositorFrame() {
   }
 }
 
-void WebFrameWidgetImpl::EndCommitCompositorFrame() {
+void WebFrameWidgetImpl::EndCommitCompositorFrame(
+    base::TimeTicks commit_start_time) {
   if (LocalRootImpl()) {
-    // Some tests call this without ever beginning a frame, so don't check for
-    // timing data.
-    LocalRootImpl()->GetFrame()->View()->EnsureUkmAggregator().RecordSample(
-        LocalFrameUkmAggregator::kProxyCommit,
-        commit_compositor_frame_start_time_.value(), base::TimeTicks::Now());
+    LocalRootImpl()
+        ->GetFrame()
+        ->View()
+        ->EnsureUkmAggregator()
+        .RecordImplCompositorSample(commit_compositor_frame_start_time_.value(),
+                                    commit_start_time, base::TimeTicks::Now());
   }
   commit_compositor_frame_start_time_.reset();
 }
@@ -339,7 +358,8 @@ void WebFrameWidgetImpl::RecordStartOfFrameMetrics() {
 }
 
 void WebFrameWidgetImpl::RecordEndOfFrameMetrics(
-    base::TimeTicks frame_begin_time) {
+    base::TimeTicks frame_begin_time,
+    cc::ActiveFrameSequenceTrackers trackers) {
   if (!LocalRootImpl())
     return;
 
@@ -347,7 +367,8 @@ void WebFrameWidgetImpl::RecordEndOfFrameMetrics(
       ->GetFrame()
       ->View()
       ->EnsureUkmAggregator()
-      .RecordEndOfFrameMetrics(frame_begin_time, base::TimeTicks::Now());
+      .RecordEndOfFrameMetrics(frame_begin_time, base::TimeTicks::Now(),
+                               trackers);
 }
 
 std::unique_ptr<cc::BeginMainFrameMetrics>
@@ -362,8 +383,8 @@ WebFrameWidgetImpl::GetBeginMainFrameMetrics() {
       .GetBeginMainFrameMetrics();
 }
 
-void WebFrameWidgetImpl::UpdateLifecycle(LifecycleUpdate requested_update,
-                                         LifecycleUpdateReason reason) {
+void WebFrameWidgetImpl::UpdateLifecycle(WebLifecycleUpdate requested_update,
+                                         DocumentUpdateReason reason) {
   TRACE_EVENT0("blink", "WebFrameWidgetImpl::updateAllLifecyclePhases");
   if (!LocalRootImpl())
     return;
@@ -456,8 +477,6 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
     if (input_event.GetType() == WebInputEvent::kMouseUp)
       MouseCaptureLost();
 
-    std::unique_ptr<UserGestureIndicator> gesture_indicator;
-
     AtomicString event_type;
     switch (input_event.GetType()) {
       case WebInputEvent::kMouseEnter:
@@ -471,14 +490,10 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
         break;
       case WebInputEvent::kMouseDown:
         event_type = event_type_names::kMousedown;
-        gesture_indicator = LocalFrame::NotifyUserActivation(
-            target->GetDocument().GetFrame(), UserGestureToken::kNewGesture);
-        mouse_capture_gesture_token_ = gesture_indicator->CurrentToken();
+        LocalFrame::NotifyUserActivation(target->GetDocument().GetFrame());
         break;
       case WebInputEvent::kMouseUp:
         event_type = event_type_names::kMouseup;
-        gesture_indicator = std::make_unique<UserGestureIndicator>(
-            std::move(mouse_capture_gesture_token_));
         break;
       default:
         NOTREACHED();
@@ -531,9 +546,10 @@ bool WebFrameWidgetImpl::ScrollFocusedEditableElementIntoView() {
     return false;
 
   PhysicalRect rect_to_scroll;
-  WebScrollIntoViewParams params;
+  auto params = ScrollAlignment::CreateScrollIntoViewParams();
   GetScrollParamsForFocusedEditableElement(*element, rect_to_scroll, params);
-  element->GetLayoutObject()->ScrollRectToVisible(rect_to_scroll, params);
+  element->GetLayoutObject()->ScrollRectToVisible(rect_to_scroll,
+                                                  std::move(params));
   return true;
 }
 
@@ -547,11 +563,9 @@ void WebFrameWidgetImpl::IntrinsicSizingInfoChanged(
   Client()->IntrinsicSizingInfoChanged(web_sizing_info);
 }
 
-void WebFrameWidgetImpl::ApplyViewportChanges(const ApplyViewportChangesArgs&) {
-}
-
 void WebFrameWidgetImpl::MouseCaptureLost() {
-  TRACE_EVENT_ASYNC_END0("input", "capturing mouse", this);
+  TRACE_EVENT_NESTABLE_ASYNC_END0("input", "capturing mouse",
+                                  TRACE_ID_LOCAL(this));
   mouse_capture_element_ = nullptr;
 }
 
@@ -592,7 +606,8 @@ void WebFrameWidgetImpl::SetFocus(bool enable) {
         // TODO(editing-dev): The use of
         // UpdateStyleAndLayout needs to be audited.
         // See http://crbug.com/590369 for more details.
-        focused_frame->GetDocument()->UpdateStyleAndLayout();
+        focused_frame->GetDocument()->UpdateStyleAndLayout(
+            DocumentUpdateReason::kFocus);
 
         focused_frame->GetInputMethodController().FinishComposingText(
             InputMethodController::kKeepSelection);
@@ -620,20 +635,15 @@ bool WebFrameWidgetImpl::SelectionBounds(WebRect& anchor_web,
   return true;
 }
 
-bool WebFrameWidgetImpl::IsAcceleratedCompositingActive() const {
-  return is_accelerated_compositing_active_;
-}
-
 void WebFrameWidgetImpl::SetRemoteViewportIntersection(
-    const WebRect& viewport_intersection,
-    FrameOcclusionState occlusion_state) {
+    const ViewportIntersectionState& intersection_state) {
   // Remote viewports are only applicable to local frames with remote ancestors.
   DCHECK(LocalRootImpl()->Parent() &&
          LocalRootImpl()->Parent()->IsWebRemoteFrame() &&
          LocalRootImpl()->GetFrame());
 
   LocalRootImpl()->GetFrame()->SetViewportIntersectionFromParent(
-      viewport_intersection, occlusion_state);
+      intersection_state);
 }
 
 void WebFrameWidgetImpl::SetIsInert(bool inert) {
@@ -686,8 +696,8 @@ void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& main_frame,
   // Take capture on a mouse down on a plugin so we can send it mouse events.
   // If the hit node is a plugin but a scrollbar is over it don't start mouse
   // capture because it will interfere with the scrollbar receiving events.
-  PhysicalOffset point(LayoutUnit(event.PositionInWidget().x),
-                       LayoutUnit(event.PositionInWidget().y));
+  PhysicalOffset point(LayoutUnit(event.PositionInWidget().x()),
+                       LayoutUnit(event.PositionInWidget().y()));
   if (event.button == WebMouseEvent::Button::kLeft) {
     HitTestLocation location(
         LocalRootImpl()->GetFrameView()->ConvertFromRootFrame(point));
@@ -700,17 +710,13 @@ void WebFrameWidgetImpl::HandleMouseDown(LocalFrame& main_frame,
     if (!result.GetScrollbar() && hit_node && hit_node->GetLayoutObject() &&
         hit_node->GetLayoutObject()->IsEmbeddedObject() && html_element &&
         html_element->IsPluginElement()) {
-      mouse_capture_element_ = ToHTMLPlugInElement(hit_node);
-      TRACE_EVENT_ASYNC_BEGIN0("input", "capturing mouse", this);
+      mouse_capture_element_ = To<HTMLPlugInElement>(hit_node);
+      TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("input", "capturing mouse",
+                                        TRACE_ID_LOCAL(this));
     }
   }
 
   PageWidgetEventHandler::HandleMouseDown(main_frame, event);
-
-  if (event.button == WebMouseEvent::Button::kLeft && mouse_capture_element_) {
-    mouse_capture_gesture_token_ =
-        main_frame.GetEventHandler().TakeLastMouseDownGestureToken();
-  }
 
   if (view_impl->GetPagePopup() && page_popup &&
       view_impl->GetPagePopup()->HasSamePopupClient(page_popup.get())) {
@@ -861,6 +867,10 @@ PageWidgetEventHandler* WebFrameWidgetImpl::GetPageWidgetEventHandler() {
   return this;
 }
 
+LocalFrameView* WebFrameWidgetImpl::GetLocalFrameViewForAnimationScrolling() {
+  return LocalRootImpl()->GetFrame()->View();
+}
+
 WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
     const WebKeyboardEvent& event) {
   DCHECK((event.GetType() == WebInputEvent::kRawKeyDown) ||
@@ -874,6 +884,17 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
   // event and a keyUp event. We reset this flag here as this is a new keyDown
   // event.
   suppress_next_keypress_event_ = false;
+
+  // If there is a popup open, it should be the one processing the event,
+  // not the page.
+  scoped_refptr<WebPagePopupImpl> page_popup = View()->GetPagePopup();
+  if (page_popup) {
+    page_popup->HandleKeyEvent(event);
+    if (event.GetType() == WebInputEvent::kRawKeyDown) {
+      suppress_next_keypress_event_ = true;
+    }
+    return WebInputEventResult::kHandledSystem;
+  }
 
   auto* frame = DynamicTo<LocalFrame>(FocusedCoreFrame());
   if (!frame)
@@ -982,14 +1003,6 @@ Element* WebFrameWidgetImpl::FocusedElement() const {
   return document->FocusedElement();
 }
 
-void WebFrameWidgetImpl::SetAnimationHost(cc::AnimationHost* animation_host) {
-  DCHECK(Client());
-  animation_host_ = animation_host;
-
-  GetPage()->AnimationHostInitialized(*animation_host_,
-                                      LocalRootImpl()->GetFrame()->View());
-}
-
 PaintLayerCompositor* WebFrameWidgetImpl::Compositor() const {
   LocalFrame* frame = LocalRootImpl()->GetFrame();
   if (!frame || !frame->GetDocument() || !frame->GetDocument()->GetLayoutView())
@@ -998,15 +1011,8 @@ PaintLayerCompositor* WebFrameWidgetImpl::Compositor() const {
   return frame->GetDocument()->GetLayoutView()->Compositor();
 }
 
-void WebFrameWidgetImpl::SetRootGraphicsLayer(GraphicsLayer* layer) {
-  root_graphics_layer_ = layer;
-  SetRootLayer(layer ? layer->CcLayer() : nullptr);
-}
-
 void WebFrameWidgetImpl::SetRootLayer(scoped_refptr<cc::Layer> layer) {
-  root_layer_ = std::move(layer);
-
-  if (!root_layer_) {
+  if (!layer) {
     // This notifies the WebFrameWidgetImpl that its LocalFrame tree is being
     // detached.
     return;
@@ -1014,20 +1020,14 @@ void WebFrameWidgetImpl::SetRootLayer(scoped_refptr<cc::Layer> layer) {
 
   // WebFrameWidgetImpl is used for child frames, which always have a
   // transparent background color.
-  Client()->SetBackgroundColor(SK_ColorTRANSPARENT);
+  widget_base_->LayerTreeHost()->set_background_color(SK_ColorTRANSPARENT);
   // Pass the limits even though this is for subframes, as the limits will
   // be needed in setting the raster scale.
   Client()->SetPageScaleStateAndLimits(1.f, false /* is_pinch_gesture_active */,
                                        View()->MinimumPageScaleFactor(),
                                        View()->MaximumPageScaleFactor());
 
-  // TODO(danakj): SetIsAcceleratedCompositingActive() also sets the root layer
-  // if it's not null..
-  Client()->SetRootLayer(root_layer_);
-}
-
-cc::AnimationHost* WebFrameWidgetImpl::AnimationHost() const {
-  return animation_host_;
+  widget_base_->LayerTreeHost()->SetRootLayer(layer);
 }
 
 HitTestResult WebFrameWidgetImpl::CoreHitTestResultAt(
@@ -1077,7 +1077,7 @@ void WebFrameWidgetImpl::DidCreateLocalRootView() {
 void WebFrameWidgetImpl::GetScrollParamsForFocusedEditableElement(
     const Element& element,
     PhysicalRect& rect_to_scroll,
-    WebScrollIntoViewParams& params) {
+    mojom::blink::ScrollIntoViewParamsPtr& params) {
   LocalFrameView& frame_view = *element.GetDocument().View();
   IntRect absolute_element_bounds =
       element.GetLayoutObject()->AbsoluteBoundingBoxRect();
@@ -1113,12 +1113,12 @@ void WebFrameWidgetImpl::GetScrollParamsForFocusedEditableElement(
     }
   }
 
-  params.zoom_into_rect = View()->ShouldZoomToLegibleScale(element);
-  params.relative_element_bounds = NormalizeRect(
+  params->zoom_into_rect = View()->ShouldZoomToLegibleScale(element);
+  params->relative_element_bounds = NormalizeRect(
       Intersection(absolute_element_bounds, maximal_rect), maximal_rect);
-  params.relative_caret_bounds = NormalizeRect(
+  params->relative_caret_bounds = NormalizeRect(
       Intersection(absolute_caret_bounds, maximal_rect), maximal_rect);
-  params.behavior = WebScrollIntoViewParams::kInstant;
+  params->behavior = mojom::blink::ScrollBehavior::kInstant;
   rect_to_scroll = PhysicalRect(maximal_rect);
 }
 

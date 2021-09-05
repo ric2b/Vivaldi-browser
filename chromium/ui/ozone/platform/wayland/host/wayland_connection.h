@@ -52,8 +52,9 @@ class WaylandConnection : public PlatformEventSource,
 
   wl_display* display() const { return display_.get(); }
   wl_compositor* compositor() const { return compositor_.get(); }
+  uint32_t compositor_version() const { return compositor_version_; }
   wl_subcompositor* subcompositor() const { return subcompositor_.get(); }
-  xdg_shell* shell() const { return shell_.get(); }
+  xdg_wm_base* shell() const { return shell_.get(); }
   zxdg_shell_v6* shell_v6() const { return shell_v6_.get(); }
   wl_seat* seat() const { return seat_.get(); }
   wl_data_device* data_device() const { return data_device_->data_device(); }
@@ -107,6 +108,8 @@ class WaylandConnection : public PlatformEventSource,
   WaylandWindowManager* wayland_window_manager() {
     return &wayland_window_manager_;
   }
+
+  WaylandDataDevice* wayland_data_device() const { return data_device_.get(); }
 
   // Starts drag with |data| to be delivered, |operation| supported by the
   // source side initiated the dragging.
@@ -171,15 +174,16 @@ class WaylandConnection : public PlatformEventSource,
   // zxdg_shell_v6_listener
   static void PingV6(void* data, zxdg_shell_v6* zxdg_shell_v6, uint32_t serial);
 
-  // xdg_shell_listener
-  static void Ping(void* data, xdg_shell* shell, uint32_t serial);
+  // xdg_wm_base_listener
+  static void Ping(void* data, xdg_wm_base* shell, uint32_t serial);
 
   wl::Object<wl_display> display_;
   wl::Object<wl_registry> registry_;
   wl::Object<wl_compositor> compositor_;
+  uint32_t compositor_version_ = 0;
   wl::Object<wl_subcompositor> subcompositor_;
   wl::Object<wl_seat> seat_;
-  wl::Object<xdg_shell> shell_;
+  wl::Object<xdg_wm_base> shell_;
   wl::Object<zxdg_shell_v6> shell_v6_;
   wl::Object<wp_presentation> presentation_;
   wl::Object<zwp_text_input_manager_v1> text_input_manager_v1_;

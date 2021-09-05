@@ -8,6 +8,7 @@
 #include "platform_media/gpu/decoders/mac/avf_media_reader.h"
 
 #import <AVFoundation/AVFoundation.h>
+#include "common/platform_media_pipeline_types.h"
 
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
@@ -15,14 +16,11 @@
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/sys_string_conversions.h"
+
 #import "platform_media/gpu/decoders/mac/data_source_loader.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/mac/framework_type_conversions.h"
 #include "platform_media/common/mac/platform_media_pipeline_types_mac.h"
-
-@interface AVURLAsset (MavericksSDK)
-@property(nonatomic, readonly) AVAssetResourceLoader* resourceLoader;
-@end
 
 namespace media {
 
@@ -43,18 +41,35 @@ class ScopedBufferLock {
 
 AVAssetTrack* AssetTrackForType(AVAsset* asset, NSString* track_type_name) {
   NSArray* tracks = [asset tracksWithMediaType:track_type_name];
-  return [tracks count] > 0u ? [tracks objectAtIndex:0] : nil;
+  AVAssetTrack* track = [tracks count] > 0u ? [tracks objectAtIndex:0] : nil;
+
+  if (track && track_type_name == AVMediaTypeVideo) {
+    // NOTE(tomas@vivaldi.com): VB-45871
+    // Return nil to avoid renderer crash
+    if (track.formatDescriptions.count > 1) {
+      return nil;
+    }
+    CMFormatDescriptionRef desc = reinterpret_cast<CMFormatDescriptionRef>(
+        [[track formatDescriptions] objectAtIndex:0]);
+    if ("jpeg" == FourCCToString(CMFormatDescriptionGetMediaSubType(desc))) {
+      return nil;
+    }
+  }
+
+  return track;
 }
 
-scoped_refptr<DataBuffer> ReadAudioSample(
-    AVAssetReaderOutput* audio_output) {
+bool ReadAudioSample(AVAssetReaderOutput* audio_output,
+                     IPCDecodingBuffer* ipc_buffer) {
   VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 
   base::ScopedCFTypeRef<CMSampleBufferRef> sample_buffer(
       reinterpret_cast<CMSampleBufferRef>(
           [audio_output copyNextSampleBuffer]));
-  if (!sample_buffer)
-    return nullptr;
+  if (!sample_buffer) {
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " No buffer available";
+    return false;
+  }
 
   const CMTime timestamp = CoreMediaGlueCMTimeToCMTime(
       CMSampleBufferGetPresentationTimeStamp(sample_buffer));
@@ -63,45 +78,48 @@ scoped_refptr<DataBuffer> ReadAudioSample(
   if (!CMTIME_IS_VALID(timestamp) || !CMTIME_IS_VALID(duration)) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " Invalid timestamp and/or duration";
-    return nullptr;
+    return false;
   }
 
   CMBlockBufferRef block_buffer =
       CMSampleBufferGetDataBuffer(sample_buffer);
   if (!block_buffer)
-    return nullptr;
+    return false;
 
-  const int data_size = base::saturated_cast<int>(
-      CMBlockBufferGetDataLength(block_buffer));
-  scoped_refptr<DataBuffer> audio_data_buffer =
-      new DataBuffer(data_size);
-  if (CMBlockBufferCopyDataBytes(
-          block_buffer, 0, data_size, audio_data_buffer->writable_data()) !=
-      kCMBlockBufferNoErr) {
+  size_t data_size = CMBlockBufferGetDataLength(block_buffer);
+  if (!data_size)
+    return false;
+  uint8_t* data = ipc_buffer->PrepareMemory(data_size);
+  if (!data)
+    return false;
+  OSStatus status =
+      CMBlockBufferCopyDataBytes(block_buffer, 0, data_size, data);
+  if (status != kCMBlockBufferNoErr) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " Failed to copy audio data";
-    return nullptr;
+            << " CMBlockBufferCopyDataBytes failed, status=" << status;
+    return false;
   }
 
-  audio_data_buffer->set_data_size(data_size);
-  audio_data_buffer->set_timestamp(CMTimeToTimeDelta(timestamp));
-  audio_data_buffer->set_duration(CMTimeToTimeDelta(duration));
+  ipc_buffer->set_timestamp(CMTimeToTimeDelta(timestamp));
+  ipc_buffer->set_duration(CMTimeToTimeDelta(duration));
+  VLOG(6) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " timestamp=" << ipc_buffer->timestamp()
+          << " duration=" << ipc_buffer->duration();
 
-  return audio_data_buffer;
+  return true;
 }
 
-scoped_refptr<DataBuffer> ReadVideoSample(
-    AVAssetReaderOutput* video_output,
-    const gfx::Size& coded_size) {
+bool ReadVideoSample(AVAssetReaderOutput* video_output,
+                     const gfx::Size& coded_size,
+                     IPCDecodingBuffer* ipc_buffer) {
   VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 
   base::ScopedCFTypeRef<CMSampleBufferRef> sample_buffer(
       reinterpret_cast<CMSampleBufferRef>(
           [video_output copyNextSampleBuffer]));
   if (!sample_buffer) {
-    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " No buffer available";
-    return nullptr;
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " No buffer available";
+    return false;
   }
 
   const CMTime timestamp = CoreMediaGlueCMTimeToCMTime(
@@ -109,7 +127,7 @@ scoped_refptr<DataBuffer> ReadVideoSample(
   if (!CMTIME_IS_VALID(timestamp)) {
     VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " Invalid timestamp and/or duration";
-    return nullptr;
+    return false;
   }
 
   CVImageBufferRef pixel_buffer =
@@ -117,7 +135,7 @@ scoped_refptr<DataBuffer> ReadVideoSample(
   if (!pixel_buffer) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " No pixel_buffer available";
-    return nullptr;
+    return false;
   }
 
   ScopedBufferLock auto_lock(pixel_buffer);
@@ -134,9 +152,11 @@ scoped_refptr<DataBuffer> ReadVideoSample(
   for (int i = 0; i < 3; ++i) {
     const int plane = planes[i];
 
-    const int stride = CVPixelBufferGetBytesPerRowOfPlane(pixel_buffer, plane);
+    size_t stride = CVPixelBufferGetBytesPerRowOfPlane(pixel_buffer, plane);
+    if (stride == 0)
+      return false;
 
-    plane_sizes[plane] =
+    plane_sizes[plane] +=
         stride *
         VideoFrame::PlaneSize(VideoPixelFormat::PIXEL_FORMAT_YV12,
                                      video_frame_planes[plane],
@@ -144,75 +164,53 @@ scoped_refptr<DataBuffer> ReadVideoSample(
   }
 
   // Copy all planes into contiguous memory.
-  const int data_size = plane_sizes[0] + plane_sizes[1] + plane_sizes[2];
-  scoped_refptr<DataBuffer> video_data_buffer =
-      new DataBuffer(data_size);
+  size_t data_size = plane_sizes[0] + plane_sizes[1] + plane_sizes[2];
+  uint8_t* data = ipc_buffer->PrepareMemory(data_size);
+  if (!data)
+    return false;
   size_t data_offset = 0;
   for (int i = 0; i < 3; ++i) {
     const int plane = planes[i];
 
-    memcpy(video_data_buffer->writable_data() + data_offset,
-           CVPixelBufferGetBaseAddressOfPlane(pixel_buffer, plane),
-           plane_sizes[plane]);
+    const void* pixels =
+        CVPixelBufferGetBaseAddressOfPlane(pixel_buffer, plane);
+    if (!pixels)
+      return false;
+    memcpy(data + data_offset, pixels, plane_sizes[plane]);
 
     data_offset += plane_sizes[plane];
   }
 
-  video_data_buffer->set_data_size(data_size);
-  video_data_buffer->set_timestamp(CMTimeToTimeDelta(timestamp));
+  ipc_buffer->set_timestamp(CMTimeToTimeDelta(timestamp));
+  VLOG(6) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " timestamp=" << ipc_buffer->timestamp();
 
-  return video_data_buffer;
+  return true;
 }
 
 }  // namespace
 
-AVFMediaReader::StreamReader::StreamReader()
-    : type(PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT),
-      end_of_stream(false) {
-}
+AVFMediaReader::StreamReader::StreamReader() = default;
 
 AVFMediaReader::StreamReader::~StreamReader() = default;
 
 AVFMediaReader::AVFMediaReader(dispatch_queue_t queue)
     : bitrate_(-1), queue_(queue) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-
-  for (int i = 0; i < PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT; ++i)
-    stream_readers_[i].type = static_cast<PlatformMediaDataType>(i);
 }
 
 AVFMediaReader::~AVFMediaReader() {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  DCHECK(queue_ == dispatch_get_current_queue());
-
-  [data_source_loader_ stop];
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
 }
 
-bool AVFMediaReader::Initialize(media::DataSource* data_source,
-                                const std::string& mime_type) {
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " mimetype " << mime_type;
-  DCHECK(queue_ == dispatch_get_current_queue());
+bool AVFMediaReader::Initialize(base::scoped_nsobject<AVAsset> asset) {
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 
-  // The URL is completely arbitrary.  We use a "custom" URL scheme to force
-  // AVURLAsset to ask our instance of AVAssetResourceLoaderDelegate for data.
-  // This way, we make sure all data is fetched through Chrome's network stack
-  // (via |data_source| rather than by AVURLAsset directly.
-
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Create Asset";
-  NSString* url = [NSString stringWithFormat:@"opop:file.mp4"];
-  asset_.reset([[AVURLAsset
-      assetWithURL:[NSURL URLWithString:url]] retain]);
-
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Create DataSourceLoader";
-  data_source_loader_.reset([[DataSourceLoader alloc]
-      initWithDataSource:data_source
-            withMIMEType:base::SysUTF8ToNSString(mime_type)]);
-
-  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Attach DataSourceLoader to Asset";
-  [[asset_ resourceLoader] setDelegate:data_source_loader_
-                                 queue:[data_source_loader_ dispatchQueue]];
+  asset_ = std::move(asset);
 
   if (![asset_ isPlayable]) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
@@ -257,18 +255,21 @@ bool AVFMediaReader::Initialize(media::DataSource* data_source,
 }
 
 int AVFMediaReader::bitrate() const {
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
   DCHECK_GE(bitrate_, 0);
   return bitrate_;
 }
 
 base::TimeDelta AVFMediaReader::duration() const {
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
   return CMTimeToTimeDelta([asset_ duration]);
 }
 
 base::TimeDelta AVFMediaReader::start_time() const {
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
 
   return GetStartTimeFromTrack(
       GetTrack(has_audio_track() ? PlatformMediaDataType::PLATFORM_MEDIA_AUDIO
@@ -276,7 +277,8 @@ base::TimeDelta AVFMediaReader::start_time() const {
 }
 
 AudioStreamBasicDescription AVFMediaReader::audio_stream_format() const {
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
   DCHECK(has_audio_track());
 
   DCHECK_GE([[GetTrack(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO) formatDescriptions] count],
@@ -292,7 +294,8 @@ AudioStreamBasicDescription AVFMediaReader::audio_stream_format() const {
 }
 
 CMFormatDescriptionRef AVFMediaReader::video_stream_format() const {
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
   DCHECK(has_video_track());
 
   DCHECK_GE([[GetTrack(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO) formatDescriptions] count],
@@ -303,30 +306,18 @@ CMFormatDescriptionRef AVFMediaReader::video_stream_format() const {
 }
 
 CGAffineTransform AVFMediaReader::video_transform() const {
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
   DCHECK(has_video_track());
 
   return [GetTrack(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO) preferredTransform];
 }
 
-scoped_refptr<DataBuffer> AVFMediaReader::GetNextAudioSample() {
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  DCHECK(queue_ == dispatch_get_current_queue());
-
-  return ProcessNextSample(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO);
-}
-
-scoped_refptr<DataBuffer> AVFMediaReader::GetNextVideoSample() {
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  DCHECK(queue_ == dispatch_get_current_queue());
-
-  return ProcessNextSample(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO);
-}
-
 bool AVFMediaReader::Seek(base::TimeDelta time) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " Seeking to " << time.InMicroseconds() << " per pipeline request";
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
 
   if (time == duration()) {
     // AVAssetReader enters an error state if the time range starts where it
@@ -346,11 +337,14 @@ bool AVFMediaReader::Seek(base::TimeDelta time) {
 }
 
 bool AVFMediaReader::CalculateBitrate() {
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
 
   float bitrate = 0;
-  for (const StreamReader& stream_reader : stream_readers_)
-    bitrate += [GetTrack(stream_reader.type) estimatedDataRate];
+  for (int i = 0; i < kPlatformMediaDataTypeCount; ++i) {
+    PlatformMediaDataType type = static_cast<PlatformMediaDataType>(i);
+    bitrate += [GetTrack(type) estimatedDataRate];
+  }
   if (!base::IsValueInRangeForNumericType<decltype(bitrate_)>(bitrate))
     return false;
 
@@ -361,13 +355,14 @@ bool AVFMediaReader::CalculateBitrate() {
 }
 
 bool AVFMediaReader::ResetStreamReaders(base::TimeDelta start_time) {
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
   VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " start_time " << start_time;
 
-  for (StreamReader& stream_reader : stream_readers_) {
-    if (GetTrack(stream_reader.type) != nil &&
-        !ResetStreamReader(stream_reader.type, start_time))
+  for (int i = 0; i < kPlatformMediaDataTypeCount; ++i) {
+    PlatformMediaDataType type = static_cast<PlatformMediaDataType>(i);
+    if (GetTrack(type) != nil && !ResetStreamReader(type, start_time))
       return false;
   }
 
@@ -379,7 +374,8 @@ bool AVFMediaReader::ResetStreamReader(PlatformMediaDataType type,
   VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " start_time " << start_time;
 
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
   DCHECK(GetTrack(type) != nil);
 
   [stream_readers_[type].asset_reader cancelReading];
@@ -425,7 +421,8 @@ bool AVFMediaReader::ResetStreamReader(PlatformMediaDataType type,
 }
 
 bool AVFMediaReader::InitializeOutput(PlatformMediaDataType type) {
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
 
   StreamReader& stream_reader = stream_readers_[type];
 
@@ -483,7 +480,8 @@ NSDictionary* AVFMediaReader::GetOutputSettings(
 
 AVAssetTrack* AVFMediaReader::GetTrack(
     PlatformMediaDataType type) const {
-  DCHECK(queue_ == dispatch_get_current_queue());
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
 
   switch (type) {
     case PlatformMediaDataType::PLATFORM_MEDIA_AUDIO:
@@ -498,49 +496,41 @@ AVAssetTrack* AVFMediaReader::GetTrack(
   }
 }
 
-scoped_refptr<DataBuffer> AVFMediaReader::ProcessNextSample(
-    PlatformMediaDataType type) {
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  DCHECK(queue_ == dispatch_get_current_queue());
-
-  const scoped_refptr<DataBuffer> buffer = ReadNextSample(type);
-
-  if (buffer && !buffer->end_of_stream()) {
-    stream_readers_[type].expected_next_timestamp =
-        buffer->timestamp() + buffer->duration();
-
-    // If a duration is set on the audio buffer, it confuses the Chromium
-    // pipeline.
-    buffer->set_duration(base::TimeDelta());
-  }
-
-  return buffer;
-}
-
-scoped_refptr<DataBuffer> AVFMediaReader::ReadNextSample(
-    PlatformMediaDataType type) {
-  DCHECK(queue_ == dispatch_get_current_queue());
-
-  if (stream_readers_[type].end_of_stream)
-    return DataBuffer::CreateEOSBuffer();
+void AVFMediaReader::GetNextMediaSample(
+    PlatformMediaDataType type,
+    IPCDecodingBuffer* ipc_buffer) {
+  DCHECK(dispatch_queue_get_label(queue_) ==
+         dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL));
 
   for (;;) {
-    const scoped_refptr<DataBuffer> buffer =
-        type == PlatformMediaDataType::PLATFORM_MEDIA_AUDIO
-            ? ReadAudioSample(stream_readers_[type].output)
-            : ReadVideoSample(stream_readers_[type].output, video_coded_size_);
-    if (buffer != nullptr)
-      return buffer;
+    if (stream_readers_[type].end_of_stream) {
+      ipc_buffer->set_status(MediaDataStatus::kEOS);
+      return;
+    }
 
-    AVAssetReader* asset_reader = stream_readers_[type].asset_reader;
+    bool ok;
+    switch (type) {
+      case PlatformMediaDataType::PLATFORM_MEDIA_AUDIO:
+        ok = ReadAudioSample(stream_readers_[type].output, ipc_buffer);
+        break;
+      case PlatformMediaDataType::PLATFORM_MEDIA_VIDEO:
+        ok = ReadVideoSample(stream_readers_[type].output, video_coded_size_,
+                             ipc_buffer);
+        break;
+    }
+    if (ok)
+      break;
 
-    // Failure to get a DataBuffer can mean a number of things: time-out caused
+    // Failure can mean a number of things: time-out caused
     // by shortage of raw media data, end of stream, or decoding error.
 
+    AVAssetReader* asset_reader = stream_readers_[type].asset_reader;
     if ([asset_reader status] == AVAssetReaderStatusFailed) {
-      const bool timed_out =
-          [[[asset_reader error] domain] isEqualToString:NSURLErrorDomain] &&
-          [[asset_reader error] code] == NSURLErrorTimedOut;
+      NSError* error = [asset_reader error];
+      NSErrorDomain domain = [error domain];
+      NSInteger code = [error code];
+      const bool timed_out = [domain isEqualToString:NSURLErrorDomain] &&
+                             code == NSURLErrorTimedOut;
       if (timed_out) {
         VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
                 << " I think we've timed out, retrying";
@@ -549,21 +539,33 @@ scoped_refptr<DataBuffer> AVFMediaReader::ReadNextSample(
           continue;
       }
 
-      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-              << " Decode error(" << type
-              << "): " << base::SysNSStringToUTF8(
-                               [[asset_reader error] localizedDescription]);
-      return nullptr;
+      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " Decode error("
+              << type << "): domain=" << base::SysNSStringToUTF8(domain)
+              << " code=" << code << " description="
+              << base::SysNSStringToUTF8([error localizedDescription]);
+      ipc_buffer->set_status(MediaDataStatus::kMediaError);
+      return;
     }
 
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
-            << " EOS(" << type << ")";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " EOS type=" << type
+            << " reader_status=" << [asset_reader status];
     stream_readers_[type].end_of_stream = true;
-    return DataBuffer::CreateEOSBuffer();
   }
 
-  NOTREACHED();
-  return nullptr;
+  stream_readers_[type].expected_next_timestamp =
+      ipc_buffer->timestamp() + ipc_buffer->duration();
+
+  // If a duration is set on the audio buffer, it confuses the Chromium
+  // pipeline.
+  // TODO(igor@vivaldi.com): Figure out if this is true. Both WMF pipeline on
+  // Windows and AVFMediaDecoder set the duration and it works.
+  if (type == PlatformMediaDataType::PLATFORM_MEDIA_AUDIO) {
+    ipc_buffer->set_duration(base::TimeDelta());
+  } else {
+    DCHECK(ipc_buffer->duration().is_zero());
+  }
+
+  ipc_buffer->set_status(MediaDataStatus::kOk);
 }
 
 }  // namespace media

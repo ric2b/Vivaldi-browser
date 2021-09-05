@@ -7,11 +7,23 @@
 
 #include <string>
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/values.h"
 #include "net/base/net_export.h"
 #include "url/origin.h"
+
+namespace network {
+namespace mojom {
+class NetworkIsolationKeyDataView;
+}  // namespace mojom
+}  // namespace network
+
+namespace mojo {
+template <typename DataViewType, typename T>
+struct StructTraits;
+}  // namespace mojo
 
 namespace net {
 
@@ -21,8 +33,8 @@ class NET_EXPORT NetworkIsolationKey {
  public:
   // Full constructor.  When a request is initiated by the top frame, it must
   // also populate the |frame_origin| parameter when calling this constructor.
-  explicit NetworkIsolationKey(const url::Origin& top_frame_origin,
-                               const url::Origin& frame_origin);
+  NetworkIsolationKey(const url::Origin& top_frame_origin,
+                      const url::Origin& frame_origin);
 
   // Construct an empty key.
   NetworkIsolationKey();
@@ -35,23 +47,47 @@ class NET_EXPORT NetworkIsolationKey {
       const NetworkIsolationKey& network_isolation_key);
   NetworkIsolationKey& operator=(NetworkIsolationKey&& network_isolation_key);
 
+  // Creates a transient non-empty NetworkIsolationKey by creating an opaque
+  // origin. This prevents the NetworkIsolationKey from sharing data with other
+  // NetworkIsolationKeys. Data for transient NetworkIsolationKeys is not
+  // persisted to disk.
+  static NetworkIsolationKey CreateTransient();
+
+  // Creates a non-empty NetworkIsolationKey with an opaque origin that is not
+  // considered transient. The returned NetworkIsolationKey will be cross-origin
+  // with all other keys and associated data is able to be persisted to disk.
+  static NetworkIsolationKey CreateOpaqueAndNonTransient();
+
+  // Creates a new key using |top_frame_origin_| and |new_frame_origin|.
+  NetworkIsolationKey CreateWithNewFrameOrigin(
+      const url::Origin& new_frame_origin) const;
+
+  // Intended for temporary use in locations that should be using a non-empty
+  // NetworkIsolationKey(), but are not yet. This both reduces the chance of
+  // accidentally copying the lack of a NIK where one should be used, and
+  // provides a reasonable way of locating callsites that need to have their
+  // NetworkIsolationKey filled in.
+  static NetworkIsolationKey Todo() { return NetworkIsolationKey(); }
+
   // Compare keys for equality, true if all enabled fields are equal.
   bool operator==(const NetworkIsolationKey& other) const {
-    return top_frame_origin_ == other.top_frame_origin_ &&
-           frame_origin_ == other.frame_origin_;
+    return std::tie(top_frame_origin_, frame_origin_,
+                    opaque_and_non_transient_) ==
+           std::tie(other.top_frame_origin_, other.frame_origin_,
+                    other.opaque_and_non_transient_);
   }
 
   // Compare keys for inequality, true if any enabled field varies.
   bool operator!=(const NetworkIsolationKey& other) const {
-    return (top_frame_origin_ != other.top_frame_origin_) ||
-           (frame_origin_ != other.frame_origin_);
+    return !(*this == other);
   }
 
   // Provide an ordering for keys based on all enabled fields.
   bool operator<(const NetworkIsolationKey& other) const {
-    return top_frame_origin_ < other.top_frame_origin_ ||
-           (top_frame_origin_ == other.top_frame_origin_ &&
-            frame_origin_ < other.frame_origin_);
+    return std::tie(top_frame_origin_, frame_origin_,
+                    opaque_and_non_transient_) <
+           std::tie(other.top_frame_origin_, other.frame_origin_,
+                    other.opaque_and_non_transient_);
   }
 
   // Returns the string representation of the key, which is the string
@@ -70,13 +106,20 @@ class NET_EXPORT NetworkIsolationKey {
   // disk related to it (e.g., disk cache).
   bool IsTransient() const;
 
-  // APIs for serialization to and from the mojo structure.
+  // Getters for the original top frame and frame origins used as inputs to
+  // construct |this|. This could return different values from what the
+  // isolation key eventually uses based on whether the NIK uses eTLD+1 or not.
+  // WARNING(crbug.com/1032081): Note that these might not return the correct
+  // value associated with a request if the NIK on which this is called is from
+  // a component using multiple requests mapped to the same NIK.
   const base::Optional<url::Origin>& GetTopFrameOrigin() const {
-    return top_frame_origin_;
+    DCHECK_EQ(original_top_frame_origin_.has_value(),
+              top_frame_origin_.has_value());
+    return original_top_frame_origin_;
   }
-
   const base::Optional<url::Origin>& GetFrameOrigin() const {
-    return frame_origin_;
+    DCHECK_EQ(original_frame_origin_.has_value(), frame_origin_.has_value());
+    return original_frame_origin_;
   }
 
   // Returns true if all parts of the key are empty.
@@ -96,14 +139,39 @@ class NET_EXPORT NetworkIsolationKey {
       WARN_UNUSED_RESULT;
 
  private:
+  // These classes need to be able to set |opaque_and_non_transient_|
+  friend class IsolationInfo;
+  friend struct mojo::StructTraits<network::mojom::NetworkIsolationKeyDataView,
+                                   net::NetworkIsolationKey>;
+  FRIEND_TEST_ALL_PREFIXES(NetworkIsolationKeyWithFrameOriginTest,
+                           UseRegistrableDomain);
+
+  NetworkIsolationKey(const url::Origin& top_frame_origin,
+                      const url::Origin& frame_origin,
+                      bool opaque_and_non_transient);
+
+  void ReplaceOriginsWithRegistrableDomains();
+
+  bool IsOpaque() const;
+
+  // Whether opaque origins cause the key to be transient. Always false, unless
+  // created with |CreateOpaqueAndNonTransient|.
+  bool opaque_and_non_transient_ = false;
+
   // Whether or not to use the |frame_origin_| as part of the key.
   bool use_frame_origin_;
 
-  // The origin of the top frame of the page making the request.
+  // The origin/etld+1 of the top frame of the page making the request.
   base::Optional<url::Origin> top_frame_origin_;
 
-  // The origin of the frame that initiates the request.
+  // The original top frame origin sent to the constructor of this request.
+  base::Optional<url::Origin> original_top_frame_origin_;
+
+  // The origin/etld+1 of the frame that initiates the request.
   base::Optional<url::Origin> frame_origin_;
+
+  // The original frame origin sent to the constructor of this request.
+  base::Optional<url::Origin> original_frame_origin_;
 };
 
 }  // namespace net

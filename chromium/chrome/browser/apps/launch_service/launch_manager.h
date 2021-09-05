@@ -8,13 +8,9 @@
 #include <string>
 
 #include "base/macros.h"
+#include "components/services/app_service/public/mojom/types.mojom.h"
 
 class Profile;
-
-namespace base {
-class CommandLine;
-class FilePath;
-}  // namespace base
 
 namespace content {
 class WebContents;
@@ -32,19 +28,6 @@ class LaunchManager {
   // Open the application in a way specified by |params|.
   virtual content::WebContents* OpenApplication(
       const AppLaunchParams& params) = 0;
-
-  // Attempt to open |app_id| in a new window.
-  virtual bool OpenApplicationWindow(
-      const std::string& app_id,
-      const base::CommandLine& command_line,
-      const base::FilePath& current_directory) = 0;
-
-  // Attempt to open |app_id| in a new tab.
-  virtual bool OpenApplicationTab(const std::string& app_id) = 0;
-
-  // Converts file arguments to an app on |command_line| into base::FilePaths.
-  static std::vector<base::FilePath> GetLaunchFilesFromCommandLine(
-      const base::CommandLine& command_line);
 
  protected:
   explicit LaunchManager(Profile*);

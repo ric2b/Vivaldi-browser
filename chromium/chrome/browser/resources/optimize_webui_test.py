@@ -44,21 +44,17 @@ class OptimizeWebUiTest(unittest.TestCase):
     assert self._out_folder
     return open(os.path.join(self._out_folder, file_name), 'r').read()
 
-  def _run_optimize(self, depfile, html_in_file, html_out_file, js_out_file,
-                    replace_for_html_imports_polyfill):
-    # TODO(dbeam): make it possible to _run_optimize twice? Is that useful?
+  def _run_optimize(self, input_args):
     assert not self._out_folder
     self._out_folder = self._create_tmp_dir()
-    optimize_webui.main([
-      '--depfile', os.path.join(self._out_folder,'depfile.d'),
-      '--html_in_files', html_in_file,
-      '--html_out_files', html_out_file,
+    # TODO(dbeam): make it possible to _run_optimize twice? Is that useful?
+    args = input_args + [
+      '--depfile', os.path.join(self._out_folder, 'depfile.d'),
       '--host', 'fake-host',
       '--input', self._tmp_src_dir,
-      '--js_out_files', js_out_file,
       '--out_folder', self._out_folder,
-      '--replace-for-html-imports-polyfill', replace_for_html_imports_polyfill,
-    ])
+    ]
+    optimize_webui.main(args)
 
   def _write_files_to_src_dir(self):
     self._write_file_to_src_dir('element.html', '<div>got here!</div>')
@@ -73,6 +69,45 @@ class OptimizeWebUiTest(unittest.TestCase):
 <script src="element.js"></script>
 ''')
 
+  def _write_v3_files_to_src_dir(self):
+    self._write_file_to_src_dir('element.js', "alert('yay');")
+    self._write_file_to_src_dir('element_in_dir/element_in_dir.js',
+                                "alert('hello from element_in_dir');")
+    self._write_file_to_src_dir('ui.js', '''
+import './element.js';
+import './element_in_dir/element_in_dir.js';
+''')
+    self._write_file_to_src_dir('ui.html', '''
+<script type="module" src="ui.js"></script>
+''')
+
+  def _write_v3_files_with_resources_to_src_dir(self):
+    resources_path = os.path.join(
+        _HERE_DIR.replace('\\', '/'), 'gen', 'ui', 'webui', 'resources', 'js',
+        'fake_resource.m.js')
+    os.makedirs(os.path.dirname(resources_path))
+    self._tmp_dirs.append('gen')
+    with open(resources_path, 'w') as tmp_file:
+      tmp_file.write("alert('hello from shared resource');")
+
+    self._write_file_to_src_dir('element.js', '''
+import 'chrome://resources/js/action_link.js';
+alert('yay');
+''')
+    self._write_file_to_src_dir('element_in_dir/element_in_dir.js', '''
+import {foo} from 'chrome://resources/js/fake_resource.m.js';
+import '../strings.m.js';
+alert('hello from element_in_dir');
+''')
+    self._write_file_to_src_dir('ui.js', '''
+import 'chrome://fake-host/strings.m.js';
+import './element.js';
+import './element_in_dir/element_in_dir.js';
+''')
+    self._write_file_to_src_dir('ui.html', '''
+<script type="module" src="ui.js"></script>
+''')
+
   def _check_output_html(self, out_html):
     self.assertNotIn('element.html', out_html)
     self.assertNotIn('element.js', out_html)
@@ -80,56 +115,107 @@ class OptimizeWebUiTest(unittest.TestCase):
     self.assertNotIn('element_in_dir.js', out_html)
     self.assertIn('got here!', out_html)
 
-  def _check_output_js(self):
-    fast_js = self._read_out_file('fast.js')
-    self.assertIn('yay', fast_js)
-    self.assertIn('hello from element_in_dir', fast_js)
+  def _check_output_js(self, output_js_name):
+    output_js = self._read_out_file(output_js_name)
+    self.assertIn('yay', output_js)
+    self.assertIn('hello from element_in_dir', output_js)
 
-  def _check_output_depfile(self):
+  def _check_output_depfile(self, has_html):
     depfile_d = self._read_out_file('depfile.d')
-    self.assertIn('element.html', depfile_d)
     self.assertIn('element.js', depfile_d)
-    self.assertIn(os.path.normpath('element_in_dir/element_in_dir.html'),
-                  depfile_d)
     self.assertIn(os.path.normpath('element_in_dir/element_in_dir.js'),
                   depfile_d)
+    if (has_html):
+      self.assertIn('element.html', depfile_d)
+      self.assertIn(os.path.normpath('element_in_dir/element_in_dir.html'),
+                    depfile_d)
 
   def testSimpleOptimize(self):
     self._write_files_to_src_dir()
-    self._run_optimize(depfile='depfile.d',
-                       html_in_file='ui.html',
-                       html_out_file='fast.html',
-                       js_out_file='fast.js',
-                       replace_for_html_imports_polyfill='')
+    args = [
+      '--html_in_files', 'ui.html',
+      '--html_out_files', 'fast.html',
+      '--js_out_files', 'fast.js',
+    ]
+    self._run_optimize(args)
 
     fast_html = self._read_out_file('fast.html')
     self._check_output_html(fast_html)
     self.assertIn('<script src="fast.js"></script>', fast_html)
-    self.assertNotIn(
-        '<script src="chrome://resources/js/crisper_loader.js"></script>',
-        fast_html)
-    self._check_output_js()
-    self._check_output_depfile()
+    self._check_output_js('fast.js')
+    self._check_output_depfile(True)
 
-  def testSimpleOptimizeWithHTMLImportsPolyfill(self):
-    self._write_files_to_src_dir()
-    self._run_optimize(depfile='depfile.d',
-                       html_in_file='ui.html',
-                       html_out_file='fast.html',
-                       js_out_file='fast.js',
-                       replace_for_html_imports_polyfill='fast.js')
+  def testV3SimpleOptimize(self):
+    self._write_v3_files_to_src_dir()
+    args = [
+      '--js_module_in_files', 'ui.js',
+      '--js_out_files', 'ui.rollup.js',
+    ]
+    self._run_optimize(args)
 
-    fast_html = self._read_out_file('fast.html')
-    self._check_output_html(fast_html)
-    self.assertNotIn('<script src="fast.js"></script>', fast_html)
+    self._check_output_js('ui.rollup.js')
+    self._check_output_depfile(False)
+
+  def testV3OptimizeWithResources(self):
+    self._write_v3_files_with_resources_to_src_dir()
+    args = [
+      '--js_module_in_files', 'ui.js',
+      '--js_out_files', 'ui.rollup.js',
+    ]
+    self._run_optimize(args)
+
+    ui_rollup_js = self._read_out_file('ui.rollup.js')
+    self.assertIn('yay', ui_rollup_js)
+    self.assertIn('hello from element_in_dir', ui_rollup_js)
+    self.assertIn('hello from shared resource', ui_rollup_js)
+
+    depfile_d = self._read_out_file('depfile.d')
+    self.assertIn('element.js', depfile_d)
+    self.assertIn(os.path.normpath('element_in_dir/element_in_dir.js'),
+                  depfile_d)
     self.assertIn(
-        '<script src="chrome://resources/js/crisper_loader.js" ' + \
-            'data-script-name="fast.js"></script>',
-        fast_html)
-    self.assertIn('<link rel="preload" href="fast.js" as="script">',
-                  fast_html)
-    self._check_output_js()
-    self._check_output_depfile()
+        os.path.normpath('../../../../ui/webui/resources/js/action_link.js'),
+        depfile_d)
+    self.assertIn(
+        os.path.normpath('../gen/ui/webui/resources/js/fake_resource.m.js'),
+        depfile_d)
+
+  def testV3MultiBundleOptimize(self):
+    self._write_v3_files_to_src_dir()
+    self._write_file_to_src_dir('lazy_element.js',
+                                "alert('hello from lazy_element');")
+    self._write_file_to_src_dir('lazy.js', '''
+import './lazy_element.js';
+import './element_in_dir/element_in_dir.js';
+''')
+
+    args = [
+      '--js_module_in_files', 'ui.js', 'lazy.js',
+      '--js_out_files', 'ui.rollup.js', 'lazy.rollup.js', 'shared.rollup.js',
+    ]
+    self._run_optimize(args)
+
+    # Check that the shared element is in the shared bundle and the non-shared
+    # elements are in the individual bundles.
+    ui_js = self._read_out_file('ui.rollup.js')
+    self.assertIn('yay', ui_js)
+    self.assertNotIn('hello from lazy_element', ui_js)
+    self.assertNotIn('hello from element_in_dir', ui_js)
+
+    lazy_js = self._read_out_file('lazy.rollup.js')
+    self.assertNotIn('yay', lazy_js)
+    self.assertIn('hello from lazy_element', lazy_js)
+    self.assertNotIn('hello from element_in_dir', lazy_js)
+
+    shared_js = self._read_out_file('shared.rollup.js')
+    self.assertNotIn('yay', shared_js)
+    self.assertNotIn('hello from lazy_element', shared_js)
+    self.assertIn('hello from element_in_dir', shared_js)
+
+    # All 3 JS files should be in the depfile.
+    self._check_output_depfile(False)
+    depfile_d = self._read_out_file('depfile.d')
+    self.assertIn('lazy_element.js', depfile_d)
 
 if __name__ == '__main__':
   unittest.main()

@@ -9,6 +9,7 @@
 #include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "ash/public/cpp/window_properties.h"
 #include "base/logging.h"  // DCHECK
+#include "ui/base/class_property.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/font_list.h"
@@ -21,9 +22,14 @@
 #include "ui/views/window/caption_button_layout_constants.h"
 #include "ui/views/window/vector_icons/vector_icons.h"
 
+DEFINE_UI_CLASS_PROPERTY_TYPE(ash::FrameHeader*)
+
 namespace ash {
 
 namespace {
+
+DEFINE_UI_CLASS_PROPERTY_KEY(FrameHeader*, kFrameHeaderKey, nullptr)
+
 // Returns the available bounds for the header's title given the views to the
 // left and right of the title, and the font used. |left_view| should be null
 // if there is no view to the left of the title.
@@ -82,7 +88,16 @@ bool CanAnimateActivation(views::Widget* widget) {
 ///////////////////////////////////////////////////////////////////////////////
 // FrameHeader, public:
 
-FrameHeader::~FrameHeader() = default;
+// static
+FrameHeader* FrameHeader::Get(views::Widget* widget) {
+  return widget->GetNativeView()->GetProperty(kFrameHeaderKey);
+}
+
+FrameHeader::~FrameHeader() {
+  auto* target_window = target_widget_->GetNativeView();
+  if (target_window && target_window->GetProperty(kFrameHeaderKey) == this)
+    target_window->ClearProperty(kFrameHeaderKey);
+}
 
 int FrameHeader::GetMinimumHeaderWidth() const {
   // Ensure we have enough space for the window icon and buttons. We allow
@@ -172,6 +187,10 @@ views::FrameCaptionButton* FrameHeader::GetBackButton() const {
   return back_button_;
 }
 
+const CaptionButtonModel* FrameHeader::GetCaptionButtonModel() const {
+  return caption_button_container_->model();
+}
+
 void FrameHeader::SetFrameTextOverride(
     const base::string16& frame_text_override) {
   frame_text_override_ = frame_text_override;
@@ -194,6 +213,11 @@ FrameHeader::FrameHeader(views::Widget* target_widget, views::View* view)
       view_(view) {
   DCHECK(target_widget);
   DCHECK(view);
+  UpdateFrameHeaderKey();
+}
+
+void FrameHeader::UpdateFrameHeaderKey() {
+  target_widget_->GetNativeView()->SetProperty(kFrameHeaderKey, this);
 }
 
 gfx::Rect FrameHeader::GetPaintedBounds() const {
@@ -217,9 +241,12 @@ void FrameHeader::PaintTitleBar(gfx::Canvas* canvas) {
   }
 
   if (!text.empty()) {
+    int flags = gfx::Canvas::NO_SUBPIXEL_RENDERING;
+    if (target_widget_delegate->ShouldCenterWindowTitleText())
+      flags |= gfx::Canvas::TEXT_ALIGN_CENTER;
     canvas->DrawStringRectWithFlags(text, gfx::FontList(), GetTitleColor(),
                                     view_->GetMirroredRect(GetTitleBounds()),
-                                    gfx::Canvas::NO_SUBPIXEL_RENDERING);
+                                    flags);
   }
 }
 

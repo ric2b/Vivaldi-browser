@@ -18,8 +18,8 @@
 #include "base/trace_event/trace_event.h"
 #include "components/safe_browsing/android/jni_headers/SafeBrowsingApiBridge_jni.h"
 #include "components/safe_browsing/android/safe_browsing_api_handler_util.h"
-#include "components/safe_browsing/db/v4_protocol_manager_util.h"
-#include "components/safe_browsing/features.h"
+#include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/core/features.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -106,11 +106,6 @@ static PendingCallbacksMap* GetPendingCallbacksMapOnIOThread() {
 
 }  // namespace
 
-// Java->Native call, to check whether the feature to use local blacklists is
-// enabled.
-jboolean JNI_SafeBrowsingApiBridge_AreLocalBlacklistsEnabled(JNIEnv* env) {
-  return base::FeatureList::IsEnabled(kUseLocalBlacklistsV2);
-}
 
 // Respond to the URL reputation request by looking up the callback information
 // stored in |pending_callbacks|.

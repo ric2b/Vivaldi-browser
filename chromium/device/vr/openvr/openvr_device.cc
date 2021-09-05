@@ -9,25 +9,19 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/numerics/math_constants.h"
 #include "build/build_config.h"
 #include "device/vr/openvr/openvr_render_loop.h"
 #include "device/vr/openvr/openvr_type_converters.h"
+#include "device/vr/util/stage_utils.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/openvr/src/headers/openvr.h"
 #include "ui/gfx/geometry/angle_conversions.h"
 
 namespace device {
-
-void OpenVRDevice::RecordRuntimeAvailability() {
-  XrRuntimeAvailable runtime = XrRuntimeAvailable::NONE;
-  if (vr::VR_IsRuntimeInstalled())
-    runtime = XrRuntimeAvailable::OPENVR;
-  UMA_HISTOGRAM_ENUMERATION("XR.RuntimeAvailable", runtime);
-}
 
 namespace {
 
@@ -72,15 +66,6 @@ mojom::VRDisplayInfoPtr CreateVRDisplayInfo(vr::IVRSystem* vr_system,
                                             device::mojom::XRDeviceId id) {
   mojom::VRDisplayInfoPtr display_info = mojom::VRDisplayInfo::New();
   display_info->id = id;
-  display_info->display_name =
-      GetOpenVRString(vr_system, vr::Prop_ManufacturerName_String) + " " +
-      GetOpenVRString(vr_system, vr::Prop_ModelNumber_String);
-  display_info->capabilities = mojom::VRDisplayCapabilities::New();
-  display_info->capabilities->has_position = true;
-  display_info->capabilities->has_external_display = true;
-  display_info->capabilities->can_present = true;
-  display_info->webvr_default_framebuffer_scale = 1.0;
-  display_info->webxr_default_framebuffer_scale = 1.0;
 
   display_info->left_eye = mojom::VREyeParameters::New();
   display_info->right_eye = mojom::VREyeParameters::New();
@@ -108,13 +93,12 @@ mojom::VRDisplayInfoPtr CreateVRDisplayInfo(vr::IVRSystem* vr_system,
 
   vr::IVRChaperone* chaperone = vr::VRChaperone();
   if (chaperone) {
-    chaperone->GetPlayAreaSize(&display_info->stage_parameters->size_x,
-                               &display_info->stage_parameters->size_z);
-  } else {
-    display_info->stage_parameters->size_x = 0.0f;
-    display_info->stage_parameters->size_z = 0.0f;
+    float size_x = 0;
+    float size_z = 0;
+    chaperone->GetPlayAreaSize(&size_x, &size_z);
+    display_info->stage_parameters->bounds =
+        vr_utils::GetStageBoundsFromSize(size_x, size_z);
   }
-
   return display_info;
 }
 
@@ -135,11 +119,6 @@ bool OpenVRDevice::IsHwAvailable() {
 
 bool OpenVRDevice::IsApiAvailable() {
   return vr::VR_IsRuntimeInstalled();
-}
-
-mojo::PendingRemote<mojom::IsolatedXRGamepadProviderFactory>
-OpenVRDevice::BindGamepadFactory() {
-  return gamepad_provider_factory_receiver_.BindNewPipeAndPassRemote();
 }
 
 mojo::PendingRemote<mojom::XRCompositorHost>
@@ -167,7 +146,7 @@ void OpenVRDevice::RequestSession(
     return;
   }
 
-  DCHECK(options->immersive);
+  DCHECK_EQ(options->mode, mojom::XRSessionMode::kImmersiveVr);
 
   if (!render_loop_->IsRunning()) {
     render_loop_->Start();
@@ -175,13 +154,6 @@ void OpenVRDevice::RequestSession(
     if (!render_loop_->IsRunning()) {
       std::move(callback).Run(nullptr, mojo::NullRemote());
       return;
-    }
-
-    if (provider_receiver_) {
-      render_loop_->task_runner()->PostTask(
-          FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestGamepadProvider,
-                                    base::Unretained(render_loop_.get()),
-                                    std::move(provider_receiver_)));
     }
 
     if (overlay_receiver_) {
@@ -210,11 +182,6 @@ void OpenVRDevice::RequestSession(
                      base::DoNothing::Repeatedly<mojom::XRVisibilityState>(),
                      std::move(options), std::move(my_callback)));
   outstanding_session_requests_count_++;
-}
-
-void OpenVRDevice::EnsureInitialized(EnsureInitializedCallback callback) {
-  EnsureValidDisplayInfo();
-  std::move(callback).Run();
 }
 
 bool OpenVRDevice::EnsureValidDisplayInfo() {
@@ -274,18 +241,6 @@ bool OpenVRDevice::IsAvailable() {
   return vr::VR_IsRuntimeInstalled() && vr::VR_IsHmdPresent();
 }
 
-void OpenVRDevice::GetIsolatedXRGamepadProvider(
-    mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> provider_receiver) {
-  if (render_loop_->IsRunning()) {
-    render_loop_->task_runner()->PostTask(
-        FROM_HERE, base::BindOnce(&XRCompositorCommon::RequestGamepadProvider,
-                                  base::Unretained(render_loop_.get()),
-                                  std::move(provider_receiver)));
-  } else {
-    provider_receiver_ = std::move(provider_receiver);
-  }
-}
-
 void OpenVRDevice::CreateImmersiveOverlay(
     mojo::PendingReceiver<mojom::ImmersiveOverlay> overlay_receiver) {
   if (render_loop_->IsRunning()) {
@@ -308,10 +263,6 @@ void OpenVRDevice::OnPresentingControllerMojoConnectionError() {
   render_loop_->task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&XRCompositorCommon::ExitPresent,
                                 base::Unretained(render_loop_.get())));
-  // Don't stop the render loop here. We need to keep the gamepad provider alive
-  // so that we don't lose a pending mojo gamepad_callback_.
-  // TODO(https://crbug.com/875187): Alternatively, we could recreate the
-  // provider on the next session, or look into why the callback gets lost.
   OnExitPresent();
   exclusive_controller_receiver_.reset();
 }

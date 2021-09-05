@@ -51,9 +51,10 @@ enum JSONParserOptions {
   // Allows commas to exist after the last element in structures.
   JSON_ALLOW_TRAILING_COMMAS = 1 << 0,
 
-  // If set the parser replaces invalid characters with the Unicode replacement
-  // character (U+FFFD). If not set, invalid characters trigger a hard error and
-  // parsing fails.
+  // If set the parser replaces invalid code points (i.e. lone
+  // surrogates) with the Unicode replacement character (U+FFFD). If
+  // not set, invalid code points trigger a hard error and parsing
+  // fails.
   JSON_REPLACE_INVALID_CHARACTERS = 1 << 1,
 };
 
@@ -71,6 +72,7 @@ class BASE_EXPORT JSONReader {
     JSON_UNSUPPORTED_ENCODING,
     JSON_UNQUOTED_DICTIONARY_KEY,
     JSON_TOO_LARGE,
+    JSON_UNREPRESENTABLE_NUMBER,
     JSON_PARSE_ERROR_COUNT
   };
 
@@ -102,6 +104,7 @@ class BASE_EXPORT JSONReader {
   static const char kUnsupportedEncoding[];
   static const char kUnquotedDictionaryKey[];
   static const char kInputTooLarge[];
+  static const char kUnrepresentableNumber[];
 
   // Constructs a reader.
   JSONReader(int options = JSON_PARSE_RFC,
@@ -128,8 +131,9 @@ class BASE_EXPORT JSONReader {
   // Reads and parses |json| like Read(). Returns a ValueWithError, which on
   // error, will be populated with a formatted error message, an error code, and
   // the error location if appropriate.
-  static ValueWithError ReadAndReturnValueWithError(StringPiece json,
-                                                    int options);
+  static ValueWithError ReadAndReturnValueWithError(
+      StringPiece json,
+      int options = JSON_PARSE_RFC);
 
   // Deprecated. Use the ReadAndReturnValueWithError() method above.
   // Reads and parses |json| like Read(). |error_code_out| and |error_msg_out|

@@ -29,8 +29,6 @@ class VivaldiPrefsApiNotificationFactory
  public:
   static VivaldiPrefsApiNotificationFactory* GetInstance();
 
-  static ::vivaldi::PrefProperties* GetPrefProperties(const std::string& path);
-
  private:
   friend struct base::DefaultSingletonTraits<
       VivaldiPrefsApiNotificationFactory>;
@@ -46,10 +44,6 @@ class VivaldiPrefsApiNotificationFactory
   bool ServiceIsNULLWhileTesting() const override;
   content::BrowserContext* GetBrowserContextToUse(
       content::BrowserContext* context) const override;
-  void RegisterProfilePrefs(
-      user_prefs::PrefRegistrySyncable* registry) override;
-
-  ::vivaldi::PrefsProperties prefs_properties_;
 };
 
 // A class receiving the callback notification when a registered
@@ -62,6 +56,8 @@ class VivaldiPrefsApiNotification : public KeyedService {
   explicit VivaldiPrefsApiNotification(Profile* profile);
   ~VivaldiPrefsApiNotification() override;
 
+  const ::vivaldi::PrefProperties* GetPrefProperties(const std::string& path);
+
   void RegisterPref(const std::string& path, bool local_pref);
 
   void OnChanged(const std::string& path);
@@ -73,6 +69,7 @@ class VivaldiPrefsApiNotification : public KeyedService {
   Profile* profile_;
   PrefChangeRegistrar prefs_registrar_;
   PrefChangeRegistrar local_prefs_registrar_;
+  ::vivaldi::PrefsProperties prefs_properties_;
 
   std::unique_ptr<::vivaldi::NativeSettingsObserver> native_settings_observer_;
   base::WeakPtrFactory<VivaldiPrefsApiNotification> weak_ptr_factory_;

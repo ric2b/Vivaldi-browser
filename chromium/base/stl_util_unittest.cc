@@ -52,12 +52,24 @@ class ComparableValue {
 };
 
 template <typename Container>
+size_t GetSize(const Container& c) {
+  return c.size();
+}
+
+template <typename T>
+size_t GetSize(const std::forward_list<T>& l) {
+  return std::distance(l.begin(), l.end());
+}
+
+template <typename Container>
 void RunEraseTest() {
   const std::pair<Container, Container> test_data[] = {
       {Container(), Container()}, {{1, 2, 3}, {1, 3}}, {{1, 2, 3, 2}, {1, 3}}};
 
   for (auto test_case : test_data) {
-    base::Erase(test_case.first, 2);
+    size_t expected_erased =
+        GetSize(test_case.first) - GetSize(test_case.second);
+    EXPECT_EQ(expected_erased, base::Erase(test_case.first, 2));
     EXPECT_EQ(test_case.second, test_case.first);
   }
 }
@@ -76,16 +88,21 @@ void RunEraseIfTest() {
   };
 
   for (auto test_case : test_data) {
-    base::EraseIf(test_case.input, [](const std::pair<int, int>& elem) {
-      return !(elem.first & 1);
-    });
+    size_t expected_erased =
+        GetSize(test_case.input) - GetSize(test_case.erase_even);
+    EXPECT_EQ(expected_erased,
+              base::EraseIf(test_case.input, [](const auto& elem) {
+                return !(elem.first & 1);
+              }));
     EXPECT_EQ(test_case.erase_even, test_case.input);
   }
 
   for (auto test_case : test_data) {
-    base::EraseIf(test_case.input, [](const std::pair<int, int>& elem) {
-      return elem.first & 1;
-    });
+    size_t expected_erased =
+        GetSize(test_case.input) - GetSize(test_case.erase_odd);
+    EXPECT_EQ(expected_erased,
+              base::EraseIf(test_case.input,
+                            [](const auto& elem) { return elem.first & 1; }));
     EXPECT_EQ(test_case.erase_odd, test_case.input);
   }
 }
@@ -257,6 +274,19 @@ TEST(STLUtilTest, Data) {
     static_assert(il.begin() == base::data(il),
                   "base::data(il) should be equal to il.begin()");
   }
+}
+
+TEST(STLUtilTest, AsConst) {
+  int i = 123;
+  EXPECT_EQ(&i, &base::as_const(i));
+  static_assert(std::is_same<const int&, decltype(base::as_const(i))>::value,
+                "Error: base::as_const() returns an unexpected type");
+
+  const int ci = 456;
+  static_assert(&ci == &base::as_const(ci),
+                "Error: base::as_const() returns an unexpected reference");
+  static_assert(std::is_same<const int&, decltype(base::as_const(ci))>::value,
+                "Error: base::as_const() returns an unexpected type");
 }
 
 TEST(STLUtilTest, GetUnderlyingContainer) {
@@ -591,24 +621,22 @@ TEST(Erase, List) {
 
 TEST(Erase, Map) {
   RunEraseIfTest<std::map<int, int>>();
-  RunEraseIfTest<std::map<int, int, std::greater<int>>>();
+  RunEraseIfTest<std::map<int, int, std::greater<>>>();
 }
 
 TEST(Erase, Multimap) {
   RunEraseIfTest<std::multimap<int, int>>();
-  RunEraseIfTest<std::multimap<int, int, std::greater<int>>>();
+  RunEraseIfTest<std::multimap<int, int, std::greater<>>>();
 }
 
 TEST(Erase, Set) {
   RunEraseIfTest<std::set<std::pair<int, int>>>();
-  RunEraseIfTest<
-      std::set<std::pair<int, int>, std::greater<std::pair<int, int>>>>();
+  RunEraseIfTest<std::set<std::pair<int, int>, std::greater<>>>();
 }
 
 TEST(Erase, Multiset) {
   RunEraseIfTest<std::multiset<std::pair<int, int>>>();
-  RunEraseIfTest<
-      std::multiset<std::pair<int, int>, std::greater<std::pair<int, int>>>>();
+  RunEraseIfTest<std::multiset<std::pair<int, int>, std::greater<>>>();
 }
 
 TEST(Erase, UnorderedMap) {
@@ -634,7 +662,7 @@ TEST(Erase, IsNotIn) {
   std::vector<int> lhs = {0, 2, 2, 4, 4, 4, 6, 8, 10};
   std::vector<int> rhs = {1, 2, 2, 4, 5, 6, 7};
   std::vector<int> expected = {2, 2, 4, 6};
-  EraseIf(lhs, IsNotIn<std::vector<int>>(rhs));
+  EXPECT_EQ(5u, EraseIf(lhs, IsNotIn<std::vector<int>>(rhs)));
   EXPECT_EQ(expected, lhs);
 }
 

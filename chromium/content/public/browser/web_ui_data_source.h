@@ -15,6 +15,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "content/common/content_export.h"
+#include "url/gurl.h"
 
 namespace base {
 class DictionaryValue;
@@ -80,8 +81,8 @@ class WebUIDataSource {
   // Used as a parameter to GotDataCallback. The caller has to run this callback
   // with the result for the path that they filtered, passing ownership of the
   // memory.
-  typedef base::Callback<void(scoped_refptr<base::RefCountedMemory>)>
-      GotDataCallback;
+  using GotDataCallback =
+      base::OnceCallback<void(scoped_refptr<base::RefCountedMemory>)>;
 
   // Used by SetRequestFilter. The string parameter is the path of the request.
   // The return value indicates if the callee wants to handle the request. Iff
@@ -94,9 +95,8 @@ class WebUIDataSource {
   // This callback is only called if a prior call to ShouldHandleRequestCallback
   // returned true. GotDataCallback should be used to provide the response
   // bytes.
-  typedef base::RepeatingCallback<void(const std::string&,
-                                       const GotDataCallback&)>
-      HandleRequestCallback;
+  using HandleRequestCallback =
+      base::RepeatingCallback<void(const std::string&, GotDataCallback)>;
 
   // Allows a caller to add a filter for URL requests.
   virtual void SetRequestFilter(
@@ -119,7 +119,9 @@ class WebUIDataSource {
       const std::string& data) = 0;
   virtual void OverrideContentSecurityPolicyWorkerSrc(
       const std::string& data) = 0;
+  // This method is deprecated and AddFrameAncestors should be used instead.
   virtual void DisableDenyXFrameOptions() = 0;
+  virtual void AddFrameAncestor(const GURL& frame_ancestor) = 0;
 
   // Replace i18n template strings in JS files. Needed for Web UIs that are
   // using Polymer 3.

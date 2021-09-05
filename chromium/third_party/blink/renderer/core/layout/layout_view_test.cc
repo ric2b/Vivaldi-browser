@@ -57,7 +57,7 @@ TEST_F(LayoutViewTest, DisplayNoneFrame) {
   EXPECT_FALSE(view->CanHaveChildren());
   EXPECT_FALSE(frame_doc->documentElement()->GetComputedStyle());
 
-  frame_doc->body()->SetInnerHTMLFromString(R"HTML(
+  frame_doc->body()->setInnerHTML(R"HTML(
     <div id="div"></div>
   )HTML");
 
@@ -74,11 +74,11 @@ class LayoutViewHitTestTest : public testing::WithParamInterface<HitTestConfig>,
                               public RenderingTest {
  public:
   LayoutViewHitTestTest()
-      : ScopedLayoutNGForTest(LayoutNG()),
+      : ScopedLayoutNGForTest(GetParam().layout_ng),
         RenderingTest(MakeGarbageCollected<SingleChildLocalFrameClient>()) {}
 
  protected:
-  bool LayoutNG() { return GetParam().layout_ng; }
+  bool LayoutNG() { return RuntimeEnabledFeatures::LayoutNGEnabled(); }
   bool IsAndroidOrWindowsEditingBehavior() {
     // TODO(crbug.com/971414): For now LayoutNG always uses Android/Windows
     // behavior for ShouldMoveCaretToHorizontalBoundaryWhenPastTopOrBottom().

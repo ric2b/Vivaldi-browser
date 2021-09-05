@@ -2,19 +2,19 @@
 
 #include "extraparts/vivaldi_main_delegate.h"
 
-#include "extensions/buildflags/buildflags.h"
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "extensions/vivaldi_extensions_client.h"
-#endif
-
-#include "components/adverse_adblocking/vivaldi_content_browser_client.h"
+#include "extraparts/vivaldi_content_browser_client.h"
 
 VivaldiMainDelegate::VivaldiMainDelegate()
-    : VivaldiMainDelegate(base::TimeTicks()) {}
+#if !defined(OS_ANDROID)
+    : VivaldiMainDelegate(base::TimeTicks())
+#endif
+{
+}
 
+#if !defined(OS_ANDROID)
 VivaldiMainDelegate::VivaldiMainDelegate(base::TimeTicks exe_entry_point_ticks)
     : ChromeMainDelegate(exe_entry_point_ticks) {}
+#endif
 
 VivaldiMainDelegate::~VivaldiMainDelegate() {}
 

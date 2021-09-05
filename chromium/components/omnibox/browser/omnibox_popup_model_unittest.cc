@@ -31,8 +31,8 @@ class TestOmniboxPopupView : public OmniboxPopupView {
   ~TestOmniboxPopupView() override {}
   bool IsOpen() const override { return false; }
   void InvalidateLine(size_t line) override {}
-  void OnLineSelected(size_t line) override {}
   void UpdatePopupAppearance() override {}
+  void ProvideButtonFocusHint(size_t line) override {}
   void OnMatchIconUpdated(size_t match_index) override {}
   void OnDragCanceled() override {}
 };
@@ -95,6 +95,39 @@ TEST_F(OmniboxPopupModelTest, SetSelectedLine) {
   EXPECT_TRUE(popup_model()->has_selected_match());
 }
 
+TEST_F(OmniboxPopupModelTest, SetSelectedLineWithNoDefaultMatches) {
+  // Creates a set of matches with NO matches allowed to be default.
+  ACMatches matches;
+  for (size_t i = 0; i < 2; ++i) {
+    AutocompleteMatch match(nullptr, 1000, false,
+                            AutocompleteMatchType::URL_WHAT_YOU_TYPED);
+    match.keyword = base::ASCIIToUTF16("match");
+    matches.push_back(match);
+  }
+  auto* result = &model()->autocomplete_controller()->result_;
+  AutocompleteInput input(base::UTF8ToUTF16("match"),
+                          metrics::OmniboxEventProto::NTP,
+                          TestSchemeClassifier());
+  result->AppendMatches(input, matches);
+  result->SortAndCull(input, nullptr);
+
+  popup_model()->OnResultChanged();
+  EXPECT_EQ(OmniboxPopupModel::kNoMatch, popup_model()->selected_line());
+  EXPECT_FALSE(popup_model()->has_selected_match());
+
+  popup_model()->SetSelectedLine(0, false, false);
+  EXPECT_EQ(0U, popup_model()->selected_line());
+  EXPECT_TRUE(popup_model()->has_selected_match());
+
+  popup_model()->SetSelectedLine(1, false, false);
+  EXPECT_EQ(1U, popup_model()->selected_line());
+  EXPECT_TRUE(popup_model()->has_selected_match());
+
+  popup_model()->ResetToInitialState();
+  EXPECT_EQ(OmniboxPopupModel::kNoMatch, popup_model()->selected_line());
+  EXPECT_FALSE(popup_model()->has_selected_match());
+}
+
 TEST_F(OmniboxPopupModelTest, PopupPositionChanging) {
   ACMatches matches;
   for (size_t i = 0; i < 3; ++i) {
@@ -122,6 +155,94 @@ TEST_F(OmniboxPopupModelTest, PopupPositionChanging) {
     model()->OnUpOrDownKeyPressed(-1);
     EXPECT_EQ(n, model()->popup_model()->selected_line());
   }
+}
+
+TEST_F(OmniboxPopupModelTest, PopupStepSelection) {
+  ACMatches matches;
+  for (size_t i = 0; i < 3; ++i) {
+    AutocompleteMatch match(nullptr, 1000, false,
+                            AutocompleteMatchType::URL_WHAT_YOU_TYPED);
+    match.keyword = base::ASCIIToUTF16("match");
+    match.allowed_to_be_default_match = true;
+    matches.push_back(match);
+  }
+  // Give the last match an associated keyword for irregular state stepping.
+  matches.back().associated_keyword =
+      std::make_unique<AutocompleteMatch>(matches.back());
+  // Make the middle match deletable to verify we can step to that.
+  matches[1].deletable = true;
+
+  auto* result = &model()->autocomplete_controller()->result_;
+  AutocompleteInput input(base::UTF8ToUTF16("match"),
+                          metrics::OmniboxEventProto::NTP,
+                          TestSchemeClassifier());
+  result->AppendMatches(input, matches);
+  result->SortAndCull(input, nullptr);
+  popup_model()->OnResultChanged();
+  EXPECT_EQ(0u, model()->popup_model()->selected_line());
+
+  // Step by lines forward.
+  for (size_t n : {1, 2, 0}) {
+    popup_model()->StepSelection(OmniboxPopupModel::kForward,
+                                 OmniboxPopupModel::kWholeLine);
+    EXPECT_EQ(n, model()->popup_model()->selected_line());
+  }
+  // Step by lines backward.
+  for (size_t n : {2, 1, 0}) {
+    popup_model()->StepSelection(OmniboxPopupModel::kBackward,
+                                 OmniboxPopupModel::kWholeLine);
+    EXPECT_EQ(n, model()->popup_model()->selected_line());
+  }
+  // Step by states forward.
+  for (auto selection : {
+           OmniboxPopupModel::Selection(1, OmniboxPopupModel::NORMAL),
+           // Focused button is the Suggestion Removal button.
+           OmniboxPopupModel::Selection(1, OmniboxPopupModel::BUTTON_FOCUSED),
+           OmniboxPopupModel::Selection(2, OmniboxPopupModel::NORMAL),
+           OmniboxPopupModel::Selection(2, OmniboxPopupModel::KEYWORD),
+           OmniboxPopupModel::Selection(0, OmniboxPopupModel::NORMAL),
+       }) {
+    popup_model()->StepSelection(OmniboxPopupModel::kForward,
+                                 OmniboxPopupModel::kStateOrLine);
+    EXPECT_EQ(selection, model()->popup_model()->selection());
+  }
+  // Step by states backward.
+  // Note the lack of KEYWORD. This is by design. Stepping forward
+  // should land on KEYWORD, but stepping backward should not.
+  for (auto selection : {
+           OmniboxPopupModel::Selection(2, OmniboxPopupModel::NORMAL),
+           // Focused button is the Suggestion Removal button.
+           OmniboxPopupModel::Selection(1, OmniboxPopupModel::BUTTON_FOCUSED),
+           OmniboxPopupModel::Selection(1, OmniboxPopupModel::NORMAL),
+           OmniboxPopupModel::Selection(0, OmniboxPopupModel::NORMAL),
+           OmniboxPopupModel::Selection(2, OmniboxPopupModel::NORMAL),
+       }) {
+    popup_model()->StepSelection(OmniboxPopupModel::kBackward,
+                                 OmniboxPopupModel::kStateOrLine);
+    EXPECT_EQ(selection, model()->popup_model()->selection());
+  }
+
+  // Try some kStateOrNothing steps on the keyword line.
+  // Note that keyword mode is specially excepted with this
+  // step behavior.
+  popup_model()->StepSelection(OmniboxPopupModel::kBackward,
+                               OmniboxPopupModel::kStateOrNothing);
+  EXPECT_EQ(OmniboxPopupModel::Selection(2, OmniboxPopupModel::NORMAL),
+            model()->popup_model()->selection());
+  popup_model()->StepSelection(OmniboxPopupModel::kForward,
+                               OmniboxPopupModel::kStateOrNothing);
+  EXPECT_EQ(OmniboxPopupModel::Selection(2, OmniboxPopupModel::NORMAL),
+            model()->popup_model()->selection());
+
+  // Try the kAllLines step behavior.
+  popup_model()->StepSelection(OmniboxPopupModel::kBackward,
+                               OmniboxPopupModel::kAllLines);
+  EXPECT_EQ(OmniboxPopupModel::Selection(0, OmniboxPopupModel::NORMAL),
+            model()->popup_model()->selection());
+  popup_model()->StepSelection(OmniboxPopupModel::kForward,
+                               OmniboxPopupModel::kAllLines);
+  EXPECT_EQ(OmniboxPopupModel::Selection(2, OmniboxPopupModel::NORMAL),
+            model()->popup_model()->selection());
 }
 
 TEST_F(OmniboxPopupModelTest, ComputeMatchMaxWidths) {

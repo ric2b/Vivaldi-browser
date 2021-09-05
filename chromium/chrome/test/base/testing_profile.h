@@ -22,7 +22,7 @@
 #include "components/keyed_service/core/simple_factory_key.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/buildflags/buildflags.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "net/cookies/cookie_store.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
@@ -36,6 +36,7 @@ class BrowserContextDependencyManager;
 class SimpleDependencyManager;
 class ExtensionSpecialStoragePolicy;
 class HostContentSettingsMap;
+class TestingPrefStore;
 
 namespace content {
 class MockResourceContext;
@@ -250,6 +251,11 @@ class TestingProfile : public Profile {
   // This is NOT invoked from CreateHistoryService.
   void BlockUntilHistoryIndexIsRefreshed();
 
+  // Blocks until the HistoryBackend is completely destroyed. This is mostly
+  // useful to ensure the destruction tasks do not outlive this class on which
+  // they depend.
+  void BlockUntilHistoryBackendDestroyed();
+
   // Allow setting a profile as Guest after-the-fact to simplify some tests.
   void SetGuestSession(bool guest);
 
@@ -435,7 +441,7 @@ class TestingProfile : public Profile {
       extensions_cookie_store_;
 
   std::unique_ptr<network::mojom::NetworkContext> network_context_;
-  mojo::BindingSet<network::mojom::NetworkContext> network_context_bindings_;
+  mojo::ReceiverSet<network::mojom::NetworkContext> network_context_receivers_;
 
   std::unique_ptr<Profile> incognito_profile_;
   TestingProfile* original_profile_;
@@ -495,6 +501,10 @@ class TestingProfile : public Profile {
 #endif  // defined(OS_CHROMEOS)
 
   std::unique_ptr<policy::PolicyService> policy_service_;
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  TestingPrefStore* supervised_user_pref_store_ = nullptr;
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 };
 
 #endif  // CHROME_TEST_BASE_TESTING_PROFILE_H_

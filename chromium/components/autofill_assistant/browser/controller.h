@@ -10,22 +10,26 @@
 #include <string>
 #include <vector>
 
+#include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/optional.h"
+#include "components/autofill_assistant/browser/basic_interactions.h"
 #include "components/autofill_assistant/browser/client.h"
-#include "components/autofill_assistant/browser/client_memory.h"
 #include "components/autofill_assistant/browser/client_settings.h"
 #include "components/autofill_assistant/browser/element_area.h"
+#include "components/autofill_assistant/browser/event_handler.h"
 #include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/script.h"
 #include "components/autofill_assistant/browser/script_executor_delegate.h"
 #include "components/autofill_assistant/browser/script_tracker.h"
 #include "components/autofill_assistant/browser/service.h"
+#include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/state.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/ui_delegate.h"
 #include "components/autofill_assistant/browser/user_action.h"
 #include "components/autofill_assistant/browser/user_data.h"
+#include "components/autofill_assistant/browser/user_model.h"
 #include "components/autofill_assistant/browser/web/web_controller.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -46,9 +50,10 @@ class ControllerTest;
 // display, execution and so on. The instance of this object self deletes when
 // the web contents is being destroyed.
 class Controller : public ScriptExecutorDelegate,
-                   public UiDelegate,
+                   public virtual UiDelegate,
                    public ScriptTracker::Listener,
-                   private content::WebContentsObserver {
+                   private content::WebContentsObserver,
+                   public UserModel::Observer {
  public:
   // |web_contents|, |client| and |tick_clock| must remain valid for the
   // lifetime of the instance. Controller will take ownership of |service| if
@@ -72,6 +77,10 @@ class Controller : public ScriptExecutorDelegate,
   void Track(std::unique_ptr<TriggerContext> trigger_context,
              base::OnceCallback<void()> on_first_check_done);
 
+  // Returns true if we are in tracking mode and the first round of script
+  // checks has been completed.
+  bool HasRunFirstCheck() const;
+
   // Called when autofill assistant should start.
   //
   // This shows a UI, containing a progress bar, and executes the first
@@ -93,12 +102,13 @@ class Controller : public ScriptExecutorDelegate,
   const GURL& GetDeeplinkURL() override;
   Service* GetService() override;
   WebController* GetWebController() override;
-  ClientMemory* GetClientMemory() override;
   const TriggerContext* GetTriggerContext() override;
   autofill::PersonalDataManager* GetPersonalDataManager() override;
   WebsiteLoginFetcher* GetWebsiteLoginFetcher() override;
   content::WebContents* GetWebContents() override;
   std::string GetAccountEmailAddress() override;
+  std::string GetLocale() override;
+
   void SetTouchableElementArea(const ElementAreaProto& area) override;
   void SetStatusMessage(const std::string& message) override;
   std::string GetStatusMessage() const override;
@@ -113,11 +123,20 @@ class Controller : public ScriptExecutorDelegate,
       std::unique_ptr<std::vector<UserAction>> user_actions) override;
   void SetViewportMode(ViewportMode mode) override;
   void SetPeekMode(ConfigureBottomSheetProto::PeekMode peek_mode) override;
-  bool SetForm(std::unique_ptr<FormProto> form,
-               base::RepeatingCallback<void(const FormProto::Result*)> callback)
-      override;
+  void ExpandBottomSheet() override;
+  void CollapseBottomSheet() override;
+  bool SetForm(
+      std::unique_ptr<FormProto> form,
+      base::RepeatingCallback<void(const FormProto::Result*)> changed_callback,
+      base::OnceCallback<void(const ClientStatus&)> cancel_callback) override;
   bool IsNavigatingToNewDocument() override;
   bool HasNavigationError() override;
+  void SetGenericUi(
+      std::unique_ptr<GenericUserInterfaceProto> generic_ui,
+      base::OnceCallback<void(bool,
+                              ProcessedActionStatusProto,
+                              const UserModel*)> end_action_callback) override;
+  void ClearGenericUi() override;
 
   // Show the UI if it's not already shown. This is only meaningful while in
   // states where showing the UI is optional, such as RUNNING, in tracking mode.
@@ -126,10 +145,13 @@ class Controller : public ScriptExecutorDelegate,
   void AddListener(ScriptExecutorDelegate::Listener* listener) override;
   void RemoveListener(ScriptExecutorDelegate::Listener* listener) override;
 
-  void EnterState(AutofillAssistantState state) override;
-  void SetCollectUserDataOptions(
-      std::unique_ptr<CollectUserDataOptions> options,
-      std::unique_ptr<UserData> information) override;
+  void SetExpandSheetForPromptAction(bool expand) override;
+  void SetBrowseDomainsWhitelist(std::vector<std::string> domains) override;
+
+  bool EnterState(AutofillAssistantState state) override;
+  void SetCollectUserDataOptions(CollectUserDataOptions* options) override;
+  void WriteUserData(
+      base::OnceCallback<void(UserData*, UserData::FieldChange*)>) override;
   void OnScriptError(const std::string& error_message,
                      Metrics::DropOutReason reason);
 
@@ -158,21 +180,17 @@ class Controller : public ScriptExecutorDelegate,
   void SetTermsAndConditions(
       TermsAndConditionsState terms_and_conditions) override;
   void SetLoginOption(std::string identifier) override;
-  void OnTermsAndConditionsLinkClicked(int link) override;
-  void SetDateTimeRangeStart(int year,
-                             int month,
-                             int day,
-                             int hour,
-                             int minute,
-                             int second) override;
-  void SetDateTimeRangeEnd(int year,
-                           int month,
-                           int day,
-                           int hour,
-                           int minute,
-                           int second) override;
+  void OnTextLinkClicked(int link) override;
+  void OnFormActionLinkClicked(int link) override;
+  void SetDateTimeRangeStartDate(
+      const base::Optional<DateProto>& date) override;
+  void SetDateTimeRangeStartTimeSlot(
+      const base::Optional<int>& timeslot_index) override;
+  void SetDateTimeRangeEndDate(const base::Optional<DateProto>& date) override;
+  void SetDateTimeRangeEndTimeSlot(
+      const base::Optional<int>& timeslot_index) override;
   void SetAdditionalValue(const std::string& client_memory_key,
-                          const std::string& value) override;
+                          const ValueProto& value) override;
   void GetTouchableArea(std::vector<RectF>* area) const override;
   void GetRestrictedArea(std::vector<RectF>* area) const override;
   void GetVisualViewport(RectF* visual_viewport) const override;
@@ -185,12 +203,19 @@ class Controller : public ScriptExecutorDelegate,
   void GetOverlayColors(OverlayColors* colors) const override;
   const ClientSettings& GetClientSettings() const override;
   const FormProto* GetForm() const override;
+  const FormProto::Result* GetFormResult() const override;
   void SetCounterValue(int input_index, int counter_index, int value) override;
   void SetChoiceSelected(int input_index,
                          int choice_index,
                          bool selected) override;
   void AddObserver(ControllerObserver* observer) override;
   void RemoveObserver(const ControllerObserver* observer) override;
+  void DispatchEvent(const EventHandler::EventKey& key) override;
+  UserModel* GetUserModel() override;
+  EventHandler* GetEventHandler() override;
+  bool ShouldPromptActionExpandSheet() const override;
+  BasicInteractions* GetBasicInteractions() override;
+  const GenericUserInterfaceProto* GetGenericUiProto() const override;
 
  private:
   friend ControllerTest;
@@ -264,12 +289,22 @@ class Controller : public ScriptExecutorDelegate,
   void OnWebContentsFocused(
       content::RenderWidgetHost* render_widget_host) override;
 
+  // Overrides autofill_assistant::UserModel::Observer:
+  void OnValueChanged(const std::string& identifier,
+                      const ValueProto& new_value) override;
+
   void OnTouchableAreaChanged(const RectF& visual_viewport,
                               const std::vector<RectF>& touchable_areas,
                               const std::vector<RectF>& restricted_areas);
 
   void SetOverlayColors(std::unique_ptr<OverlayColors> colors);
   void ReportNavigationStateChanged();
+  void SetProfile(const std::string& key,
+                  UserData::FieldChange field_change,
+                  std::unique_ptr<autofill::AutofillProfile> profile);
+
+  // Show the first "Opening..." message and enter START state.
+  void ShowFirstMessageAndStart();
 
   // Clear out visible state and enter the stopped state.
   void EnterStoppedState();
@@ -288,9 +323,6 @@ class Controller : public ScriptExecutorDelegate,
   // Lazily instantiate in GetService().
   std::unique_ptr<Service> service_;
   std::unique_ptr<TriggerContext> trigger_context_;
-
-  // Lazily instantiate in GetClientMemory().
-  std::unique_ptr<ClientMemory> memory_;
 
   AutofillAssistantState state_ = AutofillAssistantState::INACTIVE;
 
@@ -352,19 +384,26 @@ class Controller : public ScriptExecutorDelegate,
   // Current peek mode.
   ConfigureBottomSheetProto::PeekMode peek_mode_ =
       ConfigureBottomSheetProto::HANDLE;
+  bool auto_change_peek_mode_ = false;
 
   std::unique_ptr<OverlayColors> overlay_colors_;
 
-  std::unique_ptr<CollectUserDataOptions> collect_user_data_options_;
+  CollectUserDataOptions* collect_user_data_options_ = nullptr;
   std::unique_ptr<UserData> user_data_;
 
   std::unique_ptr<FormProto> form_;
   std::unique_ptr<FormProto::Result> form_result_;
-  base::RepeatingCallback<void(const FormProto::Result*)> form_callback_ =
+  base::RepeatingCallback<void(const FormProto::Result*)>
+      form_changed_callback_ = base::DoNothing();
+  base::OnceCallback<void(const ClientStatus&)> form_cancel_callback_ =
       base::DoNothing();
 
   // Value for ScriptExecutorDelegate::IsNavigatingToNewDocument()
   bool navigating_to_new_document_ = false;
+
+  // If this is set, the controller was still navigating during startup. Wait
+  // for DidFinishNavigation and execute the callback.
+  base::OnceClosure start_after_navigation_;
 
   // Value for ScriptExecutorDelegate::HasNavigationError()
   bool navigation_error_ = false;
@@ -405,6 +444,16 @@ class Controller : public ScriptExecutorDelegate,
   // until the browser has left the |script_domain_| for which the decision was
   // taken.
   base::Optional<Metrics::DropOutReason> delayed_shutdown_reason_;
+
+  EventHandler event_handler_;
+  UserModel user_model_;
+  BasicInteractions basic_interactions_{this};
+
+  bool expand_sheet_for_prompt_action_ = true;
+  std::vector<std::string> browse_domains_whitelist_;
+
+  // Only set during a ShowGenericUiAction.
+  std::unique_ptr<GenericUserInterfaceProto> generic_user_interface_;
 
   base::WeakPtrFactory<Controller> weak_ptr_factory_{this};
 

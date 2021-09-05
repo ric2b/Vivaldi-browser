@@ -13,13 +13,47 @@
     android:layout_width="match_parent"
     android:layout_height="@dimen/toolbar_height_no_shadow" >
 
+    <!-- Vivaldi -->
+    <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:visibility="visible"
+    android:orientation="horizontal" >
+
+    <!-- Vivaldi -->
+    <org.vivaldi.browser.toolbar.PanelButton
+        android:id="@+id/panel_button"
+        app:tint="@color/default_icon_color_tint_list"
+        android:visibility="gone"
+        style="@style/BottomToolbarButton"
+        android:contentDescription="@string/toolbar_button_panels" />
+
+
+    <org.chromium.ui.widget.ChromeImageButton
+        android:id="@+id/back_button"
+        style="@style/ToolbarButton"
+        android:src="@drawable/btn_back"
+        android:visibility="gone"
+        android:contentDescription="@string/accessibility_toolbar_btn_back"
+        app:tint="@color/default_icon_color_tint_list" />
+
+    <org.chromium.ui.widget.ChromeImageButton
+        android:id="@+id/forward_button"
+        style="@style/ToolbarButton"
+        android:src="@drawable/btn_forward"
+        android:visibility="gone"
+        android:contentDescription="@string/accessibility_toolbar_btn_forward"
+        app:tint="@color/default_icon_color_tint_list" />
+
     <org.chromium.chrome.browser.toolbar.HomeButton
         android:id="@+id/home_button"
         style="@style/ToolbarButton"
         android:src="@drawable/btn_toolbar_home"
         android:contentDescription="@string/accessibility_toolbar_btn_home"
         android:visibility="gone"
-        app:tint="@color/standard_mode_tint" />
+        app:tint="@color/default_icon_color_tint_list" />
+
+    </LinearLayout>
 
     <org.chromium.chrome.browser.omnibox.LocationBarPhone
         android:id="@+id/location_bar"
@@ -34,9 +68,9 @@
         android:layout_gravity="top|end" >
 
         <ViewStub
-            android:id="@+id/experimental_button_stub"
-            android:inflatedId="@+id/experimental_toolbar_button"
-            android:layout="@layout/experimental_toolbar_button"
+            android:id="@+id/optional_button_stub"
+            android:inflatedId="@+id/optional_toolbar_button"
+            android:layout="@layout/optional_toolbar_button"
             style="@style/ToolbarButton"
             android:paddingStart="12dp"
             android:visibility="gone" />
@@ -46,7 +80,9 @@
             style="@style/ToolbarButton"
             android:paddingStart="8dp"
             android:layout_gravity="top"
-            android:contentDescription="@string/accessibility_toolbar_btn_tabswitcher_toggle_default" />
+            android:contentDescription="@string/accessibility_toolbar_btn_tabswitcher_toggle_default"
+            app:menuMaxWidth="@dimen/tab_switcher_menu_width"
+            app:menuVerticalOverlapAnchor="false" />
 
         <include layout="@layout/menu_button"/>
 

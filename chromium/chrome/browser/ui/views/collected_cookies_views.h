@@ -51,12 +51,10 @@ class CollectedCookiesViews
 
   // views::DialogDelegate:
   base::string16 GetWindowTitle() const override;
-  int GetDialogButtons() const override;
   bool Accept() override;
   ui::ModalType GetModalType() const override;
   bool ShouldShowCloseButton() const override;
   void DeleteDelegate() override;
-  std::unique_ptr<views::View> CreateExtraView() override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -69,16 +67,12 @@ class CollectedCookiesViews
 
   // views::View:
   gfx::Size GetMinimumSize() const override;
-  void ViewHierarchyChanged(
-      const views::ViewHierarchyChangedDetails& details) override;
 
  private:
   friend class CollectedCookiesViewsTest;
   friend class content::WebContentsUserData<CollectedCookiesViews>;
 
   explicit CollectedCookiesViews(content::WebContents* web_contents);
-
-  void Init();
 
   std::unique_ptr<views::View> CreateAllowedPane();
 
@@ -123,11 +117,6 @@ class CollectedCookiesViews
   CookieInfoView* cookie_info_view_ = nullptr;
 
   InfobarView* infobar_ = nullptr;
-
-  // The buttons pane is owned by this class until the containing
-  // DialogClientView requests it via |CreateExtraView|, at which point
-  // ownership is handed off and this pointer becomes null.
-  std::unique_ptr<views::View> buttons_pane_;
 
   // Weak pointers to the allowed and blocked panes so that they can be
   // shown/hidden as needed.

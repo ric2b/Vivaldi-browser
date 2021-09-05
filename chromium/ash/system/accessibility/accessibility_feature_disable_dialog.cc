@@ -27,10 +27,18 @@ AccessibilityFeatureDisableDialog::AccessibilityFeatureDisableDialog(
     base::OnceClosure on_accept_callback,
     base::OnceClosure on_cancel_callback)
     : window_title_(l10n_util::GetStringUTF16(window_title_text_id)),
-      on_accept_callback_(std::move(on_accept_callback)),
       on_cancel_callback_(std::move(on_cancel_callback)) {
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK, l10n_util::GetStringUTF16(IDS_ASH_YES_BUTTON));
+  DialogDelegate::SetAcceptCallback(std::move(on_accept_callback));
+
+  auto on_cancel = [](AccessibilityFeatureDisableDialog* dialog) {
+    std::move(dialog->on_cancel_callback_).Run();
+  };
+  DialogDelegate::SetCancelCallback(
+      base::BindOnce(on_cancel, base::Unretained(this)));
+  DialogDelegate::SetCloseCallback(
+      base::BindOnce(on_cancel, base::Unretained(this)));
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetBorder(views::CreateEmptyBorder(
@@ -54,22 +62,12 @@ AccessibilityFeatureDisableDialog::AccessibilityFeatureDisableDialog(
 
   views::Widget* widget = CreateDialogWidget(
       this, nullptr,
-      Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(), container_id));
+      Shell::GetContainer(Shell::GetPrimaryRootWindow(), container_id));
   widget->Show();
 }
 
 AccessibilityFeatureDisableDialog::~AccessibilityFeatureDisableDialog() =
     default;
-
-bool AccessibilityFeatureDisableDialog::Cancel() {
-  std::move(on_cancel_callback_).Run();
-  return true;
-}
-
-bool AccessibilityFeatureDisableDialog::Accept() {
-  std::move(on_accept_callback_).Run();
-  return true;
-}
 
 ui::ModalType AccessibilityFeatureDisableDialog::GetModalType() const {
   return ui::MODAL_TYPE_SYSTEM;

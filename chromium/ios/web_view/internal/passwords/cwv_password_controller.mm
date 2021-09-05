@@ -16,7 +16,6 @@
 #include "components/password_manager/ios/account_select_fill_data.h"
 #import "components/password_manager/ios/password_form_helper.h"
 #import "components/password_manager/ios/password_suggestion_helper.h"
-#import "ios/web/common/origin_util.h"
 #include "ios/web/common/url_scheme_util.h"
 #include "ios/web/public/js_messaging/web_frame.h"
 #include "ios/web/public/js_messaging/web_frame_util.h"
@@ -63,9 +62,6 @@ typedef void (^PasswordSuggestionsAvailableCompletion)(
 // Helper contains common password suggestion logic.
 @property(nonatomic, readonly) PasswordSuggestionHelper* suggestionHelper;
 
-// Delegate to receive password autofill suggestion callbacks.
-@property(nonatomic, weak, nullable) id<CWVPasswordControllerDelegate> delegate;
-
 // Informs the |_passwordManager| of the password forms (if any were present)
 // that have been found on the page.
 - (void)didFinishPasswordFormExtraction:(const std::vector<FormData>&)forms;
@@ -105,9 +101,7 @@ typedef void (^PasswordSuggestionsAvailableCompletion)(
 
 #pragma mark - Initialization
 
-- (instancetype)initWithWebState:(web::WebState*)webState
-                     andDelegate:
-                         (nullable id<CWVPasswordControllerDelegate>)delegate {
+- (instancetype)initWithWebState:(web::WebState*)webState {
   self = [super init];
   if (self) {
     DCHECK(webState);
@@ -125,8 +119,6 @@ typedef void (^PasswordSuggestionsAvailableCompletion)(
         _passwordManagerClient.get());
     _passwordManagerDriver =
         std::make_unique<WebViewPasswordManagerDriver>(self);
-
-    _delegate = delegate;
 
     // TODO(crbug.com/865114): Credential manager related logic
   }
@@ -188,6 +180,10 @@ typedef void (^PasswordSuggestionsAvailableCompletion)(
   return _webState ? ios_web_view::WebViewBrowserState::FromBrowserState(
                          _webState->GetBrowserState())
                    : nullptr;
+}
+
+- (web::WebState*)webState {
+  return _webState;
 }
 
 - (password_manager::PasswordManager*)passwordManager {
@@ -275,18 +271,14 @@ typedef void (^PasswordSuggestionsAvailableCompletion)(
 - (void)formHelper:(PasswordFormHelper*)formHelper
      didSubmitForm:(const FormData&)form
        inMainFrame:(BOOL)inMainFrame {
-  // TODO(crbug.com/949519): remove using PasswordForm completely when the old
-  // parser is gone.
-  PasswordForm password_form;
-  password_form.form_data = form;
   if (inMainFrame) {
     self.passwordManager->OnPasswordFormSubmitted(self.passwordManagerDriver,
-                                                  password_form);
+                                                  form);
   } else {
     // Show a save prompt immediately because for iframes it is very hard to
     // figure out correctness of password forms submission.
     self.passwordManager->OnPasswordFormSubmittedNoChecksForiOS(
-        self.passwordManagerDriver, password_form);
+        self.passwordManagerDriver, form);
   }
 }
 
@@ -305,13 +297,7 @@ typedef void (^PasswordSuggestionsAvailableCompletion)(
     return;
   }
 
-  // TODO(crbug.com/949519): remove using PasswordForm completely when the old
-  // parser is gone.
-  std::vector<PasswordForm> password_forms(forms.size());
-  for (size_t i = 0; i < forms.size(); ++i)
-    password_forms[i].form_data = forms[i];
-
-  if (!password_forms.empty()) {
+  if (!forms.empty()) {
     // TODO(crbug.com/865114):
     // Notify web_state about password forms, so that this can be taken into
     // account for the security state.
@@ -319,15 +305,13 @@ typedef void (^PasswordSuggestionsAvailableCompletion)(
     [self.suggestionHelper updateStateOnPasswordFormExtracted];
     // Invoke the password manager callback to autofill password forms
     // on the loaded page.
-    _passwordManager->OnPasswordFormsParsed(self.passwordManagerDriver,
-                                            password_forms);
+    _passwordManager->OnPasswordFormsParsed(self.passwordManagerDriver, forms);
   } else {
     [self informNoSavedCredentials];
   }
   // Invoke the password manager callback to check if password was
   // accepted or rejected.
-  _passwordManager->OnPasswordFormsRendered(self.passwordManagerDriver,
-                                            password_forms,
+  _passwordManager->OnPasswordFormsRendered(self.passwordManagerDriver, forms,
                                             /*did_stop_loading=*/true);
 }
 

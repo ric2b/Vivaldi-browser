@@ -16,16 +16,16 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "media/base/media_export.h"
+
 #include "platform_media/common/platform_media_pipeline_types.h"
+#include "platform_media/gpu/data_source/ipc_data_source.h"
+#include "platform_media/gpu/pipeline/ipc_decoding_buffer.h"
 
 namespace media {
+
 class DataBuffer;
 struct PlatformAudioConfig;
 struct PlatformVideoConfig;
-}
-
-namespace media {
-class IPCDataSource;
 
 // An interface for the media pipeline using decoder infrastructure available
 // on specific platforms.  It represents a full decoding pipeline - it reads
@@ -33,32 +33,27 @@ class IPCDataSource;
 // audio and/or video samples.
 class MEDIA_EXPORT PlatformMediaPipeline {
  public:
-  using AudioConfigChangedCB =
-      base::Callback<void(const PlatformAudioConfig& audio_config)>;
-  using VideoConfigChangedCB =
-      base::Callback<void(const PlatformVideoConfig& video_config)>;
-
   using InitializeCB =
       base::Callback<void(bool success,
                           int bitrate,
                           const PlatformMediaTimeInfo& time_info,
                           const PlatformAudioConfig& audio_config,
                           const PlatformVideoConfig& video_config)>;
-  // Passing a NULL |buffer| indicates a read/decoding error.
-  using ReadDataCB =
-      base::Callback<void(const scoped_refptr<DataBuffer>& buffer)>;
   using SeekCB = base::Callback<void(bool success)>;
 
   virtual ~PlatformMediaPipeline() {}
 
-  virtual void Initialize(const std::string& mime_type,
-                          const InitializeCB& initialize_cb) = 0;
+  virtual void Initialize(ipc_data_source::Reader source_reader,
+                          ipc_data_source::Info source_info,
+                          InitializeCB initialize_cb) = 0;
 
-  virtual void ReadAudioData(const ReadDataCB& read_audio_data_cb) = 0;
-  virtual void ReadVideoData(const ReadDataCB& read_video_data_cb) = 0;
+  // Read the media data of the given type into the supplied buffer.
+  // When done with decoding, the code must call IPCDecodingBuffer::Reply()
+  // on the passed in buffer even on errors.
+  virtual void ReadMediaData(IPCDecodingBuffer buffer) = 0;
 
   virtual void WillSeek() = 0;
-  virtual void Seek(base::TimeDelta time, const SeekCB& seek_cb) = 0;
+  virtual void Seek(base::TimeDelta time, SeekCB seek_cb) = 0;
 };
 
 }  // namespace media

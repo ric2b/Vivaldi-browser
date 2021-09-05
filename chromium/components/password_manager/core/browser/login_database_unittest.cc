@@ -57,9 +57,11 @@ PasswordStoreChangeList AddChangeForForm(const PasswordForm& form) {
       1, PasswordStoreChange(PasswordStoreChange::ADD, form));
 }
 
-PasswordStoreChangeList UpdateChangeForForm(const PasswordForm& form) {
+PasswordStoreChangeList UpdateChangeForForm(const PasswordForm& form,
+                                            const bool password_changed) {
   return PasswordStoreChangeList(
-      1, PasswordStoreChange(PasswordStoreChange::UPDATE, form));
+      1,
+      PasswordStoreChange(PasswordStoreChange::UPDATE, form, password_changed));
 }
 
 PasswordStoreChangeList RemoveChangeForForm(const PasswordForm& form) {
@@ -76,7 +78,6 @@ void GenerateExamplePasswordForm(PasswordForm* form) {
   form->password_value = ASCIIToUTF16("test");
   form->submit_element = ASCIIToUTF16("signIn");
   form->signon_realm = "http://www.google.com/";
-  form->preferred = false;
   form->scheme = PasswordForm::Scheme::kHtml;
   form->times_used = 1;
   form->form_data.name = ASCIIToUTF16("form_name");
@@ -87,7 +88,7 @@ void GenerateExamplePasswordForm(PasswordForm* form) {
   form->federation_origin =
       url::Origin::Create(GURL("https://accounts.google.com/"));
   form->skip_zero_click = true;
-  form->from_store = PasswordForm::Store::kProfileStore;
+  form->in_store = PasswordForm::Store::kProfileStore;
 }
 
 // Helper functions to read the value of the first column of an executed
@@ -371,13 +372,13 @@ TEST_F(LoginDatabaseTest, Logins) {
   // User changes their password.
   PasswordForm form5(form4);
   form5.password_value = ASCIIToUTF16("test6");
-  form5.preferred = true;
   const base::Time kNow = base::Time::Now();
   form5.date_last_used = kNow;
 
   // We update, and check to make sure it matches the
   // old form, and there is only one record.
-  EXPECT_EQ(UpdateChangeForForm(form5), db().UpdateLogin(form5));
+  EXPECT_EQ(UpdateChangeForForm(form5, /*passwordchanged=*/true),
+            db().UpdateLogin(form5));
   // matches
   EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form5), &result));
   EXPECT_EQ(1U, result.size());
@@ -387,8 +388,6 @@ TEST_F(LoginDatabaseTest, Logins) {
   EXPECT_EQ(1U, result.size());
   // Password element was updated.
   EXPECT_EQ(form5.password_value, result[0]->password_value);
-  // Preferred login.
-  EXPECT_TRUE(form5.preferred);
   // Date last used.
   EXPECT_EQ(kNow, form5.date_last_used);
   result.clear();
@@ -490,7 +489,6 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatching) {
   form.password_value = ASCIIToUTF16("test");
   form.submit_element = ASCIIToUTF16("");
   form.signon_realm = "https://foo.com/";
-  form.preferred = false;
   form.scheme = PasswordForm::Scheme::kHtml;
 
   // Add it and make sure it is there.
@@ -515,14 +513,6 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatching) {
   EXPECT_EQ(1U, result.size());
   EXPECT_EQ("https://foo.com/", result[0]->signon_realm);
   EXPECT_TRUE(result[0]->is_public_suffix_match);
-
-  // Try to remove PSL matched form
-  EXPECT_FALSE(db().RemoveLogin(*result[0], /*changes=*/nullptr));
-  result.clear();
-  // Ensure that the original form is still there
-  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
-  EXPECT_EQ(1U, result.size());
-  result.clear();
 }
 
 TEST_F(LoginDatabaseTest, TestFederatedMatching) {
@@ -535,7 +525,6 @@ TEST_F(LoginDatabaseTest, TestFederatedMatching) {
   form.username_value = ASCIIToUTF16("test@gmail.com");
   form.password_value = ASCIIToUTF16("test");
   form.signon_realm = "https://foo.com/";
-  form.preferred = false;
   form.scheme = PasswordForm::Scheme::kHtml;
 
   // We go to the mobile site.
@@ -554,9 +543,9 @@ TEST_F(LoginDatabaseTest, TestFederatedMatching) {
   EXPECT_TRUE(db().GetAutofillableLogins(&result));
   EXPECT_EQ(2U, result.size());
 
-  // When we retrieve the forms from the store, |from_store| should be set.
-  form.from_store = PasswordForm::Store::kProfileStore;
-  form2.from_store = PasswordForm::Store::kProfileStore;
+  // When we retrieve the forms from the store, |in_store| should be set.
+  form.in_store = PasswordForm::Store::kProfileStore;
+  form2.in_store = PasswordForm::Store::kProfileStore;
 
   // Match against desktop.
   PasswordStore::FormDigest form_request = {PasswordForm::Scheme::kHtml,
@@ -595,9 +584,9 @@ TEST_F(LoginDatabaseTest, TestFederatedMatchingLocalhost) {
   EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
   EXPECT_EQ(AddChangeForForm(form_with_port), db().AddLogin(form_with_port));
 
-  // When we retrieve the forms from the store, |from_store| should be set.
-  form.from_store = PasswordForm::Store::kProfileStore;
-  form_with_port.from_store = PasswordForm::Store::kProfileStore;
+  // When we retrieve the forms from the store, |in_store| should be set.
+  form.in_store = PasswordForm::Store::kProfileStore;
+  form_with_port.in_store = PasswordForm::Store::kProfileStore;
 
   // Match localhost with and without port.
   PasswordStore::FormDigest form_request(PasswordForm::Scheme::kHtml,
@@ -691,7 +680,6 @@ TEST_F(LoginDatabaseTest, TestFederatedMatchingWithoutPSLMatching) {
   form.username_value = ASCIIToUTF16("test@gmail.com");
   form.password_value = ASCIIToUTF16("test");
   form.signon_realm = "https://accounts.google.com/";
-  form.preferred = false;
   form.scheme = PasswordForm::Scheme::kHtml;
 
   // We go to a different site on the same domain where PSL is disabled.
@@ -710,9 +698,9 @@ TEST_F(LoginDatabaseTest, TestFederatedMatchingWithoutPSLMatching) {
   EXPECT_TRUE(db().GetAutofillableLogins(&result));
   EXPECT_EQ(2U, result.size());
 
-  // When we retrieve the forms from the store, |from_store| should be set.
-  form.from_store = PasswordForm::Store::kProfileStore;
-  form2.from_store = PasswordForm::Store::kProfileStore;
+  // When we retrieve the forms from the store, |in_store| should be set.
+  form.in_store = PasswordForm::Store::kProfileStore;
+  form2.in_store = PasswordForm::Store::kProfileStore;
 
   // Match against the first one.
   PasswordStore::FormDigest form_request = {PasswordForm::Scheme::kHtml,
@@ -741,8 +729,8 @@ TEST_F(LoginDatabaseTest, TestFederatedPSLMatching) {
   form.scheme = PasswordForm::Scheme::kHtml;
   EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
 
-  // When we retrieve the form from the store, it should have |from_store| set.
-  form.from_store = PasswordForm::Store::kProfileStore;
+  // When we retrieve the form from the store, it should have |in_store| set.
+  form.in_store = PasswordForm::Store::kProfileStore;
 
   // Match against.
   PasswordStore::FormDigest form_request = {PasswordForm::Scheme::kHtml,
@@ -774,7 +762,6 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatchingDifferentSites) {
   form.password_value = ASCIIToUTF16("test");
   form.submit_element = ASCIIToUTF16("");
   form.signon_realm = "https://foo.com/";
-  form.preferred = false;
   form.scheme = PasswordForm::Scheme::kHtml;
 
   // Add it and make sure it is there.
@@ -809,7 +796,6 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatchingDifferentSites) {
   form.password_value = ASCIIToUTF16("test");
   form.submit_element = ASCIIToUTF16("");
   form.signon_realm = "https://baz.com/";
-  form.preferred = false;
   form.scheme = PasswordForm::Scheme::kHtml;
 
   // Add it and make sure it is there.
@@ -857,7 +843,6 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatchingRegexp) {
   form.password_value = ASCIIToUTF16("test");
   form.submit_element = ASCIIToUTF16("");
   form.signon_realm = "http://foo.com/";
-  form.preferred = false;
   form.scheme = PasswordForm::Scheme::kHtml;
 
   // Add it and make sure it is there.
@@ -1115,7 +1100,6 @@ TEST_F(LoginDatabaseTest, BlacklistedLogins) {
   form.password_element = ASCIIToUTF16("Passwd");
   form.submit_element = ASCIIToUTF16("signIn");
   form.signon_realm = "http://www.google.com/";
-  form.preferred = true;
   form.blacklisted_by_user = true;
   form.scheme = PasswordForm::Scheme::kHtml;
   form.date_synced = base::Time::Now();
@@ -1131,8 +1115,8 @@ TEST_F(LoginDatabaseTest, BlacklistedLogins) {
   EXPECT_TRUE(db().GetAutofillableLogins(&result));
   ASSERT_EQ(0U, result.size());
 
-  // When we retrieve the form from the store, it should have |from_store| set.
-  form.from_store = PasswordForm::Store::kProfileStore;
+  // When we retrieve the form from the store, it should have |in_store| set.
+  form.in_store = PasswordForm::Store::kProfileStore;
 
   // GetLogins should give the blacklisted result.
   EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
@@ -1179,7 +1163,6 @@ TEST_F(LoginDatabaseTest, UpdateIncompleteCredentials) {
   incomplete_form.signon_realm = "http://accounts.google.com/";
   incomplete_form.username_value = ASCIIToUTF16("my_username");
   incomplete_form.password_value = ASCIIToUTF16("my_password");
-  incomplete_form.preferred = true;
   incomplete_form.date_last_used = base::Time::Now();
   incomplete_form.blacklisted_by_user = false;
   incomplete_form.scheme = PasswordForm::Scheme::kHtml;
@@ -1202,7 +1185,6 @@ TEST_F(LoginDatabaseTest, UpdateIncompleteCredentials) {
   EXPECT_EQ(incomplete_form.signon_realm, result[0]->signon_realm);
   EXPECT_EQ(incomplete_form.username_value, result[0]->username_value);
   EXPECT_EQ(incomplete_form.password_value, result[0]->password_value);
-  EXPECT_TRUE(result[0]->preferred);
   EXPECT_EQ(incomplete_form.date_last_used, result[0]->date_last_used);
 
   // We should return empty 'action', 'username_element', 'password_element'
@@ -1232,8 +1214,8 @@ TEST_F(LoginDatabaseTest, UpdateIncompleteCredentials) {
 
   // This time we should have all the info available.
   PasswordForm expected_form(completed_form);
-  // When we retrieve the form from the store, it should have |from_store| set.
-  expected_form.from_store = PasswordForm::Store::kProfileStore;
+  // When we retrieve the form from the store, it should have |in_store| set.
+  expected_form.in_store = PasswordForm::Store::kProfileStore;
   EXPECT_EQ(expected_form, *result[0]);
   result.clear();
 }
@@ -1248,7 +1230,6 @@ TEST_F(LoginDatabaseTest, UpdateOverlappingCredentials) {
   incomplete_form.signon_realm = "http://accounts.google.com/";
   incomplete_form.username_value = ASCIIToUTF16("my_username");
   incomplete_form.password_value = ASCIIToUTF16("my_password");
-  incomplete_form.preferred = true;
   incomplete_form.date_last_used = base::Time::Now();
   incomplete_form.blacklisted_by_user = false;
   incomplete_form.scheme = PasswordForm::Scheme::kHtml;
@@ -1276,12 +1257,12 @@ TEST_F(LoginDatabaseTest, UpdateOverlappingCredentials) {
   // Simulate the user changing their password.
   complete_form.password_value = ASCIIToUTF16("new_password");
   complete_form.date_synced = base::Time::Now();
-  EXPECT_EQ(UpdateChangeForForm(complete_form),
+  EXPECT_EQ(UpdateChangeForForm(complete_form, /*passwordchanged=*/true),
             db().UpdateLogin(complete_form));
 
-  // When we retrieve the forms from the store, |from_store| should be set.
-  complete_form.from_store = PasswordForm::Store::kProfileStore;
-  incomplete_form.from_store = PasswordForm::Store::kProfileStore;
+  // When we retrieve the forms from the store, |in_store| should be set.
+  complete_form.in_store = PasswordForm::Store::kProfileStore;
+  incomplete_form.in_store = PasswordForm::Store::kProfileStore;
 
   // Both still exist now.
   EXPECT_TRUE(db().GetAutofillableLogins(&result));
@@ -1299,7 +1280,6 @@ TEST_F(LoginDatabaseTest, DoubleAdd) {
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = ASCIIToUTF16("my_username");
   form.password_value = ASCIIToUTF16("my_password");
-  form.preferred = true;
   form.blacklisted_by_user = false;
   form.scheme = PasswordForm::Scheme::kHtml;
   EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
@@ -1319,7 +1299,6 @@ TEST_F(LoginDatabaseTest, AddWrongForm) {
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = ASCIIToUTF16("my_username");
   form.password_value = ASCIIToUTF16("my_password");
-  form.preferred = true;
   form.blacklisted_by_user = false;
   form.scheme = PasswordForm::Scheme::kHtml;
   EXPECT_EQ(PasswordStoreChangeList(), db().AddLogin(form));
@@ -1336,7 +1315,6 @@ TEST_F(LoginDatabaseTest, UpdateLogin) {
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = ASCIIToUTF16("my_username");
   form.password_value = ASCIIToUTF16("my_password");
-  form.preferred = true;
   form.blacklisted_by_user = false;
   form.scheme = PasswordForm::Scheme::kHtml;
   form.date_last_used = base::Time::Now();
@@ -1344,7 +1322,6 @@ TEST_F(LoginDatabaseTest, UpdateLogin) {
 
   form.action = GURL("http://accounts.google.com/login");
   form.password_value = ASCIIToUTF16("my_new_password");
-  form.preferred = false;
   form.all_possible_usernames.push_back(autofill::ValueElementPair(
       ASCIIToUTF16("my_new_username"), ASCIIToUTF16("new_username_id")));
   form.times_used = 20;
@@ -1362,12 +1339,12 @@ TEST_F(LoginDatabaseTest, UpdateLogin) {
   form.skip_zero_click = true;
 
   PasswordStoreChangeList changes = db().UpdateLogin(form);
-  EXPECT_EQ(UpdateChangeForForm(form), changes);
+  EXPECT_EQ(UpdateChangeForForm(form, /*passwordchanged=*/true), changes);
   ASSERT_EQ(1U, changes.size());
   EXPECT_EQ(1, changes[0].primary_key());
 
-  // When we retrieve the form from the store, it should have |from_store| set.
-  form.from_store = PasswordForm::Store::kProfileStore;
+  // When we retrieve the form from the store, it should have |in_store| set.
+  form.in_store = PasswordForm::Store::kProfileStore;
 
   std::vector<std::unique_ptr<PasswordForm>> result;
   EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
@@ -1382,7 +1359,6 @@ TEST_F(LoginDatabaseTest, RemoveWrongForm) {
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = ASCIIToUTF16("my_username");
   form.password_value = ASCIIToUTF16("my_password");
-  form.preferred = true;
   form.blacklisted_by_user = false;
   form.scheme = PasswordForm::Scheme::kHtml;
   // The form isn't in the database.
@@ -1493,7 +1469,7 @@ TEST_F(LoginDatabaseTest, ReportMetricsTest) {
   EXPECT_TRUE(stats_table.AddRow(stats));
 
   base::HistogramTester histogram_tester;
-  db().ReportMetrics("", false);
+  db().ReportMetrics("", false, BulkCheckDone(false));
 
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.AccountsPerSiteHiRes.AutoGenerated."
@@ -1587,165 +1563,6 @@ TEST_F(LoginDatabaseTest, ReportMetricsTest) {
 #endif  // !defined(OS_IOS) && !defined(OS_ANDROID)
 }
 
-TEST_F(LoginDatabaseTest, PasswordReuseMetrics) {
-  // -- Group of accounts that are reusing password #1.
-  //
-  //                                     Destination account
-  // +-----------------+-------+-------+-------+-------+-------+-------+-------+
-  // |                 |   1   |   2   |   3   |   4   |   5   |   6   |   7   |
-  // +-----------------+-------+-------+-------+-------+-------+-------+-------+
-  // | Scheme?         | HTTP  | HTTP  | HTTP  | HTTP  | HTTPS | HTTPS | HTTPS |
-  // +-----------------+-------+-------+-------+-------+-------+-------+-------+
-  // |           |  1  |   -   | Same  |  PSL  | Diff. | Same  | Diff. | Diff. |
-  // |           |  2  | Same  |   -   |  PSL  | Diff. | Same  | Diff. | Diff. |
-  // | Relation  |  3  |  PSL  |  PSL  |   -   | Diff. | Diff. | Same  | Diff. |
-  // | to host   |  4  | Diff. | Diff. | Diff. |   -   | Diff. | Diff. | Same  |
-  // | of source |  5  | Same  | Same  | Diff. | Diff. |   -   |  PSL  | Diff. |
-  // | account:  |  6  | Diff. | Diff. | Same  | Diff. |  PSL  |   -   | Diff. |
-  // |           |  7  | Diff. | Diff. | Diff. | Same  | Diff. | Diff. |   -   |
-  // +-----------------+-------+-------+-------+-------+-------+-------+-------+
-
-  PasswordForm password_form;
-  password_form.signon_realm = "http://example.com/";
-  password_form.origin = GURL("http://example.com/");
-  password_form.username_value = ASCIIToUTF16("username_1");
-  password_form.password_value = ASCIIToUTF16("password_1");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-
-  password_form.origin = GURL("http://example.com/");
-  password_form.username_value = ASCIIToUTF16("username_2");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-
-  // Note: This PSL matches http://example.com, but not https://example.com.
-  password_form.signon_realm = "http://www.example.com/";
-  password_form.origin = GURL("http://www.example.com/");
-  password_form.username_value = ASCIIToUTF16("username_3");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-
-  password_form.signon_realm = "http://not-example.com/";
-  password_form.origin = GURL("http://not-example.com/");
-  password_form.username_value = ASCIIToUTF16("username_4");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-
-  password_form.signon_realm = "https://example.com/";
-  password_form.origin = GURL("https://example.com/");
-  password_form.username_value = ASCIIToUTF16("username_5");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-
-  // Note: This PSL matches https://example.com, but not http://example.com.
-  password_form.signon_realm = "https://www.example.com/";
-  password_form.origin = GURL("https://www.example.com/");
-  password_form.username_value = ASCIIToUTF16("username_6");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-
-  password_form.signon_realm = "https://not-example.com/";
-  password_form.origin = GURL("https://not-example.com/");
-  password_form.username_value = ASCIIToUTF16("username_7");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-
-  // -- Group of accounts that are reusing password #2.
-  // Both HTTP, different host.
-  password_form.signon_realm = "http://example.com/";
-  password_form.origin = GURL("http://example.com/");
-  password_form.username_value = ASCIIToUTF16("username_8");
-  password_form.password_value = ASCIIToUTF16("password_2");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-
-  password_form.signon_realm = "http://not-example.com/";
-  password_form.origin = GURL("http://not-example.com/");
-  password_form.username_value = ASCIIToUTF16("username_9");
-  password_form.password_value = ASCIIToUTF16("password_2");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-
-  // -- Group of accounts that are reusing password #3.
-  // HTTP sites identified by different IP addresses, so they should not be
-  // considered a public suffix match.
-  password_form.signon_realm = "http://1.2.3.4/";
-  password_form.origin = GURL("http://1.2.3.4/");
-  password_form.username_value = ASCIIToUTF16("username_10");
-  password_form.password_value = ASCIIToUTF16("password_3");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-
-  password_form.signon_realm = "http://2.2.3.4/";
-  password_form.origin = GURL("http://2.2.3.4/");
-  password_form.username_value = ASCIIToUTF16("username_11");
-  password_form.password_value = ASCIIToUTF16("password_3");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
-
-  // -- Not HTML form based logins or blacklisted logins. Should be ignored.
-  PasswordForm ignored_form;
-  ignored_form.scheme = PasswordForm::Scheme::kHtml;
-  ignored_form.signon_realm = "http://example.org/";
-  ignored_form.origin = GURL("http://example.org/blacklist");
-  ignored_form.blacklisted_by_user = true;
-  ignored_form.username_value = ASCIIToUTF16("username_x");
-  ignored_form.password_value = ASCIIToUTF16("password_y");
-  EXPECT_EQ(AddChangeForForm(ignored_form), db().AddLogin(ignored_form));
-
-  ignored_form.scheme = PasswordForm::Scheme::kBasic;
-  ignored_form.signon_realm = "http://example.org/HTTP Auth Realm";
-  ignored_form.origin = GURL("http://example.org/");
-  ignored_form.blacklisted_by_user = false;
-  EXPECT_EQ(AddChangeForForm(ignored_form), db().AddLogin(ignored_form));
-
-  ignored_form.scheme = PasswordForm::Scheme::kHtml;
-  ignored_form.signon_realm = "android://hash@com.example/";
-  ignored_form.origin = GURL();
-  ignored_form.blacklisted_by_user = false;
-  EXPECT_EQ(AddChangeForForm(ignored_form), db().AddLogin(ignored_form));
-
-  ignored_form.scheme = PasswordForm::Scheme::kHtml;
-  ignored_form.signon_realm = "federation://example.com/federation.com";
-  ignored_form.origin = GURL("https://example.com/");
-  ignored_form.blacklisted_by_user = false;
-  EXPECT_EQ(AddChangeForForm(ignored_form), db().AddLogin(ignored_form));
-
-  base::HistogramTester histogram_tester;
-  db().ReportMetrics("", false);
-
-  const std::string kPrefix("PasswordManager.AccountsReusingPassword.");
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpRealm.OnHttpRealmWithSameHost"),
-              testing::ElementsAre(base::Bucket(0, 6), base::Bucket(1, 2)));
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpRealm.OnHttpsRealmWithSameHost"),
-              testing::ElementsAre(base::Bucket(0, 4), base::Bucket(1, 4)));
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpRealm.OnPSLMatchingRealm"),
-              testing::ElementsAre(base::Bucket(0, 5), base::Bucket(1, 2),
-                                   base::Bucket(2, 1)));
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpRealm.OnHttpsRealmWithDifferentHost"),
-              testing::ElementsAre(base::Bucket(0, 4), base::Bucket(2, 4)));
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpRealm.OnHttpRealmWithDifferentHost"),
-              testing::ElementsAre(base::Bucket(1, 7), base::Bucket(3, 1)));
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpRealm.OnAnyRealmWithDifferentHost"),
-              testing::ElementsAre(base::Bucket(1, 4), base::Bucket(3, 3),
-                                   base::Bucket(5, 1)));
-
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpsRealm.OnHttpRealmWithSameHost"),
-              testing::ElementsAre(base::Bucket(1, 2), base::Bucket(2, 1)));
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpsRealm.OnHttpsRealmWithSameHost"),
-              testing::ElementsAre(base::Bucket(0, 3)));
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpsRealm.OnPSLMatchingRealm"),
-              testing::ElementsAre(base::Bucket(0, 1), base::Bucket(1, 2)));
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpsRealm.OnHttpRealmWithDifferentHost"),
-              testing::ElementsAre(base::Bucket(2, 1), base::Bucket(3, 2)));
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpsRealm.OnHttpsRealmWithDifferentHost"),
-              testing::ElementsAre(base::Bucket(1, 2), base::Bucket(2, 1)));
-  EXPECT_THAT(histogram_tester.GetAllSamples(
-                  kPrefix + "FromHttpsRealm.OnAnyRealmWithDifferentHost"),
-              testing::ElementsAre(base::Bucket(3, 1), base::Bucket(4, 1),
-                                   base::Bucket(5, 1)));
-}
-
 TEST_F(LoginDatabaseTest, DuplicatesMetrics_NoDuplicates) {
   // No duplicate.
   PasswordForm password_form;
@@ -1777,7 +1594,7 @@ TEST_F(LoginDatabaseTest, DuplicatesMetrics_NoDuplicates) {
   ASSERT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
 
   base::HistogramTester histogram_tester;
-  db().ReportMetrics("", false);
+  db().ReportMetrics("", false, BulkCheckDone(false));
 
   EXPECT_THAT(histogram_tester.GetAllSamples(
                   "PasswordManager.CredentialsWithDuplicates"),
@@ -1811,7 +1628,7 @@ TEST_F(LoginDatabaseTest, DuplicatesMetrics_ExactDuplicates) {
   ASSERT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
 
   base::HistogramTester histogram_tester;
-  db().ReportMetrics("", false);
+  db().ReportMetrics("", false, BulkCheckDone(false));
 
   // There should be 2 groups of "exact" duplicates.
   EXPECT_THAT(histogram_tester.GetAllSamples(
@@ -1844,7 +1661,7 @@ TEST_F(LoginDatabaseTest, DuplicatesMetrics_MismatchedDuplicates) {
   ASSERT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
 
   base::HistogramTester histogram_tester;
-  db().ReportMetrics("", false);
+  db().ReportMetrics("", false, BulkCheckDone(false));
 
   EXPECT_THAT(histogram_tester.GetAllSamples(
                   "PasswordManager.CredentialsWithDuplicates"),
@@ -2380,8 +2197,8 @@ PasswordForm LoginDatabaseUndecryptableLoginsTest::AddDummyLogin(
     EXPECT_EQ(db.GetLastChangeCount(), 1);
   }
 
-  // When we retrieve the form from the store, |from_store| should be set.
-  form.from_store = PasswordForm::Store::kProfileStore;
+  // When we retrieve the form from the store, |in_store| should be set.
+  form.in_store = PasswordForm::Store::kProfileStore;
 
   return form;
 }

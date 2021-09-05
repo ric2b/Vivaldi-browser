@@ -21,6 +21,7 @@ js_library("app") {
   deps = [
     ":browser_proxy",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:load_time_data.m",
   ]
 }
 
@@ -38,7 +39,5 @@ polymer_modulizer("app") {
 }
 
 group("polymer3_elements") {
-  deps = [
-    ":app_module",
-  ]
+  public_deps = [ ":app_module" ]
 }

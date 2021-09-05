@@ -9,7 +9,7 @@
 Polymer({
   is: 'oobe-network-md',
 
-  behaviors: [I18nBehavior, OobeDialogHostBehavior],
+  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior],
 
   observers:
       ['onDemoModeSetupChanged_(isDemoModeSetup, offlineDemoModeEnabled)'],
@@ -21,25 +21,34 @@ Polymer({
      * setup.
      * @type {boolean}
      */
-    isDemoModeSetup: false,
+    isDemoModeSetup: {
+      type: Boolean,
+      value: false,
+    },
 
     /**
      * Whether offline demo mode is enabled. If it is enabled offline setup
      * option will be shown in UI.
      * @type {boolean}
      */
-    offlineDemoModeEnabled: false,
+    offlineDemoModeEnabled: {
+      type: Boolean,
+      value: false,
+    },
 
     /**
      * Whether device is connected to the network.
      * @type {boolean}
      * @private
      */
-    isConnected_: false,
+    isConnected_: {
+      type: Boolean,
+      value: false,
+    },
   },
 
   /** Called when dialog is shown. */
-  onBeforeShow: function() {
+  onBeforeShow() {
     this.behaviors.forEach((behavior) => {
       if (behavior.onBeforeShow)
         behavior.onBeforeShow.call(this);
@@ -48,7 +57,7 @@ Polymer({
   },
 
   /** Called when dialog is hidden. */
-  onBeforeHide: function() {
+  onBeforeHide() {
     this.behaviors.forEach((behavior) => {
       if (behavior.onBeforeHide)
         behavior.onBeforeHide.call(this);
@@ -57,22 +66,21 @@ Polymer({
   },
 
   /** @override */
-  ready: function() {
+  ready() {
     this.updateLocalizedContent();
   },
 
   /** Shows the dialog. */
-  show: function() {
+  show() {
     this.$.networkDialog.show();
   },
 
-  focus: function() {
+  focus() {
     this.$.networkDialog.focus();
   },
 
   /** Updates localized elements of the UI. */
-  updateLocalizedContent: function() {
-    this.$.networkSelectLogin.setCrOncStrings();
+  updateLocalizedContent() {
     this.i18nUpdateLocale();
   },
 
@@ -80,9 +88,9 @@ Polymer({
    * Returns element of the network list selected by the query.
    * Used to simplify testing.
    * @param {string} query
-   * @return {CrNetworkList.CrNetworkListItemType}
+   * @return {NetworkList.NetworkListItemType}
    */
-  getNetworkListItemWithQueryForTest: function(query) {
+  getNetworkListItemWithQueryForTest(query) {
     let networkList =
         this.$.networkSelectLogin.$$('#networkSelect').getNetworkListForTest();
     assert(networkList);
@@ -90,21 +98,37 @@ Polymer({
   },
 
   /**
+   * Returns element of the network list with the given name.
+   * Used to simplify testing.
+   * @param {string} name
+   * @return {?NetworkList.NetworkListItemType}
+   */
+  getNetworkListItemByNameForTest(name) {
+    return this.$.networkSelectLogin.$$('#networkSelect')
+        .getNetworkListItemByNameForTest(name);
+  },
+
+  /**
    * Called after dialog is shown. Refreshes the list of the networks.
    * @private
    */
-  onShown_: function() {
+  onShown_() {
     this.async(function() {
       this.$.networkSelectLogin.refresh();
-      this.$.networkSelectLogin.focus();
-    }.bind(this));
+      if (this.isConnected_)
+        this.$.nextButton.focus();
+      else
+        this.$.networkSelectLogin.focus();
+    }.bind(this), 300);
+    // Timeout is a workaround to correctly propagate focus to
+    // RendererFrameHostImpl see https://crbug.com/955129 for details.
   },
 
   /**
    * Next button click handler.
    * @private
    */
-  onNextClicked_: function() {
+  onNextClicked_() {
     chrome.send('login.NetworkScreen.userActed', ['continue']);
   },
 
@@ -112,7 +136,7 @@ Polymer({
    * Back button click handler.
    * @private
    */
-  onBackClicked_: function() {
+  onBackClicked_() {
     chrome.send('login.NetworkScreen.userActed', ['back']);
   },
 
@@ -121,7 +145,7 @@ Polymer({
    * changed.
    * @private
    */
-  onDemoModeSetupChanged_: function() {
+  onDemoModeSetupChanged_() {
     this.$.networkSelectLogin.isOfflineDemoModeSetup =
         this.isDemoModeSetup && this.offlineDemoModeEnabled;
   },
@@ -130,7 +154,7 @@ Polymer({
    * This is called when network setup is done.
    * @private
    */
-  onNetworkConnected_: function() {
+  onNetworkConnected_() {
     chrome.send('login.NetworkScreen.userActed', ['continue']);
   },
 });

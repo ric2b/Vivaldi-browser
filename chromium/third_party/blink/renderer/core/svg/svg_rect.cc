@@ -21,7 +21,7 @@
 
 #include "third_party/blink/renderer/core/svg/svg_rect.h"
 
-#include "third_party/blink/renderer/core/svg/svg_animation_element.h"
+#include "third_party/blink/renderer/core/svg/svg_animate_element.h"
 #include "third_party/blink/renderer/core/svg/svg_parser_utilities.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -91,38 +91,35 @@ String SVGRect::ValueAsString() const {
 }
 
 void SVGRect::Add(SVGPropertyBase* other, SVGElement*) {
-  value_ += ToSVGRect(other)->Value();
+  value_ += To<SVGRect>(other)->Value();
 }
 
 void SVGRect::CalculateAnimatedValue(
-    SVGAnimationElement* animation_element,
+    const SVGAnimateElement& animation_element,
     float percentage,
     unsigned repeat_count,
     SVGPropertyBase* from_value,
     SVGPropertyBase* to_value,
     SVGPropertyBase* to_at_end_of_duration_value,
     SVGElement*) {
-  DCHECK(animation_element);
-  SVGRect* from_rect = animation_element->GetAnimationMode() == kToAnimation
-                           ? this
-                           : ToSVGRect(from_value);
-  SVGRect* to_rect = ToSVGRect(to_value);
-  SVGRect* to_at_end_of_duration_rect = ToSVGRect(to_at_end_of_duration_value);
+  auto* from_rect = To<SVGRect>(from_value);
+  auto* to_rect = To<SVGRect>(to_value);
+  auto* to_at_end_of_duration_rect = To<SVGRect>(to_at_end_of_duration_value);
 
   float animated_x = X();
   float animated_y = Y();
   float animated_width = Width();
   float animated_height = Height();
-  animation_element->AnimateAdditiveNumber(
+  animation_element.AnimateAdditiveNumber(
       percentage, repeat_count, from_rect->X(), to_rect->X(),
       to_at_end_of_duration_rect->X(), animated_x);
-  animation_element->AnimateAdditiveNumber(
+  animation_element.AnimateAdditiveNumber(
       percentage, repeat_count, from_rect->Y(), to_rect->Y(),
       to_at_end_of_duration_rect->Y(), animated_y);
-  animation_element->AnimateAdditiveNumber(
+  animation_element.AnimateAdditiveNumber(
       percentage, repeat_count, from_rect->Width(), to_rect->Width(),
       to_at_end_of_duration_rect->Width(), animated_width);
-  animation_element->AnimateAdditiveNumber(
+  animation_element.AnimateAdditiveNumber(
       percentage, repeat_count, from_rect->Height(), to_rect->Height(),
       to_at_end_of_duration_rect->Height(), animated_height);
 

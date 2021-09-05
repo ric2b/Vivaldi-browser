@@ -197,7 +197,7 @@ class FormFetcherImplTest : public testing::Test,
                      kTestHttpURL,
                      GURL(kTestHttpURL)) {
     mock_store_ = new MockPasswordStore;
-    mock_store_->Init(syncer::SyncableService::StartSyncFlare(), nullptr);
+    mock_store_->Init(nullptr);
     client_.set_store(mock_store_.get());
 
     if (!GetParam()) {
@@ -739,6 +739,8 @@ TEST_P(FormFetcherImplTest, DestroyFetcherFromConsumer) {
       std::vector<std::unique_ptr<PasswordForm>>());
 }
 
-INSTANTIATE_TEST_SUITE_P(, FormFetcherImplTest, testing::Values(false, true));
+INSTANTIATE_TEST_SUITE_P(All,
+                         FormFetcherImplTest,
+                         testing::Values(false, true));
 
 }  // namespace password_manager

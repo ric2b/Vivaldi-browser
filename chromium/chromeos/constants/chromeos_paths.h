@@ -29,6 +29,8 @@ enum {
                                      // store the uptime at which an update
                                      // became necessary. The file should be
                                      // cleared on boot.
+  FILE_STARTUP_CUSTOMIZATION_MANIFEST,     // Path to OEM partner startup
+                                           // customization manifest.
   DIR_DEVICE_LOCAL_ACCOUNT_EXTENSIONS,     // Directory under which a cache of
                                            // force-installed extensions is
                                            // maintained for each device-local
@@ -49,6 +51,9 @@ enum {
                                         // is stored for the signin profile.
                                         // Currently this is used for policy for
                                         // extensions.
+  DIR_SIGNIN_PROFILE_EXTENSIONS,        // Directory under which a cache of
+                                        // force-installed extensions is
+                                        // maintained for the signin profile.
   DIR_PREINSTALLED_COMPONENTS,          // Directory that contains pre-installed
                                         // components.
   DIR_DEVICE_POLICY_EXTERNAL_DATA,  // Directory where device policy external

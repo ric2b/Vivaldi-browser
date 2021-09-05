@@ -24,9 +24,6 @@ class CC_DEBUG_EXPORT DebugColors {
   static SkColor ContentLayerBorderColor();
   static int ContentLayerBorderWidth(float device_scale_factor);
 
-  static SkColor MaskingLayerBorderColor();
-  static int MaskingLayerBorderWidth(float device_scale_factor);
-
   static SkColor ContainerLayerBorderColor();
   static int ContainerLayerBorderWidth(float device_scale_factor);
 
@@ -103,6 +100,10 @@ class CC_DEBUG_EXPORT DebugColors {
   static SkColor NonFastScrollableRectBorderColor();
   static int NonFastScrollableRectBorderWidth();
   static SkColor NonFastScrollableRectFillColor();
+
+  static SkColor MainThreadScrollingReasonRectBorderColor();
+  static int MainThreadScrollingReasonRectBorderWidth();
+  static SkColor MainThreadScrollingReasonRectFillColor();
 
   static SkColor LayerAnimationBoundsBorderColor();
   static int LayerAnimationBoundsBorderWidth();

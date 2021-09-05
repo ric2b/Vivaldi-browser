@@ -104,18 +104,21 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/simple_thread.h"
 #include "base/win/scoped_co_mem.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/scoped_handle.h"
 #include "media/audio/audio_io.h"
+#include "media/audio/win/audio_manager_win.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/media_export.h"
 
 namespace media {
 
 class AudioManagerWin;
+class AudioSessionEventListener;
 
 // AudioOutputStream implementation using Windows Core Audio APIs.
 class MEDIA_EXPORT WASAPIAudioOutputStream :
@@ -127,7 +130,8 @@ class MEDIA_EXPORT WASAPIAudioOutputStream :
   WASAPIAudioOutputStream(AudioManagerWin* manager,
                           const std::string& device_id,
                           const AudioParameters& params,
-                          ERole device_role);
+                          ERole device_role,
+                          AudioManager::LogCallback log_callback);
 
   // The dtor is typically called by the AudioManager only and it is usually
   // triggered by calling AudioOutputStream::Close().
@@ -149,6 +153,8 @@ class MEDIA_EXPORT WASAPIAudioOutputStream :
   bool started() const { return render_thread_.get() != NULL; }
 
  private:
+  void SendLogMessage(const char* format, ...) PRINTF_FORMAT(2, 3);
+
   // DelegateSimpleThread::Delegate implementation.
   void Run() override;
 
@@ -173,6 +179,9 @@ class MEDIA_EXPORT WASAPIAudioOutputStream :
 
   // Reports audio stream glitch stats and resets them to their initial values.
   void ReportAndResetStats();
+
+  // Called by AudioSessionEventListener() when a device change occurs.
+  void OnDeviceChanged();
 
   // Contains the thread ID of the creating thread.
   const base::PlatformThreadId creating_thread_id_;
@@ -242,6 +251,9 @@ class MEDIA_EXPORT WASAPIAudioOutputStream :
   // Pointer to the client that will deliver audio samples to be played out.
   AudioSourceCallback* source_;
 
+  // Callback to send log messages to registered clients.
+  AudioManager::LogCallback log_callback_;
+
   // An IAudioClient interface which enables a client to create and initialize
   // an audio stream between an audio application and the audio engine.
   Microsoft::WRL::ComPtr<IAudioClient> audio_client_;
@@ -261,6 +273,14 @@ class MEDIA_EXPORT WASAPIAudioOutputStream :
   std::unique_ptr<AudioBus> audio_bus_;
 
   Microsoft::WRL::ComPtr<IAudioClock> audio_clock_;
+
+  bool device_changed_ = false;
+  std::unique_ptr<AudioSessionEventListener> session_listener_;
+
+  // Since AudioSessionEventListener needs to posts tasks back to the audio
+  // thread, it's possible to end up in a state where that task would execute
+  // after destruction of this class -- so use a WeakPtr to cancel safely.
+  base::WeakPtrFactory<WASAPIAudioOutputStream> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(WASAPIAudioOutputStream);
 };

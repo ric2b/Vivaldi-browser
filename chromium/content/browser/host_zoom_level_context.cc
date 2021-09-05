@@ -6,9 +6,7 @@
 
 #include <utility>
 
-#include "base/files/file_path.h"
 #include "content/browser/host_zoom_map_impl.h"
-#include "content/public/browser/browser_thread.h"
 
 namespace content {
 
@@ -20,15 +18,6 @@ HostZoomLevelContext::HostZoomLevelContext(
     zoom_level_delegate_->InitHostZoomMap(host_zoom_map_impl_.get());
 }
 
-HostZoomLevelContext::~HostZoomLevelContext() {}
-
-void HostZoomLevelContext::DeleteOnCorrectThread() const {
-  if (BrowserThread::IsThreadInitialized(BrowserThread::UI) &&
-      !BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::DeleteSoon(BrowserThread::UI, FROM_HERE, this);
-    return;
-  }
-  delete this;
-}
+HostZoomLevelContext::~HostZoomLevelContext() = default;
 
 }  // namespace content

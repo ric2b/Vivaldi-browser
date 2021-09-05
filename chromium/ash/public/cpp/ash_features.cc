@@ -4,11 +4,46 @@
 
 #include "ash/public/cpp/ash_features.h"
 
+#include <vector>
+
 #include "ash/public/cpp/ash_switches.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
+#include "base/strings/string_split.h"
+#include "base/system/sys_info.h"
+#include "build/build_config.h"
+#include "chromeos/constants/chromeos_switches.h"
 
 namespace ash {
 namespace features {
+
+namespace {
+
+bool IsBoardKukui() {
+  std::vector<std::string> board =
+      base::SplitString(base::SysInfo::GetLsbReleaseBoard(), "-",
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  if (board.empty())
+    return false;
+  return board[0] == "kukui";
+}
+
+}  // namespace
+
+const base::Feature kAllowAmbientEQ{"AllowAmbientEQ",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kAutoNightLight{"AutoNightLight",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kCornerShortcuts{"CornerShortcuts",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kContextualNudges{"ContextualNudges",
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kDisplayChangeModal{"DisplayChangeModal",
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kDockedMagnifier{"DockedMagnifier",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
@@ -18,6 +53,9 @@ const base::Feature kDragToSnapInClamshellMode{
 
 const base::Feature kEnableOverviewRoundedCorners{
     "EnableOverviewRoundedCorners", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kLimitAltTabToActiveDesk{"LimitAltTabToActiveDesk",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kLockScreenNotifications{"LockScreenNotifications",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
@@ -44,19 +82,16 @@ const base::Feature kMediaSessionNotification{"MediaSessionNotification",
 const base::Feature kMultiDisplayOverviewAndSplitView{
     "MultiDisplayOverviewAndSplitView", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kNewOverviewLayout{"NewOverviewLayout",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kNightLight{"NightLight", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kNotificationExpansionAnimation{
     "NotificationExpansionAnimation", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kNotificationExperimentalShortTimeouts{
+    "NotificationExperimentalShortTimeouts", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kNotificationScrollBar{"NotificationScrollBar",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kOverviewCrossFadeWallpaperBlur{
-    "OverviewCrossFadeWallpaperBlur", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPipRoundedCorners{"PipRoundedCorners",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -75,12 +110,6 @@ const base::Feature kUnlockWithExternalBinary{
 
 const base::Feature kViewsLogin{"ViewsLogin", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kVirtualDesks{"VirtualDesks",
-                                  base::FEATURE_ENABLED_BY_DEFAULT};
-
-const base::Feature kVirtualDesksGestures{"VirtualDesksGestures",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kUseBluetoothSystemInAsh{"UseBluetoothSystemInAsh",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -91,19 +120,34 @@ const base::Feature kSwapSideVolumeButtonsForOrientation{
     "SwapSideVolumeButtonsForOrientation", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kUnifiedMessageCenterRefactor{
-    "UnifiedMessageCenterRefactor", base::FEATURE_DISABLED_BY_DEFAULT};
+    "UnifiedMessageCenterRefactor", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEnableBackgroundBlur{"EnableBackgroundBlur",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSwipingFromLeftEdgeToGoBack{
-    "SwipingFromLeftEdgeToGoBack", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SwipingFromLeftEdgeToGoBack", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kDragFromShelfToHomeOrOverview{
     "DragFromShelfToHomeOrOverview", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kHomerviewGesture{"HomerviewGesture",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kHideShelfControlsInTabletMode{
+    "HideShelfControlsInTabletMode", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSystemTrayMicGainSetting{
+    "SystemTrayMicGainSetting", base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool IsAllowAmbientEQEnabled() {
+  return base::FeatureList::IsEnabled(kAllowAmbientEQ);
+}
+
+bool IsAltTabLimitedToActiveDesk() {
+  return base::FeatureList::IsEnabled(kLimitAltTabToActiveDesk);
+}
+
+bool IsAutoNightLightEnabled() {
+  return base::FeatureList::IsEnabled(kAutoNightLight);
+}
 
 bool IsHideArcMediaNotificationsEnabled() {
   return base::FeatureList::IsEnabled(kMediaSessionNotification) &&
@@ -135,6 +179,10 @@ bool IsNotificationScrollBarEnabled() {
   return base::FeatureList::IsEnabled(kNotificationScrollBar);
 }
 
+bool IsNotificationExperimentalShortTimeoutsEnabled() {
+  return base::FeatureList::IsEnabled(kNotificationExperimentalShortTimeouts);
+}
+
 bool IsPipRoundedCornersEnabled() {
   return base::FeatureList::IsEnabled(kPipRoundedCorners);
 }
@@ -147,14 +195,6 @@ bool IsTrilinearFilteringEnabled() {
   static bool use_trilinear_filtering =
       base::FeatureList::IsEnabled(kTrilinearFiltering);
   return use_trilinear_filtering;
-}
-
-bool IsVirtualDesksEnabled() {
-  return base::FeatureList::IsEnabled(kVirtualDesks);
-}
-
-bool IsVirtualDesksGesturesEnabled() {
-  return base::FeatureList::IsEnabled(kVirtualDesksGestures);
 }
 
 bool IsViewsLoginEnabled() {
@@ -175,11 +215,22 @@ bool IsSwapSideVolumeButtonsForOrientationEnabled() {
 }
 
 bool IsUnifiedMessageCenterRefactorEnabled() {
-  return base::FeatureList::IsEnabled(kUnifiedMessageCenterRefactor);
+  return base::FeatureList::IsEnabled(kUnifiedMessageCenterRefactor) ||
+         chromeos::switches::ShouldShowShelfHotseat();
 }
 
 bool IsBackgroundBlurEnabled() {
-  return base::FeatureList::IsEnabled(kEnableBackgroundBlur);
+  bool enabled_by_feature_flag =
+      base::FeatureList::IsEnabled(kEnableBackgroundBlur);
+#if defined(ARCH_CPU_ARM_FAMILY)
+  // Enable background blur on Mali when GPU rasterization is enabled.
+  // See crbug.com/996858 for the condition.
+  return enabled_by_feature_flag &&
+         base::CommandLine::ForCurrentProcess()->HasSwitch(
+             ash::switches::kAshEnableTabletMode);
+#else
+  return enabled_by_feature_flag;
+#endif
 }
 
 bool IsSwipingFromLeftEdgeToGoBackEnabled() {
@@ -187,15 +238,62 @@ bool IsSwipingFromLeftEdgeToGoBackEnabled() {
 }
 
 bool IsDragFromShelfToHomeOrOverviewEnabled() {
-  return base::FeatureList::IsEnabled(kDragFromShelfToHomeOrOverview);
+  // The kDragFromShelfToHomeOrOverview feature is only enabled on the devices
+  // that have hotseat enabled (i.e., on Krane and on Dogfood devices) in M80.
+  // See crbug.com/1029991 for details.
+  return base::FeatureList::IsEnabled(kDragFromShelfToHomeOrOverview) ||
+         chromeos::switches::ShouldShowShelfHotseat();
 }
 
 bool IsReduceDisplayNotificationsEnabled() {
   return base::FeatureList::IsEnabled(kReduceDisplayNotifications);
 }
 
-bool IsHomerviewGestureEnabled() {
-  return base::FeatureList::IsEnabled(kHomerviewGesture);
+bool IsHideShelfControlsInTabletModeEnabled() {
+  if (!IsDragFromShelfToHomeOrOverviewEnabled())
+    return false;
+
+  // Enable shelf navigation buttons by default on kukui.
+  // TODO(https://crbug.com/1084226): A better approach would be to have login
+  // manager enable the feature by setting an appropriate enable_features flag.
+  static const bool is_kukui = IsBoardKukui();
+  if (is_kukui)
+    return true;
+
+  return base::FeatureList::IsEnabled(kHideShelfControlsInTabletMode);
+}
+
+bool IsDisplayChangeModalEnabled() {
+  return base::FeatureList::IsEnabled(kDisplayChangeModal);
+}
+
+bool AreContextualNudgesEnabled() {
+  if (!IsHideShelfControlsInTabletModeEnabled())
+    return false;
+  return base::FeatureList::IsEnabled(kContextualNudges);
+}
+
+bool IsCornerShortcutsEnabled() {
+  return base::FeatureList::IsEnabled(kCornerShortcuts);
+}
+
+bool IsSystemTrayMicGainSettingEnabled() {
+  return base::FeatureList::IsEnabled(kSystemTrayMicGainSetting);
+}
+
+namespace {
+
+// The boolean flag indicating if "WebUITabStrip" feature is enabled in Chrome.
+bool g_webui_tab_strip_enabled = false;
+
+}  // namespace
+
+void SetWebUITabStripEnabled(bool enabled) {
+  g_webui_tab_strip_enabled = enabled;
+}
+
+bool IsWebUITabStripEnabled() {
+  return g_webui_tab_strip_enabled;
 }
 
 }  // namespace features

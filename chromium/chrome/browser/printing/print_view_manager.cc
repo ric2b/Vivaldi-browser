@@ -25,8 +25,8 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/webplugininfo.h"
 #include "ipc/ipc_message_macros.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "printing/buildflags/buildflags.h"
-#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 
 using content::BrowserThread;
 
@@ -113,12 +113,12 @@ bool PrintViewManager::BasicPrint(content::RenderFrameHost* rfh) {
 
 bool PrintViewManager::PrintPreviewNow(content::RenderFrameHost* rfh,
                                        bool has_selection) {
-  return PrintPreview(rfh, nullptr, has_selection);
+  return PrintPreview(rfh, mojo::NullAssociatedRemote(), has_selection);
 }
 
 bool PrintViewManager::PrintPreviewWithPrintRenderer(
     content::RenderFrameHost* rfh,
-    mojom::PrintRendererAssociatedPtrInfo print_renderer) {
+    mojo::PendingAssociatedRemote<mojom::PrintRenderer> print_renderer) {
   return PrintPreview(rfh, std::move(print_renderer), false);
 }
 
@@ -191,29 +191,11 @@ void PrintViewManager::RenderFrameDeleted(
   if (render_frame_host == print_preview_rfh_)
     PrintPreviewDone();
   PrintViewManagerBase::RenderFrameDeleted(render_frame_host);
-  print_render_frames_.erase(render_frame_host);
-}
-
-const mojo::AssociatedRemote<printing::mojom::PrintRenderFrame>&
-PrintViewManager::GetPrintRenderFrame(content::RenderFrameHost* rfh) {
-  auto it = print_render_frames_.find(rfh);
-  if (it == print_render_frames_.end()) {
-    mojo::AssociatedRemote<printing::mojom::PrintRenderFrame> remote;
-    rfh->GetRemoteAssociatedInterfaces()->GetInterface(&remote);
-    it = print_render_frames_.insert({rfh, std::move(remote)}).first;
-  } else if (it->second.is_bound() && !it->second.is_connected()) {
-    // When print preview is closed, the remote is disconnected from the
-    // receiver. Reset and bind the remote before using it again.
-    it->second.reset();
-    rfh->GetRemoteAssociatedInterfaces()->GetInterface(&it->second);
-  }
-
-  return it->second;
 }
 
 bool PrintViewManager::PrintPreview(
     content::RenderFrameHost* rfh,
-    mojom::PrintRendererAssociatedPtrInfo print_renderer,
+    mojo::PendingAssociatedRemote<mojom::PrintRenderer> print_renderer,
     bool has_selection) {
   // Users can send print commands all they want and it is beyond
   // PrintViewManager's control. Just ignore the extra commands.

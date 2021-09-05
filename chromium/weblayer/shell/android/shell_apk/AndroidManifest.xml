@@ -13,14 +13,24 @@
         <activity android:name="WebLayerShellActivity"
                   android:launchMode="singleTask"
                   android:theme="@android:style/Theme.Holo.Light.NoActionBar"
-                  android:windowSoftInputMode="adjustResize"
-                  android:configChanges="orientation|screenSize">
+                  android:windowSoftInputMode="adjustResize">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
             </intent-filter>
         </activity>
         <activity android:name="InstrumentationActivity">
+        </activity>
+        <activity android:name="TelemetryActivity"
+                  android:theme="@android:style/Theme.Holo.Light.NoActionBar">
         </activity>
         {% if weblayer_package is defined %}
             <meta-data android:name="org.chromium.weblayer.WebLayerPackage"

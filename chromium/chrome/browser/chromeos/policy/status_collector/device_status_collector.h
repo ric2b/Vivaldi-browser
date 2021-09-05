@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback_forward.h"
@@ -23,13 +24,10 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/chromeos/child_accounts/usage_time_state_notifier.h"
 #include "chrome/browser/chromeos/policy/status_collector/status_collector.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chromeos/dbus/cryptohome/cryptohome_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
-#include "chromeos/dbus/runtime_probe/runtime_probe.pb.h"
-#include "chromeos/dbus/runtime_probe_client.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_member.h"
@@ -113,7 +111,6 @@ class SampledData {
 
 // Collects and summarizes the status of an enterprise-managed ChromeOS device.
 class DeviceStatusCollector : public StatusCollector,
-                              public chromeos::UsageTimeStateNotifier::Observer,
                               public chromeos::PowerManagerClient::Observer {
  public:
   using VolumeInfoFetcher =
@@ -133,36 +130,35 @@ class DeviceStatusCollector : public StatusCollector,
   using CPUTempFetcher =
       base::Callback<std::vector<enterprise_management::CPUTempInfo>()>;
 
-  // Passed into asynchronous mojo interface for communicating with Android.
-  using AndroidStatusReceiver =
-      base::Callback<void(const std::string&, const std::string&)>;
-  // Calls the enterprise reporting mojo interface, passing over the
-  // AndroidStatusReceiver. Returns false if the mojo interface isn't available,
-  // in which case no asynchronous query is emitted and the android status query
-  // fails synchronously. The |AndroidStatusReceiver| is not called in this
-  // case.
-  using AndroidStatusFetcher =
-      base::Callback<bool(const AndroidStatusReceiver&)>;
-
   // Format of the function that asynchronously receives TpmStatusInfo.
   using TpmStatusReceiver = base::OnceCallback<void(const TpmStatusInfo&)>;
   // Gets the TpmStatusInfo and passes it to TpmStatusReceiver.
   using TpmStatusFetcher = base::RepeatingCallback<void(TpmStatusReceiver)>;
 
-  // Format of the function that asynchronously receives ProbeResult / sampled
-  // data.
-  using ProbeDataReceiver = base::OnceCallback<void(
-      const base::Optional<runtime_probe::ProbeResult>&,
-      const base::circular_deque<std::unique_ptr<SampledData>>&)>;
-  // Gets the ProbeResult/sampled data and passes it to ProbeDataReceiver.
-  using ProbeDataFetcher = base::RepeatingCallback<void(ProbeDataReceiver)>;
-
   // Format of the function that asynchronously receives data from cros_healthd.
-  using CrosHealthdDataReceiver =
-      base::OnceCallback<void(chromeos::cros_healthd::mojom::TelemetryInfoPtr)>;
+  using CrosHealthdDataReceiver = base::OnceCallback<void(
+      chromeos::cros_healthd::mojom::TelemetryInfoPtr,
+      const base::circular_deque<std::unique_ptr<SampledData>>&)>;
   // Gets the data from cros_healthd and passes it to CrosHealthdDataReceiver.
   using CrosHealthdDataFetcher =
       base::RepeatingCallback<void(CrosHealthdDataReceiver)>;
+
+  // Asynchronously receives the graphics status.
+  using GraphicsStatusReceiver =
+      base::OnceCallback<void(const enterprise_management::GraphicsStatus&)>;
+
+  // Gets the display and graphics adapter information reported to the browser
+  // by the GPU process.
+  using GraphicsStatusFetcher =
+      base::RepeatingCallback<void(GraphicsStatusReceiver)>;
+
+  // Format of the function that asynchronously receives CrashReportInfo.
+  using CrashReportInfoReceiver = base::OnceCallback<void(
+      const std::vector<enterprise_management::CrashReportInfo>&)>;
+
+  // Gets the crash report information stored on the local device.
+  using CrashReportInfoFetcher =
+      base::RepeatingCallback<void(CrashReportInfoReceiver)>;
 
   // Reads EMMC usage lifetime from /var/log/storage_info.txt
   using EMMCLifetimeFetcher =
@@ -186,7 +182,16 @@ class DeviceStatusCollector : public StatusCollector,
       const TpmStatusFetcher& tpm_status_fetcher,
       const EMMCLifetimeFetcher& emmc_lifetime_fetcher,
       const StatefulPartitionInfoFetcher& stateful_partition_info_fetcher,
-      const CrosHealthdDataFetcher& cros_healthd_data_fetcher);
+      const CrosHealthdDataFetcher& cros_healthd_data_fetcher,
+      const GraphicsStatusFetcher& graphics_status_fetcher,
+      const CrashReportInfoFetcher& crash_report_info_fetcher);
+
+  // Constructor with default callbacks. These callbacks are always executed on
+  // Blocking Pool. Caller is responsible for passing already initialized
+  // |pref_service|.
+  DeviceStatusCollector(PrefService* pref_service,
+                        chromeos::system::StatisticsProvider* provider);
+
   ~DeviceStatusCollector() override;
 
   // StatusCollector:
@@ -196,6 +201,7 @@ class DeviceStatusCollector : public StatusCollector,
   bool ShouldReportNetworkInterfaces() const override;
   bool ShouldReportUsers() const override;
   bool ShouldReportHardwareStatus() const override;
+  bool ShouldReportCrashReportInfo() const override;
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
@@ -204,10 +210,6 @@ class DeviceStatusCollector : public StatusCollector,
 
   // The total number of hardware resource usage samples cached internally.
   static const unsigned int kMaxResourceUsageSamples = 10;
-
-  // Returns the amount of time the child has used so far today. If the user is
-  // not a child or if there is no user logged in, it returns 0.
-  base::TimeDelta GetActiveChildScreenTime();
 
  protected:
   using PowerStatusCallback = base::OnceCallback<void(
@@ -226,21 +228,14 @@ class DeviceStatusCollector : public StatusCollector,
   // next device status update.
   void SampleResourceUsage();
 
-  // chromeos::UsageTimeStateNotifier::Observer:
-  void OnUsageTimeStateChange(
-      chromeos::UsageTimeStateNotifier::UsageTimeState state) override;
-
   // power_manager::PowerManagerClient::Observer:
   void PowerChanged(const power_manager::PowerSupplyProperties& prop) override;
-
-  // Updates the child's active time.
-  void UpdateChildUsageTime();
 
  private:
   // Callbacks used during sampling data collection, that allows to pass
   // additional data using partial function application.
   using SamplingProbeResultCallback =
-      base::OnceCallback<void(base::Optional<runtime_probe::ProbeResult>)>;
+      base::OnceCallback<void(chromeos::cros_healthd::mojom::TelemetryInfoPtr)>;
   using SamplingCallback = base::OnceCallback<void()>;
 
   // Clears the cached hardware resource usage.
@@ -248,7 +243,7 @@ class DeviceStatusCollector : public StatusCollector,
 
   // Callbacks from chromeos::VersionLoader.
   void OnOSVersion(const std::string& version);
-  void OnOSFirmware(const std::string& version);
+  void OnOSFirmware(std::pair<const std::string&, const std::string&> version);
   void OnTpmVersion(
       const chromeos::CryptohomeClient::TpmVersionInfo& tpm_version_info);
 
@@ -276,6 +271,10 @@ class DeviceStatusCollector : public StatusCollector,
       enterprise_management::DeviceStatusReportRequest* status);
   bool GetRunningKioskApp(
       enterprise_management::DeviceStatusReportRequest* status);
+  bool GetGraphicsStatus(scoped_refptr<DeviceStatusCollectorState>
+                             state);  // Queues async queries!
+  bool GetCrashReportInfo(scoped_refptr<DeviceStatusCollectorState>
+                              state);  // Queues async queries!
 
   // Helpers for the various portions of SESSION STATUS. Return true if they
   // actually report any status. Functions that queue async queries take
@@ -296,11 +295,11 @@ class DeviceStatusCollector : public StatusCollector,
   // Callback invoked to update our cpu usage information.
   void ReceiveCPUStatistics(const std::string& statistics);
 
-  // Callback for RuntimeProbe that samples probe live data. |callback| will
+  // Callback for CrosHealthd that samples probe live data. |callback| will
   // be called once all sampling is finished.
   void SampleProbeData(std::unique_ptr<SampledData> sample,
                        SamplingProbeResultCallback callback,
-                       base::Optional<runtime_probe::ProbeResult> result);
+                       chromeos::cros_healthd::mojom::TelemetryInfoPtr result);
 
   // Callback triggered from PowerManagedClient that samples battery discharge
   // rate. |callback| will be called once all sampling is finished.
@@ -321,14 +320,15 @@ class DeviceStatusCollector : public StatusCollector,
   // cros_healthd and passes it to |callback|.
   void FetchCrosHealthdData(CrosHealthdDataReceiver callback);
 
-  // ProbeDataReceiver interface implementation, fetches data from
-  // RuntimeProbe passes it to |callback| via OnProbeDataFetched().
-  void FetchProbeData(ProbeDataReceiver callback);
-
-  // Callback for RuntimeProbe that performs final sampling and
+  // Callback for CrosHealthd that performs final sampling and
   // actually invokes |callback|.
-  void OnProbeDataFetched(ProbeDataReceiver callback,
-                          base::Optional<runtime_probe::ProbeResult> reply);
+  void OnProbeDataFetched(
+      CrosHealthdDataReceiver callback,
+      chromeos::cros_healthd::mojom::TelemetryInfoPtr reply);
+
+  // Returns true if data (e.g. CPU info, power status, etc.) should be fetched
+  // from cros_healthd.
+  bool ShouldFetchCrosHealthdData() const;
 
   // Callback invoked when reporting users pref is changed.
   void ReportingUsersChanged();
@@ -348,26 +348,18 @@ class DeviceStatusCollector : public StatusCollector,
   // The last time an idle state check was performed.
   base::Time last_idle_check_;
 
-  // The last time an active state check was performed.
-  base::Time last_active_check_;
-
-  // Whether the last state of the device was active. This is used for child
-  // accounts only. Active is defined as having the screen turned on.
-  bool last_state_active_ = true;
-
-  // The maximum key that went into the last report generated by
-  // GetStatusAsync(), and the duration for it. This is used to trim the stored
-  // data in OnSubmittedSuccessfully(). Trimming is delayed so unsuccessful
-  // uploads don't result in dropped data.
-  int64_t last_reported_day_ = 0;
-  int duration_for_last_reported_day_ = 0;
+  // End timestamp of the latest activity that went into the last report
+  // generated by GetStatusAsync(). Used to trim the stored data in
+  // OnSubmittedSuccessfully(). Trimming is delayed so unsuccessful uploads
+  // don't result in dropped data.
+  int64_t last_reported_end_timestamp_ = 0;
 
   base::RepeatingTimer idle_poll_timer_;
-  base::RepeatingTimer update_child_usage_timer_;
   base::RepeatingTimer resource_usage_sampling_timer_;
 
   std::string os_version_;
   std::string firmware_version_;
+  std::string firmware_fetch_error_;
   chromeos::CryptohomeClient::TpmVersionInfo tpm_version_info_;
 
   struct ResourceUsage {
@@ -403,21 +395,20 @@ class DeviceStatusCollector : public StatusCollector,
 
   TpmStatusFetcher tpm_status_fetcher_;
 
-  ProbeDataFetcher probe_data_fetcher_;
-
   EMMCLifetimeFetcher emmc_lifetime_fetcher_;
 
   StatefulPartitionInfoFetcher stateful_partition_info_fetcher_;
 
   CrosHealthdDataFetcher cros_healthd_data_fetcher_;
 
+  GraphicsStatusFetcher graphics_status_fetcher_;
+
+  CrashReportInfoFetcher crash_report_info_fetcher_;
+
   PowerStatusCallback power_status_callback_;
 
   // Power manager client. Used to listen to power changed events.
   chromeos::PowerManagerClient* const power_manager_;
-
-  // Runtime probe client. Used to fetch hardware data.
-  chromeos::RuntimeProbeClient* const runtime_probe_;
 
   // The most recent CPU readings.
   uint64_t last_cpu_active_ = 0;
@@ -434,6 +425,13 @@ class DeviceStatusCollector : public StatusCollector,
   bool report_power_status_ = false;
   bool report_storage_status_ = false;
   bool report_board_status_ = false;
+  bool report_cpu_info_ = false;
+  bool report_graphics_status_ = false;
+  bool report_timezone_info_ = false;
+  bool report_memory_info_ = false;
+  bool report_backlight_info_ = false;
+  bool report_crash_report_info_ = false;
+  bool stat_reporting_pref_ = false;
 
   std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
       activity_times_subscription_;
@@ -455,6 +453,20 @@ class DeviceStatusCollector : public StatusCollector,
       storage_status_subscription_;
   std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
       board_status_subscription_;
+  std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
+      cpu_info_subscription_;
+  std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
+      graphics_status_subscription_;
+  std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
+      timezone_info_subscription_;
+  std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
+      memory_info_subscription_;
+  std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
+      backlight_info_subscription_;
+  std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
+      crash_report_info_subscription_;
+  std::unique_ptr<chromeos::CrosSettings::ObserverSubscription>
+      stats_reporting_pref_subscription_;
 
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
 

@@ -43,6 +43,7 @@ class EmailTable {
   bool GetAllEmailAddresses(EmailAddressRows* emails);
   bool DoesEmailAddressIdExist(EmailAddressID email_address_id,
                                ContactID contact_id);
+  bool DeleteEmailsForContact(ContactID contact_id);
 
  protected:
   virtual sql::Database& GetDB() = 0;

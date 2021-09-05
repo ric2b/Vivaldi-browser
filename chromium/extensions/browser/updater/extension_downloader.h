@@ -13,8 +13,10 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/version.h"
 #include "extensions/browser/updater/extension_downloader_delegate.h"
 #include "extensions/browser/updater/manifest_fetch_data.h"
@@ -35,10 +37,6 @@ class IdentityManager;
 struct AccessTokenInfo;
 }  // namespace signin
 
-namespace net {
-class URLRequestStatus;
-}
-
 namespace network {
 class SharedURLLoaderFactory;
 class SimpleURLLoader;
@@ -47,10 +45,6 @@ class URLLoaderFactory;
 }
 struct ResourceRequest;
 }  // namespace network
-
-namespace service_manager {
-class Connector;
-}
 
 namespace extensions {
 
@@ -82,7 +76,6 @@ class ExtensionDownloader {
   ExtensionDownloader(
       ExtensionDownloaderDelegate* delegate,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      service_manager::Connector* connector,
       crx_file::VerifierFormat crx_format_requirement,
       const base::FilePath& profile_path = base::FilePath());
   ~ExtensionDownloader();
@@ -286,6 +279,11 @@ class ExtensionDownloader {
                         std::set<std::string>* no_updates,
                         std::set<std::string>* errors);
 
+  // Checks whether extension is presented in cache. If yes, return path to its
+  // cached CRX, base::nullopt otherwise.
+  base::Optional<base::FilePath> GetCachedExtension(
+      const ExtensionFetch& fetch_data);
+
   // Begins (or queues up) download of an updated extension.
   void FetchUpdatedExtension(std::unique_ptr<ExtensionFetch> fetch_data);
 
@@ -304,13 +302,21 @@ class ExtensionDownloader {
       std::set<std::string> extension_ids,
       ExtensionDownloaderDelegate::Stage stage);
 
-  // Invokes OnExtensionDownloadFailed() on the |delegate_| for each extension
-  // in the set, with |error| as the reason for failure. Make a copy of
-  // arguments because there is no guarantee that callback won't indirectly
-  // change source of IDs.
+  // Calls NotifyExtensionsDownloadFailedWithFailureData with empty failure
+  // data.
   void NotifyExtensionsDownloadFailed(std::set<std::string> id_set,
                                       std::set<int> request_ids,
                                       ExtensionDownloaderDelegate::Error error);
+
+  // Invokes OnExtensionDownloadFailed() on the |delegate_| for each extension
+  // in the set, with |error| as the reason for failure, and failure data. Make
+  // a copy of arguments because there is no guarantee that callback won't
+  // indirectly change source of IDs.
+  void NotifyExtensionsDownloadFailedWithFailureData(
+      std::set<std::string> extension_ids,
+      std::set<int> request_ids,
+      ExtensionDownloaderDelegate::Error error,
+      const ExtensionDownloaderDelegate::FailureData& data);
 
   // Send a notification that an update was found for |id| that we'll
   // attempt to download.
@@ -336,7 +342,6 @@ class ExtensionDownloader {
   // |true| if the fetch should be retried. Returns |false| if the failure was
   // not related to authentication, leaving the ExtensionFetch data unmodified.
   bool IterateFetchCredentialsAfterFailure(ExtensionFetch* fetch,
-                                           const net::URLRequestStatus& status,
                                            int response_code);
 
   void OnAccessTokenFetchComplete(GoogleServiceAuthError error,
@@ -369,9 +374,6 @@ class ExtensionDownloader {
 
   // The profile path used to load file:// URLs. It can be invalid.
   base::FilePath profile_path_for_url_loader_factory_;
-
-  // The connector to the ServiceManager.
-  service_manager::Connector* connector_;
 
   // Collects UMA samples that are reported when ReportStats() is called.
   URLStats url_stats_;

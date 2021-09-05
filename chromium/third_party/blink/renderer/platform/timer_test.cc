@@ -119,7 +119,7 @@ class OnHeapTimerOwner final : public GarbageCollected<OnHeapTimerOwner> {
     timer_.StartOneShot(interval, caller);
   }
 
-  void Trace(blink::Visitor* visitor) {}
+  void Trace(Visitor* visitor) {}
 
  private:
   void Fired(TimerBase*) {
@@ -655,8 +655,8 @@ TEST_F(TimerTest, MarkOnHeapTimerAsUnreachable) {
   owner = nullptr;
   // Explicit regular GC call to allow lazy sweeping.
   ThreadState::Current()->CollectGarbage(
-      BlinkGC::kNoHeapPointersOnStack, BlinkGC::kAtomicMarking,
-      BlinkGC::kConcurrentAndLazySweeping,
+      BlinkGC::CollectionType::kMajor, BlinkGC::kNoHeapPointersOnStack,
+      BlinkGC::kAtomicMarking, BlinkGC::kConcurrentAndLazySweeping,
       BlinkGC::GCReason::kForcedGCForTesting);
   // Since the heap is laziy swept, owner is not yet destructed.
   EXPECT_FALSE(record->OwnerIsDestructed());
@@ -667,6 +667,7 @@ TEST_F(TimerTest, MarkOnHeapTimerAsUnreachable) {
     platform_->RunUntilIdle();
     EXPECT_FALSE(record->TimerHasFired());
     EXPECT_FALSE(record->OwnerIsDestructed());
+    ThreadState::Current()->CompleteSweep();
   }
 }
 
@@ -678,7 +679,7 @@ class TaskObserver : public base::TaskObserver {
                Vector<scoped_refptr<base::SingleThreadTaskRunner>>* run_order)
       : task_runner_(std::move(task_runner)), run_order_(run_order) {}
 
-  void WillProcessTask(const base::PendingTask&) override {}
+  void WillProcessTask(const base::PendingTask&, bool) override {}
 
   void DidProcessTask(const base::PendingTask&) override {
     run_order_->push_back(task_runner_);

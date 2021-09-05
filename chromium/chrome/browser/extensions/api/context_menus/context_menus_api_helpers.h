@@ -155,7 +155,7 @@ bool CreateMenuItem(const PropertyWithEnumT& create_properties,
                   item_id.extension_key));
   if (parent_id.get()) {
     if (parent_id.get()->incognito &&
-        vivaldi::IsVivaldiApp(item_id.extension_key.extension_id)) {
+        ::vivaldi::IsVivaldiApp(item_id.extension_key.extension_id)) {
       parent_id.get()->incognito = false;
     }
     MenuItem* parent = GetParent(*parent_id, menu_manager, error);
@@ -269,7 +269,7 @@ bool UpdateMenuItem(const PropertyWithEnumT& update_properties,
                   item_id.extension_key));
   if (parent_id.get()) {
     if (parent_id.get()->incognito &&
-        vivaldi::IsVivaldiApp(item_id.extension_key.extension_id)) {
+        ::vivaldi::IsVivaldiApp(item_id.extension_key.extension_id)) {
       parent_id.get()->incognito = false;
     }
     MenuItem* parent = GetParent(*parent_id, menu_manager, error);
