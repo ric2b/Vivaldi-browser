@@ -91,7 +91,7 @@ class ExpirationDateValidationDelegate : public ValidationDelegate {
     return true;
   }
 
-  bool IsValidCombobox(views::Combobox* combobox,
+  bool IsValidCombobox(ValidatingCombobox* combobox,
                        base::string16* error_message) override {
     // View will have no parent if it's not been attached yet. Use initial
     // validity state.
@@ -135,7 +135,7 @@ class ExpirationDateValidationDelegate : public ValidationDelegate {
     return true;
   }
 
-  bool ComboboxValueChanged(views::Combobox* combobox) override {
+  bool ComboboxValueChanged(ValidatingCombobox* combobox) override {
     base::string16 error_message;
     bool is_valid = IsValidCombobox(combobox, &error_message);
     controller_->DisplayErrorMessageForField(
@@ -143,7 +143,7 @@ class ExpirationDateValidationDelegate : public ValidationDelegate {
     return is_valid;
   }
 
-  void ComboboxModelChanged(views::Combobox* combobox) override {}
+  void ComboboxModelChanged(ValidatingCombobox* combobox) override {}
 
  private:
   EditorViewController* controller_;
@@ -156,9 +156,9 @@ class ExpirationDateValidationDelegate : public ValidationDelegate {
 }  // namespace
 
 CreditCardEditorViewController::CreditCardEditorViewController(
-    PaymentRequestSpec* spec,
-    PaymentRequestState* state,
-    PaymentRequestDialogView* dialog,
+    base::WeakPtr<PaymentRequestSpec> spec,
+    base::WeakPtr<PaymentRequestState> state,
+    base::WeakPtr<PaymentRequestDialogView> dialog,
     BackNavigationType back_navigation,
     int next_ui_tag,
     base::OnceClosure on_edited,
@@ -260,14 +260,22 @@ CreditCardEditorViewController::CreateHeaderView() {
             .release());
 
     // "Edit" link.
+    auto edit_link = std::make_unique<views::StyledLabel>();
     base::string16 link_text =
         l10n_util::GetStringUTF16(IDS_AUTOFILL_WALLET_MANAGEMENT_LINK_TEXT);
-    auto edit_link = std::make_unique<views::StyledLabel>(link_text, this);
+    edit_link->SetText(link_text);
     edit_link->SetID(
         static_cast<int>(DialogViewID::GOOGLE_PAYMENTS_EDIT_LINK_LABEL));
     edit_link->AddStyleRange(
         gfx::Range(0, link_text.size()),
-        views::StyledLabel::RangeStyleInfo::CreateForLink());
+        views::StyledLabel::RangeStyleInfo::CreateForLink(base::BindRepeating(
+            [](base::WeakPtr<PaymentRequestDialogView> dialog) {
+              chrome::ScopedTabbedBrowserDisplayer displayer(
+                  dialog->GetProfile());
+              ShowSingletonTab(displayer.browser(),
+                               autofill::payments::GetManageAddressesUrl());
+            },
+            dialog())));
     edit_link->SizeToFit(0);
     data_source->AddChildView(edit_link.release());
 
@@ -542,17 +550,6 @@ CreditCardEditorViewController::GetComboboxModelForType(
   return std::unique_ptr<ui::ComboboxModel>();
 }
 
-void CreditCardEditorViewController::StyledLabelLinkClicked(
-    views::StyledLabel* label,
-    const gfx::Range& range,
-    int event_flags) {
-  // The only thing that can trigger this is the user clicking on the "edit"
-  // link for a server card.
-  chrome::ScopedTabbedBrowserDisplayer displayer(dialog()->GetProfile());
-  ShowSingletonTab(displayer.browser(),
-                   autofill::payments::GetManageAddressesUrl());
-}
-
 void CreditCardEditorViewController::SelectBasicCardNetworkIcon(
     const std::string& basic_card_network) {
   // If empty string was passed or if the icon representing |basic_card_network|
@@ -672,7 +669,8 @@ bool CreditCardEditorViewController::CreditCardValidationDelegate::
 }
 
 bool CreditCardEditorViewController::CreditCardValidationDelegate::
-    IsValidCombobox(views::Combobox* combobox, base::string16* error_message) {
+    IsValidCombobox(ValidatingCombobox* combobox,
+                    base::string16* error_message) {
   return ValidateCombobox(combobox, error_message);
 }
 
@@ -700,7 +698,7 @@ bool CreditCardEditorViewController::CreditCardValidationDelegate::
 }
 
 bool CreditCardEditorViewController::CreditCardValidationDelegate::
-    ComboboxValueChanged(views::Combobox* combobox) {
+    ComboboxValueChanged(ValidatingCombobox* combobox) {
   base::string16 error_message;
   bool is_valid = ValidateCombobox(combobox, nullptr);
   controller_->DisplayErrorMessageForField(field_.type, error_message);
@@ -732,7 +730,8 @@ bool CreditCardEditorViewController::CreditCardValidationDelegate::
 }
 
 bool CreditCardEditorViewController::CreditCardValidationDelegate::
-    ValidateCombobox(views::Combobox* combobox, base::string16* error_message) {
+    ValidateCombobox(ValidatingCombobox* combobox,
+                     base::string16* error_message) {
   // The billing address ID is the selected item identifier and not the combobox
   // value itself.
   if (field_.type == kBillingAddressType) {

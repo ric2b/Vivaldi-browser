@@ -4,9 +4,6 @@
 
 #include "ui/gfx/x/x11_atom_cache.h"
 
-#include <X11/Xatom.h>
-#include <X11/Xlib.h>
-
 #include <utility>
 #include <vector>
 
@@ -228,6 +225,7 @@ constexpr const char* kAtomsToCache[] = {
     "chromium/x-web-custom-data",
     "chromium/x-webkit-paste",
     "image/png",
+    "image/svg+xml",
     "marker_event",
     "scaling mode",
     "text/html",

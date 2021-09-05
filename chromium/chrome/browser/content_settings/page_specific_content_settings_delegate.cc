@@ -19,6 +19,7 @@
 #include "chrome/common/renderer_configuration.mojom.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
+#include "components/permissions/permission_uma_util.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_process_host.h"
@@ -55,7 +56,18 @@ namespace chrome {
 
 PageSpecificContentSettingsDelegate::PageSpecificContentSettingsDelegate(
     content::WebContents* web_contents)
-    : WebContentsObserver(web_contents) {}
+    : WebContentsObserver(web_contents) {
+#if !defined(OS_ANDROID)
+  auto* access_context_audit_service =
+      AccessContextAuditServiceFactory::GetForProfile(
+          Profile::FromBrowserContext(web_contents->GetBrowserContext()));
+  if (access_context_audit_service) {
+    cookie_access_helper_ =
+        std::make_unique<AccessContextAuditService::CookieAccessHelper>(
+            access_context_audit_service);
+  }
+#endif  // !defined(OS_ANDROID)
+}
 
 PageSpecificContentSettingsDelegate::~PageSpecificContentSettingsDelegate() =
     default;
@@ -163,6 +175,33 @@ PageSpecificContentSettingsDelegate::GetMicrophoneCameraState() {
   return state;
 }
 
+void PageSpecificContentSettingsDelegate::OnContentAllowed(
+    ContentSettingsType type) {
+  if (!(type == ContentSettingsType::GEOLOCATION ||
+        type == ContentSettingsType::MEDIASTREAM_CAMERA ||
+        type == ContentSettingsType::MEDIASTREAM_MIC)) {
+    return;
+  }
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // Vivaldi
+  guest_view::GuestViewBase* guest =
+    guest_view::GuestViewBase::FromWebContents(web_contents());
+  if (guest) {
+    static_cast<extensions::WebViewGuest*>(guest)->OnContentAllowed(type);
+  }
+#endif  // ENABLE_EXTENSIONS
+  content_settings::SettingInfo setting_info;
+  GetSettingsMap()->GetWebsiteSetting(web_contents()->GetLastCommittedURL(),
+                                      web_contents()->GetLastCommittedURL(),
+                                      type, std::string(), &setting_info);
+  const base::Time grant_time = GetSettingsMap()->GetSettingLastModifiedDate(
+      setting_info.primary_pattern, setting_info.secondary_pattern, type);
+  if (grant_time.is_null())
+    return;
+  permissions::PermissionUmaUtil::RecordTimeElapsedBetweenGrantAndUse(
+      type, base::Time::Now() - grant_time);
+}
+
 void PageSpecificContentSettingsDelegate::OnContentBlocked(
     ContentSettingsType type) {
   if (type == ContentSettingsType::PLUGINS) {
@@ -194,13 +233,11 @@ void PageSpecificContentSettingsDelegate::OnCacheStorageAccessAllowed(
 void PageSpecificContentSettingsDelegate::OnCookieAccessAllowed(
     const net::CookieList& accessed_cookies) {
 #if !defined(OS_ANDROID)
-  auto* access_context_audit_service =
-      AccessContextAuditServiceFactory::GetForProfile(
-          Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
-  if (access_context_audit_service)
-    access_context_audit_service->RecordCookieAccess(
+  if (cookie_access_helper_) {
+    cookie_access_helper_->RecordCookieAccess(
         accessed_cookies,
         url::Origin::Create(web_contents()->GetLastCommittedURL()));
+  }
 #endif  // !defined(OS_ANDROID)
 }
 
@@ -263,17 +300,6 @@ void PageSpecificContentSettingsDelegate::DidFinishNavigation(
     content_settings::RecordPluginsAction(
         content_settings::PLUGINS_ACTION_TOTAL_NAVIGATIONS);
   }
-}
-
-void PageSpecificContentSettingsDelegate::OnContentAllowed(
-    ContentSettingsType type) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  guest_view::GuestViewBase* guest =
-    guest_view::GuestViewBase::FromWebContents(web_contents());
-  if (guest) {
-    static_cast<extensions::WebViewGuest*>(guest)->OnContentAllowed(type);
-  }
-#endif //ENABLE_EXTENSIONS
 }
 
 }  // namespace chrome

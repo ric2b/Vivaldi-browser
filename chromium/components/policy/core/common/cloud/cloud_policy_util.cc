@@ -83,6 +83,9 @@ std::string GetMachineName() {
 #elif defined(OS_APPLE)
 
 #if defined(OS_IOS)
+  // The user-entered device name (e.g. "Foo's iPhone") should not be used, as
+  // there are privacy considerations (crbug.com/1123949). The Apple internal
+  // device name (e.g. "iPad6,11") is used instead.
   std::string ios_model_name = base::SysInfo::HardwareModelName();
   if (!ios_model_name.empty()) {
     return ios_model_name;
@@ -133,7 +136,7 @@ std::string GetMachineName() {
 }
 
 std::string GetOSVersion() {
-#if defined(OS_LINUX) || defined(OS_APPLE)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_APPLE)
   return base::SysInfo::OperatingSystemVersion();
 #elif defined(OS_WIN)
   base::win::OSInfo::VersionNumber version_number =

@@ -5,6 +5,7 @@
 <translation id="1195447618553298278">Ukendt fejl.</translation>
 <translation id="1413240736185167732">Handlingen mislykkedes – Filterfejl</translation>
 <translation id="1468664791493211953">Tilbud</translation>
+<translation id="1478594628797167447">Scanner</translation>
 <translation id="1482734542997480527"><ph name="ENROLLMENT_DOMAIN" /> administrerer din enhed og kan muligvis overvåge din aktivitet.</translation>
 <translation id="150962533380566081">Ugyldig PUK-kode.</translation>
 <translation id="1510238584712386396">Appliste</translation>
@@ -19,10 +20,12 @@
 <translation id="2161394479394250669">Annuller udskriftsjob</translation>
 <translation id="2338501278241028356">Slå Bluetooth til for at opdage enheder i nærheden</translation>
 <translation id="2375079107209812402"><ph name="ATTEMPTS_LEFT" /> forsøg tilbage</translation>
+<translation id="2517472476991765520">Scan</translation>
 <translation id="2805756323405976993">Apps</translation>
 <translation id="2872961005593481000">Sluk</translation>
 <translation id="3008341117444806826">OPDATER</translation>
 <translation id="3091839911843451378">Handlingen mislykkedes – Stoppede</translation>
+<translation id="3246869037381808805">Udskriftjobs, der er ældre end 1 dag, fjernes</translation>
 <translation id="3268178239013324452">Handlingen mislykkedes – Åben låge</translation>
 <translation id="3369013195428705271">Er du sikker på, at du vil rydde hele udskriftshistorikken? Dine igangværende udskriftsjobs ryddes ikke.</translation>
 <translation id="3456078764689556234"><ph name="PRINTED_PAGES" /> ud af <ph name="TOTAL_PAGES" /> er blevet udskrevet.</translation>
@@ -33,13 +36,13 @@
 <translation id="38114475217616659">Ryd hele historikken</translation>
 <translation id="3820172043799983114">Ugyldig pinkode.</translation>
 <translation id="3838338534323494292">Ny adgangskode</translation>
+<translation id="39823212440917567">Udskriftsjobs, der er ældre end <ph name="NUMBER_OF_DAYS" /> dage, fjernes</translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> administrerer denne enhed og har adgang til al brugeraktivitet, bl.a. besøgte websider, adgangskoder og mails.</translation>
 <translation id="4003384961948020559">Handlingen mislykkedes – Fuld udskriftsbakke</translation>
 <translation id="4027485274696301677">Denne <ph name="DEVICE_TYPE" /> administreres af <ph name="ENROLLMENT_DOMAIN" />. Administratorer kan fjernkonfigurere enheden.</translation>
 <translation id="4034824040120875894">Printer</translation>
 <translation id="4227825898293920515">Adgangskoden udløber om <ph name="TIME" /></translation>
 <translation id="4238516577297848345">Ingen udskriftsjobs er i gang</translation>
-<translation id="428217921675623177">Udskriftsjobs, der er ældre end 90 dage, fjernes</translation>
 <translation id="4297501883039923494">Stoppet – Ukendt fejl</translation>
 <translation id="4429881212383817840">Din Kerberos-billet er ved at udløbe</translation>
 <translation id="445059817448385655">Gammel adgangskode</translation>
@@ -52,6 +55,7 @@
 <translation id="4890353053343094602">Vælg omgående en ny adgangskode</translation>
 <translation id="4917889632206600977">Stoppet – Papirbakken er tom</translation>
 <translation id="4932733599132424254">Dato</translation>
+<translation id="520299634122159966">Der er ingen tilgængelige scannere</translation>
 <translation id="5212543919916444558">Jeg kan ikke finde noget på skærmen, jeg kan hjælpe med. Prøv at trykke på mikrofonen for at spørge mig om noget.</translation>
 <translation id="5222676887888702881">Log ud</translation>
 <translation id="5267975978099728568"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="ERROR_STATUS" /></translation>
@@ -70,6 +74,7 @@
 <translation id="649050271426829538">Stoppet – Papirstop</translation>
 <translation id="6517239166834772319">Udforsk</translation>
 <translation id="6564646048574748301">Handlingen mislykkedes – Ingen forbindelse til printer</translation>
+<translation id="6620487321149975369">Udskriftsjobs vises i historikken, medmindre de fjernes manuelt</translation>
 <translation id="6643016212128521049">Ryd</translation>
 <translation id="6747215703636344499">Stoppet – Fuld udskriftsbakke</translation>
 <translation id="7162487448488904999">Galleri</translation>
@@ -80,7 +85,9 @@
 <translation id="7805768142964895445">Status</translation>
 <translation id="808894953321890993">Skift adgangskode</translation>
 <translation id="8208861521865154048">Fordele</translation>
+<translation id="8294431847097064396">Kilde</translation>
 <translation id="8347227221149377169">Udskriftsjobs</translation>
+<translation id="8352772353338965963">Føj en konto til samlet login fra flere konti. Det er muligt at få adgang til alle de konti, der er logget ind på, uden en adgangskode, så denne funktion bør kun bruges til de konti, du har tillid til.</translation>
 <translation id="8701136875688985581"><ph name="ENROLLMENT_DOMAIN" /> administrerer denne bruger. Det kan administrere indstillinger via fjernadgang og overvåge brugeraktivitet.</translation>
 <translation id="871560550817059752">Handlingen mislykkedes – Mangler blæk</translation>
 <translation id="8726019395068607495">Stoppet – Åben låge</translation>

@@ -140,6 +140,14 @@ function getCategoryItemMap() {
       disabledLabel: 'siteSettingsHidDevicesBlock',
     },
     {
+      route: routes.SITE_SETTINGS_IDLE_DETECTION,
+      id: Id.IDLE_DETECTION,
+      label: 'siteSettingsIdleDetection',
+      icon: 'settings:person',
+      enabledLabel: 'siteSettingsIdleDetectionAsk',
+      disabledLabel: 'siteSettingsIdleDetectionBlock',
+    },
+    {
       route: routes.SITE_SETTINGS_IMAGES,
       id: Id.IMAGES,
       label: 'siteSettingsImages',
@@ -177,8 +185,6 @@ function getCategoryItemMap() {
       label: 'siteSettingsInsecureContent',
       icon: 'settings:insecure-content',
       disabledLabel: 'siteSettingsInsecureContentBlock',
-      shouldShow: () =>
-          loadTimeData.getBoolean('enableInsecureContentContentSetting'),
     },
     {
       route: routes.SITE_SETTINGS_FILE_SYSTEM_WRITE,
@@ -187,8 +193,6 @@ function getCategoryItemMap() {
       icon: 'settings:save-original',
       enabledLabel: 'siteSettingsFileSystemWriteAsk',
       disabledLabel: 'siteSettingsFileSystemWriteBlock',
-      shouldShow: () =>
-          loadTimeData.getBoolean('enableFileSystemWriteContentSetting'),
     },
     {
       route: routes.SITE_SETTINGS_FONT_ACCESS,
@@ -383,6 +387,7 @@ Polymer({
             Id.BLUETOOTH_SCANNING,
             Id.AR,
             Id.VR,
+            Id.IDLE_DETECTION,
             Id.WINDOW_PLACEMENT,
             Id.FONT_ACCESS,
           ]),

@@ -277,9 +277,6 @@ void PaintController::DidAppendItem(DisplayItem& display_item) {
   if (usage_ == kTransient)
     return;
 
-  if (!display_item.IsMovedFromCachedSubsequence())
-    display_item.Client().SetIsInPaintControllerBeforeFinishCycle(true);
-
 #if DCHECK_IS_ON()
   if (display_item.IsCacheable()) {
     auto index = FindItemFromIdIndexMap(display_item.GetId(),
@@ -330,12 +327,6 @@ DisplayItem& PaintController::MoveItemFromCurrentListToNewList(
 }
 
 void PaintController::DidAppendChunk() {
-  if (usage_ == kMultiplePaints &&
-      !new_paint_chunks_.LastChunk().is_moved_from_cached_subsequence) {
-    new_paint_chunks_.LastChunk()
-        .id.client.SetIsInPaintControllerBeforeFinishCycle(true);
-  }
-
 #if DCHECK_IS_ON()
   if (new_paint_chunks_.LastChunk().is_cacheable) {
     AddToIdIndexMap(new_paint_chunks_.LastChunk().id,
@@ -612,7 +603,6 @@ void PaintController::FinishCycle() {
     client.ClearPartialInvalidationVisualRect();
     if (client.IsCacheable())
       client.Validate();
-    client.SetIsInPaintControllerBeforeFinishCycle(false);
   }
   for (const auto& chunk : current_paint_artifact_->PaintChunks()) {
     const auto& client = chunk.id.client;
@@ -625,22 +615,21 @@ void PaintController::FinishCycle() {
     }
     if (client.IsCacheable())
       client.Validate();
-    client.SetIsInPaintControllerBeforeFinishCycle(false);
   }
 
   current_paint_artifact_->FinishCycle();
 
-  if (VLOG_IS_ON(1)) {
-    LOG(ERROR) << "PaintController::FinishCycle() completed";
 #if DCHECK_IS_ON()
+  if (VLOG_IS_ON(1)) {
+    VLOG(1) << "PaintController::FinishCycle() completed";
     if (VLOG_IS_ON(3))
       ShowDebugDataWithPaintRecords();
     else if (VLOG_IS_ON(2))
       ShowDebugData();
     else if (VLOG_IS_ON(1))
       ShowCompactDebugData();
-#endif
   }
+#endif
 }
 
 void PaintController::ClearPropertyTreeChangedStateTo(
@@ -677,14 +666,6 @@ size_t PaintController::ApproximateUnsharedMemoryUsage() const {
                   sizeof(*new_cached_subsequences_.begin());
 
   return memory_usage;
-}
-
-void PaintController::AppendDebugDrawingAfterCommit(
-    sk_sp<const PaintRecord> record,
-    const PropertyTreeStateOrAlias& property_tree_state) {
-  DCHECK(!RuntimeEnabledFeatures::CompositeAfterPaintEnabled());
-  DCHECK(new_display_item_list_.IsEmpty());
-  current_paint_artifact_->AppendDebugDrawing(record, property_tree_state);
 }
 
 void PaintController::ShowUnderInvalidationError(

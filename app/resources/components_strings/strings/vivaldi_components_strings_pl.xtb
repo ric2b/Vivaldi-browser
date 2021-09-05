@@ -98,6 +98,7 @@
 <translation id="4235360514405112390">Ważny</translation>
 <translation id="4250431568374086873">Twoje połączenie z tą witryną nie jest w pełni bezpieczne</translation>
 <translation id="4265872034478892965">Dozwolone przez administratora</translation>
+<translation id="4305666528087210886">Nie udało się uzyskać dostępu do pliku</translation>
 <translation id="4312866146174492540">Blokuj (domyślnie)</translation>
 <translation id="4356973930735388585">Osoby atakujące tę stronę mogą próbować zainstalować na twoim komputerze niebezpieczne programy przeznaczone do kradzieży lub usuwania twoich danych (na przykład zdjęć, haseł, wiadomości czy numerów kart kredytowych).</translation>
 <translation id="4408413947728134509">Ciasteczka (<ph name="NUM_COOKIES" />)</translation>
@@ -152,6 +153,7 @@
 <translation id="6165508094623778733">Więcej informacji</translation>
 <translation id="6177128806592000436">Twoje połączenie z tą witryną nie jest bezpieczne</translation>
 <translation id="6203231073485539293">Sprawdź połączenie z Internetem</translation>
+<translation id="6225522625585012689">Wejdź na stronę &lt;strong&gt;vivaldi://policy&lt;/strong&gt;, aby wyświetlić listę zablokowanych adresów URL oraz inne zasady egzekwowane przez administratora systemu.</translation>
 <translation id="625755898061068298">Wyłączyłeś ostrzeżenia dotyczące bezpieczeństwa tej strony.</translation>
 <translation id="6264485186158353794">Powrót do bezpieczeństwa</translation>
 <translation id="6305205051461490394">Strona <ph name="URL" /> jest nieosiągalna.</translation>
@@ -201,7 +203,6 @@
 <translation id="8041940743680923270">Użyj globalnej wartości domyślnej (Pytaj)</translation>
 <translation id="808894953321890993">Zmień hasło</translation>
 <translation id="8119307142152921512">trackery i reklamy</translation>
-<translation id="8142868475871995937">Wejdź na stronę &lt;strong&gt;vivaldi://policy&lt;/strong&gt;, aby wyświetlić listę zablokowanych adresów URL oraz inne zasady egzekwowane przez administratora twojego systemu.</translation>
 <translation id="8149426793427495338">Twój komputer przeszedł w stan uśpienia.</translation>
 <translation id="8150722005171944719">Nie można odczytać pliku <ph name="URL" />. Być może został usunięty, przeniesiony lub uprawnienia dostępu uniemożliwiają jego odczyt.</translation>
 <translation id="8184538546369750125">Użyj globalnej wartości domyślnej (Zezwalaj)</translation>
@@ -224,6 +225,7 @@
 <translation id="9011424611726486705">Otwórz ustawienia witryny</translation>
 <translation id="9025348182339809926">(Nieważny)</translation>
 <translation id="9039213469156557790">Ta strona zawiera niezabezpieczone zasoby. Podczas przesyłania danych mogą je wyświetlić inni użytkownicy, a osoby atakujące mogą je zmodyfikować, by zmienić sposób działania strony.</translation>
+<translation id="9062620674789239642">Mógł zostać przeniesiony, edytowany lub usunięty.</translation>
 <translation id="9069693763241529744">Zablokowane przez rozszerzenie</translation>
 <translation id="9169664750068251925">Zawsze blokuj na tej stronie</translation>
 <translation id="9180553614777056266">Blokowanie reklam</translation>

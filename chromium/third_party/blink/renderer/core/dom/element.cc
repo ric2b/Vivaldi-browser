@@ -151,6 +151,7 @@
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/core/svg/svg_a_element.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_href.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg_names.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
@@ -181,33 +182,27 @@ class DisplayLockStyleScope {
   explicit DisplayLockStyleScope(Element* element) : element_(element) {
     // Note that we don't store context as a member of this scope, since it may
     // get created as part of element self style recalc.
-    auto* context = element->GetDisplayLockContext();
-    should_update_self_ =
-        !context || context->ShouldStyle(DisplayLockLifecycleTarget::kSelf);
   }
 
   ~DisplayLockStyleScope() {
     if (auto* context = element_->GetDisplayLockContext()) {
       if (did_update_children_)
-        context->DidStyle(DisplayLockLifecycleTarget::kChildren);
+        context->DidStyleChildren();
     }
   }
 
-  bool ShouldUpdateSelfStyle() const { return should_update_self_; }
   bool ShouldUpdateChildStyle() const {
     // We can't calculate this on construction time, because the element's lock
     // state may changes after self-style calculation ShouldStyle(children).
     auto* context = element_->GetDisplayLockContext();
-    return !context ||
-           context->ShouldStyle(DisplayLockLifecycleTarget::kChildren);
+    return !context || context->ShouldStyleChildren();
   }
   void DidUpdateChildStyle() { did_update_children_ = true; }
   // Returns true if the element was force unlocked due to missing requirements.
   bool DidUpdateSelfStyle() {
-    DCHECK(should_update_self_);
     if (auto* context = element_->GetDisplayLockContext()) {
       bool was_locked = context->IsLocked();
-      context->DidStyle(DisplayLockLifecycleTarget::kSelf);
+      context->DidStyleSelf();
       return was_locked && !context->IsLocked();
     }
     return false;
@@ -231,7 +226,6 @@ class DisplayLockStyleScope {
 
  private:
   Element* element_;
-  bool should_update_self_ = false;
   bool did_update_children_ = false;
 };
 
@@ -304,7 +298,7 @@ bool DefinitelyNewFormattingContext(const Node& node,
     if (!IsA<HTMLDetailsElement>(node) && !IsA<HTMLSummaryElement>(node))
       return true;
   }
-  if (!style.IsOverflowVisible())
+  if (style.IsScrollContainer())
     return node.GetDocument().ViewportDefiningElement() != &node;
   if (style.HasOutOfFlowPosition() ||
       (style.IsFloating() && !style.IsFlexOrGridItem()) ||
@@ -330,6 +324,12 @@ bool DefinitelyNewFormattingContext(const Node& node,
                element->IsFrameOwnerElement()) {
       return true;
     }
+
+    // foreignObject is absolutely-positioned for the purposes of CSS layout and
+    // so always establishes a new formatting context.
+    // https://svgwg.org/svg2-draft/embedded.html#Placement
+    if (IsA<SVGForeignObjectElement>(element))
+      return true;
   }
   if (const Node* parent = LayoutTreeBuilderTraversal::LayoutParent(node))
     return parent->ComputedStyleRef().IsDisplayFlexibleOrGridBox();
@@ -340,8 +340,7 @@ bool CalculateStyleShouldForceLegacyLayout(const Element& element,
                                            const ComputedStyle& style) {
   Document& document = element.GetDocument();
 
-  if (style.Display() == EDisplay::kLayoutCustom ||
-      style.Display() == EDisplay::kInlineLayoutCustom)
+  if (style.DisplayTypeRequiresLayoutNG())
     return false;
 
   // TODO(layout-dev): Once LayoutNG handles inline content editable, we
@@ -355,8 +354,7 @@ bool CalculateStyleShouldForceLegacyLayout(const Element& element,
   }
 
   if (style.IsDeprecatedWebkitBox() &&
-      (!style.IsDeprecatedWebkitBoxWithVerticalLineClamp() ||
-       !RuntimeEnabledFeatures::BlockFlowHandlesWebkitLineClampEnabled())) {
+      !style.IsDeprecatedWebkitBoxWithVerticalLineClamp()) {
     UseCounter::Count(
         document, WebFeature::kLegacyLayoutByWebkitBoxWithoutVerticalLineClamp);
     return true;
@@ -657,6 +655,13 @@ Node* Element::Clone(Document& factory, CloneChildrenFlag flag) const {
       // set copy’s shadow root’s "is declarative shadow root" property to true.
       cloned_shadow_root.SetIsDeclarativeShadowRoot(
           shadow_root->IsDeclarativeShadowRoot());
+
+      // 7.NEW If node’s shadow root’s "is available to element internals" is
+      // true, then set copy’s shadow root’s "is available to element internals"
+      // property to true.
+      cloned_shadow_root.SetAvailableToElementInternals(
+          shadow_root->IsAvailableToElementInternals());
+
       // 7.3 If the clone children flag is set, clone all the children of node’s
       // shadow root and append them to copy’s shadow root, with document as
       // specified, the clone children flag being set, and the clone shadows
@@ -1284,11 +1289,15 @@ int Element::clientWidth() {
         GetDocument().UpdateStyleAndLayoutForNode(
             this, DocumentUpdateReason::kJavaScript);
       }
-      if (GetDocument().GetPage()->GetSettings().GetForceZeroLayoutHeight())
+      if (GetDocument().GetPage()->GetSettings().GetForceZeroLayoutHeight()) {
+        // TODO(sky): deal with OverflowClipRect() being infinite along an
+        // axis (because of overflow: clip and overflow:visible along the
+        // opposite axis).
         return AdjustForAbsoluteZoom::AdjustLayoutUnit(
                    layout_view->OverflowClipRect(PhysicalOffset()).Width(),
                    layout_view->StyleRef())
             .Round();
+      }
       return AdjustForAbsoluteZoom::AdjustLayoutUnit(
                  LayoutUnit(layout_view->GetLayoutSize().Width()),
                  layout_view->StyleRef())
@@ -1326,11 +1335,15 @@ int Element::clientHeight() {
         GetDocument().UpdateStyleAndLayoutForNode(
             this, DocumentUpdateReason::kJavaScript);
       }
-      if (GetDocument().GetPage()->GetSettings().GetForceZeroLayoutHeight())
+      if (GetDocument().GetPage()->GetSettings().GetForceZeroLayoutHeight()) {
+        // TODO(sky): deal with OverflowClipRect() being infinite along an
+        // axis (because of overflow: clip and overflow:visible along the
+        // opposite axis).
         return AdjustForAbsoluteZoom::AdjustLayoutUnit(
                    layout_view->OverflowClipRect(PhysicalOffset()).Height(),
                    layout_view->StyleRef())
             .Round();
+      }
       return AdjustForAbsoluteZoom::AdjustLayoutUnit(
                  LayoutUnit(layout_view->GetLayoutSize().Height()),
                  layout_view->StyleRef())
@@ -1351,11 +1364,13 @@ int Element::clientHeight() {
   return 0;
 }
 
-PaintLayerScrollableArea* Element::GetScrollableArea() const {
+LayoutBox* Element::GetLayoutBoxForScrolling() const {
   LayoutBox* box = GetLayoutBox();
-  if (!box || !box->HasOverflowClip())
+  if (!box || (!box->IsScrollContainer() &&
+               !box->StyleRef().IsScrollbarGutterForce())) {
     return nullptr;
-  return box->GetScrollableArea();
+  }
+  return box;
 }
 
 double Element::scrollLeft() {
@@ -1371,7 +1386,10 @@ double Element::scrollLeft() {
     return 0;
   }
 
-  if (PaintLayerScrollableArea* scrollable_area = GetScrollableArea()) {
+  LayoutBox* box = GetLayoutBoxForScrolling();
+  if (!box)
+    return 0;
+  if (PaintLayerScrollableArea* scrollable_area = box->GetScrollableArea()) {
     DCHECK(GetLayoutBox());
 
     if (HasLeftwardDirection(*this)) {
@@ -1409,7 +1427,10 @@ double Element::scrollTop() {
     return 0;
   }
 
-  if (PaintLayerScrollableArea* scrollable_area = GetScrollableArea()) {
+  LayoutBox* box = GetLayoutBoxForScrolling();
+  if (!box)
+    return 0;
+  if (PaintLayerScrollableArea* scrollable_area = box->GetScrollableArea()) {
     DCHECK(GetLayoutBox());
 
     if (HasUpwardDirection(*this)) {
@@ -1449,10 +1470,13 @@ void Element::setScrollLeft(double new_left) {
       options->setLeft(new_left);
       window->scrollTo(options);
     }
-  } else if (PaintLayerScrollableArea* scrollable_area = GetScrollableArea()) {
-    LayoutBox* box = GetLayoutBox();
-    DCHECK(box);
+    return;
+  }
 
+  LayoutBox* box = GetLayoutBoxForScrolling();
+  if (!box)
+    return;
+  if (PaintLayerScrollableArea* scrollable_area = box->GetScrollableArea()) {
     if (HasLeftwardDirection(*this)) {
       UseCounter::Count(
           GetDocument(),
@@ -1516,10 +1540,13 @@ void Element::setScrollTop(double new_top) {
       options->setTop(new_top);
       window->scrollTo(options);
     }
-  } else if (PaintLayerScrollableArea* scrollable_area = GetScrollableArea()) {
-    LayoutBox* box = GetLayoutBox();
-    DCHECK(box);
+    return;
+  }
 
+  LayoutBox* box = GetLayoutBoxForScrolling();
+  if (!box)
+    return;
+  if (PaintLayerScrollableArea* scrollable_area = box->GetScrollableArea()) {
     if (HasUpwardDirection(*this)) {
       UseCounter::Count(
           GetDocument(),
@@ -1675,8 +1702,10 @@ void Element::ScrollLayoutBoxBy(const ScrollToOptions* scroll_to_options) {
       mojom::blink::ScrollBehavior::kAuto;
   ScrollableArea::ScrollBehaviorFromString(scroll_to_options->behavior(),
                                            scroll_behavior);
-  if (PaintLayerScrollableArea* scrollable_area = GetScrollableArea()) {
-    LayoutBox* box = GetLayoutBox();
+  LayoutBox* box = GetLayoutBoxForScrolling();
+  if (!box)
+    return;
+  if (PaintLayerScrollableArea* scrollable_area = box->GetScrollableArea()) {
     DCHECK(box);
     gfx::ScrollOffset current_position(scrollable_area->ScrollPosition().X(),
                                        scrollable_area->ScrollPosition().Y());
@@ -1701,9 +1730,10 @@ void Element::ScrollLayoutBoxTo(const ScrollToOptions* scroll_to_options) {
   ScrollableArea::ScrollBehaviorFromString(scroll_to_options->behavior(),
                                            scroll_behavior);
 
-  if (PaintLayerScrollableArea* scrollable_area = GetScrollableArea()) {
-    LayoutBox* box = GetLayoutBox();
-    DCHECK(box);
+  LayoutBox* box = GetLayoutBoxForScrolling();
+  if (!box)
+    return;
+  if (PaintLayerScrollableArea* scrollable_area = box->GetScrollableArea()) {
     if (scroll_to_options->hasLeft() && HasLeftwardDirection(*this)) {
       UseCounter::Count(
           GetDocument(),
@@ -2041,9 +2071,14 @@ DOMRect* Element::getBoundingClientRect() {
 
 const AtomicString& Element::computedRole() {
   Document& document = GetDocument();
-  if (!document.IsActive())
+  if (!document.IsActive() || !document.View())
     return g_null_atom;
-  document.UpdateStyleAndLayoutForNode(this, DocumentUpdateReason::kJavaScript);
+  if (document.NeedsLayoutTreeUpdate() || document.View()->NeedsLayout() ||
+      document.Lifecycle().GetState() <
+          DocumentLifecycle::kCompositingAssignmentsClean) {
+    document.View()->UpdateLifecycleToCompositingCleanPlusScrolling(
+        DocumentUpdateReason::kJavaScript);
+  }
   UpdateDistributionForFlatTreeTraversal();
   AXContext ax_context(document);
   return ax_context.GetAXObjectCache().ComputedRoleForNode(this);
@@ -2051,9 +2086,14 @@ const AtomicString& Element::computedRole() {
 
 String Element::computedName() {
   Document& document = GetDocument();
-  if (!document.IsActive())
+  if (!document.IsActive() || !document.View())
     return String();
-  document.UpdateStyleAndLayoutForNode(this, DocumentUpdateReason::kJavaScript);
+  if (document.NeedsLayoutTreeUpdate() || document.View()->NeedsLayout() ||
+      document.Lifecycle().GetState() <
+          DocumentLifecycle::kCompositingAssignmentsClean) {
+    document.View()->UpdateLifecycleToCompositingCleanPlusScrolling(
+        DocumentUpdateReason::kJavaScript);
+  }
   UpdateDistributionForFlatTreeTraversal();
   AXContext ax_context(document);
   return ax_context.GetAXObjectCache().ComputedNameForNode(this);
@@ -2653,10 +2693,7 @@ void Element::AttachLayoutTree(AttachContext& context) {
   LayoutObject* layout_object = nullptr;
   if (CanParticipateInFlatTree()) {
     if (being_rendered) {
-      // If an element requires forced legacy layout, all descendants need it
-      // too.
-      if (ShouldForceLegacyLayout())
-        children_context.force_legacy_layout = true;
+      AdjustForceLegacyLayout(style, &children_context.force_legacy_layout);
       LegacyLayout legacy = children_context.force_legacy_layout
                                 ? LegacyLayout::kForce
                                 : LegacyLayout::kAuto;
@@ -2823,16 +2860,6 @@ void Element::RecalcStyle(const StyleRecalcChange change) {
   DCHECK(!GetDocument().Lifecycle().InDetach());
 
   DisplayLockStyleScope display_lock_style_scope(this);
-  if (!display_lock_style_scope.ShouldUpdateSelfStyle()) {
-    display_lock_style_scope.NotifyUpdateWasBlocked(
-        change.RecalcChildren()
-            ? (change.RecalcDescendants()
-                   ? DisplayLockContext::kStyleUpdateDescendants
-                   : DisplayLockContext::kStyleUpdateChildren)
-            : DisplayLockContext::kStyleUpdateSelf);
-    return;
-  }
-
   if (HasCustomStyleCallbacks())
     WillRecalcStyle(change);
 
@@ -3109,7 +3136,6 @@ StyleRecalcChange Element::RecalcOwnStyle(const StyleRecalcChange change) {
 void Element::RebuildLayoutTree(WhitespaceAttacher& whitespace_attacher) {
   DCHECK(InActiveDocument());
   DCHECK(parentNode());
-  DCHECK(!StyleRecalcBlockedByDisplayLock(DisplayLockLifecycleTarget::kSelf));
 
   if (NeedsReattachLayoutTree()) {
     AttachContext reattach_context;
@@ -3120,8 +3146,7 @@ void Element::RebuildLayoutTree(WhitespaceAttacher& whitespace_attacher) {
     ReattachLayoutTree(reattach_context);
     whitespace_attacher.DidReattachElement(this,
                                            reattach_context.previous_in_flow);
-  } else if (!StyleRecalcBlockedByDisplayLock(
-                 DisplayLockLifecycleTarget::kChildren)) {
+  } else if (!ChildStyleRecalcBlockedByDisplayLock()) {
     // TODO(crbug.com/972752): Make the condition above a DCHECK instead when
     // style recalc and dirty bit propagation uses flat-tree traversal.
     // We create a local WhitespaceAttacher when rebuilding children of an
@@ -3155,13 +3180,10 @@ void Element::RebuildLayoutTree(WhitespaceAttacher& whitespace_attacher) {
     ClearChildNeedsReattachLayoutTree();
   }
   DCHECK(!NeedsStyleRecalc());
-  DCHECK(
-      !ChildNeedsStyleRecalc() ||
-      StyleRecalcBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
+  DCHECK(!ChildNeedsStyleRecalc() || ChildStyleRecalcBlockedByDisplayLock());
   DCHECK(!NeedsReattachLayoutTree());
-  DCHECK(
-      !ChildNeedsReattachLayoutTree() ||
-      StyleRecalcBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren));
+  DCHECK(!ChildNeedsReattachLayoutTree() ||
+         ChildStyleRecalcBlockedByDisplayLock());
 }
 
 void Element::RebuildShadowRootLayoutTree(
@@ -3384,6 +3406,10 @@ ElementInternals& Element::EnsureElementInternals() {
   return EnsureElementRareData().EnsureElementInternals(To<HTMLElement>(*this));
 }
 
+const ElementInternals* Element::GetElementInternals() const {
+  return HasRareData() ? GetElementRareData()->GetElementInternals() : nullptr;
+}
+
 ShadowRoot* Element::createShadowRoot(ExceptionState& exception_state) {
   DCHECK(RuntimeEnabledFeatures::ShadowDOMV0Enabled(GetExecutionContext()));
   if (ShadowRoot* root = GetShadowRoot()) {
@@ -3542,6 +3568,10 @@ void Element::AttachDeclarativeShadowRoot(HTMLTemplateElement* template_element,
   // 13.1. Set declarative shadow host element's shadow host's "is declarative
   // shadow root" property to true.
   shadow_root.SetIsDeclarativeShadowRoot(true);
+  // 13.NEW. Set declarative shadow host element's shadow host's "available
+  // to element internals" to true.
+  shadow_root.SetAvailableToElementInternals(true);
+
   // 13.2. Append the declarative template element's DocumentFragment to the
   // newly-created shadow root.
   shadow_root.appendChild(template_element->DeclarativeShadowContent());
@@ -3585,6 +3615,15 @@ ShadowRoot& Element::AttachShadowRootInternal(
                                 FocusDelegation::kDelegateFocus);
   // 8. Set shadow’s "is declarative shadow root" property to false.
   shadow_root.SetIsDeclarativeShadowRoot(false);
+
+  // NEW. If shadow host is a custom element, and if custom element state is
+  // not "precustomized" or "custom", set shadow root's
+  // IsAvailableToElementInternals flag to false. Otherwise, set it to true.
+  shadow_root.SetAvailableToElementInternals(
+      !(IsCustomElement() &&
+        GetCustomElementState() != CustomElementState::kCustom &&
+        GetCustomElementState() != CustomElementState::kPreCustomized));
+
   shadow_root.SetSlotAssignmentMode(slot_assignment_mode);
   return shadow_root;
 }
@@ -4301,8 +4340,7 @@ void Element::ForceLegacyLayoutInFormattingContext(
           style->IsDisplayTableType();
     }
     if (needs_traverse_to_table) {
-      EDisplay display = style->Display();
-      if (display == EDisplay::kTable || display == EDisplay::kInlineTable)
+      if (style->IsDisplayTableBox())
         needs_traverse_to_table = false;
     }
     ancestor->SetShouldForceLegacyLayoutForChild(true);
@@ -4536,6 +4574,20 @@ void Element::HideNonce() {
           ->HasHeaderDeliveredPolicy()) {
     setAttribute(html_names::kNonceAttr, g_empty_atom);
   }
+}
+
+void Element::AdjustForceLegacyLayout(const ComputedStyle* style,
+                                      bool* should_force_legacy_layout) {
+  // If an element requires forced legacy layout, all descendants need it too
+  // (but see below):
+  if (ShouldForceLegacyLayout())
+    *should_force_legacy_layout = true;
+
+  // However, any forcing of legacy layout, by this element, or by an acestor,
+  // must be reset here, if the legacy layout engine doesn't support the display
+  // type.
+  if (style && style->DisplayTypeRequiresLayoutNG())
+    *should_force_legacy_layout = false;
 }
 
 ElementIntersectionObserverData* Element::IntersectionObserverData() const {
@@ -5887,6 +5939,13 @@ void Element::ClearMutableInlineStyleIfEmpty() {
   }
 }
 
+void Element::NotifyInlineStyleMutation() {
+  if (GetLayoutObject() && GetLayoutObject()->PreviousVisibilityVisible() &&
+      GetDocument().GetPage()) {
+    GetDocument().GetPage()->Animator().SetHasInlineStyleMutation();
+  }
+}
+
 inline void Element::SetInlineStyleFromString(
     const AtomicString& new_style_string) {
   DCHECK(IsStyledElement());
@@ -6203,10 +6262,9 @@ const NamesMap* Element::PartNamesMap() const {
   return HasRareData() ? GetElementRareData()->PartNamesMap() : nullptr;
 }
 
-bool Element::StyleRecalcBlockedByDisplayLock(
-    DisplayLockLifecycleTarget target) const {
+bool Element::ChildStyleRecalcBlockedByDisplayLock() const {
   auto* context = GetDisplayLockContext();
-  return context && !context->ShouldStyle(target);
+  return context && !context->ShouldStyleChildren();
 }
 
 void Element::SetHovered(bool hovered) {
@@ -6228,8 +6286,7 @@ void Element::SetHovered(bool hovered) {
   if (ChildrenOrSiblingsAffectedByHover())
     PseudoStateChanged(CSSSelector::kPseudoHover);
 
-  if (LayoutObject* layout_object = GetLayoutObject())
-    layout_object->InvalidateIfControlStateChanged(kHoverControlState);
+  InvalidateIfHasEffectiveAppearance();
 }
 
 void Element::SetActive(bool active) {
@@ -6263,7 +6320,8 @@ void Element::SetActive(bool active) {
   if (ChildrenOrSiblingsAffectedByActive())
     PseudoStateChanged(CSSSelector::kPseudoActive);
 
-  GetLayoutObject()->InvalidateIfControlStateChanged(kPressedControlState);
+  if (!IsDisabledFormControl())
+    InvalidateIfHasEffectiveAppearance();
 }
 
 void Element::InvalidateStyleAttribute() {

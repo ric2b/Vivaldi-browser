@@ -27,7 +27,6 @@ VIZ_COMMON_EXPORT extern const base::Feature kUseRealBuffersForPageFlipTest;
 #if defined(OS_FUCHSIA)
 VIZ_COMMON_EXPORT extern const base::Feature kUseSkiaOutputDeviceBufferQueue;
 #endif
-VIZ_COMMON_EXPORT extern const base::Feature kSplitPartiallyOccludedQuads;
 VIZ_COMMON_EXPORT extern const base::Feature kWebRtcLogCapturePipeline;
 #if defined(OS_WIN)
 VIZ_COMMON_EXPORT extern const base::Feature kUseSetPresentDuration;
@@ -36,7 +35,6 @@ VIZ_COMMON_EXPORT extern const base::Feature kUseSetPresentDuration;
 VIZ_COMMON_EXPORT bool IsForcePreferredIntervalForVideoEnabled();
 VIZ_COMMON_EXPORT bool IsVizHitTestingDebugEnabled();
 VIZ_COMMON_EXPORT bool IsUsingSkiaRenderer();
-VIZ_COMMON_EXPORT bool IsRecordingSkPicture();
 #if defined(OS_ANDROID)
 VIZ_COMMON_EXPORT bool IsDynamicColorGamutEnabled();
 #endif
@@ -45,7 +43,6 @@ VIZ_COMMON_EXPORT bool IsUsingVizFrameSubmissionForWebView();
 VIZ_COMMON_EXPORT bool IsUsingPreferredIntervalForVideo();
 VIZ_COMMON_EXPORT int NumOfFramesToToggleInterval();
 VIZ_COMMON_EXPORT bool ShouldUseRealBuffersForPageFlipTest();
-VIZ_COMMON_EXPORT bool ShouldSplitPartiallyOccludedQuads();
 VIZ_COMMON_EXPORT bool ShouldWebRtcLogCapturePipeline();
 #if defined(OS_WIN)
 VIZ_COMMON_EXPORT bool ShouldUseSetPresentDuration();

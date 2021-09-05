@@ -54,7 +54,7 @@ public class RecentTabsRowAdapter extends BaseExpandableListAdapter {
     private static final int MAX_NUM_FAVICONS_TO_CACHE = 128;
 
     @IntDef({ChildType.NONE, ChildType.DEFAULT_CONTENT, ChildType.PERSONALIZED_SIGNIN_PROMO,
-            ChildType.SYNC_PROMO})
+            ChildType.PERSONALIZED_SYNC_PROMO, ChildType.SYNC_PROMO})
     @Retention(RetentionPolicy.SOURCE)
     private @interface ChildType {
         // Values should be enumerated from 0 and can't have gaps.
@@ -562,12 +562,12 @@ public class RecentTabsRowAdapter extends BaseExpandableListAdapter {
             String title = TitleUtil.getTitleForDisplay(tab.title, tab.url);
             viewHolder.textView.setText(title);
 
-            String domain = UrlUtilities.getDomainAndRegistry(tab.url, false);
+            String domain = UrlUtilities.getDomainAndRegistry(tab.url.getSpec(), false);
             if (!TextUtils.isEmpty(domain)) {
                 viewHolder.domainView.setText(domain);
                 viewHolder.domainView.setVisibility(View.VISIBLE);
             }
-            loadFavicon(viewHolder, tab.url, FaviconLocality.LOCAL);
+            loadFavicon(viewHolder, tab.url.getSpec(), FaviconLocality.LOCAL);
         }
 
         @Override

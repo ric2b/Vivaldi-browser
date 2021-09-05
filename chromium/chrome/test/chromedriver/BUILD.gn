@@ -8,6 +8,13 @@ import("//build/util/lastchange.gni")
 import("//testing/test.gni")
 import("//third_party/ffmpeg/ffmpeg_options.gni")
 
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
 action("embed_js_in_cpp") {
   script = "embed_js_in_cpp.py"
 
@@ -81,6 +88,7 @@ source_set("automation_client_lib") {
     "chrome/device_manager.h",
     "chrome/device_metrics.cc",
     "chrome/device_metrics.h",
+    "chrome/devtools_client.cc",
     "chrome/devtools_client.h",
     "chrome/devtools_client_impl.cc",
     "chrome/devtools_client_impl.h",
@@ -207,6 +215,7 @@ source_set("lib") {
     "command_listener_proxy.h",
     "commands.cc",
     "commands.h",
+    "connection_session_map.h",
     "constants/version.h",
     "devtools_events_logger.cc",
     "devtools_events_logger.h",
@@ -225,10 +234,13 @@ source_set("lib") {
     "performance_logger.h",
     "server/http_handler.cc",
     "server/http_handler.h",
+    "server/http_server.cc",
+    "server/http_server.h",
     "session.cc",
     "session.h",
     "session_commands.cc",
     "session_commands.h",
+    "session_connection_map.h",
     "session_thread_map.h",
     "util.cc",
     "util.h",

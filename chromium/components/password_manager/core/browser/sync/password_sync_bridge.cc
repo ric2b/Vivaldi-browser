@@ -15,7 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/sync/model/metadata_batch.h"
@@ -30,12 +30,6 @@
 namespace password_manager {
 
 namespace {
-
-// Controls whether we should delete the sync metadata when they aren't
-// readable.
-const base::Feature kDeletePasswordSyncMetadataWhenNoReadable{
-    "DeletePasswordSyncMetadataWhenNoReadable",
-    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Error values for reading sync metadata.
 // Used in metrics: "PasswordManager.SyncMetadataReadError". These values
@@ -62,7 +56,7 @@ std::string ComputeClientTag(
 }
 
 sync_pb::PasswordSpecifics SpecificsFromPassword(
-    const autofill::PasswordForm& password_form) {
+    const PasswordForm& password_form) {
   sync_pb::PasswordSpecifics specifics;
   sync_pb::PasswordSpecificsData* password_data =
       specifics.mutable_client_only_encrypted_data();
@@ -95,16 +89,14 @@ sync_pb::PasswordSpecifics SpecificsFromPassword(
   return specifics;
 }
 
-autofill::PasswordForm PasswordFromEntityChange(
-    const syncer::EntityChange& entity_change,
-    base::Time sync_time) {
+PasswordForm PasswordFromEntityChange(const syncer::EntityChange& entity_change,
+                                      base::Time sync_time) {
   DCHECK(entity_change.data().specifics.has_password());
   const sync_pb::PasswordSpecificsData& password_data =
       entity_change.data().specifics.password().client_only_encrypted_data();
 
-  autofill::PasswordForm password;
-  password.scheme =
-      static_cast<autofill::PasswordForm::Scheme>(password_data.scheme());
+  PasswordForm password;
+  password.scheme = static_cast<PasswordForm::Scheme>(password_data.scheme());
   password.signon_realm = password_data.signon_realm();
   password.url = GURL(password_data.origin());
   password.action = GURL(password_data.action());
@@ -128,8 +120,7 @@ autofill::PasswordForm PasswordFromEntityChange(
       // always used the Windows epoch.
       base::TimeDelta::FromMicroseconds(password_data.date_created()));
   password.blocked_by_user = password_data.blacklisted();
-  password.type =
-      static_cast<autofill::PasswordForm::Type>(password_data.type());
+  password.type = static_cast<PasswordForm::Type>(password_data.type());
   password.times_used = password_data.times_used();
   password.display_name = base::UTF8ToUTF16(password_data.display_name());
   password.icon_url = GURL(password_data.avatar_url());
@@ -139,8 +130,7 @@ autofill::PasswordForm PasswordFromEntityChange(
   return password;
 }
 
-std::unique_ptr<syncer::EntityData> CreateEntityData(
-    const autofill::PasswordForm& form) {
+std::unique_ptr<syncer::EntityData> CreateEntityData(const PasswordForm& form) {
   auto entity_data = std::make_unique<syncer::EntityData>();
   *entity_data->specifics.mutable_password() = SpecificsFromPassword(form);
   entity_data->name = form.signon_realm;
@@ -160,7 +150,7 @@ int ParsePrimaryKey(const std::string& storage_key) {
 // memberwise.
 bool AreLocalAndRemotePasswordsEqual(
     const sync_pb::PasswordSpecificsData& password_specifics,
-    const autofill::PasswordForm& password_form) {
+    const PasswordForm& password_form) {
   return (static_cast<int>(password_form.scheme) ==
               password_specifics.scheme() &&
           password_form.signon_realm == password_specifics.signon_realm() &&
@@ -196,13 +186,9 @@ bool AreLocalAndRemotePasswordsEqual(
 // the local copy, to be replaced by the remote version coming from Sync during
 // merge.
 bool ShouldRecoverPasswordsDuringMerge() {
-  // Delete the local undecryptable copy under the following conditions:
-  // 1. This is MacOS only.
-  // 2. The more general feature kDeleteCorruptedPasswords is disabled.
-  //    kDeleteCorruptedPasswords takes cares of deleting undecryptable entities
-  //    for Sync and non-Sync users upon reading from the LoginDatabase.
+  // Delete the local undecryptable copy when this is MacOS only.
 #if defined(OS_MAC)
-  return !base::FeatureList::IsEnabled(features::kDeleteCorruptedPasswords);
+  return true;
 #else
   return false;
 #endif
@@ -260,17 +246,10 @@ PasswordSyncBridge::PasswordSyncBridge(
   } else {
     batch = password_store_sync_->GetMetadataStore()->GetAllSyncMetadata();
     if (!batch) {
-      if (base::FeatureList::IsEnabled(
-              kDeletePasswordSyncMetadataWhenNoReadable)) {
-        // If the metadata cannot be read, it's mostly a persistent error, and
-        // hence we should drop the metadata to go throw the initial sync flow.
-        password_store_sync_->GetMetadataStore()->DeleteAllSyncMetadata();
-        batch = std::make_unique<syncer::MetadataBatch>();
-      } else {
-        this->change_processor()->ReportError(
-            {FROM_HERE,
-             "Failed reading passwords metadata from password store."});
-      }
+      // If the metadata cannot be read, it's mostly a persistent error, and
+      // hence we should drop the metadata to go throw the initial sync flow.
+      password_store_sync_->GetMetadataStore()->DeleteAllSyncMetadata();
+      batch = std::make_unique<syncer::MetadataBatch>();
       sync_metadata_read_error = SyncMetadataReadError::kReadFailed;
     }
   }
@@ -405,7 +384,7 @@ base::Optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
     std::unordered_set<std::string> client_tags_of_local_passwords;
     for (const auto& pair : key_to_local_form_map) {
       const int primary_key = pair.first;
-      const autofill::PasswordForm& local_password_form = *pair.second;
+      const PasswordForm& local_password_form = *pair.second;
       std::unique_ptr<syncer::EntityData> local_form_entity_data =
           CreateEntityData(local_password_form);
       const std::string client_tag_of_local_password =
@@ -760,7 +739,7 @@ void PasswordSyncBridge::GetAllDataForDebugging(DataCallback callback) {
 
   auto batch = std::make_unique<syncer::MutableDataBatch>();
   for (const auto& pair : key_to_form_map) {
-    autofill::PasswordForm form = *pair.second;
+    PasswordForm form = *pair.second;
     form.password_value = base::UTF8ToUTF16("hidden");
     batch->Put(base::NumberToString(pair.first), CreateEntityData(form));
   }
@@ -807,7 +786,7 @@ void PasswordSyncBridge::ApplyStopSyncChanges(
                                            true);
 
   PasswordStoreChangeList password_store_changes;
-  std::vector<autofill::PasswordForm> unsynced_logins_being_deleted;
+  std::vector<PasswordForm> unsynced_logins_being_deleted;
   PrimaryKeyToFormMap logins;
   FormRetrievalResult result = password_store_sync_->ReadAllLogins(&logins);
   if (result == FormRetrievalResult::kSuccess) {
@@ -815,7 +794,7 @@ void PasswordSyncBridge::ApplyStopSyncChanges(
         GetUnsyncedPasswordsStorageKeys();
     for (const auto& primary_key_and_form : logins) {
       int primary_key = primary_key_and_form.first;
-      const autofill::PasswordForm& form = *primary_key_and_form.second;
+      const PasswordForm& form = *primary_key_and_form.second;
       password_store_changes.emplace_back(PasswordStoreChange::REMOVE, form,
                                           primary_key);
       if (unsynced_passwords_storage_keys.count(primary_key) != 0 &&

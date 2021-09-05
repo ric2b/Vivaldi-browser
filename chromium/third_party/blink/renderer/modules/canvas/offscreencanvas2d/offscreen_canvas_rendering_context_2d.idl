@@ -16,6 +16,8 @@
     // state
     void save(); // push state on state stack
     void restore(); // pop state stack and restore state
+    // Clear the canvas and reset the path
+    [RuntimeEnabled=NewCanvas2DAPI] void reset();
 
     // transformations (default transform is the identity matrix)
     void scale(unrestricted double x, unrestricted double y);
@@ -88,8 +90,6 @@
     // If OffscreenCanva ships before color managed canvas, this method must remain behind flag.
     // https://github.com/WICG/canvas-color-space/blob/master/CanvasColorSpaceProposal.md
     [RuntimeEnabled=CanvasColorManagement, RaisesException] ImageData createImageData(unsigned long sw, unsigned long sh, ImageDataColorSettings imageDataColorSettings);
-    [RuntimeEnabled=CanvasColorManagement, RaisesException] ImageData createImageData(ImageDataArray data, unsigned long sw, unsigned long sh, ImageDataColorSettings imageDataColorSettings);
-
 
     // Line caps/joins
     attribute unrestricted double lineWidth; // (default 1)

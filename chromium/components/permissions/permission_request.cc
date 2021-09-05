@@ -19,19 +19,10 @@ ContentSettingsType PermissionRequest::GetContentSettingsType() const {
 }
 
 #if !defined(OS_ANDROID)
-base::string16 PermissionRequest::GetChipText() const {
-  return base::string16();
+base::Optional<base::string16> PermissionRequest::GetChipText() const {
+  return base::nullopt;
 }
 #endif
-
-base::string16 PermissionRequest::GetMessageTextWarningFragment() const {
-  return base::string16();
-}
-
-GURL PermissionRequest::GetEmbeddingOrigin() const {
-  NOTREACHED();
-  return GURL();
-}
 
 #if defined(OS_ANDROID)
 base::string16 PermissionRequest::GetQuietTitleText() const {

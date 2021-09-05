@@ -9,12 +9,14 @@
 
 #include "base/message_loop/message_pump_type.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/base/buildflags.h"
 #include "ui/base/cursor/cursor_factory.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_factory_ozone.h"
+#include "ui/base/ime/linux/linux_input_method_context_factory.h"
 #include "ui/base/x/x11_cursor_factory.h"
 #include "ui/base/x/x11_error_handler.h"
 #include "ui/base/x/x11_util.h"
@@ -43,8 +45,7 @@
 #include "ui/base/dragdrop/os_exchange_data_provider_non_backed.h"
 #include "ui/base/ime/chromeos/input_method_chromeos.h"
 #else
-#include "ui/base/ime/linux/input_method_auralinux.h"              // nogncheck
-#include "ui/base/ime/linux/linux_input_method_context_factory.h"  // nogncheck
+#include "ui/base/ime/linux/input_method_auralinux.h"
 #include "ui/ozone/platform/x11/x11_os_exchange_data_provider_ozone.h"
 #endif
 
@@ -64,26 +65,13 @@ namespace ui {
 
 namespace {
 
-constexpr OzonePlatform::PlatformProperties kX11PlatformProperties{
-    .needs_view_token = false,
-    .custom_frame_pref_default = false,
-    .use_system_title_bar = true,
-
-    // When the Ozone X11 backend is running, use a UI loop to grab Expose
-    // events. See GLSurfaceGLX and https://crbug.com/326995.
-    .message_pump_type_for_gpu = base::MessagePumpType::UI,
-    // When the Ozone X11 backend is running, use a UI loop to dispatch
-    // SHM completion events.
-    .message_pump_type_for_viz_compositor = base::MessagePumpType::UI,
-    .supports_vulkan_swap_chain = true,
-    .platform_shows_drag_image = false,
-    .supports_global_application_menus = true};
-
 // Singleton OzonePlatform implementation for X11 platform.
 class OzonePlatformX11 : public OzonePlatform,
                          public ui::OSExchangeDataProviderFactoryOzone {
  public:
-  OzonePlatformX11() { SetInstance(this); }
+  OzonePlatformX11() {
+    SetInstance(this);
+  }
 
   ~OzonePlatformX11() override {}
 
@@ -165,7 +153,28 @@ class OzonePlatformX11 : public OzonePlatform,
   }
 
   const PlatformProperties& GetPlatformProperties() override {
-    return kX11PlatformProperties;
+    static base::NoDestructor<OzonePlatform::PlatformProperties> properties;
+    static bool initialised = false;
+    if (!initialised) {
+      properties->custom_frame_pref_default = ui::GetCustomFramePrefDefault();
+      properties->use_system_title_bar = true;
+
+      // When the Ozone X11 backend is running, use a UI loop to grab Expose
+      // events. See GLSurfaceGLX and https://crbug.com/326995.
+      properties->message_pump_type_for_gpu = base::MessagePumpType::UI;
+      // When the Ozone X11 backend is running, use a UI loop to dispatch
+      // SHM completion events.
+      properties->message_pump_type_for_viz_compositor =
+          base::MessagePumpType::UI;
+      properties->supports_vulkan_swap_chain = true;
+      properties->platform_shows_drag_image = false;
+      properties->supports_global_application_menus = true;
+      properties->app_modal_dialogs_use_event_blocker = true;
+
+      initialised = true;
+    }
+
+    return *properties;
   }
 
   void InitializeUI(const InitParams& params) override {

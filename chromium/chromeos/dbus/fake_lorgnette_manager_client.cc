@@ -26,31 +26,39 @@ void FakeLorgnetteManagerClient::ListScanners(
       FROM_HERE, base::BindOnce(std::move(callback), list_scanners_response_));
 }
 
-void FakeLorgnetteManagerClient::ScanImageToString(
-    std::string device_name,
-    const ScanProperties& properties,
-    DBusMethodCallback<std::string> callback) {
+void FakeLorgnetteManagerClient::GetScannerCapabilities(
+    const std::string& device_name,
+    DBusMethodCallback<lorgnette::ScannerCapabilities> callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(std::move(callback), std::move(scan_image_response_)));
+      FROM_HERE, base::BindOnce(std::move(callback), capabilities_response_));
 }
 
 void FakeLorgnetteManagerClient::StartScan(
-    std::string device_name,
-    const ScanProperties& properties,
-    DBusMethodCallback<std::string> completion_callback,
-    base::Optional<base::RepeatingCallback<void(int)>> progress_callback) {
-  // Simulate progress reporting for the scan job.
-  if (progress_callback.has_value()) {
-    base::RepeatingCallback<void(int)> callback = progress_callback.value();
-    for (int progress : {7, 22, 40, 42, 59, 74, 95}) {
-      callback.Run(progress);
+    const std::string& device_name,
+    const lorgnette::ScanSettings& settings,
+    VoidDBusMethodCallback completion_callback,
+    base::RepeatingCallback<void(std::string, uint32_t)> page_callback,
+    base::RepeatingCallback<void(int)> progress_callback) {
+  if (scan_response_.has_value()) {
+    uint32_t page_number = 0;
+    for (const std::string& page_data : scan_response_.value()) {
+      // Simulate progress reporting for the scan job.
+      if (progress_callback) {
+        for (int progress : {7, 22, 40, 42, 59, 74, 95}) {
+          base::ThreadTaskRunnerHandle::Get()->PostTask(
+              FROM_HERE, base::BindOnce(progress_callback, progress));
+        }
+      }
+
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::BindOnce(page_callback, page_data, ++page_number));
     }
   }
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(completion_callback),
-                                std::move(scan_image_response_)));
+                                scan_response_.has_value()));
+  scan_response_ = base::nullopt;
 }
 
 void FakeLorgnetteManagerClient::SetListScannersResponse(
@@ -59,9 +67,15 @@ void FakeLorgnetteManagerClient::SetListScannersResponse(
   list_scanners_response_ = list_scanners_response;
 }
 
+void FakeLorgnetteManagerClient::SetScannerCapabilitiesResponse(
+    const base::Optional<lorgnette::ScannerCapabilities>&
+        capabilities_response) {
+  capabilities_response_ = capabilities_response;
+}
+
 void FakeLorgnetteManagerClient::SetScanResponse(
-    const base::Optional<std::string>& scan_image_response) {
-  scan_image_response_ = scan_image_response;
+    const base::Optional<std::vector<std::string>>& scan_response) {
+  scan_response_ = scan_response;
 }
 
 }  // namespace chromeos

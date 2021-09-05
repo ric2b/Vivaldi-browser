@@ -13,10 +13,10 @@
 #include "chrome/browser/media/router/providers/cast/cast_internal_message_util.h"
 #include "chrome/browser/media/router/providers/cast/cast_session_client.h"
 #include "chrome/browser/media/router/providers/cast/cast_session_tracker.h"
-#include "chrome/common/media_router/discovery/media_sink_internal.h"
-#include "chrome/common/media_router/media_route.h"
-#include "chrome/common/media_router/mojom/media_router.mojom.h"
-#include "chrome/common/media_router/providers/cast/cast_media_source.h"
+#include "components/media_router/common/discovery/media_sink_internal.h"
+#include "components/media_router/common/media_route.h"
+#include "components/media_router/common/mojom/media_router.mojom.h"
+#include "components/media_router/common/providers/cast/cast_media_source.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 
@@ -81,9 +81,6 @@ class CastActivity {
   virtual void SendStopSessionMessageToClients(const std::string& hash_token);
 
   // Sends |message| to the client given by |client_id|.
-  //
-  // TODO(jrw): This method's functionality overlaps that of OnAppMessage().
-  // Can the methods be combined?
   virtual void SendMessageToClient(
       const std::string& client_id,
       blink::mojom::PresentationConnectionMessagePtr message);

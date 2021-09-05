@@ -39,6 +39,14 @@ bool GetIsEnabledWithNoWindows(int action, bool* enabled) {
 #endif
 }
 
+bool HasActiveWindow() {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  return extensions::MenubarAPI::HasActiveWindow();
+#else
+  return false;
+#endif
+}
+
 void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::MenubarAPI::UpdateCommandEnabled(command_updater_);

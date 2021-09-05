@@ -7,7 +7,7 @@
 <translation id="1013742170491673792">recherche</translation>
 <translation id="1014370462248694370">Faites glisser deux doigts vers la droite</translation>
 <translation id="1016393160682012902">Appuyez sur une touche du clavier ou sur une touche braille actualisable, ou encore faites un geste tactile pour apprendre son fonctionnement. Appuyez sur les touches Commande et W à la fois, ou sur la touche Échappement, pour quitter.</translation>
-<translation id="1022586497894531524">Utilisez-vous la rétroaction vocale de ChromeVox pour la première fois? Ce didacticiel rapide explique les notions essentielles pour faire vos premiers pas avec ChromeVox.</translation>
+<translation id="1022586497894531524">Utilisez-vous la rétroaction vocale de ChromeVox pour la première fois? Ce tutoriel rapide explique les notions essentielles pour faire vos premiers pas avec ChromeVox.</translation>
 <translation id="1025074108959230262">Mode rémanent désactivé</translation>
 <translation id="1031961866430398710">puis</translation>
 <translation id="1038643060055067718">Lignes :</translation>
@@ -52,6 +52,7 @@
 <translation id="1291286136605998134">Bouton Activer/désactiver</translation>
 <translation id="1299774449519412690">Bleu ciel clair</translation>
 <translation id="1303806948938513162">Touchez avec quatre doigts pour accéder aux menus de ChromeVox</translation>
+<translation id="1313373992684326101">Passer à la section précédente. Par exemple, la barre d'état et le lanceur.</translation>
 <translation id="1325363694295259631"><ph name="NAME" />, le bouton radio de l'option de menu est désélectionné</translation>
 <translation id="1325946044405407859">Fauve</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> de <ph name="TOTAL" /></translation>
@@ -79,6 +80,7 @@
 <translation id="1506187449813838456">Augmenter la hauteur de la voix</translation>
 <translation id="151784044608172266">Phrase suivante</translation>
 <translation id="1524531499102321782">Ligne suivante (braille)</translation>
+<translation id="1542513807034338907">Faire défiler jusqu'à la page précédente</translation>
 <translation id="1546370775711804143">Barre de défilement</translation>
 <translation id="1555130319947370107">Bleu</translation>
 <translation id="1559739829547075274">Naviguer vers l'arrière</translation>
@@ -193,7 +195,7 @@
 <translation id="2490721194269245365">Brun rosé</translation>
 <translation id="249330843868392562">Ouvrir les paramètres de synthèse vocale</translation>
 <translation id="2497706219848005458">Jaune vert</translation>
-<translation id="2523609930580546572">Didacticiel de ChromeVox</translation>
+<translation id="2523609930580546572">Tutoriel de ChromeVox</translation>
 <translation id="2525706221823668172">Raccourcis clavier du Chromebook</translation>
 <translation id="2553108862507765288">faute de grammaire</translation>
 <translation id="257674075312929031">Groupe</translation>
@@ -212,7 +214,7 @@
 <translation id="2673280813984708147">modifie</translation>
 <translation id="267442004702508783">actualiser</translation>
 <translation id="2675533876313964202">Chartreuse</translation>
-<translation id="2684412629217766642">Fermer le didacticiel de ChromeVox</translation>
+<translation id="2684412629217766642">Fermer le tutoriel de ChromeVox</translation>
 <translation id="2697408785920771974">saisie semi-automatique alignement</translation>
 <translation id="2704429362613743330">{COUNT,plural, =1{parenthèse ouvrante}one{# parenthèse ouvrante}other{# parenthèses ouvrantes}}</translation>
 <translation id="2705875883745373140">Non appuyé</translation>
@@ -246,7 +248,7 @@
 <translation id="2894654529758326923">Information</translation>
 <translation id="2899328121302785497">{COUNT,plural, =1{accolade ouvrante}one{# accolade ouvrante}other{# accolades ouvrantes}}</translation>
 <translation id="2909584066358367921">Aucun bouton suivant</translation>
-<translation id="2911433807131383493">Ouvrir le didacticiel de ChromeVox</translation>
+<translation id="2911433807131383493">Ouvrir le tutoriel de ChromeVox</translation>
 <translation id="2912405967290226587">Faites glisser trois doigts vers la droite</translation>
 <translation id="2937799153569150791">Aucun en-tête de niveau 3 suivant</translation>
 <translation id="2942710183375260152">Bleu ardoise foncé</translation>
@@ -280,6 +282,7 @@
 <translation id="3103579948980282461">Rouge-violet moyen</translation>
 <translation id="3104705064753753826">boîte de dialogue d'alerte</translation>
 <translation id="3109724472072898302">Réduit</translation>
+<translation id="311015743332597320">Balayez quatre doigts vers la droite</translation>
 <translation id="3112457281078985179">Pour activer ou désactiver ChromeVox, utilisez Ctrl + Alt + Z.</translation>
 <translation id="3131002934070407451">Lire les nombres comme :</translation>
 <translation id="3134461040845705080">lecture seule</translation>
@@ -345,6 +348,7 @@
 <translation id="3549141990712742152">couper <ph name="TEXT" />.</translation>
 <translation id="3549680091535286226">Touchez avec deux doigts pour arrêter temporairement le contenu vocal</translation>
 <translation id="3564729643041517261">Le style d'affichage actuel est côte à côte</translation>
+<translation id="3587482841069643663">Tous</translation>
 <translation id="3589661172894441357">Glossaire</translation>
 <translation id="3591784666823501596">Bleu royal</translation>
 <translation id="3594207934078151302">Vert mer moyen</translation>
@@ -436,6 +440,7 @@
 <translation id="4278486392851938658">Aucun lien consulté précédent</translation>
 <translation id="4281245629646759298">Jaune clair</translation>
 <translation id="4289540628985791613">Aperçu</translation>
+<translation id="4294967782363273192">Tri par ordre croissant</translation>
 <translation id="4300318234632215983">Lire à voix haute l'adresse l'URL d'un lien</translation>
 <translation id="4322625298640984693">Terre de Sienne</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{point}=3{points de suspension}one{# point}other{# points}}</translation>
@@ -447,6 +452,7 @@
 <translation id="4384583879834880242">Questions/réponses</translation>
 <translation id="4391478986194775161">info contenu</translation>
 <translation id="4402014469255336455">Bleu ciel foncé</translation>
+<translation id="4406249099130339147">Énonciation de la ponctuation :</translation>
 <translation id="4432457053224379116">Rouge indien</translation>
 <translation id="4437615272777527928">Tapez pour effectuer une recherche dans les menus. Servez-vous des flèches vers le haut et vers le bas pour naviguer dans les résultats. Servez-vous des flèches de gauche et de droite pour ajuster le point d'insertion de texte et pour vous déplacer entre les menus.</translation>
 <translation id="4457472090507035117">Sélectionner la voix actuelle :</translation>
@@ -481,6 +487,7 @@
 <translation id="4763480195061959176">Vidéo</translation>
 <translation id="4764692524839457597">par défaut</translation>
 <translation id="4772771694153161212">Pas souligné</translation>
+<translation id="4780458943471935919">Faire défiler jusqu'à la page suivante</translation>
 <translation id="4784215347943747396">Pour commander l'appareil avec juste un ou deux commutateurs</translation>
 <translation id="4786285211967466855">Aucun en-tête de niveau 1 précédent</translation>
 <translation id="4787577491510559358">Annoncer le formatage pour l'élément actuel</translation>
@@ -621,7 +628,7 @@
 <translation id="5850707923114094062">Panoramique arrière</translation>
 <translation id="5851548754964597211">Liste d'onglets</translation>
 <translation id="5866042630553435010">Partiellement vérifié</translation>
-<translation id="5867591286054666064">Au cours de ce didacticiel, appuyez sur n'importe quelle touche pour entendre son nom.</translation>
+<translation id="5867591286054666064">Au cours de ce tutoriel, appuyez sur n'importe quelle touche pour entendre son nom.</translation>
 <translation id="5869546221129391014">Grille</translation>
 <translation id="5876817486144482042">Diminuer le volume de la voix</translation>
 <translation id="5878908838135392163">Bleu poudre</translation>
@@ -644,6 +651,7 @@
 <translation id="5999630716831179808">Voix</translation>
 <translation id="6006050241733874051">Formulaire</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{barre oblique inverse}one{# barre oblique inverse}other{# barres obliques inverses}}</translation>
+<translation id="6010616110396250088">Tri par ordre décroissant</translation>
 <translation id="6017514345406065928">Vert</translation>
 <translation id="602001110135236999">Faire défiler vers la gauche</translation>
 <translation id="6034000775414344507">Gris pâle</translation>
@@ -815,6 +823,7 @@
 <translation id="744163271241493234">mot de passe</translation>
 <translation id="7484805699335881122">Changer la hauteur de la voix lors de la lecture des types d'éléments et du texte entre guillemets, supprimé, en gras, entre parenthèses ou en majuscules.</translation>
 <translation id="7491962110804786152">Tabulation</translation>
+<translation id="7492497529767769458">Passer à la section suivante. Par exemple, la barre d'état et le lanceur.</translation>
 <translation id="7505149250476994901">Dire « majuscule » après la lettre</translation>
 <translation id="7518543783849163354">Pour que ChromeVox cesse temporairement de parler, appuyez sur la touche Ctrl.</translation>
 <translation id="7533226154149229506">Jaune or clair</translation>
@@ -822,6 +831,7 @@
 <translation id="7552432549459840808">Raccourcis utiles de Google Chrome</translation>
 <translation id="7569983096843329377">Noir</translation>
 <translation id="7579911500627256166">point <ph name="DOT" /></translation>
+<translation id="7592060599656252486">Certains</translation>
 <translation id="7595446402663080101">Aucun tableau précédent</translation>
 <translation id="7596131838331109045">Saumon clair</translation>
 <translation id="7604026522577407655">Aller au début de la présente colonne</translation>
@@ -841,10 +851,11 @@
 <translation id="7684431668231950609">Modifier le texte de l'adresse URL</translation>
 <translation id="7685589220304187312">barre d'outils</translation>
 <translation id="7693840228159394336">Case d'option précédente</translation>
+<translation id="7701040980221191251">Aucun</translation>
 <translation id="7701196182766842984">liste remplissage automatique</translation>
 <translation id="7714340021005120797">Aucune zone de liste ou de texte suivante</translation>
 <translation id="772146615414628379">Félicitations! Vous avez appris les bases nécessaires pour utiliser ChromeVox. Rappelez-vous : vous pouvez ouvrir le menu de commande de ChromeVox en tout temps en appuyant sur les touches Rechercher+Point. Pour en apprendre encore plus sur ChromeVox et sur Chrome OS, consultez les articles suivants.
-    Si vous avez terminé le didacticiel, servez-vous de ChromeVox pour naviguer jusqu'au bouton Fermer et cliquez dessus.</translation>
+    Si vous avez terminé le tutoriel, servez-vous de ChromeVox pour naviguer jusqu'au bouton Fermer et cliquez dessus.</translation>
 <translation id="7724603315864178912">Couper</translation>
 <translation id="7731785449856576010">Aucun widget multimédia suivant</translation>
 <translation id="773906353055481349">Appuyez simultanément sur Recherche+Ctrl+Alt et sur les flèches pour naviguer entre les cellules</translation>
@@ -899,7 +910,9 @@
 <translation id="812886159861361726">Le téléchargement du fichier <ph name="FILE_NAME" /> a été arrêté</translation>
 <translation id="8129445297241948503">Aucune cellule au-dessus</translation>
 <translation id="8138880386467279117">Tactile</translation>
+<translation id="8173092779156526980">Balayez quatre doigts vers la gauche</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{trait de soulignement}one{# trait de soulignement}other{# traits de soulignement}}</translation>
+<translation id="8179976553408161302">Entrée</translation>
 <translation id="8184828902145951186">ligne</translation>
 <translation id="8186185314313222077">basculer en plein écran</translation>
 <translation id="8199231515320852133">Lire à voix haute les en-têtes de la cellule courante</translation>
@@ -985,6 +998,7 @@
 <translation id="8946628535652548639">r<ph name="TABLECELLROWINDEX" /> c<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">Aucun bouton radio précédent</translation>
 <translation id="8970172509886453271">Aucune section précédente</translation>
+<translation id="89720367119469899">Échappement</translation>
 <translation id="8978496506222343566">infobulle</translation>
 <translation id="8986362086234534611">Supprimer</translation>
 <translation id="9040132695316389094">En-tête 1</translation>

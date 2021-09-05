@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
+import org.chromium.components.payments.BasicCardUtils;
 import org.chromium.components.payments.MethodStrings;
 import org.chromium.components.payments.PaymentApp;
 import org.chromium.components.payments.PaymentAppFactoryParams;
@@ -55,7 +56,9 @@ public class AutofillPaymentAppFactory implements PaymentAppFactoryInterface {
 
         /** @return Whether can make payments with basic card. */
         private boolean createPaymentApps() {
-            if (!mDelegate.getParams().getMethodData().containsKey(MethodStrings.BASIC_CARD)) {
+            if (mDelegate.getParams().hasClosed()
+                    || !mDelegate.getParams().getMethodData().containsKey(
+                            MethodStrings.BASIC_CARD)) {
                 return false;
             }
 
@@ -84,7 +87,7 @@ public class AutofillPaymentAppFactory implements PaymentAppFactoryInterface {
         @Override
         @Nullable
         public PaymentApp createPaymentAppForCard(CreditCard card) {
-            if (!mCanMakePayment) return null;
+            if (!mCanMakePayment || mDelegate.getParams().hasClosed()) return null;
 
             if (!mNetworks.contains(card.getBasicCardIssuerNetwork())) return null;
 
@@ -106,21 +109,6 @@ public class AutofillPaymentAppFactory implements PaymentAppFactoryInterface {
         }
     }
 
-    /** @return True if the merchant methodDataMap supports basic card payment method. */
-    public static boolean merchantSupportsBasicCard(Map<String, PaymentMethodData> methodDataMap) {
-        assert methodDataMap != null;
-        PaymentMethodData basicCardData = methodDataMap.get(MethodStrings.BASIC_CARD);
-        if (basicCardData != null) {
-            Set<String> basicCardNetworks =
-                    BasicCardUtils.convertBasicCardToNetworks(basicCardData);
-            if (basicCardNetworks != null && !basicCardNetworks.isEmpty()) return true;
-        }
-
-        // Card issuer networks as payment method names was removed in Chrome 77.
-        // https://www.chromestatus.com/feature/5725727580225536
-        return false;
-    }
-
     /**
      * Checks for usable Autofill card on file.
      *
@@ -139,6 +127,11 @@ public class AutofillPaymentAppFactory implements PaymentAppFactoryInterface {
             @Override
             public Map<String, PaymentMethodData> getMethodData() {
                 return methodData;
+            }
+
+            @Override
+            public boolean hasClosed() {
+                return false;
             }
 
             @Override

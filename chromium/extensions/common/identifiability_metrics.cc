@@ -7,16 +7,14 @@
 #include "extensions/common/extension_set.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
-#include "third_party/blink/public/common/privacy_budget/identifiability_metrics.h"
 
 namespace extensions {
 
 blink::IdentifiableSurface SurfaceForExtension(
     blink::IdentifiableSurface::Type type,
     const ExtensionId& extension_id) {
-  return blink::IdentifiableSurface::FromTypeAndInput(
-      type, blink::IdentifiabilityDigestOfBytes(
-                base::as_bytes(base::make_span(extension_id))));
+  return blink::IdentifiableSurface::FromTypeAndToken(
+      type, base::as_bytes(base::make_span(extension_id)));
 }
 
 void RecordExtensionResourceAccessResult(base::UkmSourceId ukm_source_id,
@@ -30,7 +28,7 @@ void RecordExtensionResourceAccessResult(base::UkmSourceId ukm_source_id,
       .Set(SurfaceForExtension(
                blink::IdentifiableSurface::Type::kExtensionFileAccess,
                extension_id),
-           blink::IdentifiabilityDigestHelper(result))
+           result)
       .Record(ukm::UkmRecorder::Get());
 }
 
@@ -42,7 +40,19 @@ void RecordContentScriptInjection(base::UkmSourceId ukm_source_id,
       .Set(SurfaceForExtension(
                blink::IdentifiableSurface::Type::kExtensionContentScript,
                extension_id),
-           blink::IdentifiabilityDigestHelper(true))
+           /* Succeeded= */ true)
+      .Record(ukm::UkmRecorder::Get());
+}
+
+void RecordNetworkRequestBlocked(base::UkmSourceId ukm_source_id,
+                                 const ExtensionId& extension_id) {
+  if (ukm_source_id == base::kInvalidUkmSourceId)
+    return;
+  blink::IdentifiabilityMetricBuilder(ukm_source_id)
+      .Set(SurfaceForExtension(
+               blink::IdentifiableSurface::Type::kExtensionCancelRequest,
+               extension_id),
+           /* Succeeded= */ true)
       .Record(ukm::UkmRecorder::Get());
 }
 

@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Ver código fonte da frame</translation>
 <translation id="1165039591588034296">Erro</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
-<translation id="1177863135347784049">Personalizada</translation>
 <translation id="1181037720776840403">Remover</translation>
 <translation id="1187722533808055681">Reativações após inatividade</translation>
 <translation id="119944043368869598">Limpar tudo</translation>
 <translation id="1221825588892235038">Apenas a seleção</translation>
 <translation id="1244303850296295656">Erro de extensão</translation>
+<translation id="125220115284141797">Padrão</translation>
 <translation id="1274977772557788323">Definições de armazenamento do Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Ficheiro HTML de favoritos</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nova janela</translation>
 <translation id="1725149567830788547">Mostrar &amp;controlos</translation>
 <translation id="1729533290416704613">Também controla a página apresentada quando pesquisa a partir da Caixa geral.</translation>
+<translation id="174123615272205933">Personalizada</translation>
 <translation id="1744108098763830590">página de fundo</translation>
 <translation id="176587472219019965">&amp;Nova Janela</translation>
 <translation id="1769104665586091481">Abrir ligação numa nova &amp;janela</translation>
+<translation id="1779468444204342338">Mínimo</translation>
 <translation id="1815083418640426271">Colar como texto simples</translation>
 <translation id="1828901632669367785">Imprimir utilizando a janela de diálogo do sistema...</translation>
 <translation id="1850508293116537636">Rodar para a &amp;direita</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Perguntar antes de enviar (recomendado)</translation>
 <translation id="241082044617551207">Plug-in desconhecido</translation>
 <translation id="2423578206845792524">Gra&amp;var imagem como...</translation>
-<translation id="2436707352762155834">Mínimo</translation>
 <translation id="2439110203301358333">Outro programa do computador adicionou uma extensão que pode alterar o funcionamento do Vivaldi.</translation>
 <translation id="2445081178310039857">É necessário o directório de raiz da extensão.</translation>
 <translation id="2470702053775288986">Extensões não suportadas desativadas</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Pré-renderizar: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Microfone</translation>
 <translation id="3241680850019875542">Selecione o directório raiz da extensão a comprimir. Para atualizar uma extensão, selecione também o ficheiro de chave privada a reutilizar.</translation>
+<translation id="3266179261140759675">Impedir que os websites fechados enviem e recebam dados</translation>
 <translation id="3280237271814976245">Guardar &amp;como...</translation>
 <translation id="3285322247471302225">Novo &amp;separador</translation>
 <translation id="3288047731229977326">As extensões que funcionam no modo de programador podem danificar o seu computador. Se não é programador, deverá desativar as extensões que sejam executadas neste modo para se manter protegido.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Permitir</translation>
 <translation id="5057110919553308744">Quando clica na extensão</translation>
 <translation id="5063480226653192405">Utilização</translation>
-<translation id="5068918910148307423">Não permitir que os websites fechados recentemente concluam o envio e a receção de dados</translation>
 <translation id="5116628073786783676">Gra&amp;var áudio como...</translation>
 <translation id="5143374789336132547">A extensão "<ph name="EXTENSION_NAME" />" alterou a página apresentada quando clica no botão Página inicial.</translation>
 <translation id="5154108062446123722">Definições avançadas de <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">A extensão "<ph name="EXTENSION_NAME" />" alterou a página apresentada quando pesquisa a partir da caixa geral.</translation>
 <translation id="5360150013186312835">Mostrar na barra de ferramentas</translation>
 <translation id="5362741141255528695">Seleccionar ficheiro de chave privada.</translation>
+<translation id="536638840841140142">Nenhum</translation>
 <translation id="5370819323174483825">&amp;Recarregar</translation>
 <translation id="5398572795982417028">A referência da página está fora dos limites. O limite é <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Continuar a transferir</translation>
@@ -344,7 +346,7 @@
 <translation id="6612358246767739896">Conteúdo protegido</translation>
 <translation id="6639554308659482635">Memória SQLite</translation>
 <translation id="6686817083349815241">Guardar a sua palavra-passe</translation>
-<translation id="6691936601825168937">A&amp;vançar</translation>
+<translation id="6691936601825168937">&amp;Avançar</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Manter alterações</translation>
 <translation id="6817174620439930047">Perguntar sempre que um website pretender utilizar mensagens exclusivas do sistema para aceder a equipamentos MIDI (recomendado)</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Recetor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalada pelo seu administrador</translation>
 <translation id="7685049629764448582">Memória JavaScript</translation>
-<translation id="7701040980221191251">Nenhum</translation>
 <translation id="7701869757853594372">Identificadores de UTILIZADOR</translation>
 <translation id="7704305437604973648">Tarefa</translation>
 <translation id="7710568461918838723">&amp;Transmitir...</translation>

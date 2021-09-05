@@ -6,22 +6,56 @@
 #define CHROME_BROWSER_NEARBY_SHARING_CONTACTS_NEARBY_SHARE_CONTACT_MANAGER_IMPL_H_
 
 #include <memory>
-#include <set>
 #include <string>
 
+#include "base/callback.h"
+#include "base/optional.h"
 #include "chrome/browser/nearby_sharing/contacts/nearby_share_contact_manager.h"
+#include "chrome/browser/nearby_sharing/proto/rpc_resources.pb.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/remote_set.h"
 
-// TODO(nohle): Add description after class is fully implemented.
+class NearbyShareClientFactory;
+class NearbyShareContactDownloader;
+class NearbyShareLocalDeviceDataManager;
+class NearbyShareScheduler;
+class PrefService;
+
+// Implementation of NearbyShareContactManager that persists the set of allowed
+// contact IDs--for selected-contacts visiblity mode--in prefs. All other
+// contact data is downloaded from People API, via the NearbyShare server, as
+// needed.
+//
+// The Nearby Share server must be explicitly informed of all contacts this
+// device is aware of--needed for all-contacts visibility mode--as well as what
+// contacts are allowed for selected-contacts visibility mode. These uploaded
+// contact lists are used by the server to distribute the device's public
+// certificates accordingly. This implementation persists a hash of the last
+// uploaded contact data, and after every contacts download, a subsequent upload
+// request is made if we detect that the contact list or allowlist has changed
+// since the last successful upload.
+
+// In addition to supporting on-demand contact downloads, this implementation
+// periodically checks in with the Nearby Share server to see if the user's
+// contact list has changed since the last upload.
 class NearbyShareContactManagerImpl : public NearbyShareContactManager {
  public:
   class Factory {
    public:
-    static std::unique_ptr<NearbyShareContactManager> Create();
+    static std::unique_ptr<NearbyShareContactManager> Create(
+        PrefService* pref_service,
+        NearbyShareClientFactory* http_client_factory,
+        NearbyShareLocalDeviceDataManager* local_device_data_manager);
     static void SetFactoryForTesting(Factory* test_factory);
 
    protected:
     virtual ~Factory();
-    virtual std::unique_ptr<NearbyShareContactManager> CreateInstance() = 0;
+    virtual std::unique_ptr<NearbyShareContactManager> CreateInstance(
+        PrefService* pref_service,
+        NearbyShareClientFactory* http_client_factory,
+        NearbyShareLocalDeviceDataManager* local_device_data_manager) = 0;
 
    private:
     static Factory* test_factory_;
@@ -30,14 +64,45 @@ class NearbyShareContactManagerImpl : public NearbyShareContactManager {
   ~NearbyShareContactManagerImpl() override;
 
  private:
-  NearbyShareContactManagerImpl();
+  NearbyShareContactManagerImpl(
+      PrefService* pref_service,
+      NearbyShareClientFactory* http_client_factory,
+      NearbyShareLocalDeviceDataManager* local_device_data_manager);
 
   // NearbyShareContactsManager:
-  void DownloadContacts(bool only_download_if_changed) override;
+  void DownloadContacts() override;
   void SetAllowedContacts(
       const std::set<std::string>& allowed_contact_ids) override;
   void OnStart() override;
   void OnStop() override;
+  void Bind(mojo::PendingReceiver<nearby_share::mojom::ContactManager> receiver)
+      override;
+
+  // nearby_share::mojom::ContactsManager:
+  void AddDownloadContactsObserver(
+      ::mojo::PendingRemote<nearby_share::mojom::DownloadContactsObserver>
+          observer) override;
+
+  std::set<std::string> GetAllowedContacts() const;
+  void OnContactsDownloadRequested();
+  void OnContactsDownloadSuccess(
+      std::vector<nearbyshare::proto::ContactRecord> contacts);
+  void OnContactsDownloadFailure();
+  void OnContactsUploadFinished(const std::string& contact_upload_hash,
+                                bool success);
+  bool SetAllowlist(const std::set<std::string>& new_allowlist);
+  void NotifyMojoObserverContactsDownloaded(
+      const std::set<std::string>& allowed_contact_ids,
+      const std::vector<nearbyshare::proto::ContactRecord>& contacts);
+
+  PrefService* pref_service_ = nullptr;
+  NearbyShareClientFactory* http_client_factory_ = nullptr;
+  NearbyShareLocalDeviceDataManager* local_device_data_manager_ = nullptr;
+  std::unique_ptr<NearbyShareScheduler> contact_download_and_upload_scheduler_;
+  std::unique_ptr<NearbyShareContactDownloader> contact_downloader_;
+  mojo::RemoteSet<nearby_share::mojom::DownloadContactsObserver> observers_set_;
+  mojo::ReceiverSet<nearby_share::mojom::ContactManager> receiver_set_;
+  base::WeakPtrFactory<NearbyShareContactManagerImpl> weak_ptr_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_NEARBY_SHARING_CONTACTS_NEARBY_SHARE_CONTACT_MANAGER_IMPL_H_

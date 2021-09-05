@@ -26,9 +26,8 @@ constexpr base::TimeDelta kGraphsDataRefreshInterval =
 ////////////////////////////////////////////////////////////////////////////////
 // GraphsContainerView, public:
 
-BEGIN_METADATA(GraphsContainerView)
-METADATA_PARENT_CLASS(View)
-END_METADATA()
+BEGIN_METADATA(GraphsContainerView, views::View)
+END_METADATA
 
 GraphsContainerView::GraphsContainerView() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(ui_sequence_checker_);
@@ -37,14 +36,16 @@ GraphsContainerView::GraphsContainerView() {
   // is shown at a time.
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
-  // Adds another graphs page.
-  AddChildView(std::make_unique<MemoryGraphPageView>())
-      ->SetID(static_cast<int>(DisplayMode::MEMORY_DISPLAY));
-  AddChildView(std::make_unique<CpuGraphPageView>())
-      ->SetID(static_cast<int>(DisplayMode::CPU_DISPLAY));
-
   refresh_timer_.Start(FROM_HERE, kGraphsDataRefreshInterval, this,
                        &GraphsContainerView::UpdateData);
+
+  // Adds another graphs page.
+  AddChildView(
+      std::make_unique<MemoryGraphPageView>(refresh_timer_.GetCurrentDelay()))
+      ->SetID(static_cast<int>(DisplayMode::MEMORY_DISPLAY));
+  AddChildView(
+      std::make_unique<CpuGraphPageView>(refresh_timer_.GetCurrentDelay()))
+      ->SetID(static_cast<int>(DisplayMode::CPU_DISPLAY));
 }
 
 GraphsContainerView::~GraphsContainerView() {

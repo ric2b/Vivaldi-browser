@@ -8,8 +8,6 @@
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
-#include "chrome/browser/apps/app_service/app_service_proxy.h"
-#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/chromeos/file_manager/file_manager_test_util.h"
 #include "chrome/browser/chromeos/file_manager/web_file_tasks.h"
 #include "chrome/browser/chromeos/web_applications/system_web_app_integration_test.h"
@@ -23,9 +21,9 @@
 #include "chromeos/components/media_app_ui/test/media_app_ui_browsertest.h"
 #include "chromeos/components/media_app_ui/url_constants.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "components/crash/content/browser/error_reporting/mock_crash_endpoint.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
-#include "extensions/browser/api/crash_report_private/mock_crash_endpoint.h"
 #include "extensions/browser/entry_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
@@ -78,6 +76,10 @@ class MediaAppIntegrationWithFilesAppTest : public MediaAppIntegrationTest {
   }
 };
 
+using MediaAppIntegrationAllProfilesTest = MediaAppIntegrationTest;
+using MediaAppIntegrationWithFilesAppAllProfilesTest =
+    MediaAppIntegrationWithFilesAppTest;
+
 // Gets the base::FilePath for a named file in the test folder.
 base::FilePath TestFile(const std::string& ascii_name) {
   base::FilePath path;
@@ -88,37 +90,6 @@ base::FilePath TestFile(const std::string& ascii_name) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   EXPECT_TRUE(base::PathExists(path));
   return path;
-}
-
-// Use platform_util::OpenItem() on the given |path| to simulate a user request
-// to open that path, e.g., from the Files app or chrome://downloads.
-OpenOperationResult OpenPathWithPlatformUtil(Profile* profile,
-                                             const base::FilePath& path) {
-  base::RunLoop run_loop;
-  OpenOperationResult open_result;
-  platform_util::OpenItem(
-      profile, path, platform_util::OPEN_FILE,
-      base::BindLambdaForTesting([&](OpenOperationResult result) {
-        open_result = result;
-        run_loop.Quit();
-      }));
-  run_loop.Run();
-
-  // On ChromeOS, the OpenOperationResult is determined in
-  // OpenFileMimeTypeAfterTasksListed() which also invokes
-  // ExecuteFileTaskForUrl(). For WebApps like chrome://media-app, that invokes
-  // WebApps::LaunchAppWithFiles() via AppServiceProxy.
-  // Depending how the mime type of |path| is determined (e.g. extension,
-  // metadata sniffing), there may be a number of asynchronous steps involved
-  // before the call to ExecuteFileTaskForUrl(). After that, the OpenItem
-  // callback is invoked, which exits the RunLoop above.
-  // That used to be enough to also launch a Browser for the WebApp. However,
-  // since r755257, ExecuteFileTaskForUrl() goes through the mojo AppService, so
-  // it's necessary to flush those calls for the WebApp to open.
-  apps::AppServiceProxyFactory::GetForProfile(profile)
-      ->FlushMojoCallsForTesting();
-
-  return open_result;
 }
 
 void PrepareAppForTest(content::WebContents* web_ui) {
@@ -203,7 +174,8 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchWithFile) {
 
 // Ensures that chrome://media-app is available as a file task for the ChromeOS
 // file manager and eligible for opening appropriate files / mime types.
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppEligibleOpenTask) {
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAllProfilesTest,
+                       MediaAppEligibleOpenTask) {
   constexpr bool kIsDirectory = false;
   const extensions::EntryInfo image_entry(TestFile(kFilePng800x600),
                                           "image/png", kIsDirectory);
@@ -233,7 +205,8 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppEligibleOpenTask) {
   }
 }
 
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, HiddenInLauncherAndSearch) {
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAllProfilesTest,
+                       HiddenInLauncherAndSearch) {
   WaitForTestSystemAppInstall();
 
   // Check system_web_app_manager has the correct attributes for Media App.
@@ -365,16 +338,14 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 // End-to-end test to ensure that the MediaApp successfully registers as a file
 // handler with the ChromeOS file manager on startup and acts as the default
 // handler for a given file.
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
                        FileOpenUsesMediaApp) {
   WaitForTestSystemAppInstall();
   Browser* test_browser = chrome::FindBrowserWithActiveWindow();
 
   file_manager::test::FolderInMyFiles folder(profile());
   folder.Add({TestFile(kFilePng800x600)});
-
-  OpenOperationResult open_result =
-      OpenPathWithPlatformUtil(profile(), folder.files()[0]);
+  OpenOperationResult open_result = folder.Open(TestFile(kFilePng800x600));
 
   // Window focus changes on ChromeOS are synchronous, so just get the newly
   // focused window.
@@ -394,7 +365,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
 
 // Test that the MediaApp can navigate other files in the directory of a file
 // that was opened, even if those files have changed since launch.
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
                        FileOpenCanTraverseDirectory) {
   WaitForTestSystemAppInstall();
 
@@ -416,7 +387,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
                 base::Time::UnixEpoch() + base::TimeDelta::FromDays(1));
 
   // Sent an open request using only the 640x480 JPEG file.
-  OpenPathWithPlatformUtil(profile(), copied_jpeg_640x480);
+  folder.Open(copied_jpeg_640x480);
   content::WebContents* web_ui = PrepareActiveBrowserForTest();
 
   EXPECT_EQ("640x480", WaitForImageAlt(web_ui, kFileJpeg640x480));
@@ -453,20 +424,53 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
   // test mixed file types.
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    MediaAppIntegrationTest,
-    ::testing::Combine(
-        ::testing::Values(web_app::ProviderType::kBookmarkApps,
-                          web_app::ProviderType::kWebApps),
-        ::testing::Values(web_app::InstallationType::kManifestInstall)),
-    web_app::ProviderAndInstallationTypeToString);
+// Integration test for rename using the WritableFileSystem and Streams APIs.
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
+                       RenameFile) {
+  WaitForTestSystemAppInstall();
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    MediaAppIntegrationWithFilesAppTest,
-    ::testing::Combine(
-        ::testing::Values(web_app::ProviderType::kBookmarkApps,
-                          web_app::ProviderType::kWebApps),
-        ::testing::Values(web_app::InstallationType::kManifestInstall)),
-    web_app::ProviderAndInstallationTypeToString);
+  file_manager::test::FolderInMyFiles folder(profile());
+  folder.Add({TestFile(kFileJpeg640x480)});
+  folder.Open(TestFile(kFileJpeg640x480));
+  content::WebContents* web_ui = PrepareActiveBrowserForTest();
+  content::RenderFrameHost* app = MediaAppUiBrowserTest::GetAppFrame(web_ui);
+
+  // Rename "image3.jpg" to "x.jpg".
+  constexpr int kRenameResultSuccess = 0;
+  constexpr char kScript[] =
+      "lastLoadedReceivedFileList.item(0).renameOriginalFile('x.jpg')"
+      ".then(result => domAutomationController.send(result));";
+  int result = ~kRenameResultSuccess;
+  EXPECT_EQ(true, content::ExecuteScriptAndExtractInt(app, kScript, &result));
+  EXPECT_EQ(kRenameResultSuccess, result);
+
+  folder.Refresh();
+
+  EXPECT_EQ(1u, folder.files().size());
+  EXPECT_EQ("x.jpg", folder.files()[0].BaseName().value());
+
+  std::string expected_contents, renamed_contents;
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  EXPECT_TRUE(
+      base::ReadFileToString(TestFile(kFileJpeg640x480), &expected_contents));
+  // Consistency check against the file size (2108 bytes) of image3.jpg in the
+  // test data directory.
+  EXPECT_EQ(2108u, expected_contents.size());
+  EXPECT_TRUE(base::ReadFileToString(folder.files()[0], &renamed_contents));
+  EXPECT_EQ(expected_contents, renamed_contents);
+}
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_WEB_APP_INFO_INSTALL_P(
+    MediaAppIntegrationTest);
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_ALL_PROFILE_TYPES_P(
+    MediaAppIntegrationAllProfilesTest,
+    kWebAppInfoInstall);
+
+// Note: All MediaAppIntegrationWithFilesAppTest cases above currently want
+// coverage for all profile types, so the "less" prarameterized prefix is not
+// instantiated to avoid a gtest warning.
+
+INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_ALL_PROFILE_TYPES_P(
+    MediaAppIntegrationWithFilesAppAllProfilesTest,
+    kWebAppInfoInstall);

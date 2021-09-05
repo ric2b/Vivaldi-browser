@@ -224,6 +224,11 @@
         "default": true,
         "syncable": true
       },
+      "show_qr_generator": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
       "typed_history_enabled": {
         "type": "boolean",
         "default": true,
@@ -375,10 +380,22 @@
         "default": false,
         "syncable": true
       },
-       "version": {
+      "version": {
         "type": "boolean",
         "default": false,
         "syncable": true
+      },
+      "log_level": {
+        "description": "Log level for logger",
+        "type": "enum",
+        "enum_values": {
+          "info": 0,
+          "warn": 1,
+          "error": 2,
+          "none": 3
+        },
+        "default": "warn",
+        "syncable": false
       }
     },
     "calendar": {
@@ -423,7 +440,12 @@
       "show_day_sidebar": {
         "type": "boolean",
         "default": false,
-        "syncable": true
+        "syncable": false
+      },
+      "show_tasks_sidebar": {
+        "type": "boolean",
+        "default": true,
+        "syncable": false
       },
       "default_calendar_id": {
         "type": "string",
@@ -451,6 +473,11 @@
           },
           "default": "full",
           "syncable": true
+        },
+        "event_icons": {
+          "type": "boolean",
+          "default": false,
+          "syncable": false
         }
       },
       "click_outside": {
@@ -932,10 +959,27 @@
       }
     },
     "chat": {
+      "favorites": {
+        "description": "Favorites to chat with",
+        "type": "list",
+        "default": [],
+        "syncable": false
+      },
       "notifications": {
         "description": "Enable notifications when receiving chat messages",
         "type": "boolean",
         "default": true,
+        "syncable": false
+      },
+      "debug_output": {
+        "description": "Enable console output for debug purposes",
+        "type": "enum",
+        "enum_values": {
+          "off": 0,
+          "simple": 1,
+          "verbose": 2
+        },
+        "default": "off",
         "syncable": false
       },
       "notifications_sound_on": {
@@ -957,8 +1001,15 @@
         "syncable": false
       },
       "conversation_timestamps": {
+        "description": "Store timestamps for conversations locally. Until XEP-0333 is implemented.",
         "type": "list",
         "default": [],
+        "syncable": false
+      },
+      "tabMode": {
+        "description": "Open conversations in tabs from the panel",
+        "type": "boolean",
+        "default": false,
         "syncable": false
       }
     },
@@ -1324,8 +1375,45 @@
           "default": 24,
           "syncable": false
         }
+      },
+      "google_component_extensions": {
+        "cloud_print": {
+          "description": "Load Google cloudprint ( will die soon ).",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "web_store": {
+          "description": "Load the Google webstore app.",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "pdf_viewer": {
+          "description": "Load Google pdf.",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "hangout_services": {
+          "description": "Load Google hangout services.",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "crypto_token": {
+          "description": "Load Google crypto token.",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "media_router": {
+          "description": "Load Chrome cast extension.",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
       }
-
     },
     "quick_commands": {
       "open_url_in_new_tab": {
@@ -1449,13 +1537,13 @@
         "path": {
           "description": "Start page image path, 'user_defined', or 'desktop_image' reference",
           "type": "file_path",
-          "default": "../resources/bg.webp",
+          "default": "../resources/aurora_light.webp",
           "syncable": false
         },
         "path_custom": {
           "description": "User-defined start page image path",
           "type": "file_path",
-          "default": "../resources/bg.webp",
+          "default": "../resources/aurora_light.webp",
           "syncable": false
         },
         "repeat": {
@@ -1607,8 +1695,8 @@
         "type": "enum",
         "enum_values": {
           "unknown": 0,
-          "aye": 1,
-          "nay": 2
+          "yes": 1,
+          "no": 2
         },
         "default": "unknown",
         "syncable": false
@@ -1732,6 +1820,12 @@
         "default_mac": true,
         "syncable": true
       },
+      "close_button_permanent": {
+        "type": "boolean",
+        "description": "Always show close tab buttons",
+        "default": false,
+        "syncable": true
+      },
       "counter_detection": {
         "description": "Detect counter in webpage titles",
         "type": "boolean",
@@ -1837,6 +1931,12 @@
           "openintabstackwithrelated": 3
         },
         "default": "rightofcurrent",
+        "syncable": true
+      },
+      "open_new_in_background": {
+        "description": "A new tab opens without taking focus",
+        "type": "boolean",
+        "default": false,
         "syncable": true
       },
       "selection": {
@@ -2105,10 +2205,12 @@
           "MailForward",
           "MailReload",
           "MailSearch",
+          "MailMsgEdit",
           "MailMsgReply",
           "MailMsgReplyToAll",
           "MailMsgForward",
           "MailMsgStatusRead",
+          "MailMsgMove",
           "MailMsgFlag",
           "MailMsgLabel",
           "MailMsgSpam",
@@ -2133,7 +2235,8 @@
           "MailMsgFlag",
           "MailMsgLabel",
           "MailMsgSpam",
-          "MailMsgTrash"
+          "MailMsgTrash",
+          "MailMsgMove"
         ],
         "syncable": true
       },
@@ -2620,6 +2723,10 @@
     "kMediaRouterMediaRemotingEnabled": {
       "path": "media_router.media_remoting.enabled",
       "type": "boolean"
+    },
+    "kAcceptLanguages": {
+      "path": "intl.accept_languages",
+      "type": "dictionary"
     }
   },
 

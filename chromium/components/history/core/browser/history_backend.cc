@@ -129,6 +129,13 @@ class HistoryPathsTracker {
 };
 #endif
 
+bool HasApiTransition2or3(ui::PageTransition transition) {
+  return (ui::PageTransitionGetQualifier(transition) &
+          (ui::PageTransitionGetQualifier(ui::PAGE_TRANSITION_FROM_API_2) |
+           ui::PageTransitionGetQualifier(ui::PAGE_TRANSITION_FROM_API_3))) !=
+         0;
+}
+
 void RunUnlessCanceled(
     base::OnceClosure closure,
     const base::CancelableTaskTracker::IsCanceledCallback& is_canceled) {
@@ -543,12 +550,14 @@ void HistoryBackend::AddPage(const HistoryAddPageArgs& request) {
 
   // If the user is navigating to a not-previously-typed intranet hostname,
   // change the transition to TYPED so that the omnibox will learn that this is
-  // a known host.
+  // a known host. This logic is disabled if API_2/API_3 is present as such
+  // visits are not intended to influence the omnibox, and shouldn't be
+  // changed to TYPED. (API_2/API_3 are not used with TYPED transitions).
   bool has_redirects = request.redirects.size() > 1;
   if (ui::PageTransitionIsMainFrame(request_transition) &&
       !ui::PageTransitionCoreTypeIs(request_transition,
                                     ui::PAGE_TRANSITION_TYPED) &&
-      !is_keyword_generated) {
+      !is_keyword_generated && !HasApiTransition2or3(request_transition)) {
     // Check both the start and end of a redirect chain, since the user will
     // consider both to have been "navigated to".
     if (IsUntypedIntranetHost(request.url) ||
@@ -558,6 +567,11 @@ void HistoryBackend::AddPage(const HistoryAddPageArgs& request) {
           ui::PageTransitionGetQualifier(request_transition));
     }
   }
+
+  // FROM_API_2/FROM_API_3 should never be used with a transition type that
+  // increments the typed-count as that defeats the purpose.
+  DCHECK(!IsTypedIncrement(request_transition) ||
+         !HasApiTransition2or3(request_transition));
 
   if (!has_redirects) {
     // The single entry is both a chain start and end.
@@ -665,6 +679,13 @@ void HistoryBackend::AddPage(const HistoryAddPageArgs& request) {
       // If this is the last transition, add a CHAIN_END marker
       if (redirect_index == (redirects.size() - 1)) {
         t = ui::PageTransitionFromInt(t | ui::PAGE_TRANSITION_CHAIN_END);
+        // In order for a visit to be visible, it must have CHAIN_END. If the
+        // requested transition contained PAGE_TRANSITION_FROM_API_3, then
+        // add it to the CHAIN_END visit so that the visit is not visible.
+        if ((ui::PageTransitionGetQualifier(request_transition) &
+             ui::PAGE_TRANSITION_FROM_API_3) != 0) {
+          t = ui::PageTransitionFromInt(t | ui::PAGE_TRANSITION_FROM_API_3);
+        }
 
         // Since request.publicly_routable is a property of the visit to
         // request.url, it only applies to the final redirect.
@@ -995,7 +1016,8 @@ void HistoryBackend::AddPagesWithDetails(const URLRows& urls,
   //
   // TODO(brettw) bug 1140015: Add an "add page" notification so the history
   // views can keep in sync.
-  NotifyURLsModified(changed_urls, /*is_from_expiration=*/false);
+  // HistoryService::AddPagesWithDetails() is only called from sync.
+  NotifyURLsModified(changed_urls, UrlsModifiedReason::kSync);
   ScheduleCommit();
 }
 
@@ -1048,7 +1070,7 @@ void HistoryBackend::SetPageTitle(const GURL& url,
   // Broadcast notifications for any URLs that have changed. This will
   // update the in-memory database and the InMemoryURLIndex.
   if (!changed_urls.empty()) {
-    NotifyURLsModified(changed_urls, /*is_from_expiration=*/false);
+    NotifyURLsModified(changed_urls, UrlsModifiedReason::kTitleChanged);
     ScheduleCommit();
   }
 }
@@ -1126,7 +1148,8 @@ size_t HistoryBackend::UpdateURLs(const URLRows& urls) {
   // will update the in-memory database and the InMemoryURLIndex.
   size_t num_updated_records = changed_urls.size();
   if (num_updated_records) {
-    NotifyURLsModified(changed_urls, /*is_from_expiration=*/false);
+    // HistoryService::UpdateURLs() is only called from sync.
+    NotifyURLsModified(changed_urls, UrlsModifiedReason::kSync);
     ScheduleCommit();
   }
   return num_updated_records;
@@ -2204,11 +2227,12 @@ void HistoryBackend::NotifyURLVisited(ui::PageTransition transition,
 }
 
 void HistoryBackend::NotifyURLsModified(const URLRows& changed_urls,
-                                        bool is_from_expiration) {
+                                        UrlsModifiedReason reason) {
   for (HistoryBackendObserver& observer : observers_)
-    observer.OnURLsModified(this, changed_urls, is_from_expiration);
+    observer.OnURLsModified(this, changed_urls,
+                            reason == UrlsModifiedReason::kExpired);
 
-  delegate_->NotifyURLsModified(changed_urls);
+  delegate_->NotifyURLsModified(changed_urls, reason);
 }
 
 void HistoryBackend::NotifyURLsDeleted(DeletionInfo deletion_info) {
@@ -2354,6 +2378,11 @@ bool HistoryBackend::ProcessSetFaviconsResult(
   for (const GURL& page_url : result.updated_page_urls)
     SendFaviconChangedNotificationForPageAndRedirects(page_url);
   return true;
+}
+
+void HistoryBackend::Delegate::NotifyURLsModified(const URLRows& changed_urls,
+                                                  UrlsModifiedReason reason) {
+  NotifyURLsModified(changed_urls);
 }
 
 }  // namespace history

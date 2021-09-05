@@ -179,8 +179,8 @@ UIView* GetFirstResponderSubview(UIView* view);
 // Returns a cropped image using |cropRect| on |image|.
 UIImage* CropImage(UIImage* image, const CGRect& cropRect);
 
-// Returns the interface orientation of the app.
-UIInterfaceOrientation GetInterfaceOrientation();
+// Returns the interface orientation of the given window in the app.
+UIInterfaceOrientation GetInterfaceOrientation(UIWindow* window);
 
 // Returns the height of the keyboard in the current orientation.
 CGFloat CurrentKeyboardHeight(NSValue* keyboardFrameValue);
@@ -199,35 +199,31 @@ UIColor* InterpolateFromColorToColor(UIColor* firstColor,
                                      UIColor* secondColor,
                                      CGFloat fraction);
 
+// Returns true if the window is in portrait orientation or if orientation is
+// unknown.
+bool IsPortrait(UIWindow* window);
+
+// Returns true if the window is in landscape orientation.
+bool IsLandscape(UIWindow* window);
+
 // Whether the |environment| has a compact horizontal size class.
 bool IsCompactWidth(id<UITraitEnvironment> environment);
 
-// Whether the main application window's rootViewController has a compact
-// horizontal size class.
-bool IsCompactWidth();
-
-// Whether the |environment| has a compact iPad horizontal size class.
-bool IsCompactTablet(id<UITraitEnvironment> environment);
-
-// Whether the main application window's rootViewController has a compact
-// iPad horizontal size class.
-bool IsCompactTablet();
-
-// Whether the main application window's rootViewController has a compact
-// vertical size class.
-bool IsCompactHeight();
+// Whether the |traitCollection| has a compact horizontal size class.
+bool IsCompactWidth(UITraitCollection* traitCollection);
 
 // Whether the |environment| has a compact vertical size class.
 bool IsCompactHeight(id<UITraitEnvironment> environment);
 
-// Whether toolbar should be shown in compact mode.
-bool ShouldShowCompactToolbar();
+// Whether the |traitCollection| has a compact vertical size class.
+bool IsCompactHeight(UITraitCollection* traitCollection);
+
+// Whether toolbar should be shown in compact mode in |environment|.
+bool ShouldShowCompactToolbar(id<UITraitEnvironment> environment);
+
 // Whether toolbar should be shown in compact mode in |traitCollection|.
 bool ShouldShowCompactToolbar(UITraitCollection* traitCollection);
 
-// Whether the the main application window's rootViewController has a regular
-// vertical and regular horizontal size class.
-bool IsRegularXRegularSizeClass();
 // Whether the |environment| has a regular vertical and regular horizontal
 // size class.
 bool IsRegularXRegularSizeClass(id<UITraitEnvironment> environment);
@@ -235,13 +231,13 @@ bool IsRegularXRegularSizeClass(id<UITraitEnvironment> environment);
 // size class.
 bool IsRegularXRegularSizeClass(UITraitCollection* traitCollection);
 
-// Returns whether the toolbar is split between top and bottom toolbar or if it
-// is displayed as only one toolbar.
-bool IsSplitToolbarMode();
-
 // Returns whether the |environment|'s toolbar is split between top and bottom
 // toolbar or if it is displayed as only one toolbar.
 bool IsSplitToolbarMode(id<UITraitEnvironment> environment);
+
+// Returns whether the |traitCollection|'s toolbar is split between top and
+// bottom toolbar or if it is displayed as only one toolbar.
+bool IsSplitToolbarMode(UITraitCollection* traitCollection);
 
 // Returns the current first responder for keyWindow.
 UIResponder* GetFirstResponder();

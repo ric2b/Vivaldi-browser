@@ -183,7 +183,7 @@ void CanvasCaptureHandler::SendNewFrame(
 
   if (!image->IsTextureBacked()) {
     // Initially try accessing pixels directly if they are in memory.
-    sk_sp<SkImage> sk_image = image->PaintImageForCurrentFrame().GetSkImage();
+    sk_sp<SkImage> sk_image = image->PaintImageForCurrentFrame().GetSwSkImage();
     SkPixmap pixmap;
     if (sk_image->peekPixels(&pixmap) &&
         (pixmap.colorType() == kRGBA_8888_SkColorType ||
@@ -323,6 +323,7 @@ void CanvasCaptureHandler::ReadARGBPixelsAsync(
 
   IncrementOngoingAsyncPixelReadouts();
   gpu::MailboxHolder mailbox_holder = image->GetMailboxHolder();
+  DCHECK(context_provider->RasterInterface());
   context_provider->RasterInterface()->WaitSyncTokenCHROMIUM(
       mailbox_holder.sync_token.GetConstData());
   context_provider->RasterInterface()->ReadbackARGBPixelsAsync(

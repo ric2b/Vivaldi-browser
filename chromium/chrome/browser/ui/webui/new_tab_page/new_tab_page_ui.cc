@@ -15,13 +15,16 @@
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/ntp_features.h"
+#include "chrome/browser/search/shopping_tasks/shopping_tasks_handler.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/search/ntp_user_data_logger.h"
 #include "chrome/browser/ui/search/omnibox_mojo_utils.h"
+#include "chrome/browser/ui/webui/customize_themes/chrome_customize_themes_handler.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h"
 #include "chrome/browser/ui/webui/new_tab_page/promo_browser_command/promo_browser_command_handler.h"
 #include "chrome/browser/ui/webui/new_tab_page/untrusted_source.h"
+#include "chrome/browser/ui/webui/sanitized_image_source.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
@@ -127,12 +130,15 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"defaultThemeLabel", IDS_NTP_CUSTOMIZE_DEFAULT_LABEL},
       {"hideShortcuts", IDS_NTP_CUSTOMIZE_HIDE_SHORTCUTS_LABEL},
       {"hideShortcutsDesc", IDS_NTP_CUSTOMIZE_HIDE_SHORTCUTS_DESC},
+      {"hideModules", IDS_NTP_CUSTOMIZE_HIDE_MODULES_LABEL},
+      {"hideModulesDesc", IDS_NTP_CUSTOMIZE_HIDE_MODULES_DESC},
       {"mostVisited", IDS_NTP_CUSTOMIZE_MOST_VISITED_LABEL},
       {"myShortcuts", IDS_NTP_CUSTOMIZE_MY_SHORTCUTS_LABEL},
       {"noBackground", IDS_NTP_CUSTOMIZE_NO_BACKGROUND_LABEL},
       {"refreshDaily", IDS_NTP_CUSTOM_BG_DAILY_REFRESH},
       {"shortcutsCurated", IDS_NTP_CUSTOMIZE_MY_SHORTCUTS_DESC},
       {"shortcutsMenuItem", IDS_NTP_CUSTOMIZE_MENU_SHORTCUTS_LABEL},
+      {"modulesMenuItem", IDS_NTP_CUSTOMIZE_MENU_MODULES_LABEL},
       {"shortcutsOption", IDS_NTP_CUSTOMIZE_MENU_SHORTCUTS_LABEL},
       {"shortcutsSuggested", IDS_NTP_CUSTOMIZE_MOST_VISITED_DESC},
       {"themesMenuItem", IDS_NTP_CUSTOMIZE_MENU_COLOR_LABEL},
@@ -178,14 +184,27 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"themeCreatedBy", IDS_NEW_TAB_ATTRIBUTION_INTRO},
 
       // Modules.
-      {"modulesDummyName", IDS_NTP_MODULES_DUMMY_NAME},
+      {"dismissModuleToastMessage", IDS_NTP_MODULES_DISMISS_TOAST_MESSAGE},
+      {"moduleInfoButtonTitle", IDS_NTP_MODULES_INFO_BUTTON_TITLE},
+      {"moduleDismissButtonTitle", IDS_NTP_MODULES_DISMISS_BUTTON_TITLE},
       {"modulesDummyTitle", IDS_NTP_MODULES_DUMMY_TITLE},
-      {"modulesDummy2Name", IDS_NTP_MODULES_DUMMY2_NAME},
       {"modulesDummy2Title", IDS_NTP_MODULES_DUMMY2_TITLE},
-      {"modulesKaleidoscopeName", IDS_NTP_MODULES_KALEIDOSCOPE_NAME},
       {"modulesKaleidoscopeTitle", IDS_NTP_MODULES_KALEIDOSCOPE_TITLE},
+      {"modulesShoppingTasksInfoTitle",
+       IDS_NTP_MODULES_SHOPPING_TASKS_INFO_TITLE},
+      {"modulesShoppingTasksInfoClose",
+       IDS_NTP_MODULES_SHOPPING_TASKS_INFO_CLOSE},
   };
   AddLocalizedStringsBulk(source, kStrings);
+
+  source->AddString("modulesShoppingTasksInfo1",
+                    l10n_util::GetStringFUTF16(
+                        IDS_NTP_MODULES_SHOPPING_TASKS_INFO_1,
+                        base::UTF8ToUTF16("https://myactivity.google.com/")));
+  source->AddString("modulesShoppingTasksInfo2",
+                    l10n_util::GetStringFUTF16(
+                        IDS_NTP_MODULES_SHOPPING_TASKS_INFO_2,
+                        base::UTF8ToUTF16("https://policies.google.com/")));
 
   // Register images that are purposefully not inlined in the HTML and instead
   // are set in Javascript.
@@ -206,7 +225,8 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {omnibox::kExtensionAppIconResourceName,
        IDR_LOCAL_NTP_ICONS_EXTENSION_APP},
       {omnibox::kPageIconResourceName, IDR_LOCAL_NTP_ICONS_PAGE},
-      {omnibox::kSearchIconResourceName, IDR_WEBUI_IMAGES_ICON_SEARCH}};
+      {omnibox::kSearchIconResourceName, IDR_WEBUI_IMAGES_ICON_SEARCH},
+      {omnibox::kTrendingUpIconResourceName, IDR_LOCAL_NTP_ICONS_TRENDING_UP}};
   webui::AddResourcePathsBulk(source, kImages);
 
 #if BUILDFLAG(ENABLE_KALEIDOSCOPE)
@@ -215,6 +235,9 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
 #else
   source->AddBoolean("kaleidoscopeModuleEnabled", false);
 #endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
+  source->AddBoolean(
+      "shoppingTasksModuleEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kNtpShoppingTasksModule));
 
   source->AddResourcePath("new_tab_page.mojom-lite.js",
                           IDR_NEW_TAB_PAGE_MOJO_LITE_JS);
@@ -222,6 +245,9 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
                           IDR_NEW_TAB_PAGE_OMNIBOX_MOJO_LITE_JS);
   source->AddResourcePath("promo_browser_command.mojom-lite.js",
                           IDR_NEW_TAB_PAGE_PROMO_BROWSER_COMMAND_MOJO_LITE_JS);
+  source->AddResourcePath(
+      "modules/shopping_tasks/shopping_tasks.mojom-lite.js",
+      IDR_NEW_TAB_PAGE_MODULES_SHOPPING_TASKS_SHOPPING_TASKS_MOJO_LITE_JS);
 #if BUILDFLAG(OPTIMIZE_WEBUI)
   source->AddResourcePath("new_tab_page.js", IDR_NEW_TAB_PAGE_NEW_TAB_PAGE_JS);
 #endif  // BUILDFLAG(OPTIMIZE_WEBUI)
@@ -257,6 +283,7 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
     : ui::MojoWebUIController(web_ui, /*enable_chrome_send=*/false),
       content::WebContentsObserver(web_ui->GetWebContents()),
       page_factory_receiver_(this),
+      customize_themes_factory_receiver_(this),
       profile_(Profile::FromWebUI(web_ui)),
       instant_service_(InstantServiceFactory::GetForProfile(profile_)),
       web_contents_(web_ui->GetWebContents()),
@@ -269,6 +296,8 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
                      instant_service_->IsCustomBackgroundDisabledByPolicy());
   content::WebUIDataSource::Add(profile_, source);
 
+  content::URLDataSource::Add(profile_,
+                              std::make_unique<SanitizedImageSource>(profile_));
   content::URLDataSource::Add(
       profile_, std::make_unique<FaviconSource>(
                     profile_, chrome::FaviconUrlFormat::kFavicon2));
@@ -319,10 +348,27 @@ void NewTabPageUI::BindInterface(
 }
 
 void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<
+        customize_themes::mojom::CustomizeThemesHandlerFactory>
+        pending_receiver) {
+  if (customize_themes_factory_receiver_.is_bound()) {
+    customize_themes_factory_receiver_.reset();
+  }
+  customize_themes_factory_receiver_.Bind(std::move(pending_receiver));
+}
+
+void NewTabPageUI::BindInterface(
     mojo::PendingReceiver<media::mojom::KaleidoscopeDataProvider>
         pending_page_handler) {
   kaleidoscope_data_provider_ = std::make_unique<KaleidoscopeDataProviderImpl>(
-      std::move(pending_page_handler), profile_);
+      std::move(pending_page_handler), profile_, nullptr);
+}
+
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<shopping_tasks::mojom::ShoppingTasksHandler>
+        pending_receiver) {
+  shopping_tasks_handler_ = std::make_unique<ShoppingTasksHandler>(
+      std::move(pending_receiver), profile_);
 }
 
 void NewTabPageUI::CreatePageHandler(
@@ -335,6 +381,16 @@ void NewTabPageUI::CreatePageHandler(
       instant_service_, web_contents_,
       NTPUserDataLogger::GetOrCreateFromWebContents(web_contents_),
       navigation_start_time_);
+}
+
+void NewTabPageUI::CreateCustomizeThemesHandler(
+    mojo::PendingRemote<customize_themes::mojom::CustomizeThemesClient>
+        pending_client,
+    mojo::PendingReceiver<customize_themes::mojom::CustomizeThemesHandler>
+        pending_handler) {
+  customize_themes_handler_ = std::make_unique<ChromeCustomizeThemesHandler>(
+      std::move(pending_client), std::move(pending_handler), web_contents_,
+      profile_);
 }
 
 void NewTabPageUI::NtpThemeChanged(const NtpTheme& theme) {

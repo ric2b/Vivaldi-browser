@@ -573,15 +573,6 @@ LayoutUnit GridTrackSizingAlgorithmStrategy::MinLogicalSizeForChild(
   bool override_size_has_changed =
       UpdateOverrideContainingBlockContentSizeForChild(
           child, child_inline_direction, available_size);
-  GridTrackSizingDirection child_block_direction =
-      GridLayoutUtils::FlowAwareDirectionForChild(*GetLayoutGrid(), child,
-                                                  kForRows);
-  if (ShouldClearOverrideContainingBlockContentSizeForChild(
-          *GetLayoutGrid(), child, child_block_direction)) {
-    SetOverrideContainingBlockContentSizeForChild(child, child_block_direction,
-                                                  LayoutUnit(-1));
-    override_size_has_changed = true;
-  }
   LayoutGridItemForMinSizeComputation(child, override_size_has_changed);
 
   return child.ComputeLogicalHeightUsing(kMinSize, child_min_size,
@@ -1268,9 +1259,9 @@ LayoutUnit GridTrackSizingAlgorithm::ItemSizeForTrackSizeComputationPhase(
     LayoutBox& grid_item) const {
   switch (phase) {
     case kResolveIntrinsicMinimums:
-    case kResolveIntrinsicMaximums:
       return strategy_->MinSizeForChild(grid_item);
     case kResolveContentBasedMinimums:
+    case kResolveIntrinsicMaximums:
       return strategy_->MinContentForChild(grid_item);
     case kResolveMaxContentMinimums:
     case kResolveMaxContentMaximums:

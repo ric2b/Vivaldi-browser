@@ -972,7 +972,7 @@ bool DXVAVideoDecodeAccelerator::CreateDX11DevManager() {
   }
 
   // Create the display information.
-  display_helper_.emplace(D3D11Device());
+  hdr_metadata_helper_.emplace(D3D11Device());
 
   hr = d3d11_device_context_.As(&video_context_);
   RETURN_ON_HR_FAILURE(hr, "Failed to get video context", false);
@@ -2934,13 +2934,13 @@ bool DXVAVideoDecodeAccelerator::InitializeID3D11VideoProcessor(
 }
 
 void DXVAVideoDecodeAccelerator::SetDX11ProcessorHDRMetadataIfNeeded() {
-  DCHECK(display_helper_);
+  DCHECK(hdr_metadata_helper_);
 
   // If we don't know the input metadata, then we'll still send the
   // monitor output.
 
   // Do nothing without display metadata.
-  auto dxgi_display_metadata = display_helper_->GetDisplayMetadata();
+  auto dxgi_display_metadata = hdr_metadata_helper_->GetDisplayMetadata();
   if (!dxgi_display_metadata)
     return;
 
@@ -2953,12 +2953,12 @@ void DXVAVideoDecodeAccelerator::SetDX11ProcessorHDRMetadataIfNeeded() {
   // stream metadata.  For the Radeon 5700, at least, this seems to do
   // something sane.  Not setting the metadata crashes intermittently.
   if (config_.hdr_metadata || use_empty_video_hdr_metadata_) {
-    HDRMetadata stream_metadata;
+    gl::HDRMetadata stream_metadata;
     if (config_.hdr_metadata)
       stream_metadata = *config_.hdr_metadata;
 
     DXGI_HDR_METADATA_HDR10 dxgi_stream_metadata =
-        DisplayHelper::HdrMetadataToDXGI(stream_metadata);
+        gl::HDRMetadataHelperWin::HDRMetadataToDXGI(stream_metadata);
 
     video_context2->VideoProcessorSetStreamHDRMetaData(
         d3d11_processor_.Get(), 0, DXGI_HDR_METADATA_TYPE_HDR10,

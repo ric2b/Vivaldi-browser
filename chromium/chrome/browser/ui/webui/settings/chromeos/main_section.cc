@@ -21,7 +21,6 @@
 #include "chrome/browser/ui/webui/settings/browser_lifetime_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/os_settings_features_util.h"
 #include "chrome/browser/ui/webui/webui_util.h"
-#include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/browser_resources.h"
@@ -57,9 +56,8 @@ void AddSearchInSettingsStrings(content::WebUIDataSource* html_source) {
           IDS_SETTINGS_SEARCH_NO_RESULTS_HELP,
           base::ASCIIToUTF16(chrome::kOsSettingsSearchHelpURL)));
 
-  html_source->AddBoolean(
-      "newOsSettingsSearch",
-      base::FeatureList::IsEnabled(::chromeos::features::kNewOsSettingsSearch));
+  // TODO(crbug/1080777): Remove this flag and JS codepaths effected.
+  html_source->AddBoolean("newOsSettingsSearch", true);
 }
 
 void AddUpdateRequiredEolStrings(content::WebUIDataSource* html_source) {
@@ -174,12 +172,10 @@ void MainSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
                           chromeos::features::IsDeepLinkingEnabled());
 
   // Add the System Web App resources for Settings.
-  if (web_app::SystemWebAppManager::IsEnabled()) {
-    html_source->AddResourcePath("icon-192.png", IDR_SETTINGS_LOGO_192);
-    html_source->AddResourcePath("pwa.html", IDR_PWA_HTML);
-    web_app::SetManifestRequestFilter(html_source, IDR_OS_SETTINGS_MANIFEST,
-                                      IDS_SETTINGS_SETTINGS);
-  }
+  html_source->AddResourcePath("icon-192.png", IDR_SETTINGS_LOGO_192);
+  html_source->AddResourcePath("pwa.html", IDR_PWA_HTML);
+  web_app::SetManifestRequestFilter(html_source, IDR_OS_SETTINGS_MANIFEST,
+                                    IDS_SETTINGS_SETTINGS);
 
   html_source->AddResourcePath("constants/routes.mojom-lite.js",
                                IDR_OS_SETTINGS_ROUTES_MOJOM_LITE_JS);
@@ -228,6 +224,11 @@ mojom::SearchResultIcon MainSection::GetSectionIcon() const {
 std::string MainSection::GetSectionPath() const {
   NOTIMPLEMENTED();
   return std::string();
+}
+
+bool MainSection::LogMetric(mojom::Setting setting, base::Value& value) const {
+  NOTIMPLEMENTED();
+  return false;
 }
 
 void MainSection::RegisterHierarchy(HierarchyGenerator* generator) const {

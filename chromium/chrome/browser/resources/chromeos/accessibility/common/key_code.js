@@ -11,6 +11,7 @@
 
 goog.provide('KeyCode');
 
+/** @enum {number} */
 KeyCode = {
   CANCEL: 3,
   BACK: 8,
@@ -21,6 +22,7 @@ KeyCode = {
   SHIFT: 16,
   CONTROL: 17,
   MENU: 18,
+  ALT: 18,
   PAUSE: 19,
   CAPITAL: 20,
   KANA: 21,

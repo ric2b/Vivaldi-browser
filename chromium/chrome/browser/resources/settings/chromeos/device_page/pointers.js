@@ -10,7 +10,9 @@ Polymer({
   is: 'settings-pointers',
 
   behaviors: [
+    DeepLinkingBehavior,
     PrefsBehavior,
+    settings.RouteObserverBehavior,
   ],
 
   properties: {
@@ -21,7 +23,19 @@ Polymer({
 
     hasMouse: Boolean,
 
+    hasPointingStick: Boolean,
+
     hasTouchpad: Boolean,
+
+    /**
+     * Interim property for use until we have a separate subsection for pointing
+     * sticks. (See crbug.com/1114828)
+     * @private
+     */
+    showMouseSection_: {
+      type: Boolean,
+      computed: 'computeShowMouseSection_(hasMouse, hasPointingStick)',
+    },
 
     /**
      * TODO(michaelpg): settings-slider should optionally take a min and max so
@@ -56,6 +70,35 @@ Polymer({
         return loadTimeData.getBoolean('allowScrollSettings');
       },
     },
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([
+        chromeos.settings.mojom.Setting.kTouchpadTapToClick,
+        chromeos.settings.mojom.Setting.kTouchpadTapDragging,
+        chromeos.settings.mojom.Setting.kTouchpadReverseScrolling,
+        chromeos.settings.mojom.Setting.kTouchpadAcceleration,
+        chromeos.settings.mojom.Setting.kTouchpadScrollAcceleration,
+        chromeos.settings.mojom.Setting.kTouchpadSpeed,
+        chromeos.settings.mojom.Setting.kMouseSwapPrimaryButtons,
+        chromeos.settings.mojom.Setting.kMouseReverseScrolling,
+        chromeos.settings.mojom.Setting.kMouseAcceleration,
+        chromeos.settings.mojom.Setting.kMouseScrollAcceleration,
+        chromeos.settings.mojom.Setting.kMouseSpeed,
+      ]),
+    },
+  },
+
+  /**
+   * @param {boolean} hasMouse
+   * @param {boolean} hasPointingStick
+   */
+  computeShowMouseSection_(hasMouse, hasPointingStick) {
+    return hasMouse || hasPointingStick;
   },
 
   // Used to correctly identify when the mouse button has been released.
@@ -63,14 +106,27 @@ Polymer({
   receivedMouseSwapButtonsDown_: false,
 
   /**
+   * @param {!settings.Route} route
+   * @param {settings.Route} oldRoute
+   */
+  currentRouteChanged(route, oldRoute) {
+    // Does not apply to this page.
+    if (route !== settings.routes.POINTERS) {
+      return;
+    }
+
+    this.attemptDeepLink();
+  },
+
+  /**
    * Mouse and touchpad sections are only subsections if they are both present.
-   * @param {boolean} hasMouse
+   * @param {boolean} showMouseSection
    * @param {boolean} hasTouchpad
    * @return {string}
    * @private
    */
-  getSubsectionClass_(hasMouse, hasTouchpad) {
-    return hasMouse && hasTouchpad ? 'subsection' : '';
+  getSubsectionClass_(showMouseSection, hasTouchpad) {
+    return showMouseSection && hasTouchpad ? 'subsection' : '';
   },
 
   /** @private */
@@ -109,7 +165,14 @@ Polymer({
   },
 
   /** @private */
-  onReverseScrollRowClicked_: function() {
+  onMouseReverseScrollRowClicked_: function() {
+    this.setPrefValue(
+        'settings.mouse.reverse_scroll',
+        !this.getPref('settings.mouse.reverse_scroll').value);
+  },
+
+  /** @private */
+  onTouchpadReverseScrollRowClicked_: function() {
     this.setPrefValue(
         'settings.touchpad.natural_scroll',
         !this.getPref('settings.touchpad.natural_scroll').value);

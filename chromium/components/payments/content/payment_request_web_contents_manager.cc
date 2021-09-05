@@ -30,12 +30,11 @@ PaymentRequestWebContentsManager::GetOrCreateForWebContents(
 
 void PaymentRequestWebContentsManager::CreatePaymentRequest(
     content::RenderFrameHost* render_frame_host,
-    content::WebContents* web_contents,
     std::unique_ptr<ContentPaymentRequestDelegate> delegate,
     mojo::PendingReceiver<payments::mojom::PaymentRequest> receiver,
     PaymentRequest::ObserverForTest* observer_for_testing) {
   auto new_request = std::make_unique<PaymentRequest>(
-      render_frame_host, web_contents, std::move(delegate), /*manager=*/this,
+      render_frame_host, std::move(delegate), /*manager=*/this,
       delegate->GetDisplayManager(), std::move(receiver), observer_for_testing);
   PaymentRequest* request_ptr = new_request.get();
   payment_requests_.insert(std::make_pair(request_ptr, std::move(new_request)));
@@ -75,9 +74,13 @@ void PaymentRequestWebContentsManager::RenderFrameDeleted(
   }
 }
 
-void PaymentRequestWebContentsManager::DestroyRequest(PaymentRequest* request) {
+void PaymentRequestWebContentsManager::DestroyRequest(
+    base::WeakPtr<PaymentRequest> request) {
+  if (!request)
+    return;
+
   request->HideIfNecessary();
-  payment_requests_.erase(request);
+  payment_requests_.erase(request.get());
 }
 
 void PaymentRequestWebContentsManager::CreatePaymentCredential(

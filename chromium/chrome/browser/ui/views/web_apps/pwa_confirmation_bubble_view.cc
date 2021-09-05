@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/i18n/message_formatter.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -35,7 +36,8 @@
 
 namespace {
 
-#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
+    defined(OS_CHROMEOS)
 constexpr char kDeviceTypeForCheckbox[] = "computer";
 #else
 constexpr char kDeviceTypeForCheckbox[] = "other";
@@ -61,7 +63,8 @@ std::unique_ptr<views::ImageView> CreateIconView(
 // Returns a label containing the app name.
 std::unique_ptr<views::Label> CreateNameLabel(const base::string16& name) {
   auto name_label = std::make_unique<views::Label>(
-      name, CONTEXT_BODY_TEXT_LARGE, views::style::TextStyle::STYLE_PRIMARY);
+      name, views::style::CONTEXT_DIALOG_BODY_TEXT,
+      views::style::TextStyle::STYLE_PRIMARY);
   name_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   name_label->SetElideBehavior(gfx::ELIDE_TAIL);
   return name_label;
@@ -71,7 +74,7 @@ std::unique_ptr<views::Label> CreateOriginLabel(const url::Origin& origin) {
   auto origin_label = std::make_unique<views::Label>(
       FormatOriginForSecurityDisplay(
           origin, url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS),
-      CONTEXT_BODY_TEXT_SMALL, views::style::STYLE_SECONDARY);
+      CONTEXT_DIALOG_BODY_TEXT_SMALL, views::style::STYLE_SECONDARY);
 
   origin_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
@@ -141,7 +144,8 @@ PWAConfirmationBubbleView::PWAConfirmationBubbleView(
 
   labels->AddChildView(CreateNameLabel(web_app_info_->title).release());
   labels->AddChildView(
-      CreateOriginLabel(url::Origin::Create(web_app_info_->app_url)).release());
+      CreateOriginLabel(url::Origin::Create(web_app_info_->start_url))
+          .release());
 
   if (base::FeatureList::IsEnabled(features::kDesktopPWAsTabStrip)) {
     // This UI is only for prototyping and is not intended for shipping.
@@ -171,6 +175,13 @@ PWAConfirmationBubbleView::PWAConfirmationBubbleView(
 }
 
 PWAConfirmationBubbleView::~PWAConfirmationBubbleView() = default;
+
+bool PWAConfirmationBubbleView::OnCloseRequested(
+    views::Widget::ClosedReason close_reason) {
+  base::UmaHistogramEnumeration("WebApp.InstallConfirmation.CloseReason",
+                                close_reason);
+  return LocationBarBubbleDelegateView::OnCloseRequested(close_reason);
+}
 
 views::View* PWAConfirmationBubbleView::GetInitiallyFocusedView() {
   return nullptr;

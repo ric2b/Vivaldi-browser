@@ -9,11 +9,11 @@
 #include "base/debug/stack_trace.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "content/browser/frame_host/debug_urls.h"
-#include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/navigation_entry_impl.h"
-#include "content/browser/frame_host/navigation_request.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/debug_urls.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/navigation_entry_impl.h"
+#include "content/browser/renderer_host/navigation_request.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/navigation_params.h"
@@ -29,6 +29,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/load_flags.h"
 #include "net/url_request/redirect_info.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 
 namespace content {
 
@@ -524,13 +525,18 @@ void NavigationSimulatorImpl::ReadyToCommit() {
     }
   }
 
+  if (!response_headers_) {
+    response_headers_ =
+        base::MakeRefCounted<net::HttpResponseHeaders>(std::string());
+  }
+  response_headers_->SetHeader("Content-Type", contents_mime_type_);
   PrepareCompleteCallbackOnRequest();
   if (frame_tree_node_->navigation_request()) {
     static_cast<TestRenderFrameHost*>(frame_tree_node_->current_frame_host())
         ->PrepareForCommitDeprecatedForNavigationSimulator(
             remote_endpoint_, was_fetched_via_cache_,
             is_signed_exchange_inner_response_, http_connection_info_,
-            ssl_info_);
+            ssl_info_, response_headers_);
   }
 
   // Synchronous failure can cause the navigation to finish here.
@@ -603,13 +609,6 @@ void NavigationSimulatorImpl::Commit() {
     browser_interface_broker_receiver_.reset();
   }
 
-  if (request_) {
-    scoped_refptr<net::HttpResponseHeaders> response_headers =
-        new net::HttpResponseHeaders(std::string());
-    response_headers->SetHeader("Content-Type", contents_mime_type_);
-    request_->set_response_headers_for_testing(response_headers);
-  }
-
   auto params = BuildDidCommitProvisionalLoadParams(
       same_document_ /* same_document */, false /* failed_navigation */);
   render_frame_host_->SimulateCommitProcessed(
@@ -666,9 +665,7 @@ void NavigationSimulatorImpl::AbortFromRenderer() {
   CHECK_EQ(1, num_did_finish_navigation_called_);
 }
 
-void NavigationSimulatorImpl::FailWithResponseHeaders(
-    int error_code,
-    scoped_refptr<net::HttpResponseHeaders> response_headers) {
+void NavigationSimulatorImpl::Fail(int error_code) {
   CHECK_LE(state_, STARTED) << "NavigationSimulatorImpl::Fail can only be "
                                "called once, and cannot be called after "
                                "NavigationSimulatorImpl::ReadyToCommit";
@@ -679,9 +676,6 @@ void NavigationSimulatorImpl::FailWithResponseHeaders(
 
   if (state_ == INITIALIZATION)
     Start();
-
-  CHECK(!request_->GetResponseHeaders());
-  request_->set_response_headers_for_testing(response_headers);
 
   state_ = FAILED;
 
@@ -703,10 +697,6 @@ void NavigationSimulatorImpl::FailWithResponseHeaders(
     return;
   }
   std::move(complete_closure).Run();
-}
-
-void NavigationSimulatorImpl::Fail(int error_code) {
-  FailWithResponseHeaders(error_code, nullptr);
 }
 
 void NavigationSimulatorImpl::FailComplete(int error_code) {
@@ -930,6 +920,13 @@ void NavigationSimulatorImpl::SetContentsMimeType(
   CHECK_LE(state_, STARTED) << "The contents mime type cannot be set after the "
                                "navigation has committed or failed";
   contents_mime_type_ = contents_mime_type;
+}
+
+void NavigationSimulatorImpl::SetResponseHeaders(
+    scoped_refptr<net::HttpResponseHeaders> response_headers) {
+  CHECK_LE(state_, STARTED) << "The response headers cannot be set after the "
+                               "navigation has committed or failed";
+  response_headers_ = response_headers;
 }
 
 void NavigationSimulatorImpl::SetLoadURLParams(
@@ -1402,6 +1399,10 @@ void NavigationSimulatorImpl::
   if (previous_rfh == render_frame_host_)
     return;
   if (drop_unload_ack_)
+    return;
+  // The previous RenderFrameHost is not live, we will not attempt to unload
+  // it.
+  if (!previous_rfh->IsRenderFrameLive())
     return;
   // The previous RenderFrameHost entered the back-forward cache and hasn't been
   // requested to unload. The browser process do not expect

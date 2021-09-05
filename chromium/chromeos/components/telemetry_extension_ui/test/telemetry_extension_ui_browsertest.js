@@ -115,6 +115,175 @@ TEST_F('TelemetryExtensionUIBrowserTest', 'ConvertDiagnosticsEnums', () => {
       diagnosticsProxy.convertUserMessage(userMessageEnum.kPlugInACPower),
       'plug-in-ac-power');
 
+  // Unit tests for convertPowerStatusToEnum
+  const acPowerStatusEnum = chromeos.health.mojom.AcPowerStatusEnum;
+  assertEquals(
+      diagnosticsProxy.convertPowerStatusToEnum('connected'),
+      acPowerStatusEnum.kConnected);
+  assertEquals(
+      diagnosticsProxy.convertPowerStatusToEnum('disconnected'),
+      acPowerStatusEnum.kDisconnected);
+
+  // Unit tests for convertNvmeSelfTestTypeToEnum
+  const nvmeSelfTestTypeEnum = chromeos.health.mojom.NvmeSelfTestTypeEnum;
+  assertEquals(
+      diagnosticsProxy.convertNvmeSelfTestTypeToEnum('short-self-test'),
+      nvmeSelfTestTypeEnum.kShortSelfTest);
+  assertEquals(
+      diagnosticsProxy.convertNvmeSelfTestTypeToEnum('long-self-test'),
+      nvmeSelfTestTypeEnum.kLongSelfTest);
+
+  // Unit tests for convertDiskReadTypeToEnum
+  const diskReadRoutineTypeEnum = chromeos.health.mojom.DiskReadRoutineTypeEnum;
+  assertEquals(
+      diagnosticsProxy.convertDiskReadTypeToEnum('linear-read'),
+      diskReadRoutineTypeEnum.kLinearRead);
+  assertEquals(
+      diagnosticsProxy.convertDiskReadTypeToEnum('random-read'),
+      diskReadRoutineTypeEnum.kRandomRead);
+
+  testDone();
+});
+
+// Tests that Telemetry correctly converts Mojo enums to strings.
+TEST_F('TelemetryExtensionUIBrowserTest', 'ConvertTelemetryEnums', () => {
+  // Unit tests for convertErrorType.
+  const errorTypeEnum = chromeos.health.mojom.ErrorType;
+
+  assertEquals(
+      telemetryProxy.convertErrorType(errorTypeEnum.kFileReadError),
+      'file-read-error');
+  assertEquals(
+      telemetryProxy.convertErrorType(errorTypeEnum.kParseError),
+      'parse-error');
+  assertEquals(
+      telemetryProxy.convertErrorType(errorTypeEnum.kSystemUtilityError),
+      'system-utility-error');
+  assertEquals(
+      telemetryProxy.convertErrorType(errorTypeEnum.kServiceUnavailable),
+      'service-unavailable');
+
+  // Unit tests for convertCpuArch.
+  const cpuArchEnum = chromeos.health.mojom.CpuArchitectureEnum;
+
+  assertEquals(telemetryProxy.convertCpuArch(cpuArchEnum.kUnknown), 'unknown');
+  assertEquals(telemetryProxy.convertCpuArch(cpuArchEnum.kX86_64), 'x86-64');
+  assertEquals(telemetryProxy.convertCpuArch(cpuArchEnum.kAArch64), 'AArch64');
+  assertEquals(telemetryProxy.convertCpuArch(cpuArchEnum.kArmv7l), 'Armv7l');
+
+  // Check that convertAllEnums converts all Mojo enums to strings and does not
+  // crash if some enums are not present in TelemetryInfo.
+  assertDeepEquals(telemetryProxy.convertAllEnums({}), {});
+  assertDeepEquals(
+      telemetryProxy.convertAllEnums({
+        batteryResult: {},
+        blockDeviceResult: {},
+        vpdResult: {},
+        cpuResult: {},
+        timezoneResult: {},
+        memoryResult: {},
+        backlightResult: {},
+        fanResult: {},
+        statefulPartitionResult: {},
+        bluetoothResult: {}
+      }),
+      {
+        batteryResult: {},
+        blockDeviceResult: {},
+        vpdResult: {},
+        cpuResult: {},
+        timezoneResult: {},
+        memoryResult: {},
+        backlightResult: {},
+        fanResult: {},
+        statefulPartitionResult: {},
+        bluetoothResult: {}
+      });
+  // Check architecture equals to 0 (i.e. kUnknown).
+  assertDeepEquals(
+      telemetryProxy.convertAllEnums({
+        cpuResult:
+            {cpuInfo: {architecture: cpuArchEnum.kUnknown, physicalCpus: []}}
+      }),
+      {cpuResult: {cpuInfo: {architecture: 'unknown', physicalCpus: []}}});
+  assertDeepEquals(
+      telemetryProxy.convertAllEnums({
+        cpuResult:
+            {cpuInfo: {architecture: cpuArchEnum.kX86_64, physicalCpus: []}}
+      }),
+      {cpuResult: {cpuInfo: {architecture: 'x86-64', physicalCpus: []}}});
+  // Check error type equals to 0 (i.e. kFileReadError).
+  assertDeepEquals(
+      telemetryProxy.convertAllEnums({
+        batteryResult:
+            {error: {type: errorTypeEnum.kFileReadError, msg: 'battery'}},
+        blockDeviceResult:
+            {error: {type: errorTypeEnum.kFileReadError, msg: 'ssd'}},
+        vpdResult: {error: {type: errorTypeEnum.kFileReadError, msg: 'vpd'}},
+        cpuResult: {error: {type: errorTypeEnum.kFileReadError, msg: 'cpu'}},
+        timezoneResult:
+            {error: {type: errorTypeEnum.kFileReadError, msg: 'timezone'}},
+        memoryResult:
+            {error: {type: errorTypeEnum.kFileReadError, msg: 'memory'}},
+        backlightResult:
+            {error: {type: errorTypeEnum.kFileReadError, msg: 'backlight'}},
+        fanResult: {error: {type: errorTypeEnum.kFileReadError, msg: 'fan'}},
+        statefulPartitionResult:
+            {error: {type: errorTypeEnum.kFileReadError, msg: 'partition'}},
+        bluetoothResult:
+            {error: {type: errorTypeEnum.kFileReadError, msg: 'bluetooth'}}
+      }),
+      {
+        batteryResult: {error: {type: 'file-read-error', msg: 'battery'}},
+        blockDeviceResult: {error: {type: 'file-read-error', msg: 'ssd'}},
+        vpdResult: {error: {type: 'file-read-error', msg: 'vpd'}},
+        cpuResult: {error: {type: 'file-read-error', msg: 'cpu'}},
+        timezoneResult: {error: {type: 'file-read-error', msg: 'timezone'}},
+        memoryResult: {error: {type: 'file-read-error', msg: 'memory'}},
+        backlightResult: {error: {type: 'file-read-error', msg: 'backlight'}},
+        fanResult: {error: {type: 'file-read-error', msg: 'fan'}},
+        statefulPartitionResult:
+            {error: {type: 'file-read-error', msg: 'partition'}},
+        bluetoothResult: {error: {type: 'file-read-error', msg: 'bluetooth'}}
+      });
+  assertDeepEquals(
+      telemetryProxy.convertAllEnums({
+        batteryResult:
+            {error: {type: errorTypeEnum.kParseError, msg: 'battery'}},
+        blockDeviceResult:
+            {error: {type: errorTypeEnum.kSystemUtilityError, msg: 'ssd'}},
+        vpdResult:
+            {error: {type: errorTypeEnum.kServiceUnavailable, msg: 'vpd'}},
+        cpuResult: {error: {type: errorTypeEnum.kParseError, msg: 'cpu'}},
+        timezoneResult:
+            {error: {type: errorTypeEnum.kSystemUtilityError, msg: 'timezone'}},
+        memoryResult:
+            {error: {type: errorTypeEnum.kServiceUnavailable, msg: 'memory'}},
+        backlightResult:
+            {error: {type: errorTypeEnum.kParseError, msg: 'backlight'}},
+        fanResult:
+            {error: {type: errorTypeEnum.kSystemUtilityError, msg: 'fan'}},
+        statefulPartitionResult: {
+          error: {type: errorTypeEnum.kServiceUnavailable, msg: 'partition'}
+        },
+        bluetoothResult:
+            {error: {type: errorTypeEnum.kParseError, msg: 'bluetooth'}}
+      }),
+      {
+        batteryResult: {error: {type: 'parse-error', msg: 'battery'}},
+        blockDeviceResult: {error: {type: 'system-utility-error', msg: 'ssd'}},
+        vpdResult: {error: {type: 'service-unavailable', msg: 'vpd'}},
+        cpuResult: {error: {type: 'parse-error', msg: 'cpu'}},
+        timezoneResult:
+            {error: {type: 'system-utility-error', msg: 'timezone'}},
+        memoryResult: {error: {type: 'service-unavailable', msg: 'memory'}},
+        backlightResult: {error: {type: 'parse-error', msg: 'backlight'}},
+        fanResult: {error: {type: 'system-utility-error', msg: 'fan'}},
+        statefulPartitionResult:
+            {error: {type: 'service-unavailable', msg: 'partition'}},
+        bluetoothResult: {error: {type: 'parse-error', msg: 'bluetooth'}}
+      });
+
   testDone();
 });
 
@@ -134,6 +303,10 @@ TEST_F(
       // {value: X} --> X if X is a number.
       assertEquals(telemetryProxy.convert({value: 15}), 15);
       assertEquals(telemetryProxy.convert({value: 777.555}), 777.555);
+
+      // {value: X} --> X if X is a booelan.
+      assertEquals(telemetryProxy.convert({value: false}), false);
+      assertEquals(telemetryProxy.convert({value: true}), true);
 
       // {value: X} --> {value: X} if X is not a number.
       assertDeepEquals(telemetryProxy.convert({value: 'ABC'}), {value: 'ABC'});
@@ -174,45 +347,7 @@ TEST_F(
       testDone();
     });
 
-// Test cases injected into the untrusted context.
-// See implementations in untrusted_browsertest.js.
-
-TEST_F(
-    'TelemetryExtensionUIBrowserTest', 'UntrustedCanSpawnWorkers', async () => {
-      await runTestInUntrusted('UntrustedCanSpawnWorkers');
-      testDone();
-    });
-
-TEST_F(
-    'TelemetryExtensionUIBrowserTest', 'UntrustedRequestAvailableRoutines',
-    async () => {
-      await runTestInUntrusted('UntrustedRequestAvailableRoutines');
-      testDone();
-    });
-
-TEST_F(
-    'TelemetryExtensionUIBrowserTest',
-    'UntrustedDiagnosticsRequestRoutineUpdateUnknownArguments', async () => {
-      await runTestInUntrusted(
-          'UntrustedDiagnosticsRequestRoutineUpdateUnknownArguments');
-      testDone();
-    });
-
-TEST_F(
-    'TelemetryExtensionUIBrowserTest',
-    'UntrustedRequestTelemetryInfoUnknownCategory', async () => {
-      await runTestInUntrusted('UntrustedRequestTelemetryInfoUnknownCategory');
-      testDone();
-    });
-
-TEST_F(
-    'TelemetryExtensionUIBrowserTest', 'UntrustedRequestTelemetryInfo',
-    async () => {
-      await runTestInUntrusted('UntrustedRequestTelemetryInfo');
-      testDone();
-    });
-
-var DiagnosticsInteractiveRoutineUpdate =
+var TelemetryExtensionUIWithInteractiveRoutineUpdateBrowserTest =
     class extends TelemetryExtensionUIBrowserTest {
   /** @override */
   testGenPreamble() {
@@ -220,15 +355,7 @@ var DiagnosticsInteractiveRoutineUpdate =
   }
 }
 
-TEST_F(
-    'DiagnosticsInteractiveRoutineUpdate',
-    'UntrustedDiagnosticsRequestInteractiveRoutineUpdate', async () => {
-      await runTestInUntrusted(
-          'UntrustedDiagnosticsRequestInteractiveRoutineUpdate');
-      testDone();
-    });
-
-var DiagnosticsNonInteractiveRoutineUpdate =
+var TelemetryExtensionUIWithNonInteractiveRoutineUpdateBrowserTest =
     class extends TelemetryExtensionUIBrowserTest {
   /** @override */
   testGenPreamble() {
@@ -236,13 +363,80 @@ var DiagnosticsNonInteractiveRoutineUpdate =
   }
 }
 
-TEST_F(
-    'DiagnosticsNonInteractiveRoutineUpdate',
-    'UntrustedDiagnosticsRequestNonInteractiveRoutineUpdate', async () => {
-      await runTestInUntrusted(
-          'UntrustedDiagnosticsRequestNonInteractiveRoutineUpdate');
-      testDone();
-    });
+var TelemetryExtensionUIWithProbeServiceErrorsBrowserTest =
+    class extends TelemetryExtensionUIBrowserTest {
+  /** @override */
+  testGenPreamble() {
+    GEN('ConfigureProbeServiceToReturnErrors();');
+  }
+}
+
+// Test cases injected into the untrusted context.
+// See implementations in untrusted_browsertest.js.
+//
+// To register a test with TelemetryExtensionUIBrowserTest class add an array
+// with the test name from untrusted_browsertest.js.
+// Example: ['UntrustedAwesomeTest']
+//
+// To register a test with a custom test class add an array with the test name
+// from untrusted_browsertest.js and test class name whose definition needs to
+// be above untrustedTests definition.
+// Example: ['UntrustedAwesomeTest', 'MyAwesomeTestClass']
+const untrustedTests = [
+  ['UntrustedCanSpawnWorkers'],
+  ['UntrustedDiagnosticsRequestAvailableRoutines'],
+  ['UntrustedDiagnosticsRequestRoutineUpdateUnknownArguments'],
+  ['UntrustedDiagnosticsRequestRunBatteryCapacityRoutine'],
+  ['UntrustedDiagnosticsRequestRunBatteryHealthRoutine'],
+  ['UntrustedDiagnosticsRequestRunSmartctlCheckRoutine'],
+  ['UntrustedDiagnosticsRequestRunAcPowerRoutineInvalidInput'],
+  ['UntrustedDiagnosticsRequestRunAcPowerRoutine'],
+  ['UntrustedDiagnosticsRequestRunCpuCacheRoutineInvalidInput'],
+  ['UntrustedDiagnosticsRequestRunCpuCacheRoutine'],
+  ['UntrustedDiagnosticsRequestRunCpuStressRoutineInvalidInput'],
+  ['UntrustedDiagnosticsRequestRunCpuStressRoutine'],
+  ['UntrustedDiagnosticsRequestRunFPAccuracyRoutineInvalidInput'],
+  ['UntrustedDiagnosticsRequestRunFPAccuracyRoutine'],
+  ['UntrustedDiagnosticsRequestRunNvmeWearLevelRoutine'],
+  ['UntrustedDiagnosticsRequestRunNvmeSelfTestRoutineInvalidInput'],
+  ['UntrustedDiagnosticsRequestRunNvmeSelfTestRoutine'],
+  ['UntrustedDiagnosticsRequestRunDiskReadRoutineInvalidInput'],
+  ['UntrustedDiagnosticsRequestRunDiskReadRoutine'],
+  ['UntrustedDiagnosticsRequestRunPrimeSearchRoutineInvalidInput'],
+  ['UntrustedDiagnosticsRequestRunPrimeSearchRoutine'],
+  ['UntrustedDiagnosticsRequestRunBatteryDischargeRoutineInvalidInput'],
+  ['UntrustedDiagnosticsRequestRunBatteryDischargeRoutine'],
+  ['UntrustedDiagnosticsRequestRunBatteryChargeRoutineInvalidInput'],
+  ['UntrustedDiagnosticsRequestRunBatteryChargeRoutine'],
+  ['UntrustedLidEventListener'],
+  ['UntrustedRequestTelemetryInfoUnknownCategory'],
+  ['UntrustedRequestTelemetryInfo'],
+  [
+    'UntrustedDiagnosticsRequestInteractiveRoutineUpdate',
+    'TelemetryExtensionUIWithInteractiveRoutineUpdateBrowserTest'
+  ],
+  [
+    'UntrustedDiagnosticsRequestNonInteractiveRoutineUpdate',
+    'TelemetryExtensionUIWithNonInteractiveRoutineUpdateBrowserTest'
+  ],
+  [
+    'UntrustedRequestTelemetryInfoWithErrors',
+    'TelemetryExtensionUIWithProbeServiceErrorsBrowserTest'
+  ],
+].forEach(test => registerUntrustedTest(...test));
+
+/**
+ * Registers a test in chrome-untrusted://.
+ * @param {!string} testName
+ * @param {!string=} testClass
+ */
+function registerUntrustedTest(
+    testName, testClass = 'TelemetryExtensionUIBrowserTest') {
+  TEST_F(testClass, testName, async () => {
+    await runTestInUntrusted(testName);
+    testDone();
+  });
+}
 
 /**
  * @implements {chromeos.health.mojom.ProbeServiceInterface}

@@ -50,7 +50,6 @@
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/heap/blink_gc.h"
 #include "third_party/blink/renderer/platform/heap/blink_gc_memory_dump_provider.h"
-#include "third_party/blink/renderer/platform/heap/cancelable_task_scheduler.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/heap_buildflags.h"
@@ -100,18 +99,7 @@ uint8_t ThreadState::main_thread_state_storage_[sizeof(ThreadState)];
 
 namespace {
 
-// Concurrent marking should stop every once in a while to flush private
-// segments to v8 marking worklist. It should also stop to avoid priority
-// inversion.
-//
-// TODO(omerkatz): What is a good value to set here?
-constexpr base::TimeDelta kConcurrentMarkingStepDuration =
-    base::TimeDelta::FromMilliseconds(2);
-// Number of concurrent marking tasks to use.
-//
-// TODO(omerkatz): kNumberOfMarkingTasks should be set heuristically
-// instead of a constant.
-constexpr uint8_t kNumberOfConcurrentMarkingTasks = 3u;
+constexpr double kMarkingScheduleRatioBeforeConcurrentPriorityIncrease = 0.5;
 
 constexpr size_t kMaxTerminationGCLoops = 20;
 
@@ -198,9 +186,7 @@ ThreadState::ThreadState()
       asan_fake_stack_(__asan_get_current_fake_stack()),
 #endif
       incremental_marking_scheduler_(
-          std::make_unique<IncrementalMarkingScheduler>(this)),
-      marker_scheduler_(std::make_unique<CancelableTaskScheduler>(
-          base::MakeRefCounted<WorkerPoolTaskRunner>())) {
+          std::make_unique<IncrementalMarkingScheduler>(this)) {
   DCHECK(CheckThread());
   DCHECK(!**thread_specific_);
   **thread_specific_ = this;
@@ -697,10 +683,9 @@ void ThreadState::AtomicPauseMarkPrologue(
     SetGCState(kNoGCScheduled);
     if (base::FeatureList::IsEnabled(
             blink::features::kBlinkHeapConcurrentMarking)) {
-      // Stop concurrent markers
-      marker_scheduler_->CancelAndWait();
-      active_markers_ = 0;
-      available_concurrent_marking_task_ids_.clear();
+      // Stop concurrent markers and wait synchronously until they have all
+      // returned.
+      marker_handle_.Cancel();
     }
 #if DCHECK_IS_ON()
     MarkingWorklist* marking_worklist = Heap().GetMarkingWorklist();
@@ -1132,23 +1117,13 @@ void ThreadState::IncrementalMarkingStart(BlinkGC::GCReason reason) {
     if (base::FeatureList::IsEnabled(
             blink::features::kBlinkHeapConcurrentMarking)) {
       current_gc_data_.visitor->FlushMarkingWorklists();
-      // Check that the marking worklist has enough private segments for all
-      // concurrent marking tasks.
-      const uint8_t max_concurrent_task_id =
-          WorklistTaskId::ConcurrentThreadBase +
-          kNumberOfConcurrentMarkingTasks;
       static_assert(
           MarkingWorklist::kNumTasks == WriteBarrierWorklist::kNumTasks,
           "Marking worklist and write-barrier worklist should be the "
           "same size");
-      static_assert(max_concurrent_task_id <= MarkingWorklist::kNumTasks,
-                    "Number of concurrent marking tasks should not exceed "
-                    "number of tasks in worlkist");
-      // Initialize concurrent marking task ids.
-      for (uint8_t i = WorklistTaskId::ConcurrentThreadBase;
-           i < max_concurrent_task_id; ++i) {
-        available_concurrent_marking_task_ids_.push_back(i);
-      }
+      last_concurrently_marked_bytes_ = 0;
+      last_concurrently_marked_bytes_update_ = base::TimeTicks::Now();
+      concurrent_marking_priority_increased_ = false;
       ScheduleConcurrentMarking();
     }
     SetGCState(kIncrementalMarkingStepScheduled);
@@ -1208,11 +1183,38 @@ void ThreadState::IncrementalMarkingStep(BlinkGC::StackState stack_state) {
 bool ThreadState::ConcurrentMarkingStep() {
   current_gc_data_.visitor->FlushMarkingWorklists();
   if (Heap().HasWorkForConcurrentMarking()) {
-    ScheduleConcurrentMarking();
+    // Notifies the scheduler that max concurrency might have increased.
+    // This will adjust the number of markers if necessary.
+    marker_handle_.NotifyConcurrencyIncrease();
+    if (!concurrent_marking_priority_increased_) {
+      // If concurrent tasks aren't executed, it might delay GC finalization.
+      // As long as GC is active so is the write barrier, which incurs a
+      // performance cost. Marking is estimated to take overall
+      // |MarkingSchedulingOracle::kEstimatedMarkingTimeMs| (500ms). If
+      // concurrent marking tasks have not reported any progress (i.e. the
+      // concurrently marked bytes count as not changed) in over
+      // |kMarkingScheduleRatioBeforeConcurrentPriorityIncrease| (50%) of
+      // that expected duration, we increase the concurrent task priority
+      // for the duration of the current GC. This is meant to prevent the
+      // GC from exceeding it's expected end time.
+      size_t current_concurrently_marked_bytes_ =
+          marking_scheduling_->GetConcurrentlyMarkedBytes();
+      if (current_concurrently_marked_bytes_ >
+          last_concurrently_marked_bytes_) {
+        last_concurrently_marked_bytes_ = current_concurrently_marked_bytes_;
+        last_concurrently_marked_bytes_update_ = base::TimeTicks::Now();
+      } else if ((base::TimeTicks::Now() -
+                  last_concurrently_marked_bytes_update_)
+                     .InMilliseconds() >
+                 kMarkingScheduleRatioBeforeConcurrentPriorityIncrease *
+                     MarkingSchedulingOracle::kEstimatedMarkingTimeMs) {
+        marker_handle_.UpdatePriority(base::TaskPriority::USER_BLOCKING);
+        concurrent_marking_priority_increased_ = true;
+      }
+    }
     return false;
   }
-  base::AutoLock lock(concurrent_marker_bootstrapping_lock_);
-  return active_markers_ == 0;
+  return marker_handle_.IsCompleted();
 }
 
 void ThreadState::IncrementalMarkingFinalize() {
@@ -1384,7 +1386,6 @@ void ThreadState::AtomicPauseSweepAndCompact(
     ThreadHeapStatsCollector::Scope stats_scope(
         Heap().stats_collector(),
         ThreadHeapStatsCollector::kAtomicPauseCompaction);
-    Heap().Compaction()->UpdateBackingStoreCallbacks();
     Heap().Compaction()->FilterNonLiveSlots();
   }
 
@@ -1700,33 +1701,38 @@ void ThreadState::EnableCompactionForNextGCForTesting() {
 }
 
 void ThreadState::ScheduleConcurrentMarking() {
-  base::AutoLock lock(concurrent_marker_bootstrapping_lock_);
-
   DCHECK(base::FeatureList::IsEnabled(
       blink::features::kBlinkHeapConcurrentMarking));
 
-  for (uint8_t i = active_markers_; i < kNumberOfConcurrentMarkingTasks; ++i) {
-    marker_scheduler_->ScheduleTask(WTF::CrossThreadBindOnce(
-        &ThreadState::PerformConcurrentMark, WTF::CrossThreadUnretained(this)));
-  }
-
-  active_markers_ = kNumberOfConcurrentMarkingTasks;
+  marker_handle_ = base::PostJob(
+      FROM_HERE, {base::ThreadPool(), base::TaskPriority::USER_VISIBLE},
+      ConvertToBaseRepeatingCallback(
+          WTF::CrossThreadBindRepeating(&ThreadState::PerformConcurrentMark,
+                                        WTF::CrossThreadUnretained(this))),
+      ConvertToBaseRepeatingCallback(WTF::CrossThreadBindRepeating(
+          [](ThreadState* state, size_t active_worker_count) -> size_t {
+            // We need to account for local segments in addition to
+            // ConcurrentMarkingGlobalWorkSize().
+            return std::min<size_t>(
+                state->Heap().ConcurrentMarkingGlobalWorkSize() +
+                    active_worker_count,
+                MarkingWorklist::kNumTasks -
+                    WorklistTaskId::ConcurrentThreadBase);
+          },
+          WTF::CrossThreadUnretained(this))));
 }
 
-void ThreadState::PerformConcurrentMark() {
+void ThreadState::PerformConcurrentMark(base::JobDelegate* job) {
   VLOG(2) << "[state:" << this << "] [threadid:" << CurrentThread() << "] "
           << "ConcurrentMark";
   ThreadHeapStatsCollector::EnabledConcurrentScope stats_scope(
       Heap().stats_collector(),
       ThreadHeapStatsCollector::kConcurrentMarkingStep);
 
-  uint8_t task_id;
-  {
-    base::AutoLock lock(concurrent_marker_bootstrapping_lock_);
-    DCHECK(!available_concurrent_marking_task_ids_.IsEmpty());
-    task_id = available_concurrent_marking_task_ids_.back();
-    available_concurrent_marking_task_ids_.pop_back();
-  }
+  if (!Heap().HasWorkForConcurrentMarking())
+    return;
+
+  uint8_t task_id = job->GetTaskId() + 1;
 
   std::unique_ptr<ConcurrentMarkingVisitor> concurrent_visitor =
       IsUnifiedGCMarkingInProgress()
@@ -1737,28 +1743,13 @@ void ThreadState::PerformConcurrentMark() {
                 this, GetMarkingMode(Heap().Compaction()->IsCompacting()),
                 task_id);
 
-  const bool finished = Heap().AdvanceConcurrentMarking(
-      concurrent_visitor.get(),
-      base::TimeTicks::Now() + kConcurrentMarkingStepDuration);
+  Heap().AdvanceConcurrentMarking(concurrent_visitor.get(), job,
+                                  marking_scheduling_.get());
 
   marking_scheduling_->AddConcurrentlyMarkedBytes(
-      concurrent_visitor->marked_bytes());
+      concurrent_visitor->RecentlyMarkedBytes());
 
   concurrent_visitor->FlushWorklists();
-  {
-    base::AutoLock lock(concurrent_marker_bootstrapping_lock_);
-    // When marking is done, flush visitor worklists and decrement number of
-    // active markers so we know how many markers are left
-    available_concurrent_marking_task_ids_.push_back(task_id);
-    if (finished) {
-      --active_markers_;
-      return;
-    }
-  }
-
-  // Reschedule this marker
-  marker_scheduler_->ScheduleTask(WTF::CrossThreadBindOnce(
-      &ThreadState::PerformConcurrentMark, WTF::CrossThreadUnretained(this)));
 }
 
 }  // namespace blink

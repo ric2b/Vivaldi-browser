@@ -12,9 +12,9 @@
 #include "base/callback.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
-#include "base/strings/nullable_string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
@@ -98,8 +98,9 @@ class WebAppInstallTaskTest : public WebAppTest {
     install_finalizer_ =
         std::make_unique<WebAppInstallFinalizer>(profile(), icon_manager_.get(),
                                                  /*legacy_finalizer=*/nullptr);
-    os_integration_manager_ =
-        std::make_unique<TestOsIntegrationManager>(profile());
+    os_integration_manager_ = std::make_unique<TestOsIntegrationManager>(
+        profile(), /*app_shortcut_manager=*/nullptr,
+        /*file_handler_manager=*/nullptr);
 
     install_finalizer_->SetSubsystems(
         &registrar(), ui_manager_.get(),
@@ -160,7 +161,7 @@ class WebAppInstallTaskTest : public WebAppTest {
                              bool open_as_window) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
 
-    web_app_info->app_url = url;
+    web_app_info->start_url = url;
     web_app_info->title = base::UTF8ToUTF16(name);
     web_app_info->description = base::UTF8ToUTF16(description);
     web_app_info->scope = scope;
@@ -175,10 +176,6 @@ class WebAppInstallTaskTest : public WebAppTest {
                              const std::string description) {
     CreateRendererAppInfo(url, name, description, GURL(), base::nullopt,
                           /*open_as_window*/ true);
-  }
-
-  static base::NullableString16 ToNullableUTF16(const std::string& str) {
-    return base::NullableString16(base::UTF8ToUTF16(str), false);
   }
 
   void ResetInstallTask() {
@@ -216,8 +213,7 @@ class WebAppInstallTaskTest : public WebAppTest {
 
     auto manifest = std::make_unique<blink::Manifest>();
     manifest->start_url = url;
-    manifest->short_name =
-        base::NullableString16(base::UTF8ToUTF16("Manifest Name"), false);
+    manifest->short_name = base::ASCIIToUTF16("Manifest Name");
     data_retriever_->SetManifest(std::move(manifest), /*is_installable=*/true);
 
     data_retriever_->SetIcons(IconsMap{});
@@ -376,7 +372,7 @@ class WebAppInstallTaskWithRunOnOsLoginTest : public WebAppInstallTaskTest {
                              bool run_on_os_login) {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
 
-    web_app_info->app_url = url;
+    web_app_info->start_url = url;
     web_app_info->title = base::UTF8ToUTF16(name);
     web_app_info->description = base::UTF8ToUTF16(description);
     web_app_info->scope = scope;
@@ -409,8 +405,7 @@ TEST_F(WebAppInstallTaskTest, InstallFromWebContents) {
     auto manifest = std::make_unique<blink::Manifest>();
     manifest->start_url = url;
     manifest->scope = scope;
-    manifest->short_name =
-        base::NullableString16(base::ASCIIToUTF16(manifest_name), false);
+    manifest->short_name = base::ASCIIToUTF16(manifest_name);
 
     data_retriever().SetManifest(std::move(manifest), /*is_installable=*/true);
   }
@@ -439,7 +434,7 @@ TEST_F(WebAppInstallTaskTest, InstallFromWebContents) {
   EXPECT_EQ(app_id, web_app->app_id());
   EXPECT_EQ(manifest_name, web_app->name());
   EXPECT_EQ(description, web_app->description());
-  EXPECT_EQ(url, web_app->launch_url());
+  EXPECT_EQ(url, web_app->start_url());
   EXPECT_EQ(scope, web_app->scope());
   EXPECT_EQ(theme_color, web_app->theme_color());
 }
@@ -462,8 +457,7 @@ TEST_F(WebAppInstallTaskTest, ForceReinstall) {
     auto manifest = std::make_unique<blink::Manifest>();
     manifest->start_url = url;
     manifest->scope = url;
-    manifest->short_name =
-        base::NullableString16(base::ASCIIToUTF16("Manifest Name2"), false);
+    manifest->short_name = base::ASCIIToUTF16("Manifest Name2");
 
     data_retriever().SetManifest(std::move(manifest), /*is_installable=*/true);
   }
@@ -557,8 +551,8 @@ TEST_F(WebAppInstallTaskTest, InstallableCheck) {
 
   {
     auto manifest = std::make_unique<blink::Manifest>();
-    manifest->short_name = ToNullableUTF16("Short Name from Manifest");
-    manifest->name = ToNullableUTF16(manifest_name);
+    manifest->short_name = base::ASCIIToUTF16("Short Name from Manifest");
+    manifest->name = base::ASCIIToUTF16(manifest_name);
     manifest->start_url = manifest_start_url;
     manifest->scope = manifest_scope;
     manifest->theme_color = manifest_theme_color;
@@ -591,7 +585,7 @@ TEST_F(WebAppInstallTaskTest, InstallableCheck) {
   // Manifest data overrides Renderer data, except |description|.
   EXPECT_EQ(app_id, web_app->app_id());
   EXPECT_EQ(manifest_name, web_app->name());
-  EXPECT_EQ(manifest_start_url, web_app->launch_url());
+  EXPECT_EQ(manifest_start_url, web_app->start_url());
   EXPECT_EQ(renderer_description, web_app->description());
   EXPECT_EQ(manifest_scope, web_app->scope());
   EXPECT_EQ(expected_theme_color, web_app->theme_color());
@@ -723,9 +717,9 @@ TEST_F(WebAppInstallTaskTest, WriteDataToDisk) {
 }
 
 TEST_F(WebAppInstallTaskTest, WriteDataToDiskFailed) {
-  const GURL app_url = GURL("https://example.com/path");
-  CreateDefaultDataToRetrieve(app_url);
-  CreateRendererAppInfo(app_url, "Name", "Description");
+  const GURL start_url = GURL("https://example.com/path");
+  CreateDefaultDataToRetrieve(start_url);
+  CreateRendererAppInfo(start_url, "Name", "Description");
 
   IconsMap icons_map;
   AddIconToIconsMap(GURL("https://example.com/app.ico"), icon_size::k512,
@@ -762,7 +756,7 @@ TEST_F(WebAppInstallTaskTest, WriteDataToDiskFailed) {
   EXPECT_TRUE(file_utils_->DirectoryExists(temp_dir));
   EXPECT_TRUE(file_utils_->IsDirectoryEmpty(temp_dir));
 
-  const AppId app_id = GenerateAppIdFromURL(app_url);
+  const AppId app_id = GenerateAppIdFromURL(start_url);
   const base::FilePath app_dir =
       manifest_resources_directory.AppendASCII(app_id);
   EXPECT_FALSE(file_utils_->DirectoryExists(app_dir));
@@ -839,8 +833,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromManifest_Success) {
 
   auto manifest = std::make_unique<blink::Manifest>();
   manifest->start_url = url;
-  manifest->short_name =
-      base::NullableString16(base::UTF8ToUTF16("Server Name"), false);
+  manifest->short_name = base::ASCIIToUTF16("Server Name");
 
   data_retriever_->SetManifest(std::move(manifest), /*is_installable=*/true);
 
@@ -867,7 +860,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromInfo_Success) {
   const AppId app_id = GenerateAppIdFromURL(url);
 
   auto web_app_info = std::make_unique<WebApplicationInfo>();
-  web_app_info->app_url = url;
+  web_app_info->start_url = url;
   web_app_info->open_as_window = true;
   web_app_info->title = base::ASCIIToUTF16("App Name");
 
@@ -895,7 +888,7 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppFromInfo_GenerateIcons) {
   SetInstallFinalizerForTesting();
 
   auto web_app_info = std::make_unique<WebApplicationInfo>();
-  web_app_info->app_url = GURL("https://example.com/path");
+  web_app_info->start_url = GURL("https://example.com/path");
   web_app_info->open_as_window = false;
   web_app_info->title = base::ASCIIToUTF16("App Name");
 
@@ -983,9 +976,8 @@ TEST_F(WebAppInstallTaskTest, IntentToPlayStore) {
     manifest->start_url = url;
     manifest->scope = scope;
     blink::Manifest::RelatedApplication related_app;
-    related_app.platform =
-        base::NullableString16(base::ASCIIToUTF16("chromeos_play"));
-    related_app.id = base::NullableString16(base::ASCIIToUTF16("com.app.id"));
+    related_app.platform = base::ASCIIToUTF16("chromeos_play");
+    related_app.id = base::ASCIIToUTF16("com.app.id");
     manifest->related_applications.push_back(std::move(related_app));
 
     data_retriever_->SetManifest(std::move(manifest), /*is_installable=*/true);
@@ -1016,9 +1008,9 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppWithParams_GuestProfile) {
   ASSERT_TRUE(profile_manager.SetUp());
   Profile* guest_profile = profile_manager.CreateGuestProfile();
 
-  const GURL app_url("https://example.com/path");
+  const GURL start_url("https://example.com/path");
   auto data_retriever = std::make_unique<TestDataRetriever>();
-  data_retriever->BuildDefaultDataToRetrieve(app_url,
+  data_retriever->BuildDefaultDataToRetrieve(start_url,
                                              /*scope=*/GURL{});
 
   auto install_task = std::make_unique<WebAppInstallTask>(
@@ -1181,7 +1173,7 @@ TEST_F(WebAppInstallTaskTest, LoadAndRetrieveWebApplicationInfoWithIcons) {
     std::unique_ptr<WebApplicationInfo> result =
         LoadAndRetrieveWebApplicationInfoWithIcons(url);
     EXPECT_TRUE(result);
-    EXPECT_EQ(result->app_url, start_url);
+    EXPECT_EQ(result->start_url, start_url);
     EXPECT_TRUE(result->icon_infos.empty());
     EXPECT_FALSE(result->icon_bitmaps_any.empty());
   }
@@ -1249,7 +1241,7 @@ TEST_F(WebAppInstallTaskWithRunOnOsLoginTest,
 
   EXPECT_EQ(app_id, web_app->app_id());
   EXPECT_EQ(description, web_app->description());
-  EXPECT_EQ(url, web_app->launch_url());
+  EXPECT_EQ(url, web_app->start_url());
   EXPECT_EQ(scope, web_app->scope());
   EXPECT_EQ(theme_color, web_app->theme_color());
   EXPECT_EQ(1u,
@@ -1295,7 +1287,7 @@ TEST_F(WebAppInstallTaskWithRunOnOsLoginTest,
 
   EXPECT_EQ(app_id, web_app->app_id());
   EXPECT_EQ(description, web_app->description());
-  EXPECT_EQ(url, web_app->launch_url());
+  EXPECT_EQ(url, web_app->start_url());
   EXPECT_EQ(scope, web_app->scope());
   EXPECT_EQ(theme_color, web_app->theme_color());
   EXPECT_EQ(0u,
@@ -1330,8 +1322,7 @@ class WebAppInstallTaskTestWithShortcutsMenu : public WebAppInstallTaskTest {
     auto manifest = std::make_unique<blink::Manifest>();
     manifest->start_url = start_url;
     manifest->theme_color = theme_color;
-    manifest->name =
-        base::NullableString16(base::ASCIIToUTF16("Manifest Name"));
+    manifest->name = base::ASCIIToUTF16("Manifest Name");
 
     // Add shortcuts to manifest.
     blink::Manifest::ShortcutItem shortcut_item;
@@ -1399,7 +1390,7 @@ class WebAppInstallTaskTestWithShortcutsMenu : public WebAppInstallTaskTest {
     const AppId app_id = GenerateAppIdFromURL(url);
 
     auto web_app_info = std::make_unique<WebApplicationInfo>();
-    web_app_info->app_url = url;
+    web_app_info->start_url = url;
     web_app_info->open_as_window = true;
     web_app_info->theme_color = theme_color;
     web_app_info->title = base::ASCIIToUTF16("App Name");

@@ -47,6 +47,9 @@ class ArcAppIcon {
     // is loaded and added to |image|.
     virtual void OnIconUpdated(ArcAppIcon* icon) = 0;
 
+    // Invoked when failed to generate an icon.
+    virtual void OnIconFailed(ArcAppIcon* icon) {}
+
    protected:
     virtual ~Observer() {}
   };
@@ -62,12 +65,12 @@ class ArcAppIcon {
              int resource_size_in_dip,
              Observer* observer,
              IconType icon_type = IconType::kUncompressed);
-  ~ArcAppIcon();
+  virtual ~ArcAppIcon();
 
   // Starts loading the icon at every supported scale factor. The |observer_|
   // will be notified as progress is made. "Supported" is in the same sense as
   // ui::GetSupportedScaleFactors().
-  void LoadSupportedScaleFactors();
+  virtual void LoadSupportedScaleFactors();
 
   // Whether every supported scale factor was successfully loaded. "Supported"
   // is in the same sense as ui::GetSupportedScaleFactors().
@@ -115,13 +118,21 @@ class ArcAppIcon {
   static void DisableSafeDecodingForTesting();
   static bool IsSafeDecodingDisabledForTesting();
 
- private:
-  friend class ArcAppIconLoader;
-  friend class apps::ArcIconOnceLoader;
+ protected:
+  struct ReadResult {
+    ReadResult(bool error,
+               bool request_to_install,
+               ui::ScaleFactor scale_factor,
+               bool resize_allowed,
+               std::vector<std::string> unsafe_icon_data);
+    ~ReadResult();
 
-  class Source;
-  class DecodeRequest;
-  struct ReadResult;
+    const bool error;
+    const bool request_to_install;
+    const ui::ScaleFactor scale_factor;
+    const bool resize_allowed;
+    const std::vector<std::string> unsafe_icon_data;
+  };
 
   // Icon loading is performed in several steps. It is initiated by
   // LoadImageForScaleFactor request that specifies a required scale factor.
@@ -138,7 +149,16 @@ class ArcAppIcon {
   // install required resource from ARC side. ArcAppListPrefs notifies UI items
   // that new icon is available and corresponding item should invoke
   // LoadImageForScaleFactor again.
-  void LoadForScaleFactor(ui::ScaleFactor scale_factor);
+  virtual void LoadForScaleFactor(ui::ScaleFactor scale_factor);
+
+  virtual void OnIconRead(std::unique_ptr<ArcAppIcon::ReadResult> read_result);
+
+ private:
+  friend class ArcAppIconLoader;
+  friend class apps::ArcIconOnceLoader;
+
+  class Source;
+  class DecodeRequest;
 
   void MaybeRequestIcon(ui::ScaleFactor scale_factor);
   static std::unique_ptr<ArcAppIcon::ReadResult> ReadOnBackgroundThread(
@@ -199,7 +219,6 @@ class ArcAppIcon {
       bool resize_allowed,
       const base::FilePath& foreground_path,
       const base::FilePath& background_path);
-  void OnIconRead(std::unique_ptr<ArcAppIcon::ReadResult> read_result);
   void DecodeImage(
       const std::string& unsafe_icon_data,
       const ArcAppIconDescriptor& descriptor,
@@ -213,7 +232,7 @@ class ArcAppIcon {
       gfx::ImageSkia& image_skia,
       std::map<ui::ScaleFactor, base::Time>& incomplete_scale_factors);
   void UpdateCompressed(ui::ScaleFactor scale_factor, std::string data);
-  void DiscardDecodeRequest(DecodeRequest* request);
+  void DiscardDecodeRequest(DecodeRequest* request, bool is_decode_success);
 
   content::BrowserContext* const context_;
   const std::string app_id_;

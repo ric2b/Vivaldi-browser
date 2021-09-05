@@ -76,6 +76,7 @@
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
+#include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/global_error/global_error.h"
 #include "chrome/browser/ui/global_error/global_error_service.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
@@ -2335,6 +2336,10 @@ TEST_F(ExtensionServiceTest, LoadLocalizedTheme) {
 
   base::FilePath extension_path = data_dir().AppendASCII("theme_i18n");
 
+  // Don't create "Cached Theme.pak" in the extension directory, so as not to
+  // modify the source tree.
+  ThemeService::DisableThemePackForTesting();
+
   UnpackedInstaller::Create(service())->Load(extension_path);
   content::RunAllTasksUntilIdle();
   EXPECT_EQ(0u, GetErrors().size());
@@ -2343,13 +2348,6 @@ TEST_F(ExtensionServiceTest, LoadLocalizedTheme) {
   const Extension* theme = registry()->enabled_extensions().begin()->get();
   EXPECT_EQ("name", theme->name());
   EXPECT_EQ("description", theme->description());
-
-  // Cleanup the "Cached Theme.pak" file. Ideally, this would be installed in a
-  // temporary directory, but it automatically installs to the extension's
-  // directory, and we don't want to copy the whole extension for a unittest.
-  base::FilePath theme_file = extension_path.Append(chrome::kThemePackFilename);
-  ASSERT_TRUE(base::PathExists(theme_file));
-  ASSERT_TRUE(base::DeleteFile(theme_file));  // Not recursive.
 }
 
 #if defined(OS_POSIX)
@@ -3553,7 +3551,7 @@ TEST_F(ExtensionServiceTest, UnloadBlocklistedExtensionPolicy) {
   test_blocklist.SetBlocklistState(good_crx, BLOCKLISTED_MALWARE, true);
   content::RunAllTasksUntilIdle();
 
-  // The good_crx is blocklisted and the whitelist doesn't negate it.
+  // The good_crx is blocklisted and the allowlist doesn't negate it.
   ASSERT_TRUE(ValidateBooleanPref(good_crx, kPrefBlocklist, true));
   EXPECT_EQ(0u, registry()->enabled_extensions().size());
 }
@@ -4052,7 +4050,7 @@ TEST_F(ExtensionServiceTest, ComponentExtensionAllowlisted) {
 
 // Tests that active permissions are not revoked from component extensions
 // by policy when the policy is updated. https://crbug.com/746017.
-TEST_F(ExtensionServiceTest, ComponentExtensionWhitelistedPermission) {
+TEST_F(ExtensionServiceTest, ComponentExtensionAllowlistedPermission) {
   InitializeEmptyExtensionServiceWithTestingPrefs();
 
   // Install a component extension.
@@ -6614,19 +6612,17 @@ TEST_F(ExtensionServiceTest, ConcurrentExternalLocalFile) {
   EXPECT_FALSE(pending_info->version().IsValid());
 }
 
-// This makes sure we can package and install CRX files that use whitelisted
+// This makes sure we can package and install CRX files that use allowlisted
 // permissions.
-TEST_F(ExtensionServiceTest, InstallWhitelistedExtension) {
+TEST_F(ExtensionServiceTest, InstallAllowlistedExtension) {
   std::string test_id = "hdkklepkcpckhnpgjnmbdfhehckloojk";
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kAllowlistedExtensionID, test_id);
 
   InitializeEmptyExtensionService();
   base::FilePath path = data_dir().AppendASCII("permissions");
-  base::FilePath pem_path = path
-      .AppendASCII("whitelist.pem");
-  path = path
-      .AppendASCII("whitelist");
+  base::FilePath pem_path = path.AppendASCII("allowlist.pem");
+  path = path.AppendASCII("allowlist");
 
   const Extension* extension = PackAndInstallCRX(path, pem_path, INSTALL_NEW);
   EXPECT_EQ(0u, GetErrors().size());

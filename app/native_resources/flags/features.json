@@ -3,20 +3,26 @@
     "double_click_menu": {
       "friendly_name": "Show context menu on a double click",
       "description": "Use a double click anywhere in the page to show its context menu. Requires a restart of Vivaldi to be active.",
-      "value": "false",
-      "internal_value": "true"
+      "value": false,
+      "internal_value": true
     },
     "css_mods": {
       "friendly_name": "Allow for using CSS modifications.",
       "description": "Allow for CSS modifications set in appearance in settings.",
-      "value": "false",
-      "internal_value": "false"
+      "value": false,
+      "internal_value": false
     },
     "install_pwa": {
       "friendly_name": "Menu entries for installing Progressive Web Apps.",
       "description": "Enables menu entries to do installation of Progressive Web Apps.",
-      "value": "false",
-      "internal_value": "true"
+      "value": false,
+      "internal_value": true
+    },
+    "calendar_mail_feeds": {
+      "friendly_name": "Calendar, Mail & Feeds.",
+      "description": "Enables Calendar, Mail & Feeds. Requires a restart of Vivaldi to be active.",
+      "value": false,
+      "internal_value": true
     }
   }
 }

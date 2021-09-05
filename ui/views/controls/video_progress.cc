@@ -14,6 +14,7 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
 
 namespace vivaldi {
@@ -251,8 +252,7 @@ void VideoProgress::HandleSeeking(const gfx::Point& location) {
   seek_callback_.Run(current_position, seek_to_progress);
 }
 
-BEGIN_METADATA(VideoProgress)
-METADATA_PARENT_CLASS(View)
-END_METADATA()
+BEGIN_METADATA(VideoProgress, views::View)
+END_METADATA
 
 }  // namespace vivaldi

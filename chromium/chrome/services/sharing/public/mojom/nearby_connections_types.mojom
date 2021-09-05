@@ -4,6 +4,7 @@
 
 module location.nearby.connections.mojom;
 
+import "device/bluetooth/public/mojom/uuid.mojom";
 import "mojo/public/mojom/base/file.mojom";
 
 // Generic result status of NearbyConnections API calls.
@@ -43,6 +44,9 @@ enum Status {
   kNotConnectedToEndpoint,
   // There was an error trying to use the device's Bluetooth capabilities.
   kBluetoothError,
+  // There was an error trying to use the device's Bluetooth Low Energy
+  // capabilities.
+  kBleError,
   // There was an error trying to use the device's WiFi capabilities.
   kWifiLanError,
   // An attempt to interact with an in-flight Payload failed because it's
@@ -103,6 +107,8 @@ enum Strategy {
 struct MediumSelection {
   // Whether Bluetooth should be allowed.
   bool bluetooth;
+  // Whether BLE should be allowed.
+  bool ble;
   // Whether WebRTC should be allowed.
   bool web_rtc;
   // Whether WiFi LAN should be allowed.
@@ -128,6 +134,13 @@ struct AdvertisingOptions {
   // you can initially connect as a kP2pCluster and then trim connections until
   // you match kP2pStar or kP2pPointToPoint before upgrading the bandwidth.
   bool enforce_topology_constraints = true;
+  // By default, this option is false. If true, this allows listening on
+  // incoming Bluetooth Classic connections while BLE advertising.
+  bool enable_bluetooth_listening = false;
+  // Optional. If set, BLE advertisements will be in their "fast advertisement"
+  // form, use this UUID, and non-connectable; if empty, BLE advertisements
+  // will otherwise be normal and connectable.
+  bluetooth.mojom.UUID fast_advertisement_service_uuid;
 };
 
 // Options for a call to NearbyConnections::StartDiscovery().
@@ -135,6 +148,16 @@ struct DiscoveryOptions {
   // The strategy to use for discovering. Must match the strategy used in
   // AdvertisingOptions in order to see advertisements.
   Strategy strategy;
+};
+
+// Options for a call to NearbyConnections::RequestConnection().
+struct ConnectionOptions {
+  // Describes which mediums are allowed to be used for connection. Note that
+  // allowing an otherwise unsupported medium is ok. Only the intersection of
+  // allowed and supported mediums will be used to connect.
+  MediumSelection allowed_mediums;
+  // Bluetooth MAC address of remote device in byte format.
+  array<uint8, 6>? remote_bluetooth_mac_address;
 };
 
 // A simple payload containing raw bytes.
@@ -209,4 +232,17 @@ enum BandwidthQuality {
   kMedium,
   // High quality, e.g. connected via WebRTC or WiFi LAN.
   kHigh,
+};
+
+enum Medium {
+  kUnknown,
+  kMdns,
+  kBluetooth,
+  kWifiHotspot,
+  kBle,
+  kWifiLan,
+  kWifiAware,
+  kNfc,
+  kWifiDirect,
+  kWebRtc,
 };

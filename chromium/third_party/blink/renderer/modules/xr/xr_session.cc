@@ -12,6 +12,7 @@
 
 #include "base/auto_reset.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/ranges.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_frame_request_callback.h"
@@ -30,6 +31,7 @@
 #include "third_party/blink/renderer/modules/xr/xr_anchor_set.h"
 #include "third_party/blink/renderer/modules/xr/xr_bounded_reference_space.h"
 #include "third_party/blink/renderer/modules/xr/xr_canvas_input_provider.h"
+#include "third_party/blink/renderer/modules/xr/xr_depth_information.h"
 #include "third_party/blink/renderer/modules/xr/xr_dom_overlay_state.h"
 #include "third_party/blink/renderer/modules/xr/xr_frame.h"
 #include "third_party/blink/renderer/modules/xr/xr_frame_provider.h"
@@ -99,24 +101,27 @@ const char kEntityTypesNotSpecified[] =
 
 const double kDegToRad = M_PI / 180.0;
 
+const float kMinDefaultFramebufferScale = 0.1f;
+const float kMaxDefaultFramebufferScale = 1.0f;
+
 // Indices into the views array.
 const unsigned int kMonoOrStereoLeftView = 0;
 const unsigned int kStereoRightView = 1;
 
 void UpdateViewFromEyeParameters(
-    XRViewData& view,
+    XRViewData* view,
     const device::mojom::blink::VREyeParametersPtr& eye,
     double depth_near,
     double depth_far) {
   const device::mojom::blink::VRFieldOfViewPtr& fov = eye->field_of_view;
 
-  view.UpdateProjectionMatrixFromFoV(
+  view->UpdateProjectionMatrixFromFoV(
       fov->up_degrees * kDegToRad, fov->down_degrees * kDegToRad,
       fov->left_degrees * kDegToRad, fov->right_degrees * kDegToRad, depth_near,
       depth_far);
 
   const TransformationMatrix matrix(eye->head_from_eye.matrix());
-  view.SetHeadFromEyeTransform(matrix);
+  view->SetHeadFromEyeTransform(matrix);
 }
 
 // Returns the session feature corresponding to the given reference space type.
@@ -292,6 +297,7 @@ void XRSession::MetricsReporter::ReportFeatureUsed(
     case XRSessionFeature::ANCHORS:
     case XRSessionFeature::CAMERA_ACCESS:
     case XRSessionFeature::PLANE_DETECTION:
+    case XRSessionFeature::DEPTH:
       // Not recording metrics for these features currently.
       break;
   }
@@ -305,6 +311,7 @@ XRSession::XRSession(
     EnvironmentBlendMode environment_blend_mode,
     InteractionMode interaction_mode,
     bool uses_input_eventing,
+    float default_framebuffer_scale,
     bool sensorless_session,
     XRSessionFeatureSet enabled_features)
     : xr_(xr),
@@ -327,6 +334,11 @@ XRSession::XRSession(
   render_state_ = MakeGarbageCollected<XRRenderState>(immersive());
   // Ensure that frame focus is considered in the initial visibilityState.
   UpdateVisibilityState();
+
+  // Clamp to a reasonable min/max size for the default framebuffer scale.
+  default_framebuffer_scale_ =
+      base::ClampToRange(default_framebuffer_scale, kMinDefaultFramebufferScale,
+                         kMaxDefaultFramebufferScale);
 
   world_tracking_state_ = MakeGarbageCollected<XRWorldTrackingState>(
       IsFeatureEnabled(device::mojom::XRSessionFeature::PLANE_DETECTION));
@@ -681,6 +693,19 @@ XRSession::GetStationaryReferenceSpace() const {
   result.native_origin =
       XRNativeOriginInformation::Create(reference_space_type);
   return result;
+}
+
+void XRSession::ScheduleVideoFrameCallbacksExecution(
+    ExecuteVfcCallback execute_vfc_callback) {
+  vfc_execution_queue_.push_back(std::move(execute_vfc_callback));
+  MaybeRequestFrame();
+}
+
+void XRSession::ExecuteVideoFrameCallbacks(double timestamp) {
+  Vector<ExecuteVfcCallback> execute_vfc_callbacks;
+  vfc_execution_queue_.swap(execute_vfc_callbacks);
+  for (auto& callback : execute_vfc_callbacks)
+    std::move(callback).Run(timestamp);
 }
 
 int XRSession::requestAnimationFrame(V8XRFrameRequestCallback* callback) {
@@ -1135,6 +1160,41 @@ void XRSession::ProcessHitTestData(
   }
 }
 
+void XRSession::ProcessDepthData(
+    device::mojom::blink::XRDepthDataPtr depth_data) {
+  DVLOG(3) << __func__ << ": depth_data valid? " << !!depth_data;
+
+  if (depth_data) {
+    switch (depth_data->which()) {
+      case device::mojom::blink::XRDepthData::Tag::DATA_STILL_VALID:
+        // Stale depth buffer is still the most recent information we have.
+        // Current API shape is not well-suited to return data pertaining to
+        // older frames, so just discard what we have.
+        depth_data_ = nullptr;
+        break;
+      case device::mojom::blink::XRDepthData::Tag::UPDATED_DEPTH_DATA:
+        // Just store the current depth data as a member - we will need to
+        // construct instances of XRDepthInformation once the app requests them
+        // anyway.
+        depth_data_ = std::move(depth_data->get_updated_depth_data());
+        break;
+    }
+  } else {
+    // Device did not return new pixel data.
+    depth_data_ = nullptr;
+  }
+}
+
+XRDepthInformation* XRSession::GetDepthInformation() const {
+  DVLOG(2) << __func__;
+
+  if (!depth_data_) {
+    return nullptr;
+  }
+
+  return MakeGarbageCollected<XRDepthInformation>(*depth_data_);
+}
+
 ScriptPromise XRSession::requestLightProbe(ScriptState* script_state,
                                            ExceptionState& exception_state) {
   if (ended_) {
@@ -1277,12 +1337,11 @@ void XRSession::HandleShutdown() {
 
 double XRSession::NativeFramebufferScale() const {
   if (immersive()) {
-    double scale = display_info_->webxr_default_framebuffer_scale;
-    DCHECK(scale);
+    DCHECK(default_framebuffer_scale_);
 
     // Return the inverse of the default scale, since that's what we'll need to
     // multiply the default size by to get back to the native size.
-    return 1.0 / scale;
+    return 1.0 / default_framebuffer_scale_;
   }
   return 1.0;
 }
@@ -1292,7 +1351,7 @@ DoubleSize XRSession::DefaultFramebufferSize() const {
     return OutputCanvasSize();
   }
 
-  double scale = display_info_->webxr_default_framebuffer_scale;
+  double scale = default_framebuffer_scale_;
   double width = display_info_->left_eye->render_width;
   double height = display_info_->left_eye->render_height;
 
@@ -1382,7 +1441,8 @@ void XRSession::MaybeRequestFrame() {
 
   // If we have an outstanding callback registered, then we know that the page
   // actually wants frames.
-  bool page_wants_frame = !callback_collection_->IsEmpty();
+  bool page_wants_frame =
+      !callback_collection_->IsEmpty() || !vfc_execution_queue_.IsEmpty();
 
   // A page can process frames if it has its appropriate base layer set and has
   // indicated that it actually wants frames.
@@ -1531,6 +1591,7 @@ void XRSession::UpdateWorldUnderstandingStateForFrame(
         frame_data->detected_planes_data.get(), timestamp);
     ProcessAnchorsData(frame_data->anchors_data.get(), timestamp);
     ProcessHitTestData(frame_data->hit_test_subscription_results.get());
+    ProcessDepthData(std::move(frame_data->depth_data));
 
     const device::mojom::blink::XRLightEstimationData* light_data =
         frame_data->light_estimation_data.get();
@@ -1541,6 +1602,7 @@ void XRSession::UpdateWorldUnderstandingStateForFrame(
     world_information_->ProcessPlaneInformation(nullptr, timestamp);
     ProcessAnchorsData(nullptr, timestamp);
     ProcessHitTestData(nullptr);
+    ProcessDepthData(nullptr);
 
     if (world_light_probe_) {
       world_light_probe_->ProcessLightEstimationData(nullptr, timestamp);
@@ -1633,6 +1695,7 @@ void XRSession::OnFrame(
     // happen within these calls. resolving_frame_ will be true for the duration
     // of the callbacks.
     base::AutoReset<bool> resolving(&resolving_frame_, true);
+    ExecuteVideoFrameCallbacks(timestamp);
     callback_collection_->ExecuteCallbacks(this, timestamp, presentation_frame);
 
     // The session might have ended in the middle of the frame. Only call
@@ -2008,7 +2071,7 @@ void XRSession::SetXRDisplayInfo(
   display_info_ = std::move(display_info);
 }
 
-Vector<XRViewData>& XRSession::views() {
+const HeapVector<Member<XRViewData>>& XRSession::views() {
   // TODO(bajones): For now we assume that immersive sessions render a stereo
   // pair of views and non-immersive sessions render a single view. That doesn't
   // always hold true, however, so the view configuration should ultimately come
@@ -2017,9 +2080,10 @@ Vector<XRViewData>& XRSession::views() {
     if (immersive()) {
       // If we don't already have the views allocated, do so now.
       if (views_.IsEmpty()) {
-        views_.emplace_back(XRView::kEyeLeft);
+        views_.emplace_back(MakeGarbageCollected<XRViewData>(XRView::kEyeLeft));
         if (display_info_->right_eye) {
-          views_.emplace_back(XRView::kEyeRight);
+          views_.emplace_back(
+              MakeGarbageCollected<XRViewData>(XRView::kEyeRight));
         }
       }
       // In immersive mode the projection and view matrices must be aligned with
@@ -2034,7 +2098,7 @@ Vector<XRViewData>& XRSession::views() {
       }
     } else {
       if (views_.IsEmpty()) {
-        views_.emplace_back(XRView::kEyeNone);
+        views_.emplace_back(MakeGarbageCollected<XRViewData>(XRView::kEyeNone));
       }
 
       float aspect = 1.0f;
@@ -2051,7 +2115,7 @@ Vector<XRViewData>& XRSession::views() {
 
       // inlineVerticalFieldOfView should only be null in immersive mode.
       DCHECK(inline_vertical_fov.has_value());
-      views_[kMonoOrStereoLeftView].UpdateProjectionMatrixFromAspect(
+      views_[kMonoOrStereoLeftView]->UpdateProjectionMatrixFromAspect(
           inline_vertical_fov.value(), aspect, render_state_->depthNear(),
           render_state_->depthFar());
     }
@@ -2063,7 +2127,9 @@ Vector<XRViewData>& XRSession::views() {
 }
 
 bool XRSession::HasPendingActivity() const {
-  return !callback_collection_->IsEmpty() && !ended_;
+  return (!callback_collection_->IsEmpty() ||
+          !vfc_execution_queue_.IsEmpty()) &&
+         !ended_;
 }
 
 void XRSession::Trace(Visitor* visitor) const {
@@ -2090,6 +2156,7 @@ void XRSession::Trace(Visitor* visitor) const {
   visitor->Trace(prev_base_layer_);
   visitor->Trace(hit_test_source_ids_to_hit_test_sources_);
   visitor->Trace(hit_test_source_ids_to_transient_input_hit_test_sources_);
+  visitor->Trace(views_);
   EventTargetWithInlineData::Trace(visitor);
 }
 

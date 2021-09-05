@@ -98,8 +98,8 @@ const std::vector<SearchConcept>& GetCrostiniOptedOutSearchConcepts() {
        mojom::kCrostiniSectionPath,
        mojom::SearchResultIcon::kPenguin,
        mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSection,
-       {.section = mojom::Section::kCrostini},
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kSetUpCrostini},
        {IDS_OS_SETTINGS_TAG_CROSTINI_SETUP_ALT1, SearchConcept::kAltTagEnd}},
   });
   return *tags;
@@ -270,6 +270,10 @@ void CrostiniSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_CROSTINI_SHARED_USB_DEVICES_EXTRA_DESCRIPTION},
       {"crostiniSharedUsbDevicesListEmptyMessage",
        IDS_SETTINGS_CROSTINI_SHARED_USB_DEVICES_LIST_EMPTY_MESSAGE},
+      {"crostiniSharedUsbDevicesInUse",
+       IDS_SETTINGS_CROSTINI_SHARED_USB_DEVICES_IN_USE},
+      {"crostiniSharedUsbDevicesReassign",
+       IDS_SETTINGS_CROSTINI_SHARED_USB_DEVICES_REASSIGN},
       {"crostiniArcAdbTitle", IDS_SETTINGS_CROSTINI_ARC_ADB_TITLE},
       {"crostiniArcAdbDescription", IDS_SETTINGS_CROSTINI_ARC_ADB_DESCRIPTION},
       {"crostiniArcAdbLabel", IDS_SETTINGS_CROSTINI_ARC_ADB_LABEL},
@@ -446,6 +450,12 @@ mojom::SearchResultIcon CrostiniSection::GetSectionIcon() const {
 
 std::string CrostiniSection::GetSectionPath() const {
   return mojom::kCrostiniSectionPath;
+}
+
+bool CrostiniSection::LogMetric(mojom::Setting setting,
+                                base::Value& value) const {
+  // Unimplemented.
+  return false;
 }
 
 void CrostiniSection::RegisterHierarchy(HierarchyGenerator* generator) const {

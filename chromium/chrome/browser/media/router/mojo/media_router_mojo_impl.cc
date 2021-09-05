@@ -11,6 +11,7 @@
 #include "base/bind.h"
 #include "base/check_op.h"
 #include "base/guid.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/stl_util.h"
@@ -19,69 +20,33 @@
 #include "chrome/browser/media/cast_remoting_connector.h"
 #include "chrome/browser/media/router/event_page_request_manager.h"
 #include "chrome/browser/media/router/event_page_request_manager_factory.h"
-#include "chrome/browser/media/router/issues_observer.h"
-#include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/media_router_feature.h"
-#include "chrome/browser/media/router/media_router_metrics.h"
-#include "chrome/browser/media/router/media_routes_observer.h"
-#include "chrome/browser/media/router/media_sinks_observer.h"
 #include "chrome/browser/media/router/mojo/media_route_provider_util_win.h"
 #include "chrome/browser/media/router/mojo/media_router_mojo_metrics.h"
 #include "chrome/browser/media/router/mojo/media_sink_service_status.h"
-#include "chrome/browser/media/router/route_message_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/media_router/media_source.h"
-#include "chrome/common/media_router/providers/cast/cast_media_source.h"
 #include "chrome/grit/chromium_strings.h"
+#include "components/media_router/browser/issues_observer.h"
+#include "components/media_router/browser/media_router_metrics.h"
+#include "components/media_router/browser/media_routes_observer.h"
+#include "components/media_router/browser/media_sinks_observer.h"
+#include "components/media_router/browser/route_message_observer.h"
+#include "components/media_router/common/media_source.h"
+#include "components/media_router/common/providers/cast/cast_media_source.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/desktop_streams_registry.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "extensions/common/constants.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace media_router {
 namespace {
-
-// TODO(crbug.com/831416): Delete temporary code once we can use
-// presentation.mojom types here.
-blink::mojom::PresentationConnectionCloseReason
-PresentationConnectionCloseReasonToBlink(
-    mojom::MediaRouter::PresentationConnectionCloseReason reason) {
-  switch (reason) {
-    case mojom::MediaRouter::PresentationConnectionCloseReason::
-        CONNECTION_ERROR:
-      return blink::mojom::PresentationConnectionCloseReason::CONNECTION_ERROR;
-    case mojom::MediaRouter::PresentationConnectionCloseReason::CLOSED:
-      return blink::mojom::PresentationConnectionCloseReason::CLOSED;
-    case mojom::MediaRouter::PresentationConnectionCloseReason::WENT_AWAY:
-      return blink::mojom::PresentationConnectionCloseReason::WENT_AWAY;
-  }
-  NOTREACHED() << "Unknown PresentationConnectionCloseReason " << reason;
-  return blink::mojom::PresentationConnectionCloseReason::CONNECTION_ERROR;
-}
-
-// TODO(crbug.com/831416): Delete temporary code once we can use
-// presentation.mojom types here.
-blink::mojom::PresentationConnectionState PresentationConnectionStateToBlink(
-    mojom::MediaRouter::PresentationConnectionState state) {
-  switch (state) {
-    case mojom::MediaRouter::PresentationConnectionState::CONNECTING:
-      return blink::mojom::PresentationConnectionState::CONNECTING;
-    case mojom::MediaRouter::PresentationConnectionState::CONNECTED:
-      return blink::mojom::PresentationConnectionState::CONNECTED;
-    case mojom::MediaRouter::PresentationConnectionState::CLOSED:
-      return blink::mojom::PresentationConnectionState::CLOSED;
-    case mojom::MediaRouter::PresentationConnectionState::TERMINATED:
-      return blink::mojom::PresentationConnectionState::TERMINATED;
-  }
-  NOTREACHED() << "Unknown PresentationConnectionState " << state;
-  return blink::mojom::PresentationConnectionState::CONNECTING;
-}
 
 // Get the WebContents associated with the given tab id. Returns nullptr if the
 // tab id is invalid, or if the searching fails.
@@ -146,7 +111,67 @@ DesktopMediaPickerController::Params MakeDesktopPickerParams(
   params.app_name = l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_NAME);
   params.target_name = params.app_name;
   params.select_only_screen = true;
+  params.request_audio = true;
+  params.approve_audio_by_default = true;
+
   return params;
+}
+
+// Records the possible ways a Presentation URL can be used to start a
+// presentation, both by the kind of URL and the type of the sink the URL will
+// be presented on.  "Normal" (https:, file:, or chrome-extension:) URLs are
+// typically implemented by loading them into an offscreen tab for streaming,
+// while Cast and DIAL URLs are sent directly to a compatible device.
+enum class PresentationUrlBySink {
+  kUnknown = 0,
+  kNormalUrlToChromecast = 1,
+  kNormalUrlToExtension = 2,
+  kNormalUrlToWiredDisplay = 3,
+  kCastUrlToChromecast = 4,
+  kDialUrlToDial = 5,
+  // Add new values immediately above this line.  Also update kMaxValue below
+  // and the enum of the same name in tools/metrics/histograms/enums.xml.
+  kMaxValue = kDialUrlToDial,
+};
+
+// NOTE: To record this on Android, will need to move to
+// //components/media_router and refactor to avoid the extensions dependency.
+void RecordPresentationRequestUrlBySink(const MediaSource& source,
+                                        MediaRouteProviderId provider_id) {
+  PresentationUrlBySink value = PresentationUrlBySink::kUnknown;
+  // URLs that can be rendered in offscreen tabs (for cloud or Chromecast
+  // sinks), or on a wired display.
+  bool is_normal_url = source.url().SchemeIs(url::kHttpsScheme) ||
+                       source.url().SchemeIs(extensions::kExtensionScheme) ||
+                       source.url().SchemeIs(url::kFileScheme);
+  switch (provider_id) {
+    case MediaRouteProviderId::EXTENSION:
+      if (is_normal_url) {
+        value = PresentationUrlBySink::kNormalUrlToExtension;
+      }
+      break;
+    case MediaRouteProviderId::WIRED_DISPLAY:
+      if (is_normal_url) {
+        value = PresentationUrlBySink::kNormalUrlToWiredDisplay;
+      }
+      break;
+    case MediaRouteProviderId::CAST:
+      if (source.IsCastPresentationUrl()) {
+        value = PresentationUrlBySink::kCastUrlToChromecast;
+      } else if (is_normal_url) {
+        value = PresentationUrlBySink::kNormalUrlToChromecast;
+      }
+      break;
+    case MediaRouteProviderId::DIAL:
+      if (source.IsDialSource()) {
+        value = PresentationUrlBySink::kDialUrlToDial;
+      }
+      break;
+    case MediaRouteProviderId::UNKNOWN:
+      break;
+  }
+  base::UmaHistogramEnumeration("MediaRouter.PresentationRequest.UrlBySink",
+                                value);
 }
 
 }  // namespace
@@ -305,6 +330,11 @@ void MediaRouterMojoImpl::CreateRoute(const MediaSource::Id& source_id,
 
   MediaRouterMetrics::RecordMediaSinkType(sink->icon_type());
   const MediaRouteProviderId provider_id = FixProviderId(sink->provider_id());
+  // Record which of the possible ways the sink may render the source's
+  // presentation URL (if it has one).
+  if (source.url().is_valid()) {
+    RecordPresentationRequestUrlBySink(source, provider_id);
+  }
 
   const std::string presentation_id = MediaRouterBase::CreatePresentationId();
   auto mr_callback = base::BindOnce(
@@ -867,17 +897,15 @@ void MediaRouterMojoImpl::OnSinkAvailabilityUpdated(
 
 void MediaRouterMojoImpl::OnPresentationConnectionStateChanged(
     const std::string& route_id,
-    media_router::mojom::MediaRouter::PresentationConnectionState state) {
-  NotifyPresentationConnectionStateChange(
-      route_id, PresentationConnectionStateToBlink(state));
+    blink::mojom::PresentationConnectionState state) {
+  NotifyPresentationConnectionStateChange(route_id, state);
 }
 
 void MediaRouterMojoImpl::OnPresentationConnectionClosed(
     const std::string& route_id,
-    media_router::mojom::MediaRouter::PresentationConnectionCloseReason reason,
+    blink::mojom::PresentationConnectionCloseReason reason,
     const std::string& message) {
-  NotifyPresentationConnectionClose(
-      route_id, PresentationConnectionCloseReasonToBlink(reason), message);
+  NotifyPresentationConnectionClose(route_id, reason, message);
 }
 
 void MediaRouterMojoImpl::OnTerminateRouteResult(
@@ -1127,8 +1155,8 @@ void MediaRouterMojoImpl::CreateRouteWithSelectedDesktop(
           media_id, "ChromeMediaRouter", content::kRegistryStreamTypeDesktop);
 
   media_route_providers_[provider_id]->CreateRoute(
-      MediaSource::ForDesktop(request.stream_id).id(), sink_id, presentation_id,
-      origin, -1, timeout, off_the_record,
+      MediaSource::ForDesktop(request.stream_id, media_id.audio_share).id(),
+      sink_id, presentation_id, origin, -1, timeout, off_the_record,
       base::BindOnce(
           [](mojom::MediaRouteProvider::CreateRouteCallback inner_callback,
              base::WeakPtr<MediaRouterMojoImpl> self,

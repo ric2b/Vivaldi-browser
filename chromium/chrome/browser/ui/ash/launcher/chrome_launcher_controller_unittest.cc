@@ -31,7 +31,6 @@
 #include "base/files/file_path.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/location.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/statistics_recorder.h"
@@ -51,6 +50,7 @@
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_mode_test_helper.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/prefs/browser_prefs.h"
@@ -175,6 +175,8 @@ constexpr char kDummyAppId[] = "dummyappid_dummyappid_dummyappid";
 class TestAppIconLoaderImpl : public AppIconLoader {
  public:
   TestAppIconLoaderImpl() = default;
+  TestAppIconLoaderImpl(const TestAppIconLoaderImpl&) = delete;
+  TestAppIconLoaderImpl& operator=(const TestAppIconLoaderImpl&) = delete;
   ~TestAppIconLoaderImpl() override = default;
 
   void AddSupportedApp(const std::string& id) { supported_apps_.insert(id); }
@@ -194,8 +196,6 @@ class TestAppIconLoaderImpl : public AppIconLoader {
   int fetch_count_ = 0;
   int clear_count_ = 0;
   std::set<std::string> supported_apps_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestAppIconLoaderImpl);
 };
 
 // Test implementation of LauncherControllerHelper.
@@ -204,7 +204,10 @@ class TestLauncherControllerHelper : public LauncherControllerHelper {
   TestLauncherControllerHelper() : LauncherControllerHelper(nullptr) {}
   explicit TestLauncherControllerHelper(Profile* profile)
       : LauncherControllerHelper(profile) {}
-  ~TestLauncherControllerHelper() override {}
+  TestLauncherControllerHelper(const TestLauncherControllerHelper&) = delete;
+  TestLauncherControllerHelper& operator=(const TestLauncherControllerHelper&) =
+      delete;
+  ~TestLauncherControllerHelper() override = default;
 
   // Sets the id for the specified tab.
   void SetAppID(content::WebContents* tab, const std::string& id) {
@@ -237,8 +240,6 @@ class TestLauncherControllerHelper : public LauncherControllerHelper {
   typedef std::map<content::WebContents*, std::string> TabToStringMap;
 
   TabToStringMap tab_id_map_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestLauncherControllerHelper);
 };
 
 // Test implementation of a V2 app launcher item controller.
@@ -247,7 +248,11 @@ class TestV2AppLauncherItemController : public ash::ShelfItemDelegate {
   explicit TestV2AppLauncherItemController(const std::string& app_id)
       : ash::ShelfItemDelegate(ash::ShelfID(app_id)) {}
 
-  ~TestV2AppLauncherItemController() override {}
+  TestV2AppLauncherItemController(const TestV2AppLauncherItemController&) =
+      delete;
+  TestV2AppLauncherItemController& operator=(
+      const TestV2AppLauncherItemController&) = delete;
+  ~TestV2AppLauncherItemController() override = default;
 
   // Override for ash::ShelfItemDelegate:
   void ItemSelected(std::unique_ptr<ui::Event> event,
@@ -259,9 +264,6 @@ class TestV2AppLauncherItemController : public ash::ShelfItemDelegate {
   }
   void ExecuteCommand(bool, int64_t, int32_t, int64_t) override {}
   void Close() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestV2AppLauncherItemController);
 };
 
 // Simulates selection of the shelf item.
@@ -301,7 +303,10 @@ class ChromeLauncherControllerTest
     }
   }
 
-  ~ChromeLauncherControllerTest() override {}
+  ChromeLauncherControllerTest(const ChromeLauncherControllerTest&) = delete;
+  ChromeLauncherControllerTest& operator=(const ChromeLauncherControllerTest&) =
+      delete;
+  ~ChromeLauncherControllerTest() override = default;
 
   void SetUp() override {
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -571,7 +576,7 @@ class ChromeLauncherControllerTest
     sync_preferences::PrefServiceSyncable* pref_sync =
         profile()->GetTestingPrefService();
     sync_preferences::PrefModelAssociator* pref_sync_service =
-        reinterpret_cast<sync_preferences::PrefModelAssociator*>(
+        static_cast<sync_preferences::PrefModelAssociator*>(
             pref_sync->GetSyncableService(GetPreferencesModelType()));
     return pref_sync_service;
   }
@@ -699,7 +704,7 @@ class ChromeLauncherControllerTest
       app_list_syncable_service_->ProcessSyncChanges(FROM_HERE,
                                                      combined_sync_list);
     }
-    app_service_test_.FlushMojoCalls();
+    content::RunAllTasksUntilIdle();
   }
 
   // Set the index at which the chrome icon should be.
@@ -1004,8 +1009,6 @@ class ChromeLauncherControllerTest
 
   base::test::ScopedFeatureList scoped_feature_list_;
   apps::AppServiceTest app_service_test_;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeLauncherControllerTest);
 };
 
 class ChromeLauncherControllerWithArcTest
@@ -1015,7 +1018,11 @@ class ChromeLauncherControllerWithArcTest
     auto_start_arc_test_ = true;
   }
 
-  ~ChromeLauncherControllerWithArcTest() override {}
+  ChromeLauncherControllerWithArcTest(
+      const ChromeLauncherControllerWithArcTest&) = delete;
+  ChromeLauncherControllerWithArcTest& operator=(
+      const ChromeLauncherControllerWithArcTest&) = delete;
+  ~ChromeLauncherControllerWithArcTest() override = default;
 
   void SetUp() override {
     // To prevent crash on test exit and pending decode request.
@@ -1023,9 +1030,6 @@ class ChromeLauncherControllerWithArcTest
 
     ChromeLauncherControllerTest::SetUp();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ChromeLauncherControllerWithArcTest);
 };
 
 // Tests for feature SplitSettingsSync. Exists as a separate class because the
@@ -1042,10 +1046,31 @@ class ChromeLauncherControllerSplitSettingsSyncTest
   base::test::ScopedFeatureList feature_list_;
 };
 
+// Tests for Lacros integration. Exists as a separate class because the feature
+// must be initialized before ChromeLauncherControllerTest::SetUp().
+class ChromeLauncherControllerLacrosTest : public ChromeLauncherControllerTest {
+ public:
+  ChromeLauncherControllerLacrosTest() {
+    feature_list_.InitAndEnableFeature(chromeos::features::kLacrosSupport);
+  }
+  ChromeLauncherControllerLacrosTest(
+      const ChromeLauncherControllerLacrosTest&) = delete;
+  ChromeLauncherControllerLacrosTest& operator=(
+      const ChromeLauncherControllerLacrosTest&) = delete;
+  ~ChromeLauncherControllerLacrosTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
 class ChromeLauncherControllerExtendedShelfTest
     : public ChromeLauncherControllerWithArcTest {
  protected:
   ChromeLauncherControllerExtendedShelfTest() = default;
+  ChromeLauncherControllerExtendedShelfTest(
+      const ChromeLauncherControllerExtendedShelfTest&) = delete;
+  ChromeLauncherControllerExtendedShelfTest& operator=(
+      const ChromeLauncherControllerExtendedShelfTest&) = delete;
   ~ChromeLauncherControllerExtendedShelfTest() override = default;
 
   void SetUp() override {
@@ -1091,8 +1116,6 @@ class ChromeLauncherControllerExtendedShelfTest
 
  private:
   std::vector<scoped_refptr<Extension>> extra_extensions_;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeLauncherControllerExtendedShelfTest);
 };
 
 // A V1 windowed application.
@@ -1106,7 +1129,8 @@ class V1App : public TestBrowserWindow {
     browser_ = std::make_unique<Browser>(params);
     chrome::AddTabAt(browser_.get(), GURL(), 0, true);
   }
-
+  V1App(const V1App&) = delete;
+  V1App& operator=(const V1App&) = delete;
   ~V1App() override {
     // close all tabs. Note that we do not need to destroy the browser itself.
     browser_->tab_strip_model()->CloseAllTabs();
@@ -1117,8 +1141,6 @@ class V1App : public TestBrowserWindow {
  private:
   // The associated browser with this app.
   std::unique_ptr<Browser> browser_;
-
-  DISALLOW_COPY_AND_ASSIGN(V1App);
 };
 
 // A V2 application window created with an |extension| and for a |profile|.
@@ -1145,6 +1167,8 @@ class V2App {
                   creator_web_contents_->GetMainFrame(), params);
   }
 
+  V2App(const V2App&) = delete;
+  V2App& operator=(const V2App&) = delete;
   virtual ~V2App() {
     content::WebContentsDestroyedWatcher destroyed_watcher(
         window_->web_contents());
@@ -1161,17 +1185,21 @@ class V2App {
   // deletes itself asynchronously after window_->GetBaseWindow()->Close() gets
   // called.
   extensions::AppWindow* window_;
-
-  DISALLOW_COPY_AND_ASSIGN(V2App);
 };
 
 // The testing framework to test multi profile scenarios.
 class MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest
     : public ChromeLauncherControllerTest {
  protected:
-  MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest() {}
-
-  ~MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest() override {}
+  MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest() = default;
+  MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest(
+      const MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest&) =
+      delete;
+  MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest& operator=(
+      const MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest&) =
+      delete;
+  ~MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest() override =
+      default;
 
   // Overwrite the Setup function to enable multi profile and needed objects.
   void SetUp() override {
@@ -1291,9 +1319,6 @@ class MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest
   TestWallpaperController test_wallpaper_controller_;
 
   ProfileToNameMap created_profiles_;
-
-  DISALLOW_COPY_AND_ASSIGN(
-      MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest);
 };
 
 class ChromeLauncherControllerMultiProfileWithArcTest
@@ -1302,10 +1327,11 @@ class ChromeLauncherControllerMultiProfileWithArcTest
   ChromeLauncherControllerMultiProfileWithArcTest() {
     auto_start_arc_test_ = true;
   }
-  ~ChromeLauncherControllerMultiProfileWithArcTest() override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ChromeLauncherControllerMultiProfileWithArcTest);
+  ChromeLauncherControllerMultiProfileWithArcTest(
+      const ChromeLauncherControllerMultiProfileWithArcTest&) = delete;
+  ChromeLauncherControllerMultiProfileWithArcTest& operator=(
+      const ChromeLauncherControllerMultiProfileWithArcTest&) = delete;
+  ~ChromeLauncherControllerMultiProfileWithArcTest() override = default;
 };
 
 TEST_P(ChromeLauncherControllerTest, DefaultApps) {
@@ -1354,6 +1380,25 @@ TEST_P(ChromeLauncherControllerSplitSettingsSyncTest, DefaultApps) {
 
   // Default apps are pinned.
   EXPECT_EQ("Chrome, Gmail, Doc, Youtube", GetPinnedAppStatus());
+}
+
+TEST_P(ChromeLauncherControllerLacrosTest, LacrosPinnedByDefault) {
+  // Checking to see if Lacros is allowed requires a user.
+  auto user_manager = std::make_unique<chromeos::FakeChromeUserManager>();
+  auto* fake_user_manager = user_manager.get();
+  user_manager::ScopedUserManager scoped_user_manager(std::move(user_manager));
+  AccountId account_id = AccountId::FromUserEmail("user@example.com");
+  user_manager::User* user = fake_user_manager->AddUser(account_id);
+  fake_user_manager->LoginUser(account_id);
+
+  TestingProfile::Builder profile_builder;
+  profile_builder.SetProfileName(account_id.GetUserEmail());
+  std::unique_ptr<TestingProfile> testing_profile = profile_builder.Build();
+  chromeos::ProfileHelper::Get()->SetUserToProfileMappingForTesting(
+      user, testing_profile.get());
+
+  InitLauncherController();
+  EXPECT_EQ("Chrome, Lacros", GetPinnedAppStatus());
 }
 
 TEST_P(ChromeLauncherControllerExtendedShelfTest, ExtendedShefDefault) {
@@ -4241,8 +4286,12 @@ namespace {
 class ChromeLauncherControllerArcDefaultAppsTest
     : public ChromeLauncherControllerTest {
  public:
-  ChromeLauncherControllerArcDefaultAppsTest() {}
-  ~ChromeLauncherControllerArcDefaultAppsTest() override {}
+  ChromeLauncherControllerArcDefaultAppsTest() = default;
+  ChromeLauncherControllerArcDefaultAppsTest(
+      const ChromeLauncherControllerArcDefaultAppsTest&) = delete;
+  ChromeLauncherControllerArcDefaultAppsTest& operator=(
+      const ChromeLauncherControllerArcDefaultAppsTest&) = delete;
+  ~ChromeLauncherControllerArcDefaultAppsTest() override = default;
 
  protected:
   void SetUp() override {
@@ -4250,15 +4299,16 @@ class ChromeLauncherControllerArcDefaultAppsTest
     ArcDefaultAppList::UseTestAppsDirectory();
     ChromeLauncherControllerTest::SetUp();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ChromeLauncherControllerArcDefaultAppsTest);
 };
 
 class ChromeLauncherControllerPlayStoreAvailabilityTest
     : public ChromeLauncherControllerTest {
  public:
   ChromeLauncherControllerPlayStoreAvailabilityTest() = default;
+  ChromeLauncherControllerPlayStoreAvailabilityTest(
+      const ChromeLauncherControllerPlayStoreAvailabilityTest&) = delete;
+  ChromeLauncherControllerPlayStoreAvailabilityTest& operator=(
+      const ChromeLauncherControllerPlayStoreAvailabilityTest&) = delete;
   ~ChromeLauncherControllerPlayStoreAvailabilityTest() override = default;
 
  protected:
@@ -4270,9 +4320,6 @@ class ChromeLauncherControllerPlayStoreAvailabilityTest
     ArcDefaultAppList::UseTestAppsDirectory();
     ChromeLauncherControllerTest::SetUp();
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ChromeLauncherControllerPlayStoreAvailabilityTest);
 };
 
 }  // namespace
@@ -4611,7 +4658,11 @@ class ChromeLauncherControllerDemoModeTest
     : public ChromeLauncherControllerTest {
  protected:
   ChromeLauncherControllerDemoModeTest() { auto_start_arc_test_ = true; }
-  ~ChromeLauncherControllerDemoModeTest() override {}
+  ChromeLauncherControllerDemoModeTest(
+      const ChromeLauncherControllerDemoModeTest&) = delete;
+  ChromeLauncherControllerDemoModeTest& operator=(
+      const ChromeLauncherControllerDemoModeTest&) = delete;
+  ~ChromeLauncherControllerDemoModeTest() override = default;
 
   void SetUp() override {
     // To prevent crash on test exit and pending decode request.
@@ -4632,8 +4683,6 @@ class ChromeLauncherControllerDemoModeTest
 
  private:
   std::unique_ptr<chromeos::DemoModeTestHelper> demo_mode_test_helper_;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeLauncherControllerDemoModeTest);
 };
 
 TEST_P(ChromeLauncherControllerDemoModeTest, PinnedAppsOnline) {
@@ -5021,6 +5070,12 @@ INSTANTIATE_TEST_SUITE_P(
 INSTANTIATE_TEST_SUITE_P(
     All,
     ChromeLauncherControllerSplitSettingsSyncTest,
+    ::testing::Values(std::make_pair(ProviderType::kBookmarkApps, false),
+                      std::make_pair(ProviderType::kWebApps, false)));
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ChromeLauncherControllerLacrosTest,
     ::testing::Values(std::make_pair(ProviderType::kBookmarkApps, false),
                       std::make_pair(ProviderType::kWebApps, false)));
 

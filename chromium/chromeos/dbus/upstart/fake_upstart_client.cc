@@ -29,9 +29,6 @@ FakeUpstartClient::~FakeUpstartClient() {
   g_instance = nullptr;
 }
 
-void FakeUpstartClient::AddObserver(Observer* observer) {}
-void FakeUpstartClient::RemoveObserver(Observer* observer) {}
-
 // static
 FakeUpstartClient* FakeUpstartClient::Get() {
   return g_instance;
@@ -103,6 +100,16 @@ void FakeUpstartClient::StartWilcoDtcService(VoidDBusMethodCallback callback) {
 }
 
 void FakeUpstartClient::StopWilcoDtcService(VoidDBusMethodCallback callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), true));
+}
+
+void FakeUpstartClient::StartArcDataSnapshotd(VoidDBusMethodCallback callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), true));
+}
+
+void FakeUpstartClient::StopArcDataSnapshotd(VoidDBusMethodCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), true));
 }

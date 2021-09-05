@@ -226,12 +226,16 @@ OffTheRecordProfileImpl::~OffTheRecordProfileImpl() {
   // other profile-related destroy notifications are dispatched.
   ShutdownStoragePartitions();
 
-  // Store incognito lifetime histogram.
-  if (!IsGuestSession()) {
+  // Store incognito lifetime and navigations count histogram.
+  if (IsIncognitoProfile()) {
     auto duration = base::Time::Now() - start_time_;
     base::UmaHistogramCustomCounts(
         "Profile.Incognito.Lifetime", duration.InMinutes(), 1,
         base::TimeDelta::FromDays(28).InMinutes(), 100);
+
+    base::UmaHistogramCounts1000(
+        "Profile.Incognito.MainFrameNavigationsPerSession",
+        main_frame_navigations_);
   }
 }
 
@@ -521,10 +525,6 @@ OffTheRecordProfileImpl::GetSharedCorsOriginAccessList() {
   return profile_->GetSharedCorsOriginAccessList();
 }
 
-bool OffTheRecordProfileImpl::ShouldEnableOutOfBlinkCors() {
-  return profile_->ShouldEnableOutOfBlinkCors();
-}
-
 content::NativeFileSystemPermissionContext*
 OffTheRecordProfileImpl::GetNativeFileSystemPermissionContext() {
   return NativeFileSystemPermissionContextFactory::GetForProfile(this);
@@ -669,3 +669,7 @@ void OffTheRecordProfileImpl::UpdateDefaultZoomLevel() {
       ->OnDefaultZoomLevelChanged();
 }
 #endif  // !defined(OS_ANDROID)
+
+void OffTheRecordProfileImpl::RecordMainFrameNavigation() {
+  main_frame_navigations_++;
+}

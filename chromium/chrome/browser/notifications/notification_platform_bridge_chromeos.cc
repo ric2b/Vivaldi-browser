@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "base/callback_list.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
@@ -38,8 +38,11 @@ bool NotificationPlatformBridge::CanHandleType(
 
 NotificationPlatformBridgeChromeOs::NotificationPlatformBridgeChromeOs() {
 #if BUILDFLAG(IS_LACROS)
-  impl_ = std::make_unique<NotificationPlatformBridgeLacros>(
-      this, &chromeos::LacrosChromeServiceImpl::Get()->message_center_remote());
+  mojo::Remote<crosapi::mojom::MessageCenter>* remote = nullptr;
+  auto* service = chromeos::LacrosChromeServiceImpl::Get();
+  if (service->IsMessageCenterAvailable())
+    remote = &service->message_center_remote();
+  impl_ = std::make_unique<NotificationPlatformBridgeLacros>(this, remote);
 #else
   impl_ = std::make_unique<ChromeAshMessageCenterClient>(this);
 #endif
@@ -77,7 +80,10 @@ void NotificationPlatformBridgeChromeOs::Close(
 void NotificationPlatformBridgeChromeOs::GetDisplayed(
     Profile* profile,
     GetDisplayedNotificationsCallback callback) const {
-  impl_->GetDisplayed(profile, std::move(callback));
+  impl_->GetDisplayed(
+      profile,
+      base::BindOnce(&NotificationPlatformBridgeChromeOs::OnGetDisplayed,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void NotificationPlatformBridgeChromeOs::SetReadyCallback(
@@ -200,4 +206,18 @@ ProfileNotification* NotificationPlatformBridgeChromeOs::GetProfileNotification(
   if (iter == active_notifications_.end())
     return nullptr;
   return iter->second.get();
+}
+
+void NotificationPlatformBridgeChromeOs::OnGetDisplayed(
+    GetDisplayedNotificationsCallback callback,
+    std::set<std::string> notification_ids,
+    bool supports_synchronization) const {
+  std::set<std::string> original_notification_ids;
+  for (const auto& id : notification_ids) {
+    auto iter = active_notifications_.find(id);
+    if (iter != active_notifications_.end())
+      original_notification_ids.insert(iter->second->original_id());
+  }
+  std::move(callback).Run(std::move(original_notification_ids),
+                          supports_synchronization);
 }

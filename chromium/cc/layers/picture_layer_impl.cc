@@ -186,7 +186,7 @@ void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   layer_impl->SanityCheckTilingState();
 }
 
-void PictureLayerImpl::AppendQuads(viz::RenderPass* render_pass,
+void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
                                    AppendQuadsData* append_quads_data) {
   // RenderSurfaceImpl::AppendQuads sets mask properties in the DrawQuad for
   // the masked surface, which will apply to both the backdrop filter and the
@@ -596,11 +596,9 @@ bool PictureLayerImpl::UpdateTiles() {
   if (layer_tree_impl()->IsActiveTree())
     CleanUpTilingsOnActiveLayer(last_append_quads_tilings_);
 
-  const float old_ideal_contents_scale = ideal_contents_scale_;
   UpdateIdealScales();
 
-  const bool should_adjust_raster_scale =
-      ShouldAdjustRasterScale(old_ideal_contents_scale);
+  const bool should_adjust_raster_scale = ShouldAdjustRasterScale();
   if (should_adjust_raster_scale)
     RecalculateRasterScales();
   UpdateTilingsForRasterScaleAndTranslation(should_adjust_raster_scale);
@@ -812,24 +810,31 @@ void PictureLayerImpl::UpdateRasterSource(
   }
 }
 
-bool PictureLayerImpl::UpdateCanUseLCDText(
+void PictureLayerImpl::UpdateCanUseLCDText(
     bool raster_translation_aligns_pixels) {
   // If we have pending/active trees, the active tree doesn't update lcd text
   // status but copies it from the pending tree.
   if (!layer_tree_impl()->IsSyncTree())
-    return false;
+    return;
 
-  auto new_lcd_text_disallowed_reason =
+  lcd_text_disallowed_reason_ =
       ComputeLCDTextDisallowedReason(raster_translation_aligns_pixels);
-  if (lcd_text_disallowed_reason_ == new_lcd_text_disallowed_reason)
-    return false;
+}
 
-  lcd_text_disallowed_reason_ = new_lcd_text_disallowed_reason;
-  return true;
+bool PictureLayerImpl::HasWillChangeTransformHint() const {
+  TransformNode* transform_node =
+      GetTransformTree().Node(transform_tree_index());
+  return transform_node && transform_node->will_change_transform;
 }
 
 LCDTextDisallowedReason PictureLayerImpl::ComputeLCDTextDisallowedReason(
     bool raster_translation_aligns_pixels) const {
+  // No need to use LCD text if there is no text.
+  if (!raster_source_ || !raster_source_->GetDisplayItemList() ||
+      !raster_source_->GetDisplayItemList()->has_draw_text_ops()) {
+    return LCDTextDisallowedReason::kNoText;
+  }
+
   if (layer_tree_impl()->settings().layers_always_allowed_lcd_text)
     return LCDTextDisallowedReason::kNone;
   if (!layer_tree_impl()->settings().can_use_lcd_text)
@@ -852,14 +857,17 @@ LCDTextDisallowedReason PictureLayerImpl::ComputeLCDTextDisallowedReason(
     return LCDTextDisallowedReason::kNonIntegralTranslation;
   }
 
-  if (has_will_change_transform_hint())
+  TransformNode* transform_node =
+      GetTransformTree().Node(transform_tree_index());
+  if (transform_node->node_or_ancestors_will_change_transform)
     return LCDTextDisallowedReason::kWillChangeTransform;
 
   if (screen_space_transform_is_animating())
     return LCDTextDisallowedReason::kTransformAnimation;
 
   EffectNode* effect_node = GetEffectTree().Node(effect_tree_index());
-  if (effect_node->node_or_ancestor_has_filters)
+  if (effect_node->node_or_ancestor_has_filters ||
+      effect_node->affected_by_backdrop_filter)
     return LCDTextDisallowedReason::kPixelOrColorEffect;
 
   return LCDTextDisallowedReason::kNone;
@@ -1153,33 +1161,6 @@ float PictureLayerImpl::CalculateDirectlyCompositedImageRasterScale() const {
   return adjusted_raster_scale;
 }
 
-// Log either the tile area saved or added due to directly compositing an
-// image. This is logged every time we choose a raster source scale for a
-// directly composited image.
-void PictureLayerImpl::LogDirectlyCompositedImageRasterScaleUMAs() const {
-  base::CheckedNumeric<int> actual_area =
-      ScaleToCeiledSize(bounds(), raster_source_scale_).GetCheckedArea();
-  base::CheckedNumeric<int> ideal_area =
-      ScaleToCeiledSize(bounds(), ideal_source_scale_).GetCheckedArea();
-  if (actual_area.IsValid() && ideal_area.IsValid()) {
-    int area_difference =
-        std::abs(static_cast<int>((actual_area - ideal_area).ValueOrDie()));
-    bool raster_area_matches = raster_source_scale_ == ideal_source_scale_;
-    UMA_HISTOGRAM_BOOLEAN(
-        "Compositing.Renderer.DirectlyCompositedImage.TileAreaMatches",
-        raster_area_matches);
-    if (raster_source_scale_ < ideal_source_scale_) {
-      UMA_HISTOGRAM_COUNTS_10M(
-          "Compositing.Renderer.DirectlyCompositedImage.TileAreaSaved",
-          area_difference);
-    } else if (raster_source_scale_ > ideal_source_scale_) {
-      UMA_HISTOGRAM_COUNTS_10M(
-          "Compositing.Renderer.DirectlyCompositedImage.TileAreaAdded",
-          area_difference);
-    }
-  }
-}
-
 PictureLayerTiling* PictureLayerImpl::AddTiling(
     const gfx::AxisTransform2d& raster_transform) {
   DCHECK(CanHaveTilings());
@@ -1209,10 +1190,13 @@ bool PictureLayerImpl::CanRecreateHighResTilingForLCDTextAndRasterTranslation(
   // Keep the non-ideal raster translation unchanged for transform animations
   // to avoid re-rasterization during animation.
   if (draw_properties().screen_space_transform_is_animating ||
-      has_will_change_transform_hint())
+      HasWillChangeTransformHint())
     return false;
   // Also avoid re-rasterization during pinch-zoom.
   if (layer_tree_impl()->PinchGestureActive())
+    return false;
+  // Keep the current LCD text and raster translation if there is no text.
+  if (lcd_text_disallowed_reason_ == LCDTextDisallowedReason::kNoText)
     return false;
   return true;
 }
@@ -1225,11 +1209,12 @@ void PictureLayerImpl::UpdateTilingsForRasterScaleAndTranslation(
   gfx::Vector2dF raster_translation;
   bool raster_translation_aligns_pixels =
       CalculateRasterTranslation(raster_translation);
-  bool can_use_lcd_text_changed =
-      UpdateCanUseLCDText(raster_translation_aligns_pixels);
+  UpdateCanUseLCDText(raster_translation_aligns_pixels);
   if (high_res) {
     bool raster_translation_is_not_ideal =
         high_res->raster_transform().translation() != raster_translation;
+    bool can_use_lcd_text_changed =
+        high_res->can_use_lcd_text() != can_use_lcd_text();
     bool should_recreate_high_res =
         (raster_translation_is_not_ideal || can_use_lcd_text_changed) &&
         CanRecreateHighResTilingForLCDTextAndRasterTranslation(*high_res);
@@ -1280,8 +1265,7 @@ void PictureLayerImpl::UpdateTilingsForRasterScaleAndTranslation(
   SanityCheckTilingState();
 }
 
-bool PictureLayerImpl::ShouldAdjustRasterScale(
-    float old_ideal_contents_scale) const {
+bool PictureLayerImpl::ShouldAdjustRasterScale() const {
   if (!raster_contents_scale_)
     return true;
 
@@ -1309,23 +1293,8 @@ bool PictureLayerImpl::ShouldAdjustRasterScale(
     // changed. We should recalculate in order to raster at the intrinsic image
     // size. Note that this is not a comparison of the used raster_source_scale_
     // and desired because of the adjustments in RecalculateRasterScales.
-    bool ideal_contents_scale_changed =
-        old_ideal_contents_scale != 0 &&
-        old_ideal_contents_scale != ideal_contents_scale_;
     bool default_raster_scale_changed =
         default_raster_scale != directly_composited_image_initial_raster_scale_;
-    if (ideal_contents_scale_changed && !default_raster_scale_changed) {
-      // Log a histogram to indicate that we most likely saved raster costs,
-      // if the ideal contents scale changed but we did not need to recalculate
-      // raster scales because this layer is a directly composited image.
-      bool transform_trigger =
-          draw_properties().screen_space_transform_is_animating ||
-          has_will_change_transform_hint();
-      UMA_HISTOGRAM_BOOLEAN(
-          "Compositing.Renderer.DirectlyCompositedImage."
-          "AvoidRasterAdjustmentWithTransformTrigger",
-          transform_trigger);
-    }
     return default_raster_scale_changed;
   }
 
@@ -1335,7 +1304,7 @@ bool PictureLayerImpl::ShouldAdjustRasterScale(
     // will-change: transform hint to preserve maximum resolution tiles
     // needed.
     if (draw_properties().screen_space_transform_is_animating ||
-        !has_will_change_transform_hint())
+        !HasWillChangeTransformHint())
       return true;
   }
 
@@ -1375,7 +1344,7 @@ bool PictureLayerImpl::ShouldAdjustRasterScale(
 
   // Don't update will-change: transform layers if the raster contents scale is
   // at least the native scale (otherwise, we'd need to clamp it).
-  if (has_will_change_transform_hint() &&
+  if (HasWillChangeTransformHint() &&
       raster_contents_scale_ >= raster_page_scale_ * raster_device_scale_) {
     return false;
   }
@@ -1416,14 +1385,7 @@ void PictureLayerImpl::AddLowResolutionTilingIfNeeded() {
 void PictureLayerImpl::RecalculateRasterScales() {
   if (directly_composited_image_size_) {
     float used_raster_scale = CalculateDirectlyCompositedImageRasterScale();
-    const bool should_directly_composite =
-        ShouldDirectlyCompositeImage(used_raster_scale);
-
-    UMA_HISTOGRAM_BOOLEAN(
-        "Compositing.Renderer.DirectlyCompositedImage."
-        "RasterScaleDirectlyComposited",
-        should_directly_composite);
-    if (should_directly_composite) {
+    if (ShouldDirectlyCompositeImage(used_raster_scale)) {
       directly_composited_image_initial_raster_scale_ =
           GetDefaultDirectlyCompositedImageRasterScale();
       raster_source_scale_ = used_raster_scale;
@@ -1431,8 +1393,6 @@ void PictureLayerImpl::RecalculateRasterScales() {
       raster_device_scale_ = 1.f;
       raster_contents_scale_ = raster_source_scale_;
       low_res_raster_contents_scale_ = raster_contents_scale_;
-
-      LogDirectlyCompositedImageRasterScaleUMAs();
       return;
     }
 
@@ -1533,7 +1493,7 @@ void PictureLayerImpl::RecalculateRasterScales() {
     else
       animation_desired_scale = 1.f * ideal_page_scale_ * ideal_device_scale_;
 
-    if (has_will_change_transform_hint()) {
+    if (HasWillChangeTransformHint()) {
       // If we have a will-change: transform hint, do not shrink the content
       // raster scale, otherwise we will end up throwing away larger tiles we
       // may need again.
@@ -1545,7 +1505,7 @@ void PictureLayerImpl::RecalculateRasterScales() {
   }
 
   // Clamp will-change: transform layers to be at least the native scale.
-  if (has_will_change_transform_hint()) {
+  if (HasWillChangeTransformHint()) {
     float min_desired_scale = raster_device_scale_ * raster_page_scale_;
     if (raster_contents_scale_ < min_desired_scale) {
       raster_contents_scale_ = min_desired_scale;
@@ -1617,6 +1577,12 @@ bool PictureLayerImpl::CalculateRasterTranslation(
   // about temporary misalignment, so don't bother raster translation.
   if (layer_tree_impl()->settings().layers_always_allowed_lcd_text)
     return true;
+
+  // No need to use raster translation if there is no text.
+  if (!raster_source_ || !raster_source_->GetDisplayItemList() ||
+      !raster_source_->GetDisplayItemList()->has_draw_text_ops()) {
+    return false;
+  }
 
   const gfx::Transform& screen_transform = ScreenSpaceTransform();
   gfx::Transform draw_transform = DrawTransform();

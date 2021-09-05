@@ -20,6 +20,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/media_player_id.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "media/base/use_after_free_checker.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/device/public/mojom/wake_lock.mojom.h"
 
@@ -156,6 +157,8 @@ class CONTENT_EXPORT MediaWebContentsObserver : public WebContentsObserver {
   void OnAudioOutputSinkChanged(RenderFrameHost* render_frame_host,
                                 int delegate_id,
                                 std::string hashed_device_id);
+  void OnAudioOutputSinkChangingDisabled(RenderFrameHost* render_frame_host,
+                                         int delegate_id);
   void OnBufferUnderflow(RenderFrameHost* render_frame_host, int delegate_id);
 
   device::mojom::WakeLock* GetAudioWakeLock();
@@ -194,6 +197,8 @@ class CONTENT_EXPORT MediaWebContentsObserver : public WebContentsObserver {
   std::map<RenderFrameHost*,
            std::unique_ptr<base::WeakPtrFactory<MediaWebContentsObserver>>>
       per_frame_factory_;
+
+  media::UseAfterFreeChecker use_after_free_checker_;
 
   base::WeakPtrFactory<MediaWebContentsObserver> weak_ptr_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(MediaWebContentsObserver);

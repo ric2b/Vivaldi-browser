@@ -3,14 +3,14 @@
 #include "app/vivaldi_apptools.h"
 
 #include "app/vivaldi_constants.h"
-#include "base/lazy_instance.h"
 #include "base/stl_util.h"
 
 namespace vivaldi {
 
 namespace {
 
-const char *vivaldi_extra_locales_array[] = {
+// This must be sorted.
+const char *const vivaldi_extra_locales_array[] = {
   "af",
   "be",
   "de-CH",
@@ -35,29 +35,26 @@ const char *vivaldi_extra_locales_array[] = {
   "sq",
 };
 
-base::LazyInstance<std::set<std::string>>::DestructorAtExit
-    vivaldi_extra_locales = LAZY_INSTANCE_INITIALIZER;
-
 }  // namespace
 
-bool IsVivaldiApp(const std::string &extension_id) {
+bool IsVivaldiApp(base::StringPiece extension_id) {
   return extension_id == kVivaldiAppIdHex || extension_id == kVivaldiAppId;
 }
 
-const std::set<std::string> &GetVivaldiExtraLocales() {
-  auto *extra_locales = vivaldi_extra_locales.Pointer();
-  DCHECK(extra_locales);
-
-  if (extra_locales->empty()) {
-    for (size_t i = 0; i < base::size(vivaldi_extra_locales_array); i++)
-      extra_locales->insert(vivaldi_extra_locales_array[i]);
-  }
-  return *extra_locales;
-}
-
-bool IsVivaldiExtraLocale(const std::string &locale) {
-  auto &extra_locales = GetVivaldiExtraLocales();
-  return extra_locales.find(locale) != extra_locales.end();
+bool IsVivaldiExtraLocale(base::StringPiece locale) {
+  DCHECK([]() {
+    // Verify vivaldi_extra_locales_array is sorted.
+    static bool after_first = false;
+    if (after_first)
+      return true;
+    after_first = true;
+    return std::is_sorted(
+        std::begin(vivaldi_extra_locales_array),
+        std::end(vivaldi_extra_locales_array),
+        [](const char* a, const char* b) { return strcmp(a, b) < 0; });
+  }());
+  return std::binary_search(std::begin(vivaldi_extra_locales_array),
+                            std::end(vivaldi_extra_locales_array), locale);
 }
 
 }  // namespace vivaldi

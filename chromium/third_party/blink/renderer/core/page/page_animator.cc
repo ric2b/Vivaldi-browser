@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/page/page_animator.h"
 
 #include "base/auto_reset.h"
+#include "cc/animation/animation_host.h"
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -120,6 +121,19 @@ void PageAnimator::PostAnimate() {
     Clock().SetAllowedToDynamicallyUpdateTime(true);
 }
 
+void PageAnimator::SetHasCanvasInvalidation() {
+  has_canvas_invalidation_ = true;
+}
+
+void PageAnimator::ReportFrameAnimations(cc::AnimationHost* animation_host) {
+  if (animation_host) {
+    animation_host->SetHasCanvasInvalidation(has_canvas_invalidation_);
+    animation_host->SetHasInlineStyleMutation(has_inline_style_mutation_);
+  }
+  has_canvas_invalidation_ = false;
+  has_inline_style_mutation_ = false;
+}
+
 void PageAnimator::SetSuppressFrameRequestsWorkaroundFor704763Only(
     bool suppress_frame_requests) {
   // If we are enabling the suppression and it was already enabled then we must
@@ -127,6 +141,10 @@ void PageAnimator::SetSuppressFrameRequestsWorkaroundFor704763Only(
   DCHECK(!suppress_frame_requests_workaround_for704763_only_ ||
          !suppress_frame_requests);
   suppress_frame_requests_workaround_for704763_only_ = suppress_frame_requests;
+}
+
+void PageAnimator::SetHasInlineStyleMutation() {
+  has_inline_style_mutation_ = true;
 }
 
 DISABLE_CFI_PERF

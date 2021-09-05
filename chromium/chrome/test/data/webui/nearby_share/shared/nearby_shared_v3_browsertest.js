@@ -9,7 +9,6 @@ GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
 
 GEN('#include "chrome/browser/browser_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
-GEN('#include "services/network/public/cpp/features.h"');
 
 /** Test fixture for Polymer Nearby Share Shared elements. */
 const NearbySharedV3Test = class extends PolymerTest {
@@ -35,14 +34,13 @@ const NearbySharedV3Test = class extends PolymerTest {
     return {
       enabled: [
         'features::kNearbySharing',
-        // required for linux-blink-cors-rel builder (post CQ)
-        'network::features::kOutOfBlinkCors',
       ]
     };
   }
 };
 
 [['OnboardingPage', 'nearby_onboarding_page_test.m.js'],
+ ['PageTemplate', 'nearby_page_template_test.m.js'],
  ['VisibilityPage', 'nearby_visibility_page_test.m.js'],
  ['ContactVisibility', 'nearby_contact_visibility_test.m.js'],
 ].forEach(test => registerTest(...test));

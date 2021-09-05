@@ -20,10 +20,9 @@ if (is_nacl) {
 
 declare_args() {
   # Enables whitelist generation for IDR_ grit defines seen by the compiler.
-  # Currently works only on some platforms and enabled by default for release
-  # builds.
-  # Requires debug info, so disabled for symbol_level=0 & strip_debug_info=true.
-  enable_resource_whitelist_generation =
+  # Currently works only on some platforms and enabled by default for official
+  # builds. Requires debug info.
+  enable_resource_allowlist_generation =
       is_official_build &&
       # Don't enable for Android-on-Chrome OS so that they can build with
       # symbol_level=0 without this failing (crbug.com/891164).
@@ -33,7 +32,22 @@ declare_args() {
 # When the arg is set via args.gn, it applies to all toolchains. In order to not
 # hit the assert in grit_rule.gni, explicitly disable for host toolchains.
 if ((is_linux || is_chromeos) && target_os == "android") {
-  enable_resource_whitelist_generation = false
+  enable_resource_allowlist_generation = false
+}
+
+# Ensure enable_resource_allowlist_generation is enabled only when it will work.
+if (enable_resource_allowlist_generation) {
+  assert(symbol_level >= 1,
+         "enable_resource_allowlist_generation=true requires symbol_level >= 1")
+  assert(
+      !strip_debug_info,
+      "enable_resource_allowlist_generation=true requires strip_debug_info=false")
+  assert(
+      !is_component_build,
+      "enable_resource_allowlist_generation=true requires is_component_build=false")
+  assert(
+      target_os == "android" || target_os == "win",
+      "enable_resource_allowlist_generation=true does not work for target_os=$target_os")
 }
 
 # This template defines a toolchain for something that works like gcc
@@ -237,6 +251,11 @@ template("gcc_toolchain") {
     } else {
       nm = "nm"
     }
+    if (defined(invoker.dwp)) {
+      dwp = invoker.dwp
+    } else {
+      dwp = "dwp"
+    }
 
     if (defined(invoker.shlib_extension)) {
       default_shlib_extension = invoker.shlib_extension
@@ -398,7 +417,12 @@ template("gcc_toolchain") {
       # The host might not have a POSIX shell and utilities (e.g. Windows).
       solink_wrapper =
           rebase_path("//build/toolchain/gcc_solink_wrapper.py", root_build_dir)
-      command = "$python_path \"$solink_wrapper\" --readelf=\"$readelf\" --nm=\"$nm\" $strip_switch--sofile=\"$unstripped_sofile\" --tocfile=\"$tocfile\"$map_switch --output=\"$sofile\" -- $link_command"
+      dwp_switch = ""
+      if (is_android && target_os == "android" && use_debug_fission &&
+          symbol_level == 2) {
+        dwp_switch = " --dwp=\"${dwp}\""
+      }
+      command = "$python_path \"$solink_wrapper\" --readelf=\"$readelf\" --nm=\"$nm\" $strip_switch$dwp_switch --sofile=\"$unstripped_sofile\" --tocfile=\"$tocfile\"$map_switch --output=\"$sofile\" -- $link_command"
 
       if (target_cpu == "mipsel" && is_component_build && is_android) {
         rspfile_content = "-Wl,--start-group -Wl,--whole-archive {{inputs}} {{solibs}} -Wl,--no-whole-archive {{libs}} -Wl,--end-group"
@@ -433,6 +457,18 @@ template("gcc_toolchain") {
         if (defined(invoker.use_unstripped_as_runtime_outputs) &&
             invoker.use_unstripped_as_runtime_outputs) {
           runtime_outputs = [ unstripped_sofile ]
+        }
+      }
+
+      # Clank build will generate DWP files when Fission is used.
+      # Other builds generate DWP files outside of the gn link targets, if at
+      # all.
+      if (is_android && target_os == "android" && use_debug_fission &&
+          symbol_level == 2) {
+        outputs += [ unstripped_sofile + ".dwp" ]
+        if (defined(invoker.use_unstripped_as_runtime_outputs) &&
+            invoker.use_unstripped_as_runtime_outputs) {
+          runtime_outputs += [ unstripped_sofile + ".dwp" ]
         }
       }
       if (defined(map_file)) {
@@ -528,13 +564,17 @@ template("gcc_toolchain") {
         strip_switch = " --strip=\"${invoker.strip}\" --unstripped-file=\"$unstripped_outfile\""
       }
 
-      if (strip_switch != "" || map_switch != "") {
-        link_wrapper =
-            rebase_path("//build/toolchain/gcc_link_wrapper.py", root_build_dir)
-        command = "$python_path \"$link_wrapper\" --output=\"$outfile\"$strip_switch$map_switch -- $link_command"
+      dwp_switch = ""
+      if (is_android && target_os == "android" && use_debug_fission &&
+          symbol_level == 2) {
+        dwp_switch = " --dwp=\"${dwp}\""
       } else {
-        command = link_command
+        not_needed([ "dwp" ])
       }
+
+      link_wrapper =
+          rebase_path("//build/toolchain/gcc_link_wrapper.py", root_build_dir)
+      command = "$python_path \"$link_wrapper\" --output=\"$outfile\"$strip_switch$map_switch$dwp_switch -- $link_command"
 
       description = "LINK $outfile"
       rspfile_content = "{{inputs}}"
@@ -544,6 +584,18 @@ template("gcc_toolchain") {
         if (defined(invoker.use_unstripped_as_runtime_outputs) &&
             invoker.use_unstripped_as_runtime_outputs) {
           runtime_outputs = [ unstripped_outfile ]
+        }
+      }
+
+      # Clank build will generate DWP files when Fission is used.
+      # Other builds generate DWP files outside of the gn link targets, if at
+      # all.
+      if (is_android && target_os == "android" && use_debug_fission &&
+          symbol_level == 2) {
+        outputs += [ unstripped_outfile + ".dwp" ]
+        if (defined(invoker.use_unstripped_as_runtime_outputs) &&
+            invoker.use_unstripped_as_runtime_outputs) {
+          runtime_outputs += [ unstripped_outfile + ".dwp" ]
         }
       }
       if (defined(invoker.link_outputs)) {

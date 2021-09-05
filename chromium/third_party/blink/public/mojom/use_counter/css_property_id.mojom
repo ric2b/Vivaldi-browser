@@ -16,7 +16,6 @@ enum CSSSampleId {
     // These internal properties exist but are mapped to 0 to ensure they don't get
     // reported in use counter.
     kInternalEmptyLineHeight = 0,
-    kInternalForcedBackgroundColorRgb = 0,
     kInternalVisitedBackgroundColor = 0,
     kInternalVisitedBorderBlockEndColor = 0,
     kInternalVisitedBorderBlockStartColor = 0,
@@ -36,6 +35,7 @@ enum CSSSampleId {
     kInternalVisitedTextEmphasisColor = 0,
     kInternalVisitedTextFillColor = 0,
     kInternalVisitedTextStrokeColor = 0,
+    kInternalFontSizeDelta = 0,
 
     // This CSSSampleId represents page load for CSS histograms. It is recorded once
     // per page visit for each CSS histogram being logged on the blink side and the
@@ -284,7 +284,7 @@ enum CSSSampleId {
     kFlexShrink = 238,
     kFlexWrap = 239,
     kJustifyContent = 240,
-    kWebkitFontSizeDelta = 241,
+    // kWebkitFontSizeDelta = 241,
     kGridTemplateColumns = 242,
     kGridTemplateRows = 243,
     kGridColumnStart = 244,
@@ -702,7 +702,7 @@ enum CSSSampleId {
     kMathStyle = 656,
     kAspectRatio = 657,
     kAppearance = 658,
-    kMathSuperscriptShiftStyle = 659,
+    // kMathSuperscriptShiftStyle = 659,
     kRubyPosition = 660,
     kTextUnderlineOffset = 661,
     kContentVisibility = 662,
@@ -719,6 +719,8 @@ enum CSSSampleId {
     kDescentOverride = 673,
     kAdvanceOverride = 674,
     kLineGapOverride = 675,
+    kMathShift = 676,
+    kMathDepth = 677,
     // 1. Add new features above this line (don't change the assigned numbers of
     //    the existing items).
     // 2. Run the src/tools/metrics/histograms/update_use_counter_css.py script

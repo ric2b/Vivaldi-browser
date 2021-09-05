@@ -39,6 +39,15 @@ enum UpdateCalendarFields {
   CALENDAR_ICONINDEX = 1 << 7,
   CALENDAR_LAST_CHECKED = 1 << 8,
   CALENDAR_TIMEZONE = 1 << 9,
+  CALENDAR_SUPPORTED_COMPONENT_SET = 1 << 10,
+};
+
+// Bit flags determing which calendar component set are supported
+enum SupportedCalendarComponentSet {
+  NONE = 0,
+  CALENDAR_VEVENT = 1 << 0,
+  CALENDAR_VTODO = 1 << 1,
+  CALENDAR_VJOURNAL = 1 << 2,
 };
 
 // Holds all information associated with a specific Calendar.
@@ -57,6 +66,7 @@ class CalendarRow {
               int iconindex,
               base::Time last_checked,
               std::string timezone,
+              uint16_t supported_component_set,
               base::Time created,
               base::Time lastmodified);
   ~CalendarRow();
@@ -103,6 +113,11 @@ class CalendarRow {
   std::string timezone() const { return timezone_; }
   void set_timezone(std::string timezone) { timezone_ = timezone; }
 
+  uint16_t supported_component_set() const { return supported_component_set_; }
+  void set_supported_component_set(uint16_t supported_component_set) {
+    supported_component_set_ = supported_component_set;
+  }
+
   base::Time created() const { return created_; }
   void set_created(base::Time created) { created_ = created; }
 
@@ -124,6 +139,7 @@ class CalendarRow {
   int iconindex_;
   base::Time last_checked_;
   std::string timezone_;
+  uint16_t supported_component_set_;
   base::Time created_;
   base::Time lastmodified_;
 };
@@ -157,6 +173,7 @@ struct Calendar {
   int iconindex;
   base::Time last_checked;
   std::string timezone;
+  uint16_t supported_component_set;
   base::Time created;
   base::Time lastmodified;
   int updateFields;

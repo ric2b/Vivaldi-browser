@@ -68,13 +68,10 @@ TEST(SurfaceTest, SurfaceIds) {
   for (size_t i = 0; i < 3; ++i) {
     ParentLocalSurfaceIdAllocator allocator;
     allocator.GenerateId();
-    LocalSurfaceIdAllocation id1 =
-        allocator.GetCurrentLocalSurfaceIdAllocation();
+    LocalSurfaceId id1 = allocator.GetCurrentLocalSurfaceId();
     allocator.GenerateId();
-    LocalSurfaceIdAllocation id2 =
-        allocator.GetCurrentLocalSurfaceIdAllocation();
+    LocalSurfaceId id2 = allocator.GetCurrentLocalSurfaceId();
     EXPECT_NE(id1, id2);
-    EXPECT_NE(id1.local_surface_id(), id2.local_surface_id());
   }
 }
 
@@ -116,18 +113,20 @@ TEST(SurfaceTest, CopyRequestLifetime) {
   int max_frame = 3, start_id = 200;
   for (int i = 0; i < max_frame; ++i) {
     CompositorFrame frame = CompositorFrameBuilder().Build();
-    frame.render_pass_list.push_back(RenderPass::Create());
-    frame.render_pass_list.back()->id = RenderPassId{i * 3 + start_id};
-    frame.render_pass_list.push_back(RenderPass::Create());
-    frame.render_pass_list.back()->id = RenderPassId{i * 3 + start_id + 1};
-    frame.render_pass_list.push_back(RenderPass::Create());
-    frame.render_pass_list.back()->SetNew(RenderPassId{i * 3 + start_id + 2},
-                                          gfx::Rect(0, 0, 20, 20), gfx::Rect(),
-                                          gfx::Transform());
+    frame.render_pass_list.push_back(CompositorRenderPass::Create());
+    frame.render_pass_list.back()->id =
+        CompositorRenderPassId{i * 3 + start_id};
+    frame.render_pass_list.push_back(CompositorRenderPass::Create());
+    frame.render_pass_list.back()->id =
+        CompositorRenderPassId{i * 3 + start_id + 1};
+    frame.render_pass_list.push_back(CompositorRenderPass::Create());
+    frame.render_pass_list.back()->SetNew(
+        CompositorRenderPassId{i * 3 + start_id + 2}, gfx::Rect(0, 0, 20, 20),
+        gfx::Rect(), gfx::Transform());
     support->SubmitCompositorFrame(local_surface_id, std::move(frame));
   }
 
-  RenderPassId last_pass_id{(max_frame - 1) * 3 + start_id + 2};
+  CompositorRenderPassId last_pass_id{(max_frame - 1) * 3 + start_id + 2};
   // The copy request should stay on the Surface until TakeCopyOutputRequests
   // is called.
   EXPECT_FALSE(copy_called);

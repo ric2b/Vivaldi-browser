@@ -128,7 +128,7 @@ TEST_F(LoginPasswordViewTestFeatureEnabled,
 
   // The display password button is not toggled by default and the password is
   // not visible.
-  EXPECT_FALSE(test_api.display_password_button()->toggled());
+  EXPECT_FALSE(test_api.display_password_button()->GetToggled());
   EXPECT_EQ(test_api.textfield()->GetTextInputType(),
             ui::TEXT_INPUT_TYPE_PASSWORD);
 
@@ -137,7 +137,7 @@ TEST_F(LoginPasswordViewTestFeatureEnabled,
   generator->MoveMouseTo(
       test_api.display_password_button()->GetBoundsInScreen().CenterPoint());
   generator->ClickLeftButton();
-  EXPECT_FALSE(test_api.display_password_button()->toggled());
+  EXPECT_FALSE(test_api.display_password_button()->GetToggled());
   EXPECT_EQ(test_api.textfield()->GetTextInputType(),
             ui::TEXT_INPUT_TYPE_PASSWORD);
 
@@ -146,14 +146,14 @@ TEST_F(LoginPasswordViewTestFeatureEnabled,
   generator->MoveMouseTo(
       test_api.display_password_button()->GetBoundsInScreen().CenterPoint());
   generator->ClickLeftButton();
-  EXPECT_TRUE(test_api.display_password_button()->toggled());
+  EXPECT_TRUE(test_api.display_password_button()->GetToggled());
   EXPECT_EQ(test_api.textfield()->GetTextInputType(), ui::TEXT_INPUT_TYPE_NULL);
 
   // Click the display password button again. The password should be hidden.
   generator->MoveMouseTo(
       test_api.display_password_button()->GetBoundsInScreen().CenterPoint());
   generator->ClickLeftButton();
-  EXPECT_FALSE(test_api.display_password_button()->toggled());
+  EXPECT_FALSE(test_api.display_password_button()->GetToggled());
   EXPECT_EQ(test_api.textfield()->GetTextInputType(),
             ui::TEXT_INPUT_TYPE_PASSWORD);
 }
@@ -171,6 +171,9 @@ TEST_F(LoginPasswordViewTest, PasswordSubmitIncludesPasswordText) {
 
   ASSERT_TRUE(password_.has_value());
   EXPECT_EQ(base::ASCIIToUTF16("abc1"), *password_);
+
+  // Expect the password field to be read only after submitting.
+  EXPECT_EQ(test_api.textfield()->GetReadOnly(), true);
 }
 
 // Verifies that password submit works when clicking the submit button.
@@ -188,6 +191,9 @@ TEST_F(LoginPasswordViewTest, PasswordSubmitViaButton) {
 
   ASSERT_TRUE(password_.has_value());
   EXPECT_EQ(base::ASCIIToUTF16("abc1"), *password_);
+
+  // Expect the password field to be read only after submitting.
+  EXPECT_EQ(test_api.textfield()->GetReadOnly(), true);
 }
 
 // Verifies that text is not cleared after submitting a password.
@@ -207,6 +213,7 @@ TEST_F(LoginPasswordViewTest, PasswordSubmitClearsPassword) {
   // Clear password.
   password_.reset();
   view_->Clear();
+  view_->SetReadOnly(false);
   EXPECT_TRUE(is_password_field_empty_);
 
   // Submit 'b' password.

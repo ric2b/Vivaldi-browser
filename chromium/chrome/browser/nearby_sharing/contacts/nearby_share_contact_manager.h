@@ -15,27 +15,36 @@
 #include "base/observer_list_types.h"
 #include "base/optional.h"
 #include "chrome/browser/nearby_sharing/proto/rpc_resources.pb.h"
+#include "chrome/browser/ui/webui/nearby_share/public/mojom/nearby_share_settings.mojom.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 
-// The Nearby Share contacts manager interfaces with the Nearby server to 1)
-// download the user's contacts and 2) upload the user-input list of allowed
-// contacts for selected-contacts visibility mode. All contact data and update
-// notifications are conveyed to observers via OnContactsUpdated(); the manager
-// does not return data directly from function calls.
-class NearbyShareContactManager {
+// The Nearby Share contacts manager interfaces with the Nearby server in the
+// following ways:
+//   1) The user's contacts are downloaded from People API, using the Nearby
+//   server as a proxy.
+//   2) All of the user's contacts are uploaded to Nearby server, along with an
+//   indication of what contacts are allowed for selected-contacts visibility
+//   mode. The Nearby server will distribute all-contacts and selected-contacts
+//   visibility certificates accordingly. For privacy reasons, the Nearby server
+//   needs to explicitly receive the list of contacts from the device instead of
+//   pulling them directly from People API.
+//
+// All contact data and update notifications are conveyed via observer methods;
+// the manager does not return data directly from function calls.
+class NearbyShareContactManager : public nearby_share::mojom::ContactManager {
  public:
   class Observer : public base::CheckedObserver {
    public:
-    virtual void OnContactsUpdated(
-        bool contacts_list_changed,
-        bool contacts_added_to_allowlist,
-        bool contacts_removed_from_allowlist,
+    virtual void OnContactsDownloaded(
         const std::set<std::string>& allowed_contact_ids,
-        const base::Optional<std::vector<nearbyshare::proto::ContactRecord>>&
-            contacts) = 0;
+        const std::vector<nearbyshare::proto::ContactRecord>& contacts) = 0;
+    virtual void OnContactsUploaded(
+        bool did_contacts_change_since_last_upload) = 0;
   };
 
   NearbyShareContactManager();
-  virtual ~NearbyShareContactManager();
+  ~NearbyShareContactManager() override;
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -45,34 +54,41 @@ class NearbyShareContactManager {
   void Stop();
   bool is_running() { return is_running_; }
 
-  // Makes RPC calls to check if the user's contact list has changed since the
-  // last call to the server. If it changed or if |only_download_if_changed| is
-  // false, the contact list is downloaded from the server. The list of allowed
-  // contacts is reconciled with the newly downloaded contacts. These RPC calls
+  // nearby_share::mojom::ContactManager:
+  // Downloads the user's contact list from the server. The locally persisted
+  // list of allowed contacts is reconciled with the newly downloaded contacts.
+  // If the user's contact list or the allowlist has changed since the last
+  // successful contacts upload to the Nearby Share server, via the UpdateDevice
+  // RPC, an upload is requested. Contact downloads (and uploads if necessary)
   // are also scheduled periodically. The results are sent to observers via
-  // OnContactsUpdated().
-  virtual void DownloadContacts(bool only_download_if_changed) = 0;
+  // OnContactsDownloaded(), and if an upload occurs, observers are notified via
+  // OnContactsUploaded().
+  void DownloadContacts() override = 0;
+
+  // nearby_share::mojom::ContactManager:
+  void SetAllowedContacts(
+      const std::vector<std::string>& allowed_contacts) override;
 
   // Assigns the set of contacts that the local device allows sharing with when
   // in selected-contacts visibility mode. (Note: This set is irrelevant for
   // all-contacts visibility mode.) The allowed contact list determines what
   // contacts receive the local device's "selected-contacts" visibility public
-  // certificates. Changes to the allowlist will trigger an RPC call. Observers
-  // are notified of any changes to the allowlist via OnContactsUpdated().
+  // certificates. Changes to the allowlist will trigger RPC calls to upload the
+  // new allowlist to the Nearby Share server.
   virtual void SetAllowedContacts(
       const std::set<std::string>& allowed_contact_ids) = 0;
+
+  virtual void Bind(
+      mojo::PendingReceiver<nearby_share::mojom::ContactManager> receiver) = 0;
 
  protected:
   virtual void OnStart() = 0;
   virtual void OnStop() = 0;
 
-  void NotifyContactsUpdated(
-      bool contacts_list_changed,
-      bool contacts_added_to_allowlist,
-      bool contacts_removed_from_allowlist,
+  void NotifyContactsDownloaded(
       const std::set<std::string>& allowed_contact_ids,
-      const base::Optional<std::vector<nearbyshare::proto::ContactRecord>>&
-          contacts);
+      const std::vector<nearbyshare::proto::ContactRecord>& contacts);
+  void NotifyContactsUploaded(bool did_contacts_change_since_last_upload);
 
  private:
   bool is_running_ = false;

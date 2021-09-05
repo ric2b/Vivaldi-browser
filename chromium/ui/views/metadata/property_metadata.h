@@ -27,7 +27,7 @@ template <typename TClass,
           TRet (TClass::*Get)() const>
 class ClassPropertyReadOnlyMetaData : public MemberMetaDataBase {
  public:
-  ClassPropertyReadOnlyMetaData() = default;
+  using MemberMetaDataBase::MemberMetaDataBase;
   ~ClassPropertyReadOnlyMetaData() override = default;
 
   base::string16 GetValueAsString(void* obj) const override {
@@ -49,13 +49,15 @@ class ClassPropertyReadOnlyMetaData : public MemberMetaDataBase {
 // (so it will trigger things like property changed notifications).
 template <typename TClass,
           typename TValue,
-          void (TClass::*Set)(ArgType<TValue>),
+          typename TSig,
+          TSig Set,
           typename TRet,
           TRet (TClass::*Get)() const>
 class ClassPropertyMetaData
     : public ClassPropertyReadOnlyMetaData<TClass, TValue, TRet, Get> {
  public:
-  ClassPropertyMetaData() = default;
+  using ClassPropertyReadOnlyMetaData<TClass, TValue, TRet, Get>::
+      ClassPropertyReadOnlyMetaData;
   ~ClassPropertyMetaData() override = default;
 
   void SetValueAsString(void* obj, const base::string16& new_value) override {

@@ -85,8 +85,13 @@ class CookieSettingsTest : public testing::Test {
         kHttpsSubdomainSite("https://www.example.com"),
         kHttpsSite8080("https://example.com:8080"),
         kAllHttpsSitesPattern(ContentSettingsPattern::FromString("https://*")) {
-    feature_list_.InitAndDisableFeature(
-        net::features::kSameSiteByDefaultCookies);
+    feature_list_.InitWithFeatures(
+        {
+#ifdef OS_IOS
+            kImprovedCookieControls,
+#endif
+        },
+        {net::features::kSameSiteByDefaultCookies});
   }
 
   ~CookieSettingsTest() override { settings_map_->ShutdownOnUIThread(); }
@@ -97,7 +102,6 @@ class CookieSettingsTest : public testing::Test {
     HostContentSettingsMap::RegisterProfilePrefs(prefs_.registry());
     settings_map_ = new HostContentSettingsMap(
         &prefs_, false /* is_off_the_record */, false /* store_last_modified */,
-        false /* migrate_requesting_and_top_level_origin_settings */,
         false /* restore_session */);
     cookie_settings_ = new CookieSettings(settings_map_.get(), &prefs_, false,
                                           "chrome-extension");
@@ -168,33 +172,21 @@ TEST_F(CookieSettingsTest, CookiesBlockSingle) {
 }
 
 TEST_F(CookieSettingsTest, CookiesBlockThirdParty) {
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
   EXPECT_FALSE(
       cookie_settings_->IsCookieAccessAllowed(kBlockedSite, kFirstPartySite));
   EXPECT_FALSE(cookie_settings_->IsCookieSessionOnly(kBlockedSite));
 }
 
-// Test fixture with ImprovedCookieControls enabled.
-class ImprovedCookieControlsCookieSettingsTest : public CookieSettingsTest {
- public:
-  ImprovedCookieControlsCookieSettingsTest() {
-#if defined(OS_IOS)
-    feature_list_.InitAndEnableFeature(kImprovedCookieControls);
-#endif
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-TEST_F(ImprovedCookieControlsCookieSettingsTest, CookiesControlsDefault) {
+TEST_F(CookieSettingsTest, CookiesControlsDefault) {
   EXPECT_TRUE(
       cookie_settings_->IsCookieAccessAllowed(kBlockedSite, kFirstPartySite));
   EXPECT_FALSE(cookie_settings_incognito_->IsCookieAccessAllowed(
       kBlockedSite, kFirstPartySite));
 }
 
-TEST_F(ImprovedCookieControlsCookieSettingsTest, CookiesControlsEnabled) {
+TEST_F(CookieSettingsTest, CookiesControlsEnabled) {
   prefs_.SetInteger(prefs::kCookieControlsMode,
                     static_cast<int>(CookieControlsMode::kBlockThirdParty));
   EXPECT_FALSE(
@@ -203,7 +195,7 @@ TEST_F(ImprovedCookieControlsCookieSettingsTest, CookiesControlsEnabled) {
       kBlockedSite, kFirstPartySite));
 }
 
-TEST_F(ImprovedCookieControlsCookieSettingsTest, CookiesControlsDisabled) {
+TEST_F(CookieSettingsTest, CookiesControlsDisabled) {
   prefs_.SetInteger(prefs::kCookieControlsMode,
                     static_cast<int>(CookieControlsMode::kOff));
   EXPECT_TRUE(
@@ -212,8 +204,7 @@ TEST_F(ImprovedCookieControlsCookieSettingsTest, CookiesControlsDisabled) {
       kBlockedSite, kFirstPartySite));
 }
 
-TEST_F(ImprovedCookieControlsCookieSettingsTest,
-       CookiesControlsEnabledForIncognito) {
+TEST_F(CookieSettingsTest, CookiesControlsEnabledForIncognito) {
   prefs_.SetInteger(prefs::kCookieControlsMode,
                     static_cast<int>(CookieControlsMode::kIncognitoOnly));
   EXPECT_TRUE(
@@ -271,7 +262,8 @@ TEST_F(CookieSettingsTest, CookiesExplicitSessionOnly) {
       cookie_settings_->IsCookieAccessAllowed(kBlockedSite, kFirstPartySite));
   EXPECT_TRUE(cookie_settings_->IsCookieSessionOnly(kBlockedSite));
 
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
   EXPECT_TRUE(
       cookie_settings_->IsCookieAccessAllowed(kBlockedSite, kFirstPartySite));
   EXPECT_TRUE(cookie_settings_->IsCookieSessionOnly(kBlockedSite));
@@ -388,7 +380,8 @@ TEST_F(CookieSettingsTest, DeletionWithSubDomains) {
 
 TEST_F(CookieSettingsTest, CookiesThirdPartyBlockedExplicitAllow) {
   cookie_settings_->SetCookieSetting(kAllowedSite, CONTENT_SETTING_ALLOW);
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
   EXPECT_TRUE(
       cookie_settings_->IsCookieAccessAllowed(kAllowedSite, kFirstPartySite));
   EXPECT_FALSE(cookie_settings_->IsCookieSessionOnly(kAllowedSite));
@@ -400,7 +393,8 @@ TEST_F(CookieSettingsTest, CookiesThirdPartyBlockedExplicitAllow) {
 
 TEST_F(CookieSettingsTest, CookiesThirdPartyBlockedAllSitesAllowed) {
   cookie_settings_->SetCookieSetting(kAllowedSite, CONTENT_SETTING_ALLOW);
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
   // As an example for a url that matches all hosts but not all origins,
   // match all HTTPS sites.
   settings_map_->SetContentSettingCustomScope(
@@ -455,7 +449,8 @@ TEST_F(CookieSettingsTest, GetCookieSettingAllowedTelemetry) {
   const GURL top_level_url = GURL(kFirstPartySite);
   const GURL url = GURL(kAllowedSite);
 
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, false);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kOff));
 
   base::HistogramTester histogram_tester;
   histogram_tester.ExpectTotalCount(kAllowedRequestsHistogram, 0);
@@ -479,7 +474,8 @@ TEST_F(CookieSettingsTest, GetCookieSettingDisabledSAA) {
   const GURL top_level_url = GURL(kFirstPartySite);
   const GURL url = GURL(kAllowedSite);
 
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
 
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
@@ -501,7 +497,8 @@ TEST_F(CookieSettingsTest, GetCookieSettingDefaultSAA) {
   base::HistogramTester histogram_tester;
   histogram_tester.ExpectTotalCount(kAllowedRequestsHistogram, 0);
 
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
 
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
@@ -532,7 +529,8 @@ TEST_F(CookieSettingsTest, GetCookieSettingEnabledSAA) {
   base::HistogramTester histogram_tester;
   histogram_tester.ExpectTotalCount(kAllowedRequestsHistogram, 0);
 
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
 
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
@@ -575,7 +573,8 @@ TEST_F(CookieSettingsTest, GetCookieSettingSAAResourceWildcards) {
   const GURL top_level_url = GURL(kFirstPartySite);
   const GURL url = GURL(kHttpSite);
 
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
 
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
@@ -601,7 +600,8 @@ TEST_F(CookieSettingsTest, GetCookieSettingSAATopLevelWildcards) {
   const GURL top_level_url = GURL(kHttpSite);
   const GURL url = GURL(kFirstPartySite);
 
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
 
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
@@ -648,7 +648,8 @@ TEST_F(CookieSettingsTest, GetCookieSettingSAAExpiredGrant) {
   const GURL top_level_url = GURL(kFirstPartySite);
   const GURL url = GURL(kAllowedSite);
 
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
 
   settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::FromURLNoWildcard(url),
@@ -697,7 +698,8 @@ TEST_F(CookieSettingsTest, ExtensionsOwnCookies) {
 }
 
 TEST_F(CookieSettingsTest, ExtensionsThirdParty) {
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
 
   // XHRs stemming from extensions are exempt from third-party cookie blocking
   // rules (as the first party is always the extension's security origin).
@@ -711,7 +713,8 @@ TEST_F(CookieSettingsTest, ThirdPartyException) {
   EXPECT_TRUE(
       cookie_settings_->IsCookieAccessAllowed(kHttpsSite, kFirstPartySite));
 
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
   EXPECT_FALSE(
       cookie_settings_->IsThirdPartyAccessAllowed(kFirstPartySite, nullptr));
   EXPECT_FALSE(
@@ -757,7 +760,8 @@ TEST_F(CookieSettingsTest, ManagedThirdPartyException) {
 TEST_F(CookieSettingsTest, ThirdPartySettingObserver) {
   CookieSettingsObserver observer(cookie_settings_.get());
   EXPECT_FALSE(observer.last_value());
-  prefs_.SetBoolean(prefs::kBlockThirdPartyCookies, true);
+  prefs_.SetInteger(prefs::kCookieControlsMode,
+                    static_cast<int>(CookieControlsMode::kBlockThirdParty));
   EXPECT_TRUE(observer.last_value());
 }
 
@@ -844,7 +848,7 @@ TEST_F(CookieSettingsTest,
 // Test fixture with SameSiteByDefaultCookies enabled.
 class SameSiteByDefaultCookieSettingsTest : public CookieSettingsTest {
  public:
-  SameSiteByDefaultCookieSettingsTest() : CookieSettingsTest() {
+  SameSiteByDefaultCookieSettingsTest() {
     feature_list_.InitAndEnableFeature(
         net::features::kSameSiteByDefaultCookies);
   }

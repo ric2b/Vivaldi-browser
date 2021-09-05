@@ -242,6 +242,11 @@ NGLayoutCacheStatus CalculateSizeBasedLayoutCacheStatusWithGeometry(
     if (!node.IsBlockFlow() || node.IsLayoutNGCustom())
       return NGLayoutCacheStatus::kNeedsLayout;
 
+    // Fieldsets stretch their content to the final block-size, which might
+    // affect scrollbars.
+    if (node.IsFieldsetContainer())
+      return NGLayoutCacheStatus::kNeedsLayout;
+
     // If we are the document or body element in quirks mode, changing our size
     // means that a scrollbar was added/removed. Require full layout.
     if (node.IsQuirkyAndFillsViewport())
@@ -312,6 +317,13 @@ NGLayoutCacheStatus CalculateSizeBasedLayoutCacheStatusWithGeometry(
   }
 
   if (style.MayHavePadding() && fragment_geometry.padding != fragment.Padding())
+    return NGLayoutCacheStatus::kNeedsLayout;
+
+  // Table-cells with vertical alignment might shift their contents if their
+  // block-size changes.
+  if (new_space.IsTableCell() && !is_block_size_equal &&
+      style.VerticalAlign() !=
+          ComputedStyleInitialValues::InitialVerticalAlign())
     return NGLayoutCacheStatus::kNeedsLayout;
 
   // If we've reached here we know that we can potentially "stretch"/"shrink"

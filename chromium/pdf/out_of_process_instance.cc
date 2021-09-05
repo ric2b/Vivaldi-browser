@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <algorithm>  // for min/max()
 #include <cmath>      // for log() and pow()
@@ -14,6 +15,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
@@ -37,11 +39,13 @@
 #include "pdf/ppapi_migration/bitmap.h"
 #include "pdf/ppapi_migration/geometry_conversions.h"
 #include "pdf/ppapi_migration/graphics.h"
+#include "pdf/ppapi_migration/input_event_conversions.h"
+#include "pdf/ppapi_migration/url_loader.h"
 #include "pdf/ppapi_migration/value_conversions.h"
+#include "pdf/thumbnail.h"
 #include "ppapi/c/dev/ppb_cursor_control_dev.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/c/private/ppb_pdf.h"
-#include "ppapi/c/trusted/ppb_url_loader_trusted.h"
 #include "ppapi/cpp/core.h"
 #include "ppapi/cpp/dev/memory_dev.h"
 #include "ppapi/cpp/dev/text_input_dev.h"
@@ -55,7 +59,6 @@
 #include "ppapi/cpp/rect.h"
 #include "ppapi/cpp/resource.h"
 #include "ppapi/cpp/size.h"
-#include "ppapi/cpp/url_request_info.h"
 #include "ppapi/cpp/var_array.h"
 #include "ppapi/cpp/var_array_buffer.h"
 #include "ppapi/cpp/var_dictionary.h"
@@ -117,6 +120,7 @@ constexpr char kJSProgressPercentage[] = "progress";
 constexpr char kJSPreviewLoadedType[] = "printPreviewLoaded";
 // Metadata
 constexpr char kJSMetadataType[] = "metadata";
+constexpr char kJSAttachments[] = "attachments";
 constexpr char kJSBookmarks[] = "bookmarks";
 constexpr char kJSTitle[] = "title";
 constexpr char kJSCanSerializeDocument[] = "canSerializeDocument";
@@ -130,10 +134,9 @@ constexpr char kJSPrintType[] = "print";
 // Save attachment (Page -> Plugin)
 constexpr char kJSSaveAttachmentType[] = "saveAttachment";
 constexpr char kJSAttachmentIndex[] = "attachmentIndex";
-constexpr char kJSAttachmentToken[] = "attachmentToken";
 // Save attachment data (Plugin -> Page)
 constexpr char kJSSaveAttachmentDataType[] = "saveAttachmentData";
-constexpr char kJSAttachmentDataToSave[] = "attachmentDataToSave";
+constexpr char kJSAttachmentDataToSave[] = "dataToSave";
 // Save (Page -> Plugin)
 constexpr char kJSSaveType[] = "save";
 constexpr char kJSToken[] = "token";
@@ -208,6 +211,7 @@ constexpr char kJSGetNamedDestination[] = "namedDestination";
 // Reply with the page number of the named destination (Plugin -> Page)
 constexpr char kJSGetNamedDestinationReplyType[] = "getNamedDestinationReply";
 constexpr char kJSNamedDestinationPageNumber[] = "pageNumber";
+constexpr char kJSNamedDestinationView[] = "namedDestinationView";
 
 // Selecting text in document (Plugin -> Page)
 constexpr char kJSSetIsSelectingType[] = "setIsSelecting";
@@ -224,9 +228,18 @@ constexpr char kJSFieldFocus[] = "focused";
 constexpr char kJSDocumentFocusChangedType[] = "documentFocusChanged";
 constexpr char kJSDocumentHasFocus[] = "hasFocus";
 
+// Request the thumbnail image for a particular page (Page -> Plugin)
+constexpr char kJSGetThumbnailType[] = "getThumbnail";
+constexpr char kJSGetThumbnailPage[] = "page";
+// Reply with the image data of the requested thumbnail (Plugin -> Page)
+constexpr char kJSGetThumbnailReplyType[] = "getThumbnailReply";
+constexpr char kJSGetThumbnailImageData[] = "imageData";
+constexpr char kJSGetThumbnailWidth[] = "width";
+constexpr char kJSGetThumbnailHeight[] = "height";
+
 constexpr int kFindResultCooldownMs = 100;
 
-// Do not save forms with over 100 MB. This cap should be kept in sync with and
+// Do not save files with over 100 MB. This cap should be kept in sync with and
 // is also enforced in chrome/browser/resources/pdf/pdf_viewer.js.
 constexpr size_t kMaximumSavedFileSize = 100u * 1000u * 1000u;
 
@@ -450,16 +463,16 @@ void ScalePoint(float scale, pp::Point* point) {
   point->set_y(static_cast<int>(point->y() * scale));
 }
 
-void ScaleRect(float scale, pp::Rect* rect) {
-  int left = static_cast<int>(floorf(rect->x() * scale));
-  int top = static_cast<int>(floorf(rect->y() * scale));
-  int right = static_cast<int>(ceilf((rect->x() + rect->width()) * scale));
-  int bottom = static_cast<int>(ceilf((rect->y() + rect->height()) * scale));
-  rect->SetRect(left, top, right - left, bottom - top);
-}
-
 bool IsSaveDataSizeValid(size_t size) {
   return size > 0 && size <= kMaximumSavedFileSize;
+}
+
+PDFiumFormFiller::ScriptOption DefaultScriptOption() {
+#if defined(PDF_ENABLE_XFA)
+  return PDFiumFormFiller::ScriptOption::kJavaScriptAndXFA;
+#else   // defined(PDF_ENABLE_XFA)
+  return PDFiumFormFiller::ScriptOption::kJavaScript;
+#endif  // defined(PDF_ENABLE_XFA)
 }
 
 }  // namespace
@@ -519,7 +532,7 @@ bool OutOfProcessInstance::Init(uint32_t argc,
 
   text_input_ = std::make_unique<pp::TextInput_Dev>(this);
 
-  bool enable_javascript = true;
+  PDFiumFormFiller::ScriptOption script_option = DefaultScriptOption();
   bool has_edits = false;
   const char* stream_url = nullptr;
   const char* original_url = nullptr;
@@ -541,8 +554,10 @@ bool OutOfProcessInstance::Init(uint32_t argc,
       success =
           base::StringToInt(argv[i], &top_toolbar_height_in_viewport_coords_);
     } else if (strcmp(argn[i], "javascript") == 0) {
-      if (base::FeatureList::IsEnabled(features::kPdfHonorJsContentSettings))
-        enable_javascript = (strcmp(argv[i], "allow") == 0);
+      if (base::FeatureList::IsEnabled(features::kPdfHonorJsContentSettings)) {
+        if (strcmp(argv[i], "allow") != 0)
+          script_option = PDFiumFormFiller::ScriptOption::kNoJavaScript;
+      }
     } else if (strcmp(argn[i], "has-edits") == 0) {
       has_edits = true;
     }
@@ -556,7 +571,7 @@ bool OutOfProcessInstance::Init(uint32_t argc,
   if (!stream_url)
     stream_url = original_url;
 
-  InitializeEngine(enable_javascript);
+  InitializeEngine(script_option);
 
   // If we're in print preview mode we don't need to load the document yet.
   // A |kJSResetPrintPreviewModeType| message will be sent to the plugin letting
@@ -615,6 +630,8 @@ void OutOfProcessInstance::HandleMessage(const pp::Var& message) {
     HandleGetSelectedTextMessage(dict);
   } else if (type == kJSGetNamedDestinationType) {
     HandleGetNamedDestinationMessage(dict);
+  } else if (type == kJSGetThumbnailType) {
+    HandleGetThumbnailMessage(dict);
   } else {
     NOTREACHED();
   }
@@ -665,7 +682,7 @@ bool OutOfProcessInstance::HandleInputEvent(const pp::InputEvent& event) {
     }
   }
 
-  if (engine()->HandleEvent(event_device_res))
+  if (SendInputEventToEngine(event_device_res))
     return true;
 
   // Middle click is used for scrolling and is handled by the container page.
@@ -686,10 +703,12 @@ void OutOfProcessInstance::DidChangeView(const pp::View& view) {
   pp::Size view_device_size(view_rect.width() * device_scale,
                             view_rect.height() * device_scale);
 
-  if (view_device_size != plugin_size_ || device_scale != device_scale_) {
+  if (view_device_size != plugin_size_ || device_scale != device_scale_ ||
+      view_rect.point() != plugin_offset_) {
     device_scale_ = device_scale;
     plugin_dip_size_ = view_rect.size();
     plugin_size_ = view_device_size;
+    plugin_offset_ = view_rect.point();
 
     paint_manager_.SetSize(SizeFromPPSize(view_device_size), device_scale_);
 
@@ -820,8 +839,9 @@ void OutOfProcessInstance::SendNextAccessibilityPage(int32_t page_index) {
 
 void OutOfProcessInstance::SendAccessibilityViewportInfo() {
   PP_PrivateAccessibilityViewportInfo viewport_info;
-  viewport_info.scroll.x = 0;
-  viewport_info.scroll.y = -top_toolbar_height_in_viewport_coords_;
+  viewport_info.scroll.x = -plugin_offset_.x();
+  viewport_info.scroll.y =
+      -top_toolbar_height_in_viewport_coords_ - plugin_offset_.y();
   viewport_info.offset.x =
       available_area_.point().x() / (device_scale_ * zoom_);
   viewport_info.offset.y =
@@ -840,10 +860,10 @@ void OutOfProcessInstance::SendAccessibilityViewportInfo() {
   pp::PDF::SetAccessibilityViewportInfo(GetPluginInstance(), &viewport_info);
 }
 
-void OutOfProcessInstance::SelectionChanged(const pp::Rect& left,
-                                            const pp::Rect& right) {
-  pp::Point l(left.point().x() + available_area_.x(), left.point().y());
-  pp::Point r(right.x() + available_area_.x(), right.point().y());
+void OutOfProcessInstance::SelectionChanged(const gfx::Rect& left,
+                                            const gfx::Rect& right) {
+  pp::Point l(left.x() + available_area_.x(), left.y());
+  pp::Point r(right.x() + available_area_.x(), right.y());
 
   float inverse_scale = 1.0f / device_scale_;
   ScalePoint(inverse_scale, &l);
@@ -1038,16 +1058,18 @@ void OutOfProcessInstance::OnPaint(const std::vector<gfx::Rect>& paint_rects,
     if (!pdf_rect.IsEmpty()) {
       pdf_rect.Offset(available_area_.x() * -1, 0);
 
-      std::vector<pp::Rect> pdf_ready;
-      std::vector<pp::Rect> pdf_pending;
-      engine()->Paint(pdf_rect, skia_image_data_, pdf_ready, pdf_pending);
+      std::vector<gfx::Rect> pdf_ready;
+      std::vector<gfx::Rect> pdf_pending;
+      engine()->Paint(RectFromPPRect(pdf_rect), skia_image_data_, pdf_ready,
+                      pdf_pending);
       for (auto& ready_rect : pdf_ready) {
-        ready_rect.Offset(available_area_.point());
-        ready->push_back(PaintReadyRect(ready_rect, image_data_));
+        ready_rect.Offset(VectorFromPPPoint(available_area_.point()));
+        ready->push_back(
+            PaintReadyRect(PPRectFromRect(ready_rect), image_data_));
       }
       for (auto& pending_rect : pdf_pending) {
-        pending_rect.Offset(available_area_.point());
-        pending->push_back(RectFromPPRect(pending_rect));
+        pending_rect.Offset(VectorFromPPPoint(available_area_.point()));
+        pending->push_back(pending_rect);
       }
     }
 
@@ -1081,9 +1103,10 @@ void OutOfProcessInstance::OnPaint(const std::vector<gfx::Rect>& paint_rects,
   }
 }
 
-void OutOfProcessInstance::DidOpen(int32_t result) {
+void OutOfProcessInstance::DidOpen(std::unique_ptr<UrlLoader> loader,
+                                   int32_t result) {
   if (result == PP_OK) {
-    if (!engine()->HandleDocumentLoad(embed_loader_)) {
+    if (!engine()->HandleDocumentLoad(std::move(loader))) {
       document_load_state_ = LOAD_STATE_LOADING;
       DocumentLoadFailed();
     }
@@ -1092,13 +1115,13 @@ void OutOfProcessInstance::DidOpen(int32_t result) {
   }
 }
 
-void OutOfProcessInstance::DidOpenPreview(int32_t result) {
+void OutOfProcessInstance::DidOpenPreview(std::unique_ptr<UrlLoader> loader,
+                                          int32_t result) {
   if (result == PP_OK) {
     preview_client_ = std::make_unique<PreviewModeClient>(this);
-    preview_engine_ =
-        std::make_unique<PDFiumEngine>(preview_client_.get(),
-                                       /*enable_javascript=*/false);
-    preview_engine_->HandleDocumentLoad(embed_preview_loader_);
+    preview_engine_ = std::make_unique<PDFiumEngine>(
+        preview_client_.get(), PDFiumFormFiller::ScriptOption::kNoJavaScript);
+    preview_engine_->HandleDocumentLoad(std::move(loader));
   } else {
     NOTREACHED();
   }
@@ -1123,6 +1146,28 @@ void OutOfProcessInstance::CalculateBackgroundParts() {
       pp::Rect(0, bottom, plugin_size_.width(), plugin_size_.height() - bottom);
   if (!part.location.IsEmpty())
     background_parts_.push_back(part);
+}
+
+pp::VarArray OutOfProcessInstance::GetDocumentAttachments() {
+  const std::vector<DocumentAttachmentInfo>& list =
+      engine()->GetDocumentAttachmentInfoList();
+  pp::VarArray attachments;
+  attachments.SetLength(list.size());
+
+  for (size_t i = 0; i < list.size(); ++i) {
+    const DocumentAttachmentInfo& attachment_info = list[i];
+    pp::VarDictionary dict;
+    dict.Set(pp::Var("name"), pp::Var(base::UTF16ToUTF8(attachment_info.name)));
+    // Set |size| to -1 to indicate that the attachment is too big to be
+    // downloaded.
+    int32_t size = attachment_info.size_bytes <= kMaximumSavedFileSize
+                       ? static_cast<int32_t>(attachment_info.size_bytes)
+                       : -1;
+    dict.Set(pp::Var("size"), pp::Var(size));
+    dict.Set(pp::Var("readable"), pp::Var(attachment_info.is_readable));
+    attachments.Set(i, dict);
+  }
+  return attachments;
 }
 
 int OutOfProcessInstance::GetDocumentPixelWidth() const {
@@ -1156,7 +1201,7 @@ void OutOfProcessInstance::ProposeDocumentLayout(const DocumentLayout& layout) {
   dimensions.Set(kJSLayoutOptions, VarFromValue(layout.options().ToValue()));
   pp::VarArray page_dimensions_array;
   for (size_t i = 0; i < layout.page_count(); ++i) {
-    const pp::Rect& page_rect = layout.page_rect(i);
+    const gfx::Rect& page_rect = layout.page_rect(i);
     pp::VarDictionary page_dimensions;
     page_dimensions.Set(kJSPageX, pp::Var(page_rect.x()));
     page_dimensions.Set(kJSPageY, pp::Var(page_rect.y()));
@@ -1168,15 +1213,15 @@ void OutOfProcessInstance::ProposeDocumentLayout(const DocumentLayout& layout) {
   PostMessage(dimensions);
 }
 
-void OutOfProcessInstance::Invalidate(const pp::Rect& rect) {
+void OutOfProcessInstance::Invalidate(const gfx::Rect& rect) {
   if (in_paint_) {
     deferred_invalidates_.push_back(rect);
     return;
   }
 
-  pp::Rect offset_rect(rect);
-  offset_rect.Offset(available_area_.point());
-  paint_manager_.InvalidateRect(RectFromPPRect(offset_rect));
+  gfx::Rect offset_rect(rect);
+  offset_rect.Offset(VectorFromPPPoint(available_area_.point()));
+  paint_manager_.InvalidateRect(offset_rect);
 }
 
 void OutOfProcessInstance::DidScroll(const gfx::Vector2d& offset) {
@@ -1266,12 +1311,14 @@ void OutOfProcessInstance::UpdateCursor(PP_CursorType_Dev cursor) {
 }
 
 void OutOfProcessInstance::UpdateTickMarks(
-    const std::vector<pp::Rect>& tickmarks) {
+    const std::vector<gfx::Rect>& tickmarks) {
   float inverse_scale = 1.0f / device_scale_;
-  std::vector<pp::Rect> scaled_tickmarks = tickmarks;
-  for (auto& tickmark : scaled_tickmarks)
-    ScaleRect(inverse_scale, &tickmark);
-  tickmarks_ = scaled_tickmarks;
+  tickmarks_.clear();
+  tickmarks_.reserve(tickmarks.size());
+  for (auto& tickmark : tickmarks) {
+    tickmarks_.emplace_back(
+        PPRectFromRect(gfx::ScaleToEnclosingRect(tickmark, inverse_scale)));
+  }
 }
 
 void OutOfProcessInstance::NotifyNumberOfFindResultsChanged(int total,
@@ -1440,28 +1487,22 @@ void OutOfProcessInstance::Print() {
 void OutOfProcessInstance::SubmitForm(const std::string& url,
                                       const void* data,
                                       int length) {
-  pp::URLRequestInfo request(this);
-  request.SetURL(url);
-  request.SetMethod("POST");
-  request.AppendDataToBody(reinterpret_cast<const char*>(data), length);
+  UrlRequest request;
+  request.url = url;
+  request.method = "POST";
+  request.body.assign(static_cast<const char*>(data), length);
 
-  form_loader_ = CreateURLLoaderInternal();
-  pp::CompletionCallback callback =
-      PPCompletionCallbackFromResultCallback(base::BindOnce(
-          &OutOfProcessInstance::FormDidOpen, weak_factory_.GetWeakPtr()));
-  int rv = form_loader_.Open(request, callback);
-  if (rv != PP_OK_COMPLETIONPENDING)
-    callback.Run(rv);
+  form_loader_ = CreateUrlLoaderInternal();
+  form_loader_->Open(request, base::BindOnce(&OutOfProcessInstance::FormDidOpen,
+                                             weak_factory_.GetWeakPtr()));
 }
 
 void OutOfProcessInstance::FormDidOpen(int32_t result) {
-  // TODO: inform the user of success/failure.
-  if (result != PP_OK) {
-    LOG(ERROR) << "FormDidOpen failed: " << result;
-  }
+  // TODO(crbug.com/719344): Process response.
+  LOG_IF(ERROR, result != PP_OK) << "FormDidOpen failed: " << result;
 }
 
-pp::URLLoader OutOfProcessInstance::CreateURLLoader() {
+std::unique_ptr<UrlLoader> OutOfProcessInstance::CreateUrlLoader() {
   if (full_) {
     if (!did_call_start_loading_) {
       did_call_start_loading_ = true;
@@ -1475,7 +1516,7 @@ pp::URLLoader OutOfProcessInstance::CreateURLLoader() {
         this, PP_CONTENT_RESTRICTION_SAVE | PP_CONTENT_RESTRICTION_PRINT);
   }
 
-  return CreateURLLoaderInternal();
+  return CreateUrlLoaderInternal();
 }
 
 std::vector<PDFEngine::Client::SearchStringResult>
@@ -1615,6 +1656,16 @@ void OutOfProcessInstance::HandleGetNamedDestinationMessage(
   reply.Set(pp::Var(kJSNamedDestinationPageNumber),
             named_destination ? static_cast<int>(named_destination->page) : -1);
   reply.Set(pp::Var(kJSMessageId), dict.Get(pp::Var(kJSMessageId)).AsString());
+
+  // Handle named destination view.
+  if (named_destination && !named_destination->view.empty()) {
+    std::ostringstream view_stream;
+    view_stream << named_destination->view;
+    for (unsigned long i = 0; i < named_destination->num_params; ++i)
+      view_stream << "," << named_destination->params[i];
+
+    reply.Set(pp::Var(kJSNamedDestinationView), view_stream.str());
+  }
   PostMessage(reply);
 }
 
@@ -1643,6 +1694,22 @@ void OutOfProcessInstance::HandleGetSelectedTextMessage(
   reply.Set(pp::Var(kJSSelectedText), selected_text);
   reply.Set(pp::Var(kJSMessageId), dict.Get(pp::Var(kJSMessageId)).AsString());
   PostMessage(reply);
+}
+
+void OutOfProcessInstance::HandleGetThumbnailMessage(
+    const pp::VarDictionary& dict) {
+  if (!dict.Get(pp::Var(kJSGetThumbnailPage)).is_number() ||
+      !dict.Get(pp::Var(kJSMessageId)).is_string()) {
+    NOTREACHED();
+    return;
+  }
+
+  const int page_index = dict.Get(pp::Var(kJSGetThumbnailPage)).AsInt();
+  engine()->RequestThumbnail(
+      page_index, device_scale_,
+      base::BindOnce(&OutOfProcessInstance::SendThumbnail,
+                     weak_factory_.GetWeakPtr(),
+                     dict.Get(pp::Var(kJSMessageId)).AsString()));
 }
 
 void OutOfProcessInstance::HandleLoadPreviewPageMessage(
@@ -1703,7 +1770,7 @@ void OutOfProcessInstance::HandleResetPrintPreviewModeMessage(
   document_load_state_ = LOAD_STATE_LOADING;
   LoadUrl(url_, /*is_print_preview=*/false);
   preview_engine_.reset();
-  InitializeEngine(/*enable_javascript=*/false);
+  InitializeEngine(PDFiumFormFiller::ScriptOption::kNoJavaScript);
   engine()->SetGrayscale(dict.Get(pp::Var(kJSPrintPreviewGrayscale)).AsBool());
   engine()->New(url_.c_str(), /*headers=*/nullptr);
 
@@ -1712,7 +1779,7 @@ void OutOfProcessInstance::HandleResetPrintPreviewModeMessage(
 
 void OutOfProcessInstance::HandleSaveAttachmentMessage(
     const pp::VarDictionary& dict) {
-  if (!dict.Get(pp::Var(kJSAttachmentToken)).is_string() ||
+  if (!dict.Get(pp::Var(kJSMessageId)).is_string() ||
       !dict.Get(pp::Var(kJSAttachmentIndex)).is_int() ||
       dict.Get(pp::Var(kJSAttachmentIndex)).AsInt() < 0) {
     NOTREACHED();
@@ -1723,14 +1790,14 @@ void OutOfProcessInstance::HandleSaveAttachmentMessage(
   const std::vector<DocumentAttachmentInfo>& list =
       engine()->GetDocumentAttachmentInfoList();
   if (static_cast<size_t>(index) >= list.size() || !list[index].is_readable ||
-      list[index].size_bytes == 0) {
+      !IsSaveDataSizeValid(list[index].size_bytes)) {
     NOTREACHED();
     return;
   }
 
   pp::VarDictionary message;
   message.Set(kType, kJSSaveAttachmentDataType);
-  message.Set(kJSAttachmentToken, dict.Get(pp::Var(kJSAttachmentToken)));
+  message.Set(kJSMessageId, dict.Get(pp::Var(kJSMessageId)));
   // This will be overwritten if the save is successful.
   message.Set(kJSAttachmentDataToSave, pp::Var(pp::Var::Null()));
 
@@ -1788,8 +1855,8 @@ void OutOfProcessInstance::HandleSetTwoUpViewMessage(
 void OutOfProcessInstance::HandleUpdateScrollMessage(
     const pp::VarDictionary& dict) {
   if (!base::FeatureList::IsEnabled(features::kPDFViewerUpdate) ||
-      !dict.Get(pp::Var(kJSUpdateScrollX)).is_int() ||
-      !dict.Get(pp::Var(kJSUpdateScrollY)).is_int()) {
+      !dict.Get(pp::Var(kJSUpdateScrollX)).is_number() ||
+      !dict.Get(pp::Var(kJSUpdateScrollY)).is_number()) {
     NOTREACHED();
     return;
   }
@@ -1809,7 +1876,7 @@ void OutOfProcessInstance::HandleViewportMessage(
   pp::Var layout_options_var = dict.Get(kJSLayoutOptions);
   if (!layout_options_var.is_undefined()) {
     DocumentLayout::Options layout_options;
-    layout_options.FromVar(layout_options_var);
+    layout_options.FromValue(ValueFromVar(layout_options_var));
     // TODO(crbug.com/1013800): Eliminate need to get document size from here.
     document_size_ =
         PPSizeFromSize(engine()->ApplyDocumentLayout(layout_options));
@@ -2068,34 +2135,13 @@ void OutOfProcessInstance::OnGeometryChanged(double old_zoom,
     SendAccessibilityViewportInfo();
 }
 
-void OutOfProcessInstance::LoadUrl(const std::string& url,
-                                   bool is_print_preview) {
-  pp::URLRequestInfo request(this);
-  request.SetURL(url);
-  request.SetMethod("GET");
-  request.SetFollowRedirects(false);
-
-  pp::URLLoader* loader =
-      is_print_preview ? &embed_preview_loader_ : &embed_loader_;
-  *loader = CreateURLLoaderInternal();
-  pp::CompletionCallback callback = PPCompletionCallbackFromResultCallback(
-      base::BindOnce(is_print_preview ? &OutOfProcessInstance::DidOpenPreview
-                                      : &OutOfProcessInstance::DidOpen,
-                     weak_factory_.GetWeakPtr()));
-  int rv = loader->Open(request, callback);
-  if (rv != PP_OK_COMPLETIONPENDING)
-    callback.Run(rv);
+base::WeakPtr<PdfViewPluginBase> OutOfProcessInstance::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
-pp::URLLoader OutOfProcessInstance::CreateURLLoaderInternal() {
-  pp::URLLoader loader(this);
-
-  const PPB_URLLoaderTrusted* trusted_interface =
-      reinterpret_cast<const PPB_URLLoaderTrusted*>(
-          pp::Module::Get()->GetBrowserInterface(
-              PPB_URLLOADERTRUSTED_INTERFACE));
-  if (trusted_interface)
-    trusted_interface->GrantUniversalAccess(loader.pp_resource());
+std::unique_ptr<UrlLoader> OutOfProcessInstance::CreateUrlLoaderInternal() {
+  auto loader = std::make_unique<PepperUrlLoader>(this);
+  loader->GrantUniversalAccess();
   return loader;
 }
 
@@ -2209,6 +2255,8 @@ void OutOfProcessInstance::SendDocumentMetadata() {
   if (!base::TrimWhitespace(base::UTF8ToUTF16(title), base::TRIM_ALL).empty())
     metadata_message.Set(pp::Var(kJSTitle), pp::Var(title));
 
+  metadata_message.Set(pp::Var(kJSAttachments), GetDocumentAttachments());
+
   pp::VarArray bookmarks = engine()->GetBookmarks();
   metadata_message.Set(pp::Var(kJSBookmarks), bookmarks);
 
@@ -2227,6 +2275,25 @@ void OutOfProcessInstance::SendLoadingProgress(double percentage) {
   PostMessage(progress_message);
 }
 
+void OutOfProcessInstance::SendThumbnail(const std::string& message_id,
+                                         Thumbnail thumbnail) {
+  pp::VarDictionary reply;
+  reply.Set(pp::Var(kType), pp::Var(kJSGetThumbnailReplyType));
+  reply.Set(pp::Var(kJSMessageId), message_id);
+
+  const SkBitmap& bitmap = thumbnail.bitmap();
+  const size_t buffer_size = bitmap.computeByteSize();
+  pp::VarArrayBuffer buffer(buffer_size);
+  memcpy(buffer.Map(), bitmap.getPixels(), buffer_size);
+  reply.Set(pp::Var(kJSGetThumbnailImageData), buffer);
+  buffer.Unmap();
+
+  reply.Set(pp::Var(kJSGetThumbnailWidth), bitmap.width());
+  reply.Set(pp::Var(kJSGetThumbnailHeight), bitmap.height());
+
+  PostMessage(reply);
+}
+
 void OutOfProcessInstance::UserMetricsRecordAction(const std::string& action) {
   // TODO(raymes): Move this function to PPB_UMA_Private.
   pp::PDF::UserMetricsRecordAction(this, pp::Var(action));
@@ -2243,6 +2310,43 @@ pp::FloatPoint OutOfProcessInstance::BoundScrollOffsetToDocument(
       min_y);
   float y = base::ClampToRange(scroll_offset.y(), min_y, max_y);
   return pp::FloatPoint(x, y);
+}
+
+bool OutOfProcessInstance::SendInputEventToEngine(const pp::InputEvent& event) {
+  switch (event.GetType()) {
+    case PP_INPUTEVENT_TYPE_MOUSEDOWN:
+    case PP_INPUTEVENT_TYPE_MOUSEUP:
+    case PP_INPUTEVENT_TYPE_MOUSEMOVE:
+    case PP_INPUTEVENT_TYPE_MOUSEENTER:
+    case PP_INPUTEVENT_TYPE_MOUSELEAVE:
+      return engine()->HandleEvent(
+          GetMouseInputEvent(pp::MouseInputEvent(event)));
+    case PP_INPUTEVENT_TYPE_RAWKEYDOWN:
+    case PP_INPUTEVENT_TYPE_KEYDOWN:
+    case PP_INPUTEVENT_TYPE_KEYUP:
+    case PP_INPUTEVENT_TYPE_CHAR:
+      return engine()->HandleEvent(
+          GetKeyboardInputEvent(pp::KeyboardInputEvent(event)));
+    case PP_INPUTEVENT_TYPE_TOUCHSTART:
+    case PP_INPUTEVENT_TYPE_TOUCHEND:
+    case PP_INPUTEVENT_TYPE_TOUCHMOVE:
+    case PP_INPUTEVENT_TYPE_TOUCHCANCEL:
+      return engine()->HandleEvent(
+          GetTouchInputEvent(pp::TouchInputEvent(event)));
+    case PP_INPUTEVENT_TYPE_WHEEL:
+    case PP_INPUTEVENT_TYPE_CONTEXTMENU:
+    case PP_INPUTEVENT_TYPE_IME_COMPOSITION_START:
+    case PP_INPUTEVENT_TYPE_IME_COMPOSITION_UPDATE:
+    case PP_INPUTEVENT_TYPE_IME_COMPOSITION_END:
+    case PP_INPUTEVENT_TYPE_IME_TEXT:
+      // These event types are not used in PDFiumEngine, so there are no
+      // functions to convert them from pp::InputEvent to
+      // chrome_pdf::InputEvent. As such just send a dummy NoneInputEvent
+      // instead.
+      return engine()->HandleEvent(NoneInputEvent());
+    case PP_INPUTEVENT_TYPE_UNDEFINED:
+      return false;
+  }
 }
 
 template <typename T>
@@ -2278,7 +2382,7 @@ void OutOfProcessInstance::OnPrint(int32_t /*unused_but_required*/) {
 void OutOfProcessInstance::InvalidateAfterPaintDone(
     int32_t /*unused_but_required*/) {
   DCHECK(!in_paint_);
-  for (const pp::Rect& rect : deferred_invalidates_)
+  for (const gfx::Rect& rect : deferred_invalidates_)
     Invalidate(rect);
   deferred_invalidates_.clear();
 }

@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">нэмэлт тэмдэглэл</translation>
 <translation id="1281252709823657822">харилцан яриа</translation>
 <translation id="1306460908038601864">Унтраалттай</translation>
+<translation id="1311894908970423688">Утга нь <ph name="VALUE_DATE_OR_TIME" /> байх ёстой.</translation>
 <translation id="1335095011850992622">оролцогчид</translation>
 <translation id="1342835525016946179">Гарчиг</translation>
 <translation id="1359897965706325498">баннер</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> зүйлс</translation>
 <translation id="1480676835519562650">олныг сонгох боломжтой, <ph name="COUNT" />-c <ph name="SELECTED" />-г сонгосон</translation>
 <translation id="1589122976691792535">хамрах бүс</translation>
 <translation id="1591562245178063882">Энэ сар</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">Долоо хоног <ph name="WEEKNUMBER" /> , <ph name="YEAR" /></translation>
 <translation id="2277199496770840904"><ph name="NUMBER" />-р бичлэг</translation>
 <translation id="2291999235780842123">чагтлах</translation>
+<translation id="2307576640803031502">жагсаалтын <ph name="COUNT" />-с <ph name="INDEX" /></translation>
 <translation id="2311842470354187719">хуудас тусгаарлагч</translation>
 <translation id="2335594187091864976">огноо болон хугацаа сонгогч</translation>
 <translation id="2393030564806080191">Арван зургаатын өнгөний утга</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">бусад сонголт</translation>
 <translation id="576709008726043716">оршил</translation>
 <translation id="57838592816432529">Дууг хаах</translation>
+<translation id="5860033963881614850">Идэвхгүй байна</translation>
 <translation id="588258955323874662">Дэлгэц дүүрэн</translation>
 <translation id="5888666972993069672">Одоо <ph name="DEVICE_FRIENDLY_NAME" />-д дамжуулж байна</translation>
 <translation id="591047860372322273">хайх хэсэг</translation>
+<translation id="5916664084637901428">Асаах</translation>
 <translation id="5939518447894949180">Дахин сэргээх</translation>
 <translation id="5966707198760109579">Долоо хоног</translation>
 <translation id="5987525920412732405">эргүүлэх товчлуур</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Цэвэрлэх</translation>
 <translation id="668171684555832681">Бусад...</translation>
 <translation id="6692633176391053278">stepper</translation>
+<translation id="6709093583001123835">Утга нь <ph name="VALUE" /> байх ёстой.</translation>
 <translation id="6709570249143506788">Тоглуулагчийн чанар муу байна</translation>
 <translation id="6755330956360078551">хэрэгслийн зөвлөмж</translation>
 <translation id="6790428901817661496">Тоглуулах</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK_START_DATE" />-ээс эхэлж буй <ph name="WEEK" /></translation>
 <translation id="916607977885256133">Дэлгэцэн доторх дэлгэц</translation>
 <translation id="9168329111483466115">зүүлт тайлбар</translation>
+<translation id="945780513535800434">Хэсэгчлэн тэмдэглэсэн</translation>
 <translation id="954003015749068518">дэлгэцэн доторх дэлгэцийг оруулах</translation>
 <translation id="966787709310836684">цэс</translation>
 </translationbundle>

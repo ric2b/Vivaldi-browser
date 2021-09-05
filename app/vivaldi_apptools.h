@@ -3,9 +3,9 @@
 #ifndef APP_VIVALDI_APPTOOLS_H_
 #define APP_VIVALDI_APPTOOLS_H_
 
-#include <set>
 #include <string>
 #include "base/base_export.h"
+#include "base/strings/string_piece.h"
 
 namespace base {
 class CommandLine;
@@ -14,10 +14,9 @@ class GURL;
 
 namespace vivaldi {
 
-bool IsVivaldiApp(const std::string& extension_id);
+bool IsVivaldiApp(base::StringPiece extension_id);
 
-const std::set<std::string>& GetVivaldiExtraLocales();
-bool IsVivaldiExtraLocale(const std::string& locale);
+bool IsVivaldiExtraLocale(base::StringPiece locale);
 
 bool BASE_EXPORT IsVivaldiRunning();
 bool BASE_EXPORT IsDebuggingVivaldi();

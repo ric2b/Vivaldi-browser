@@ -32,6 +32,7 @@
 #include "chromeos/printing/ppd_metadata_manager.h"
 #include "chromeos/printing/printer_config_cache.h"
 #include "chromeos/printing/printer_configuration.h"
+#include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
@@ -39,6 +40,11 @@ namespace chromeos {
 namespace {
 
 using PrinterDiscoveryType = PrinterSearchData::PrinterDiscoveryType;
+using ::testing::AllOf;
+using ::testing::Eq;
+using ::testing::Field;
+using ::testing::StrEq;
+using ::testing::UnorderedElementsAre;
 
 // A pseudo-ppd that should get cupsFilter lines extracted from it.
 const char kCupsFilterPpdContents[] = R"(
@@ -168,8 +174,7 @@ class PpdProviderTest : public ::testing::Test {
     auto config_cache = std::make_unique<FakePrinterConfigCache>();
     provider_backdoor_.config_cache = config_cache.get();
 
-    return CreateV3Provider(options.browser_locale,
-                            base::Version("40.8.6753.09"), ppd_cache_,
+    return CreateV3Provider(base::Version("40.8.6753.09"), ppd_cache_,
                             std::move(manager), std::move(config_cache));
   }
 
@@ -243,6 +248,24 @@ class PpdProviderTest : public ::testing::Test {
   void DiscardResolvePpd(PpdProvider::CallbackResultCode code,
                          const std::string& contents) {}
 
+  // Calls the ResolveManufacturer() method of the |provider| and
+  // waits for its completion. Ignores the returned string values and
+  // returns whether the result code was
+  // PpdProvider::CallbackResultCode::SUCCESS.
+  bool SuccessfullyResolveManufacturers(PpdProvider* provider) {
+    base::RunLoop run_loop;
+    PpdProvider::CallbackResultCode code;
+    provider->ResolveManufacturers(base::BindLambdaForTesting(
+        [&run_loop, &code](
+            PpdProvider::CallbackResultCode result_code,
+            const std::vector<std::string>& unused_manufacturers) {
+          code = result_code;
+          run_loop.QuitClosure().Run();
+        }));
+    run_loop.Run();
+    return code == PpdProvider::CallbackResultCode::SUCCESS;
+  }
+
  protected:
   // List of relevant endpoint for this FakeServer
   std::vector<std::pair<std::string, std::string>> server_contents() const {
@@ -270,48 +293,122 @@ class PpdProviderTest : public ::testing::Test {
                   "emm": "printer_c_ref"
                 } ]
                })"},
-            {"metadata_v2/index-01.json",
-             R"([
-             ["printer_a_ref", "printer_a.ppd", {"license": "fake_license"}]
-            ])"},
-            {"metadata_v2/index-02.json",
-             R"([
-             ["printer_b_ref", "printer_b.ppd"]
-            ])"},
-            {"metadata_v2/index-03.json",
-             R"([
-             ["printer_c_ref", "printer_c.ppd"]
-            ])"},
-            {"metadata_v2/index-04.json",
-             R"([
-             ["printer_d_ref", "printer_d.ppd"]
-            ])"},
-            {"metadata_v2/index-05.json",
-             R"([
-             ["printer_e_ref", "printer_e.ppd"]
-            ])"},
-            {"metadata_v2/index-13.json",
-             R"([
-            ])"},
-            {"metadata_v2/usb-031f.json",
-             R"([
-             [1592, "Some canonical reference"],
-             [6535, "Some other canonical reference"]
-            ])"},
-            {"metadata_v2/usb-03f0.json", ""},
-            {"metadata_v2/usb-1234.json", ""},
-            {"metadata_v2/reverse_index-en-01.json",
-             R"([
-             ["printer_a_ref", "manufacturer_a_en", "printer_a"]
-             ])"},
-            {"metadata_v2/reverse_index-en-19.json",
-             R"([
-             ])"},
-            {"ppds/printer_a.ppd", kCupsFilterPpdContents},
-            {"ppds/printer_b.ppd", kCupsFilter2PpdContents},
-            {"ppds/printer_c.ppd", "c"},
-            {"ppds/printer_d.ppd", "d"},
-            {"ppds/printer_e.ppd", "e"},
+            {"metadata_v3/index-01.json",
+             R"({
+                "ppdIndex": {
+                  "printer_a_ref": {
+                    "ppdMetadata": [ {
+                      "name": "printer_a.ppd",
+                      "license": "fake_license"
+                    } ]
+                  }
+                }
+            })"},
+            {"metadata_v3/index-02.json",
+             R"({
+                "ppdIndex": {
+                  "printer_b_ref": {
+                    "ppdMetadata": [ {
+                      "name": "printer_b.ppd"
+                    } ]
+                  }
+                }
+            })"},
+            {"metadata_v3/index-03.json",
+             R"({
+                "ppdIndex": {
+                  "printer_c_ref": {
+                    "ppdMetadata": [ {
+                      "name": "printer_c.ppd"
+                    } ]
+                  }
+                }
+            })"},
+            {"metadata_v3/index-04.json",
+             R"({
+                "ppdIndex": {
+                  "printer_d_ref": {
+                    "ppdMetadata": [ {
+                      "name": "printer_d.ppd"
+                    } ]
+                  }
+                }
+            })"},
+            {"metadata_v3/index-05.json",
+             R"({
+                "ppdIndex": {
+                  "printer_e_ref": {
+                    "ppdMetadata": [ {
+                      "name": "printer_e.ppd"
+                    } ]
+                  }
+                }
+            })"},
+            {"metadata_v3/index-08.json",
+             R"({
+                "ppdIndex": {
+                  "Some canonical reference": {
+                    "ppdMetadata": [ {
+                      "name": "unused.ppd"
+                    } ]
+                  }
+                }
+            })"},
+            {"metadata_v3/index-10.json",
+             R"({
+                "ppdIndex": {
+                  "Some other canonical reference": {
+                    "ppdMetadata": [ {
+                      "name": "unused.ppd"
+                    } ]
+                  }
+                }
+            })"},
+            {"metadata_v3/usb-031f.json",
+             R"({
+                "usbIndex": {
+                  "1592": {
+                    "effectiveMakeAndModel": "Some canonical reference"
+                  },
+                  "6535": {
+                    "effectiveMakeAndModel": "Some other canonical reference"
+                  }
+                }
+            })"},
+            {"metadata_v3/usb-03f0.json", ""},
+            {"metadata_v3/usb-1234.json", ""},
+            {"metadata_v3/usb_vendor_ids.json", R"({
+              "entries": [ {
+                "vendorId": 799,
+                "vendorName": "Seven Ninety Nine LLC"
+              }, {
+                "vendorId": 1008,
+                "vendorName": "HP"
+              } ]
+            })"},
+            {"metadata_v3/reverse_index-en-01.json",
+             R"({
+                "reverseIndex": {
+                  "printer_a_ref": {
+                    "manufacturer": "manufacturer_a_en",
+                    "model": "printer_a"
+                  }
+                }
+             })"},
+            {"metadata_v3/reverse_index-en-19.json",
+             R"({
+                "reverseIndex": {
+                  "unused effective make and model": {
+                    "manufacturer": "unused manufacturer",
+                    "model": "unused model"
+                  }
+                }
+             })"},
+            {"ppds_for_metadata_v3/printer_a.ppd", kCupsFilterPpdContents},
+            {"ppds_for_metadata_v3/printer_b.ppd", kCupsFilter2PpdContents},
+            {"ppds_for_metadata_v3/printer_c.ppd", "c"},
+            {"ppds_for_metadata_v3/printer_d.ppd", "d"},
+            {"ppds_for_metadata_v3/printer_e.ppd", "e"},
             {"user_supplied_ppd_directory/user_supplied.ppd", "u"}};
   }
 
@@ -375,20 +472,11 @@ TEST_F(PpdProviderTest, FailsOldestQueuedResolveManufacturers) {
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
                       PropagateLocaleToMetadataManager::kDoNotPropagate});
 
-  // The moment we constructed a provider, it will have requested a
-  // metadata locale. But we don't want it to ever obtain one: we
-  // want to fill up the deferral queue and test that behavior, without
-  // ever hitting the success _or_ failure cases in getting the metadata
-  // locale.
-  //
-  // The pending task is the FakePrinterConfigCache calling back to
-  // indicate failure. We have to take this one, but before we do, we
-  // can ask the FakePrinterConfigCache to pretend to be an infinitely
-  // slow server for future calls.
-  ASSERT_EQ(1UL, task_environment_.GetPendingMainThreadTaskCount());
+  // Prevents the provider from ever getting a metadata locale.
+  // We want it to stall out, forcing it to perpetually defer method
+  // calls to ResolveManufacturers().
   provider_backdoor_.manager_config_cache->DiscardFetchRequestFor(
       "metadata_v3/locales.json");
-  task_environment_.FastForwardUntilNoTasksRemain();
 
   for (int i = kMethodDeferralLimitForTesting; i >= 0; i--) {
     provider->ResolveManufacturers(base::BindOnce(
@@ -415,20 +503,11 @@ TEST_F(PpdProviderTest, FailsOldestQueuedReverseLookup) {
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
                       PropagateLocaleToMetadataManager::kDoNotPropagate});
 
-  // The moment we constructed a provider, it will have requested a
-  // metadata locale. But we don't want it to ever obtain one: we
-  // want to fill up the deferral queue and test that behavior, without
-  // ever hitting the success _or_ failure cases in getting the metadata
-  // locale.
-  //
-  // The pending task is the FakePrinterConfigCache calling back to
-  // indicate failure. We have to take this one, but before we do, we
-  // can ask the FakePrinterConfigCache to pretend to be an infinitely
-  // slow server for future calls.
-  ASSERT_EQ(1UL, task_environment_.GetPendingMainThreadTaskCount());
+  // Prevents the provider from ever getting a metadata locale.
+  // We want it to stall out, forcing it to perpetually defer method
+  // calls to ReverseLookup().
   provider_backdoor_.manager_config_cache->DiscardFetchRequestFor(
       "metadata_v3/locales.json");
-  task_environment_.FastForwardUntilNoTasksRemain();
 
   for (int i = kMethodDeferralLimitForTesting; i >= 0; i--) {
     provider->ReverseLookup(
@@ -456,15 +535,6 @@ TEST_F(PpdProviderTest, ManufacturersFetch) {
                       PropagateLocaleToMetadataManager::kDoNotPropagate});
   StartFakePpdServer();
 
-  // The provider attempted to get a metadata locale as soon as it was
-  // constructed. The pending task on the sequence is a callback from
-  // the FakePrinterConfigCache indicating that it failed to get a
-  // metadata locale. We'll let that fail harmelssly; having called
-  // StartFakePpdServer(), the retry attempt will allow the provider to
-  // successfully obtain a metadata locale.
-  ASSERT_EQ(1UL, task_environment_.GetPendingMainThreadTaskCount());
-  task_environment_.FastForwardUntilNoTasksRemain();
-
   // Issue two requests at the same time, both should be resolved properly.
   provider->ResolveManufacturers(base::BindOnce(
       &PpdProviderTest::CaptureResolveManufacturers, base::Unretained(this)));
@@ -488,26 +558,13 @@ TEST_F(PpdProviderTest, ManufacturersFetchNoServer) {
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
                       PropagateLocaleToMetadataManager::kDoNotPropagate});
 
-  // Unlike the above, there is no breaking out of the failure loop in
-  // which the provider attempts to fetch a metadata locale and the
-  // fake server indicates that none are forthcoming.
-  //
-  // Since the provider never stops trying to get the metadata locale,
-  // it's not appropriate to use things like RunUntilIdle() or
-  // FastForwardUntilNoTasksRemain().
-  base::RunLoop run_loop;
-
   // Issue two requests at the same time, both should resolve properly
   // (though they will fail).
   provider->ResolveManufacturers(base::BindOnce(
       &PpdProviderTest::CaptureResolveManufacturers, base::Unretained(this)));
-  provider->ResolveManufacturers(base::BindLambdaForTesting(
-      [this, &run_loop](PpdProvider::CallbackResultCode code,
-                        const std::vector<std::string>& empty_manufacturers) {
-        this->CaptureResolveManufacturers(code, empty_manufacturers);
-        run_loop.QuitClosure().Run();
-      }));
-  run_loop.Run();
+  provider->ResolveManufacturers(base::BindOnce(
+      &PpdProviderTest::CaptureResolveManufacturers, base::Unretained(this)));
+  task_environment_.FastForwardUntilNoTasksRemain();
 
   ASSERT_EQ(2UL, captured_resolve_manufacturers_.size());
   EXPECT_EQ(PpdProvider::SERVER_ERROR,
@@ -523,7 +580,7 @@ TEST_F(PpdProviderTest, ManufacturersFetchNoServer) {
 TEST_F(PpdProviderTest, RepeatedMakeModel) {
   auto provider =
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+                      PropagateLocaleToMetadataManager::kDoPropagate});
   StartFakePpdServer();
 
   PrinterSearchData unrecognized_printer;
@@ -566,7 +623,7 @@ TEST_F(PpdProviderTest, RepeatedMakeModel) {
 TEST_F(PpdProviderTest, UsbResolution) {
   auto provider =
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+                      PropagateLocaleToMetadataManager::kDoPropagate});
   StartFakePpdServer();
 
   PrinterSearchData search_data;
@@ -586,6 +643,8 @@ TEST_F(PpdProviderTest, UsbResolution) {
                                   base::Unretained(this)));
 
   // Vendor id that exists, nonexistent device id, should get a NOT_FOUND.
+  // In our fake serving root, the manufacturer with vendor ID 0x031f
+  // (== 799) is named "Seven Ninety Nine LLC."
   search_data.usb_vendor_id = 0x031f;
   search_data.usb_product_id = 8162;
   provider->ResolvePpdReference(
@@ -604,15 +663,28 @@ TEST_F(PpdProviderTest, UsbResolution) {
   task_environment_.RunUntilIdle();
 
   ASSERT_EQ(captured_resolve_ppd_references_.size(), static_cast<size_t>(4));
-  EXPECT_EQ(captured_resolve_ppd_references_[0].code, PpdProvider::SUCCESS);
-  EXPECT_EQ(captured_resolve_ppd_references_[0].ref.effective_make_and_model,
-            "Some canonical reference");
-  EXPECT_EQ(captured_resolve_ppd_references_[1].code, PpdProvider::SUCCESS);
-  EXPECT_EQ(captured_resolve_ppd_references_[1].ref.effective_make_and_model,
-            "Some other canonical reference");
-  EXPECT_EQ(captured_resolve_ppd_references_[2].code, PpdProvider::NOT_FOUND);
-  EXPECT_FALSE(captured_resolve_ppd_references_[3].code ==
-               PpdProvider::SUCCESS);
+
+  // ResolvePpdReference() takes place in several asynchronous steps, so
+  // order is not guaranteed.
+  EXPECT_THAT(
+      captured_resolve_ppd_references_,
+      UnorderedElementsAre(
+          AllOf(Field(&CapturedResolvePpdReferenceResults::code,
+                      Eq(PpdProvider::SUCCESS)),
+                Field(&CapturedResolvePpdReferenceResults::ref,
+                      Field(&Printer::PpdReference::effective_make_and_model,
+                            StrEq("Some canonical reference")))),
+          AllOf(Field(&CapturedResolvePpdReferenceResults::code,
+                      Eq(PpdProvider::SUCCESS)),
+                Field(&CapturedResolvePpdReferenceResults::ref,
+                      Field(&Printer::PpdReference::effective_make_and_model,
+                            StrEq("Some other canonical reference")))),
+          AllOf(Field(&CapturedResolvePpdReferenceResults::code,
+                      Eq(PpdProvider::NOT_FOUND)),
+                Field(&CapturedResolvePpdReferenceResults::usb_manufacturer,
+                      StrEq("Seven Ninety Nine LLC"))),
+          Field(&CapturedResolvePpdReferenceResults::code,
+                Eq(PpdProvider::NOT_FOUND))));
 }
 
 // Test basic ResolvePrinters() functionality.  At the same time, make
@@ -623,11 +695,10 @@ TEST_F(PpdProviderTest, ResolvePrinters) {
                       PropagateLocaleToMetadataManager::kDoPropagate});
   StartFakePpdServer();
 
-  // Same as the contents in test fixture's server_contents() above,
-  // but allows us to bypass PpdProvider::ResolveManufacturers().
+  // Required setup calls to advance past PpdProvider's method deferral.
   ASSERT_TRUE(provider_backdoor_.metadata_manager->SetManufacturersForTesting(
       kDefaultManufacturersJson));
-  task_environment_.RunUntilIdle();
+  ASSERT_TRUE(SuccessfullyResolveManufacturers(provider.get()));
 
   provider->ResolvePrinters(
       "Manufacturer A", base::BindOnce(&PpdProviderTest::CaptureResolvePrinters,
@@ -670,11 +741,10 @@ TEST_F(PpdProviderTest, ResolvePrintersBadReference) {
                       PropagateLocaleToMetadataManager::kDoPropagate});
   StartFakePpdServer();
 
-  // Same as the contents in test fixture's server_contents() above,
-  // but allows us to bypass PpdProvider::ResolveManufacturers().
+  // Required setup calls to advance past PpdProvider's method deferral.
   ASSERT_TRUE(provider_backdoor_.metadata_manager->SetManufacturersForTesting(
       kDefaultManufacturersJson));
-  task_environment_.RunUntilIdle();
+  ASSERT_TRUE(SuccessfullyResolveManufacturers(provider.get()));
 
   provider->ResolvePrinters(
       "bogus_doesnt_exist",
@@ -691,11 +761,10 @@ TEST_F(PpdProviderTest, ResolvePrintersNoServer) {
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
                       PropagateLocaleToMetadataManager::kDoPropagate});
 
-  // Same as the contents in test fixture's server_contents() above,
-  // but allows us to bypass PpdProvider::ResolveManufacturers().
+  // Required setup calls to advance past PpdProvider's method deferral.
   ASSERT_TRUE(provider_backdoor_.metadata_manager->SetManufacturersForTesting(
       kDefaultManufacturersJson));
-  task_environment_.RunUntilIdle();
+  ASSERT_TRUE(SuccessfullyResolveManufacturers(provider.get()));
 
   provider->ResolvePrinters(
       "Manufacturer A", base::BindOnce(&PpdProviderTest::CaptureResolvePrinters,
@@ -713,7 +782,7 @@ TEST_F(PpdProviderTest, ResolvePrintersNoServer) {
 TEST_F(PpdProviderTest, ResolveServerKeyPpd) {
   auto provider =
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+                      PropagateLocaleToMetadataManager::kDoPropagate});
   StartFakePpdServer();
   Printer::PpdReference ref;
   ref.effective_make_and_model = "printer_b_ref";
@@ -725,10 +794,19 @@ TEST_F(PpdProviderTest, ResolveServerKeyPpd) {
   task_environment_.RunUntilIdle();
 
   ASSERT_EQ(2UL, captured_resolve_ppd_.size());
-  EXPECT_EQ(PpdProvider::SUCCESS, captured_resolve_ppd_[0].code);
-  EXPECT_EQ(kCupsFilter2PpdContents, captured_resolve_ppd_[0].ppd_contents);
-  EXPECT_EQ(PpdProvider::SUCCESS, captured_resolve_ppd_[1].code);
-  EXPECT_EQ("c", captured_resolve_ppd_[1].ppd_contents);
+
+  // ResolvePpd() works in several asynchronous steps, so order of
+  // return is not guaranteed.
+  EXPECT_THAT(
+      captured_resolve_ppd_,
+      UnorderedElementsAre(
+          AllOf(Field(&CapturedResolvePpdResults::code,
+                      PpdProvider::CallbackResultCode::SUCCESS),
+                Field(&CapturedResolvePpdResults::ppd_contents,
+                      StrEq(kCupsFilter2PpdContents))),
+          AllOf(Field(&CapturedResolvePpdResults::code,
+                      PpdProvider::CallbackResultCode::SUCCESS),
+                Field(&CapturedResolvePpdResults::ppd_contents, StrEq("c")))));
 }
 
 // Test that we *don't* resolve a ppd URL over non-file schemes.  It's not clear
@@ -738,12 +816,13 @@ TEST_F(PpdProviderTest, ResolveServerKeyPpd) {
 TEST_F(PpdProviderTest, ResolveUserSuppliedUrlPpdFromNetworkFails) {
   auto provider =
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+                      PropagateLocaleToMetadataManager::kDoPropagate});
   StartFakePpdServer();
 
   Printer::PpdReference ref;
-  // TODO(crbug.com/888189): give |ref| a nonempty
-  // |user_supplied_ppd_url|.
+  // PpdProvider::ResolvePpd() shall fail if a user-supplied PPD URL
+  // does not begin with the "file://" scheme.
+  ref.user_supplied_ppd_url = "nonfilescheme://unused";
   provider->ResolvePpd(ref, base::BindOnce(&PpdProviderTest::CaptureResolvePpd,
                                            base::Unretained(this)));
   task_environment_.RunUntilIdle();
@@ -759,7 +838,7 @@ TEST_F(PpdProviderTest, ResolveUserSuppliedUrlPpdFromNetworkFails) {
 TEST_F(PpdProviderTest, ResolveUserSuppliedUrlPpdFromFile) {
   auto provider =
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+                      PropagateLocaleToMetadataManager::kDoPropagate});
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::FilePath filename = temp_dir.GetPath().Append("my_spiffy.ppd");
@@ -785,7 +864,7 @@ TEST_F(PpdProviderTest, ResolveUserSuppliedUrlPpdFromFile) {
 TEST_F(PpdProviderTest, ResolvedPpdsGetCached) {
   auto provider =
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+                      PropagateLocaleToMetadataManager::kDoPropagate});
   std::string user_ppd_contents = "Woohoo";
   Printer::PpdReference ref;
   {
@@ -814,9 +893,8 @@ TEST_F(PpdProviderTest, ResolvedPpdsGetCached) {
 
   // Recreate the provider to make sure we don't have any memory caches which
   // would mask problems with disk persistence.
-  provider =
-      CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+  provider = CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
+                             PropagateLocaleToMetadataManager::kDoPropagate});
 
   // Re-resolve.
   provider->ResolvePpd(ref, base::BindOnce(&PpdProviderTest::CaptureResolvePpd,
@@ -833,7 +911,7 @@ TEST_F(PpdProviderTest, ResolvedPpdsGetCached) {
 TEST_F(PpdProviderTest, CaseInsensitiveMakeAndModel) {
   auto provider =
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+                      PropagateLocaleToMetadataManager::kDoPropagate});
   StartFakePpdServer();
   std::string ref = "pRiNteR_A_reF";
 
@@ -902,12 +980,12 @@ TEST_F(PpdProviderTest, ResolvePpdLicense) {
   EXPECT_EQ("", captured_resolve_ppd_license_[1].license);
 }
 
-// Verifies that we can extract the Manufacturer and Model selectison for a
+// Verifies that we can extract the Manufacturer and Model selection for a
 // given effective make and model.
 TEST_F(PpdProviderTest, ReverseLookup) {
   auto provider =
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+                      PropagateLocaleToMetadataManager::kDoPropagate});
   StartFakePpdServer();
   std::string ref = "printer_a_ref";
   provider->ReverseLookup(ref,
@@ -933,21 +1011,31 @@ TEST_F(PpdProviderTest, ReverseLookup) {
   EXPECT_EQ(PpdProvider::NOT_FOUND, failed_capture.code);
 }
 
-// If we have a fresh entry in the cache, we shouldn't need to go out to the
-// network at all to successfully resolve a ppd.
-TEST_F(PpdProviderTest, FreshCacheHitNoNetworkTraffic) {
+// Verifies that we never attempt to re-download a PPD that we
+// previously retrieved from the serving root. The Chrome OS Printing
+// Team plans to keep PPDs immutable inside the serving root, so
+// PpdProvider should always prefer to retrieve a PPD from the PpdCache
+// when it's possible to do so.
+TEST_F(PpdProviderTest, PreferToResolvePpdFromPpdCacheOverServingRoot) {
   // Explicitly *not* starting a fake server.
   std::string cached_ppd_contents =
       "These cached contents are different from what's being served";
   auto provider =
       CreateProvider({"en", PpdCacheRunLocation::kOnTestThread,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+                      PropagateLocaleToMetadataManager::kDoPropagate});
   Printer::PpdReference ref;
   ref.effective_make_and_model = "printer_a_ref";
   std::string cache_key = PpdProvider::PpdReferenceToCacheKey(ref);
+
   // Cache exists, and is just created, so should be fresh.
-  ppd_cache_->StoreForTesting(PpdProvider::PpdReferenceToCacheKey(ref),
+  //
+  // PPD basename is taken from value specified in forward index shard
+  // defined in server_contents().
+  const std::string ppd_basename = "printer_a.ppd";
+  ppd_cache_->StoreForTesting(PpdBasenameToCacheKey(ppd_basename),
                               cached_ppd_contents, base::TimeDelta());
+  ppd_cache_->StoreForTesting(PpdProvider::PpdReferenceToCacheKey(ref),
+                              ppd_basename, base::TimeDelta());
   task_environment_.RunUntilIdle();
   provider->ResolvePpd(ref, base::BindOnce(&PpdProviderTest::CaptureResolvePpd,
                                            base::Unretained(this)));
@@ -960,94 +1048,6 @@ TEST_F(PpdProviderTest, FreshCacheHitNoNetworkTraffic) {
   EXPECT_EQ(cached_ppd_contents, captured_resolve_ppd_[0].ppd_contents);
 }
 
-// If we have a stale cache entry and a good network connection, does the cache
-// get refreshed during a resolution?
-TEST_F(PpdProviderTest, StaleCacheGetsRefreshed) {
-  std::string cached_ppd_contents =
-      "These cached contents are different from what's being served";
-  auto provider =
-      CreateProvider({"en", PpdCacheRunLocation::kOnTestThread,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
-  StartFakePpdServer();
-  // printer_ref_a resolves to kCupsFilterPpdContents on the server.
-  std::string expected_ppd = kCupsFilterPpdContents;
-  Printer::PpdReference ref;
-  ref.effective_make_and_model = "printer_a_ref";
-  std::string cache_key = PpdProvider::PpdReferenceToCacheKey(ref);
-  // Cache exists, and is 6 months old, so really stale.
-  ppd_cache_->StoreForTesting(PpdProvider::PpdReferenceToCacheKey(ref),
-                              cached_ppd_contents,
-                              base::TimeDelta::FromDays(180));
-  task_environment_.RunUntilIdle();
-  provider->ResolvePpd(ref, base::BindOnce(&PpdProviderTest::CaptureResolvePpd,
-                                           base::Unretained(this)));
-  task_environment_.RunUntilIdle();
-  ASSERT_EQ(1UL, captured_resolve_ppd_.size());
-
-  // Should get the served results back, not the stale cached ones.
-  EXPECT_EQ(PpdProvider::SUCCESS, captured_resolve_ppd_[0].code);
-  EXPECT_EQ(captured_resolve_ppd_[0].ppd_contents, expected_ppd);
-
-  // Check that the cache was also updated.
-  PpdCache::FindResult captured_find_result;
-  // This is just a complicated syntax around the idea "use the Find callback to
-  // save the result in captured_find_result.
-  ppd_cache_->Find(PpdProvider::PpdReferenceToCacheKey(ref),
-                   base::BindOnce(
-                       [](PpdCache::FindResult* captured_find_result,
-                          const PpdCache::FindResult& find_result) {
-                         *captured_find_result = find_result;
-                       },
-                       &captured_find_result));
-  task_environment_.RunUntilIdle();
-  EXPECT_EQ(captured_find_result.success, true);
-  EXPECT_EQ(captured_find_result.contents, expected_ppd);
-  EXPECT_LT(captured_find_result.age, base::TimeDelta::FromDays(1));
-}
-
-// Test that, if we have an old entry in the cache that needs to be refreshed,
-// and we fail to contact the server, we still use the cached version.
-TEST_F(PpdProviderTest, StaleCacheGetsUsedIfNetworkFails) {
-  // Note that we're explicitly *not* starting the Fake ppd server in this test.
-  std::string cached_ppd_contents =
-      "These cached contents are different from what's being served";
-  auto provider =
-      CreateProvider({"en", PpdCacheRunLocation::kOnTestThread,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
-  Printer::PpdReference ref;
-  ref.effective_make_and_model = "printer_a_ref";
-  std::string cache_key = PpdProvider::PpdReferenceToCacheKey(ref);
-  // Cache exists, and is 6 months old, so really stale.
-  ppd_cache_->StoreForTesting(PpdProvider::PpdReferenceToCacheKey(ref),
-                              cached_ppd_contents,
-                              base::TimeDelta::FromDays(180));
-  task_environment_.RunUntilIdle();
-  provider->ResolvePpd(ref, base::BindOnce(&PpdProviderTest::CaptureResolvePpd,
-                                           base::Unretained(this)));
-  task_environment_.RunUntilIdle();
-  ASSERT_EQ(1UL, captured_resolve_ppd_.size());
-
-  // Should successfully resolve from the cache, even though it's stale.
-  EXPECT_EQ(PpdProvider::SUCCESS, captured_resolve_ppd_[0].code);
-  EXPECT_EQ(cached_ppd_contents, captured_resolve_ppd_[0].ppd_contents);
-
-  // Check that the cache is *not* updated; it should remain stale.
-  PpdCache::FindResult captured_find_result;
-  // This is just a complicated syntax around the idea "use the Find callback to
-  // save the result in captured_find_result.
-  ppd_cache_->Find(PpdProvider::PpdReferenceToCacheKey(ref),
-                   base::BindOnce(
-                       [](PpdCache::FindResult* captured_find_result,
-                          const PpdCache::FindResult& find_result) {
-                         *captured_find_result = find_result;
-                       },
-                       &captured_find_result));
-  task_environment_.RunUntilIdle();
-  EXPECT_EQ(captured_find_result.success, true);
-  EXPECT_EQ(captured_find_result.contents, cached_ppd_contents);
-  EXPECT_GT(captured_find_result.age, base::TimeDelta::FromDays(179));
-}
-
 // For user-provided ppds, we should always use the latest version on
 // disk if it still exists there.
 TEST_F(PpdProviderTest, UserPpdAlwaysRefreshedIfAvailable) {
@@ -1056,7 +1056,7 @@ TEST_F(PpdProviderTest, UserPpdAlwaysRefreshedIfAvailable) {
   std::string disk_ppd_contents = "Updated Ppd Contents";
   auto provider =
       CreateProvider({"en", PpdCacheRunLocation::kOnTestThread,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+                      PropagateLocaleToMetadataManager::kDoPropagate});
   StartFakePpdServer();
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
   base::FilePath filename = temp_dir.GetPath().Append("my_spiffy.ppd");
@@ -1099,7 +1099,7 @@ TEST_F(PpdProviderTest, UserPpdAlwaysRefreshedIfAvailable) {
 TEST_F(PpdProviderTest, ResolveUsbManufacturer) {
   auto provider =
       CreateProvider({"en", PpdCacheRunLocation::kInBackgroundThreads,
-                      PropagateLocaleToMetadataManager::kDoNotPropagate});
+                      PropagateLocaleToMetadataManager::kDoPropagate});
   StartFakePpdServer();
 
   PrinterSearchData search_data;

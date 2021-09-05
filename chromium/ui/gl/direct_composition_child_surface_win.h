@@ -33,7 +33,8 @@ class GL_EXPORT DirectCompositionChildSurfaceWin : public GLSurfaceEGL,
       base::RepeatingCallback<void(base::TimeTicks, base::TimeDelta)>;
   DirectCompositionChildSurfaceWin(VSyncCallback vsync_callback,
                                    bool use_angle_texture_offset,
-                                   size_t max_pending_frames);
+                                   size_t max_pending_frames,
+                                   bool force_full_damage);
 
   // GLSurfaceEGL implementation.
   bool Initialize(GLSurfaceFormat format) override;
@@ -54,7 +55,6 @@ class GL_EXPORT DirectCompositionChildSurfaceWin : public GLSurfaceEGL,
               const gfx::ColorSpace& color_space,
               bool has_alpha) override;
   bool SetEnableDCLayers(bool enable) override;
-  void SetFrameRate(float frame_rate) override;
   gfx::VSyncProvider* GetVSyncProvider() override;
   bool SupportsGpuVSync() const override;
   void SetGpuVSyncEnabled(bool enabled) override;
@@ -110,10 +110,6 @@ class GL_EXPORT DirectCompositionChildSurfaceWin : public GLSurfaceEGL,
   // to it. Returns false if this fails.
   bool ReleaseDrawTexture(bool will_discard);
 
-  // This is called when a new swap chain is created, or when a new frame rate
-  // is received.
-  void SetSwapChainPresentDuration();
-
   gfx::Size size_ = gfx::Size(1, 1);
   bool enable_dc_layers_ = false;
   bool has_alpha_ = true;
@@ -142,12 +138,10 @@ class GL_EXPORT DirectCompositionChildSurfaceWin : public GLSurfaceEGL,
   Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain_;
   Microsoft::WRL::ComPtr<ID3D11Texture2D> draw_texture_;
 
-  // Number of frames per second.
-  float frame_rate_ = 0.f;
-
   const VSyncCallback vsync_callback_;
   const bool use_angle_texture_offset_;
   const size_t max_pending_frames_;
+  const bool force_full_damage_;
 
   VSyncThreadWin* const vsync_thread_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;

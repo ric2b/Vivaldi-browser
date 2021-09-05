@@ -125,6 +125,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::Clone(ITextRangeProvider** clone) {
 HRESULT AXPlatformNodeTextRangeProviderWin::Compare(ITextRangeProvider* other,
                                                     BOOL* result) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_COMPARE);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_COMPARE);
   UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_IN_1_OUT(other, result);
 
   Microsoft::WRL::ComPtr<AXPlatformNodeTextRangeProviderWin> other_provider;
@@ -144,6 +145,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::CompareEndpoints(
     TextPatternRangeEndpoint other_endpoint,
     int* result) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_COMPAREENDPOINTS);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_COMPAREENDPOINTS);
   UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_IN_1_OUT(other, result);
 
   Microsoft::WRL::ComPtr<AXPlatformNodeTextRangeProviderWin> other_provider;
@@ -174,6 +176,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::CompareEndpoints(
 HRESULT AXPlatformNodeTextRangeProviderWin::ExpandToEnclosingUnit(
     TextUnit unit) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_EXPANDTOENCLOSINGUNIT);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_EXPANDTOENCLOSINGUNIT);
   return ExpandToEnclosingUnitImpl(unit);
 }
 
@@ -318,6 +321,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::FindAttribute(
   //    match the attribute and value and there is a previously matched range.
   //    The previously matched range is the final match we found.
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_FINDATTRIBUTE);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_FINDATTRIBUTE);
   UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_OUT(result);
   NormalizeTextRange();
 
@@ -416,6 +420,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::FindText(
     BOOL ignore_case,
     ITextRangeProvider** result) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_FINDTEXT);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_FINDTEXT);
   UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_IN_1_OUT(string, result);
 
   base::string16 search_string(string);
@@ -469,6 +474,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::GetAttributeValue(
     TEXTATTRIBUTEID attribute_id,
     VARIANT* value) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_GETATTRIBUTEVALUE);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_GETATTRIBUTEVALUE);
   UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_OUT(value);
   NormalizeTextRange();
 
@@ -538,6 +544,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::GetAttributeValue(
 HRESULT AXPlatformNodeTextRangeProviderWin::GetBoundingRectangles(
     SAFEARRAY** screen_physical_pixel_rectangles) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_GETBOUNDINGRECTANGLES);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_GETBOUNDINGRECTANGLES);
   UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_OUT(screen_physical_pixel_rectangles);
 
   *screen_physical_pixel_rectangles = nullptr;
@@ -582,6 +589,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::GetBoundingRectangles(
 HRESULT AXPlatformNodeTextRangeProviderWin::GetEnclosingElement(
     IRawElementProviderSimple** element) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_GETENCLOSINGELEMENT);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_GETENCLOSINGELEMENT);
   UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_OUT(element);
 
   AXPlatformNodeWin* enclosing_node = GetLowestAccessibleCommonPlatformNode();
@@ -606,6 +614,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::GetEnclosingElement(
 
 HRESULT AXPlatformNodeTextRangeProviderWin::GetText(int max_count, BSTR* text) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_GETTEXT);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_GETTEXT);
   UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_OUT(text);
 
   // -1 is a valid value that signifies that the caller wants complete text.
@@ -631,6 +640,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::Move(TextUnit unit,
                                                  int count,
                                                  int* units_moved) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_MOVE);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_MOVE);
   UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_OUT(units_moved);
 
   // Per MSDN, move with zero count has no effect.
@@ -701,6 +711,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::MoveEndpointByUnit(
     int count,
     int* units_moved) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_MOVEENDPOINTBYUNIT);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_MOVEENDPOINTBYUNIT);
   return MoveEndpointByUnitImpl(endpoint, unit, count, units_moved);
 }
 
@@ -773,6 +784,8 @@ HRESULT AXPlatformNodeTextRangeProviderWin::MoveEndpointByRange(
     ITextRangeProvider* other,
     TextPatternRangeEndpoint other_endpoint) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_MOVEENPOINTBYRANGE);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_MOVEENPOINTBYRANGE);
+
   UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_IN(other);
 
   Microsoft::WRL::ComPtr<AXPlatformNodeTextRangeProviderWin> other_provider;
@@ -816,6 +829,15 @@ HRESULT AXPlatformNodeTextRangeProviderWin::Select() {
   DCHECK(!selection_end->IsNullPosition());
   DCHECK_EQ(selection_start->tree_id(), selection_end->tree_id());
 
+  // TODO(crbug.com/1124051): Blink does not support selection on the list
+  // markers. So if |selection_start| or |selection_end| are in list markers, we
+  // don't perform selection and return success. Remove this check once this bug
+  // is fixed.
+  if (selection_start->GetAnchor()->IsInListMarker() ||
+      selection_end->GetAnchor()->IsInListMarker()) {
+    return S_OK;
+  }
+
   AXPlatformNodeDelegate* delegate =
       GetDelegate(selection_start->tree_id(), selection_start->anchor_id());
   DCHECK(delegate);
@@ -837,13 +859,15 @@ HRESULT AXPlatformNodeTextRangeProviderWin::Select() {
 
 HRESULT AXPlatformNodeTextRangeProviderWin::AddToSelection() {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_ADDTOSELECTION);
-  return UIA_E_INVALIDOPERATION;  // not supporting disjoint text selections
+  // Blink does not support disjoint text selections.
+  return UIA_E_INVALIDOPERATION;
 }
 
 HRESULT
 AXPlatformNodeTextRangeProviderWin::RemoveFromSelection() {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_REMOVEFROMSELECTION);
-  return UIA_E_INVALIDOPERATION;  // not supporting disjoint text selections
+  // Blink does not support disjoint text selections.
+  return UIA_E_INVALIDOPERATION;
 }
 
 HRESULT AXPlatformNodeTextRangeProviderWin::ScrollIntoView(BOOL align_to_top) {
@@ -926,6 +950,7 @@ HRESULT AXPlatformNodeTextRangeProviderWin::ScrollIntoView(BOOL align_to_top) {
 
 HRESULT AXPlatformNodeTextRangeProviderWin::GetChildren(SAFEARRAY** children) {
   WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_GETCHILDREN);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_GETCHILDREN);
   UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_OUT(children);
 
   std::vector<gfx::NativeViewAccessible> descendants;
@@ -990,6 +1015,7 @@ AXPlatformNodeTextRangeProviderWin::GetNextTextBoundaryPosition(
     AXBoundaryBehavior boundary_behavior,
     ax::mojom::MoveDirection boundary_direction) {
   // Override At[Start|End]OfLinePredicate for behavior specific to UIA.
+  DCHECK_NE(boundary_type, ax::mojom::TextBoundary::kNone);
   switch (boundary_type) {
     case ax::mojom::TextBoundary::kLineStart:
       return position->CreateBoundaryStartPosition(
@@ -1171,21 +1197,12 @@ void AXPlatformNodeTextRangeProviderWin::NormalizeTextRange() {
   // first snap them both to be unignored positions.
   NormalizeAsUnignoredTextRange();
 
-  // Do not normalize text ranges when a cursor or selection is visible. ATs
-  // may depend on the specific position that the caret or selection is at. This
-  // condition fixes issues when the caret is inside a plain text field, but
-  // causes more issues when used inside of a rich text field. For this reason,
-  // if we have a caret or a selection inside of an editable node, restrict this
-  // to a plain text field as we gain nothing from using it in a rich text
-  // field.
-  AXPlatformNodeDelegate* start_delegate = GetDelegate(start_.get());
-  AXPlatformNodeDelegate* end_delegate = GetDelegate(end_.get());
-  if ((start_delegate && start_delegate->HasVisibleCaretOrSelection() &&
-       (!start_delegate->GetData().HasState(ax::mojom::State::kEditable) ||
-        start_delegate->IsChildOfPlainTextField())) ||
-      (end_delegate && end_delegate->HasVisibleCaretOrSelection() &&
-       (!end_delegate->GetData().HasState(ax::mojom::State::kEditable) ||
-        end_delegate->IsChildOfPlainTextField()))) {
+  // When carets are visible or selections are occurring, the precise state of
+  // the TextPattern must be preserved so that the UIA client can handle
+  // scenarios such as determining which characters were deleted. So
+  // normalization must be bypassed.
+  if (HasCaretOrSelectionInPlainTextField(start_) ||
+      HasCaretOrSelectionInPlainTextField(end_)) {
     return;
   }
 
@@ -1323,6 +1340,24 @@ AXPlatformNodeTextRangeProviderWin::GetLowestAccessibleCommonPlatformNode()
   DCHECK(platform_node);
 
   return platform_node->GetLowestAccessibleElement();
+}
+
+bool AXPlatformNodeTextRangeProviderWin::HasCaretOrSelectionInPlainTextField(
+    const AXPositionInstance& position) const {
+  // This condition fixes issues when the caret is inside a plain text field,
+  // but causes more issues when used inside of a rich text field. For this
+  // reason, if we have a caret or a selection inside of an editable node,
+  // restrict this to a plain text field as we gain nothing from using it in a
+  // rich text field.
+  AXPlatformNodeDelegate* delegate = GetDelegate(position.get());
+  if (delegate && delegate->HasVisibleCaretOrSelection()) {
+    if (!delegate->GetData().HasState(ax::mojom::State::kEditable) ||
+        (delegate->GetData().IsPlainTextField() ||
+         delegate->IsChildOfPlainTextField())) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // static

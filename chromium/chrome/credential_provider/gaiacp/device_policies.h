@@ -7,13 +7,14 @@
 
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/strings/string16.h"
 #include "chrome/credential_provider/gaiacp/user_policies.h"
 
 namespace credential_provider {
 
 // Structure to hold the policies for the device.
-struct DevicePolicies {
+struct COMPONENT_EXPORT(GCPW_POLICIES) DevicePolicies {
   // Controls whether MDM enrollment is enabled/disabled.
   bool enable_dm_enrollment;
 
@@ -47,6 +48,9 @@ struct DevicePolicies {
   void MergeWith(const DevicePolicies& other);
 
   bool operator==(const DevicePolicies& other) const;
+
+  // Get a string with comma separated values from domains_allowed_to_login.
+  base::string16 GetAllowedDomainsStr() const;
 };
 
 }  // namespace credential_provider

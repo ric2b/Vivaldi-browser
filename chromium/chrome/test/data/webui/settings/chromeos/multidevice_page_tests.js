@@ -6,11 +6,13 @@
 // #import 'chrome://os-settings/chromeos/os_settings.js';
 
 // #import {TestLifetimeBrowserProxy} from './test_os_lifetime_browser_proxy.m.js';
-// #import {MultiDeviceSettingsMode, MultiDeviceFeature, MultiDeviceFeatureState, MultiDevicePageContentData, MultiDeviceBrowserProxyImpl} from 'chrome://os-settings/chromeos/os_settings.js';
+// #import {MultiDeviceSettingsMode, MultiDeviceFeature, MultiDeviceFeatureState, MultiDevicePageContentData, MultiDeviceBrowserProxyImpl, Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
 // #import {TestOsResetBrowserProxy} from './test_os_reset_browser_proxy.m.js';
 // #import {assertEquals, assertFalse, assertNotEquals, assertTrue} from '../../chai_assert.js';
 // #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 // #import {TestMultideviceBrowserProxy, createFakePageContentData, HOST_DEVICE} from './test_multidevice_browser_proxy.m.js';
+// #import {waitAfterNextRender} from 'chrome://test/test_util.m.js';
+// #import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
 // clang-format on
 
 suite('Multidevice', function() {
@@ -41,14 +43,38 @@ suite('Multidevice', function() {
         multidevice.createFakePageContentData(newMode, opt_newHostDeviceName));
   }
 
+  /**
+   * @param {settings.MultiDeviceFeatureState} newState
+   */
   function setSuiteState(newState) {
     setPageContentData(Object.assign(
         {}, multidevicePage.pageContentData, {betterTogetherState: newState}));
   }
 
+  /**
+   * @param {settings.MultiDeviceFeatureState} newState
+   */
   function setSmartLockState(newState) {
     setPageContentData(Object.assign(
         {}, multidevicePage.pageContentData, {smartLockState: newState}));
+  }
+
+  /**
+   * @param {settings.MultiDeviceFeatureState} newState
+   */
+  function setPhoneHubNotificationsState(newState) {
+    setPageContentData(Object.assign(
+        {}, multidevicePage.pageContentData,
+        {phoneHubNotificationsState: newState}));
+  }
+
+  /**
+   * @param {boolean} accessGranted
+   */
+  function setPhoneHubNotificationAccessGranted(accessGranted) {
+    setPageContentData(Object.assign(
+        {}, multidevicePage.pageContentData,
+        {isNotificationAccessGranted: accessGranted}));
   }
 
   /**
@@ -77,10 +103,19 @@ suite('Multidevice', function() {
       // Simulate closing the password prompt dialog
       multidevicePage.$$('#multidevicePasswordPrompt').fire('close');
       Polymer.dom.flush();
-    } else {
-      assertFalse(multidevicePage.showPasswordPromptDialog_);
     }
 
+    if (enabled &&
+        feature === settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS) {
+      const accessDialog = multidevicePage.$$(
+          'settings-multidevice-notification-access-setup-dialog');
+      assertEquals(
+          !accessDialog,
+          multidevicePage.pageContentData.isNotificationAccessGranted);
+      return;
+    }
+
+    assertFalse(multidevicePage.showPasswordPromptDialog_);
     return browserProxy.whenCalled('setFeatureEnabledState').then(params => {
       assertEquals(feature, params[0]);
       assertEquals(enabled, params[1]);
@@ -109,6 +144,7 @@ suite('Multidevice', function() {
 
   teardown(function() {
     multidevicePage.remove();
+    settings.Router.getInstance().resetRouteForTesting();
   });
 
   const getLabel = () => {
@@ -123,6 +159,26 @@ suite('Multidevice', function() {
     assertTrue(!!button);
     button.click();
     return browserProxy.whenCalled('showMultiDeviceSetupDialog');
+  });
+
+  test('Deep link to multidevice setup', async () => {
+    loadTimeData.overrideValues({
+      isDeepLinkingEnabled: true,
+    });
+    setHostData(settings.MultiDeviceSettingsMode.NO_HOST_SET);
+
+    const params = new URLSearchParams;
+    params.append('settingId', '200');
+    settings.Router.getInstance().navigateTo(
+        settings.routes.MULTIDEVICE, params);
+
+    Polymer.dom.flush();
+
+    const deepLinkElement = multidevicePage.$$('cr-button');
+    await test_util.waitAfterNextRender(deepLinkElement);
+    assertEquals(
+        deepLinkElement, getDeepActiveElement(),
+        'Setup multidevice button should be focused for settingId=200.');
   });
 
   test('headings render based on mode and host', function() {
@@ -182,6 +238,36 @@ suite('Multidevice', function() {
     // Reallow suite.
     setSuiteState(settings.MultiDeviceFeatureState.DISABLED_BY_USER);
     assertFalse(!!multidevicePage.$$('cr-policy-indicator'));
+  });
+
+  test('Phone hub notification access setup dialog', () => {
+    setPhoneHubNotificationsState(
+        settings.MultiDeviceFeatureState.DISABLED_BY_USER);
+    assertFalse(!!multidevicePage.$$(
+        'settings-multidevice-notification-access-setup-dialog'));
+
+    setPhoneHubNotificationAccessGranted(false);
+    simulateFeatureStateChangeRequest(
+        settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS,
+        /*enabled=*/ true, /*authRequired=*/ false);
+
+    // Close the dialog.
+    multidevicePage.showNotificationAccessSetupDialog_ = false;
+
+    setPhoneHubNotificationAccessGranted(false);
+    simulateFeatureStateChangeRequest(
+        settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS,
+        /*enabled=*/ false, /*authRequired=*/ false);
+
+    setPhoneHubNotificationAccessGranted(true);
+    simulateFeatureStateChangeRequest(
+        settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS,
+        /*enabled=*/ true, /*authRequired=*/ false);
+
+    multidevicePage.pageContentData.isNotificationAccessGranted = true;
+    simulateFeatureStateChangeRequest(
+        settings.MultiDeviceFeature.PHONE_HUB_NOTIFICATIONS,
+        /*enabled=*/ false, /*authRequired=*/ false);
   });
 
   test('Disabling features never requires authentication', () => {

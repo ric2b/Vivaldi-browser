@@ -784,8 +784,8 @@ class AppCacheUpdateJobTest : public testing::Test,
                 BrowserContext::GetDefaultStoragePartition(
                     browser_context_.get())));
 
-    ChildProcessSecurityPolicyImpl::GetInstance()->Add(process_id_,
-                                                       browser_context_.get());
+    ChildProcessSecurityPolicyImpl::GetInstance()->AddForTesting(
+        process_id_, browser_context_.get());
     blink::TrialTokenValidator::SetOriginTrialPolicyGetter(base::BindRepeating(
         []() -> blink::OriginTrialPolicy* { return &g_origin_trial_policy; }));
   }
@@ -2463,7 +2463,7 @@ class AppCacheUpdateJobTest : public testing::Test,
   void FailStoreNewestCacheTest() {
     MakeService();
     MockAppCacheStorage* storage =
-        reinterpret_cast<MockAppCacheStorage*>(service_->storage());
+        static_cast<MockAppCacheStorage*>(service_->storage());
     storage->SimulateStoreGroupAndNewestCacheFailure();
 
     group_ = base::MakeRefCounted<AppCacheGroup>(
@@ -2490,7 +2490,7 @@ class AppCacheUpdateJobTest : public testing::Test,
   void UpgradeFailStoreNewestCacheTest() {
     MakeService();
     MockAppCacheStorage* storage =
-        reinterpret_cast<MockAppCacheStorage*>(service_->storage());
+        static_cast<MockAppCacheStorage*>(service_->storage());
     storage->SimulateStoreGroupAndNewestCacheFailure();
 
     group_ = base::MakeRefCounted<AppCacheGroup>(
@@ -2543,7 +2543,7 @@ class AppCacheUpdateJobTest : public testing::Test,
   void MasterEntryFailStoreNewestCacheTest() {
     MakeService();
     MockAppCacheStorage* storage =
-        reinterpret_cast<MockAppCacheStorage*>(service_->storage());
+        static_cast<MockAppCacheStorage*>(service_->storage());
     storage->SimulateStoreGroupAndNewestCacheFailure();
 
     const GURL kManifestUrl = MockHttpServer::GetMockUrl("files/notmodified");
@@ -2589,7 +2589,7 @@ class AppCacheUpdateJobTest : public testing::Test,
   void UpgradeFailMakeGroupObsoleteTest() {
     MakeService();
     MockAppCacheStorage* storage =
-        reinterpret_cast<MockAppCacheStorage*>(service_->storage());
+        static_cast<MockAppCacheStorage*>(service_->storage());
     storage->SimulateMakeGroupObsoleteFailure();
 
     group_ = base::MakeRefCounted<AppCacheGroup>(
@@ -4528,7 +4528,7 @@ class AppCacheUpdateJobTest : public testing::Test,
                 !group_->first_evictable_error_time().is_null());
       if (expect_evictable_error_) {
         MockAppCacheStorage* storage =
-            reinterpret_cast<MockAppCacheStorage*>(service_->storage());
+            static_cast<MockAppCacheStorage*>(service_->storage());
         EXPECT_EQ(group_->first_evictable_error_time(),
                   storage->stored_eviction_times_[group_->group_id()].second);
       }
@@ -4563,7 +4563,7 @@ class AppCacheUpdateJobTest : public testing::Test,
         // is unknown to the test). Check group and newest cache were stored
         // when update succeeds.
         MockAppCacheStorage* storage =
-            reinterpret_cast<MockAppCacheStorage*>(service_->storage());
+            static_cast<MockAppCacheStorage*>(service_->storage());
         EXPECT_TRUE(storage->IsGroupStored(group_.get()));
         EXPECT_TRUE(storage->IsCacheStored(group_->newest_complete_cache()));
 
@@ -5369,26 +5369,9 @@ class AppCacheUpdateJobOriginTrialTest : public AppCacheUpdateJobTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-class AppCacheUpdateJobUpdateOn304Test : public AppCacheUpdateJobTest {
- public:
-  AppCacheUpdateJobUpdateOn304Test() {
-    scoped_feature_list_.InitAndEnableFeature(
-        kAppCacheUpdateResourceOn304Feature);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
 class AppCacheUpdateJobNoUpdateOn304Test : public AppCacheUpdateJobTest {
  public:
-  AppCacheUpdateJobNoUpdateOn304Test() {
-    scoped_feature_list_.InitAndDisableFeature(
-        kAppCacheUpdateResourceOn304Feature);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
+  AppCacheUpdateJobNoUpdateOn304Test() = default;
 };
 
 class AppCacheUpdateJobWithCorruptionRecoveryTest
@@ -5808,11 +5791,6 @@ TEST_F(AppCacheUpdateJobTest, IfNoneMatchUpgradeParserVersion1) {
 
 TEST_F(AppCacheUpdateJobTest, RequestResponseTimesAreSet) {
   RunTestOnUIThread(&AppCacheUpdateJobTest::RequestResponseTimesAreSetTest);
-}
-
-TEST_F(AppCacheUpdateJobUpdateOn304Test, RequestResponseTimesAreModified) {
-  RunTestOnUIThread(
-      &AppCacheUpdateJobTest::RequestResponseTimesAreModifiedTest);
 }
 
 TEST_F(AppCacheUpdateJobNoUpdateOn304Test, RequestResponseTimesAreNotModified) {

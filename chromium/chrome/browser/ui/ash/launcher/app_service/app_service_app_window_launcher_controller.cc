@@ -14,6 +14,7 @@
 #include "base/stl_util.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/crosapi/browser_util.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_shelf_utils.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
@@ -252,6 +253,8 @@ void AppServiceAppWindowLauncherController::OnWindowDestroying(
   observed_windows_.Remove(window);
   if (arc_tracker_)
     arc_tracker_->RemoveCandidateWindow(window);
+  if (crostini_tracker_)
+    crostini_tracker_->OnWindowDestroying(window);
 
   // When the window is destroyed, we should search all proxies, because the
   // window could be teleported from the inactive user, and isn't saved in the
@@ -515,7 +518,7 @@ void AppServiceAppWindowLauncherController::RegisterWindow(
       static_cast<exo::ShellSurfaceBase*>(
           views::Widget::GetWidgetForNativeWindow(window)->widget_delegate())
           ->SetIcon(*ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-              IDR_LOGO_PLUGIN_VM_DEFAULT_32));
+              IDR_LOGO_PLUGIN_VM_DEFAULT_192));
     }
   }
 }
@@ -595,6 +598,9 @@ void AppServiceAppWindowLauncherController::OnItemDelegateDiscarded(
 
 ash::ShelfID AppServiceAppWindowLauncherController::GetShelfId(
     aura::Window* window) const {
+  if (crosapi::browser_util::IsLacrosWindow(window))
+    return ash::ShelfID(extension_misc::kLacrosAppId);
+
   if (crostini_tracker_) {
     std::string shelf_app_id;
     shelf_app_id = crostini_tracker_->GetShelfAppId(window);

@@ -10,6 +10,7 @@
 
 #include "base/time/time.h"
 #include "components/signin/public/base/multilogin_parameters.h"
+#include "components/signin/public/identity_manager/consent_level.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -64,6 +65,10 @@ class AccountReconcilorDelegate {
   // error state. Defaults to false.
   virtual bool ShouldAbortReconcileIfPrimaryHasError() const;
 
+  // Returns the consent level that should be used for obtaining the primary
+  // account. Defaults to ConsentLevel::kSync.
+  virtual ConsentLevel GetConsentLevelForPrimaryAccount() const;
+
   // Returns the first account to add in the Gaia cookie.
   // If this returns an empty string, the user must be logged out of all
   // accounts.
@@ -80,6 +85,15 @@ class AccountReconcilorDelegate {
 
   // Returns a pair of mode and accounts to send to Mutilogin endpoint.
   MultiloginParameters CalculateParametersForMultilogin(
+      const std::vector<CoreAccountId>& chrome_accounts,
+      const CoreAccountId& primary_account,
+      const std::vector<gaia::ListedAccount>& gaia_accounts,
+      bool first_execution,
+      bool primary_has_error) const;
+
+  // Returns whether secondary accounts should be revoked for doing full logout.
+  // Used only for the Multilogin codepath.
+  virtual bool ShouldRevokeTokensBeforeMultilogin(
       const std::vector<CoreAccountId>& chrome_accounts,
       const CoreAccountId& primary_account,
       const std::vector<gaia::ListedAccount>& gaia_accounts,
@@ -139,11 +153,11 @@ class AccountReconcilorDelegate {
   AccountReconcilor* reconcilor() { return reconcilor_; }
 
  protected:
-  // Computes a new ordering for chrome_accounts. |first_account| must be in
-  // |chrome_accounts|. The returned order has the following properties:
-  // - first_account will be first.
+  // Computes a new ordering for chrome_accounts.
+  // The returned order has the following properties:
+  // - first_account will be first if it's not empty.
   // - if a chrome account is also in gaia_accounts, the function tries to keep
-  //   it at the same index. The function mimimizes account re-numbering.
+  //   it at the same index. The function minimizes account re-numbering.
   // - if there are too many accounts, some accounts will be discarded.
   //   |first_account| and accounts already in cookies will be kept in priority.
   //   Aplhabetical order is used to break ties.
@@ -161,11 +175,14 @@ class AccountReconcilorDelegate {
       const std::vector<CoreAccountId>& chrome_accounts,
       const CoreAccountId& primary_account,
       const std::vector<gaia::ListedAccount>& gaia_accounts,
+      bool first_execution,
+      bool primary_has_error,
       const gaia::MultiloginMode mode) const;
 
   // Returns Mode which shows if it is allowed to change the order of the gaia
   // accounts (e.g. on mobile or on stratup). Default is UPDATE.
   virtual gaia::MultiloginMode CalculateModeForReconcile(
+      const std::vector<CoreAccountId>& chrome_accounts,
       const std::vector<gaia::ListedAccount>& gaia_accounts,
       const CoreAccountId& primary_account,
       bool first_execution,

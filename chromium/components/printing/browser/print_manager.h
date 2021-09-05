@@ -13,16 +13,19 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_receiver_set.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "printing/buildflags/buildflags.h"
 
 #if defined(OS_ANDROID)
 #include "base/callback.h"
 #endif
 
+#if BUILDFLAG(ENABLE_TAGGED_PDF)
+#include "ui/accessibility/ax_tree_update_forward.h"
+#endif
+
 namespace IPC {
 class Message;
 }
-
-struct PrintHostMsg_ScriptedPrint_Params;
 
 namespace printing {
 
@@ -41,9 +44,17 @@ class PrintManager : public content::WebContentsObserver,
   virtual void PdfWritingDone(int page_count) = 0;
 #endif
 
-  // printing::mojom::PrintManager:
-  void DidGetPrintedPagesCount(int32_t cookie, int32_t number_pages) override;
+  // printing::mojom::PrintManagerHost:
+  void DidGetPrintedPagesCount(int32_t cookie, uint32_t number_pages) override;
   void DidGetDocumentCookie(int32_t cookie) override;
+#if BUILDFLAG(ENABLE_TAGGED_PDF)
+  void SetAccessibilityTree(
+      int32_t cookie,
+      const ui::AXTreeUpdate& accessibility_tree) override;
+#endif
+  void DidShowPrintDialog() override;
+  void ShowInvalidPrinterSettingsError() override;
+  void PrintingFailed(int32_t cookie) override;
 
  protected:
   explicit PrintManager(content::WebContents* contents);
@@ -96,16 +107,15 @@ class PrintManager : public content::WebContentsObserver,
       content::RenderFrameHost* render_frame_host,
       const mojom::DidPrintDocumentParams& params,
       std::unique_ptr<DelayedFrameDispatchHelper> helper) = 0;
-  virtual void OnGetDefaultPrintSettings(
-      content::RenderFrameHost* render_frame_host,
-      IPC::Message* reply_msg) = 0;
-  virtual void OnPrintingFailed(int cookie);
   virtual void OnScriptedPrint(content::RenderFrameHost* render_frame_host,
-                               const PrintHostMsg_ScriptedPrint_Params& params,
+                               const mojom::ScriptedPrintParams& params,
                                IPC::Message* reply_msg) = 0;
 
-  int number_pages_ = 0;  // Number of pages to print in the print job.
+  uint32_t number_pages_ = 0;  // Number of pages to print in the print job.
   int cookie_ = 0;        // The current document cookie.
+  // Holds WebContents associated mojo receivers.
+  content::WebContentsFrameReceiverSet<printing::mojom::PrintManagerHost>
+      print_manager_host_receivers_;
 
 #if defined(OS_ANDROID)
   // Callback to execute when done writing pdf.
@@ -119,9 +129,6 @@ class PrintManager : public content::WebContentsObserver,
   std::map<content::RenderFrameHost*,
            mojo::AssociatedRemote<printing::mojom::PrintRenderFrame>>
       print_render_frames_;
-
-  content::WebContentsFrameReceiverSet<printing::mojom::PrintManagerHost>
-      print_manager_host_receivers_;
 };
 
 }  // namespace printing

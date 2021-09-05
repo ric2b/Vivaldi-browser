@@ -12,6 +12,13 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
 # See //content/BUILD.gn for how this works.
 group("browser") {
   if (is_component_build) {
@@ -193,6 +200,7 @@ source_set("browser_sources") {
     "installed_payment_apps_finder.h",
     "invalidate_type.h",
     "is_uvpaa.h",
+    "jank_monitor.h",
     "javascript_dialog_manager.cc",
     "javascript_dialog_manager.h",
     "keyboard_event_processing_result.h",
@@ -243,6 +251,8 @@ source_set("browser_sources") {
     "network_context_client_base.h",
     "network_quality_observer_factory.h",
     "network_service_instance.h",
+    "non_network_url_loader_factory_base.cc",
+    "non_network_url_loader_factory_base.h",
     "notification_database_data.cc",
     "notification_database_data.h",
     "notification_details.h",
@@ -260,6 +270,7 @@ source_set("browser_sources") {
     "page_navigator.cc",
     "page_navigator.h",
     "payment_app_provider.h",
+    "payment_app_provider_util.h",
     "peak_gpu_memory_tracker.h",
     "pepper_flash_settings_helper.h",
     "pepper_vpn_provider_resource_host_proxy.h",
@@ -331,6 +342,7 @@ source_set("browser_sources") {
     "shared_worker_instance.h",
     "shared_worker_service.h",
     "site_instance.h",
+    "site_instance_process_assignment.h",
     "site_isolation_policy.cc",
     "site_isolation_policy.h",
     "sms_fetcher.h",
@@ -458,7 +470,7 @@ source_set("browser_sources") {
     "//storage/browser",
   ]
   deps = [
-    "//build:lacros_buildflags",
+    "//build:chromeos_buildflags",
     "//cc",
     "//components/viz/host",
     "//content/browser",  # Must not be public_deps!
@@ -471,7 +483,6 @@ source_set("browser_sources") {
     "//ppapi/c",
     "//services/device/public/cpp/geolocation",
     "//services/metrics/public/cpp:metrics_cpp",
-    "//services/service_manager/embedder:embedder_result_codes",
     "//ui/accessibility",
     "//ui/base",
     "//ui/base/clipboard",
@@ -548,6 +559,9 @@ source_set("browser_sources") {
 if (is_android) {
   java_cpp_enum("contacts_picker_properties_requested_javagen") {
     sources = [ "contacts_picker_properties_requested.h" ]
+  }
+  java_cpp_enum("bluetooth_chooser_event_javagen") {
+    sources = [ "bluetooth_chooser.h" ]
   }
 }
 

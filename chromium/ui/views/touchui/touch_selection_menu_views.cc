@@ -187,8 +187,7 @@ void TouchSelectionMenuViews::ButtonPressed(Button* sender,
     client_->RunContextMenu();
 }
 
-BEGIN_METADATA(TouchSelectionMenuViews)
-METADATA_PARENT_CLASS(BubbleDialogDelegateView)
-END_METADATA()
+BEGIN_METADATA(TouchSelectionMenuViews, BubbleDialogDelegateView)
+END_METADATA
 
 }  // namespace views

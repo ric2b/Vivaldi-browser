@@ -7,9 +7,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/mock_callback.h"
 #include "base/util/type_safety/pass_key.h"
-#include "chrome/browser/password_manager/password_store_factory.h"
+#include "chrome/browser/password_manager/password_manager_test_util.h"
 #include "chrome/browser/ui/android/passwords/all_passwords_bottom_sheet_view.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom-forward.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/origin_credential_store.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
@@ -28,6 +29,7 @@ using autofill::PasswordForm;
 using password_manager::TestPasswordStore;
 using password_manager::UiCredential;
 using CallbackFunctionMock = testing::MockFunction<void()>;
+using autofill::mojom::FocusedFieldType;
 
 using DismissCallback = base::MockCallback<base::OnceCallback<void()>>;
 
@@ -46,8 +48,8 @@ class MockPasswordManagerDriver
     : public password_manager::StubPasswordManagerDriver {
  public:
   MOCK_METHOD(void,
-              FillSuggestion,
-              (const base::string16&, const base::string16&),
+              FillIntoFocusedField,
+              (bool, const base::string16&),
               (override));
 };
 
@@ -55,7 +57,8 @@ class MockAllPasswordsBottomSheetView : public AllPasswordsBottomSheetView {
  public:
   MOCK_METHOD(void,
               Show,
-              (const std::vector<std::unique_ptr<PasswordForm>>&),
+              (const std::vector<std::unique_ptr<PasswordForm>>&,
+               FocusedFieldType),
               (override));
 };
 
@@ -79,17 +82,6 @@ PasswordForm MakeSavedPassword(const std::string& signon_realm,
   return form;
 }
 
-scoped_refptr<TestPasswordStore> CreateAndUseTestPasswordStore(
-    Profile* profile) {
-  return base::WrapRefCounted(static_cast<TestPasswordStore*>(
-      PasswordStoreFactory::GetInstance()
-          ->SetTestingFactoryAndUse(
-              profile,
-              base::BindRepeating(&password_manager::BuildPasswordStore<
-                                  content::BrowserContext, TestPasswordStore>))
-          .get()));
-}
-
 class AllPasswordsBottomSheetControllerTest : public testing::Test {
  protected:
   AllPasswordsBottomSheetControllerTest() {
@@ -100,7 +92,8 @@ class AllPasswordsBottomSheetControllerTest : public testing::Test {
         std::make_unique<AllPasswordsBottomSheetController>(
             util::PassKey<AllPasswordsBottomSheetControllerTest>(),
             std::move(mock_view_unique_ptr), driver_.AsWeakPtr(), store_.get(),
-            dissmissal_callback_.Get());
+            dissmissal_callback_.Get(),
+            FocusedFieldType::kFillablePasswordField);
   }
 
   MockPasswordManagerDriver& driver() { return driver_; }
@@ -139,9 +132,10 @@ TEST_F(AllPasswordsBottomSheetControllerTest, Show) {
   store().AddLogin(form3);
   store().AddLogin(form4);
 
-  EXPECT_CALL(view(), Show(UnorderedElementsAre(
-                          Pointee(Eq(form1)), Pointee(Eq(form2)),
-                          Pointee(Eq(form3)), Pointee(Eq(form4)))));
+  EXPECT_CALL(view(),
+              Show(UnorderedElementsAre(Pointee(Eq(form1)), Pointee(Eq(form2)),
+                                        Pointee(Eq(form3)), Pointee(Eq(form4))),
+                   FocusedFieldType::kFillablePasswordField));
   all_passwords_controller()->Show();
 
   // Show method uses the store which has async work.
@@ -151,10 +145,11 @@ TEST_F(AllPasswordsBottomSheetControllerTest, Show) {
 TEST_F(AllPasswordsBottomSheetControllerTest, OnCredentialSelected) {
   UiCredential credential = MakeUiCredential(kUsername1, kPassword);
 
-  EXPECT_CALL(driver(), FillSuggestion(base::ASCIIToUTF16(kUsername1),
-                                       base::ASCIIToUTF16(kPassword)));
+  EXPECT_CALL(driver(),
+              FillIntoFocusedField(true, base::ASCIIToUTF16(kPassword)));
 
-  all_passwords_controller()->OnCredentialSelected(credential);
+  all_passwords_controller()->OnCredentialSelected(
+      base::UTF8ToUTF16(kUsername1), base::UTF8ToUTF16(kPassword));
 }
 
 TEST_F(AllPasswordsBottomSheetControllerTest, OnDismiss) {

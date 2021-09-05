@@ -77,14 +77,24 @@ Status EvaluateScriptAndIgnoreResult(Session* session,
   return web_view->EvaluateScript(frame_id, expression, awaitPromise, &result);
 }
 
+void InitSessionForWebSocketConnection(SessionConnectionMap* session_map,
+                                       std::string session_id) {
+  session_map->insert({session_id, -1});
+}
+
 }  // namespace
 
-InitSessionParams::InitSessionParams(network::mojom::URLLoaderFactory* factory,
-                                     const SyncWebSocketFactory& socket_factory,
-                                     DeviceManager* device_manager)
+InitSessionParams::InitSessionParams(
+    network::mojom::URLLoaderFactory* factory,
+    const SyncWebSocketFactory& socket_factory,
+    DeviceManager* device_manager,
+    const scoped_refptr<base::SingleThreadTaskRunner> cmd_task_runner,
+    SessionConnectionMap* session_map)
     : url_loader_factory(factory),
       socket_factory(socket_factory),
-      device_manager(device_manager) {}
+      device_manager(device_manager),
+      cmd_task_runner(cmd_task_runner),
+      session_map(session_map) {}
 
 InitSessionParams::InitSessionParams(const InitSessionParams& other) = default;
 
@@ -221,6 +231,11 @@ std::unique_ptr<base::DictionaryValue> CreateCapabilities(
     caps->SetBoolean("acceptSslCerts", capabilities.accept_insecure_certs);
     caps->SetBoolean("nativeEvents", true);
     caps->SetBoolean("hasTouchScreen", session->chrome->HasTouchScreen());
+  }
+
+  if (session->webSocketUrl) {
+    caps->SetString("webSocketUrl",
+                    "ws://" + session->host + "/session/" + session->id);
   }
 
   return caps;
@@ -363,6 +378,7 @@ Status ConfigureSession(Session* session,
   session->script_timeout = capabilities->script_timeout;
   session->strict_file_interactability =
       capabilities->strict_file_interactability;
+  session->webSocketUrl = capabilities->webSocketUrl;
   Log::Level driver_level = Log::kWarning;
   if (capabilities->logging_prefs.count(WebDriverLog::kDriverType))
     driver_level = capabilities->logging_prefs[WebDriverLog::kDriverType];
@@ -595,6 +611,10 @@ Status ExecuteInitSession(const InitSessionParams& bound_params,
     session->quit = true;
     if (session->chrome != NULL)
       session->chrome->Quit();
+  } else if (session->webSocketUrl) {
+    bound_params.cmd_task_runner->PostTask(
+        FROM_HERE, base::BindOnce(&InitSessionForWebSocketConnection,
+                                  bound_params.session_map, session->id));
   }
   return status;
 }

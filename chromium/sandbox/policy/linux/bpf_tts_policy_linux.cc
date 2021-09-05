@@ -25,9 +25,16 @@ TtsProcessPolicy::TtsProcessPolicy() {}
 TtsProcessPolicy::~TtsProcessPolicy() {}
 
 ResultExpr TtsProcessPolicy::EvaluateSyscall(int sysno) const {
-  auto* broker_process = SandboxLinux::GetInstance()->broker_process();
-  if (broker_process->IsSyscallAllowed(sysno))
-    return Trap(BrokerProcess::SIGSYS_Handler, broker_process);
+  switch (sysno) {
+    case __NR_sched_setscheduler:
+      return RestrictSchedTarget(GetPolicyPid(), sysno);
+    default:
+      break;
+  }
+
+  auto* sandbox_linux = SandboxLinux::GetInstance();
+  if (sandbox_linux->ShouldBrokerHandleSyscall(sysno))
+    return sandbox_linux->HandleViaBroker();
 
   return BPFBasePolicy::EvaluateSyscall(sysno);
 }

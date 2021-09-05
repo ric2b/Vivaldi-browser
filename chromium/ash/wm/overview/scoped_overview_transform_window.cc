@@ -170,7 +170,7 @@ ScopedOverviewTransformWindow::ScopedOverviewTransformWindow(
 
     // Add this as |aura::WindowObserver| for observing |kHideInOverviewKey|
     // property changes.
-    transient->AddObserver(this);
+    window_observer_.Add(transient);
 
     // Hide transient children which have been specified to be hidden in
     // overview mode.
@@ -218,12 +218,13 @@ ScopedOverviewTransformWindow::~ScopedOverviewTransformWindow() {
     transient->ClearProperty(kIsShowingInOverviewKey);
     DCHECK(event_targeting_blocker_map_.contains(transient));
     event_targeting_blocker_map_.erase(transient);
-    transient->RemoveObserver(this);
   }
 
   if (!IsMinimized())
     UpdateRoundedCorners(/*show=*/false);
   aura::client::GetTransientWindowClient()->RemoveObserver(this);
+
+  window_observer_.RemoveAll();
 }
 
 // static
@@ -298,7 +299,7 @@ void ScopedOverviewTransformWindow::BeginScopedAnimation(
   if (animation_type == OVERVIEW_ANIMATION_NONE)
     return;
 
-  for (auto* window : GetVisibleTransientTreeIterator(window_)) {
+  for (auto* window : window_util::GetVisibleTransientTreeIterator(window_)) {
     auto settings = std::make_unique<ScopedOverviewAnimationSettings>(
         animation_type, window);
     settings->DeferPaint();
@@ -334,14 +335,14 @@ bool ScopedOverviewTransformWindow::Contains(const aura::Window* target) const {
 }
 
 gfx::RectF ScopedOverviewTransformWindow::GetTransformedBounds() const {
-  return ::ash::GetTransformedBounds(window_, GetTopInset());
+  return window_util::GetTransformedBounds(window_, GetTopInset());
 }
 
 int ScopedOverviewTransformWindow::GetTopInset() const {
   // Mirror window doesn't have insets.
   if (IsMinimized())
     return 0;
-  for (auto* window : GetVisibleTransientTreeIterator(window_)) {
+  for (auto* window : window_util::GetVisibleTransientTreeIterator(window_)) {
     // If there are regular windows in the transient ancestor tree, all those
     // windows are shown in the same overview item and the header is not masked.
     if (window != window_ &&
@@ -353,7 +354,8 @@ int ScopedOverviewTransformWindow::GetTopInset() const {
 }
 
 void ScopedOverviewTransformWindow::SetOpacity(float opacity) {
-  for (auto* window : GetVisibleTransientTreeIterator(GetOverviewWindow()))
+  for (auto* window :
+       window_util::GetVisibleTransientTreeIterator(GetOverviewWindow()))
     window->layer()->SetOpacity(opacity);
 }
 
@@ -476,7 +478,8 @@ void ScopedOverviewTransformWindow::PrepareForOverview() {
   // enter animation and the whole time during overview mode. For the exit
   // animation of overview mode, we need to add those requests again.
   if (features::IsTrilinearFilteringEnabled()) {
-    for (auto* window : GetVisibleTransientTreeIterator(GetOverviewWindow())) {
+    for (auto* window :
+         window_util::GetVisibleTransientTreeIterator(GetOverviewWindow())) {
       cached_and_filtered_layer_observers_.push_back(
           std::make_unique<LayerCachingAndFilteringObserver>(window->layer()));
     }
@@ -525,7 +528,7 @@ void ScopedOverviewTransformWindow::OnTransientChildWindowAdded(
 
   // Add this as |aura::WindowObserver| for observing |kHideInOverviewKey|
   // property changes.
-  transient_child->AddObserver(this);
+  window_observer_.Add(transient_child);
 }
 
 void ScopedOverviewTransformWindow::OnWindowPropertyChanged(
@@ -566,7 +569,9 @@ void ScopedOverviewTransformWindow::OnTransientChildWindowRemoved(
   transient_child->ClearProperty(kIsShowingInOverviewKey);
   DCHECK(event_targeting_blocker_map_.contains(transient_child));
   event_targeting_blocker_map_.erase(transient_child);
-  transient_child->RemoveObserver(this);
+
+  if (window_observer_.IsObserving(transient_child))
+    window_observer_.Remove(transient_child);
 }
 
 // static

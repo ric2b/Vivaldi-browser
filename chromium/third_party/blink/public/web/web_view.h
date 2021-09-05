@@ -32,13 +32,16 @@
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_VIEW_H_
 
 #include "base/time/time.h"
-#include "third_party/blink/public/common/page/web_drag_operation.h"
+#include "third_party/blink/public/common/page/drag_operation.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/page.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom-shared.h"
 #include "third_party/blink/public/mojom/widget/screen_orientation.mojom-shared.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/web/web_settings.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -327,6 +330,14 @@ class WebView {
   virtual void SetScreenOrientationOverrideForTesting(
       base::Optional<blink::mojom::ScreenOrientation> orientation) = 0;
 
+  // Enable/Disable synchronous resize mode that is used for web tests.
+  virtual void UseSynchronousResizeModeForTesting(bool enable) = 0;
+
+  // Set the window rect synchronously for testing. The normal flow is an
+  // asynchronous request to the browser.
+  virtual void SetWindowRectSynchronouslyForTesting(
+      const gfx::Rect& new_window_rect) = 0;
+
   // Auto-Resize -----------------------------------------------------------
 
   // Return the state of the auto resize mode.
@@ -495,7 +506,16 @@ class WebView {
   // after.
   virtual void PaintContent(cc::PaintCanvas*, const gfx::Rect& viewport) = 0;
 
-  // Suspend and resume ---------------------------------------------------
+  // Web preferences ---------------------------------------------------
+
+  // Applies blink related preferences to this view.
+  BLINK_EXPORT static void ApplyWebPreferences(
+      const web_pref::WebPreferences& prefs,
+      WebView* web_view);
+
+  virtual void SetWebPreferences(
+      const web_pref::WebPreferences& preferences) = 0;
+  virtual const web_pref::WebPreferences& GetWebPreferences() = 0;
 
   // TODO(lfg): Remove this once the refactor of WebView/WebWidget is
   // completed.

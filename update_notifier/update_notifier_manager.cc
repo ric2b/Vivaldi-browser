@@ -116,10 +116,11 @@ class ResourceBundleDelegate : public ui::ResourceBundle::Delegate {
 
   bool GetRawDataResource(int resource_id,
                           ui::ScaleFactor scale_factor,
-                          base::StringPiece* value) override {
+                          base::StringPiece* value) const override {
     return false;
   }
-  bool GetLocalizedString(int message_id, base::string16* value) override {
+  bool GetLocalizedString(int message_id,
+                          base::string16* value) const override {
     return false;
   }
 };

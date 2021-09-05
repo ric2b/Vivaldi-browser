@@ -45,21 +45,12 @@ class ServiceWorkerRegistrationCookiesImpl final
           registration_->GetExecutionContext();
       DCHECK(execution_context);
 
-      // TODO(crbug.com/839117): Remove once Expose on partial interface is
-      // supported or Origin Trial as ended.
-      if (!execution_context->IsWindow() &&
-          !execution_context->IsServiceWorkerGlobalScope()) {
-        return nullptr;
-      }
-
       HeapMojoRemote<mojom::blink::CookieStore,
                      HeapMojoWrapperMode::kWithoutContextObserver>
           backend(execution_context);
-      // TODO(pwnall): Replace TaskType::kInternalDefault with the task queue in
-      //               the Cookie Store spec, once that spec is finalized.
       execution_context->GetBrowserInterfaceBroker().GetInterface(
           backend.BindNewPipeAndPassReceiver(
-              execution_context->GetTaskRunner(TaskType::kInternalDefault)));
+              execution_context->GetTaskRunner(TaskType::kDOMManipulation)));
       cookie_store_manager_ = MakeGarbageCollected<CookieStoreManager>(
           registration_, std::move(backend));
     }

@@ -9,16 +9,20 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_browsertest_base.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_dialog_views.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_test_utils.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/fake_deep_scanning_dialog_delegate.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/test/browser_test.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/throbber.h"
+#include "ui/views/test/ax_event_counter.h"
 
 namespace safe_browsing {
 
@@ -38,14 +42,15 @@ base::string16 text() {
 // - It respects time constraints (minimum shown time, initial delay, timeout)
 // - It is always destroyed, therefore |quit_closure_| is called in the dtor
 //   observer.
+// - It sends accessibility events correctly.
 class DeepScanningDialogViewsBehaviorBrowserTest
     : public DeepScanningBrowserTestBase,
       public DeepScanningDialogViews::TestObserver,
       public testing::WithParamInterface<
-          std::tuple<bool, bool, bool, base::TimeDelta>> {
+          std::tuple<bool, bool, base::TimeDelta>> {
  public:
   DeepScanningDialogViewsBehaviorBrowserTest()
-      : DeepScanningBrowserTestBase(std::get<0>(GetParam())) {
+      : ax_event_counter_(views::AXEventManager::Get()) {
     DeepScanningDialogViews::SetObserverForTesting(this);
 
     expected_scan_result_ = dlp_success() && malware_success();
@@ -84,6 +89,11 @@ class DeepScanningDialogViewsBehaviorBrowserTest
     // The dialog's buttons should be Cancel in the pending and fail case.
     EXPECT_EQ(dialog_->GetDialogButtons(), ui::DIALOG_BUTTON_CANCEL);
 
+    // Record the number of AX events until now to check if the text update adds
+    // one later.
+    ax_events_count_when_first_shown_ =
+        ax_event_counter_.GetCount(ax::mojom::Event::kAlert);
+
     // The dialog should only be shown once some time after being constructed.
     EXPECT_TRUE(ctor_called_);
     EXPECT_FALSE(views_first_shown_);
@@ -120,6 +130,14 @@ class DeepScanningDialogViewsBehaviorBrowserTest
     // The dialog should only be updated once some time after being shown.
     EXPECT_TRUE(views_first_shown_);
     EXPECT_FALSE(dialog_updated_);
+
+    // TODO(crbug/1131565): Re-enable this for Mac.
+#if !defined(OS_MAC)
+    // The dialog being updated implies an accessibility alert is sent.
+    EXPECT_EQ(ax_events_count_when_first_shown_ + 1,
+              ax_event_counter_.GetCount(ax::mojom::Event::kAlert));
+#endif
+
     dialog_updated_ = true;
   }
 
@@ -156,11 +174,11 @@ class DeepScanningDialogViewsBehaviorBrowserTest
     CallQuitClosure();
   }
 
-  bool dlp_success() const { return std::get<1>(GetParam()); }
+  bool dlp_success() const { return std::get<0>(GetParam()); }
 
-  bool malware_success() const { return std::get<2>(GetParam()); }
+  bool malware_success() const { return std::get<1>(GetParam()); }
 
-  base::TimeDelta response_delay() const { return std::get<3>(GetParam()); }
+  base::TimeDelta response_delay() const { return std::get<2>(GetParam()); }
 
  private:
   DeepScanningDialogViews* dialog_;
@@ -176,6 +194,9 @@ class DeepScanningDialogViewsBehaviorBrowserTest
   bool dialog_updated_ = false;
 
   bool expected_scan_result_;
+
+  int ax_events_count_when_first_shown_ = 0;
+  views::test::AXEventCounter ax_event_counter_;
 };
 
 // Tests the behavior of the dialog in the following ways:
@@ -184,11 +205,9 @@ class DeepScanningDialogViewsBehaviorBrowserTest
 // - The "CancelledByUser" metrics are recorded.
 class DeepScanningDialogViewsCancelPendingScanBrowserTest
     : public DeepScanningBrowserTestBase,
-      public testing::WithParamInterface<bool>,
       public DeepScanningDialogViews::TestObserver {
  public:
-  DeepScanningDialogViewsCancelPendingScanBrowserTest()
-      : DeepScanningBrowserTestBase(GetParam()) {
+  DeepScanningDialogViewsCancelPendingScanBrowserTest() {
     DeepScanningDialogViews::SetObserverForTesting(this);
   }
 
@@ -229,10 +248,9 @@ class DeepScanningDialogViewsCancelPendingScanBrowserTest
 class DeepScanningDialogViewsWarningBrowserTest
     : public DeepScanningBrowserTestBase,
       public DeepScanningDialogViews::TestObserver,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
+      public testing::WithParamInterface<bool> {
  public:
-  DeepScanningDialogViewsWarningBrowserTest()
-      : DeepScanningBrowserTestBase(std::get<1>(GetParam())) {
+  DeepScanningDialogViewsWarningBrowserTest() {
     DeepScanningDialogViews::SetObserverForTesting(this);
   }
 
@@ -265,7 +283,7 @@ class DeepScanningDialogViewsWarningBrowserTest
     CallQuitClosure();
   }
 
-  bool user_bypasses_warning() { return std::get<0>(GetParam()); }
+  bool user_bypasses_warning() { return GetParam(); }
 };
 
 // Tests the behavior of the dialog in the following ways:
@@ -278,10 +296,9 @@ class DeepScanningDialogViewsAppearanceBrowserTest
     : public DeepScanningBrowserTestBase,
       public DeepScanningDialogViews::TestObserver,
       public testing::WithParamInterface<
-          std::tuple<bool, bool, DeepScanAccessPoint, bool>> {
+          std::tuple<bool, bool, DeepScanAccessPoint>> {
  public:
-  DeepScanningDialogViewsAppearanceBrowserTest()
-      : DeepScanningBrowserTestBase(std::get<3>(GetParam())) {
+  DeepScanningDialogViewsAppearanceBrowserTest() {
     DeepScanningDialogViews::SetObserverForTesting(this);
   }
 
@@ -388,14 +405,14 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsBehaviorBrowserTest, Test) {
 
   // Setup policies to enable deep scanning, its UI and the responses to be
   // simulated.
-  SetDlpPolicy(CHECK_UPLOADS_AND_DOWNLOADS);
-  SetMalwarePolicy(SEND_UPLOADS_AND_DOWNLOADS);
-  AddUrlToCheckForMalwareOfUploads("*");
-  SetStatusCallbackResponse(SimpleDeepScanningClientResponseForTesting(
+  SetDlpPolicyForConnectors(CHECK_UPLOADS_AND_DOWNLOADS);
+  SetMalwarePolicyForConnectors(SEND_UPLOADS_AND_DOWNLOADS);
+  AddUrlsToCheckForMalwareOfUploadsForConnectors({"*"});
+  SetStatusCallbackResponse(SimpleContentAnalysisResponseForTesting(
       dlp_success(), malware_success()));
 
   // Always set this policy so the UI is shown.
-  SetWaitPolicy(DELAY_UPLOADS);
+  SetDelayDeliveryUntilVerdictPolicyForConnectors(DELAY_UPLOADS);
 
   // Set up delegate test values.
   FakeDeepScanningDialogDelegate::SetResponseDelay(response_delay());
@@ -406,8 +423,6 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsBehaviorBrowserTest, Test) {
   SetQuitClosure(run_loop.QuitClosure());
 
   DeepScanningDialogDelegate::Data data;
-  data.do_dlp_scan = true;
-  data.do_malware_scan = true;
   CreateFilesForTest({"foo.doc"}, {"content"}, &data);
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
       browser()->profile(), GURL(kTestUrl), &data,
@@ -446,24 +461,23 @@ INSTANTIATE_TEST_SUITE_P(
     ,
     DeepScanningDialogViewsBehaviorBrowserTest,
     testing::Combine(
-        /*use_legacy_policies*/ testing::Bool(),
         /*dlp_success*/ testing::Bool(),
         /*malware_success*/ testing::Bool(),
         /*response_delay*/
         testing::Values(kNoDelay, kSmallDelay, kNormalDelay)));
 
-IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsCancelPendingScanBrowserTest,
+IN_PROC_BROWSER_TEST_F(DeepScanningDialogViewsCancelPendingScanBrowserTest,
                        Test) {
   base::ScopedAllowBlockingForTesting allow_blocking;
 
   // Setup policies to enable deep scanning, its UI and the responses to be
   // simulated.
-  SetDlpPolicy(CHECK_UPLOADS);
-  SetStatusCallbackResponse(SimpleDeepScanningClientResponseForTesting(
+  SetDlpPolicyForConnectors(CHECK_UPLOADS);
+  SetStatusCallbackResponse(SimpleContentAnalysisResponseForTesting(
       /*dlp=*/true, /*malware=*/base::nullopt));
 
   // Always set this policy so the UI is shown.
-  SetWaitPolicy(DELAY_UPLOADS);
+  SetDelayDeliveryUntilVerdictPolicyForConnectors(DELAY_UPLOADS);
 
   // Set up delegate test values. An unresponsive delegate is set up to avoid
   // a race between the file responses and the "Cancel" button being clicked.
@@ -475,8 +489,6 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsCancelPendingScanBrowserTest,
   SetQuitClosure(run_loop.QuitClosure());
 
   DeepScanningDialogDelegate::Data data;
-  data.do_dlp_scan = true;
-  data.do_malware_scan = false;
   CreateFilesForTest({"foo.doc", "bar.doc", "baz.doc"},
                      {"random", "file", "contents"}, &data);
   ASSERT_TRUE(DeepScanningDialogDelegate::IsEnabled(
@@ -500,25 +512,22 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsCancelPendingScanBrowserTest,
   ValidateMetrics();
 }
 
-INSTANTIATE_TEST_SUITE_P(,
-                         DeepScanningDialogViewsCancelPendingScanBrowserTest,
-                         /*use_legacy_policies=*/testing::Bool());
-
 IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsWarningBrowserTest, Test) {
   base::ScopedAllowBlockingForTesting allow_blocking;
 
   // Setup policies.
-  SetDlpPolicy(CHECK_UPLOADS);
-  SetWaitPolicy(DELAY_UPLOADS);
+  SetDlpPolicyForConnectors(CHECK_UPLOADS);
+  SetDelayDeliveryUntilVerdictPolicyForConnectors(DELAY_UPLOADS);
 
   // Setup the DLP warning response.
-  DeepScanningClientResponse response;
-  response.mutable_dlp_scan_verdict()->set_status(
-      DlpDeepScanningVerdict::SUCCESS);
-  DlpDeepScanningVerdict::TriggeredRule* rule =
-      response.mutable_dlp_scan_verdict()->add_triggered_rules();
+  enterprise_connectors::ContentAnalysisResponse response;
+  auto* result = response.add_results();
+  result->set_tag("dlp");
+  result->set_status(
+      enterprise_connectors::ContentAnalysisResponse::Result::SUCCESS);
+  auto* rule = result->add_triggered_rules();
   rule->set_rule_name("warning_rule_name");
-  rule->set_action(DlpDeepScanningVerdict::TriggeredRule::WARN);
+  rule->set_action(enterprise_connectors::TriggeredRule::WARN);
   SetStatusCallbackResponse(response);
 
   // Set up delegate.
@@ -529,7 +538,6 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsWarningBrowserTest, Test) {
   SetQuitClosure(run_loop.QuitClosure());
 
   DeepScanningDialogDelegate::Data data;
-  data.do_dlp_scan = true;
   data.text.emplace_back(text());
   data.text.emplace_back(text());
   CreateFilesForTest({"foo.doc", "bar.doc"}, {"file", "content"}, &data);
@@ -559,23 +567,21 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsWarningBrowserTest, Test) {
 
 INSTANTIATE_TEST_SUITE_P(,
                          DeepScanningDialogViewsWarningBrowserTest,
-                         testing::Combine(
-                             /*user_bypasses_warning=*/testing::Bool(),
-                             /*use_legacy_policies=*/testing::Bool()));
+                         /*user_bypasses_warning=*/testing::Bool());
 
 IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsAppearanceBrowserTest, Test) {
   base::ScopedAllowBlockingForTesting allow_blocking;
 
   // Setup policies to enable deep scanning, its UI and the responses to be
   // simulated.
-  SetDlpPolicy(CHECK_UPLOADS);
-  SetMalwarePolicy(SEND_UPLOADS);
+  SetDlpPolicyForConnectors(CHECK_UPLOADS);
+  SetMalwarePolicyForConnectors(SEND_UPLOADS);
 
   SetStatusCallbackResponse(
-      SimpleDeepScanningClientResponseForTesting(success(), success()));
+      SimpleContentAnalysisResponseForTesting(success(), success()));
 
   // Always set this policy so the UI is shown.
-  SetWaitPolicy(DELAY_UPLOADS);
+  SetDelayDeliveryUntilVerdictPolicyForConnectors(DELAY_UPLOADS);
 
   // Set up delegate test values.
   FakeDeepScanningDialogDelegate::SetResponseDelay(kSmallDelay);
@@ -586,8 +592,6 @@ IN_PROC_BROWSER_TEST_P(DeepScanningDialogViewsAppearanceBrowserTest, Test) {
   SetQuitClosure(run_loop.QuitClosure());
 
   DeepScanningDialogDelegate::Data data;
-  data.do_dlp_scan = true;
-  data.do_malware_scan = true;
 
   // Use a file path or text to validate the appearance of the dialog for both
   // types of scans.
@@ -621,7 +625,6 @@ INSTANTIATE_TEST_SUITE_P(,
                              /*access_point=*/
                              testing::Values(DeepScanAccessPoint::UPLOAD,
                                              DeepScanAccessPoint::DRAG_AND_DROP,
-                                             DeepScanAccessPoint::PASTE),
-                             /*use_legacy_policies=*/testing::Bool()));
+                                             DeepScanAccessPoint::PASTE)));
 
 }  // namespace safe_browsing

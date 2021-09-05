@@ -19,7 +19,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "chrome/browser/extensions/component_extensions_whitelist/whitelist.h"
+#include "chrome/browser/extensions/component_extensions_allowlist/allowlist.h"
 #include "chrome/browser/extensions/data_deleter.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -73,6 +73,7 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "apps/switches.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using content::BrowserThread;
 
@@ -158,16 +159,15 @@ ComponentLoader::ComponentExtensionInfo::operator=(
   return *this;
 }
 
-ComponentLoader::ComponentExtensionInfo::~ComponentExtensionInfo() {}
+ComponentLoader::ComponentExtensionInfo::~ComponentExtensionInfo() = default;
 
 ComponentLoader::ComponentLoader(ExtensionSystem* extension_system,
                                  Profile* profile)
     : profile_(profile),
       extension_system_(extension_system),
-      ignore_whitelist_for_testing_(false) {}
+      ignore_allowlist_for_testing_(false) {}
 
-ComponentLoader::~ComponentLoader() {
-}
+ComponentLoader::~ComponentLoader() = default;
 
 void ComponentLoader::LoadAll() {
   TRACE_EVENT0("browser,startup", "ComponentLoader::LoadAll");
@@ -191,8 +191,8 @@ std::unique_ptr<base::DictionaryValue> ComponentLoader::ParseManifest(
 
 std::string ComponentLoader::Add(int manifest_resource_id,
                                  const base::FilePath& root_directory) {
-  if (!ignore_whitelist_for_testing_ &&
-      !IsComponentExtensionWhitelisted(manifest_resource_id))
+  if (!ignore_allowlist_for_testing_ &&
+      !IsComponentExtensionAllowlisted(manifest_resource_id))
     return std::string();
 
   base::StringPiece manifest_contents =
@@ -208,24 +208,23 @@ std::string ComponentLoader::Add(const base::StringPiece& manifest_contents,
 
 std::string ComponentLoader::Add(const base::StringPiece& manifest_contents,
                                  const base::FilePath& root_directory,
-                                 bool skip_whitelist) {
+                                 bool skip_allowlist) {
   // The Value is kept for the lifetime of the ComponentLoader. This is
   // required in case LoadAll() is called again.
   std::unique_ptr<base::DictionaryValue> manifest =
       ParseManifest(manifest_contents);
   if (manifest)
-    return Add(std::move(manifest), root_directory, skip_whitelist);
+    return Add(std::move(manifest), root_directory, skip_allowlist);
   return std::string();
 }
 
 std::string ComponentLoader::Add(
     std::unique_ptr<base::DictionaryValue> parsed_manifest,
     const base::FilePath& root_directory,
-    bool skip_whitelist) {
+    bool skip_allowlist) {
   ComponentExtensionInfo info(std::move(parsed_manifest), root_directory);
-  if (!ignore_whitelist_for_testing_ &&
-      !skip_whitelist &&
-      !IsComponentExtensionWhitelisted(info.extension_id))
+  if (!ignore_allowlist_for_testing_ && !skip_allowlist &&
+      !IsComponentExtensionAllowlisted(info.extension_id))
     return std::string();
 
   component_extensions_.push_back(std::move(info));
@@ -241,8 +240,8 @@ std::string ComponentLoader::AddOrReplace(const base::FilePath& path) {
   std::unique_ptr<base::DictionaryValue> manifest(
       file_util::LoadManifest(absolute_path, &error));
   if (!manifest) {
-    LOG(ERROR) << "Could not load extension from '" <<
-                  absolute_path.value() << "'. " << error;
+    LOG(ERROR) << "Could not load extension from '" << absolute_path.value()
+               << "'. " << error;
     return std::string();
   }
   Remove(GenerateId(manifest.get(), absolute_path));
@@ -329,8 +328,8 @@ void ComponentLoader::AddWithNameAndDescription(
     const base::FilePath& root_directory,
     const std::string& name_string,
     const std::string& description_string) {
-  if (!ignore_whitelist_for_testing_ &&
-      !IsComponentExtensionWhitelisted(manifest_resource_id))
+  if (!ignore_allowlist_for_testing_ &&
+      !IsComponentExtensionAllowlisted(manifest_resource_id))
     return;
 
   base::StringPiece manifest_contents =
@@ -355,10 +354,13 @@ void ComponentLoader::AddWebStoreApp() {
     return;
 #endif
 
+  if (profile_->GetPrefs()->GetBoolean(
+          vivaldiprefs::kPrivacyGoogleComponentExtensionsWebStore)) {
   AddWithNameAndDescription(
       IDR_WEBSTORE_MANIFEST, base::FilePath(FILE_PATH_LITERAL("web_store")),
       l10n_util::GetStringUTF8(IDS_WEBSTORE_NAME_STORE),
       l10n_util::GetStringUTF8(IDS_WEBSTORE_APP_DESCRIPTION));
+  }
 }
 
 #if defined(OS_CHROMEOS)
@@ -401,6 +403,10 @@ void ComponentLoader::AddKeyboardApp() {
 }
 
 void ComponentLoader::AddChromeCameraApp() {
+  if (base::FeatureList::IsEnabled(chromeos::features::kCameraSystemWebApp)) {
+    return;
+  }
+
   base::FilePath resources_path;
   if (base::PathService::Get(chrome::DIR_RESOURCES, &resources_path)) {
     AddComponentFromDir(resources_path.Append(extension_misc::kCameraAppPath),
@@ -421,16 +427,13 @@ void ComponentLoader::AddZipArchiverExtension() {
 #endif  // defined(OS_CHROMEOS)
 
 scoped_refptr<const Extension> ComponentLoader::CreateExtension(
-    const ComponentExtensionInfo& info, std::string* utf8_error) {
+    const ComponentExtensionInfo& info,
+    std::string* utf8_error) {
   // TODO(abarth): We should REQUIRE_MODERN_MANIFEST_VERSION once we've updated
   //               our component extensions to the new manifest version.
   int flags = Extension::REQUIRE_KEY;
-  return Extension::Create(
-      info.root_directory,
-      Manifest::COMPONENT,
-      *info.manifest,
-      flags,
-      utf8_error);
+  return Extension::Create(info.root_directory, Manifest::COMPONENT,
+                           *info.manifest, flags, utf8_error);
 }
 
 // static
@@ -478,8 +481,11 @@ void ComponentLoader::AddDefaultComponentExtensions(
   DCHECK(!skip_session_components);
 #if BUILDFLAG(ENABLE_PRINTING)
   // Cloud Print component app. Not required on Chrome OS.
+  if (profile_->GetPrefs()->GetBoolean(
+          vivaldiprefs::kPrivacyGoogleComponentExtensionsCloudPrint)) {
   Add(IDR_CLOUDPRINT_MANIFEST,
       base::FilePath(FILE_PATH_LITERAL("cloud_print")));
+  }
 #endif  // BUILDFLAG(ENABLE_PRINTING)
 #endif  // defined(OS_CHROMEOS)
 
@@ -488,10 +494,13 @@ void ComponentLoader::AddDefaultComponentExtensions(
 #if defined(OS_CHROMEOS)
     AddChromeApp();
 #endif  // defined(OS_CHROMEOS)
+    if (profile_->GetPrefs()->GetBoolean(
+            vivaldiprefs::kPrivacyGoogleComponentExtensionsPdfViewer)) {
 #if BUILDFLAG(ENABLE_PDF)
     Add(pdf_extension_util::GetManifest(),
         base::FilePath(FILE_PATH_LITERAL("pdf")));
 #endif  // BUILDFLAG(ENABLE_PDF)
+    }
   }
 
   AddDefaultComponentExtensionsWithBackgroundPages(skip_session_components);
@@ -555,7 +564,10 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
 
   if (!skip_session_components) {
 #if BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
+    if (profile_->GetPrefs()->GetBoolean(
+      vivaldiprefs::kPrivacyGoogleComponentExtensionsMediaRouter)) {
     AddHangoutServicesExtension();
+    }
 #endif  // BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
 
     bool install_feedback = enable_background_extensions_during_testing;
@@ -624,8 +636,11 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
 
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
+  if (profile_->GetPrefs()->GetBoolean(
+          vivaldiprefs::kPrivacyGoogleComponentExtensionsCryptoToken)) {
   Add(IDR_CRYPTOTOKEN_MANIFEST,
       base::FilePath(FILE_PATH_LITERAL("cryptotoken")));
+  }
 }
 
 void ComponentLoader::
@@ -642,9 +657,12 @@ void ComponentLoader::
     return;
   }
 
+  if (profile_->GetPrefs()->GetBoolean(
+          vivaldiprefs::kPrivacyGoogleComponentExtensionsHangoutServices)) {
 #if BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
   AddHangoutServicesExtension();
 #endif  // BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
+  }
 }
 
 void ComponentLoader::UnloadComponent(ComponentExtensionInfo* component) {
@@ -655,10 +673,9 @@ void ComponentLoader::UnloadComponent(ComponentExtensionInfo* component) {
 }
 
 #if defined(OS_CHROMEOS)
-void ComponentLoader::AddComponentFromDir(
-    const base::FilePath& root_directory,
-    const char* extension_id,
-    const base::Closure& done_cb) {
+void ComponentLoader::AddComponentFromDir(const base::FilePath& root_directory,
+                                          const char* extension_id,
+                                          const base::Closure& done_cb) {
   AddComponentFromDirWithManifestFilename(
       root_directory, extension_id, extensions::kManifestFilename,
       extension_misc::kGuestManifestFilename, done_cb);

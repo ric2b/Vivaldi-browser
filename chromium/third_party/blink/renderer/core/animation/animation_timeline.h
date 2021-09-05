@@ -42,6 +42,7 @@ class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
 
   virtual bool IsDocumentTimeline() const { return false; }
   virtual bool IsScrollTimeline() const { return false; }
+  virtual bool IsCSSScrollTimeline() const { return false; }
   virtual bool IsActive() const = 0;
   virtual double ZeroTimeInSeconds() = 0;
   // https://drafts.csswg.org/web-animations/#monotonically-increasing-timeline
@@ -93,11 +94,15 @@ class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
 
   void MarkAnimationsCompositorPending(bool source_changed = false);
 
+  using ReplaceableAnimationsMap =
+      HeapHashMap<Member<Element>, Member<HeapVector<Member<Animation>>>>;
+  void getReplaceableAnimations(
+      ReplaceableAnimationsMap* replaceable_animation_set);
+
   void Trace(Visitor*) const override;
 
  protected:
   virtual PhaseAndTime CurrentPhaseAndTime() = 0;
-  void RemoveReplacedAnimations();
 
   Member<Document> document_;
   unsigned outdated_animation_count_;

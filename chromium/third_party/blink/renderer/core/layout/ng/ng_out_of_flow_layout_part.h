@@ -124,19 +124,10 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
       const WritingMode,
       const TextDirection,
       const LayoutBox* only_layout,
-      const NGBlockBreakToken* break_token = nullptr,
-      const NGConstraintSpace* fragmentainer_constraint_space = nullptr);
+      bool is_fragmentainer_descendant = false);
 
   bool IsContainingBlockForCandidate(const NGLogicalOutOfFlowPositionedNode&);
 
-  void AddOOFResultsToFragmentainer(
-      const Vector<scoped_refptr<const NGLayoutResult>>& results,
-      const wtf_size_t index);
-  const NGConstraintSpace& GetFragmentainerConstraintSpace(
-      const wtf_size_t index);
-  void AddOOFResultToFragmentainerResults(
-      const scoped_refptr<const NGLayoutResult> result,
-      const wtf_size_t index);
   scoped_refptr<const NGLayoutResult> GenerateFragment(
       NGBlockNode node,
       const LogicalSize& container_content_size_in_child_writing_mode,
@@ -145,6 +136,18 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
       const LayoutUnit block_offset,
       const NGBlockBreakToken* break_token,
       const NGConstraintSpace* fragmentainer_constraint_space);
+  void AddOOFResultsToFragmentainer(
+      const Vector<scoped_refptr<const NGLayoutResult>>& results,
+      wtf_size_t index);
+  const NGConstraintSpace& GetFragmentainerConstraintSpace(wtf_size_t index);
+  void AddOOFResultToFragmentainerResults(
+      const scoped_refptr<const NGLayoutResult> result,
+      wtf_size_t index);
+  void ComputeStartFragmentIndexAndRelativeOffset(
+      const ContainingBlockInfo& container_info,
+      WritingMode default_writing_mode,
+      wtf_size_t* start_index,
+      LogicalOffset* offset) const;
 
   const NGConstraintSpace& container_space_;
   NGBoxFragmentBuilder* container_builder_;
@@ -157,6 +160,10 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
       fragmentainer_descendant_results_;
   const WritingMode writing_mode_;
   LayoutUnit column_inline_progression_ = kIndefiniteSize;
+  // The block size of the multi-column (before adjustment for spanners, etc.)
+  // This is used to calculate the column size of any newly added proxy
+  // fragments when handling fragmentation for abspos elements.
+  LayoutUnit original_column_block_size_ = kIndefiniteSize;
   bool is_absolute_container_;
   bool is_fixed_container_;
   bool allow_first_tier_oof_cache_;

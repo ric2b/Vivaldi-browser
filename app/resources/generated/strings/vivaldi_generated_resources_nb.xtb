@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Vis rammekilde</translation>
 <translation id="1165039591588034296">Feil</translation>
 <translation id="1175364870820465910">&amp;Skriv ut...</translation>
-<translation id="1177863135347784049">Tilpasset</translation>
 <translation id="1181037720776840403">Fjern</translation>
 <translation id="1187722533808055681">Oppvåkninger fra inaktiv</translation>
 <translation id="119944043368869598">Tøm alle</translation>
 <translation id="1221825588892235038">Bare markering</translation>
 <translation id="1244303850296295656">Utvidelsesfeil</translation>
+<translation id="125220115284141797">Standard</translation>
 <translation id="1274977772557788323">Lagringsinnstillinger for Adobe Flash-avspiller</translation>
 <translation id="1297175357211070620">Mål</translation>
 <translation id="1303101771013849280">HTML-fil med bokmerker</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nytt vindu</translation>
 <translation id="1725149567830788547">Vis &amp;kontroller</translation>
 <translation id="1729533290416704613">Den kontrollerer også hvilken side som vises når du søker fra adressefeltet.</translation>
+<translation id="174123615272205933">Tilpasset</translation>
 <translation id="1744108098763830590">bakgrunnsside</translation>
 <translation id="176587472219019965">&amp;Nytt vindu</translation>
 <translation id="1769104665586091481">Åpne lenken i nytt &amp;vindu</translation>
+<translation id="1779468444204342338">Minimum</translation>
 <translation id="1815083418640426271">Lim inn som ren tekst</translation>
 <translation id="1828901632669367785">Skriv ut med systemvindu...</translation>
 <translation id="1850508293116537636">Roter med klokken</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Spør før sending (anbefales)</translation>
 <translation id="241082044617551207">Ukjent programtillegg</translation>
 <translation id="2423578206845792524">Lagre &amp;bildet som...</translation>
-<translation id="2436707352762155834">Minimum</translation>
 <translation id="2439110203301358333">Et annet program på datamaskinen la til en utvidelse som kan endre hvordan Vivaldi virker.</translation>
 <translation id="2445081178310039857">Rotkatalogen til utvidelsen er påkrevd.</translation>
 <translation id="2470702053775288986">Utvidelser som ikke støttes ble deaktivert</translation>
@@ -135,7 +136,7 @@
 <translation id="3129173833825111527">Venstremarg</translation>
 <translation id="3144647712221361880">Åpne lenken som</translation>
 <translation id="3154429428035006212">Offline i mer enn en måned</translation>
-<translation id="3222066309010235055">Forhåndsgjengivelse: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
+<translation id="3222066309010235055">Forhåndsrendring: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3241680850019875542">Velg rotmappen til utvidelsen som skal pakkes. For å oppdatere en utvidelse må du også velge den private nøkkelen som skal brukes.</translation>
 <translation id="3280237271814976245">L&amp;agre som...</translation>
@@ -245,7 +246,6 @@
 <translation id="5039804452771397117">Tillat</translation>
 <translation id="5057110919553308744">Når du klikker på utvidelsen</translation>
 <translation id="5063480226653192405">Bruk</translation>
-<translation id="5068918910148307423">Blokker nylig lukkede nettsider fra å fullføre sending og mottak av data</translation>
 <translation id="5116628073786783676">La&amp;gre lyd som...</translation>
 <translation id="5143374789336132547">Utvidelsen "<ph name="EXTENSION_NAME" />" har endret hvilken side som vises når du trykker på Hjem-knappen.</translation>
 <translation id="5154108062446123722">Avanserte innstillinger for <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +264,7 @@
 <translation id="5355926466126177564">Utvidelsen "<ph name="EXTENSION_NAME" />" har endret hvilken side som vises når du søker fra adressefeltet.</translation>
 <translation id="5360150013186312835">Vis i verktøyraden</translation>
 <translation id="5362741141255528695">Velg fil med privat nøkkel.</translation>
+<translation id="536638840841140142">Ingen</translation>
 <translation id="5370819323174483825">&amp;Oppdater</translation>
 <translation id="5398572795982417028">Sidetall utenfor gyldig område, grensen er <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Fortsett nedlastingen</translation>
@@ -388,7 +389,6 @@
 <translation id="7663719505383602579">Mottaker: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installert av administratoren din</translation>
 <translation id="7685049629764448582">JavaScript-minne</translation>
-<translation id="7701040980221191251">Ingen</translation>
 <translation id="7701869757853594372">BRUKER-håndtak</translation>
 <translation id="7704305437604973648">Oppgave</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>
@@ -457,7 +457,7 @@ Ta godt vare på nøkkelfilen. Du vil trenge den for å lage nye versjoner av ut
 <translation id="8757090071857742562">Kunne ikke caste skrivebord.  Sjekk om du godtok forespørselen om å starte skjermdeling.</translation>
 <translation id="8774934320277480003">Toppmarg</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vi dele skriveren &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; med deg.</translation>
-<translation id="8798099450830957504">Standard</translation>
+<translation id="8798099450830957504">Forvalg</translation>
 <translation id="8800004011501252845">Viser mål for</translation>
 <translation id="8808478386290700967">Nettmarked</translation>
 <translation id="8823514049557262177">Kopier lenkte&amp;kst</translation>

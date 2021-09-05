@@ -42,6 +42,10 @@ mojom("video_capture") {
         cpp = "::media::VideoCaptureBufferType"
       },
       {
+        mojom = "media.mojom.VideoCaptureControlSupport"
+        cpp = "::media::VideoCaptureControlSupport"
+      },
+      {
         mojom = "media.mojom.VideoCaptureError"
         cpp = "::media::VideoCaptureError"
       },
@@ -68,6 +72,10 @@ mojom("video_capture") {
       {
         mojom = "media.mojom.VideoFacingMode"
         cpp = "::media::VideoFacingMode"
+      },
+      {
+        mojom = "media.mojom.VideoFrameFeedback"
+        cpp = "::media::VideoFrameFeedback"
       },
     ]
     traits_headers = [ "video_capture_types_mojom_traits.h" ]

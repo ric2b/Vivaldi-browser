@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">અંતિમ નોંધ</translation>
 <translation id="1281252709823657822">સંવાદ</translation>
 <translation id="1306460908038601864">બંધ</translation>
+<translation id="1311894908970423688">મૂલ્ય <ph name="VALUE_DATE_OR_TIME" /> હોવું આવશ્યક છે.</translation>
 <translation id="1335095011850992622">ક્રેડિટ</translation>
 <translation id="1342835525016946179">લેખ</translation>
 <translation id="1359897965706325498">બેનર</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> આઇટમ્સ</translation>
 <translation id="1480676835519562650">એકથી વધુ પસંદ કરવા યોગ્ય, <ph name="COUNT" />માંથી <ph name="SELECTED" /> બાળક પસંદ કરવામાં આવ્યા.</translation>
 <translation id="1589122976691792535">પ્રદેશ</translation>
 <translation id="1591562245178063882">આ મહિને</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">અઠવાડિયું <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904">ટ્રૅક <ph name="NUMBER" /></translation>
 <translation id="2291999235780842123">ચેકબોક્સ</translation>
+<translation id="2307576640803031502">સૂચિમાં, <ph name="COUNT" />માંથી <ph name="INDEX" /> આઇટમ</translation>
 <translation id="2311842470354187719">પેજ વિભાજન</translation>
 <translation id="2335594187091864976">તારીખ અને સમય પીકર</translation>
 <translation id="2393030564806080191">રંગનું હેક્ઝાડેસિમલ મૂલ્ય</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">વધુ વિકલ્પો</translation>
 <translation id="576709008726043716">પ્રસ્તાવના</translation>
 <translation id="57838592816432529">અવાજ બંધ કરો</translation>
+<translation id="5860033963881614850">બંધ</translation>
 <translation id="588258955323874662">પૂર્ણસ્ક્રીન</translation>
 <translation id="5888666972993069672">હવે <ph name="DEVICE_FRIENDLY_NAME" /> પર કાસ્ટ કરી રહ્યાં છીએ</translation>
 <translation id="591047860372322273">શોધ બૉક્સ</translation>
+<translation id="5916664084637901428">ચાલુ</translation>
 <translation id="5939518447894949180">રીસેટ કરો</translation>
 <translation id="5966707198760109579">અઠવાડિયું</translation>
 <translation id="5987525920412732405">સ્પિન બટન</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">સાફ કરો</translation>
 <translation id="668171684555832681">અન્ય...</translation>
 <translation id="6692633176391053278">સ્ટેપર</translation>
+<translation id="6709093583001123835">મૂલ્ય <ph name="VALUE" /> હોવું આવશ્યક છે.</translation>
 <translation id="6709570249143506788">ખરાબ પ્લેબૅક ક્વૉલિટી</translation>
 <translation id="6755330956360078551">ટૂલટીપ</translation>
 <translation id="6790428901817661496">ચલાવો</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" />, <ph name="WEEK_START_DATE" /> થી શરૂ કરીને</translation>
 <translation id="916607977885256133">ચિત્ર-માં-ચિત્ર</translation>
 <translation id="9168329111483466115">ફૂટનોટ</translation>
+<translation id="945780513535800434">આંશિક રૂપે ચેક કરેલું</translation>
 <translation id="954003015749068518">ચિત્ર-માં-ચિત્રમાં પ્રવેશ કરો</translation>
 <translation id="966787709310836684">મેનૂ</translation>
 </translationbundle>

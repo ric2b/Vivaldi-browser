@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <map>
 #include <set>
 
 #include "base/check_op.h"
@@ -92,11 +91,8 @@ class Comparator {
 Iter FindFirstOf(Iter begin, Iter end, const std::string& chars) {
   return std::find_if(begin, end, Comparator(chars));
 }
-}  // namespace
 
-const std::map<std::string, int> Uri::Pim::kDefaultPorts = {
-    {"ipp", 631},   {"ipps", 443}, {"http", 80},
-    {"https", 443}, {"lpd", 515},  {"socket", 9100}};
+}  // namespace
 
 template <bool encoded, bool case_insensitive>
 bool Uri::Pim::ParseString(const Iter& begin,
@@ -185,9 +181,8 @@ bool Uri::Pim::SavePort(int value) {
     parser_error_.status = ParserStatus::kInvalidPortNumber;
     return false;
   }
-  if (value == kPortUnspecified && kDefaultPorts.count(scheme_)) {
-    value = kDefaultPorts.at(scheme_);
-  }
+  if (value == kPortUnspecified)
+    value = Uri::GetDefaultPort(scheme_);
   port_ = value;
   return true;
 }
@@ -297,8 +292,8 @@ bool Uri::Pim::ParseScheme(const Iter& begin, const Iter& end) {
   scheme_ = std::move(out);
   // If the current Port is unspecified and the new Scheme has default port
   // number, set the default port number.
-  if (port_ == kPortUnspecified && kDefaultPorts.count(scheme_))
-    port_ = kDefaultPorts.at(scheme_);
+  if (port_ == kPortUnspecified)
+    port_ = Uri::GetDefaultPort(scheme_);
   return true;
 }
 

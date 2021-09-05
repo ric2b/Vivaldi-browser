@@ -9,6 +9,7 @@ import './date_time_page/timezone_selector.m.js';
 import './os_files_page/os_files_page.m.js';
 import './os_languages_page/input_method_options_page.m.js';
 import './os_languages_page/input_page.m.js';
+import './os_languages_page/os_edit_dictionary_page.m.js';
 import './os_languages_page/os_languages_page.m.js';
 import './os_languages_page/os_languages_page_v2.m.js';
 import './os_languages_page/os_languages_section.m.js';
@@ -35,6 +36,7 @@ import './os_files_page/smb_shares_page.m.js';
 
 export {SmbBrowserProxyImpl, SmbMountResult} from 'chrome://resources/cr_components/chromeos/smb_shares/smb_browser_proxy.m.js';
 export {LanguagesBrowserProxy, LanguagesBrowserProxyImpl} from '../languages_page/languages_browser_proxy.m.js';
+export {LifetimeBrowserProxyImpl} from '../lifetime_browser_proxy.m.js';
 export {TimeZoneAutoDetectMethod} from './date_time_page/date_time_types.m.js';
 export {TimeZoneBrowserProxyImpl} from './date_time_page/timezone_browser_proxy.m.js';
 export {LanguagesMetricsProxy, LanguagesMetricsProxyImpl, LanguagesPageInteraction} from './os_languages_page/languages_metrics_proxy.m.js';

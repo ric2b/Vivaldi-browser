@@ -26,6 +26,7 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/components/account_manager/account_manager_factory.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/dbus/util/version_loader.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -44,10 +45,6 @@ std::string AnonymizeAccountEmail(const std::string& email) {
   std::string result;
   base::Base64Encode(crypto::SHA256HashString(email), &result);
   return result + "@example.com";
-}
-
-bool GaiaActionButtonsEnabled() {
-  return base::FeatureList::IsEnabled(chromeos::features::kGaiaActionButtons);
 }
 
 // Returns a base64-encoded hash code of "signin_scoped_device_id:gaia_id".
@@ -99,6 +96,7 @@ class SigninHelper : public GaiaAuthConsumer {
       : account_manager_(account_manager),
         close_dialog_closure_(close_dialog_closure),
         email_(email),
+        url_loader_factory_(url_loader_factory),
         gaia_auth_fetcher_(this,
                            gaia::GaiaSource::kChrome,
                            url_loader_factory) {
@@ -151,6 +149,10 @@ class SigninHelper : public GaiaAuthConsumer {
 
   const std::string GetEmail() { return email_; }
 
+  const scoped_refptr<network::SharedURLLoaderFactory> GetUrlLoaderFactory() {
+    return url_loader_factory_;
+  }
+
  private:
   // A non-owning pointer to Chrome OS AccountManager.
   chromeos::AccountManager* const account_manager_;
@@ -160,6 +162,7 @@ class SigninHelper : public GaiaAuthConsumer {
   chromeos::AccountManager::AccountKey account_key_;
   // The user's email for which |this| object has been created.
   const std::string email_;
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
   // Used for exchanging auth code for OAuth tokens.
   GaiaAuthFetcher gaia_auth_fetcher_;
 
@@ -207,9 +210,8 @@ class ChildSigninHelper : public SigninHelper {
     DCHECK(!secondary_account_consent_logger_);
     secondary_account_consent_logger_ =
         std::make_unique<SecondaryAccountConsentLogger>(
-            identity_manager_, GetAccountManager()->GetUrlLoaderFactory(),
-            pref_service_, GetEmail(), parent_obfuscated_gaia_id_,
-            re_auth_proof_token_,
+            identity_manager_, GetUrlLoaderFactory(), pref_service_, GetEmail(),
+            parent_obfuscated_gaia_id_, re_auth_proof_token_,
             base::BindOnce(&ChildSigninHelper::OnConsentLogged,
                            weak_ptr_factory_.GetWeakPtr(),
                            result.refresh_token));
@@ -280,12 +282,15 @@ void InlineLoginHandlerChromeOS::SetExtraInitParams(
   const GURL& url = gaia_urls->embedded_setup_chromeos_url(2U);
   params.SetKey("gaiaPath", base::Value(url.path().substr(1)));
 
+  params.SetKey(
+      "platformVersion",
+      base::Value(version_loader::GetVersion(version_loader::VERSION_SHORT)));
   params.SetKey("constrained", base::Value("1"));
   params.SetKey("flow", base::Value(GetInlineLoginFlowName(
                             Profile::FromWebUI(web_ui()),
                             params.FindStringKey("email"))));
   params.SetBoolean("dontResizeNonEmbeddedPages", true);
-  params.SetBoolean("enableGaiaActionButtons", GaiaActionButtonsEnabled());
+  params.SetBoolean("enableGaiaActionButtons", true);
 
   // For in-session login flows, request Gaia to ignore third party SAML IdP SSO
   // redirection policies (and redirect to SAML IdPs by default), otherwise some
@@ -338,8 +343,8 @@ void InlineLoginHandlerChromeOS::CompleteLogin(const std::string& email,
         InlineLoginDialogChromeOS::EduCoexistenceFlowResult::kFlowCompleted);
     // ChildSigninHelper deletes itself after its work is done.
     new ChildSigninHelper(
-        account_manager, close_dialog_closure_,
-        account_manager->GetUrlLoaderFactory(), gaia_id, email, auth_code,
+        account_manager, close_dialog_closure_, profile->GetURLLoaderFactory(),
+        gaia_id, email, auth_code,
         GetAccountDeviceId(GetSigninScopedDeviceIdForProfile(profile), gaia_id),
         identity_manager, profile->GetPrefs(), *parentId, *rapt);
     return;
@@ -347,8 +352,8 @@ void InlineLoginHandlerChromeOS::CompleteLogin(const std::string& email,
 
   // SigninHelper deletes itself after its work is done.
   new SigninHelper(
-      account_manager, close_dialog_closure_,
-      account_manager->GetUrlLoaderFactory(), gaia_id, email, auth_code,
+      account_manager, close_dialog_closure_, profile->GetURLLoaderFactory(),
+      gaia_id, email, auth_code,
       GetAccountDeviceId(GetSigninScopedDeviceIdForProfile(profile), gaia_id));
 }
 

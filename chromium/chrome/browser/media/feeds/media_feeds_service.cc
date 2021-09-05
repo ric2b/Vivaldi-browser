@@ -9,6 +9,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
+#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/clock.h"
@@ -22,6 +23,7 @@
 #include "chrome/browser/media/feeds/media_feeds_store.mojom.h"
 #include "chrome/browser/media/history/media_history_keyed_service.h"
 #include "chrome/browser/media/history/media_history_keyed_service_factory.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -136,6 +138,9 @@ class CookieChangeListener : public network::mojom::CookieChangeListener {
 
 }  // namespace
 
+const char MediaFeedsService::kAggregateWatchtimeHistogramName[] =
+    "Media.Feeds.AggregateWatchtime";
+
 const char MediaFeedsService::kSafeSearchResultHistogramName[] =
     "Media.Feeds.SafeSearch.Result";
 
@@ -174,6 +179,20 @@ MediaFeedsService::MediaFeedsService(Profile* profile)
         base::BindOnce(&MediaFeedsService::FetchTopMediaFeeds,
                        weak_factory_.GetWeakPtr(), base::OnceClosure()));
   }
+
+  // Wrapping in PostTask is needed to avoid a crash in the tests.
+  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
+                 base::BindOnce(&MediaFeedsService::RecordFeedWatchtimes,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void MediaFeedsService::RecordFeedWatchtimes() {
+  GetMediaHistoryService()->GetMediaFeeds(
+      media_history::MediaHistoryKeyedService::GetMediaFeedsRequest::
+          CreateTopFeedsForFetch(std::numeric_limits<unsigned>::max(),
+                                 base::TimeDelta()),
+      base::BindOnce(&MediaFeedsService::OnGotFeedsForMetrics,
+                     weak_factory_.GetWeakPtr()));
 }
 
 // static
@@ -354,11 +373,23 @@ void MediaFeedsService::FetchTopMediaFeeds(base::OnceClosure callback) {
   if (!IsBackgroundFetchingEnabled())
     return;
 
-  GetMediaHistoryService()->GetMediaFeeds(
-      media_history::MediaHistoryKeyedService::GetMediaFeedsRequest::
-          CreateTopFeedsForFetch(kMaxTopFeedsToFetch, kTopFeedsMinWatchTime),
-      base::BindOnce(&MediaFeedsService::OnGotTopFeeds,
-                     weak_factory_.GetWeakPtr(), std::move(callback)));
+  // If the user has opted into auto selection of media feeds then we should get
+  // the top media feeds based on heuristics. Otherwise, we should fallback to
+  // feeds the user has opted into.
+  if (profile_->GetPrefs()->GetBoolean(
+          kaleidoscope::prefs::kKaleidoscopeAutoSelectMediaFeeds)) {
+    GetMediaHistoryService()->GetMediaFeeds(
+        media_history::MediaHistoryKeyedService::GetMediaFeedsRequest::
+            CreateTopFeedsForFetch(kMaxTopFeedsToFetch, kTopFeedsMinWatchTime),
+        base::BindOnce(&MediaFeedsService::OnGotTopFeeds,
+                       weak_factory_.GetWeakPtr(), std::move(callback)));
+  } else {
+    GetMediaHistoryService()->GetMediaFeeds(
+        media_history::MediaHistoryKeyedService::GetMediaFeedsRequest::
+            CreateSelectedFeedsForFetch(),
+        base::BindOnce(&MediaFeedsService::OnGotTopFeeds,
+                       weak_factory_.GetWeakPtr(), std::move(callback)));
+  }
 }
 
 void MediaFeedsService::OnGotTopFeeds(
@@ -662,6 +693,15 @@ void MediaFeedsService::EnsureCookieObserver() {
   cookie_change_listener_ = std::make_unique<CookieChangeListener>(
       profile_, base::BindRepeating(&MediaFeedsService::OnResetOriginFromCookie,
                                     base::Unretained(this)));
+}
+
+void MediaFeedsService::OnGotFeedsForMetrics(
+    std::vector<media_feeds::mojom::MediaFeedPtr> feeds) {
+  for (const auto& feed : feeds) {
+    base::UmaHistogramCustomTimes(kAggregateWatchtimeHistogramName,
+                                  *feed->aggregate_watchtime, base::TimeDelta(),
+                                  base::TimeDelta::FromHours(1), 60);
+  }
 }
 
 }  // namespace media_feeds

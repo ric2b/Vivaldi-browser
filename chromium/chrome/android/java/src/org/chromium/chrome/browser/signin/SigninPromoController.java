@@ -17,6 +17,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.signin.SigninActivity.AccessPoint;
@@ -74,8 +75,12 @@ public class SigninPromoController {
             case SigninAccessPoint.BOOKMARK_MANAGER:
                 return getSigninPromoImpressionsCountBookmarks() < MAX_IMPRESSIONS_BOOKMARKS;
             case SigninAccessPoint.NTP_CONTENT_SUGGESTIONS:
-                // There is no impression limit for NTP content suggestions.
-                return true;
+                int maxImpressions = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
+                        ChromeFeatureList.ENHANCED_PROTECTION_PROMO_CARD,
+                        "MaxSigninPromoImpressions", Integer.MAX_VALUE);
+                return SharedPreferencesManager.getInstance().readInt(
+                               ChromePreferenceKeys.SIGNIN_PROMO_IMPRESSIONS_COUNT_NTP)
+                        < maxImpressions;
             case SigninAccessPoint.RECENT_TABS:
                 // There is no impression limit for Recent Tabs.
                 return true;
@@ -122,8 +127,7 @@ public class SigninPromoController {
                         R.string.signin_promo_description_bookmarks_no_account;
                 break;
             case SigninAccessPoint.NTP_CONTENT_SUGGESTIONS:
-                // There is no impression limit for NTP content suggestions.
-                mImpressionCountName = null;
+                mImpressionCountName = ChromePreferenceKeys.SIGNIN_PROMO_IMPRESSIONS_COUNT_NTP;
                 mImpressionUserActionName = "Signin_Impression_FromNTPContentSuggestions";
                 mImpressionWithAccountUserActionName =
                         "Signin_ImpressionWithAccount_FromNTPContentSuggestions";
@@ -267,7 +271,11 @@ public class SigninPromoController {
 
         view.getDescription().setText(mDescriptionStringIdNoAccount);
 
-        view.getPrimaryButton().setText(R.string.sign_in_to_chrome);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
+            view.getPrimaryButton().setText(R.string.sync_promo_turn_on_sync);
+        } else {
+            view.getPrimaryButton().setText(R.string.sign_in_to_chrome);
+        }
         view.getPrimaryButton().setOnClickListener(v -> signinWithNewAccount(context));
 
         view.getSecondaryButton().setVisibility(View.GONE);
@@ -280,9 +288,13 @@ public class SigninPromoController {
 
         view.getDescription().setText(mDescriptionStringId);
 
-        String signinButtonText = context.getString(
-                R.string.signin_promo_continue_as, mProfileData.getGivenNameOrFullNameOrEmail());
-        view.getPrimaryButton().setText(signinButtonText);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
+            view.getPrimaryButton().setText(R.string.sync_promo_turn_on_sync);
+        } else {
+            String signinButtonText = context.getString(R.string.signin_promo_continue_as,
+                    mProfileData.getGivenNameOrFullNameOrEmail());
+            view.getPrimaryButton().setText(signinButtonText);
+        }
         view.getPrimaryButton().setOnClickListener(v -> signinWithDefaultAccount(context));
 
         view.getSecondaryButton().setText(R.string.signin_promo_choose_another_account);

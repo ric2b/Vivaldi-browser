@@ -52,7 +52,7 @@ void FakeAccessibilityController::SetDictationActive(bool is_active) {}
 void FakeAccessibilityController::ToggleDictationFromSource(
     ash::DictationToggleSource source) {}
 
-void FakeAccessibilityController::OnAutoclickScrollableBoundsFound(
+void FakeAccessibilityController::HandleAutoclickScrollableBoundsFound(
     gfx::Rect& bounds_in_screen) {}
 
 base::string16 FakeAccessibilityController::GetBatteryDescription() const {
@@ -60,6 +60,9 @@ base::string16 FakeAccessibilityController::GetBatteryDescription() const {
 }
 
 void FakeAccessibilityController::SetVirtualKeyboardVisible(bool is_visible) {}
+
+void FakeAccessibilityController::PerformAcceleratorAction(
+    ash::AcceleratorAction accelerator_action) {}
 
 void FakeAccessibilityController::NotifyAccessibilityStatusChanged() {}
 

@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Xem nguồn khung</translation>
 <translation id="1165039591588034296">Lỗi</translation>
 <translation id="1175364870820465910">&amp;In...</translation>
-<translation id="1177863135347784049">Tùy chỉnh</translation>
 <translation id="1181037720776840403">Xóa</translation>
 <translation id="1187722533808055681">Đánh thức khỏi chế độ rảnh</translation>
 <translation id="119944043368869598">Xóa tất cả</translation>
 <translation id="1221825588892235038">Chỉ lựa chọn</translation>
 <translation id="1244303850296295656">Lỗi tiện ích</translation>
+<translation id="125220115284141797">Mặc định</translation>
 <translation id="1274977772557788323">Cài đặt bộ nhớ của Adobe Flash Player</translation>
 <translation id="1297175357211070620">Máy in đích</translation>
 <translation id="1303101771013849280">Tệp dấu trang HTML</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">Cửa sổ &amp;mới</translation>
 <translation id="1725149567830788547">Hiển thị &amp;Các điều khiển</translation>
 <translation id="1729533290416704613">Tiện ích này cũng điều khiển trang nào được hiển thị khi bạn tìm kiếm từ Thanh địa chỉ.</translation>
+<translation id="174123615272205933">Tùy chỉnh</translation>
 <translation id="1744108098763830590">trang chạy nền</translation>
 <translation id="176587472219019965">Cửa sổ &amp;Mới</translation>
 <translation id="1769104665586091481">Mở Liên kết trong Cửa sổ &amp;Mới</translation>
+<translation id="1779468444204342338">Tối thiểu</translation>
 <translation id="1815083418640426271">Dán Dưới dạng Văn bản Thuần túy</translation>
 <translation id="1828901632669367785">In Bằng Hộp thoại Hệ thống...</translation>
 <translation id="1850508293116537636">Xoay &amp;thuận kim đồng hồ</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Hỏi trước khi gửi (được đề xuất)</translation>
 <translation id="241082044617551207">Plugin không rõ</translation>
 <translation id="2423578206845792524">Lưu &amp;hình ảnh dưới dạng...</translation>
-<translation id="2436707352762155834">Tối thiểu</translation>
 <translation id="2439110203301358333">Một chương trình khác trên máy tính của bạn đã thêm một tiện ích có thể thay đổi cách Vivaldi hoạt động.</translation>
 <translation id="2445081178310039857">Thư mục gốc của tiện ích là bắt buộc.</translation>
 <translation id="2470702053775288986">Tiện ích không được hỗ trợ đã bị tắt</translation>
@@ -245,7 +246,6 @@
 <translation id="5039804452771397117">Cho phép</translation>
 <translation id="5057110919553308744">Khi bạn nhấp vào tiện ích</translation>
 <translation id="5063480226653192405">Sử dụng</translation>
-<translation id="5068918910148307423">Không cho phép các trang web đóng gần đây hoàn tất gửi và nhận dữ liệu</translation>
 <translation id="5116628073786783676">Lư&amp;u Âm thanh Dưới dạng...</translation>
 <translation id="5143374789336132547">Tiện ích "<ph name="EXTENSION_NAME" />" đã thay đổi trang nào sẽ hiển thị khi bạn nhấp vào nút Trang chủ.</translation>
 <translation id="5154108062446123722">Thiết lập nâng cao cho <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +264,7 @@
 <translation id="5355926466126177564">Tiện ích "<ph name="EXTENSION_NAME" />" đã thay đổi trang nào được hiển thị khi bạn tìm kiếm từ Thanh địa chỉ.</translation>
 <translation id="5360150013186312835">Hiển thị trên Thanh công cụ</translation>
 <translation id="5362741141255528695">Chọn tệp khóa cá nhân.</translation>
+<translation id="536638840841140142">Không</translation>
 <translation id="5370819323174483825">&amp;Tải lại</translation>
 <translation id="5398572795982417028">Vượt quá phạm vi trang, giới hạn là <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Tiếp tục tải xuống</translation>
@@ -388,7 +389,6 @@
 <translation id="7663719505383602579">Bộ thu: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Được cài đặt bởi Quản trị viên Của bạn</translation>
 <translation id="7685049629764448582">Bộ nhớ dành cho JavaScript</translation>
-<translation id="7701040980221191251">Không</translation>
 <translation id="7701869757853594372">Tài nguyên NGƯỜI DÙNG</translation>
 <translation id="7704305437604973648">Tác vụ</translation>
 <translation id="7710568461918838723">&amp;Truyền...</translation>

@@ -36,3 +36,27 @@ source_set("content_adverse_adblocking") {
     "//vivaldi/prefs:prefs_files_generated",
   ]
 }
+
+action("vivaldi_prepopulated_search_engines") {
+  script = "search_engines/merge_searchengines.py"
+
+  chromium_json = "//components/search_engines/prepopulated_engines.json"
+  vivaldi_json = "//vivaldi/components/search_engines/vivaldi_prepopulated_engines.json"
+
+  output_json = "$root_gen_dir/components/search_engines/prepopulated_engines.json"
+
+  inputs = [
+    chromium_json,
+    vivaldi_json
+  ]
+
+  outputs = [
+    output_json,
+  ]
+
+  args = [
+    rebase_path(chromium_json),
+    rebase_path(vivaldi_json),
+    rebase_path(output_json),
+  ]
+}

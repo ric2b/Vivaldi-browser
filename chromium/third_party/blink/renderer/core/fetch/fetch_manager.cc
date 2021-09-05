@@ -714,11 +714,6 @@ void FetchManager::Loader::PerformHTTPFetch() {
 
   request.SetCredentialsMode(fetch_request_data_->Credentials());
   for (const auto& header : fetch_request_data_->HeaderList()->List()) {
-    // Since |fetch_request_data_|'s headers are populated with either of the
-    // "request" guard or "request-no-cors" guard, we can assume that none of
-    // the headers have a name listed in the forbidden header names.
-    DCHECK(!cors::IsForbiddenHeaderName(header.first));
-
     request.AddHttpHeaderField(AtomicString(header.first),
                                AtomicString(header.second));
   }
@@ -730,8 +725,7 @@ void FetchManager::Loader::PerformHTTPFetch() {
           fetch_request_data_->Buffer()->DrainAsFormData();
       if (form_data) {
         request.SetHttpBody(form_data);
-      } else if (RuntimeEnabledFeatures::OutOfBlinkCorsEnabled() &&
-                 RuntimeEnabledFeatures::FetchUploadStreamingEnabled(
+      } else if (RuntimeEnabledFeatures::FetchUploadStreamingEnabled(
                      execution_context_)) {
         UseCounter::Count(execution_context_,
                           WebFeature::kFetchUploadStreaming);
@@ -760,16 +754,6 @@ void FetchManager::Loader::PerformHTTPFetch() {
   request.SetSkipServiceWorker(world_->IsIsolatedWorld());
 
   if (fetch_request_data_->Keepalive()) {
-    if (!RuntimeEnabledFeatures::OutOfBlinkCorsEnabled() &&
-        cors::IsCorsEnabledRequestMode(fetch_request_data_->Mode()) &&
-        (!cors::IsCorsSafelistedMethod(request.HttpMethod()) ||
-         !cors::ContainsOnlyCorsSafelistedOrForbiddenHeaders(
-             request.HttpHeaderFields()))) {
-      PerformNetworkError(
-          "Preflight request for request with keepalive "
-          "specified is currently not supported");
-      return;
-    }
     request.SetKeepalive(true);
     UseCounter::Count(execution_context_, mojom::WebFeature::kFetchKeepalive);
   }

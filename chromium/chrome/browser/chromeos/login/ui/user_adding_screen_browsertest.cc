@@ -20,6 +20,8 @@
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ash/login_screen_client.h"
+#include "chrome/browser/ui/ash/login_screen_shown_observer.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -148,18 +150,36 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, CancelAdding) {
             users[0].account_id);
 }
 
-class UserAddingScreenWithViewBasedTest : public UserAddingScreenTest {
+class UserAddingScreenViewBasedTest : public UserAddingScreenTest,
+                                      public LoginScreenShownObserver {
  public:
-  UserAddingScreenWithViewBasedTest() : UserAddingScreenTest() {
+  UserAddingScreenViewBasedTest() : UserAddingScreenTest() {
     feature_list_.InitWithFeatures(
         {chromeos::features::kViewBasedMultiprofileLogin}, {});
   }
 
+  // LoginScreenShownObserver:
+  void OnLoginScreenShown() override {
+    LoginScreenClient::Get()->RemoveLoginScreenShownObserver(this);
+    login_screen_shown_ = true;
+    if (run_loop_)
+      run_loop_->Quit();
+  }
+
+  void WaitUntilLoginScreenShown() {
+    if (login_screen_shown_)
+      return;
+    run_loop_ = std::make_unique<base::RunLoop>();
+    run_loop_->Run();
+  }
+
  private:
+  bool login_screen_shown_ = false;
+  std::unique_ptr<base::RunLoop> run_loop_;
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(UserAddingScreenWithViewBasedTest, CancelAdding) {
+IN_PROC_BROWSER_TEST_F(UserAddingScreenViewBasedTest, CancelAdding) {
   const auto& users = login_mixin_.users();
   EXPECT_EQ(users.size(), user_manager::UserManager::Get()->GetUsers().size());
   EXPECT_EQ(user_manager::UserManager::Get()->GetLoggedInUsers().size(), 0u);
@@ -171,7 +191,10 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenWithViewBasedTest, CancelAdding) {
   EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
             session_manager::SessionState::ACTIVE);
 
+  base::HistogramTester histogram_tester;
   UserAddingScreen::Get()->Start();
+  LoginScreenClient::Get()->AddLoginScreenShownObserver(this);
+  WaitUntilLoginScreenShown();
 
   EXPECT_EQ(user_adding_started(), 1);
   EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
@@ -180,6 +203,9 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenWithViewBasedTest, CancelAdding) {
   EXPECT_TRUE(ash::LoginScreenTestApi::IsCancelButtonShown());
   EXPECT_TRUE(ash::LoginScreenTestApi::ClickCancelButton());
   WaitUntilUserAddingFinishedOrCancelled();
+
+  histogram_tester.ExpectTotalCount(
+      "ChromeOS.UserAddingScreen.LoadTimeViewsBased", 1);
 
   EXPECT_EQ(user_adding_finished(), 1);
   EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
@@ -227,7 +253,7 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, UILogin) {
             session_manager::SessionState::ACTIVE);
 }
 
-IN_PROC_BROWSER_TEST_F(UserAddingScreenWithViewBasedTest, UILogin) {
+IN_PROC_BROWSER_TEST_F(UserAddingScreenViewBasedTest, UILogin) {
   const auto& users = login_mixin_.users();
   EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
             session_manager::SessionState::LOGIN_PRIMARY);
@@ -238,7 +264,11 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenWithViewBasedTest, UILogin) {
 
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
 
+  base::HistogramTester histogram_tester;
   UserAddingScreen::Get()->Start();
+  LoginScreenClient::Get()->AddLoginScreenShownObserver(this);
+  WaitUntilLoginScreenShown();
+
   EXPECT_EQ(user_adding_started(), 1);
   EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
             session_manager::SessionState::LOGIN_SECONDARY);
@@ -257,6 +287,9 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenWithViewBasedTest, UILogin) {
             session_manager::SessionState::ACTIVE);
   EXPECT_TRUE(LoginDisplayHost::default_host() == nullptr);
   ASSERT_EQ(user_manager->GetLoggedInUsers().size(), 2u);
+
+  histogram_tester.ExpectTotalCount(
+      "ChromeOS.UserAddingScreen.LoadTimeViewsBased", 1);
 
   EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
             session_manager::SessionState::ACTIVE);
@@ -281,8 +314,8 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, AddingSeveralUsers) {
     EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
               session_manager::SessionState::LOGIN_SECONDARY);
 
-    AddUser(users[n - i].account_id);
-    users_in_session_order_.push_back(users[n - i].account_id);
+    AddUser(users[i].account_id);
+    users_in_session_order_.push_back(users[i].account_id);
     WaitUntilUserAddingFinishedOrCancelled();
 
     EXPECT_EQ(user_adding_finished(), i);
@@ -369,7 +402,7 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, AddingSeveralUsers) {
     EXPECT_EQ(users_in_session_order_[i], unlock_users[i]->GetAccountId());
 }
 
-IN_PROC_BROWSER_TEST_F(UserAddingScreenWithViewBasedTest, AddingSeveralUsers) {
+IN_PROC_BROWSER_TEST_F(UserAddingScreenViewBasedTest, AddingSeveralUsers) {
   const auto& users = login_mixin_.users();
   EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
             session_manager::SessionState::LOGIN_PRIMARY);
@@ -384,12 +417,15 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenWithViewBasedTest, AddingSeveralUsers) {
   const int n = users.size();
   for (int i = 1; i < n; ++i) {
     UserAddingScreen::Get()->Start();
+    LoginScreenClient::Get()->AddLoginScreenShownObserver(this);
+    WaitUntilLoginScreenShown();
+
     EXPECT_EQ(user_adding_started(), i);
     EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
               session_manager::SessionState::LOGIN_SECONDARY);
 
-    AddUser(users[n - i].account_id);
-    users_in_session_order_.push_back(users[n - i].account_id);
+    AddUser(users[i].account_id);
+    users_in_session_order_.push_back(users[i].account_id);
     WaitUntilUserAddingFinishedOrCancelled();
 
     EXPECT_EQ(user_adding_finished(), i);
@@ -508,7 +544,7 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenTest, ScreenVisibilityAfterLock) {
   WaitUntilUserAddingFinishedOrCancelled();
 }
 
-IN_PROC_BROWSER_TEST_F(UserAddingScreenWithViewBasedTest,
+IN_PROC_BROWSER_TEST_F(UserAddingScreenViewBasedTest,
                        ScreenVisibilityAfterLock) {
   const auto& users = login_mixin_.users();
   LoginUser(users[0].account_id);
@@ -538,6 +574,49 @@ IN_PROC_BROWSER_TEST_F(UserAddingScreenWithViewBasedTest,
   EXPECT_TRUE(ash::LoginScreenTestApi::ClickCancelButton());
 
   WaitUntilUserAddingFinishedOrCancelled();
+}
+
+IN_PROC_BROWSER_TEST_F(UserAddingScreenViewBasedTest, InfoBubbleVisible) {
+  const auto& users = login_mixin_.users();
+  EXPECT_EQ(users.size(), user_manager::UserManager::Get()->GetUsers().size());
+  EXPECT_EQ(user_manager::UserManager::Get()->GetLoggedInUsers().size(), 0u);
+  EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
+            session_manager::SessionState::LOGIN_PRIMARY);
+
+  EXPECT_FALSE(ash::LoginScreenTestApi::IsUserAddingScreenBubbleShown());
+
+  LoginUser(users[0].account_id);
+  EXPECT_EQ(user_manager::UserManager::Get()->GetLoggedInUsers().size(), 1u);
+  EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
+            session_manager::SessionState::ACTIVE);
+
+  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+
+  // Check if the user adding screen bubble is still shown after adding other
+  // users, as a re-layout is executed each time.
+  const int n = users.size();
+  for (int i = 1; i < n; ++i) {
+    UserAddingScreen::Get()->Start();
+    EXPECT_EQ(user_adding_started(), i);
+    EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
+              session_manager::SessionState::LOGIN_SECONDARY);
+
+    EXPECT_TRUE(ash::LoginScreenTestApi::IsUserAddingScreenBubbleShown());
+
+    AddUser(users[i].account_id);
+    users_in_session_order_.push_back(users[i].account_id);
+    WaitUntilUserAddingFinishedOrCancelled();
+
+    EXPECT_EQ(user_adding_finished(), i);
+    EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
+              session_manager::SessionState::ACTIVE);
+    EXPECT_TRUE(LoginDisplayHost::default_host() == nullptr);
+    ASSERT_EQ(user_manager->GetLoggedInUsers().size(),
+              static_cast<size_t>(i + 1));
+  }
+
+  EXPECT_EQ(session_manager::SessionManager::Get()->session_state(),
+            session_manager::SessionState::ACTIVE);
 }
 
 }  // namespace chromeos

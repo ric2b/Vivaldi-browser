@@ -90,16 +90,16 @@ struct RendererPreferences {
 
   array<string> webrtc_local_ips_allowed_urls;
 
+  // Whether WebRTC peer connections are allowed to use legacy versions of the
+  // TLS/DTLS protocols.
+  bool webrtc_allow_legacy_tls_protocols = false;
+
   // The user agent given to WebKit when it requests one and the user agent is
   // being overridden for the current navigation.
   UserAgentOverride user_agent_override;
 
   // The accept-languages of the browser, comma-separated.
   string accept_languages;
-
-  // Disables rendering default error page when client choses to block a page.
-  // Corresponds to net::ERR_BLOCKED_BY_CLIENT.
-  bool disable_client_blocked_error_page = false;
 
   // Determines whether plugins are allowed to enter fullscreen mode.
   bool plugin_fullscreen_allowed = true;

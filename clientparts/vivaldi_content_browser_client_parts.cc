@@ -14,8 +14,10 @@
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
-#include "content/public/common/web_preferences.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/buildflags/buildflags.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#include "third_party/blink/renderer/core/html/media/autoplay_policy.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -60,7 +62,7 @@ void VivaldiContentBrowserClientParts::BrowserURLHandlerCreated(
 
 void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
     content::RenderViewHost* rvh,
-    content::WebPreferences* web_prefs) {
+    blink::web_pref::WebPreferences* web_prefs) {
 #if !defined(OS_ANDROID)
   if (!vivaldi::IsVivaldiRunning())
     return;
@@ -94,7 +96,7 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
       // this method is only called on renderer initialization so this will only
       // work when the game is started in a new tab.
       web_prefs->autoplay_policy =
-          content::AutoplayPolicy::kNoUserGestureRequired;
+          blink::web_pref::AutoplayPolicy::kNoUserGestureRequired;
     }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -113,7 +115,19 @@ void VivaldiContentBrowserClientParts::OverrideWebkitPrefs(
       // No forced dark mode for our UI.
       web_prefs->force_dark_mode_enabled = false;
     }
-#endif
+
+    // See extension_webkit_preferences::SetPreferences() where some preferences
+    // are overridden for platform-apps like Vivaldi.
+    extensions::WebViewGuest* guest =
+        extensions::WebViewGuest::FromWebContents(web_contents);
+    if (guest && guest->IsNavigatingAwayFromVivaldiUI()) {
+      web_prefs->databases_enabled = true;
+      web_prefs->local_storage_enabled = true;
+      web_prefs->sync_xhr_in_documents_enabled = true;
+      web_prefs->cookie_enabled = true;
+      web_prefs->privileged_webgl_extensions_enabled = false;
+    }
+#endif //ENABLE_EXTENSIONS
   }
 #endif  // !OS_ANDROID
 }

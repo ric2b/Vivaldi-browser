@@ -90,12 +90,11 @@
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/system/dynamic_library_support.h"
 #include "mojo/public/cpp/system/invitation.h"
-#include "mojo/public/mojom/base/binder.mojom.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "sandbox/policy/sandbox_type.h"
 #include "sandbox/policy/switches.h"
 #include "services/network/public/cpp/features.h"
-#include "services/service_manager/embedder/switches.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
 #include "ui/base/ui_base_paths.h"
@@ -166,6 +165,7 @@
 
 #if defined(OS_ANDROID)
 #include "content/browser/android/browser_startup_controller.h"
+#include "content/common/android/cpu_affinity.h"
 #endif
 
 namespace content {
@@ -394,24 +394,6 @@ void PreSandboxInit() {
 
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
-class ControlInterfaceBinderImpl : public mojo_base::mojom::Binder {
- public:
-  ControlInterfaceBinderImpl() = default;
-  ~ControlInterfaceBinderImpl() override = default;
-
-  // mojo_base::mojom::Binder:
-  void Bind(mojo::GenericPendingReceiver receiver) override {
-    GetContentClient()->browser()->BindBrowserControlInterface(
-        std::move(receiver));
-  }
-};
-
-void RunControlInterfaceBinder(mojo::ScopedMessagePipeHandle pipe) {
-  mojo::MakeSelfOwnedReceiver(
-      std::make_unique<ControlInterfaceBinderImpl>(),
-      mojo::PendingReceiver<mojo_base::mojom::Binder>(std::move(pipe)));
-}
-
 }  // namespace
 
 class ContentClientCreator {
@@ -552,7 +534,7 @@ int RunOtherNamedProcessTypeMain(const std::string& process_type,
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
   // Zygote startup is special -- see RunZygote comments above
   // for why we don't use ZygoteMain directly.
-  if (process_type == service_manager::switches::kZygoteProcess)
+  if (process_type == switches::kZygoteProcess)
     return RunZygote(delegate);
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
@@ -561,8 +543,8 @@ int RunOtherNamedProcessTypeMain(const std::string& process_type,
 }
 
 // static
-ContentMainRunnerImpl* ContentMainRunnerImpl::Create() {
-  return new ContentMainRunnerImpl();
+std::unique_ptr<ContentMainRunnerImpl> ContentMainRunnerImpl::Create() {
+  return std::make_unique<ContentMainRunnerImpl>();
 }
 
 ContentMainRunnerImpl::ContentMainRunnerImpl() {
@@ -608,19 +590,16 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
 
 // On Android, the ipc_fd is passed through the Java service.
 #if !defined(OS_ANDROID)
-    g_fds->Set(service_manager::kMojoIPCChannel,
-               service_manager::kMojoIPCChannel +
-                   base::GlobalDescriptors::kBaseDescriptor);
+  g_fds->Set(kMojoIPCChannel,
+             kMojoIPCChannel + base::GlobalDescriptors::kBaseDescriptor);
 
-    g_fds->Set(service_manager::kFieldTrialDescriptor,
-               service_manager::kFieldTrialDescriptor +
-                   base::GlobalDescriptors::kBaseDescriptor);
+  g_fds->Set(kFieldTrialDescriptor,
+             kFieldTrialDescriptor + base::GlobalDescriptors::kBaseDescriptor);
 #endif  // !OS_ANDROID
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_OPENBSD)
-    g_fds->Set(service_manager::kCrashDumpSignal,
-               service_manager::kCrashDumpSignal +
-                   base::GlobalDescriptors::kBaseDescriptor);
+  g_fds->Set(kCrashDumpSignal,
+             kCrashDumpSignal + base::GlobalDescriptors::kBaseDescriptor);
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_OPENBSD)
 
 #endif  // !OS_WIN
@@ -673,8 +652,7 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
   //
   // Startup tracing flags are not (and should not be) passed to Zygote
   // processes. We will enable tracing when forked, if needed.
-  bool enable_startup_tracing =
-      process_type != service_manager::switches::kZygoteProcess;
+  bool enable_startup_tracing = process_type != switches::kZygoteProcess;
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
   // In the browser process, we have to enable startup tracing after
   // InitializeZygoteSandboxForBrowserProcess() is run below, because that
@@ -785,8 +763,7 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
     // the call to PreSandboxStartup() on the delegate below), because otherwise
     // this would interfere with signal handlers used by crash reporting.
     if (should_enable_stack_dump &&
-        !command_line.HasSwitch(
-            service_manager::switches::kDisableInProcessStackTraces)) {
+        !command_line.HasSwitch(switches::kDisableInProcessStackTraces)) {
       base::debug::EnableInProcessStackDumping();
     }
 
@@ -846,7 +823,7 @@ int ContentMainRunnerImpl::Run(bool start_service_manager_only) {
       command_line.GetSwitchValueASCII(switches::kProcessType);
   // Run this logic on all child processes.
   if (!process_type.empty()) {
-    if (process_type != service_manager::switches::kZygoteProcess) {
+    if (process_type != switches::kZygoteProcess) {
       // Zygotes will run this at a later point in time when the command line
       // has been updated.
       InitializeFieldTrialAndFeatureList();
@@ -946,6 +923,10 @@ int ContentMainRunnerImpl::RunServiceManager(MainFunctionParams& main_params,
 
 #if defined(OS_ANDROID)
     SetupCpuTimeMetrics();
+    // For child processes, this requires allowing of the
+    // sched_setaffinity() syscall in the sandbox (baseline_policy_android.cc).
+    // When this call is removed, the sandbox allowlist should be updated too.
+    SetupCpuAffinityPollingOnce();
 #endif
 
     if (should_start_service_manager_only)
@@ -969,7 +950,8 @@ int ContentMainRunnerImpl::RunServiceManager(MainFunctionParams& main_params,
           mojo::PlatformChannel::RecoverPassedEndpointFromCommandLine(
               command_line);
       auto invitation = mojo::IncomingInvitation::Accept(std::move(endpoint));
-      RunControlInterfaceBinder(invitation.ExtractMessagePipe(0));
+      GetContentClient()->browser()->BindBrowserControlInterface(
+          invitation.ExtractMessagePipe(0));
     }
 
     download::SetIOTaskRunner(
@@ -1029,7 +1011,7 @@ void ContentMainRunnerImpl::Shutdown() {
 }
 
 // static
-ContentMainRunner* ContentMainRunner::Create() {
+std::unique_ptr<ContentMainRunner> ContentMainRunner::Create() {
   return ContentMainRunnerImpl::Create();
 }
 

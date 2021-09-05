@@ -153,6 +153,7 @@
 <translation id="6165508094623778733">Läs mer</translation>
 <translation id="6177128806592000436">Anslutningen till webbplatsen är inte säker</translation>
 <translation id="6203231073485539293">Kontrollera internetanslutningen</translation>
+<translation id="6225522625585012689">Besök &lt;strong&gt;vivaldi://policy&lt;/strong&gt; om du vill se listan över blockerade webbadresser och andra policyer som angetts av systemadministratören.</translation>
 <translation id="625755898061068298">Du har valt att inaktivera säkerhetsvarningar för den här webbplatsen.</translation>
 <translation id="6264485186158353794">Tillbaka till säker webbplats</translation>
 <translation id="6305205051461490394"><ph name="URL" /> kan inte nås.</translation>
@@ -202,7 +203,6 @@
 <translation id="8041940743680923270">Använd global standardinställning (Fråga)</translation>
 <translation id="808894953321890993">Byt lösenord</translation>
 <translation id="8119307142152921512">spårare och annonser</translation>
-<translation id="8142868475871995937">Besök &lt;strong&gt;vivaldi://policy&lt;/strong&gt; om du vill visa listan med webbadresser som inte är godkända och andra policyer som angetts av systemadministratören.</translation>
 <translation id="8149426793427495338">Datorn gick ner i vänteläge.</translation>
 <translation id="8150722005171944719">Det går inte att läsa filen på <ph name="URL" />. Den kan ha tagits bort eller flyttats, eller så krävs behörighet för att få åtkomst till den.</translation>
 <translation id="8184538546369750125">Använd global standardinställning (Tillåt)</translation>

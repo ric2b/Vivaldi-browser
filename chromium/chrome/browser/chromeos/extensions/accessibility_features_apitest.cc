@@ -96,6 +96,8 @@ class AccessibilityFeaturesApiTest : public ExtensionApiTest,
       return ash::prefs::kAccessibilitySwitchAccessEnabled;
     if (feature == "cursorColor")
       return ash::prefs::kAccessibilityCursorColorEnabled;
+    if (feature == "dockedMagnifier")
+      return ash::prefs::kDockedMagnifierEnabled;
     return NULL;
   }
 
@@ -186,11 +188,24 @@ IN_PROC_BROWSER_TEST_P(AccessibilityFeaturesApiTest, Get) {
   // WARNING: Make sure that features which load Chrome extension are not among
   // enabled_features (see |Set| test for the reason).
   std::vector<std::string> enabled_features = {
-      "largeCursor", "stickyKeys", "highContrast", "cursorHighlight"};
+      "cursorColor",
+      "cursorHighlight",
+      "highContrast",
+      "largeCursor",
+      "stickyKeys",
+  };
 
   std::vector<std::string> disabled_features = {
-      "spokenFeedback", "screenMagnifier", "autoclick",    "virtualKeyboard",
-      "focusHighlight", "selectToSpeak",   "switchAccess", "caretHighlight"};
+      "autoclick",
+      "caretHighlight",
+      "dockedMagnifier",
+      "focusHighlight",
+      "screenMagnifier",
+      "selectToSpeak",
+      "spokenFeedback",
+      "switchAccess",
+      "virtualKeyboard",
+  };
 
   ASSERT_TRUE(
       InitPrefServiceForTest(GetPrefs(), enabled_features, disabled_features));
@@ -217,11 +232,24 @@ IN_PROC_BROWSER_TEST_P(AccessibilityFeaturesApiTest, Get_ComponentApp) {
   // WARNING: Make sure that features which load Chrome extension are not among
   // enabled_features (see |Set| test for the reason).
   std::vector<std::string> enabled_features = {
-      "largeCursor", "stickyKeys", "highContrast", "cursorHighlight"};
+      "cursorHighlight",
+      "dockedMagnifier",
+      "highContrast",
+      "largeCursor",
+      "stickyKeys",
+  };
 
   std::vector<std::string> disabled_features = {
-      "spokenFeedback", "screenMagnifier", "autoclick",    "virtualKeyboard",
-      "focusHighlight", "selectToSpeak",   "switchAccess", "caretHighlight"};
+      "autoclick",
+      "caretHighlight",
+      "cursorColor",
+      "focusHighlight",
+      "screenMagnifier",
+      "selectToSpeak",
+      "spokenFeedback",
+      "switchAccess",
+      "virtualKeyboard",
+  };
 
   ASSERT_TRUE(
       InitPrefServiceForTest(GetPrefs(), enabled_features, disabled_features));
@@ -248,11 +276,24 @@ IN_PROC_BROWSER_TEST_P(AccessibilityFeaturesApiTest, Set) {
   // speak, autoclick, or switch access here would break this assumption as it
   // would induce loading of Chrome extension.
   std::vector<std::string> enabled_features = {
-      "stickyKeys", "virtualKeyboard", "caretHighlight", "focusHighlight"};
+      "caretHighlight",
+      "cursorColor",
+      "focusHighlight",
+      "stickyKeys",
+  };
 
   std::vector<std::string> disabled_features = {
-      "spokenFeedback", "largeCursor",     "highContrast",  "screenMagnifier",
-      "autoclick",      "cursorHighlight", "selectToSpeak", "switchAccess"};
+      "autoclick",
+      "cursorHighlight",
+      "dockedMagnifier",
+      "highContrast",
+      "largeCursor",
+      "screenMagnifier",
+      "selectToSpeak",
+      "spokenFeedback",
+      "switchAccess",
+      "virtualKeyboard",
+  };
 
   ASSERT_TRUE(
       InitPrefServiceForTest(GetPrefs(), enabled_features, disabled_features));
@@ -279,10 +320,25 @@ IN_PROC_BROWSER_TEST_P(AccessibilityFeaturesApiTest, Set) {
 IN_PROC_BROWSER_TEST_F(AccessibilityFeaturesApiTest, ObserveFeatures) {
   // WARNING: Make sure that features which load Chrome extension are not among
   // enabled_features (see |Set| test for the reason).
-  std::vector<std::string> enabled_features = {"largeCursor", "stickyKeys",
-                                               "highContrast"};
+  std::vector<std::string> enabled_features = {
+      "caretHighlight",
+      "cursorColor",
+      "dockedMagnifier",
+      "focusHighlight",
+      "stickyKeys",
+  };
 
-  std::vector<std::string> disabled_features = {"screenMagnifier"};
+  std::vector<std::string> disabled_features = {
+      "autoclick",
+      "cursorHighlight",
+      "highContrast",
+      "largeCursor",
+      "screenMagnifier",
+      "selectToSpeak",
+      "spokenFeedback",
+      "switchAccess",
+      "virtualKeyboard",
+  };
 
   ASSERT_TRUE(
       InitPrefServiceForTest(GetPrefs(), enabled_features, disabled_features));

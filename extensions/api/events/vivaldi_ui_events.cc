@@ -9,11 +9,14 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "components/prefs/pref_service.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"  // nogncheck
+#include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/web_contents.h"
+#include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "extensions/schema/tabs_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
@@ -33,87 +36,74 @@ namespace {
 // start recording a gesture and eat the following pointer move events.
 constexpr float MOUSE_GESTURE_THRESHOLD = 5.0f;
 
-struct MouseGestures {
-  // To avoid depending on platform's focus policy store the id of the window
-  // where the gesture was initiated and send the gesture events towards it and
-  // not to the focused window, see VB-47721. Similarly, pass the initial
-  // pointer coordinates relative to root to apply the gesture to the tab over
-  // which the gesture has started, see VB-48232.
-  SessionID window_id = SessionID::InvalidValue();
-  gfx::PointF initial_client_pos;
-
-  // Gesture started with the Alt key
-  bool with_alt = false;
-
-  bool recording = false;
-  float last_x = 0.0f;
-  float last_y = 0.0f;
-  float min_move_squared = 0.0f;
-
-  // The string of uniqe gesture directions that is send to JS.
-  std::string directions;
-  int last_direction = -1;
-};
-
-struct WheelGestures {
-  bool active = 0;
-  SessionID window_id = SessionID::InvalidValue();
-};
-
-struct RockerGestures {
-  bool eat_next_left_mouseup = false;
-  bool eat_next_right_mouseup = false;
-};
-
-class GestureState {
- public:
-  void StartMouseGestureDetection(content::WebContents* web_contents,
-                                  SessionID window_id,
-                                  const blink::WebMouseEvent& mouse_event,
-                                  bool with_alt);
-  bool FinishMouseOrWheelGesture(bool with_alt);
-  bool CheckMouseGesture(content::WebContents* web_contents,
-                         SessionID window_id,
-                         const blink::WebMouseEvent& mouse_event);
-  bool CheckRockerGesture(content::WebContents* web_contents,
-                          SessionID window_id,
-                          const blink::WebMouseEvent& mouse_event);
-  bool HandleMouseGestureMove(const blink::WebMouseEvent& mouse_event,
-                              content::WebContents* web_contents);
-  void CheckWebviewClick(content::WebContents* web_contents,
-                         SessionID window_id,
-                         const blink::WebMouseEvent& mouse_event);
-
- private:
-  friend class ::extensions::VivaldiUIEvents;
-  std::unique_ptr<MouseGestures> mouse_gestures_;
-  WheelGestures wheel_gestures_;
-  RockerGestures rocker_gestures_;
-};
-
-GestureState& GetGestureState() {
-  static base::NoDestructor<GestureState> instance;
-  return *instance;
+bool ShouldPreventWindowGestures(VivaldiBrowserWindow* window) {
+  if (!window->web_contents())
+    return true;
+  const web_modal::WebContentsModalDialogManager* manager =
+      web_modal::WebContentsModalDialogManager::FromWebContents(
+          window->web_contents());
+  if (manager && manager->IsDialogActive()) {
+    // Avoid dangling modal dialogs that will crash if the tab is closed
+    // through a gesture.
+    // TODO(pettern): There is still a chance a tab will be able to close
+    // before this check, so investigate blocking on the api level after
+    // the tab close rewrite on the js side.
+    return true;
+  }
+  return false;
 }
 
-// Helper to send the event using BrowserContext corresponding to to the gven
-// window_id.
-void SendEventToUI(SessionID window_id,
+VivaldiBrowserWindow* FindMouseEventWindowFromView(
+    content::RenderWidgetHostViewBase* root_view,
+    bool ignore_native_children = false) {
+  if (!root_view->host())
+    return nullptr;
+  content::WebContents* web_contents =
+      root_view->host()->delegate()->GetAsWebContents();
+  if (!web_contents)
+    return nullptr;
+  // web_contents is not ourtermost content when the root_view corresponds
+  // to a native control like date picker on Mac.
+  web_contents = web_contents->GetOutermostWebContents();
+  VivaldiBrowserWindow* window =
+      ::vivaldi::FindWindowForEmbedderWebContents(web_contents);
+  if (window && ShouldPreventWindowGestures(window)) {
+    window = nullptr;
+  }
+  return window;
+}
+
+VivaldiBrowserWindow* FindMouseEventWindowFromId(SessionID::id_type window_id) {
+  VivaldiBrowserWindow* window = nullptr;
+  Browser* browser = ::vivaldi::FindBrowserByWindowId(window_id);
+  if (browser) {
+    window = VivaldiBrowserWindow::FromBrowser(browser);
+    if (window && ShouldPreventWindowGestures(window)) {
+      window = nullptr;
+    }
+  }
+  return window;
+}
+
+// Transform screen coordinates to the UI coordinates for the given window.
+gfx::PointF TransformToWindowUICoordinates(VivaldiBrowserWindow* window,
+                                           gfx::PointF screen_point) {
+  gfx::Rect ui_bounds = window->web_contents()->GetContainerBounds();
+  gfx::PointF p = screen_point;
+  p.Offset(-ui_bounds.x(), -ui_bounds.y());
+  p = ::vivaldi::ToUICoordinates(window->web_contents(), p);
+  return p;
+}
+
+void SendEventToUI(VivaldiBrowserWindow* window,
                    const std::string& eventname,
                    std::unique_ptr<base::ListValue> args) {
-  Browser* browser = chrome::FindBrowserWithID(window_id);
-  if (!browser)
-    return;
-  VivaldiBrowserWindow* window = VivaldiBrowserWindow::FromBrowser(browser);
-  if (!window || !window->web_contents())
-    return;
-
   // TODO(igor@vivaldi.com): This broadcats the event to all windows and
   // extensions forcing our JS code to check in each window if it matches
-  // the window id. Find a way to send this only to Vivaldi JS
-  // in a specific window.
+  // the window id embedded into the event. Find a way to send this only to
+  // Vivaldi JS in a specific window.
   ::vivaldi::BroadcastEvent(eventname, std::move(args),
-                            window->web_contents()->GetBrowserContext());
+                            window->browser()->profile());
 }
 
 bool IsLoneAltKeyPressed(int modifiers) {
@@ -134,9 +124,16 @@ bool IsGestureAltMouseMove(const blink::WebMouseEvent& mouse_event) {
   return IsLoneAltKeyPressed(mouse_event.GetModifiers());
 }
 
-void GestureState::StartMouseGestureDetection(
-    content::WebContents* web_contents,
-    SessionID window_id,
+}  //namespace
+
+VivaldiUIEvents::MouseGestures::MouseGestures() = default;
+VivaldiUIEvents::MouseGestures::~MouseGestures() = default;
+
+VivaldiUIEvents::VivaldiUIEvents() = default;
+VivaldiUIEvents::~VivaldiUIEvents() = default;
+
+void VivaldiUIEvents::StartMouseGestureDetection(
+    content::RenderWidgetHostViewBase* root_view,
     const blink::WebMouseEvent& mouse_event,
     bool with_alt) {
   DCHECK(!mouse_gestures_);
@@ -145,8 +142,10 @@ void GestureState::StartMouseGestureDetection(
   // pressed but before the key or button was released.
   if (wheel_gestures_.active)
     return;
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  VivaldiBrowserWindow* window = FindMouseEventWindowFromView(root_view);
+  if (!window)
+    return;
+  Profile* profile = window->browser()->profile();
   if (with_alt) {
     if (!profile->GetPrefs()->GetBoolean(
             vivaldiprefs::kMouseGesturesAltGesturesEnabled))
@@ -157,20 +156,22 @@ void GestureState::StartMouseGestureDetection(
   }
 
   mouse_gestures_ = std::make_unique<MouseGestures>();
-  mouse_gestures_->window_id = window_id;
-  mouse_gestures_->initial_client_pos =
-      ::vivaldi::ToUICoordinates(web_contents, mouse_event.PositionInWidget());
+  mouse_gestures_->window_id = window->id();
+  mouse_gestures_->initial_pos = mouse_event.PositionInScreen();
   mouse_gestures_->with_alt = with_alt;
   mouse_gestures_->last_x = mouse_event.PositionInScreen().x();
   mouse_gestures_->last_y = mouse_event.PositionInScreen().y();
+  mouse_gestures_->stroke_tolerance =
+      static_cast<float>(profile->GetPrefs()->GetDouble(
+          vivaldiprefs::kMouseGesturesStrokeTolerance));
 
-  SendEventToUI(window_id, tabs_private::OnMouseGestureDetection::kEventName,
-                tabs_private::OnMouseGestureDetection::Create(window_id.id()));
+  SendEventToUI(window, tabs_private::OnMouseGestureDetection::kEventName,
+                tabs_private::OnMouseGestureDetection::Create(
+                    mouse_gestures_->window_id));
 }
 
-bool GestureState::HandleMouseGestureMove(
-    const blink::WebMouseEvent& mouse_event,
-    content::WebContents* web_contents) {
+bool VivaldiUIEvents::HandleMouseGestureMove(
+    const blink::WebMouseEvent& mouse_event) {
   DCHECK(mouse_event.GetType() == blink::WebInputEvent::Type::kMouseMove);
   DCHECK(mouse_gestures_);
   float x = mouse_event.PositionInScreen().x();
@@ -194,10 +195,7 @@ bool GestureState::HandleMouseGestureMove(
     // tolerance = movement in pixels before gesture move initiates.
     // For min_move we devide the preference by two as we require at least two
     // mouse move events in the same direction to acount as a gesture move.
-    Profile* profile =
-        Profile::FromBrowserContext(web_contents->GetBrowserContext());
-    float tolerance = static_cast<float>(profile->GetPrefs()->GetDouble(
-        vivaldiprefs::kMouseGesturesStrokeTolerance));
+    float tolerance = mouse_gestures_->stroke_tolerance;
     mouse_gestures_->min_move_squared = (tolerance / 2.0f) * (tolerance / 2.0f);
   }
 
@@ -234,16 +232,18 @@ bool GestureState::HandleMouseGestureMove(
   return eat_event;
 }
 
-bool GestureState::FinishMouseOrWheelGesture(bool with_alt) {
+bool VivaldiUIEvents::FinishMouseOrWheelGesture(bool with_alt) {
   bool after_gesture = false;
   if (wheel_gestures_.active) {
     DCHECK(!mouse_gestures_);
     after_gesture = true;
-    SessionID window_id = wheel_gestures_.window_id;
-    SendEventToUI(window_id, tabs_private::OnTabSwitchEnd::kEventName,
-                  tabs_private::OnTabSwitchEnd::Create(window_id.id()));
+    SessionID::id_type window_id = wheel_gestures_.window_id;
     wheel_gestures_.active = false;
-    wheel_gestures_.window_id = SessionID::InvalidValue();
+    wheel_gestures_.window_id = 0;
+    if (VivaldiBrowserWindow* window = FindMouseEventWindowFromId(window_id)) {
+      SendEventToUI(window, tabs_private::OnTabSwitchEnd::kEventName,
+                    tabs_private::OnTabSwitchEnd::Create(window_id));
+    }
   }
   if (!mouse_gestures_)
     return after_gesture;
@@ -260,84 +260,83 @@ bool GestureState::FinishMouseOrWheelGesture(bool with_alt) {
   if (!mouse_gestures_->directions.empty()) {
     after_gesture = true;
 
-    gfx::PointF p = mouse_gestures_->initial_client_pos;
-    SessionID window_id = mouse_gestures_->window_id;
-    SendEventToUI(
-        window_id, tabs_private::OnMouseGesture::kEventName,
-        tabs_private::OnMouseGesture::Create(window_id.id(), p.x(), p.y(),
-                                             mouse_gestures_->directions));
+    SessionID::id_type window_id = mouse_gestures_->window_id;
+    if (VivaldiBrowserWindow* window = FindMouseEventWindowFromId(window_id)) {
+      gfx::PointF p =
+          TransformToWindowUICoordinates(window, mouse_gestures_->initial_pos);
+      SendEventToUI(
+          window, tabs_private::OnMouseGesture::kEventName,
+          tabs_private::OnMouseGesture::Create(window_id, p.x(), p.y(),
+                                               mouse_gestures_->directions));
+    }
   }
   mouse_gestures_.reset();
   return after_gesture;
 }
 
-bool GestureState::CheckMouseGesture(content::WebContents* web_contents,
-                                     SessionID window_id,
-                                     const blink::WebMouseEvent& mouse_event) {
-  using blink::WebInputEvent;
-  using blink::WebMouseEvent;
-  using blink::WebMouseWheelEvent;
-
+bool VivaldiUIEvents::CheckMouseMove(content::RenderWidgetHostViewBase* root_view,
+                                  const blink::WebMouseEvent& mouse_event) {
+  DCHECK_EQ(mouse_event.GetType(), blink::WebInputEvent::Type::kMouseMove);
   bool eat_event = false;
-  // We should not have both wheel and mouse gestures running.
-  DCHECK(!wheel_gestures_.active || !mouse_gestures_);
-  switch (mouse_event.GetType()) {
-    default:
-      break;
-    case WebInputEvent::Type::kMouseDown: {
-      if (!mouse_gestures_) {
-        if (mouse_event.button == WebMouseEvent::Button::kRight &&
-            !(mouse_event.GetModifiers() & WebInputEvent::kLeftButtonDown)) {
-          StartMouseGestureDetection(web_contents, window_id, mouse_event,
-                                     false);
-        }
-      }
-      break;
+  if (!mouse_gestures_) {
+    bool gesture = false;
+    bool with_alt = false;
+    if (IsGestureMouseMove(mouse_event)) {
+      gesture = true;
+    } else if (IsGestureAltMouseMove(mouse_event)) {
+      gesture = true;
+      with_alt = true;
     }
-    case WebInputEvent::Type::kMouseMove: {
-      if (!mouse_gestures_) {
-        bool gesture = false;
-        bool with_alt = false;
-        if (IsGestureMouseMove(mouse_event)) {
-          gesture = true;
-        } else if (IsGestureAltMouseMove(mouse_event)) {
-          gesture = true;
-          with_alt = true;
-        }
-        if (gesture) {
-          // Handle the right button pressed outside the window before entering
-          // the window.
-          StartMouseGestureDetection(web_contents, window_id, mouse_event,
-                                     with_alt);
-        }
-        break;
-      }
-      bool gesture = false;
-      if (mouse_gestures_->with_alt) {
-        gesture = IsGestureAltMouseMove(mouse_event);
-      } else {
-        gesture = IsGestureMouseMove(mouse_event);
-      }
-      if (gesture) {
-        eat_event = HandleMouseGestureMove(mouse_event, web_contents);
-        break;
-      }
+    if (gesture) {
+      // Handle the right button pressed outside the window before entering
+      // the window.
+      StartMouseGestureDetection(root_view, mouse_event, with_alt);
+    }
+  } else {
+    bool gesture = false;
+    if (mouse_gestures_->with_alt) {
+      gesture = IsGestureAltMouseMove(mouse_event);
+    } else {
+      gesture = IsGestureMouseMove(mouse_event);
+    }
+    if (gesture) {
+      eat_event = HandleMouseGestureMove(mouse_event);
+    } else {
       // This happens when the right mouse button is released outside of webview
       // or the alt key was released when the window lost input focus.
       mouse_gestures_.reset();
-      break;
-    }
-    case WebInputEvent::Type::kMouseUp: {
-      eat_event = FinishMouseOrWheelGesture(false);
-      break;
     }
   }
   return eat_event;
 }
 
-bool GestureState::CheckRockerGesture(content::WebContents* web_contents,
-                                      SessionID window_id,
-                                      const blink::WebMouseEvent& mouse_event) {
+bool VivaldiUIEvents::CheckMouseGesture(
+    content::RenderWidgetHostViewBase* root_view,
+    const blink::WebMouseEvent& mouse_event) {
+  using blink::WebInputEvent;
+  using blink::WebMouseEvent;
+  using blink::WebMouseWheelEvent;
+
+  DCHECK(mouse_event.GetType() != WebInputEvent::Type::kMouseMove);
+  bool eat_event = false;
+  // We should not have both wheel and mouse gestures running.
+  DCHECK(!wheel_gestures_.active || !mouse_gestures_);
+  if (mouse_event.GetType() == WebInputEvent::Type::kMouseDown) {
+    if (!mouse_gestures_) {
+      if (mouse_event.button == WebMouseEvent::Button::kRight &&
+          !(mouse_event.GetModifiers() & WebInputEvent::kLeftButtonDown)) {
+        StartMouseGestureDetection(root_view, mouse_event, false);
+      }
+    }
+  } else if (mouse_event.GetType() == WebInputEvent::Type::kMouseUp) {
+    eat_event = FinishMouseOrWheelGesture(false);
+  }
+  return eat_event;
+}
+
+bool VivaldiUIEvents::CheckRockerGesture(
+    content::RenderWidgetHostViewBase* root_view,
+    const blink::WebMouseEvent& mouse_event) {
   using blink::WebInputEvent;
   using blink::WebMouseEvent;
 
@@ -362,8 +361,10 @@ bool GestureState::CheckRockerGesture(content::WebContents* web_contents,
     // Check if rocker gestures are enabled only after we detected them to avoid
     // preference checks on each mouse down.
     if (rocker_action != ROCKER_NONE) {
-      Profile* profile =
-          Profile::FromBrowserContext(web_contents->GetBrowserContext());
+      VivaldiBrowserWindow* window = FindMouseEventWindowFromView(root_view);
+      if (!window)
+        return eat_event;
+      Profile* profile = window->browser()->profile();
       if (profile->GetPrefs()->GetBoolean(
               vivaldiprefs::kMouseGesturesRockerGesturesEnabled)) {
         // We got a rocker gesture. Follow Opera's implementation and consume
@@ -377,10 +378,9 @@ bool GestureState::CheckRockerGesture(content::WebContents* web_contents,
         // Stop any mouse gesture if any.
         mouse_gestures_.reset();
         bool is_left = (rocker_action == ROCKER_LEFT);
-
         SendEventToUI(
-            window_id, tabs_private::OnRockerGesture::kEventName,
-            tabs_private::OnRockerGesture::Create(window_id.id(), is_left));
+            window, tabs_private::OnRockerGesture::kEventName,
+            tabs_private::OnRockerGesture::Create(window->id(), is_left));
       }
     }
   } else if (mouse_event.GetType() == WebInputEvent::Type::kMouseUp) {
@@ -417,37 +417,85 @@ bool GestureState::CheckRockerGesture(content::WebContents* web_contents,
 // RenderWidgetHostInputEventRouter::FindViewAtLocation(), and it is simpler to
 // filter out clicks outside the webviews in the handler for the extension event
 // using document.elementFromPoint().
-void GestureState::CheckWebviewClick(content::WebContents* web_contents,
-                                     SessionID window_id,
-                                     const blink::WebMouseEvent& mouse_event) {
+void VivaldiUIEvents::CheckWebviewClick(
+    content::RenderWidgetHostViewBase* root_view,
+    const blink::WebMouseEvent& mouse_event) {
   using blink::WebInputEvent;
   using Button = blink::WebPointerProperties::Button;
-  WebInputEvent::Type type = mouse_event.GetType();
-  if (type != WebInputEvent::Type::kMouseDown &&
-      type != WebInputEvent::Type::kMouseUp)
+
+  bool mousedown = (mouse_event.GetType() == WebInputEvent::Type::kMouseDown);
+  bool mouseup = (mouse_event.GetType() == WebInputEvent::Type::kMouseUp);
+  if (!mousedown && !mouseup)
     return;
 
-  bool mousedown = (type == WebInputEvent::Type::kMouseDown);
-  int button = 0;
-  if (mouse_event.button == Button::kMiddle) {
+  int button;
+  if (mouse_event.button == Button::kLeft) {
+    button = 0;
+  } else if (mouse_event.button == Button::kMiddle) {
     button = 1;
   } else if (mouse_event.button == Button::kRight) {
     button = 2;
+  } else {
+    return;
   }
+
+  VivaldiBrowserWindow* window = FindMouseEventWindowFromView(root_view);
+  if (!window)
+    return;
+
+  if (window->web_contents()->GetRenderWidgetHostView() != root_view) {
+    // The event was originated in a native child view like that of a date
+    // picker input elelemnt on Mac. As popups such controls are supposed
+    // to grab the mouse click to themselves and our UI should not know about
+    // it.
+    DCHECK(root_view->GetWidgetType() == content::WidgetType::kPopup);
+    return;
+  }
+
   gfx::PointF p =
-      ::vivaldi::ToUICoordinates(web_contents, mouse_event.PositionInWidget());
-  SendEventToUI(window_id, tabs_private::OnWebviewClickCheck::kEventName,
+      TransformToWindowUICoordinates(window, mouse_event.PositionInScreen());
+  SendEventToUI(window, tabs_private::OnWebviewClickCheck::kEventName,
                 tabs_private::OnWebviewClickCheck::Create(
-                    window_id.id(), mousedown, button, p.x(), p.y()));
+                    window->id(), mousedown, button, p.x(), p.y()));
 }
 
-}  // namespace
+bool VivaldiUIEvents::CheckBackForward(
+    content::RenderWidgetHostViewBase* root_view,
+    const blink::WebMouseEvent& event) {
+  using Button = blink::WebPointerProperties::Button;
 
-VivaldiUIEvents::VivaldiUIEvents(content::WebContents* web_contents,
-                                 SessionID window_id)
-    : web_contents_(web_contents), window_id_(window_id) {}
+  if (event.GetType() != blink::WebInputEvent::Type::kMouseUp)
+    return false;
 
-bool VivaldiUIEvents::HandleKeyboardEvent(
+  bool back = (event.button == Button::kBack);
+  bool forward = (event.button == Button::kForward);
+  if (!back && !forward)
+    return false;
+
+  VivaldiBrowserWindow* window = FindMouseEventWindowFromView(root_view);
+  if (!window)
+    return false;
+
+  content::WebContents* activecontents =
+      window->browser()->tab_strip_model()->GetActiveWebContents();
+  if (!activecontents)
+    return false;
+
+  bool eat_event = false;
+  content::NavigationController& controller = activecontents->GetController();
+  if (back && controller.CanGoBack()) {
+    controller.GoBack();
+    eat_event = true;
+  }
+  if (forward && controller.CanGoForward()) {
+    controller.GoForward();
+    eat_event = true;
+  }
+  return eat_event;
+}
+
+bool VivaldiUIEvents::DoHandleKeyboardEvent(
+    content::RenderWidgetHostImpl* widget_host,
     const content::NativeWebKeyboardEvent& event) {
   bool down = false;
   bool after_gesture = false;
@@ -456,77 +504,56 @@ bool VivaldiUIEvents::HandleKeyboardEvent(
   } else if (event.GetType() == blink::WebInputEvent::Type::kKeyUp) {
     // Check for Alt aka Menu release
     if (event.windows_key_code == blink::VKEY_MENU) {
-      GestureState& state = GetGestureState();
-      after_gesture = state.FinishMouseOrWheelGesture(true);
+      after_gesture = FinishMouseOrWheelGesture(true);
     }
   } else {
     return false;
   }
 
+  content::WebContents* web_contents =
+      widget_host->delegate()->GetAsWebContents();
+  if (!web_contents)
+    return false;
+  web_contents = web_contents->GetOutermostWebContents();
+  VivaldiBrowserWindow* window =
+      ::vivaldi::FindWindowForEmbedderWebContents(web_contents);
+  if (!window)
+    return false;
+
   // We only need the four lowest bits for cmd, alt, ctrl, shift
   int modifiers = event.GetModifiers() & 15;
 
-  SendEventToUI(window_id_, tabs_private::OnKeyboardChanged::kEventName,
+  SendEventToUI(window, tabs_private::OnKeyboardChanged::kEventName,
                 tabs_private::OnKeyboardChanged::Create(
-                    window_id_.id(), down, modifiers, event.windows_key_code,
+                    window->id(), down, modifiers, event.windows_key_code,
                     after_gesture));
 
   return after_gesture;
 }
 
-bool VivaldiUIEvents::HandleMouseEvent(
+bool VivaldiUIEvents::DoHandleMouseEvent(
     content::RenderWidgetHostViewBase* root_view,
     const blink::WebMouseEvent& event) {
-  bool eat_event = false;
-  bool is_blocked = false;
-  const web_modal::WebContentsModalDialogManager* manager =
-      web_modal::WebContentsModalDialogManager::FromWebContents(web_contents_);
-  if (manager) {
-    // Avoid dangling modal dialogs that will crash if the tab is closed
-    // through a gesture.
-    // TODO(pettern): There is still a chance a tab will be able to close
-    // before this check, so investigate blocking on the api level after
-    // the tab close rewrite on the js side.
-    is_blocked = manager->IsDialogActive();
+  if (event.GetType() == blink::WebInputEvent::Type::kMouseMove) {
+    return CheckMouseMove(root_view, event);
   }
-  if (!is_blocked) {
-    GestureState& state = GetGestureState();
 
-    // Rocker gestures take priority over any other mouse gestures.
-    eat_event = state.CheckRockerGesture(web_contents_, window_id_, event);
-    if (!eat_event) {
-      eat_event = state.CheckMouseGesture(web_contents_, window_id_, event);
-      if (!eat_event) {
-        state.CheckWebviewClick(web_contents_, window_id_, event);
-      }
-
-      Browser* browser =
-          ::vivaldi::FindBrowserForEmbedderWebContents(web_contents_);
-      content::WebContents* activecontents;
-      // browser is null for devtools
-      if (browser && (activecontents =
-                          browser->tab_strip_model()->GetActiveWebContents())) {
-        content::NavigationController& controller =
-            activecontents->GetController();
-        if (event.GetType() == blink::WebInputEvent::Type::kMouseUp) {
-          if (event.button == blink::WebPointerProperties::Button::kBack &&
-              controller.CanGoBack()) {
-            controller.GoBack();
-            eat_event = true;
-          } else if (event.button ==
-                         blink::WebPointerProperties::Button::kForward &&
-                     controller.CanGoForward()) {
-            controller.GoForward();
-            eat_event = true;
-          }
-        }
-      }
-    }
+  // Rocker gestures take priority over any other mouse gestures.
+  bool eat_event = CheckRockerGesture(root_view, event);
+  if (!eat_event) {
+    eat_event = CheckMouseGesture(root_view, event);
   }
+  if (!eat_event) {
+    eat_event = CheckBackForward(root_view, event);
+  }
+  if (!eat_event) {
+    CheckWebviewClick(root_view, event);
+  }
+
   return eat_event;
 }
 
-bool VivaldiUIEvents::HandleWheelEvent(
+bool VivaldiUIEvents::DoHandleWheelEvent(
     content::RenderWidgetHostViewBase* root_view,
     const blink::WebMouseWheelEvent& wheel_event,
     const ui::LatencyInfo& latency) {
@@ -541,17 +568,18 @@ bool VivaldiUIEvents::HandleWheelEvent(
   if (!wheel_gesture_event)
     return false;
 
-  GestureState& state = GetGestureState();
-
   // We should not have both wheel and mouse gestures running.
-  DCHECK(!state.wheel_gestures_.active || !state.mouse_gestures_);
+  DCHECK(!wheel_gestures_.active || !mouse_gestures_);
 
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents_->GetBrowserContext());
+  VivaldiBrowserWindow* window = FindMouseEventWindowFromView(root_view);
+  if (!window)
+    return false;
+
+  Profile* profile = window->browser()->profile();
   if (!profile->GetPrefs()->GetBoolean(vivaldiprefs::kMouseWheelTabSwitch))
     return false;
 
-  if (!state.wheel_gestures_.active) {
+  if (!wheel_gestures_.active) {
     // The event starts a new wheel gesture sequence canceling any mouse
     // gesture detection unless the wheel phase is:
     //
@@ -565,18 +593,17 @@ bool VivaldiUIEvents::HandleWheelEvent(
     constexpr int unwanted_phases =
         WebMouseWheelEvent::kPhaseEnded | WebMouseWheelEvent::kPhaseCancelled;
     if (!(wheel_event.phase & unwanted_phases)) {
-      state.mouse_gestures_.reset();
-      state.wheel_gestures_.active = true;
-      state.wheel_gestures_.window_id = window_id_;
+      mouse_gestures_.reset();
+      wheel_gestures_.active = true;
+      wheel_gestures_.window_id = window->id();
     }
   }
   root_view->ProcessMouseWheelEvent(wheel_event, latency);
   return true;
 }
 
-bool VivaldiUIEvents::HandleWheelEventAfterChild(
+bool VivaldiUIEvents::DoHandleWheelEventAfterChild(
     content::RenderWidgetHostViewBase* root_view,
-    content::RenderWidgetHostViewBase* child_view,
     const blink::WebMouseWheelEvent& event) {
   using blink::WebInputEvent;
   using blink::WebMouseWheelEvent;
@@ -596,8 +623,11 @@ bool VivaldiUIEvents::HandleWheelEventAfterChild(
   if (event.phase & unwanted_phases)
     return false;
 
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents_->GetBrowserContext());
+  VivaldiBrowserWindow* window = FindMouseEventWindowFromView(root_view);
+  if (!window)
+    return false;
+
+  Profile* profile = window->browser()->profile();
   if (!profile->GetPrefs()->GetBoolean(vivaldiprefs::kMouseWheelPageZoom)) {
     return false;
   }
@@ -613,29 +643,26 @@ bool VivaldiUIEvents::HandleWheelEventAfterChild(
 
   // TODO(igor@vivaldi.com): Shall we scale steps according to wheel_ticks?
   double steps = (wheel_ticks > 0) ? 1.0 : -1.0;
-
-  gfx::PointF p = event.PositionInWidget();
-  if (child_view) {
-    p = child_view->TransformPointToRootCoordSpaceF(p);
-  }
-  p = ::vivaldi::ToUICoordinates(web_contents_, p);
+  gfx::PointF p =
+      TransformToWindowUICoordinates(window, event.PositionInScreen());
   SendEventToUI(
-      window_id_, tabs_private::OnPageZoom::kEventName,
-      tabs_private::OnPageZoom::Create(window_id_.id(), steps, p.x(), p.y()));
+      window, tabs_private::OnPageZoom::kEventName,
+      tabs_private::OnPageZoom::Create(window->id(), steps, p.x(), p.y()));
 
   return true;
 }
 
-bool VivaldiUIEvents::HandleDragEnd(blink::WebDragOperation operation,
-                                    bool cancelled,
-                                    int screen_x,
-                                    int screen_y) {
+bool VivaldiUIEvents::DoHandleDragEnd(content::WebContents* web_contents,
+                                      blink::DragOperation operation,
+                                      bool cancelled,
+                                      int screen_x,
+                                      int screen_y) {
   if (!::vivaldi::IsTabDragInProgress())
     return false;
   ::vivaldi::SetTabDragInProgress(false);
 
   bool outside = ::vivaldi::ui_tools::IsOutsideAppWindow(screen_x, screen_y);
-  if (!outside && operation == blink::WebDragOperation::kWebDragOperationNone) {
+  if (!outside && operation == blink::DragOperation::kDragOperationNone) {
     // None of browser windows accepted the drag and we do not moving tabs out.
     cancelled = true;
   }
@@ -643,7 +670,7 @@ bool VivaldiUIEvents::HandleDragEnd(blink::WebDragOperation operation,
   ::vivaldi::BroadcastEvent(
       tabs_private::OnDragEnd::kEventName,
       tabs_private::OnDragEnd::Create(cancelled, outside, screen_x, screen_y),
-      web_contents_->GetBrowserContext());
+      web_contents->GetBrowserContext());
 
   return outside;
 }
@@ -693,12 +720,11 @@ void VivaldiUIEvents::SendMouseChangeEvent(
 }
 
 // static
-void VivaldiUIEvents::SetupWindowContents(content::WebContents* web_contents,
-                                          SessionID window_id) {
-  DCHECK(!web_contents->GetUserData(VivaldiEventHooks::UserDataKey()));
-  web_contents->SetUserData(
-      VivaldiEventHooks::UserDataKey(),
-      std::make_unique<VivaldiUIEvents>(web_contents, window_id));
+void VivaldiUIEvents::InitSingleton() {
+  if (!VivaldiEventHooks::HasInstance()) {
+    static base::NoDestructor<VivaldiUIEvents> instance;
+    VivaldiEventHooks::InitInstance(*instance);
+  }
 }
 
 }  // namespace extensions

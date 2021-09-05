@@ -14,6 +14,7 @@ import android.view.View.OnClickListener;
 
 import androidx.annotation.IntDef;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -45,15 +46,17 @@ import java.util.Set;
 // TODO(crbug/1022172): Should be package-protected once modularization is complete.
 public class ShareSheetPropertyModelBuilder {
     @IntDef({ContentType.LINK_PAGE_VISIBLE, ContentType.LINK_PAGE_NOT_VISIBLE, ContentType.TEXT,
-            ContentType.IMAGE, ContentType.HIGHLIGHTED_TEXT, ContentType.OTHER_FILE_TYPE})
+            ContentType.HIGHLIGHTED_TEXT, ContentType.LINK_AND_TEXT, ContentType.IMAGE,
+            ContentType.OTHER_FILE_TYPE})
     @Retention(RetentionPolicy.SOURCE)
     @interface ContentType {
         int LINK_PAGE_VISIBLE = 0;
         int LINK_PAGE_NOT_VISIBLE = 1;
         int TEXT = 2;
-        int IMAGE = 3;
-        int HIGHLIGHTED_TEXT = 4;
-        int OTHER_FILE_TYPE = 5;
+        int HIGHLIGHTED_TEXT = 3;
+        int LINK_AND_TEXT = 4;
+        int IMAGE = 5;
+        int OTHER_FILE_TYPE = 6;
     }
 
     private static final int MAX_NUM_APPS = 7;
@@ -61,9 +64,10 @@ public class ShareSheetPropertyModelBuilder {
     // Variations parameter name for the comma-separated list of third-party activity names.
     private static final String PARAM_SHARING_HUB_THIRD_PARTY_APPS = "sharing-hub-third-party-apps";
 
-    static final HashSet<Integer> ALL_CONTENT_TYPES = new HashSet<>(Arrays.asList(
-            ContentType.LINK_PAGE_VISIBLE, ContentType.LINK_PAGE_NOT_VISIBLE, ContentType.TEXT,
-            ContentType.IMAGE, ContentType.HIGHLIGHTED_TEXT, ContentType.OTHER_FILE_TYPE));
+    static final HashSet<Integer> ALL_CONTENT_TYPES = new HashSet<>(
+            Arrays.asList(ContentType.LINK_PAGE_VISIBLE, ContentType.LINK_PAGE_NOT_VISIBLE,
+                    ContentType.TEXT, ContentType.HIGHLIGHTED_TEXT, ContentType.LINK_AND_TEXT,
+                    ContentType.IMAGE, ContentType.OTHER_FILE_TYPE));
     private static final ArrayList<String> FALLBACK_ACTIVITIES =
             new ArrayList<>(Arrays.asList("com.whatsapp.ContactPicker",
                     "com.facebook.composer.shareintent.ImplicitShareIntentHandlerDefaultAlias",
@@ -119,13 +123,15 @@ public class ShareSheetPropertyModelBuilder {
                 contentTypes.add(ContentType.LINK_PAGE_NOT_VISIBLE);
             }
         }
-        if (!TextUtils.isEmpty(params.getText())
-                && !TextUtils.equals(params.getUrl(), params.getText())) {
+        if (!TextUtils.isEmpty(params.getText())) {
             if (chromeShareExtras.isUserHighlightedText()) {
                 contentTypes.add(ContentType.HIGHLIGHTED_TEXT);
             } else {
                 contentTypes.add(ContentType.TEXT);
             }
+        }
+        if (!TextUtils.isEmpty(params.getUrl()) && !TextUtils.isEmpty(params.getText())) {
+            contentTypes.add(ContentType.LINK_AND_TEXT);
         }
         if (params.getFileUris() != null) {
             if (!TextUtils.isEmpty(params.getFileContentType())
@@ -162,8 +168,12 @@ public class ShareSheetPropertyModelBuilder {
                 break;
             }
         }
+
+        String chromePackageName = ContextUtils.getApplicationContext().getPackageName();
         for (ResolveInfo res : resolveInfoList) {
-            thirdPartyActivities.add(res);
+            if (!res.activityInfo.packageName.equals(chromePackageName)) {
+                thirdPartyActivities.add(res);
+            }
             if (thirdPartyActivities.size() == MAX_NUM_APPS) {
                 break;
             }

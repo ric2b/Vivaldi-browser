@@ -13,6 +13,8 @@
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/main/browser_list.h"
 #import "ios/chrome/browser/main/browser_list_factory.h"
+#import "ios/chrome/browser/snapshots/snapshot_browser_agent.h"
+#import "ios/chrome/browser/snapshots/snapshot_cache.h"
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_opener.h"
@@ -58,6 +60,28 @@ Browser* FindBrowser(NSString* tab_id,
                                  tab_index);
 }
 
+// Moves snapshot associated with |snapshot_id| from |source_browser| to
+// |destination_browser|'s snapshot cache.
+void MoveSnapshot(NSString* snapshot_id,
+                  Browser* source_browser,
+                  Browser* destination_browser) {
+  DCHECK(snapshot_id.length);
+  SnapshotCache* source_cache =
+      SnapshotBrowserAgent::FromBrowser(source_browser)->snapshot_cache();
+  SnapshotCache* destination_cache =
+      SnapshotBrowserAgent::FromBrowser(destination_browser)->snapshot_cache();
+  [source_cache
+      retrieveImageForSnapshotID:snapshot_id
+                        callback:^(UIImage* snapshot) {
+                          if (snapshot) {
+                            [destination_cache setImage:snapshot
+                                         withSnapshotID:snapshot_id];
+                            [source_cache
+                                removeImageWithSnapshotID:snapshot_id];
+                          }
+                        }];
+}
+
 }  // namespace
 
 void MoveTabToBrowser(NSString* tab_id,
@@ -81,9 +105,14 @@ void MoveTabToBrowser(NSString* tab_id,
         source_tab_index, destination_tab_index);
     return;
   }
+  MoveSnapshot(tab_id, source_browser, destination_browser);
   std::unique_ptr<web::WebState> web_state =
       source_browser->GetWebStateList()->DetachWebStateAt(source_tab_index);
+  int insertion_flags = WebStateList::INSERT_FORCE_INDEX;
+  if (destination_browser->GetWebStateList()->empty()) {
+    insertion_flags = WebStateList::INSERT_ACTIVATE;
+  }
   destination_browser->GetWebStateList()->InsertWebState(
-      destination_tab_index, std::move(web_state),
-      WebStateList::INSERT_FORCE_INDEX, WebStateOpener());
+      destination_tab_index, std::move(web_state), insertion_flags,
+      WebStateOpener());
 }

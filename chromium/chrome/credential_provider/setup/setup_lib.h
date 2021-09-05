@@ -18,25 +18,6 @@ namespace credential_provider {
 
 struct FakesForTesting;
 
-// Define command line swtiches for setup.
-
-namespace switches {
-
-extern const char kParentHandle[];
-extern const char kInstallPath[];
-extern const char kUninstall[];
-extern const char kEnableStats[];
-extern const char kDisableStats[];
-
-}  // namespace switches
-
-// Installs GCPW Extension service. If there is an already GCPW extension, it is
-// stopped and deleted initially.
-DWORD InstallGCPWExtension(const base::FilePath& extension_exe_path);
-
-// Uninstalls GCPW Extension service by stopping and deleting the service.
-DWORD UninstallGCPWExtension();
-
 // Does a full install of GCP.  |installer_path| is the full path to the
 // installer exe and |product_version| is the version of GCP being installed.
 HRESULT DoInstall(const base::FilePath& installer_path,
@@ -65,7 +46,8 @@ int EnableStatsCollection(const base::CommandLine& cmdline);
 HRESULT WriteUninstallRegistryValues(const base::FilePath& setup_exe);
 
 // Writes the registry entries Credential Provider uses at runtime.
-HRESULT WriteCredentialProviderRegistryValues();
+HRESULT WriteCredentialProviderRegistryValues(
+    const base::FilePath& install_path);
 
 }  // namespace credential_provider
 

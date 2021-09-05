@@ -18,6 +18,7 @@ import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionUiType;
+import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionDrawableState;
 import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionSpannable;
@@ -91,6 +92,9 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
                     return SuggestionIcon.HISTORY;
 
                 default:
+                    if (suggestion.getSubtypes().contains(/* SUBTYPE_TRENDS = */ 143)) {
+                        return SuggestionIcon.TRENDS;
+                    }
                     return SuggestionIcon.MAGNIFIER;
             }
         } else {
@@ -127,6 +131,10 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
 
             case SuggestionIcon.VOICE:
                 icon = R.drawable.btn_mic;
+                break;
+
+            case SuggestionIcon.TRENDS:
+                icon = R.drawable.trending_up_black_24dp;
                 break;
 
             default:

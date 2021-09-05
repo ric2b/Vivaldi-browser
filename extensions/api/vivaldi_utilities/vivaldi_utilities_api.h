@@ -13,6 +13,8 @@
 #include "base/power_monitor/power_observer.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/shell_integration.h"
+#include "chrome/services/qrcode_generator/public/cpp/qrcode_generator_service.h"
+#include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom-shared.h"
 #include "components/password_manager/core/browser/password_access_authenticator.h"
 #include "components/password_manager/core/browser/reauth_purpose.h"
 #include "content/public/browser/download_manager.h"
@@ -767,6 +769,31 @@ class UtilitiesIsFirstRunFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesIsFirstRunFunction);
+};
+
+class UtilitiesGenerateQRCodeFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.generateQRCode",
+                             UTILITIES_GENERATE_QR_CODE)
+  UtilitiesGenerateQRCodeFunction();
+
+ private:
+  ~UtilitiesGenerateQRCodeFunction() override;
+  ResponseAction Run() override;
+
+  void OnCodeGeneratorResponse(
+      const qrcode_generator::mojom::GenerateQRCodeResponsePtr response);
+  void RespondOnUiThread(std::string data_url);
+  void RespondOnUiThreadForFile(base::FilePath path);
+
+  // Remote to service instance to generate QR code images.
+  mojo::Remote<qrcode_generator::mojom::QRCodeGeneratorService>
+      qr_code_service_remote_;
+
+  vivaldi::utilities::CaptureQRDestination dest_ =
+                vivaldi::utilities::CAPTURE_QR_DESTINATION_DATAURL;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGenerateQRCodeFunction);
 };
 
 }  // namespace extensions

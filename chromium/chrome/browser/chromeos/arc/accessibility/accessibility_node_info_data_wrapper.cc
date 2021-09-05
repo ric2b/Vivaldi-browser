@@ -70,7 +70,7 @@ bool AccessibilityNodeInfoDataWrapper::IsVirtualNode() const {
 }
 
 bool AccessibilityNodeInfoDataWrapper::IsIgnored() const {
-  if (!tree_source_->IsScreenReaderMode())
+  if (!tree_source_->UseFullFocusMode())
     return !IsImportantInAndroid();
 
   if (!IsImportantInAndroid() || !HasImportantProperty())
@@ -208,7 +208,7 @@ void AccessibilityNodeInfoDataWrapper::PopulateAXRole(
 
   std::string chrome_role;
   if (GetProperty(AXStringProperty::CHROME_ROLE, &chrome_role)) {
-    ax::mojom::Role role_value = ui::ParseRole(chrome_role.c_str());
+    auto role_value = ui::ParseAXEnum<ax::mojom::Role>(chrome_role.c_str());
     if (role_value != ax::mojom::Role::kNone) {
       // The webView and rootWebArea roles differ between Android and Chrome. In
       // particular, Android includes far fewer attributes which leads to
@@ -294,7 +294,7 @@ void AccessibilityNodeInfoDataWrapper::PopulateAXState(
 
 #undef MAP_STATE
 
-  const bool focusable = tree_source_->IsScreenReaderMode()
+  const bool focusable = tree_source_->UseFullFocusMode()
                              ? IsAccessibilityFocusableContainer()
                              : IsFocusable();
   if (focusable)
@@ -537,7 +537,7 @@ std::string AccessibilityNodeInfoDataWrapper::ComputeAXName(
 
   // If a node is accessibility focusable, but has no name, the name should be
   // computed from its descendants.
-  if (names.empty() && tree_source_->IsScreenReaderMode() &&
+  if (names.empty() && tree_source_->UseFullFocusMode() &&
       IsAccessibilityFocusableContainer())
     ComputeNameFromContents(&names);
 

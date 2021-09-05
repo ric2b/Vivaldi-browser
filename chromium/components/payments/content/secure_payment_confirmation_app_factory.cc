@@ -5,6 +5,7 @@
 #include "components/payments/content/secure_payment_confirmation_app_factory.h"
 
 #include <stdint.h>
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -73,7 +74,7 @@ void SecurePaymentConfirmationAppFactory::
         mojom::SecurePaymentConfirmationRequestPtr request,
         std::unique_ptr<autofill::InternalAuthenticator> authenticator,
         bool is_available) {
-  if (!delegate)
+  if (!delegate || !delegate->GetWebContents())
     return;
 
   if (!is_available && !base::FeatureList::IsEnabled(
@@ -97,21 +98,25 @@ void SecurePaymentConfirmationAppFactory::
   WebDataServiceBase::Handle handle =
       web_data_service->GetSecurePaymentConfirmationInstruments(
           std::move(request->credential_ids), this);
-  requests_[handle] = std::make_unique<Request>(delegate, std::move(request),
-                                                std::move(authenticator));
+  requests_[handle] = std::make_unique<Request>(
+      delegate, web_data_service, std::move(request), std::move(authenticator));
 }
 
 SecurePaymentConfirmationAppFactory::SecurePaymentConfirmationAppFactory()
     : PaymentAppFactory(PaymentApp::Type::INTERNAL) {}
 
-SecurePaymentConfirmationAppFactory::~SecurePaymentConfirmationAppFactory() =
-    default;
+SecurePaymentConfirmationAppFactory::~SecurePaymentConfirmationAppFactory() {
+  std::for_each(requests_.begin(), requests_.end(), [&](const auto& pair) {
+    if (pair.second->web_data_service)
+      pair.second->web_data_service->CancelRequest(pair.first);
+  });
+}
 
 void SecurePaymentConfirmationAppFactory::Create(
     base::WeakPtr<Delegate> delegate) {
   DCHECK(delegate);
 
-  PaymentRequestSpec* spec = delegate->GetSpec();
+  base::WeakPtr<PaymentRequestSpec> spec = delegate->GetSpec();
   if (!spec || !base::Contains(spec->payment_method_identifiers_set(),
                                methods::kSecurePaymentConfirmation)) {
     delegate->OnDoneCreatingPaymentApps();
@@ -130,8 +135,9 @@ void SecurePaymentConfirmationAppFactory::Create(
 
       std::unique_ptr<autofill::InternalAuthenticator> authenticator =
           delegate->CreateInternalAuthenticator();
+      auto* authenticator_ptr = authenticator.get();
 
-      authenticator->IsUserVerifyingPlatformAuthenticatorAvailable(
+      authenticator_ptr->IsUserVerifyingPlatformAuthenticatorAvailable(
           base::BindOnce(&SecurePaymentConfirmationAppFactory::
                              OnIsUserVerifyingPlatformAuthenticatorAvailable,
                          weak_ptr_factory_.GetWeakPtr(), delegate,
@@ -146,11 +152,14 @@ void SecurePaymentConfirmationAppFactory::Create(
 
 struct SecurePaymentConfirmationAppFactory::Request
     : public content::WebContentsObserver {
-  Request(base::WeakPtr<PaymentAppFactory::Delegate> delegate,
-          mojom::SecurePaymentConfirmationRequestPtr mojo_request,
-          std::unique_ptr<autofill::InternalAuthenticator> authenticator)
+  Request(
+      base::WeakPtr<PaymentAppFactory::Delegate> delegate,
+      scoped_refptr<payments::PaymentManifestWebDataService> web_data_service,
+      mojom::SecurePaymentConfirmationRequestPtr mojo_request,
+      std::unique_ptr<autofill::InternalAuthenticator> authenticator)
       : content::WebContentsObserver(delegate->GetWebContents()),
         delegate(delegate),
+        web_data_service(web_data_service),
         mojo_request(std::move(mojo_request)),
         authenticator(std::move(authenticator)) {}
 
@@ -160,6 +169,7 @@ struct SecurePaymentConfirmationAppFactory::Request
   Request& operator=(const Request& other) = delete;
 
   base::WeakPtr<PaymentAppFactory::Delegate> delegate;
+  scoped_refptr<payments::PaymentManifestWebDataService> web_data_service;
   mojom::SecurePaymentConfirmationRequestPtr mojo_request;
   std::unique_ptr<autofill::InternalAuthenticator> authenticator;
 };
@@ -230,7 +240,7 @@ void SecurePaymentConfirmationAppFactory::OnAppIconDecoded(
           std::move(icon), instrument->label,
           std::move(instrument->credential_id),
           url::Origin::Create(request->delegate->GetTopOrigin()),
-          request->delegate->GetSpec()->details().total->amount,
+          request->delegate->GetSpec()->AsWeakPtr(),
           std::move(request->mojo_request), std::move(request->authenticator)));
 
   request->delegate->OnDoneCreatingPaymentApps();

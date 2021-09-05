@@ -7,9 +7,9 @@
 #include "base/bind_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "build/buildflag.h"
 #include "chromeos/services/ime/constants.h"
 #include "chromeos/services/ime/public/cpp/buildflags.h"
+#include "chromeos/services/ime/public/proto/messages.pb.h"
 
 namespace chromeos {
 namespace ime {
@@ -18,13 +18,6 @@ namespace {
 
 // Whether to create a fake main entry.
 bool g_fake_main_entry_for_testing = false;
-
-#if BUILDFLAG(ENABLE_CROS_IME_SANITY_TEST_SO)
-// This is for development purposes only.
-const char kDecoderLibName[] = "imesanitytest";
-#else
-const char kDecoderLibName[] = "imedecoder";
-#endif
 
 // A client delegate that makes calls on client side.
 class ClientDelegate : public ImeClientDelegate {
@@ -62,6 +55,14 @@ class ClientDelegate : public ImeClientDelegate {
   mojo::Remote<mojom::InputChannel> client_remote_;
 };
 
+std::vector<uint8_t> SerializeMessage(ime::PublicMessage message) {
+  ime::Wrapper wrapper;
+  *wrapper.mutable_public_message() = std::move(message);
+  std::vector<uint8_t> output;
+  wrapper.SerializeToArray(output.data(), wrapper.ByteSizeLong());
+  return output;
+}
+
 }  // namespace
 
 void FakeEngineMainEntryForTesting() {
@@ -70,7 +71,7 @@ void FakeEngineMainEntryForTesting() {
 
 DecoderEngine::DecoderEngine(ImeCrosPlatform* platform) : platform_(platform) {
   if (g_fake_main_entry_for_testing) {
-    // TODO(b/156897880): Impl the fake main entry.
+    // TODO(b/156897880): Add a fake main entry.
   } else {
     if (!TryLoadDecoder()) {
       LOG(ERROR) << "DecoderEngine INIT FAILED!";
@@ -84,8 +85,8 @@ bool DecoderEngine::TryLoadDecoder() {
   if (engine_main_entry_)
     return true;
 
-  // Load the decoder library.
-  base::FilePath lib_path(base::GetNativeLibraryName(kDecoderLibName));
+  // Load the decoder whose DSO has been preloaded before sandbox is engaged.
+  base::FilePath lib_path(kCrosImeDecoderLib);
   library_ = base::ScopedNativeLibrary(lib_path);
 
   if (!library_.is_valid()) {
@@ -132,6 +133,14 @@ bool DecoderEngine::BindRequest(
 bool DecoderEngine::IsImeSupportedByDecoder(const std::string& ime_spec) {
   return engine_main_entry_ &&
          engine_main_entry_->IsImeSupported(ime_spec.c_str());
+}
+
+void DecoderEngine::OnFocus() {
+  ime::PublicMessage message;
+  message.set_seq_id(current_seq_id_++);
+  *message.mutable_on_focus() = ime::OnFocus();
+
+  ProcessMessage(SerializeMessage(std::move(message)), base::DoNothing());
 }
 
 void DecoderEngine::ProcessMessage(const std::vector<uint8_t>& message,

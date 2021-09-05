@@ -24,6 +24,7 @@
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/masked_targeter_delegate.h"
+#include "ui/views/metadata/metadata_header_macros.h"
 #include "ui/views/view_observer.h"
 
 class AlertIndicator;
@@ -48,13 +49,11 @@ class View;
 //
 ///////////////////////////////////////////////////////////////////////////////
 class Tab : public gfx::AnimationDelegate,
-            public views::ButtonListener,
             public views::MaskedTargeterDelegate,
             public views::ViewObserver,
             public TabSlotView {
  public:
-  // The Tab's class name.
-  static const char kViewClassName[];
+  METADATA_HEADER(Tab);
 
   // When the content's width of the tab shrinks to below this size we should
   // hide the close button on inactive tabs. Any smaller and they're too easy
@@ -75,15 +74,11 @@ class Tab : public gfx::AnimationDelegate,
   void AnimationEnded(const gfx::Animation* animation) override;
   void AnimationProgressed(const gfx::Animation* animation) override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // views::MaskedTargeterDelegate:
   bool GetHitTestMask(SkPath* mask) const override;
 
   // TabSlotView:
   void Layout() override;
-  const char* GetClassName() const override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnKeyReleased(const ui::KeyEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
@@ -176,6 +171,10 @@ class Tab : public gfx::AnimationDelegate,
   static base::Optional<TabAlertState> GetAlertStateToShow(
       const std::vector<TabAlertState>& alert_states);
 
+  bool showing_close_button_for_testing() const {
+    return showing_close_button_;
+  }
+
  private:
   class TabCloseButtonObserver;
   friend class AlertIndicatorTest;
@@ -214,6 +213,8 @@ class Tab : public gfx::AnimationDelegate,
   // the mouse moving over the tab. If the tab is already hovered or mouse
   // events are disabled because of touch input, this is a no-op.
   void MaybeUpdateHoverStatus(const ui::MouseEvent& event);
+
+  void CloseButtonPressed(const ui::Event& event);
 
   // The controller, never nullptr.
   TabController* const controller_;

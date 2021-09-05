@@ -12,6 +12,7 @@
 #include "base/metrics/user_metrics.h"
 #include "build/build_config.h"
 #include "content/browser/browser_plugin/browser_plugin_embedder.h"
+#include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
@@ -27,14 +28,14 @@
 #include "content/browser/browser_plugin/browser_plugin_popup_menu_helper_mac.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 namespace content {
 
 BrowserPluginGuest::BrowserPluginGuest(WebContentsImpl* web_contents,
                                        BrowserPluginGuestDelegate* delegate)
     : WebContentsObserver(web_contents),
       owner_web_contents_(nullptr),
-      attached_(false),
-      focused_(false),
       initialized_(false),
       last_drag_status_(blink::kWebDragStatusUnknown),
       seen_embedder_system_drag_ended_(false),
@@ -45,17 +46,10 @@ BrowserPluginGuest::BrowserPluginGuest(WebContentsImpl* web_contents,
   RecordAction(base::UserMetricsAction("BrowserPlugin.Guest.Create"));
 }
 
-int BrowserPluginGuest::LoadURLWithParams(
-    const NavigationController::LoadURLParams& load_params) {
-  GetWebContents()->GetController().LoadURLWithParams(load_params);
-  return MSG_ROUTING_NONE;
-}
-
 void BrowserPluginGuest::WillDestroy() {
   // It is important that the WebContents is notified before detaching.
   GetWebContents()->BrowserPluginGuestWillDetach();
 
-  attached_ = false;
   owner_web_contents_ = nullptr;
 }
 
@@ -79,7 +73,6 @@ void BrowserPluginGuest::SetFocus(bool focused,
   RenderWidgetHostView* rwhv = web_contents()->GetRenderWidgetHostView();
   RenderWidgetHost* rwh = rwhv ? rwhv->GetRenderWidgetHost() : nullptr;
 
-  focused_ = focused;
   if (!rwh)
     return;
 
@@ -103,10 +96,7 @@ WebContentsImpl* BrowserPluginGuest::CreateNewGuestWindow(
 }
 
 void BrowserPluginGuest::InitInternal(WebContentsImpl* owner_web_contents) {
-  focused_ = false;
-  SetFocus(focused_, blink::mojom::FocusType::kNone);
-
-  frame_rect_ = gfx::Rect();
+  SetFocus(false, blink::mojom::FocusType::kNone);
 
   if (owner_web_contents_ != owner_web_contents) {
     // Once a BrowserPluginGuest has an embedder WebContents, it's considered to
@@ -130,19 +120,21 @@ void BrowserPluginGuest::InitInternal(WebContentsImpl* owner_web_contents) {
   // Navigation is disabled in Chrome Apps. We want to make sure guest-initiated
   // navigations still continue to function inside the app.
   renderer_prefs->browser_handles_all_top_level_requests = false;
-  // Disable "client blocked" error page for browser plugin.
-  renderer_prefs->disable_client_blocked_error_page = true;
 
   DCHECK(GetWebContents()->GetRenderViewHost());
 
   // TODO(chrishtr): this code is wrong. The navigate_on_drag_drop field will
   // be reset again the next time preferences are updated.
-  WebPreferences prefs = GetWebContents()->GetOrCreateWebPreferences();
+  blink::web_pref::WebPreferences prefs =
+      GetWebContents()->GetOrCreateWebPreferences();
   prefs.navigate_on_drag_drop = false;
   GetWebContents()->SetWebPreferences(prefs);
 }
 
 BrowserPluginGuest::~BrowserPluginGuest() {
+  if (vivaldi::IsVivaldiRunning() && delegate_) {
+    delegate_->SetGuestHost(nullptr);
+  }
 }
 
 // static
@@ -165,19 +157,14 @@ WebContentsImpl* BrowserPluginGuest::GetWebContents() const {
 
 gfx::Point BrowserPluginGuest::GetScreenCoordinates(
     const gfx::Point& relative_position) const {
-  if (!attached_)
-    return relative_position;
-
-  gfx::Point screen_pos(relative_position);
-  screen_pos += frame_rect_.OffsetFromOrigin();
-  return screen_pos;
+  return relative_position;
 }
 
 void BrowserPluginGuest::DragSourceEndedAt(float client_x,
                                            float client_y,
                                            float screen_x,
                                            float screen_y,
-                                           blink::WebDragOperation operation) {
+                                           blink::DragOperation operation) {
   web_contents()->GetRenderViewHost()->GetWidget()->DragSourceEndedAt(
       gfx::PointF(client_x, client_y), gfx::PointF(screen_x, screen_y),
       operation);
@@ -252,6 +239,20 @@ void BrowserPluginGuest::SendTextInputTypeChangedToView(
           false, last_text_input_state_->type != ui::TEXT_INPUT_TYPE_NONE);
     }
   }
+}
+
+void BrowserPluginGuest::DidStartNavigation(
+    NavigationHandle* navigation_handle) {
+  // Originally added to suppress the error page when a navigation is blocked
+  // using the webrequest API in a <webview> guest: https://crbug.com/284741.
+  //
+  // TODO(https://crbug.com/1127132): net::ERR_BLOCKED_BY_CLIENT is used for
+  // many other errors. Figure out what suppression policy is desirable here.
+  //
+  // TODO(mcnee): Investigate moving this out to WebViewGuest.
+  if (!allow_blocked_by_client_)
+  NavigationRequest::From(navigation_handle)
+      ->SetSilentlyIgnoreBlockedByClient();
 }
 
 void BrowserPluginGuest::DidFinishNavigation(

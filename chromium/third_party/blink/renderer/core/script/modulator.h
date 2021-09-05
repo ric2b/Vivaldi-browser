@@ -10,6 +10,7 @@
 #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/module_record.h"
+#include "third_party/blink/renderer/bindings/core/v8/module_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/sanitize_script_errors.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_code_cache.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -113,7 +114,7 @@ class CORE_EXPORT Modulator : public GarbageCollected<Modulator>,
 
   virtual ScriptState* GetScriptState() = 0;
 
-  virtual V8CacheOptions GetV8CacheOptions() const = 0;
+  virtual mojom::blink::V8CacheOptions GetV8CacheOptions() const = 0;
 
   // https://html.spec.whatwg.org/C/#concept-bc-noscript
   // "scripting is disabled for settings's responsible browsing context"
@@ -190,12 +191,6 @@ class CORE_EXPORT Modulator : public GarbageCollected<Modulator>,
 
   virtual ScriptValue InstantiateModule(v8::Local<v8::Module>, const KURL&) = 0;
 
-  struct ModuleRequest {
-    String specifier;
-    TextPosition position;
-    ModuleRequest(const String& specifier, const TextPosition& position)
-        : specifier(specifier), position(position) {}
-  };
   virtual Vector<ModuleRequest> ModuleRequestsFromModuleRecord(
       v8::Local<v8::Module>) = 0;
 
@@ -206,13 +201,14 @@ class CORE_EXPORT Modulator : public GarbageCollected<Modulator>,
   // CaptureEvalErrorFlag is used to implement "rethrow errors" parameter in
   // run-a-module-script.
   // - When "rethrow errors" is to be set, use kCapture for EvaluateModule().
-  // Then EvaluateModule() wraps exceptions in a ModuleEvaluationResult instead
+  // Then EvaluateModule() wraps exceptions in a ScriptEvaluationResult instead
   // of throwing it and the caller should rethrow the exception.
-  // - When "rethrow errors" is not to be set, use kReport. EvaluateModule()
-  // "report the error" inside it (if any), and returns either a
-  // ModuleEvaluationResult that is empty or contains the successful
-  // evaluation result.
-  virtual ModuleEvaluationResult ExecuteModule(ModuleScript*,
+  // - When "rethrow errors" is not to be set, use kReport. If there is an error
+  // to throw, EvaluateModule() "report the error" inside it, and returns
+  // ScriptEvaluationResult wrapping the error. Otherwise, it returns either a
+  // ScriptEvaluationResult that is empty or contains the successful evaluation
+  // result.
+  virtual ScriptEvaluationResult ExecuteModule(ModuleScript*,
                                                CaptureEvalErrorFlag) = 0;
 
   virtual ModuleScriptFetcher* CreateModuleScriptFetcher(

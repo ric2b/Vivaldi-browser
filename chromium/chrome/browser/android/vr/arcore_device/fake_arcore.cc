@@ -7,9 +7,6 @@
 #include "base/android/android_hardware_buffer_compat.h"
 #include "base/numerics/math_constants.h"
 #include "base/single_thread_task_runner.h"
-#include "ui/display/display.h"
-#include "ui/gfx/buffer_types.h"
-#include "ui/gl/gl_image_ahardwarebuffer.h"
 
 namespace {}
 
@@ -21,7 +18,9 @@ FakeArCore::FakeArCore()
 FakeArCore::~FakeArCore() = default;
 
 bool FakeArCore::Initialize(
-    base::android::ScopedJavaLocalRef<jobject> application_context) {
+    base::android::ScopedJavaLocalRef<jobject> application_context,
+    const std::unordered_set<device::mojom::XRSessionFeature>&
+        enabled_features) {
   DCHECK(IsOnGlThread());
   return true;
 }
@@ -46,7 +45,7 @@ void FakeArCore::SetCameraTexture(uint32_t texture) {
 }
 
 std::vector<float> FakeArCore::TransformDisplayUvCoords(
-    const base::span<const float> uvs) {
+    const base::span<const float> uvs) const {
   // Try to match ArCore's transfore values.
   //
   // Sample ArCore input: width=1080, height=1795, rotation=0,
@@ -76,6 +75,8 @@ std::vector<float> FakeArCore::TransformDisplayUvCoords(
   // SetDisplayGeometry should have been called first.
   DCHECK(frame_size_.width());
   DCHECK(frame_size_.height());
+
+  DCHECK_GE(uvs.size(), 6u);
 
   // Do clipping calculations in orientation ROTATE_0. screen U is left=0,
   // right=1. Screen V is bottom=0, top=1. We'll apply screen rotation later.
@@ -147,6 +148,7 @@ std::vector<float> FakeArCore::TransformDisplayUvCoords(
     uvs_out.push_back(v);
     DVLOG(2) << __FUNCTION__ << ": uv[" << i << "]=(" << u << ", " << v << ")";
   }
+
   return uvs_out;
 }
 
@@ -301,6 +303,10 @@ mojom::XRLightEstimationDataPtr FakeArCore::GetLightEstimationData() {
   result->reflection_probe->cube_map->negative_z.resize(16 * 16);
 
   return result;
+}
+
+mojom::XRDepthDataPtr FakeArCore::GetDepthData() {
+  return nullptr;
 }
 
 void FakeArCore::CreatePlaneAttachedAnchor(

@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.toolbar;
 
+import static org.chromium.chrome.browser.incognito.IncognitoUtils.getNonPrimaryOTRProfileFromWindowAndroid;
+
 import android.content.Context;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
@@ -24,7 +26,7 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
-import org.chromium.chrome.browser.paint_preview.TabbedPaintPreviewPlayer;
+import org.chromium.chrome.browser.paint_preview.TabbedPaintPreview;
 import org.chromium.chrome.browser.previews.Previews;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
@@ -38,6 +40,7 @@ import org.chromium.components.omnibox.SecurityStatusIcon;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.components.security_state.SecurityStateModel;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.url.URI;
 
@@ -132,7 +135,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         }
 
         // TODO(yusufo) : Consider using this for all calls from getTab() for accessing url.
-        if (!hasTab()) return "";
+        if (!hasTab() || !getTab().isInitialized()) return "";
 
         // Tab.getUrl() returns empty string if it does not have a URL.
         return getTab().getUrlString().trim();
@@ -280,12 +283,18 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
     public Profile getProfile() {
         Profile lastUsedRegularProfile = Profile.getLastUsedRegularProfile();
         if (mIsIncognito) {
+            WindowAndroid windowAndroid = (mTab != null) ? mTab.getWindowAndroid() : null;
+            // If the mTab belongs to a CustomTabActivity then we return the non-primary OTR profile
+            // which is associated with it. For all other cases we return the primary OTR profile.
+            Profile nonPrimaryOTRProfile = getNonPrimaryOTRProfileFromWindowAndroid(windowAndroid);
+            if (nonPrimaryOTRProfile != null) return nonPrimaryOTRProfile;
+
             // When in overview mode with no open tabs, there has not been created an
-            // OffTheRecordProfile yet. #getOffTheRecordProfile will create a profile if none
+            // OTR profile yet. #getOffTheRecordProfile will create a profile if none
             // exists.
-            assert lastUsedRegularProfile.hasOffTheRecordProfile()
-                    || isInOverviewAndShowingOmnibox();
-            return lastUsedRegularProfile.getOffTheRecordProfile();
+            assert lastUsedRegularProfile.hasPrimaryOTRProfile() || isInOverviewAndShowingOmnibox();
+            // Return the primary OTR profile.
+            return lastUsedRegularProfile.getPrimaryOTRProfile();
         }
         return lastUsedRegularProfile;
     }
@@ -340,7 +349,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
     @Override
     public boolean isPaintPreview() {
-        return hasTab() && TabbedPaintPreviewPlayer.get(mTab).isShowingAndNeedsBadge();
+        return hasTab() && TabbedPaintPreview.get(mTab).isShowing();
     }
 
     @Override

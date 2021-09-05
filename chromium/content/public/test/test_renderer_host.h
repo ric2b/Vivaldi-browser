@@ -35,6 +35,12 @@ class AuraTestHelper;
 }
 }  // namespace aura
 
+namespace blink {
+namespace web_pref {
+struct WebPreferences;
+}
+}  // namespace blink
+
 namespace display {
 class Screen;
 }
@@ -62,7 +68,6 @@ class TestRenderViewHostFactory;
 class TestRenderWidgetHostFactory;
 class TestNavigationURLLoaderFactory;
 class WebContents;
-struct WebPreferences;
 
 // An interface and utility for driving tests of RenderFrameHost.
 class RenderFrameHostTester {
@@ -99,6 +104,12 @@ class RenderFrameHostTester {
   // Gives tests access to RenderFrameHostImpl::OnCreateChild. The returned
   // RenderFrameHost is owned by the parent RenderFrameHost.
   virtual RenderFrameHost* AppendChild(const std::string& frame_name) = 0;
+
+  // Same as AppendChild above, but simulates a custom allow attribute being
+  // used as the container policy.
+  virtual RenderFrameHost* AppendChildWithPolicy(
+      const std::string& frame_name,
+      const blink::ParsedFeaturePolicy& allow) = 0;
 
   // Gives tests access to RenderFrameHostImpl::OnDetach. Destroys |this|.
   virtual void Detach() = 0;
@@ -162,7 +173,7 @@ class RenderViewHostTester {
   virtual void SimulateWasShown() = 0;
 
   // Promote ComputeWebPreferences to public.
-  virtual WebPreferences TestComputeWebPreferences() = 0;
+  virtual blink::web_pref::WebPreferences TestComputeWebPreferences() = 0;
 };
 
 // You can instantiate only one class like this at a time.  During its

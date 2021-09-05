@@ -36,6 +36,8 @@ class TransferMetadata {
 
   static bool IsFinalStatus(Status status);
 
+  static std::string StatusToString(TransferMetadata::Status status);
+
   TransferMetadata(Status status,
                    float progress,
                    base::Optional<std::string> token,
@@ -46,6 +48,8 @@ class TransferMetadata {
   TransferMetadata& operator=(const TransferMetadata&);
 
   Status status() const { return status_; }
+
+  // Returns transfer progress as percentage.
   float progress() const { return progress_; }
 
   // Represents the UKey2 token from Nearby Connection. base::nullopt if no

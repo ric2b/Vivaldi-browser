@@ -11,6 +11,8 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accelerated_widget_mac/ca_renderer_layer_tree.h"
 #include "ui/gfx/geometry/dip_util.h"
+#include "ui/gfx/geometry/point_conversions.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/mac/io_surface.h"
 #include "ui/gl/ca_renderer_layer_params.h"
 #include "ui/gl/gl_image_io_surface.h"
@@ -456,11 +458,12 @@ class CALayerTreePropertyUpdatesTest : public CALayerTreeTest {
 
       // Validate the clip and sorting context layer.
       EXPECT_TRUE([clip_and_sorting_layer masksToBounds]);
-      EXPECT_EQ(gfx::ConvertRectToDIP(properties.scale_factor,
-                                      gfx::Rect(properties.clip_rect.size())),
-                gfx::Rect([clip_and_sorting_layer bounds]));
-      EXPECT_EQ(gfx::ConvertPointToDIP(properties.scale_factor,
-                                       properties.clip_rect.origin()),
+      EXPECT_EQ(
+          gfx::ToFlooredRectDeprecated(gfx::ConvertRectToDips(
+              gfx::Rect(properties.clip_rect.size()), properties.scale_factor)),
+          gfx::Rect([clip_and_sorting_layer bounds]));
+      EXPECT_EQ(gfx::ToFlooredPoint(gfx::ConvertPointToDips(
+                    properties.clip_rect.origin(), properties.scale_factor)),
                 gfx::Point([clip_and_sorting_layer position]));
       EXPECT_EQ(-properties.clip_rect.origin().x() / properties.scale_factor,
                 [clip_and_sorting_layer sublayerTransform].m41);
@@ -480,12 +483,13 @@ class CALayerTreePropertyUpdatesTest : public CALayerTreeTest {
                 [content_layer contents]);
       EXPECT_EQ(properties.contents_rect,
                 gfx::RectF([content_layer contentsRect]));
-      EXPECT_EQ(gfx::ConvertPointToDIP(properties.scale_factor,
-                                       properties.rect.origin()),
+      EXPECT_EQ(gfx::ToFlooredPoint(gfx::ConvertPointToDips(
+                    properties.rect.origin(), properties.scale_factor)),
                 gfx::Point([content_layer position]));
-      EXPECT_EQ(gfx::ConvertRectToDIP(properties.scale_factor,
-                                      gfx::Rect(properties.rect.size())),
-                gfx::Rect([content_layer bounds]));
+      EXPECT_EQ(
+          gfx::ToFlooredRectDeprecated(gfx::ConvertRectToDips(
+              gfx::Rect(properties.rect.size()), properties.scale_factor)),
+          gfx::Rect([content_layer bounds]));
       EXPECT_EQ(kCALayerBottomEdge, [content_layer edgeAntialiasingMask]);
       EXPECT_EQ(properties.opacity, [content_layer opacity]);
       if ([content_layer respondsToSelector:(@selector(contentsScale))])

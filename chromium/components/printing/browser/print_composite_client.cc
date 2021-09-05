@@ -79,22 +79,6 @@ PrintCompositeClient::PrintCompositeClient(content::WebContents* web_contents)
 
 PrintCompositeClient::~PrintCompositeClient() {}
 
-bool PrintCompositeClient::OnMessageReceived(
-    const IPC::Message& message,
-    content::RenderFrameHost* render_frame_host) {
-#if BUILDFLAG(ENABLE_TAGGED_PDF)
-  bool handled = true;
-  IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(PrintCompositeClient, message,
-                                   render_frame_host)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_AccessibilityTree, OnAccessibilityTree)
-    IPC_MESSAGE_UNHANDLED(handled = false)
-  IPC_END_MESSAGE_MAP()
-  return handled;
-#else
-  return false;
-#endif
-}
-
 void PrintCompositeClient::RenderFrameDeleted(
     content::RenderFrameHost* render_frame_host) {
   if (document_cookie_ == 0) {
@@ -125,13 +109,8 @@ void PrintCompositeClient::OnDidPrintFrameContent(
     int document_cookie,
     mojom::DidPrintContentParamsPtr params) {
   auto* outer_contents = web_contents()->GetOuterWebContents();
-  if (outer_contents) {
-    // NOTE(andre@vivaldi.com) : Vivaldi turned on
-    // |MimeHandlerViewInCrossProcessFrame| and the outer_contents is our UI which
-    // should not notified as printed. This will report a new printed frame and
-    // cause the state in the pdf-compositor to go stale as this is never printed.
-    if (!vivaldi::IsVivaldiApp(
-      outer_contents->GetSiteInstance()->GetSiteURL().host())) {
+  // NOTE(andre@vivaldi.com) : We do not print our UI.
+  if (outer_contents && !vivaldi::IsVivaldiRunning()) {
     // When the printed content belongs to an extension or app page, the print
     // composition needs to be handled by its outer content.
     // TODO(weili): so far, we don't have printable web contents nested in more
@@ -143,7 +122,6 @@ void PrintCompositeClient::OnDidPrintFrameContent(
     outer_client->OnDidPrintFrameContent(render_process_id, render_frame_id,
                                          document_cookie, std::move(params));
     return;
-    }
   }
 
   if (!IsDocumentCookieValid(document_cookie))
@@ -169,7 +147,7 @@ void PrintCompositeClient::OnDidPrintFrameContent(
 }
 
 #if BUILDFLAG(ENABLE_TAGGED_PDF)
-void PrintCompositeClient::OnAccessibilityTree(
+void PrintCompositeClient::SetAccessibilityTree(
     int document_cookie,
     const ui::AXTreeUpdate& accessibility_tree) {
   if (!IsDocumentCookieValid(document_cookie))

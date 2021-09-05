@@ -87,10 +87,8 @@ OffscreenCanvasRenderingContext2D::OffscreenCanvasRenderingContext2D(
   is_valid_size_ = IsValidImageSize(Host()->Size());
 
   // Clear the background transparent or opaque.
-  if (IsCanvas2DBufferValid()) {
-    GetCanvasResourceProvider()->Clear();
+  if (IsCanvas2DBufferValid())
     DidDraw();
-  }
 
   ExecutionContext* execution_context = canvas->GetTopExecutionContext();
   if (auto* window = DynamicTo<LocalDOMWindow>(execution_context)) {
@@ -179,7 +177,7 @@ OffscreenCanvasRenderingContext2D::GetCanvasResourceProvider() const {
 }
 void OffscreenCanvasRenderingContext2D::Reset() {
   Host()->DiscardResourceProvider();
-  BaseRenderingContext2D::Reset();
+  BaseRenderingContext2D::reset();
   // Because the host may have changed to a zero size
   is_valid_size_ = IsValidImageSize(Host()->Size());
 }
@@ -220,17 +218,10 @@ ImageBitmap* OffscreenCanvasRenderingContext2D::TransferToImageBitmap(
   if (!image)
     return nullptr;
   image->SetOriginClean(this->OriginClean());
-  if (image->IsTextureBacked()) {
-    // Before discarding the image resource, we need to flush pending render ops
-    // to fully resolve the snapshot.
-    // We can only do this if the skImage is not null
-    if (auto skImage = image->PaintImageForCurrentFrame().GetSkImage()) {
-      skImage->getBackendTexture(true);  // Flush pending ops.
-    } else {
-      // If the SkImage was null, we better return a null ImageBitmap
-      return nullptr;
-    }
-  }
+  // Before discarding the image resource, we need to flush pending render ops
+  // to fully resolve the snapshot.
+  image->PaintImageForCurrentFrame().FlushPendingSkiaOps();
+
   Host()->DiscardResourceProvider();
 
   return MakeGarbageCollected<ImageBitmap>(std::move(image));

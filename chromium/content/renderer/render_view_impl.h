@@ -32,7 +32,6 @@
 #include "content/public/common/page_visibility_state.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/web_preferences.h"
 #include "content/public/renderer/render_view.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_widget.h"
@@ -43,6 +42,7 @@
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy_features.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
@@ -65,6 +65,7 @@ struct WebWindowFeatures;
 }  // namespace blink
 
 namespace content {
+class AgentSchedulingGroup;
 class RenderViewImplTest;
 class RenderViewObserver;
 class RenderViewTest;
@@ -109,6 +110,7 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   // The opener should provide a non-null value for |show_callback| if it needs
   // to send an additional IPC to finish making this view visible.
   static RenderViewImpl* Create(
+      AgentSchedulingGroup& agent_scheduling_group,
       CompositorDependencies* compositor_deps,
       mojom::CreateViewParamsPtr params,
       RenderWidget::ShowCallback show_callback,
@@ -121,7 +123,8 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
 
   // Used by web_test_support to hook into the creation of RenderViewImpls.
   static void InstallCreateHook(RenderViewImpl* (*create_render_view_impl)(
-      CompositorDependencies* compositor_deps,
+      AgentSchedulingGroup&,
+      CompositorDependencies*,
       const mojom::CreateViewParams&));
 
   // Returns the RenderViewImpl for the given routing ID.
@@ -137,10 +140,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   // or not.
   bool widgets_never_composited() const { return widgets_never_composited_; }
 
-  const WebPreferences& webkit_preferences() const {
-    return webkit_preferences_;
-  }
-
   const blink::mojom::RendererPreferences& renderer_preferences() const {
     return renderer_preferences_;
   }
@@ -152,19 +151,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   // Functions to add and remove observers for this object.
   void AddObserver(RenderViewObserver* observer);
   void RemoveObserver(RenderViewObserver* observer);
-
-  // Passes along the prefer compositing preference to the WebView's settings.
-  void SetPreferCompositingToLCDTextEnabled(bool prefer);
-
-  // Passes along the device scale factor to the WebView.
-  void SetDeviceScaleFactor(bool use_zoom_for_dsf, float device_scale_factor);
-
-  // Passes along the visible viewport size to the WebView, for child local
-  // roots when there is no local main frame present. When a local main frame
-  // exists in this renderer's frame tree, its value should persist and this
-  // method does nothing.
-  void SetVisibleViewportSizeForChildLocalRoot(
-      const gfx::Size& visible_viewport_size);
 
   // Passes along the page zoom to the WebView to set it on a newly attached
   // LocalFrame.
@@ -199,7 +185,7 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   void RegisterRendererPreferenceWatcher(
       mojo::PendingRemote<blink::mojom::RendererPreferenceWatcher> watcher);
 
-  // IPC::Listener implementation (via RenderWidget inheritance).
+  // IPC::Listener implementation.
   bool OnMessageReceived(const IPC::Message& msg) override;
 
   // blink::WebViewClient implementation --------------------------------------
@@ -221,8 +207,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
                                      base::i18n::TextDirection main_text_hint,
                                      base::string16* sub_text,
                                      base::i18n::TextDirection sub_text_hint);
-  void SetMouseOverURL(const blink::WebURL& url) override;
-  void SetKeyboardFocusURL(const blink::WebURL& url) override;
   bool AcceptsLoadDrops() override;
   void FocusNext() override;
   void FocusPrevious() override;
@@ -231,7 +215,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   blink::WebString AcceptLanguages() override;
   int HistoryBackListCount() override;
   int HistoryForwardListCount() override;
-  void DidAutoResize(const blink::WebSize& newSize) override;
   bool CanHandleGestureEvent() override;
   bool AllowPopupsDuringPageUnload() override;
   void OnPageVisibilityChanged(PageVisibilityState visibility) override;
@@ -246,8 +229,9 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   RenderFrameImpl* GetMainRenderFrame() override;
   int GetRoutingID() override;
   float GetZoomLevel() override;
-  const WebPreferences& GetWebkitPreferences() override;
-  void SetWebkitPreferences(const WebPreferences& preferences) override;
+  const blink::web_pref::WebPreferences& GetBlinkPreferences() override;
+  void SetBlinkPreferences(
+      const blink::web_pref::WebPreferences& preferences) override;
   blink::WebView* GetWebView() override;
   bool GetContentStateImmediately() override;
   const std::string& GetAcceptLanguages() override;
@@ -265,7 +249,8 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   }
 
  protected:
-  RenderViewImpl(CompositorDependencies* compositor_deps,
+  RenderViewImpl(AgentSchedulingGroup& agent_scheduling_group,
+                 CompositorDependencies* compositor_deps,
                  const mojom::CreateViewParams& params);
   ~RenderViewImpl() override;
 
@@ -296,13 +281,12 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, OnHandleKeyboardEvent);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, OnImeTypeChanged);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, OnNavStateChanged);
-  FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, OnUpdateWebPreferences);
+  FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, SetBlinkPreferences);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest,
                            SetEditableSelectionAndComposition);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, StaleNavigationsIgnored);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest,
                            DontIgnoreBackAfterNavEntryLimit);
-  FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, UpdateTargetURLWithInvalidURL);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest,
                            GetCompositionCharacterBoundsTest);
   FRIEND_TEST_ALL_PREFIXES(RenderViewImplTest, OnNavigationHttpPost);
@@ -349,17 +333,12 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   bool SupportsMultipleWindowsForWidget() override;
   bool ShouldAckSyntheticInputImmediately() override;
   bool AutoResizeMode() override;
-  void ScrollFocusedNodeIntoViewForWidget() override;
-  void DidReceiveSetFocusEventForWidget() override;
   void DidCommitCompositorFrameForWidget() override;
   void DidCompletePageScaleAnimationForWidget() override;
   void ResizeWebWidgetForWidget(
       const gfx::Size& widget_size,
       const gfx::Size& visible_viewport_size,
       cc::BrowserControlsParams browser_controls_params) override;
-  void SetScreenMetricsEmulationParametersForWidget(
-      bool enabled,
-      const blink::DeviceEmulationParams& params) override;
 
   // Old WebLocalFrameClient implementations
   // ----------------------------------------
@@ -390,8 +369,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   void OnSetRendererPrefs(
       const blink::mojom::RendererPreferences& renderer_prefs);
   void OnSuppressDialogsUntilSwapOut();
-  void OnUpdateTargetURLAck();
-  void OnUpdateWebPreferences(const WebPreferences& prefs);
 
   // Page message handlers -----------------------------------------------------
   void SetPageFrozen(bool frozen);
@@ -419,10 +396,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   // In OOPIF-enabled modes, this tells each RenderFrame with a pending state
   // update to inform the browser process.
   void SendFrameStateUpdates();
-
-  // Update the target url and tell the browser that the target URL has changed.
-  // If |url| is empty, show |fallback_url|.
-  void UpdateTargetURL(const GURL& url, const GURL& fallback_url);
 
   // RenderFrameImpl accessible state ------------------------------------------
   // The following section is the set of methods that RenderFrameImpl needs
@@ -473,7 +446,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
 
   // Settings ------------------------------------------------------------------
 
-  WebPreferences webkit_preferences_;
   blink::mojom::RendererPreferences renderer_preferences_;
   // These are observing changes in |renderer_preferences_|. This is used for
   // keeping WorkerFetchContext in sync.
@@ -507,37 +479,6 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   // process.
   int history_list_length_ = 0;
 
-  // UI state ------------------------------------------------------------------
-
-  // The state of our target_url transmissions. When we receive a request to
-  // send a URL to the browser, we set this to TARGET_INFLIGHT until an ACK
-  // comes back - if a new request comes in before the ACK, we store the new
-  // URL in pending_target_url_ and set the status to TARGET_PENDING. If an
-  // ACK comes back and we are in TARGET_PENDING, we send the stored URL and
-  // revert to TARGET_INFLIGHT.
-  //
-  // We don't need a queue of URLs to send, as only the latest is useful.
-  enum {
-    TARGET_NONE,
-    TARGET_INFLIGHT,  // We have a request in-flight, waiting for an ACK
-    TARGET_PENDING    // INFLIGHT + we have a URL waiting to be sent
-  } target_url_status_ = TARGET_NONE;
-
-  // The URL we show the user in the status bar. We use this to determine if we
-  // want to send a new one (we do not need to send duplicates). It will be
-  // equal to either |mouse_over_url_| or |focus_url_|, depending on which was
-  // updated last.
-  GURL target_url_;
-
-  // The URL the user's mouse is hovering over.
-  GURL mouse_over_url_;
-
-  // The URL that has keyboard focus.
-  GURL focus_url_;
-
-  // The next target URL we want to send to the browser.
-  GURL pending_target_url_;
-
   // View ----------------------------------------------------------------------
 
   // This class owns this member, and is responsible for calling
@@ -545,6 +486,9 @@ class CONTENT_EXPORT RenderViewImpl : public blink::WebViewClient,
   blink::WebView* webview_ = nullptr;
 
   // Helper objects ------------------------------------------------------------
+
+  // The `AgentSchedulingGroup` this view is associated with.
+  AgentSchedulingGroup& agent_scheduling_group_;
 
   RenderFrameImpl* main_render_frame_ = nullptr;
 

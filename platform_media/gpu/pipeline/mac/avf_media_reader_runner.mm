@@ -125,18 +125,16 @@ void AVFMediaReaderRunner::WarmUp() {
   if (!IsAvailable())
     return;
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
-  ipc_data_source::Info source_info;
-  source_info.mime_type = "video/mp4";
 
-  // To warmup the sandbox we do not need to read anything. So make any read
-  // attempt to fail.
+  // To warmup the sandbox we do not need to read anything. It is sufficient
+  // to report an empty stream to media API.
+  ipc_data_source::Info source_info;
+  source_info.size = 0;
+  source_info.mime_type = "video/mp4";
   source_info.buffer.Init(base::ReadOnlySharedMemoryMapping(),
                           ipc_data_source::Reader());
-  source_info.buffer.SetReadError();
 
-  scoped_refptr<DataRequestHandler> data_request_handler;
-
-  // Normally AVFMediaReader runs on own queue and data_request_handler lives on
+  // Normally AVFMediaReader runs on own queue and DataRequestHandler lives on
   // the main thread queue. But the warmup function runs on the main thread and
   // should not return until the AVFMediaReader::Initialize returns. Yet the
   // data source should live on a queue that never blocks to avoid a deadlock.
@@ -144,7 +142,8 @@ void AVFMediaReaderRunner::WarmUp() {
   dispatch_queue_t loader_queue = dispatch_queue_create(
       "com.vivaldi.warmupMediaLoader", DISPATCH_QUEUE_SERIAL);
 
-  data_request_handler = base::MakeRefCounted<media::DataRequestHandler>();
+  scoped_refptr<DataRequestHandler> data_request_handler =
+      base::MakeRefCounted<media::DataRequestHandler>();
   data_request_handler->Init(std::move(source_info), loader_queue);
 
   AVFMediaReader reader(dispatch_get_main_queue());

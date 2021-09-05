@@ -30,6 +30,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
@@ -45,7 +46,6 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_scroll_into_view_options.h"
-#include "third_party/blink/renderer/core/accessibility/apply_dark_mode.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/css/font_face_set_document.h"
@@ -120,7 +120,6 @@
 #include "third_party/blink/renderer/core/paint/block_paint_invalidator.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
 #include "third_party/blink/renderer/core/paint/compositing/compositing_inputs_updater.h"
-#include "third_party/blink/renderer/core/paint/compositing/graphics_layer_tree_as_text.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/frame_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
@@ -199,22 +198,12 @@ void LogCursorSizeCounter(LocalFrame* frame, const ui::Cursor& cursor) {
   }
 }
 
-// Default value and parameter name for how long we want to delay the
-// compositor commit beyond the start of document lifdecycle updates to avoid
+// Default value for how long we want to delay the
+// compositor commit beyond the start of document lifecycle updates to avoid
 // flash between navigations. The delay should be small enough so that it won't
 // confuse users expecting a new page to appear after navigation and the omnibar
 // has updated the url display.
-constexpr int kPaintHoldingCommitDelayDefaultInMs = 500;  // 30 frames @ 60hz
-constexpr char kPaintHoldingCommitDelayParameterName[] = "commit_delay";
-
-// Get the field trial parameter value for Paint Holding.
-base::TimeDelta GetCommitDelayForPaintHolding() {
-  DCHECK(base::FeatureList::IsEnabled(blink::features::kPaintHolding));
-  return base::TimeDelta::FromMilliseconds(
-      base::GetFieldTrialParamByFeatureAsInt(
-          blink::features::kPaintHolding, kPaintHoldingCommitDelayParameterName,
-          kPaintHoldingCommitDelayDefaultInMs));
-}
+constexpr int kCommitDelayDefaultInMs = 500;  // 30 frames @ 60hz
 
 }  // namespace
 
@@ -369,10 +358,8 @@ void LocalFrameView::ForAllNonThrottledLocalFrameViews(
 // updated, consider updating |ForAllNonThrottledLocalFrameViews| too.
 template <typename Function>
 void LocalFrameView::ForAllThrottledLocalFrameViews(const Function& function) {
-  if (!ShouldThrottleRendering())
-    return;
-
-  function(*this);
+  if (ShouldThrottleRendering())
+    function(*this);
 
   for (Frame* child = frame_->Tree().FirstChild(); child;
        child = child->Tree().NextSibling()) {
@@ -382,6 +369,12 @@ void LocalFrameView::ForAllThrottledLocalFrameViews(const Function& function) {
     if (LocalFrameView* child_view = child_local_frame->View())
       child_view->ForAllThrottledLocalFrameViews(function);
   }
+}
+
+void LocalFrameView::ForAllThrottledLocalFrameViewsForTesting(
+    base::RepeatingCallback<void(LocalFrameView&)> callback) {
+  ForAllThrottledLocalFrameViews(
+      [&callback](LocalFrameView& view) { callback.Run(view); });
 }
 
 template <typename Function>
@@ -886,9 +879,8 @@ void LocalFrameView::UpdateLayout() {
         mojom::blink::ScrollbarMode v_mode;
         GetLayoutView()->CalculateScrollbarModes(h_mode, v_mode);
         if (v_mode == mojom::blink::ScrollbarMode::kAuto) {
-          GetLayoutView()
-              ->GetScrollableArea()
-              ->ForceVerticalScrollbarForFirstLayout();
+          if (auto* scrollable_area = GetLayoutView()->GetScrollableArea())
+            scrollable_area->ForceVerticalScrollbarForFirstLayout();
         }
       }
 
@@ -1104,8 +1096,9 @@ void LocalFrameView::RunIntersectionObserverSteps() {
 #if DCHECK_IS_ON()
   bool was_dirty = NeedsLayout();
 #endif
-  if (ShouldThrottleRendering() || Lifecycle().LifecyclePostponed() ||
-      !frame_->GetDocument()->IsActive()) {
+  if ((intersection_observation_state_ < kRequired &&
+       ShouldThrottleRendering()) ||
+      Lifecycle().LifecyclePostponed() || !frame_->GetDocument()->IsActive()) {
     return;
   }
 
@@ -1336,7 +1329,8 @@ void LocalFrameView::ViewportSizeChanged(bool width_changed,
     // clamp the scroll offset here.
     if (GetFrame().IsMainFrame()) {
       layout_view->Layer()->UpdateSize();
-      layout_view->GetScrollableArea()->ClampScrollOffsetAfterOverflowChange();
+      if (auto* scrollable_area = layout_view->GetScrollableArea())
+        scrollable_area->ClampScrollOffsetAfterOverflowChange();
     }
 
     // TODO(pdr): |UsesCompositing()| will be false with CompositeAfterPaint but
@@ -1828,9 +1822,15 @@ void LocalFrameView::SetNeedsLayout() {
   layout_view->SetNeedsLayout(layout_invalidation_reason::kUnknown);
 }
 
+bool LocalFrameView::ShouldUseColorAdjustBackground() const {
+  return use_color_adjust_background_ == UseColorAdjustBackground::kYes ||
+         (use_color_adjust_background_ ==
+              UseColorAdjustBackground::kIfBaseNotTransparent &&
+          base_background_color_ != Color::kTransparent);
+}
+
 Color LocalFrameView::BaseBackgroundColor() const {
-  if (use_color_adjust_background_ &&
-      base_background_color_ != Color::kTransparent) {
+  if (ShouldUseColorAdjustBackground()) {
     DCHECK(frame_->GetDocument());
     return frame_->GetDocument()->GetStyleEngine().ColorAdjustBackgroundColor();
   }
@@ -1862,14 +1862,19 @@ void LocalFrameView::SetBaseBackgroundColor(const Color& background_color) {
     GetPage()->Animator().ScheduleVisualUpdate(frame_.Get());
 }
 
-void LocalFrameView::SetUseColorAdjustBackground(bool color_adjust,
+void LocalFrameView::SetUseColorAdjustBackground(UseColorAdjustBackground use,
                                                  bool color_scheme_changed) {
-  if (use_color_adjust_background_ == color_adjust && !color_scheme_changed)
+  if (use_color_adjust_background_ == use && !color_scheme_changed)
     return;
 
-  use_color_adjust_background_ = color_adjust;
+  use_color_adjust_background_ = use;
   if (auto* layout_view = GetLayoutView())
     layout_view->SetBackgroundNeedsFullPaintInvalidation();
+}
+
+bool LocalFrameView::ShouldPaintBaseBackgroundColor() const {
+  return ShouldUseColorAdjustBackground() ||
+         frame_->GetDocument()->IsInMainFrame();
 }
 
 void LocalFrameView::UpdateBaseBackgroundColorRecursively(
@@ -2206,7 +2211,6 @@ bool LocalFrameView::UpdateAllLifecyclePhases(DocumentUpdateReason reason) {
 }
 
 // TODO(schenney): add a scrolling update lifecycle phase.
-// TODO(schenney): Pass a LifecycleUpdateReason in here
 bool LocalFrameView::UpdateLifecycleToCompositingCleanPlusScrolling(
     DocumentUpdateReason reason) {
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
@@ -2221,7 +2225,6 @@ bool LocalFrameView::UpdateLifecycleToPrePaintClean(
       DocumentLifecycle::kPrePaintClean, reason);
 }
 
-// TODO(schenney): Pass a LifecycleUpdateReason in here
 bool LocalFrameView::UpdateLifecycleToCompositingInputsClean(
     DocumentUpdateReason reason) {
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
@@ -2230,7 +2233,6 @@ bool LocalFrameView::UpdateLifecycleToCompositingInputsClean(
       DocumentLifecycle::kCompositingInputsClean, reason);
 }
 
-// TODO(schenney): Pass a LifecycleUpdateReason in here
 bool LocalFrameView::UpdateAllLifecyclePhasesExceptPaint(
     DocumentUpdateReason reason) {
   return GetFrame().LocalFrameRoot().View()->UpdateLifecyclePhases(
@@ -2263,7 +2265,6 @@ void LocalFrameView::UpdateLifecyclePhasesForPrinting() {
       DocumentUpdateReason::kPrinting);
 }
 
-// TODO(schenney): Pass a LifecycleUpdateReason in here
 bool LocalFrameView::UpdateLifecycleToLayoutClean(DocumentUpdateReason reason) {
   return GetFrame().LocalFrameRoot().View()->UpdateLifecyclePhases(
       DocumentLifecycle::kLayoutClean, reason);
@@ -2271,15 +2272,16 @@ bool LocalFrameView::UpdateLifecycleToLayoutClean(DocumentUpdateReason reason) {
 
 void LocalFrameView::ScheduleVisualUpdateForPaintInvalidationIfNeeded() {
   LocalFrame& local_frame_root = GetFrame().LocalFrameRoot();
+  // We need a full lifecycle update to clear pending paint invalidations.
   if (local_frame_root.View()->current_update_lifecycle_phases_target_state_ <
-          DocumentLifecycle::kPrePaintClean ||
+          DocumentLifecycle::kPaintClean ||
       Lifecycle().GetState() >= DocumentLifecycle::kPrePaintClean) {
     // Schedule visual update to process the paint invalidation in the next
     // cycle.
     local_frame_root.ScheduleVisualUpdateUnlessThrottled();
   }
-  // Otherwise the paint invalidation will be handled in the pre-paint
-  // phase of this cycle.
+  // Otherwise the paint invalidation will be handled in the pre-paint and paint
+  // phase of this full lifecycle update.
 }
 
 bool LocalFrameView::NotifyResizeObservers(
@@ -2395,34 +2397,39 @@ bool LocalFrameView::UpdateLifecyclePhases(
   lifecycle_data_.start_time = base::TimeTicks::Now();
   ++lifecycle_data_.count;
 
-  {
-    TRACE_EVENT0("blink", "LocalFrameView::WillStartLifecycleUpdate");
+  ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+    frame_view.Lifecycle().EnsureStateAtMost(
+        DocumentLifecycle::kVisualUpdatePending);
+  });
 
-    ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
-      frame_view.Lifecycle().EnsureStateAtMost(
-          DocumentLifecycle::kVisualUpdatePending);
-      auto lifecycle_observers = frame_view.lifecycle_observers_;
-      for (auto& observer : lifecycle_observers)
-        observer->WillStartLifecycleUpdate(frame_view);
-    });
-  }
+  if (target_state == DocumentLifecycle::kPaintClean) {
+    {
+      TRACE_EVENT0("blink", "LocalFrameView::WillStartLifecycleUpdate");
 
-  {
-    TRACE_EVENT0(
-        "blink",
-        "LocalFrameView::UpdateLifecyclePhases - start of lifecycle tasks");
-    ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
-      WTF::Vector<base::OnceClosure> tasks;
-      frame_view.start_of_lifecycle_tasks_.swap(tasks);
-      for (auto& task : tasks)
-        std::move(task).Run();
-    });
+      ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+        auto lifecycle_observers = frame_view.lifecycle_observers_;
+        for (auto& observer : lifecycle_observers)
+          observer->WillStartLifecycleUpdate(frame_view);
+      });
+    }
+
+    {
+      TRACE_EVENT0(
+          "blink",
+          "LocalFrameView::UpdateLifecyclePhases - start of lifecycle tasks");
+      ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+        WTF::Vector<base::OnceClosure> tasks;
+        frame_view.start_of_lifecycle_tasks_.swap(tasks);
+        for (auto& task : tasks)
+          std::move(task).Run();
+      });
+    }
   }
 
   // Run the lifecycle updates.
   UpdateLifecyclePhasesInternal(target_state);
 
-  {
+  if (target_state == DocumentLifecycle::kPaintClean) {
     TRACE_EVENT0("blink", "LocalFrameView::DidFinishLifecycleUpdate");
 
     ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
@@ -2752,7 +2759,8 @@ void LocalFrameView::RunPaintLifecyclePhase() {
                          paint_artifact_compositor_->NeedsUpdate();
     PushPaintArtifactToCompositor(repainted_layers);
     ForAllNonThrottledLocalFrameViews([this](LocalFrameView& frame_view) {
-      frame_view.GetScrollableArea()->UpdateCompositorScrollAnimations();
+      if (auto* scrollable_area = frame_view.GetScrollableArea())
+        scrollable_area->UpdateCompositorScrollAnimations();
       if (const auto* animating_scrollable_areas =
               frame_view.AnimatingScrollableAreas()) {
         for (PaintLayerScrollableArea* area : *animating_scrollable_areas)
@@ -2799,6 +2807,8 @@ void LocalFrameView::RunPaintLifecyclePhase() {
       }
     }
   }
+  if (GetPage())
+    GetPage()->Animator().ReportFrameAnimations(GetCompositorAnimationHost());
 }
 
 bool LocalFrameView::RunAccessibilityLifecyclePhase(
@@ -2891,15 +2901,6 @@ static void UpdateLayerDebugInfoRecursively(const GraphicsLayer& root) {
       });
 }
 
-static void PaintGraphicsLayerRecursively(
-    GraphicsLayer* layer,
-    HashSet<const GraphicsLayer*>& repainted_layers) {
-  layer->PaintRecursively(repainted_layers);
-#if DCHECK_IS_ON()
-  VerboseLogGraphicsLayerTree(layer);
-#endif
-}
-
 void LocalFrameView::PaintTree(
     HashSet<const GraphicsLayer*>& repainted_layers) {
   SCOPED_UMA_AND_UKM_TIMER(EnsureUkmAggregator(),
@@ -2934,8 +2935,9 @@ void LocalFrameView::PaintTree(
     } else {
       GraphicsContext graphics_context(*paint_controller_);
       if (Settings* settings = frame_->GetSettings()) {
-        graphics_context.SetDarkMode(
-            BuildDarkModeSettings(*settings, *GetLayoutView()));
+        graphics_context.SetDarkModeEnabled(
+            settings->GetForceDarkModeEnabled() &&
+            !GetLayoutView()->StyleRef().DarkColorScheme());
       }
 
       bool painted_full_screen_overlay = false;
@@ -2986,7 +2988,7 @@ void LocalFrameView::PaintTree(
     // the host page and will be painted during painting of the host page.
     if (GraphicsLayer* root_graphics_layer =
             layout_view->Compositor()->PaintRootGraphicsLayer()) {
-      PaintGraphicsLayerRecursively(root_graphics_layer, repainted_layers);
+      root_graphics_layer->PaintRecursively(repainted_layers);
       if (!repainted_layers.IsEmpty()) {
         // If the painted result changed, the recorded hit test data may have
         // changed which will affect the mapped hit test geometry.
@@ -3228,7 +3230,7 @@ void LocalFrameView::UpdateStyleAndLayoutIfNeededRecursive() {
   // Ensure that we become visually non-empty eventually.
   // TODO(esprehn): This should check isRenderingReady() instead.
   if (GetFrame().GetDocument()->HasFinishedParsing() &&
-      GetFrame().Loader().StateMachine()->CommittedFirstRealDocumentLoad())
+      !GetFrame().GetDocument()->IsInitialEmptyDocument())
     is_visually_non_empty_ = true;
 
   GetFrame().Selection().UpdateStyleAndLayoutIfNeeded();
@@ -3562,14 +3564,12 @@ void LocalFrameView::SetTracksRasterInvalidations(
       continue;
     if (auto* layout_view = local_frame->ContentLayoutObject()) {
       is_tracking_raster_invalidations_ = track_raster_invalidations;
-      if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-        if (paint_artifact_compositor_) {
-          paint_artifact_compositor_->SetTracksRasterInvalidations(
-              track_raster_invalidations);
-        }
-      } else {
-        layout_view->Compositor()->UpdateTrackingRasterInvalidations();
+      if (paint_artifact_compositor_) {
+        paint_artifact_compositor_->SetTracksRasterInvalidations(
+            track_raster_invalidations);
       }
+      if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+        layout_view->Compositor()->UpdateTrackingRasterInvalidations();
     }
   }
 
@@ -4301,6 +4301,13 @@ void LocalFrameView::InvalidateForThrottlingChange() {
     // the frame was throttled.
     layout_view->AddSubtreePaintPropertyUpdateReason(
         SubtreePaintPropertyUpdateReason::kPreviouslySkipped);
+
+    if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+      // PaintLayerCompositor::CanBeComposited returns an incorrect visibility
+      // value for throttled frames, and it needs to be recomputed when the
+      // frame becomes unthrottled again.
+      layout_view->Layer()->SetNeedsCompositingInputsUpdate();
+    }
   }
   // Ensure we'll recompute viewport intersection for the frame subtree during
   // the scheduled visual update.
@@ -4318,6 +4325,16 @@ void LocalFrameView::SetIntersectionObservationState(
   if (intersection_observation_state_ >= state)
     return;
   intersection_observation_state_ = state;
+
+  // If an intersection observation is required, force all ancestors to update.
+  // Otherwise, an update could stop at a throttled frame before reaching this.
+  if (state == kRequired) {
+    Frame* parent_frame = frame_->Tree().Parent();
+    if (auto* parent_local_frame = DynamicTo<LocalFrame>(parent_frame)) {
+      if (parent_local_frame->View())
+        parent_local_frame->View()->SetIntersectionObservationState(kRequired);
+    }
+  }
 }
 
 void LocalFrameView::SetPaintArtifactCompositorNeedsUpdate() {
@@ -4425,7 +4442,7 @@ void LocalFrameView::BeginLifecycleUpdates() {
   // Avoid pumping frames for the initially empty document.
   // TODO(schenney): This seems pointless because main frame updates do occur
   // for pages like about:blank, at least according to log messages.
-  if (!GetFrame().Loader().StateMachine()->CommittedFirstRealDocumentLoad())
+  if (GetFrame().GetDocument()->IsInitialEmptyDocument())
     return;
   lifecycle_updates_throttled_ = false;
   if (auto* owner = GetLayoutEmbeddedContent())
@@ -4454,16 +4471,15 @@ void LocalFrameView::BeginLifecycleUpdates() {
   // updates start. Doing so allows us to update the page lifecycle but not
   // present the results to screen until we see first contentful paint is
   // available or until a timer expires.
-  // This is enabled only if kPaintHolding is enabled, and
-  // the document loading is regular HTML served over HTTP/HTTPs.
-  // And only defer commits once. This method gets called multiple times,
-  // and we do not want to defer a second time if we have already done
-  // so once and resumed commits already.
+  // This is enabled only when the document loading is regular HTML served
+  // over HTTP/HTTPs. And only defer commits once. This method gets called
+  // multiple times, and we do not want to defer a second time if we have
+  // already done so once and resumed commits already.
   if (document &&
       document->DeferredCompositorCommitIsAllowed() &&
       !have_deferred_commits_) {
-    chrome_client.StartDeferringCommits(GetFrame(),
-                                        GetCommitDelayForPaintHolding());
+    chrome_client.StartDeferringCommits(
+        GetFrame(), base::TimeDelta::FromMilliseconds(kCommitDelayDefaultInMs));
     have_deferred_commits_ = true;
   }
 

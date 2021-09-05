@@ -10,7 +10,7 @@ load("//lib/branches.star", "branches")
 load("//project.star", "settings")
 
 lucicfg.check_version(
-    min = "1.18.4",
+    min = "1.19.0",
     message = "Update depot_tools",
 )
 
@@ -150,3 +150,7 @@ exec("//generators/scheduler-noop-jobs.star")
 exec("//generators/sort-consoles.star")
 
 exec("//validators/builders-in-consoles.star")
+
+# Execute this file last so that any configuration changes needed for handling
+# outages gets final say
+exec("//outages/outages.star")

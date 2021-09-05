@@ -18,15 +18,13 @@
 #include "components/printing/common/print.mojom-forward.h"
 #include "content/public/test/mock_render_thread.h"
 #include "printing/buildflags/buildflags.h"
+#include "printing/print_job_constants.h"
 
 namespace base {
 class DictionaryValue;
 }
 
 class MockPrinter;
-struct PrintHostMsg_PreviewIds;
-struct PrintHostMsg_ScriptedPrint_Params;
-struct PrintMsg_PrintPages_Params;
 
 // Extends content::MockRenderThread to know about printing
 class PrintMockRenderThread : public content::MockRenderThread {
@@ -54,13 +52,13 @@ class PrintMockRenderThread : public content::MockRenderThread {
   void set_print_dialog_user_response(bool response);
 
   // Cancel print preview when print preview has |page| remaining pages.
-  void set_print_preview_cancel_page_number(int page);
+  void set_print_preview_cancel_page_number(uint32_t page);
 
   // Get the number of pages to generate for print preview.
-  int print_preview_pages_remaining() const;
+  uint32_t print_preview_pages_remaining() const;
 
   // Get a vector of print preview pages.
-  const std::vector<std::pair<int, uint32_t>>& print_preview_pages() const;
+  const std::vector<std::pair<uint32_t, uint32_t>>& print_preview_pages() const;
 #endif
 
   MockPrinter* GetPrinter() { return printer_.get(); }
@@ -70,28 +68,24 @@ class PrintMockRenderThread : public content::MockRenderThread {
   bool OnMessageReceived(const IPC::Message& msg) override;
 
 #if BUILDFLAG(ENABLE_PRINTING)
-  // PrintRenderFrameHelper expects default print settings.
-  void OnGetDefaultPrintSettings(printing::mojom::PrintParams* setting);
-
   // PrintRenderFrameHelper expects final print settings from the user.
-  void OnScriptedPrint(const PrintHostMsg_ScriptedPrint_Params& params,
-                       PrintMsg_PrintPages_Params* settings);
+  void OnScriptedPrint(const printing::mojom::ScriptedPrintParams& params,
+                       IPC::Message* reply_msg);
 
   void OnDidPrintDocument(const printing::mojom::DidPrintDocumentParams& params,
                           IPC::Message* reply_msg);
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   void OnDidStartPreview(const printing::mojom::DidStartPreviewParams& params,
-                         const PrintHostMsg_PreviewIds& ids);
+                         const printing::mojom::PreviewIds& ids);
   void OnDidPreviewPage(const printing::mojom::DidPreviewPageParams& params,
-                        const PrintHostMsg_PreviewIds& ids);
-  void OnCheckForCancel(const PrintHostMsg_PreviewIds& ids, bool* cancel);
+                        const printing::mojom::PreviewIds& ids);
+  void OnCheckForCancel(const printing::mojom::PreviewIds& ids, bool* cancel);
 #endif
 
   // For print preview, PrintRenderFrameHelper will update settings.
   void OnUpdatePrintSettings(int document_cookie,
                              const base::DictionaryValue& job_settings,
-                             PrintMsg_PrintPages_Params* params,
-                             bool* canceled);
+                             IPC::Message* reply_msg);
 
   // A mock printer device used for printing tests.
   std::unique_ptr<MockPrinter> printer_;
@@ -101,13 +95,13 @@ class PrintMockRenderThread : public content::MockRenderThread {
 
   // Simulates cancelling print preview if |print_preview_pages_remaining_|
   // equals this.
-  int print_preview_cancel_page_number_ = -1;
+  uint32_t print_preview_cancel_page_number_ = printing::kInvalidPageIndex;
 
   // Number of pages to generate for print preview.
-  int print_preview_pages_remaining_ = 0;
+  uint32_t print_preview_pages_remaining_ = 0;
 
   // Vector of <page_number, content_data_size> that were previewed.
-  std::vector<std::pair<int, uint32_t>> print_preview_pages_;
+  std::vector<std::pair<uint32_t, uint32_t>> print_preview_pages_;
 #endif
 
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;

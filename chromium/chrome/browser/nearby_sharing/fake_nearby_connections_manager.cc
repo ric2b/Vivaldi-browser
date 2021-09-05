@@ -24,14 +24,18 @@ void FakeNearbyConnectionsManager::StartAdvertising(
   advertising_listener_ = listener;
   advertising_data_usage_ = data_usage;
   advertising_power_level_ = power_level;
+  advertising_endpoint_info_ = std::move(endpoint_info);
+  std::move(callback).Run(
+      NearbyConnectionsManager::ConnectionsStatus::kSuccess);
 }
 
 void FakeNearbyConnectionsManager::StopAdvertising() {
   DCHECK(IsAdvertising());
-  DCHECK(!IsShutdown());
+  DCHECK(!is_shutdown());
   advertising_listener_ = nullptr;
   advertising_data_usage_ = DataUsage::kUnknown;
   advertising_power_level_ = PowerLevel::kUnknown;
+  advertising_endpoint_info_.reset();
 }
 
 void FakeNearbyConnectionsManager::StartDiscovery(
@@ -44,7 +48,7 @@ void FakeNearbyConnectionsManager::StartDiscovery(
 
 void FakeNearbyConnectionsManager::StopDiscovery() {
   DCHECK(IsDiscovering());
-  DCHECK(!IsShutdown());
+  DCHECK(!is_shutdown());
   discovery_listener_ = nullptr;
   // TODO(alexchau): Implement.
 }
@@ -55,58 +59,83 @@ void FakeNearbyConnectionsManager::Connect(
     base::Optional<std::vector<uint8_t>> bluetooth_mac_address,
     DataUsage data_usage,
     NearbyConnectionCallback callback) {
-  DCHECK(!IsShutdown());
-  // TODO(alexchau): Implement.
+  DCHECK(!is_shutdown());
+  connected_data_usage_ = data_usage;
+  connection_endpoint_infos_.emplace(endpoint_id, std::move(endpoint_info));
+  std::move(callback).Run(connection_);
 }
 
 void FakeNearbyConnectionsManager::Disconnect(const std::string& endpoint_id) {
-  DCHECK(!IsShutdown());
-  // TODO(alexchau): Implement.
+  DCHECK(!is_shutdown());
+  connection_endpoint_infos_.erase(endpoint_id);
 }
 
 void FakeNearbyConnectionsManager::Send(const std::string& endpoint_id,
                                         PayloadPtr payload,
                                         PayloadStatusListener* listener) {
-  DCHECK(!IsShutdown());
-  // TODO(alexchau): Implement.
+  DCHECK(!is_shutdown());
+  if (send_payload_callback_)
+    send_payload_callback_.Run(std::move(payload), listener);
 }
 
 void FakeNearbyConnectionsManager::RegisterPayloadStatusListener(
     int64_t payload_id,
     PayloadStatusListener* listener) {
-  DCHECK(!IsShutdown());
-  // TODO(alexchau): Implement.
+  DCHECK(!is_shutdown());
+
+  payload_status_listeners_[payload_id] = listener;
 }
 
 void FakeNearbyConnectionsManager::RegisterPayloadPath(
     int64_t payload_id,
     const base::FilePath& file_path,
     ConnectionsCallback callback) {
-  DCHECK(!IsShutdown());
-  // TODO(alexchau): Implement.
+  DCHECK(!is_shutdown());
+
+  registered_payload_paths_[payload_id] = file_path;
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    base::File file(file_path, base::File::Flags::FLAG_CREATE_ALWAYS |
+                                   base::File::Flags::FLAG_READ |
+                                   base::File::Flags::FLAG_WRITE);
+  }
+
+  auto it = payload_path_status_.find(payload_id);
+  if (it == payload_path_status_.end()) {
+    std::move(callback).Run(
+        location::nearby::connections::mojom::Status::kPayloadUnknown);
+    return;
+  }
+
+  std::move(callback).Run(it->second);
 }
 
 FakeNearbyConnectionsManager::Payload*
 FakeNearbyConnectionsManager::GetIncomingPayload(int64_t payload_id) {
-  DCHECK(!IsShutdown());
-  // TODO(alexchau): Implement.
-  return nullptr;
+  DCHECK(!is_shutdown());
+  auto it = incoming_payloads_.find(payload_id);
+  if (it == incoming_payloads_.end())
+    return nullptr;
+
+  return it->second.get();
 }
 
 void FakeNearbyConnectionsManager::Cancel(int64_t payload_id) {
-  DCHECK(!IsShutdown());
+  DCHECK(!is_shutdown());
   // TODO(alexchau): Implement.
 }
 
 void FakeNearbyConnectionsManager::ClearIncomingPayloads() {
-  DCHECK(!IsShutdown());
-  // TODO(alexchau): Implement.
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
+  incoming_payloads_.clear();
+  payload_status_listeners_.clear();
 }
 
 base::Optional<std::vector<uint8_t>>
 FakeNearbyConnectionsManager::GetRawAuthenticationToken(
     const std::string& endpoint_id) {
-  DCHECK(!IsShutdown());
+  DCHECK(!is_shutdown());
 
   auto iter = endpoint_auth_tokens_.find(endpoint_id);
   if (iter != endpoint_auth_tokens_.end())
@@ -143,27 +172,46 @@ void FakeNearbyConnectionsManager::OnEndpointLost(
   discovery_listener_->OnEndpointLost(endpoint_id);
 }
 
-bool FakeNearbyConnectionsManager::IsAdvertising() {
+bool FakeNearbyConnectionsManager::IsAdvertising() const {
   return advertising_listener_ != nullptr;
 }
 
-bool FakeNearbyConnectionsManager::IsDiscovering() {
+bool FakeNearbyConnectionsManager::IsDiscovering() const {
   return discovery_listener_ != nullptr;
 }
 
-bool FakeNearbyConnectionsManager::IsShutdown() {
-  return is_shutdown_;
-}
-
-DataUsage FakeNearbyConnectionsManager::GetAdvertisingDataUsage() {
-  return advertising_data_usage_;
-}
-
-PowerLevel FakeNearbyConnectionsManager::GetAdvertisingPowerLevel() {
-  return advertising_power_level_;
-}
-
 bool FakeNearbyConnectionsManager::DidUpgradeBandwidth(
-    const std::string& endpoint_id) {
-  return (upgrade_bandwidth_endpoint_ids_.count(endpoint_id) > 0);
+    const std::string& endpoint_id) const {
+  return upgrade_bandwidth_endpoint_ids_.find(endpoint_id) !=
+         upgrade_bandwidth_endpoint_ids_.end();
+}
+
+void FakeNearbyConnectionsManager::SetPayloadPathStatus(
+    int64_t payload_id,
+    ConnectionsStatus status) {
+  payload_path_status_[payload_id] = status;
+}
+
+FakeNearbyConnectionsManager::PayloadStatusListener*
+FakeNearbyConnectionsManager::GetRegisteredPayloadStatusListener(
+    int64_t payload_id) {
+  auto it = payload_status_listeners_.find(payload_id);
+  if (it != payload_status_listeners_.end())
+    return it->second;
+
+  return nullptr;
+}
+
+void FakeNearbyConnectionsManager::SetIncomingPayload(int64_t payload_id,
+                                                      PayloadPtr payload) {
+  incoming_payloads_[payload_id] = std::move(payload);
+}
+
+base::Optional<base::FilePath>
+FakeNearbyConnectionsManager::GetRegisteredPayloadPath(int64_t payload_id) {
+  auto it = registered_payload_paths_.find(payload_id);
+  if (it == registered_payload_paths_.end())
+    return base::nullopt;
+
+  return it->second;
 }

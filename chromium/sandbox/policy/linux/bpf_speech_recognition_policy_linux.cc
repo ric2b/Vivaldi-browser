@@ -23,10 +23,20 @@ SpeechRecognitionProcessPolicy::~SpeechRecognitionProcessPolicy() = default;
 ResultExpr SpeechRecognitionProcessPolicy::EvaluateSyscall(
     int system_call_number) const {
   switch (system_call_number) {
+    // Required by the Speech On-Device API (SODA) binary to find the
+    // appropriate configuration file to use within a language pack directory.
+#if defined(__NR_getdents64)
+    case __NR_getdents64:
+      return Allow();
+#endif
+#if defined(__NR_getdents)
+    case __NR_getdents:
+      return Allow();
+#endif
     default:
-      auto* broker_process = SandboxLinux::GetInstance()->broker_process();
-      if (broker_process->IsSyscallAllowed(system_call_number))
-        return Trap(BrokerProcess::SIGSYS_Handler, broker_process);
+      auto* sandbox_linux = SandboxLinux::GetInstance();
+      if (sandbox_linux->ShouldBrokerHandleSyscall(system_call_number))
+        return sandbox_linux->HandleViaBroker();
 
       // Default on the content baseline policy.
       return BPFBasePolicy::EvaluateSyscall(system_call_number);

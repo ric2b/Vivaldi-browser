@@ -8,6 +8,7 @@
 
 #include <set>
 #include <string>
+#include <utility>
 
 #include "apps/switches.h"
 #include "base/bind.h"
@@ -53,6 +54,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/buildflags.h"
@@ -71,6 +73,7 @@
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/common/content_switches.h"
+#include "extensions/api/runtime/runtime_api.h"
 #include "extensions/common/switches.h"
 #include "printing/buildflags/buildflags.h"
 
@@ -399,7 +402,8 @@ bool StartupBrowserCreator::LaunchBrowser(
     Profile* profile,
     const base::FilePath& cur_dir,
     chrome::startup::IsProcessStartup process_startup,
-    chrome::startup::IsFirstRun is_first_run) {
+    chrome::startup::IsFirstRun is_first_run,
+    std::unique_ptr<LaunchModeRecorder> launch_mode_recorder) {
   DCHECK(profile);
   in_synchronous_profile_launch_ =
       process_startup == chrome::startup::IS_PROCESS_STARTUP;
@@ -431,7 +435,8 @@ bool StartupBrowserCreator::LaunchBrowser(
     const std::vector<GURL> urls_to_launch =
         GetURLsFromCommandLine(command_line, cur_dir, profile);
     const bool launched =
-        lwp.Launch(profile, urls_to_launch, in_synchronous_profile_launch_);
+        lwp.Launch(profile, urls_to_launch, in_synchronous_profile_launch_,
+                   std::move(launch_mode_recorder));
     in_synchronous_profile_launch_ = false;
     if (!launched) {
       LOG(ERROR) << "launch error";
@@ -586,8 +591,10 @@ std::vector<GURL> StartupBrowserCreator::GetURLsFromCommandLine(
     }
 
     // NOTE(bjorgvin@vivaldi.com): VB-35394 Map mailto: URL to internal URL
-#if !defined(OS_ANDROID) && !defined(OFFICIAL_BUILD)
-    if (params[i].find(FILE_PATH_LITERAL("mailto:")) == 0) {
+#if !defined(OS_ANDROID)
+    if (extensions::VivaldiRuntimeFeatures::IsEnabled(profile,
+                                                      "calendar_mail_feeds") &&
+        params[i].find(FILE_PATH_LITERAL("mailto:")) == 0) {
       base::CommandLine::StringType internal_mailto_url =
 #if defined(OS_WIN)
           base::UTF8ToWide(vivaldi::kVivaldiMailURL + ("?path=composer&mailto=" +
@@ -750,11 +757,10 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
 #endif  // OS_CHROMEOS
 
 #if defined(TOOLKIT_VIEWS) && defined(USE_X11)
-  // TODO(https://crbug.com/1097696): make it available on ozone/linux.
-  if (!features::IsUsingOzonePlatform())
+  if (!features::IsUsingOzonePlatform()) {
+    // Ozone sets the device list upon platform initialisation.
     ui::TouchFactory::SetTouchDeviceListFromCommandLine();
-  else
-    NOTIMPLEMENTED_LOG_ONCE();
+  }
 #endif
 
 #if defined(OS_MAC)
@@ -909,9 +915,9 @@ bool StartupBrowserCreator::LaunchBrowserForLastProfiles(
       Profile* profile_to_open = last_used_profile->IsGuestSession()
                                      ? last_used_profile->GetPrimaryOTRProfile()
                                      : last_used_profile;
-
       return LaunchBrowser(command_line, profile_to_open, cur_dir,
-                           is_process_startup, is_first_run);
+                           is_process_startup, is_first_run,
+                           std::make_unique<LaunchModeRecorder>());
     }
 
     // Show UserManager if |last_used_profile| can't be auto opened.
@@ -964,10 +970,15 @@ bool StartupBrowserCreator::ProcessLastOpenedProfiles(
         !HasPendingUncleanExit(profile)) {
       continue;
     }
+    // Only record a launch mode histogram for |last_used_profile|. Pass a
+    // null launch_mode_recorder for other profiles.
     if (!LaunchBrowser((profile == last_used_profile)
                            ? command_line
                            : command_line_without_urls,
-                       profile, cur_dir, is_process_startup, is_first_run)) {
+                       profile, cur_dir, is_process_startup, is_first_run,
+                       profile == last_used_profile
+                           ? std::make_unique<LaunchModeRecorder>()
+                           : nullptr)) {
       return false;
     }
     // We've launched at least one browser.

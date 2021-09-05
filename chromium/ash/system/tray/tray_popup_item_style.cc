@@ -5,7 +5,6 @@
 #include "ash/system/tray/tray_popup_item_style.h"
 
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/default_color_constants.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/font.h"
@@ -27,8 +26,7 @@ SkColor TrayPopupItemStyle::GetIconColor(ColorStyle color_style,
   const SkColor kBaseIconColor =
       use_unified_theme
           ? AshColorProvider::Get()->GetContentLayerColor(
-                AshColorProvider::ContentLayerType::kIconColorPrimary,
-                AshColorProvider::AshColorMode::kDark)
+                AshColorProvider::ContentLayerType::kIconColorPrimary)
           : gfx::kChromeIconGrey;
   switch (color_style) {
     case ColorStyle::ACTIVE:
@@ -62,8 +60,7 @@ SkColor TrayPopupItemStyle::GetTextColor() const {
   const SkColor kBaseTextColor =
       use_unified_theme_
           ? AshColorProvider::Get()->GetContentLayerColor(
-                AshColorProvider::ContentLayerType::kTextColorPrimary,
-                AshColorProvider::AshColorMode::kDark)
+                AshColorProvider::ContentLayerType::kTextColorPrimary)
           : SkColorSetA(SK_ColorBLACK, 0xDE);
 
   switch (color_style_) {
@@ -118,11 +115,6 @@ void TrayPopupItemStyle::SetupLabel(views::Label* label) const {
     case FontStyle::CAPTION:
       label->SetFontList(base_font_list.Derive(0, gfx::Font::NORMAL,
                                                gfx::Font::Weight::NORMAL));
-      break;
-    case FontStyle::HOLDING_SPACE_TITLE:
-      label->SetFontList(base_font_list.Derive(3, gfx::Font::NORMAL,
-                                               gfx::Font::Weight::NORMAL));
-      label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
       break;
   }
 }

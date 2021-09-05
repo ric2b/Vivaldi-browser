@@ -16,9 +16,9 @@
 #include "content/browser/appcache/appcache_request.h"
 #include "content/browser/appcache/appcache_subresource_url_factory.h"
 #include "content/browser/appcache/appcache_url_loader.h"
-#include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/navigation_subresource_loader_params.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/navigation_request.h"
 #include "content/public/common/content_client.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "third_party/blink/public/common/features.h"
@@ -437,6 +437,8 @@ void AppCacheRequestHandler::RunLoaderCallbackForMainResource(
               ContentBrowserClient::URLLoaderFactoryType::kNavigation,
               url::Origin(),
               frame_tree_node->navigation_request()->GetNavigationId(),
+              base::UkmSourceId::FromInt64(frame_tree_node->navigation_request()
+                                               ->GetNextPageUkmSourceId()),
               &factory_receiver, nullptr /* header_client */,
               nullptr /* bypass_redirect_checks */,
               nullptr /* disable_secure_dns */, nullptr /* factory_override */);

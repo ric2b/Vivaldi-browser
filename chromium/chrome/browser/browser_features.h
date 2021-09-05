@@ -26,7 +26,13 @@ extern const base::Feature kDoubleTapToZoomInTabletMode;
 #endif
 
 #if !defined(OS_ANDROID)
+extern const base::Feature kCopyLinkToText;
+extern const base::Feature kMuteNotificationsDuringScreenShare;
 extern const base::Feature kNearbySharing;
+#endif
+
+#if defined(OS_MAC)
+extern const base::Feature kNewMacNotificationAPI;
 #endif
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)

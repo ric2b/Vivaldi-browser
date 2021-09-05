@@ -25,6 +25,7 @@
         android:theme="@android:style/Theme.Translucent.NoTitleBar">
     </activity>  # DIFF-ANCHOR: ea1a94af
     <activity  # DIFF-ANCHOR: a4438884
+        android:exported="true"
         android:icon="@drawable/icon_webview"
         android:label="WebView DevTools"
         android:launchMode="singleTask"
@@ -40,6 +41,7 @@
       </intent-filter>  # DIFF-ANCHOR: b80aa336
     </activity>  # DIFF-ANCHOR: a4438884
     <activity  # DIFF-ANCHOR: aeabab17
+        android:exported="true"
         android:label="@string/license_activity_title"
         android:name="org.chromium.android_webview.nonembedded.LicenseActivity"
         android:process=":webview_apk">
@@ -63,6 +65,7 @@
     <provider  # DIFF-ANCHOR: a5e78e63
         android:authorities="$PACKAGE.LicenseContentProvider"
         android:exported="true"
+        android:grantUriPermissions="true"
         android:name="org.chromium.android_webview.nonembedded.LicenseContentProvider"
         android:process=":webview_apk">
     </provider>  # DIFF-ANCHOR: a5e78e63
@@ -73,6 +76,18 @@
         android:process=":webview_service"
         android:visibleToInstantApps="true">
     </provider>  # DIFF-ANCHOR: bfe37944
+    <receiver  # DIFF-ANCHOR: 1091f66b
+        android:exported="false"
+        android:name="com.google.android.gms.cast.framework.media.MediaIntentReceiver">
+    </receiver>  # DIFF-ANCHOR: 1091f66b
+    <service  # DIFF-ANCHOR: 41539e3c
+        android:exported="false"
+        android:name="com.google.android.gms.cast.framework.ReconnectionService">
+    </service>  # DIFF-ANCHOR: 41539e3c
+    <service  # DIFF-ANCHOR: 7dad1ec5
+        android:exported="false"
+        android:name="com.google.android.gms.cast.framework.media.MediaNotificationService">
+    </service>  # DIFF-ANCHOR: 7dad1ec5
     <service  # DIFF-ANCHOR: 3cd6d713
         android:exported="true"
         android:name="org.chromium.android_webview.services.AwMinidumpUploadJobService"

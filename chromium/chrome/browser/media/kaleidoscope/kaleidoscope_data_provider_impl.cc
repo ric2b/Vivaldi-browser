@@ -11,7 +11,9 @@
 #include "chrome/browser/media/history/media_history_keyed_service.h"
 #include "chrome/browser/media/history/media_history_keyed_service_factory.h"
 #include "chrome/browser/media/kaleidoscope/constants.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_metrics_recorder.h"
 #include "chrome/browser/media/kaleidoscope/kaleidoscope_prefs.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -68,9 +70,11 @@ base::Optional<media_feeds::mojom::MediaFeedItemType> GetFeedItemTypeForTab(
 
 KaleidoscopeDataProviderImpl::KaleidoscopeDataProviderImpl(
     mojo::PendingReceiver<media::mojom::KaleidoscopeDataProvider> receiver,
-    Profile* profile)
+    Profile* profile,
+    KaleidoscopeMetricsRecorder* metrics_recorder)
     : credentials_(media::mojom::Credentials::New()),
       profile_(profile),
+      metrics_recorder_(metrics_recorder),
       receiver_(this, std::move(receiver)) {
   DCHECK(profile);
 
@@ -102,6 +106,14 @@ void KaleidoscopeDataProviderImpl::GetCredentials(GetCredentialsCallback cb) {
     return;
   }
 
+  // If the administrator has disabled Kaleidoscope then stop.
+  auto* prefs = profile_->GetPrefs();
+  if (!prefs->GetBoolean(kaleidoscope::prefs::kKaleidoscopePolicyEnabled)) {
+    std::move(cb).Run(nullptr,
+                      media::mojom::CredentialsResult::kDisabledByPolicy);
+    return;
+  }
+
   // If the user is not signed in, return the credentials without an access
   // token. Sync consent is not required to use Kaleidoscope.
   if (!identity_manager_->HasPrimaryAccount(
@@ -127,42 +139,35 @@ void KaleidoscopeDataProviderImpl::GetCredentials(GetCredentialsCallback cb) {
 
 void KaleidoscopeDataProviderImpl::GetShouldShowFirstRunExperience(
     GetShouldShowFirstRunExperienceCallback cb) {
-  // If the flag for forcing the first run experience to show is set, then just
-  // show it.
-  if (base::FeatureList::IsEnabled(
-          media::kKaleidoscopeForceShowFirstRunExperience)) {
-    std::move(cb).Run(true);
+  auto* service = kaleidoscope::KaleidoscopeService::Get(profile_);
+
+  // The Kaleidoscope Service would not be available for incognito profiles.
+  if (!service) {
+    std::move(cb).Run(false);
     return;
   }
 
-  // Otherwise, check to see if the user has already completed the latest first
-  // run experience.
-  auto* prefs = profile_->GetPrefs();
-  if (!prefs) {
-    std::move(cb).Run(true);
-    return;
-  }
-
-  // If the pref is unset or lower than the current version, then we haven't
-  // shown the current first run experience before and we should show it now.
-  const base::Value* pref = prefs->GetUserPrefValue(
-      kaleidoscope::prefs::kKaleidoscopeFirstRunCompleted);
-  if (!pref || pref->GetInt() < kKaleidoscopeFirstRunLatestVersion) {
-    std::move(cb).Run(true);
-    return;
-  }
-
-  // Otherwise, we have shown it and don't need to.
-  std::move(cb).Run(false);
+  std::move(cb).Run(service->ShouldShowFirstRunExperience());
 }
 
-void KaleidoscopeDataProviderImpl::SetFirstRunExperienceCompleted() {
+void KaleidoscopeDataProviderImpl::SetFirstRunExperienceStep(
+    media::mojom::KaleidoscopeFirstRunExperienceStep step) {
+  if (metrics_recorder_)
+    metrics_recorder_->OnFirstRunExperienceStepChanged(step);
+
+  // If the FRE is completed, then store a pref so we know to not show it again.
+  if (step != media::mojom::KaleidoscopeFirstRunExperienceStep::kCompleted)
+    return;
+
   auto* prefs = profile_->GetPrefs();
   if (!prefs)
     return;
 
   prefs->SetInteger(kaleidoscope::prefs::kKaleidoscopeFirstRunCompleted,
                     kKaleidoscopeFirstRunLatestVersion);
+
+  // Delete any cached data that has the first run stored in it.
+  GetMediaHistoryService()->DeleteKaleidoscopeData();
 }
 
 void KaleidoscopeDataProviderImpl::GetAllMediaFeeds(
@@ -191,8 +196,15 @@ void KaleidoscopeDataProviderImpl::SetMediaFeedsConsent(
   prefs->SetBoolean(kaleidoscope::prefs::kKaleidoscopeAutoSelectMediaFeeds,
                     accepted_auto_select_media_feeds);
 
-  // TODO(b/154517281): Update the MediaFeeds service with the allowlisted
-  // feeds from |enabled_feed_ids| and |disabled_feed_ids|.
+  for (auto& feed_id : disabled_feed_ids) {
+    GetMediaHistoryService()->UpdateFeedUserStatus(
+        feed_id, media_feeds::mojom::FeedUserStatus::kDisabled);
+  }
+
+  for (auto& feed_id : enabled_feed_ids) {
+    GetMediaHistoryService()->UpdateFeedUserStatus(
+        feed_id, media_feeds::mojom::FeedUserStatus::kEnabled);
+  }
 }
 
 void KaleidoscopeDataProviderImpl::GetHighWatchTimeOrigins(
@@ -254,6 +266,32 @@ void KaleidoscopeDataProviderImpl::SendFeedback() {
                            std::string() /* extra_diagnostics */);
 }
 
+void KaleidoscopeDataProviderImpl::GetCollections(const std::string& request,
+                                                  GetCollectionsCallback cb) {
+  GetCredentials(base::BindOnce(
+      &KaleidoscopeDataProviderImpl::OnGotCredentialsForCollections,
+      weak_ptr_factory.GetWeakPtr(), request, std::move(cb)));
+}
+
+void KaleidoscopeDataProviderImpl::OnGotCredentialsForCollections(
+    const std::string& request,
+    GetCollectionsCallback cb,
+    media::mojom::CredentialsPtr credentials,
+    media::mojom::CredentialsResult result) {
+  // If we have no credentials then we should return an empty response.
+  if (result != media::mojom::CredentialsResult::kSuccess) {
+    std::move(cb).Run(media::mojom::GetCollectionsResponse::New(
+        "", media::mojom::GetCollectionsResult::kFailed));
+    return;
+  }
+
+  auto account_info = identity_manager_->GetPrimaryAccountInfo(
+      signin::ConsentLevel::kNotRequired);
+
+  kaleidoscope::KaleidoscopeService::Get(profile_)->GetCollections(
+      std::move(credentials), account_info.gaia, request, std::move(cb));
+}
+
 media_history::MediaHistoryKeyedService*
 KaleidoscopeDataProviderImpl::GetMediaHistoryService() {
   return media_history::MediaHistoryKeyedServiceFactory::GetForProfile(
@@ -266,8 +304,10 @@ void KaleidoscopeDataProviderImpl::OnAccessTokenAvailable(
   DCHECK(token_fetcher_);
   token_fetcher_.reset();
 
-  if (error.state() == GoogleServiceAuthError::State::NONE)
+  if (error.state() == GoogleServiceAuthError::State::NONE) {
     credentials_->access_token = access_token_info.token;
+    credentials_->expiry_time = access_token_info.expiration_time;
+  }
 
   for (auto& callback : pending_callbacks_) {
     std::move(callback).Run(credentials_.Clone(),

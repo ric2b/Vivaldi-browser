@@ -10,9 +10,6 @@ import("//chrome/test/base/js2gtest.gni")
 import("//testing/test.gni")
 import("//third_party/closure_compiler/compile_js.gni")
 
-# Prevent Chromium source assignment filters from being inherited.
-set_sources_assignment_filter([])
-
 declare_args() {
   # Whether to compress the main Chromevox javascript files or load the
   # modules individually from source files.
@@ -28,6 +25,9 @@ chromevox_modules = [
   "../common/automation_predicate.js",
   "../common/automation_util.js",
   "../common/constants.js",
+  "../common/event_generator.js",
+  "../common/key_code.js",
+  "../common/instance_checker.js",
   "../common/tree_walker.js",
   "background/annotation/node_identifier.js",
   "background/annotation/user_annotation_handler.js",
@@ -402,6 +402,8 @@ if (is_chromeos) {
     extra_js_files = [
       "../common/testing/assert_additions.js",
       "../common/testing/callback_helper.js",
+      "../common/closure_shim.js",
+      "../common/key_code.js",
       "braille/expanding_braille_translator.js",
       "braille/nav_braille.js",
       "braille/pan_strategy.js",
@@ -459,6 +461,7 @@ if (is_chromeos) {
       "background/output_test.js",
       "background/portals_test.js",
       "background/recovery_strategy_test.js",
+      "background/settings_test.js",
       "background/smart_sticky_mode_test.js",
       "background/user_action_monitor_test.js",
       "braille/braille_table_test.js",
@@ -469,6 +472,7 @@ if (is_chromeos) {
       "options/options_test.js",
       "panel/i_search_test.js",
       "panel/panel_test.js",
+      "panel/tutorial_test.js",
     ]
     gen_include_files = [
       "../common/testing/assert_additions.js",

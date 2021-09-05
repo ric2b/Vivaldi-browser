@@ -15,9 +15,11 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -42,6 +44,18 @@ constexpr int kBannerHeightPx = 160;
 // Strings for converting to and from AmbientModeTemperatureUnit enum.
 constexpr char kCelsius[] = "celsius";
 constexpr char kFahrenheit[] = "fahrenheit";
+
+constexpr int kMaxRetries = 3;
+
+constexpr net::BackoffEntry::Policy kRetryBackoffPolicy = {
+    0,          // Number of initial errors to ignore.
+    500,        // Initial delay in ms.
+    2.0,        // Factor by which the waiting time will be multiplied.
+    0.2,        // Fuzzing percentage.
+    60 * 1000,  // Maximum delay in ms.
+    -1,         // Never discard the entry.
+    true,       // Use initial delay.
+};
 
 ash::AmbientModeTemperatureUnit ExtractTemperatureUnit(
     const base::ListValue* args) {
@@ -108,7 +122,9 @@ base::string16 GetAlbumDescription(const ash::PersonalAlbum& album) {
 
 }  // namespace
 
-AmbientModeHandler::AmbientModeHandler() = default;
+AmbientModeHandler::AmbientModeHandler()
+    : fetch_settings_retry_backoff_(&kRetryBackoffPolicy),
+      update_settings_retry_backoff_(&kRetryBackoffPolicy) {}
 
 AmbientModeHandler::~AmbientModeHandler() = default;
 
@@ -149,10 +165,7 @@ void AmbientModeHandler::HandleRequestSettings(const base::ListValue* args) {
   // since the last time requesting the data. Abort any request in progress to
   // avoid unnecessary updating invisible subpage.
   ui_update_weak_factory_.InvalidateWeakPtrs();
-  RequestSettingsAndAlbums(
-      base::BindOnce(&AmbientModeHandler::OnSettingsAndAlbumsFetched,
-                     ui_update_weak_factory_.GetWeakPtr(),
-                     /*topic_source=*/base::nullopt));
+  RequestSettingsAndAlbums(/*topic_source=*/base::nullopt);
 }
 
 void AmbientModeHandler::HandleRequestAlbums(const base::ListValue* args) {
@@ -165,9 +178,7 @@ void AmbientModeHandler::HandleRequestAlbums(const base::ListValue* args) {
   // Photos to Art gallery, since the last time requesting the data.
   // Abort any request in progress to avoid updating incorrect contents.
   ui_update_weak_factory_.InvalidateWeakPtrs();
-  RequestSettingsAndAlbums(base::BindOnce(
-      &AmbientModeHandler::OnSettingsAndAlbumsFetched,
-      ui_update_weak_factory_.GetWeakPtr(), ExtractTopicSource(args)));
+  RequestSettingsAndAlbums(ExtractTopicSource(args));
 }
 
 void AmbientModeHandler::HandleSetSelectedTemperatureUnit(
@@ -222,6 +233,9 @@ void AmbientModeHandler::HandleSetSelectedAlbums(const base::ListValue* args) {
             });
         const bool checked = it != albums->GetList().end();
         art_setting.enabled = checked;
+        // A setting must be visible to be enabled.
+        if (art_setting.enabled)
+          CHECK(art_setting.visible);
       }
       break;
   }
@@ -268,6 +282,8 @@ void AmbientModeHandler::SendAlbums(ash::AmbientModeTopicSource topic_source) {
       break;
     case ash::AmbientModeTopicSource::kArtGallery:
       for (const auto& setting : settings_->art_settings) {
+        if (!setting.visible)
+          continue;
         base::Value value(base::Value::Type::DICTIONARY);
         value.SetKey("albumId", base::Value(setting.album_id));
         value.SetKey("checked", base::Value(setting.enabled));
@@ -298,6 +314,14 @@ void AmbientModeHandler::SendAlbumPreview(
 }
 
 void AmbientModeHandler::UpdateSettings() {
+  if (is_updating_backend_) {
+    has_pending_updates_for_backend_ = true;
+    return;
+  }
+
+  has_pending_updates_for_backend_ = false;
+  is_updating_backend_ = true;
+
   DCHECK(settings_);
   ash::AmbientBackendController::Get()->UpdateSettings(
       *settings_, base::BindOnce(&AmbientModeHandler::OnUpdateSettings,
@@ -305,31 +329,58 @@ void AmbientModeHandler::UpdateSettings() {
 }
 
 void AmbientModeHandler::OnUpdateSettings(bool success) {
-  if (success)
-    return;
+  is_updating_backend_ = false;
 
-  // TODO(b/152921891): Retry a small fixed number of times, then only retry
-  // when user confirms in the error message dialog.
+  if (success) {
+    update_settings_retry_backoff_.Reset();
+  } else {
+    update_settings_retry_backoff_.InformOfRequest(/*succeeded=*/false);
+    if (update_settings_retry_backoff_.failure_count() > kMaxRetries)
+      return;
+  }
+
+  if (has_pending_updates_for_backend_ || !success) {
+    const base::TimeDelta kDelay =
+        update_settings_retry_backoff_.GetTimeUntilRelease();
+    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&AmbientModeHandler::UpdateSettings,
+                       backend_weak_factory_.GetWeakPtr()),
+        kDelay);
+  }
 }
 
 void AmbientModeHandler::RequestSettingsAndAlbums(
-    ash::AmbientBackendController::OnSettingsAndAlbumsFetchedCallback
-        callback) {
+    base::Optional<ash::AmbientModeTopicSource> topic_source) {
   // TODO(b/161044021): Add a helper function to get all the albums. Currently
   // only load 100 latest modified albums.
   ash::AmbientBackendController::Get()->FetchSettingsAndAlbums(
-      kBannerWidthPx, kBannerHeightPx, /*num_albums=*/100, std::move(callback));
+      kBannerWidthPx, kBannerHeightPx, /*num_albums=*/100,
+      base::BindOnce(&AmbientModeHandler::OnSettingsAndAlbumsFetched,
+                     ui_update_weak_factory_.GetWeakPtr(), topic_source));
 }
 
 void AmbientModeHandler::OnSettingsAndAlbumsFetched(
     base::Optional<ash::AmbientModeTopicSource> topic_source,
     const base::Optional<ash::AmbientSettings>& settings,
     ash::PersonalAlbums personal_albums) {
-  // TODO(b/152921891): Retry a small fixed number of times, then only retry
-  // when user confirms in the error message dialog.
-  if (!settings)
-    return;
+  // |settings| value implies success.
+  if (!settings) {
+    fetch_settings_retry_backoff_.InformOfRequest(/*succeeded=*/false);
+    if (fetch_settings_retry_backoff_.failure_count() > kMaxRetries)
+      return;
 
+    const base::TimeDelta kDelay =
+        fetch_settings_retry_backoff_.GetTimeUntilRelease();
+    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&AmbientModeHandler::RequestSettingsAndAlbums,
+                       ui_update_weak_factory_.GetWeakPtr(), topic_source),
+        kDelay);
+    return;
+  }
+
+  fetch_settings_retry_backoff_.Reset();
   settings_ = settings;
   personal_albums_ = std::move(personal_albums);
   SyncSettingsAndAlbums();
@@ -337,6 +388,17 @@ void AmbientModeHandler::OnSettingsAndAlbumsFetched(
   if (!topic_source) {
     SendTopicSource();
     SendTemperatureUnit();
+
+    // Explicitly enable the weather settings if necessary to make sure we
+    // can always get weather info in the response. Leaving this settings as
+    // default could result in unpredictable behavior (b/158630188). Note that
+    // right now the weather info is designed to be always shown on ambient
+    // screen, so we don't expose an option in ambient Settings for users to
+    // switch it off.
+    if (!settings_->show_weather) {
+      settings_->show_weather = true;
+      UpdateSettings();
+    }
     return;
   }
 

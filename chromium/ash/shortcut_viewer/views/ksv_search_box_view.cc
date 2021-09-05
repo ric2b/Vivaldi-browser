@@ -4,12 +4,12 @@
 
 #include "ash/shortcut_viewer/views/ksv_search_box_view.h"
 
+#include "ash/search_box/search_box_view_delegate.h"
 #include "ash/shortcut_viewer/strings/grit/shortcut_viewer_strings.h"
 #include "ash/shortcut_viewer/vector_icons/vector_icons.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/chromeos/search_box/search_box_view_delegate.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -30,8 +30,8 @@ constexpr int kBorderCornerRadius = 32;
 
 }  // namespace
 
-KSVSearchBoxView::KSVSearchBoxView(search_box::SearchBoxViewDelegate* delegate)
-    : search_box::SearchBoxViewBase(delegate) {
+KSVSearchBoxView::KSVSearchBoxView(ash::SearchBoxViewDelegate* delegate)
+    : ash::SearchBoxViewBase(delegate) {
   SetSearchBoxBackgroundCornerRadius(kBorderCornerRadius);
   UpdateBackgroundColor(kDefaultSearchBoxBackgroundColor);
   search_box()->SetBackgroundColor(SK_ColorTRANSPARENT);
@@ -109,7 +109,7 @@ void KSVSearchBoxView::UpdateSearchBoxBorder() {
 
 void KSVSearchBoxView::SetupCloseButton() {
   views::ImageButton* close = close_button();
-  close->set_has_ink_drop_action_on_click(true);
+  close->SetHasInkDropActionOnClick(true);
   close->SetImage(
       views::ImageButton::STATE_NORMAL,
       gfx::CreateVectorIcon(kKsvSearchCloseIcon, gfx::kGoogleGrey700));
@@ -125,7 +125,7 @@ void KSVSearchBoxView::SetupCloseButton() {
 
 void KSVSearchBoxView::SetupBackButton() {
   views::ImageButton* back = back_button();
-  back->set_has_ink_drop_action_on_click(true);
+  back->SetHasInkDropActionOnClick(true);
   back->SetImage(
       views::ImageButton::STATE_NORMAL,
       gfx::CreateVectorIcon(kKsvSearchBackIcon, gfx::kGoogleBlue500));

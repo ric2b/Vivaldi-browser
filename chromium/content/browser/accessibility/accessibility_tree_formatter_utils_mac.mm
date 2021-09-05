@@ -5,12 +5,7 @@
 #include "content/browser/accessibility/accessibility_tree_formatter_utils_mac.h"
 
 #include "base/strings/sys_string_conversions.h"
-
-// error: 'accessibilityAttributeNames' is deprecated: first deprecated in
-// macOS 10.10 - Use the NSAccessibility protocol methods instead (see
-// NSAccessibilityProtocols.h
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#include "content/browser/accessibility/accessibility_tools_utils_mac.h"
 
 using base::SysNSStringToUTF8;
 
@@ -49,23 +44,34 @@ namespace {
 
 }  // namespace
 
-LineIndexesMap::LineIndexesMap(const BrowserAccessibilityCocoa* cocoa_node) {
+// Line indexers
+
+LineIndexer::LineIndexer(const gfx::NativeViewAccessible node) {
   int counter = 0;
-  Build(cocoa_node, &counter);
+  Build(node, &counter);
 }
 
-LineIndexesMap::~LineIndexesMap() {}
+LineIndexer::~LineIndexer() {}
 
-std::string LineIndexesMap::IndexBy(
-    const BrowserAccessibilityCocoa* cocoa_node) const {
+std::string LineIndexer::IndexBy(const gfx::NativeViewAccessible node) const {
   std::string line_index = ":unknown";
-  if (map.find(cocoa_node) != map.end()) {
-    line_index = map.at(cocoa_node);
+  if (IsBrowserAccessibilityCocoa(node)) {
+    auto iter = map.find(node);
+    if (iter != map.end()) {
+      line_index = iter->second;
+    }
+  } else if (IsAXUIElement(node)) {
+    for (auto& iter : map) {
+      if (CFEqual(iter.first, node)) {
+        line_index = iter.second;
+        break;
+      }
+    }
   }
   return line_index;
 }
 
-gfx::NativeViewAccessible LineIndexesMap::NodeBy(
+gfx::NativeViewAccessible LineIndexer::NodeBy(
     const std::string& line_index) const {
   for (std::pair<const gfx::NativeViewAccessible, std::string> item : map) {
     if (item.second == line_index) {
@@ -75,24 +81,23 @@ gfx::NativeViewAccessible LineIndexesMap::NodeBy(
   return nil;
 }
 
-void LineIndexesMap::Build(const BrowserAccessibilityCocoa* cocoa_node,
-                           int* counter) {
+void LineIndexer::Build(const gfx::NativeViewAccessible node, int* counter) {
   const std::string line_index =
       std::string(1, ':') + base::NumberToString(++(*counter));
-  map.insert({cocoa_node, line_index});
-  for (BrowserAccessibilityCocoa* cocoa_child in [cocoa_node children]) {
-    Build(cocoa_child, counter);
+  map.insert({node, line_index});
+  NSArray* children = ChildrenOf(node);
+  for (gfx::NativeViewAccessible child in children) {
+    Build(child, counter);
   }
 }
 
 // AttributeInvoker
 
-AttributeInvoker::AttributeInvoker(const BrowserAccessibilityCocoa* cocoa_node,
-                                   const LineIndexesMap& line_indexes_map)
-    : cocoa_node(cocoa_node), line_indexes_map(line_indexes_map) {
-  attributes = [cocoa_node accessibilityAttributeNames];
-  parameterized_attributes =
-      [cocoa_node accessibilityParameterizedAttributeNames];
+AttributeInvoker::AttributeInvoker(const id node,
+                                   const LineIndexer* line_indexer)
+    : node(node), line_indexer(line_indexer) {
+  attributes = AttributeNamesOf(node);
+  parameterized_attributes = ParameterizedAttributeNamesOf(node);
 }
 
 OptionalNSObject AttributeInvoker::Invoke(
@@ -101,7 +106,7 @@ OptionalNSObject AttributeInvoker::Invoke(
   for (NSString* attribute : attributes) {
     if (property_node.IsMatching(SysNSStringToUTF8(attribute))) {
       return OptionalNSObject::NotNullOrNotApplicable(
-          [cocoa_node accessibilityAttributeValue:attribute]);
+          AttributeValueOf(node, attribute));
     }
   }
 
@@ -110,9 +115,8 @@ OptionalNSObject AttributeInvoker::Invoke(
     if (property_node.IsMatching(SysNSStringToUTF8(attribute))) {
       OptionalNSObject param = ParamByPropertyNode(property_node);
       if (param.IsNotNil()) {
-        return OptionalNSObject([cocoa_node
-            accessibilityAttributeValue:attribute
-                           forParameter:*param]);
+        return OptionalNSObject(
+            ParameterizedAttributeValueOf(node, attribute, *param));
       }
       return param;
     }
@@ -216,7 +220,7 @@ NSValue* AttributeInvoker::PropertyNodeToRange(
 gfx::NativeViewAccessible AttributeInvoker::PropertyNodeToUIElement(
     const PropertyNode& uielement_node) const {
   gfx::NativeViewAccessible uielement =
-      line_indexes_map.NodeBy(uielement_node.name_or_value);
+      line_indexer->NodeBy(uielement_node.name_or_value);
   if (!uielement) {
     UIELEMENT_FAIL(uielement_node,
                    "no corresponding UIElement was found in the tree")
@@ -233,7 +237,7 @@ id AttributeInvoker::DictNodeToTextMarker(const PropertyNode& dictnode) const {
   }
 
   BrowserAccessibilityCocoa* anchor_cocoa =
-      line_indexes_map.NodeBy(dictnode.parameters[0].name_or_value);
+      line_indexer->NodeBy(dictnode.parameters[0].name_or_value);
   if (!anchor_cocoa) {
     TEXTMARKER_FAIL(dictnode, "1st argument: wrong anchor")
   }
@@ -294,5 +298,3 @@ id AttributeInvoker::PropertyNodeToTextMarkerRange(
 
 }  // namespace a11y
 }  // namespace content
-
-#pragma clang diagnostic pop

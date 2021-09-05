@@ -20,12 +20,15 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {focusWithoutInk} from 'chrome://resources/js/cr/ui/focus_without_ink.m.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
+import {SyncBrowserProxyImpl} from '../people_page/sync_browser_proxy.m.js';
 
 // <if expr="chromeos">
 import {BlockingRequestManager} from './blocking_request_manager.js';
+import {MultiStorePasswordUiEntry} from './multi_store_password_ui_entry.js';
 // </if>
 import {PasswordMoreActionsClickedEvent} from './password_list_item.js';
 import {PasswordManagerImpl, PasswordManagerProxy} from './password_manager_proxy.js';
@@ -36,16 +39,20 @@ Polymer({
 
   _template: html`{__html_template__}`,
 
-  properties: {
+  behaviors: [
+    I18nBehavior,
+    WebUIListenerBehavior,
+  ],
 
+  properties: {
     /**
-     * The model for any active menus or dialogs. The value is reset to null
-     * whenever actions from the menus/dialogs are concluded.
-     * @private {?PasswordListItemElement}
+     * Saved passwords after deduplicating versions that are repeated in the
+     * account and on the device.
+     * @type {!Array<!MultiStorePasswordUiEntry>}
      */
-    activePassword: {
-      type: Object,
-      value: null,
+    savedPasswords: {
+      type: Array,
+      value: () => [],
     },
 
     /**
@@ -61,7 +68,7 @@ Polymer({
      * Whether an option for moving a password to the account should be offered
      * in the overflow menu.
      */
-    shouldShowMoveToAccountOption: {
+    allowMoveToAccountOption: {
       type: Boolean,
       value: false,
     },
@@ -71,12 +78,14 @@ Polymer({
     tokenRequestManager: Object,
     // </if>
 
-    /** @private */
-    enablePasswordCheck_: {
-      type: Boolean,
-      value() {
-        return loadTimeData.getBoolean('enablePasswordCheck');
-      }
+    /**
+     * The model for any active menus or dialogs. The value is reset to null
+     * whenever actions from the menus/dialogs are concluded.
+     * @private {?PasswordListItemElement}
+     */
+    activePassword_: {
+      type: Object,
+      value: null,
     },
 
     /** @private */
@@ -91,10 +100,11 @@ Polymer({
      * Check if editPasswordsInSettings flag is true and entry isn't federation
      * credential.
      * @private
-     * */
+     */
     isEditDialog_: {
       type: Boolean,
-      computed: 'computeIsEditDialog_(editPasswordsInSettings_, activePassword)'
+      computed:
+          'computeIsEditDialog_(editPasswordsInSettings_, activePassword_)'
     },
 
     /** @private */
@@ -115,29 +125,44 @@ Polymer({
 
     /**
      * The message displayed in the toast following a password removal.
+     * @private
      */
     removalNotification_: {
+      type: String,
+      value: '',
+    },
+
+    /**
+     * The email of the first signed-in account, or the empty string if
+     * there's none.
+     * @private
+     */
+    firstSignedInAccountEmail_: {
       type: String,
       value: '',
     }
   },
 
-  behaviors: [
-    I18nBehavior,
-  ],
-
-  listeners: {
-    'password-more-actions-clicked': 'onPasswordMoreActionsClicked_',
-    'password-remove-dialog-passwords-removed':
-        'onPasswordRemoveDialogPasswordsRemoved_',
-  },
-
   /** @private {?PasswordManagerProxy} */
   passwordManager_: null,
+
+  listeners: {
+    'password-more-actions-clicked': 'passwordMoreActionsClickedHandler_',
+    'password-remove-dialog-passwords-removed':
+        'passwordRemoveDialogPasswordsRemovedHandler_',
+  },
 
   /** @override */
   attached() {
     this.passwordManager_ = PasswordManagerImpl.getInstance();
+
+    const extractFirstAccountEmail = accounts => {
+      this.firstSignedInAccountEmail_ =
+          accounts.length > 0 ? accounts[0].email : '';
+    };
+    SyncBrowserProxyImpl.getInstance().getStoredAccounts().then(
+        extractFirstAccountEmail);
+    this.addWebUIListener('stored-accounts-updated', extractFirstAccountEmail);
   },
 
   /** @override */
@@ -145,17 +170,6 @@ Polymer({
     if (this.$.toast.open) {
       this.$.toast.hide();
     }
-  },
-
-  /**
-   * Helper function that checks if editPasswordsInSettings flag is true and
-   * entry isn't federation credential.
-   * @return {boolean}
-   * @private
-   * */
-  computeIsEditDialog_() {
-    return this.editPasswordsInSettings_ &&
-        (!this.activePassword || !this.activePassword.entry.federationText);
   },
 
   /**
@@ -170,12 +184,32 @@ Polymer({
    * @param {PasswordMoreActionsClickedEvent} event
    * @private
    */
-  onPasswordMoreActionsClicked_(event) {
+  passwordMoreActionsClickedHandler_(event) {
     const target = event.detail.target;
 
-    this.activePassword = event.detail.listItem;
+    this.activePassword_ = event.detail.listItem;
     this.$.menu.showAt(target);
     this.activeDialogAnchor_ = target;
+  },
+
+  /**
+   * @param {PasswordRemoveDialogPasswordsRemovedEvent} event
+   * @private
+   */
+  passwordRemoveDialogPasswordsRemovedHandler_(event) {
+    this.displayRemovalNotification_(
+        event.detail.removedFromAccount, event.detail.removedFromDevice);
+  },
+
+  /**
+   * Helper function that checks if editPasswordsInSettings flag is true and
+   * entry isn't federation credential.
+   * @return {boolean}
+   * @private
+   */
+  computeIsEditDialog_() {
+    return this.editPasswordsInSettings_ &&
+        (!this.activePassword_ || !this.activePassword_.entry.federationText);
   },
 
   /**
@@ -188,7 +222,7 @@ Polymer({
    */
   requestActivePlaintextPassword_(reason, callback) {
     this.passwordManager_
-        .requestPlaintextPassword(this.activePassword.entry.getAnyId(), reason)
+        .requestPlaintextPassword(this.activePassword_.entry.getAnyId(), reason)
         .then(callback, error => {
           // <if expr="chromeos">
           // If no password was found, refresh auth token and retry.
@@ -204,14 +238,14 @@ Polymer({
     if (this.isEditDialog_) {
       this.requestActivePlaintextPassword_(
           chrome.passwordsPrivate.PlaintextReason.EDIT, password => {
-            this.set('activePassword.entry.password', password);
+            this.set('activePassword_.entry.password', password);
             this.showPasswordEditDialog_ = true;
           });
     } else {
       this.showPasswordEditDialog_ = true;
     }
     this.$.menu.close();
-    this.activePassword.hide();
+    this.activePassword_.hide();
   },
 
   /**
@@ -228,8 +262,8 @@ Polymer({
     this.showPasswordEditDialog_ = false;
     focusWithoutInk(assert(this.activeDialogAnchor_));
     this.activeDialogAnchor_ = null;
-    this.activePassword.hide();
-    this.activePassword = null;
+    this.activePassword_.hide();
+    this.activePassword_ = null;
   },
 
   /** @private */
@@ -237,7 +271,7 @@ Polymer({
     this.showPasswordEditDialog_ = false;
     focusWithoutInk(assert(this.activeDialogAnchor_));
     this.activeDialogAnchor_ = null;
-    this.activePassword = null;
+    this.activePassword_ = null;
   },
 
   /**
@@ -249,7 +283,7 @@ Polymer({
     // result back to javascript.
     this.requestActivePlaintextPassword_(
         chrome.passwordsPrivate.PlaintextReason.COPY, _ => {
-          this.activePassword = null;
+          this.activePassword_ = null;
         });
 
     this.$.menu.close();
@@ -264,20 +298,20 @@ Polymer({
   onMenuRemovePasswordTap_() {
     this.$.menu.close();
 
-    if (this.activePassword.entry.isPresentOnDevice() &&
-        this.activePassword.entry.isPresentInAccount()) {
+    if (this.activePassword_.entry.isPresentOnDevice() &&
+        this.activePassword_.entry.isPresentInAccount()) {
       this.showPasswordRemoveDialog_ = true;
       return;
     }
 
-    const idToRemove = this.activePassword.entry.isPresentInAccount() ?
-        this.activePassword.entry.accountId :
-        this.activePassword.entry.deviceId;
+    const idToRemove = this.activePassword_.entry.isPresentInAccount() ?
+        this.activePassword_.entry.accountId :
+        this.activePassword_.entry.deviceId;
     this.passwordManager_.removeSavedPassword(idToRemove);
     this.displayRemovalNotification_(
-        this.activePassword.entry.isPresentInAccount(),
-        this.activePassword.entry.isPresentOnDevice());
-    this.activePassword = null;
+        this.activePassword_.entry.isPresentInAccount(),
+        this.activePassword_.entry.isPresentOnDevice());
+    this.activePassword_ = null;
   },
 
   /**
@@ -304,24 +338,14 @@ Polymer({
     this.fire('iron-announce', {text: this.i18n('undoDescription')});
   },
 
-  /**
-   * @param {PasswordRemoveDialogPasswordsRemovedEvent} event
-   */
-  onPasswordRemoveDialogPasswordsRemoved_(event) {
-    this.displayRemovalNotification_(
-        event.detail.removedFromAccount, event.detail.removedFromDevice);
-  },
-
-  /**
-   * @private
-   */
+  /** @private */
   onUndoButtonClick_() {
     this.passwordManager_.undoRemoveSavedPasswordOrException();
     this.onSavedPasswordOrExceptionRemoved();
   },
 
   /**
-   * Should only be called when |activePassword| has a device copy.
+   * Should only be called when |activePassword_| has a device copy.
    * @private
    */
   onMenuMovePasswordToAccountTap_() {
@@ -329,26 +353,36 @@ Polymer({
     this.showPasswordMoveToAccountDialog_ = true;
   },
 
-  /**
-   * @private
-   */
+  /** @private */
   onPasswordMoveToAccountDialogClosed_() {
     this.showPasswordMoveToAccountDialog_ = false;
-    this.activePassword = null;
+    this.activePassword_ = null;
 
     // The entry possibly disappeared, so don't reset the focus.
     this.activeDialogAnchor_ = null;
   },
 
-  /**
-   * @private
-   */
+  /** @private */
   onPasswordRemoveDialogClosed_() {
     this.showPasswordRemoveDialog_ = false;
-    this.activePassword = null;
+    this.activePassword_ = null;
 
     // A removal possibly happened, so don't reset the focus.
     this.activeDialogAnchor_ = null;
+  },
+
+  /**
+   * Whether the move option should be present in the overflow menu.
+   * @private
+   * @return {boolean}
+   */
+  shouldShowMoveToAccountOption_() {
+    const isFirstSignedInAccountPassword = !!this.activePassword_ &&
+        this.activePassword_.entry.urls.origin.includes(
+            'accounts.google.com') &&
+        this.activePassword_.entry.username === this.firstSignedInAccountEmail_;
+    // It's not useful to move a password for an account into that same account.
+    return this.allowMoveToAccountOption && !isFirstSignedInAccountPassword;
   },
 
 });

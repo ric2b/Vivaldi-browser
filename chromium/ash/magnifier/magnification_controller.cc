@@ -27,7 +27,6 @@
 #include "ui/base/ime/chromeos/ime_bridge.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
-#include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
@@ -35,6 +34,7 @@
 #include "ui/events/event.h"
 #include "ui/events/gestures/gesture_provider_aura.h"
 #include "ui/events/types/event_type.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -259,6 +259,16 @@ void MagnificationController::HandleFocusedNodeChanged(
     return;
 
   gfx::Rect node_bounds_in_root = node_bounds_in_screen;
+  ::wm::ConvertRectFromScreen(root_window_, &node_bounds_in_root);
+  if (GetViewportRect().Contains(node_bounds_in_root))
+    return;
+
+  MoveMagnifierWindowFollowRect(node_bounds_in_root);
+}
+
+void MagnificationController::HandleMoveMagnifierToRect(
+    const gfx::Rect& rect_in_screen) {
+  gfx::Rect node_bounds_in_root = rect_in_screen;
   ::wm::ConvertRectFromScreen(root_window_, &node_bounds_in_root);
   if (GetViewportRect().Contains(node_bounds_in_root))
     return;
@@ -593,13 +603,14 @@ ui::EventDispatchDetails MagnificationController::RewriteEvent(
   return SendEvent(continuation, &event);
 }
 
-bool MagnificationController::Redraw(const gfx::PointF& position,
-                                     float scale,
-                                     bool animate) {
-  const gfx::PointF position_in_dip =
-      ui::ConvertPointToDIP(root_window_->layer(), position);
-  return RedrawDIP(position_in_dip, scale,
-                   animate ? kDefaultAnimationDurationInMs : 0,
+bool MagnificationController::Redraw(
+    const gfx::PointF& position_in_physical_pixels,
+    float scale,
+    bool animate) {
+  gfx::PointF position =
+      gfx::ConvertPointToDips(position_in_physical_pixels,
+                              root_window_->layer()->device_scale_factor());
+  return RedrawDIP(position, scale, animate ? kDefaultAnimationDurationInMs : 0,
                    kDefaultAnimationTweenType);
 }
 

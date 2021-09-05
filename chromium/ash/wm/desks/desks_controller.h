@@ -123,6 +123,14 @@ class ASH_EXPORT DesksController : public DesksHelper,
   // do nothing, no desk switch or hit the wall animation.
   bool ActivateAdjacentDesk(bool going_left, DesksSwitchSource source);
 
+  // Functions used by WmGestureHandler to modify the current touchpad desk
+  // animation, if it exists. StartSwipeAnimation starts a new animation to
+  // an adjacent desk, or replaces an existing swipe animation. It returns
+  // true if either of those were successful, false otherwise.
+  bool StartSwipeAnimation(bool move_left);
+  void UpdateSwipeAnimation(float scroll_delta_x);
+  void EndSwipeAnimation();
+
   // Moves |window| (which must belong to the currently active desk) to
   // |target_desk| (which must be a different desk).
   // |target_root| is provided if |window| is desired to be moved to another
@@ -222,13 +230,16 @@ class ASH_EXPORT DesksController : public DesksHelper,
   // mode as a result of desks modifications.
   bool are_desks_being_modified_ = false;
 
-  // List of on-going desks animations.
-  std::vector<std::unique_ptr<DeskAnimationBase>> animations_;
+  // Not null if there is an on-going desks animation.
+  std::unique_ptr<DeskAnimationBase> animation_;
 
   // A free list of desk container IDs to be used for newly-created desks. New
   // desks pops from this queue and removed desks's associated container IDs are
   // re-pushed on this queue.
   std::queue<int> available_container_ids_;
+
+  // True when the enhanced desk animations feature is enabled.
+  const bool is_enhanced_desk_animations_;
 
   base::ObserverList<Observer>::Unchecked observers_;
 

@@ -52,6 +52,7 @@
 <translation id="1291286136605998134">ടോഗിൾ ബട്ടൺ</translation>
 <translation id="1299774449519412690">ഇളം ആകാശനീല</translation>
 <translation id="1303806948938513162">ChromeVox മെനു നൽകാൻ 4 വിരലുകൾ ഉപയോഗിച്ച് ടാപ്പ് ചെയ്യുക</translation>
+<translation id="1313373992684326101">മുമ്പത്തെ വിഭാഗത്തിലേക്ക് നീങ്ങുക. സ്‌റ്റാറ്റസ് ട്രേ, ലോഞ്ചർ എന്നിവ ഉദാഹരണങ്ങളിൽപ്പെടുന്നു.</translation>
 <translation id="1325363694295259631"><ph name="NAME" />, മെനു ഇനത്തിന്റെ റേഡിയോ ബട്ടണ്‍ തിരഞ്ഞെടുത്തത് മാറ്റി</translation>
 <translation id="1325946044405407859">തവിട്ടുനിറം</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> / <ph name="TOTAL" /></translation>
@@ -79,6 +80,7 @@
 <translation id="1506187449813838456">പിച്ച് വർദ്ധിപ്പിക്കുക</translation>
 <translation id="151784044608172266">അടുത്ത വാക്യം</translation>
 <translation id="1524531499102321782">അടുത്ത ബ്രെയ്‌ലി വരി</translation>
+<translation id="1542513807034338907">മുമ്പത്തെ പേജിലേക്ക് സ്ക്രോൾ ചെയ്യുക</translation>
 <translation id="1546370775711804143">സ്‌ക്രോൾ ബാർ</translation>
 <translation id="1555130319947370107">നീല</translation>
 <translation id="1559739829547075274">പിന്നോട്ട് നാവിഗേറ്റ് ചെയ്യുക</translation>
@@ -280,6 +282,7 @@
 <translation id="3103579948980282461">മീഡിയം വയലറ്റ് റെഡ്</translation>
 <translation id="3104705064753753826">alrt dlg</translation>
 <translation id="3109724472072898302">ചുരുക്കിയത്</translation>
+<translation id="311015743332597320">നാല് വിരലുകൾ ഉപയോഗിച്ച് വലത്തേക്ക് സ്വൈപ്പ് ചെയ്യുക</translation>
 <translation id="3112457281078985179">ChromeVox ഓണാക്കാനോ ഓഫാക്കാനോ, കൺട്രോൾ+Alt+Z ഉപയോഗിക്കുക.</translation>
 <translation id="3131002934070407451">നമ്പറുകൾ ഇനിപ്പറയുന്നതായി വായിക്കുക:</translation>
 <translation id="3134461040845705080">rdonly</translation>
@@ -345,6 +348,7 @@
 <translation id="3549141990712742152"><ph name="TEXT" /> മുറിക്കുക.</translation>
 <translation id="3549680091535286226">സംസാരിക്കുന്നത് താൽക്കാലികമായി നിർത്താൻ രണ്ട് വിരലുകൾ ഉപയോഗിച്ച് ടാപ്പ് ചെയ്യുക</translation>
 <translation id="3564729643041517261">നിലവിലുള്ള ഡിസ്‌പ്ലേ ശൈലി വശങ്ങളിൽ കാണിക്കുന്ന തരത്തിലാണ്</translation>
+<translation id="3587482841069643663">എല്ലാം</translation>
 <translation id="3589661172894441357">പദസഞ്ചയം</translation>
 <translation id="3591784666823501596">റോയൽ നീല</translation>
 <translation id="3594207934078151302">മീഡിയം കടൽ പച്ച</translation>
@@ -436,6 +440,7 @@
 <translation id="4278486392851938658">സന്ദർശിച്ച മുമ്പത്തെ ലിങ്കൊന്നുമില്ല</translation>
 <translation id="4281245629646759298">ഇളം മഞ്ഞ</translation>
 <translation id="4289540628985791613">അവലോകനം</translation>
+<translation id="4294967782363273192">ആരോഹണക്രമത്തിൽ അടുക്കിയവ</translation>
 <translation id="4300318234632215983">ഒരു ലിങ്കിന് പുറകിലുള്ള URL അറിയിക്കുക</translation>
 <translation id="4322625298640984693">സിയെന്ന</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{ഡോട്ട്}=3{എല്ലിപ്‌സിസ്}other{# ഡോട്ടുകൾ}}</translation>
@@ -447,6 +452,7 @@
 <translation id="4384583879834880242">ചോദ്യോത്തരം</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">കടും ആകാശനീല</translation>
+<translation id="4406249099130339147">വിരാമചിഹ്നം എക്കോ:</translation>
 <translation id="4432457053224379116">ഇന്ത്യൻ ചുവപ്പ്</translation>
 <translation id="4437615272777527928">മെനുകൾ തിരയാൻ ടൈപ്പ് ചെയ്യുക. ഫലങ്ങളിലൂടെ കടന്നുപോകാൻ മുകളിലേക്കും താഴേക്കുമുള്ള അമ്പടയാളങ്ങൾ ഉപയോഗിക്കുക. ടെക്സ്റ്റ് കാരറ്റിന്റെ വലുപ്പം മാറ്റാനും മെനുകൾക്കിടയിൽ നീക്കാനും ഇടത്തേക്കും വലത്തേക്കുമുള്ള അമ്പടയാളങ്ങൾ ഉപയോഗിക്കുക.</translation>
 <translation id="4457472090507035117">നിലവിലെ ശബ്‌ദം തിരഞ്ഞെടുക്കുക:</translation>
@@ -481,6 +487,7 @@
 <translation id="4763480195061959176">വീഡിയോ</translation>
 <translation id="4764692524839457597">ഡിഫോൾട്ട്</translation>
 <translation id="4772771694153161212">അടിവര ഇല്ല</translation>
+<translation id="4780458943471935919">അടുത്ത പേജിലേക്ക് സ്ക്രോൾ ചെയ്യുക</translation>
 <translation id="4784215347943747396">ഒന്നോ രണ്ടോ സ്വിച്ച് ഉപയോഗിച്ച് ഉപകരണം നിയന്ത്രിക്കുക</translation>
 <translation id="4786285211967466855">മുൻ നില 1 ശീർഷകം ഒന്നുമില്ല</translation>
 <translation id="4787577491510559358">നിലവിലെ ഇനത്തിന്റെ ഫോർമാറ്റ് ചെയ്യൽ അറിയിക്കുക</translation>
@@ -644,6 +651,7 @@
 <translation id="5999630716831179808">വോയ്‌സുകൾ</translation>
 <translation id="6006050241733874051">ഫോം</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{ബാക്ക്‌സ്ലാഷ്}other{# ബാക്ക്‌സ്ലാഷുകൾ}}</translation>
+<translation id="6010616110396250088">അവരോഹണക്രമത്തിൽ അടുക്കിയവ</translation>
 <translation id="6017514345406065928">പച്ച</translation>
 <translation id="602001110135236999">ഇടത്തോട്ട് സ്ക്രോൾ ചെയ്യുക</translation>
 <translation id="6034000775414344507">ഇളം ചാരനിറം</translation>
@@ -814,6 +822,7 @@
 <translation id="744163271241493234">pwded</translation>
 <translation id="7484805699335881122">ഘടകത്തിന്റെ തരങ്ങളും ഉദ്ധരിച്ചതോ ഇല്ലാതാക്കിയതോ ബോൾഡ് ചെയ്‌തതോ ബ്രാക്കറ്റിനുള്ളിലെയോ വലിയക്ഷരത്തിലുള്ളതോ ആയ ടെക്‌സ്‌റ്റ് പറയുമ്പോൾ പിച്ച് മാറ്റുക.</translation>
 <translation id="7491962110804786152">ടാബ്</translation>
+<translation id="7492497529767769458">അടുത്ത വിഭാഗത്തിലേക്ക് നീങ്ങുക. സ്‌റ്റാറ്റസ് ട്രേ, ലോഞ്ചർ എന്നിവ ഉദാഹരണങ്ങളിൽപ്പെടുന്നു.</translation>
 <translation id="7505149250476994901">അക്ഷരം പറയുന്നതിന് മുമ്പ് "വലിയക്ഷരം" എന്ന് പറയുക</translation>
 <translation id="7518543783849163354">സംസാരിക്കുന്നതിൽ നിന്ന് ChromeVox-നെ തൽക്കാലം നിർത്താൻ, കൺട്രോൾ കീ അമർത്തുക.</translation>
 <translation id="7533226154149229506">ഇളം ഗോൾഡൻ റോഡ് മഞ്ഞ</translation>
@@ -821,6 +830,7 @@
 <translation id="7552432549459840808">സഹായകരമായ Chrome കുറുക്കുവഴികൾ</translation>
 <translation id="7569983096843329377">കറുപ്പ്</translation>
 <translation id="7579911500627256166"><ph name="DOT" /> ഡോട്ട്</translation>
+<translation id="7592060599656252486">ചിലത്</translation>
 <translation id="7595446402663080101">മുൻ പട്ടിക ഒന്നുമില്ല</translation>
 <translation id="7596131838331109045">ഇളം സാൽമൻ</translation>
 <translation id="7604026522577407655">നിലവിലെ നിരയുടെ തുടക്കത്തിലേക്ക് പോകുക</translation>
@@ -840,6 +850,7 @@
 <translation id="7684431668231950609">ടെക്സ്റ്റ് എഡിറ്റ് ചെയ്യുക, URL എൻട്രി</translation>
 <translation id="7685589220304187312">tlbar</translation>
 <translation id="7693840228159394336">മുൻ റേഡിയോ ബട്ടൺ</translation>
+<translation id="7701040980221191251">ഒന്നുമില്ല</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7714340021005120797">അടുത്ത കോമ്പോ ബോക്‌സ് ഒന്നുമില്ല</translation>
 <translation id="772146615414628379">അഭിനന്ദനങ്ങൾ! ChromeVox ഉപയോഗിക്കാൻ ആവശ്യമായ കാര്യങ്ങളെ കുറിച്ച് നിങ്ങൾ മനസ്സിലാക്കിയിരിക്കുന്നു. Search+Period അമർത്തുന്നതിലൂടെ നിങ്ങൾക്ക് എപ്പോൾ വേണമെങ്കിലും ChromeVox കമാൻഡ് മെനു തുറക്കാനാവുമെന്ന് ഓർമ്മിക്കുക. ChromeVox, Chrome OS എന്നിവയെ കുറിച്ച് കൂടുതലറിയാൻ ഇനിപ്പറയുന്ന ലേഖനങ്ങൾ വായിക്കുക.
@@ -898,7 +909,9 @@
 <translation id="812886159861361726"><ph name="FILE_NAME" /> ഡൗൺലോഡ് നിർത്തി</translation>
 <translation id="8129445297241948503">മുകളിൽ കളമൊന്നുമില്ല</translation>
 <translation id="8138880386467279117">സ്‌പർശിക്കുക</translation>
+<translation id="8173092779156526980">നാല് വിരലുകൾ ഉപയോഗിച്ച് ഇടത്തേക്ക് സ്വൈപ്പ് ചെയ്യുക</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{അടിവര}other{# അടിവരകൾ}}</translation>
+<translation id="8179976553408161302">Enter</translation>
 <translation id="8184828902145951186">വരി</translation>
 <translation id="8186185314313222077">പൂർണ്ണ സ്‌ക്രീൻ ടോഗിൾ ചെയ്യുക</translation>
 <translation id="8199231515320852133">നിലവിലുള്ള സെല്ലിന്റെ ശീർഷകങ്ങൾ അറിയിക്കുക</translation>
@@ -984,6 +997,7 @@
 <translation id="8946628535652548639">വരി<ph name="TABLECELLROWINDEX" />കോളം<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">മുൻ റേഡിയോ ബട്ടൺ ഒന്നുമില്ല</translation>
 <translation id="8970172509886453271">മുമ്പത്തെ വിഭാഗങ്ങളൊന്നുമില്ല</translation>
+<translation id="89720367119469899">എസ്‌കേപ്പ്</translation>
 <translation id="8978496506222343566">tltip</translation>
 <translation id="8986362086234534611">മറന്നു</translation>
 <translation id="9040132695316389094">ശീർഷകം 1</translation>

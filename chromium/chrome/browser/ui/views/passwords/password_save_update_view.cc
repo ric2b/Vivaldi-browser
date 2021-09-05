@@ -162,7 +162,7 @@ std::unique_ptr<views::ToggleImageButton> CreatePasswordViewButton(
   auto button = std::make_unique<views::ToggleImageButton>(listener);
   button->SetFocusForPlatform();
   button->SetInstallFocusRingOnFocus(true);
-  button->set_request_focus_on_press(true);
+  button->SetRequestFocusOnPress(true);
   button->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_SHOW_PASSWORD));
   button->SetToggledTooltipText(
@@ -308,6 +308,7 @@ PasswordSaveUpdateView::PasswordSaveUpdateView(
                         std::move(password_view_button));
   }
 
+  SetShowIcon(false);
   SetFootnoteView(CreateFooterView());
   SetCancelCallback(base::BindOnce(&PasswordSaveUpdateView::OnDialogCancelled,
                                    base::Unretained(this)));
@@ -375,10 +376,6 @@ gfx::ImageSkia PasswordSaveUpdateView::GetWindowIcon() {
   return gfx::ImageSkia();
 }
 
-bool PasswordSaveUpdateView::ShouldShowWindowIcon() const {
-  return false;
-}
-
 bool PasswordSaveUpdateView::ShouldShowCloseButton() const {
   return true;
 }
@@ -391,8 +388,8 @@ void PasswordSaveUpdateView::AddedToWidget() {
 void PasswordSaveUpdateView::OnThemeChanged() {
   PasswordBubbleViewBase::OnThemeChanged();
   int id = color_utils::IsDark(GetBubbleFrameView()->GetBackgroundColor())
-               ? IDR_SAVE_PASSWORD_DARK
-               : IDR_SAVE_PASSWORD;
+               ? IDR_SAVE_PASSWORD_MULTI_DEVICE_DARK
+               : IDR_SAVE_PASSWORD_MULTI_DEVICE;
   GetBubbleFrameView()->SetHeaderView(CreateHeaderImage(id));
   if (password_view_button_) {
     auto* theme = GetNativeTheme();
@@ -486,7 +483,7 @@ std::unique_ptr<views::View> PasswordSaveUpdateView::CreateFooterView() {
     return nullptr;
   auto label = std::make_unique<views::Label>(
       l10n_util::GetStringUTF16(IDS_SAVE_PASSWORD_FOOTER),
-      ChromeTextContext::CONTEXT_BODY_TEXT_SMALL,
+      ChromeTextContext::CONTEXT_DIALOG_BODY_TEXT_SMALL,
       views::style::STYLE_SECONDARY);
   label->SetMultiLine(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);

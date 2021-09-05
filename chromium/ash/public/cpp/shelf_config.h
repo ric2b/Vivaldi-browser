@@ -9,6 +9,7 @@
 #include "ash/public/cpp/app_list/app_list_controller_observer.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/system/model/virtual_keyboard_model.h"
 #include "ash/wm/overview/overview_observer.h"
 #include "base/macros.h"
@@ -143,12 +144,6 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   int hidden_shelf_in_screen_portion() const {
     return hidden_shelf_in_screen_portion_;
   }
-  SkColor shelf_ink_drop_base_color() const {
-    return shelf_ink_drop_base_color_;
-  }
-  float shelf_ink_drop_visible_opacity() const {
-    return shelf_ink_drop_visible_opacity_;
-  }
   SkColor shelf_icon_color() const { return shelf_icon_color_; }
   int status_indicator_offset_from_shelf_edge() const {
     return status_indicator_offset_from_shelf_edge_;
@@ -184,6 +179,8 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
 
   bool in_tablet_mode() const { return in_tablet_mode_; }
 
+  bool in_overview_mode() const { return overview_mode_; }
+
   // Gets the current color for the shelf control buttons.
   SkColor GetShelfControlButtonColor() const;
 
@@ -193,10 +190,8 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
   // Gets the shelf color when a window is maximized.
   SkColor GetMaximizedShelfColor() const;
 
-  // Calculates a themed color for shelf and system menu based on the wallpaper.
-  // Uses alpha value from the provided base_color, returns base_color unchanged
-  // if the wallpaper can not be used to generate a themed color.
-  SkColor GetThemedColorFromWallpaper(SkColor base_color) const;
+  // Gets the base layer type for shelf color.
+  AshColorProvider::BaseLayerType GetShelfBaseLayerType() const;
 
   // Gets the default shelf color, calculated using the wallpaper color if
   // available.
@@ -301,12 +296,6 @@ class ASH_EXPORT ShelfConfig : public TabletModeObserver,
 
   // Portion of the shelf that's within the screen bounds when auto-hidden.
   const int hidden_shelf_in_screen_portion_;
-
-  // Ink drop color for shelf items.
-  const SkColor shelf_ink_drop_base_color_;
-
-  // Opacity of the ink drop ripple for shelf items when the ripple is visible.
-  const float shelf_ink_drop_visible_opacity_;
 
   // The foreground color of the icons used in the shelf (launcher,
   // notifications, etc).

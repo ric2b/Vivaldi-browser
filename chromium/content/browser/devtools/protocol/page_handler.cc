@@ -30,9 +30,9 @@
 #include "content/browser/devtools/protocol/devtools_mhtml_helper.h"
 #include "content/browser/devtools/protocol/emulation_handler.h"
 #include "content/browser/devtools/protocol/handler_helpers.h"
-#include "content/browser/frame_host/navigation_request.h"
-#include "content/browser/frame_host/navigator.h"
 #include "content/browser/manifest/manifest_manager_host.h"
+#include "content/browser/renderer_host/navigation_request.h"
+#include "content/browser/renderer_host/navigator.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -78,6 +78,8 @@ constexpr int kDefaultScreenshotQuality = 80;
 constexpr int kFrameRetryDelayMs = 100;
 constexpr int kCaptureRetryLimit = 2;
 constexpr int kMaxScreencastFramesInFlight = 2;
+constexpr char kCommandIsOnlyAvailableAtTopTarget[] =
+    "Command can only be executed on top-level targets";
 
 Binary EncodeImage(const gfx::Image& image,
                    const std::string& format,
@@ -166,6 +168,17 @@ void GetMetadataFromFrame(const media::VideoFrame& frame,
   root_scroll_offset->set_x(*frame.metadata()->root_scroll_offset_x);
   root_scroll_offset->set_y(*frame.metadata()->root_scroll_offset_y);
   *top_controls_visible_height = *frame.metadata()->top_controls_visible_height;
+}
+
+template <typename ProtocolCallback>
+bool CanExecuteGlobalCommands(
+    RenderFrameHost* host,
+    const std::unique_ptr<ProtocolCallback>& callback) {
+  if (!host || !host->GetParent())
+    return true;
+  callback->sendFailure(
+      Response::ServerError(kCommandIsOnlyAvailableAtTopTarget));
+  return false;
 }
 
 }  // namespace
@@ -653,6 +666,8 @@ Response PageHandler::ResetNavigationHistory() {
 void PageHandler::CaptureSnapshot(
     Maybe<std::string> format,
     std::unique_ptr<CaptureSnapshotCallback> callback) {
+  if (!CanExecuteGlobalCommands(host_, callback))
+    return;
   std::string snapshot_format = format.fromMaybe(kMhtml);
   if (snapshot_format != kMhtml) {
     callback->sendFailure(Response::ServerError("Unsupported snapshot format"));
@@ -672,6 +687,8 @@ void PageHandler::CaptureScreenshot(
     callback->sendFailure(Response::InternalError());
     return;
   }
+  if (!CanExecuteGlobalCommands(host_, callback))
+    return;
   if (clip.isJust()) {
     if (clip.fromJust()->GetWidth() == 0) {
       callback->sendFailure(
@@ -928,6 +945,8 @@ Response PageHandler::SetDownloadBehavior(const std::string& behavior,
       host_ ? host_->GetProcess()->GetBrowserContext() : nullptr;
   if (!browser_context)
     return Response::ServerError("Could not fetch browser context");
+  if (host_ && host_->GetParent())
+    return Response::ServerError(kCommandIsOnlyAvailableAtTopTarget);
   return browser_handler_->DoSetDownloadBehavior(behavior, browser_context,
                                                  std::move(download_path));
 }
@@ -938,6 +957,8 @@ void PageHandler::GetAppManifest(
     callback->sendFailure(Response::ServerError("Cannot retrieve manifest"));
     return;
   }
+  if (!CanExecuteGlobalCommands(host_, callback))
+    return;
   ManifestManagerHost::GetOrCreateForCurrentDocument(host_->GetMainFrame())
       ->RequestManifestDebugInfo(base::BindOnce(&PageHandler::GotManifest,
                                                 weak_factory_.GetWeakPtr(),
@@ -957,14 +978,16 @@ void PageHandler::NotifyScreencastVisibility(bool visible) {
   frontend_->ScreencastVisibilityChanged(visible);
 }
 
+bool PageHandler::ShouldCaptureNextScreencastFrame() {
+  return frames_in_flight_ <= kMaxScreencastFramesInFlight &&
+         !(++frame_counter_ % capture_every_nth_frame_);
+}
+
 void PageHandler::InnerSwapCompositorFrame() {
   if (!host_)
     return;
 
-  if (frames_in_flight_ > kMaxScreencastFramesInFlight)
-    return;
-
-  if (++frame_counter_ % capture_every_nth_frame_)
+  if (!ShouldCaptureNextScreencastFrame())
     return;
 
   RenderWidgetHostViewBase* const view =
@@ -1007,6 +1030,9 @@ void PageHandler::OnFrameFromVideoConsumer(
   if (!host_)
     return;
 
+  if (!ShouldCaptureNextScreencastFrame())
+    return;
+
   RenderWidgetHostViewBase* const view =
       static_cast<RenderWidgetHostViewBase*>(host_->GetView());
   if (!view)
@@ -1038,6 +1064,7 @@ void PageHandler::OnFrameFromVideoConsumer(
   if (!page_metadata)
     return;
 
+  frames_in_flight_++;
   ScreencastFrameCaptured(std::move(page_metadata),
                           DevToolsVideoConsumer::GetSkBitmapFromFrame(frame));
 }

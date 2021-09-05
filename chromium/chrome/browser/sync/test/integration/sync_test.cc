@@ -26,7 +26,6 @@
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
-#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
@@ -39,7 +38,6 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/test/base/search_test_utils.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/gcm_driver/gcm_profile_service.h"
 #include "components/invalidation/impl/fake_invalidation_service.h"
@@ -54,7 +52,6 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/os_crypt/os_crypt_mocker.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/search_engines/template_url_service.h"
 #include "components/signin/public/identity_manager/consent_level.h"
 #include "components/sync/base/invalidation_helper.h"
 #include "components/sync/base/sync_base_switches.h"
@@ -227,6 +224,7 @@ bool SyncTest::FakeInstanceIDDriver::ExistsInstanceID(
 
 SyncTest::SyncTest(TestType test_type)
     : test_type_(test_type),
+      test_construction_time_(base::Time::Now()),
       server_type_(SERVER_TYPE_UNDECIDED),
       previous_profile_(nullptr),
       num_clients_(-1),
@@ -279,6 +277,9 @@ void SyncTest::SetUp() {
 
   // Yield control back to the PlatformBrowserTest framework.
   PlatformBrowserTest::SetUp();
+
+  LOG(INFO) << "SyncTest::SetUp() completed; elapsed time since construction: "
+            << (base::Time::Now() - test_construction_time_);
 }
 
 void SyncTest::TearDown() {
@@ -334,6 +335,9 @@ void SyncTest::BeforeSetupClient(int index,
 bool SyncTest::CreateProfile(int index) {
   base::FilePath profile_path;
 
+// For Android, we don't create profile because Clank doesn't support
+// multiple profiles.
+#if !defined(OS_ANDROID)
   base::ScopedAllowBlockingForTesting allow_blocking;
   if (UsingExternalServers() && (num_clients_ > 1 || use_new_user_data_dir_)) {
     scoped_temp_dirs_.push_back(std::make_unique<base::ScopedTempDir>());
@@ -363,6 +367,7 @@ bool SyncTest::CreateProfile(int index) {
     profile_path = user_data_dir.AppendASCII(
         base::StringPrintf("SyncIntegrationTestClient%d", index));
   }
+#endif
 
   BeforeSetupClient(index, profile_path);
 
@@ -371,6 +376,12 @@ bool SyncTest::CreateProfile(int index) {
     // GAIA server. This requires creating profiles with no test hooks.
     InitializeProfile(index, MakeProfileForUISignin(profile_path));
   } else {
+// Use default profile for Android.
+#if defined(OS_ANDROID)
+    DCHECK(index == 0);
+    Profile* profile = ProfileManager::GetLastUsedProfile();
+    InitializeProfile(index, profile);
+#else
     // Without need of real GAIA authentication, we create new test profiles.
     // For test profiles, a custom delegate needs to be used to do the
     // initialization work before the profile is registered.
@@ -378,6 +389,8 @@ bool SyncTest::CreateProfile(int index) {
         std::make_unique<SyncProfileDelegate>(base::Bind(
             &SyncTest::InitializeProfile, base::Unretained(this), index));
     Profile* profile = MakeTestProfile(profile_path, index);
+#endif
+
     SetupMockGaiaResponsesForProfile(profile);
   }
 
@@ -559,11 +572,21 @@ bool SyncTest::SetupClients() {
     if (!CreateProfile(i)) {
       return false;
     }
+
+    LOG(INFO) << "SyncTest::SetupClients() created profile " << i
+              << "; elapsed time since construction: "
+              << (base::Time::Now() - test_construction_time_);
   }
 
   // Verifier account is not useful when running against external servers.
   if (UsingExternalServers())
     DisableVerifier();
+
+// Verifier needs to create a test profile. But Clank doesn't support multiple
+// profiles.
+#if defined(OS_ANDROID)
+  DisableVerifier();
+#endif
 
   // Create the verifier profile.
   if (use_verifier_) {
@@ -592,6 +615,10 @@ bool SyncTest::SetupClients() {
       return false;
   }
 #endif
+
+  LOG(INFO)
+      << "SyncTest::SetupClients() completed; elapsed time since construction: "
+      << (base::Time::Now() - test_construction_time_);
 
   return true;
 }
@@ -817,6 +844,13 @@ void SyncTest::ClearProfiles() {
 }
 
 bool SyncTest::SetupSync() {
+#if defined(OS_ANDROID)
+  // For Android, currently the framework only supports one client.
+  // The client uses the default profile.
+  DCHECK(num_clients_ == 1) << "For Android, currently it only supports "
+                            << "one client.";
+#endif
+
   base::ScopedAllowBlockingForTesting allow_blocking;
 
   SetupSyncInternal(/*setup_mode=*/WAIT_FOR_SYNC_SETUP_TO_COMPLETE);
@@ -1022,8 +1056,6 @@ void SyncTest::WaitForDataModels(Profile* profile) {
   bookmarks::test::WaitForBookmarkModelToLoad(
       BookmarkModelFactory::GetForBrowserContext(profile));
 
-  search_test_utils::WaitForTemplateURLServiceToLoad(
-      TemplateURLServiceFactory::GetForProfile(profile));
 #if defined(OS_CHROMEOS)
   printers_helper::WaitForPrinterStoreToLoad(profile);
 #endif

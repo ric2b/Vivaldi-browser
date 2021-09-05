@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/nth_index_cache.h"
 #include "third_party/blink/renderer/core/dom/static_node_list.h"
+#include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/root_frame_viewport.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
@@ -87,7 +88,7 @@ static LayoutRect RelativeBounds(const LayoutObject* layout_object,
     // If we clip overflow then we can use the `PhysicalBorderBoxRect()`
     // as our bounds. If not, we expand the bounds by the layout overflow and
     // lowest floating object.
-    if (!layout_object->ShouldClipOverflow()) {
+    if (!layout_object->ShouldClipOverflowAlongEitherAxis()) {
       // BorderBoxRect doesn't include overflow content and floats.
       LayoutUnit max_y =
           std::max(local_bounds.Bottom(),
@@ -122,7 +123,10 @@ static LayoutRect RelativeBounds(const LayoutObject* layout_object,
 static LayoutPoint ComputeRelativeOffset(const LayoutObject* layout_object,
                                          const ScrollableArea* scroller,
                                          Corner corner) {
-  return CornerPointOfRect(RelativeBounds(layout_object, scroller), corner);
+  LayoutPoint offset =
+      CornerPointOfRect(RelativeBounds(layout_object, scroller), corner);
+  const LayoutBox* scroller_box = ScrollerLayoutBox(scroller);
+  return scroller_box->FlipForWritingMode(PhysicalOffset(offset));
 }
 
 static bool CandidateMayMoveWithScroller(const LayoutObject* candidate,
@@ -338,13 +342,19 @@ bool ScrollAnchor::FindAnchorInPriorityCandidates() {
   auto& document = scroller_box->GetDocument();
 
   // Focused area.
-  LayoutObject* candidate =
-      PriorityCandidateFromNode(document.FocusedElement());
-  auto result = ExaminePriorityCandidate(candidate);
-  if (result.viable) {
-    anchor_object_ = candidate;
-    corner_ = result.corner;
-    return true;
+  LayoutObject* candidate = nullptr;
+  ExamineResult result{kSkip};
+  auto* focused_element = document.FocusedElement();
+  if (focused_element && HasEditableStyle(*focused_element)) {
+    candidate = PriorityCandidateFromNode(focused_element);
+    if (candidate) {
+      result = ExaminePriorityCandidate(candidate);
+      if (result.viable) {
+        anchor_object_ = candidate;
+        corner_ = result.corner;
+        return true;
+      }
+    }
   }
 
   // Active find-in-page match.
@@ -497,10 +507,16 @@ IntSize ScrollAnchor::ComputeAdjustment() const {
                   RoundedIntSize(saved_relative_offset_);
 
   // Only adjust on the block layout axis.
-  if (ScrollerLayoutBox(scroller_)->IsHorizontalWritingMode())
+  const LayoutBox* scroller_box = ScrollerLayoutBox(scroller_);
+  if (scroller_box->IsHorizontalWritingMode()) {
     delta.SetWidth(0);
-  else
+  } else {
+    // If block direction is flipped, delta is a logical value, so flip it to
+    // make it physical.
+    if (scroller_box->HasFlippedBlocksWritingMode())
+      delta.SetWidth(-delta.Width());
     delta.SetHeight(0);
+  }
   return delta;
 }
 

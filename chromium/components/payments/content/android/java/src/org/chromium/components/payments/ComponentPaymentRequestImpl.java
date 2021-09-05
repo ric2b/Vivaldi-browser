@@ -4,11 +4,15 @@
 
 package org.chromium.components.payments;
 
+import android.text.TextUtils;
+
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
 import org.chromium.components.autofill.EditableOption;
+import org.chromium.components.page_info.CertificateChainHelper;
+import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsStatics;
@@ -16,6 +20,7 @@ import org.chromium.mojo.system.MojoException;
 import org.chromium.payments.mojom.PayerDetail;
 import org.chromium.payments.mojom.PaymentAddress;
 import org.chromium.payments.mojom.PaymentDetails;
+import org.chromium.payments.mojom.PaymentErrorReason;
 import org.chromium.payments.mojom.PaymentItem;
 import org.chromium.payments.mojom.PaymentMethodData;
 import org.chromium.payments.mojom.PaymentOptions;
@@ -23,6 +28,7 @@ import org.chromium.payments.mojom.PaymentRequest;
 import org.chromium.payments.mojom.PaymentRequestClient;
 import org.chromium.payments.mojom.PaymentResponse;
 import org.chromium.payments.mojom.PaymentValidationErrors;
+import org.chromium.url.Origin;
 
 import java.util.List;
 
@@ -44,6 +50,21 @@ public class ComponentPaymentRequestImpl {
     private final Runnable mOnClosedListener;
     private final WebContents mWebContents;
     private final JourneyLogger mJourneyLogger;
+    private final RenderFrameHost mRenderFrameHost;
+    private final String mTopLevelOrigin;
+    private final String mPaymentRequestOrigin;
+    private final Origin mPaymentRequestSecurityOrigin;
+    private final String mMerchantName;
+    @Nullable
+    private final byte[][] mCertificateChain;
+    private final boolean mIsOffTheRecord;
+    @Nullable
+    private final PaymentOptions mPaymentOptions;
+    private final boolean mRequestShipping;
+    private final boolean mRequestPayerName;
+    private final boolean mRequestPayerPhone;
+    private final boolean mRequestPayerEmail;
+    private final Delegate mDelegate;
     private boolean mSkipUiForNonUrlPaymentMethodIdentifiers;
     private PaymentRequestLifecycleObserver mPaymentRequestLifecycleObserver;
     private boolean mHasClosed;
@@ -72,6 +93,50 @@ public class ComponentPaymentRequestImpl {
         void onAbortCalled();
         void onCompleteCalled();
         void onMinimalUIReady();
+    }
+
+    /**
+     * A delegate to ask questions about the system, that allows tests to inject behaviour without
+     * having to modify the entire system. This partially mirrors a similar C++
+     * (Content)PaymentRequestDelegate for the C++ implementation, allowing the test harness to
+     * override behaviour in both in a similar fashion.
+     */
+    public interface Delegate {
+        /**
+         * @return Whether the merchant's WebContents is currently showing an off-the-record tab.
+         *         Return true if the tab profile is not accessible from the WebContents.
+         */
+        boolean isOffTheRecord();
+
+        /**
+         * @return A non-null string if there is an invalid SSL certificate on the currently loaded
+         *         page.
+         */
+        String getInvalidSslCertificateErrorMessage();
+
+        /**
+         * @return True if the merchant's web contents that initiated the payment request is active.
+         */
+        boolean isWebContentsActive();
+
+        /**
+         * @return Whether the preferences allow CAN_MAKE_PAYMENT.
+         */
+        boolean prefsCanMakePayment();
+
+        /**
+         * @return True if the UI can be skipped for "basic-card" scenarios. This will only ever be
+         *         true in tests.
+         */
+        boolean skipUiForBasicCard();
+
+        /**
+         * @return If the merchant's WebContents is running inside of a Trusted Web Activity,
+         *         returns the package name for Trusted Web Activity. Otherwise returns an empty
+         *         string or null.
+         */
+        @Nullable
+        String getTwaPackageName();
     }
 
     /**
@@ -145,20 +210,21 @@ public class ComponentPaymentRequestImpl {
      * @param renderFrameHost The RenderFrameHost of the merchant page.
      * @param isOffTheRecord Whether the merchant page is in a off-the-record (e.g., incognito,
      *         guest mode) Tab.
+     * @param delegate The delegate of this class.
      * @param skipUiForBasicCard True if the PaymentRequest UI should be skipped when the request
      *         only supports basic-card methods.
      * @param browserPaymentRequestFactory The factory that generates BrowserPaymentRequest.
      * @return The created instance.
      */
     public static PaymentRequest createPaymentRequest(RenderFrameHost renderFrameHost,
-            boolean isOffTheRecord, boolean skipUiForBasicCard,
+            boolean isOffTheRecord, boolean skipUiForBasicCard, Delegate delegate,
             BrowserPaymentRequest.Factory browserPaymentRequestFactory) {
         return new MojoPaymentRequestGateKeeper(
                 (client, methodData, details, options, googlePayBridgeEligible, onClosedListener)
                         -> ComponentPaymentRequestImpl.createIfParamsValid(renderFrameHost,
                                 isOffTheRecord, skipUiForBasicCard, browserPaymentRequestFactory,
                                 client, methodData, details, options, googlePayBridgeEligible,
-                                onClosedListener));
+                                onClosedListener, delegate));
     }
 
     /**
@@ -171,7 +237,7 @@ public class ComponentPaymentRequestImpl {
             BrowserPaymentRequest.Factory browserPaymentRequestFactory,
             @Nullable PaymentRequestClient client, @Nullable PaymentMethodData[] methodData,
             @Nullable PaymentDetails details, @Nullable PaymentOptions options,
-            boolean googlePayBridgeEligible, Runnable onClosedListener) {
+            boolean googlePayBridgeEligible, Runnable onClosedListener, Delegate delegate) {
         assert renderFrameHost != null;
         assert browserPaymentRequestFactory != null;
         assert onClosedListener != null;
@@ -204,17 +270,27 @@ public class ComponentPaymentRequestImpl {
             return null;
         }
 
+        // details has default value, so could never be null, according to payment_request.idl.
         if (details == null) {
             abortBeforeInstantiation(client, journeyLogger, ErrorStrings.INVALID_PAYMENT_DETAILS,
                     AbortReason.INVALID_DATA_FROM_RENDERER);
             return null;
         }
 
-        ComponentPaymentRequestImpl instance = new ComponentPaymentRequestImpl(client,
-                renderFrameHost, webContents, journeyLogger, skipUiForBasicCard, onClosedListener);
+        // options has default value, so could never be null, according to
+        // payment_request.idl.
+        if (options == null) {
+            abortBeforeInstantiation(client, journeyLogger, ErrorStrings.INVALID_PAYMENT_OPTIONS,
+                    AbortReason.INVALID_DATA_FROM_RENDERER);
+            return null;
+        }
+
+        ComponentPaymentRequestImpl instance =
+                new ComponentPaymentRequestImpl(client, renderFrameHost, webContents, journeyLogger,
+                        options, skipUiForBasicCard, isOffTheRecord, onClosedListener, delegate);
         instance.onCreated();
-        boolean valid = instance.initAndValidate(renderFrameHost, browserPaymentRequestFactory,
-                methodData, details, options, googlePayBridgeEligible, isOffTheRecord);
+        boolean valid = instance.initAndValidate(
+                browserPaymentRequestFactory, methodData, details, googlePayBridgeEligible);
         if (!valid) {
             instance.close();
             return null;
@@ -238,17 +314,40 @@ public class ComponentPaymentRequestImpl {
 
     private ComponentPaymentRequestImpl(PaymentRequestClient client,
             RenderFrameHost renderFrameHost, WebContents webContents, JourneyLogger journeyLogger,
-            boolean skipUiForBasicCard, Runnable onClosedListener) {
+            PaymentOptions options, boolean skipUiForBasicCard, boolean isOffTheRecord,
+            Runnable onClosedListener, Delegate delegate) {
         assert client != null;
         assert renderFrameHost != null;
         assert webContents != null;
         assert journeyLogger != null;
+        assert options != null;
+        assert onClosedListener != null;
+        assert delegate != null;
 
+        mRenderFrameHost = renderFrameHost;
+        mPaymentRequestSecurityOrigin = mRenderFrameHost.getLastCommittedOrigin();
+        mWebContents = webContents;
+
+        // TODO(crbug.com/992593): replace UrlFormatter with GURL operations.
+        mPaymentRequestOrigin =
+                UrlFormatter.formatUrlForSecurityDisplay(mRenderFrameHost.getLastCommittedURL());
+        mTopLevelOrigin =
+                UrlFormatter.formatUrlForSecurityDisplay(mWebContents.getLastCommittedUrl());
+
+        mPaymentOptions = options;
+        mRequestShipping = mPaymentOptions.requestShipping;
+        mRequestPayerName = mPaymentOptions.requestPayerName;
+        mRequestPayerPhone = mPaymentOptions.requestPayerPhone;
+        mRequestPayerEmail = mPaymentOptions.requestPayerEmail;
+
+        mMerchantName = mWebContents.getTitle();
+        mCertificateChain = CertificateChainHelper.getCertificateChain(mWebContents);
+        mIsOffTheRecord = isOffTheRecord;
         mSkipUiForNonUrlPaymentMethodIdentifiers = skipUiForBasicCard;
         mClient = client;
-        mWebContents = webContents;
         mJourneyLogger = journeyLogger;
         mOnClosedListener = onClosedListener;
+        mDelegate = delegate;
         mHasClosed = false;
     }
 
@@ -268,14 +367,43 @@ public class ComponentPaymentRequestImpl {
         return sNativeObserverForTest;
     }
 
-    private boolean initAndValidate(RenderFrameHost renderFrameHost,
-            BrowserPaymentRequest.Factory factory, @Nullable PaymentMethodData[] methodData,
-            @Nullable PaymentDetails details, @Nullable PaymentOptions options,
-            boolean googlePayBridgeEligible, boolean isOffTheRecord) {
-        mBrowserPaymentRequest =
-                factory.createBrowserPaymentRequest(renderFrameHost, this, isOffTheRecord);
-        return mBrowserPaymentRequest.initAndValidate(
-                methodData, details, options, googlePayBridgeEligible);
+    private boolean initAndValidate(BrowserPaymentRequest.Factory factory,
+            PaymentMethodData[] methodData, PaymentDetails details,
+            boolean googlePayBridgeEligible) {
+        mBrowserPaymentRequest = factory.createBrowserPaymentRequest(this);
+        mJourneyLogger.recordCheckoutStep(
+                org.chromium.components.payments.CheckoutFunnelStep.INITIATED);
+
+        if (!UrlUtil.isOriginAllowedToUseWebPaymentApis(mWebContents.getLastCommittedUrl())) {
+            Log.d(TAG, org.chromium.components.payments.ErrorStrings.PROHIBITED_ORIGIN);
+            Log.d(TAG,
+                    org.chromium.components.payments.ErrorStrings
+                            .PROHIBITED_ORIGIN_OR_INVALID_SSL_EXPLANATION);
+            mJourneyLogger.setAborted(
+                    org.chromium.components.payments.AbortReason.INVALID_DATA_FROM_RENDERER);
+            mBrowserPaymentRequest.disconnectFromClientWithDebugMessage(
+                    ErrorStrings.PROHIBITED_ORIGIN,
+                    PaymentErrorReason.NOT_SUPPORTED_FOR_INVALID_ORIGIN_OR_SSL);
+            return false;
+        }
+
+        mJourneyLogger.setRequestedInformation(
+                mRequestShipping, mRequestPayerEmail, mRequestPayerPhone, mRequestPayerName);
+
+        String rejectShowErrorMessage = mDelegate.getInvalidSslCertificateErrorMessage();
+        if (!TextUtils.isEmpty(rejectShowErrorMessage)) {
+            Log.d(TAG, rejectShowErrorMessage);
+            Log.d(TAG,
+                    org.chromium.components.payments.ErrorStrings
+                            .PROHIBITED_ORIGIN_OR_INVALID_SSL_EXPLANATION);
+            mJourneyLogger.setAborted(
+                    org.chromium.components.payments.AbortReason.INVALID_DATA_FROM_RENDERER);
+            mBrowserPaymentRequest.disconnectFromClientWithDebugMessage(rejectShowErrorMessage,
+                    PaymentErrorReason.NOT_SUPPORTED_FOR_INVALID_ORIGIN_OR_SSL);
+            return false;
+        }
+
+        return mBrowserPaymentRequest.initAndValidate(methodData, details, googlePayBridgeEligible);
     }
 
     /**
@@ -398,7 +526,8 @@ public class ComponentPaymentRequestImpl {
         assert mBrowserPaymentRequest != null;
 
         mJourneyLogger.setAborted(AbortReason.INVALID_DATA_FROM_RENDERER);
-        mBrowserPaymentRequest.disconnectFromClientWithDebugMessage(debugMessage);
+        mBrowserPaymentRequest.disconnectFromClientWithDebugMessage(
+                debugMessage, PaymentErrorReason.USER_CANCEL);
     }
 
     /**
@@ -464,7 +593,7 @@ public class ComponentPaymentRequestImpl {
         mSkipUiForNonUrlPaymentMethodIdentifiers = true;
     }
 
-    /** Invokes {@link PaymentRequest.onPaymentMethodChange}. */
+    /** Invokes {@link PaymentRequestClient.onPaymentMethodChange}. */
     public void onPaymentMethodChange(String methodName, String stringifiedDetails) {
         // Every caller should stop referencing this class once close() is called.
         assert mClient != null;
@@ -472,15 +601,16 @@ public class ComponentPaymentRequestImpl {
         mClient.onPaymentMethodChange(methodName, stringifiedDetails);
     }
 
-    /** Invokes {@link PaymentRequest.onShippingAddressChange}. */
+    /** Invokes {@link PaymentRequestClient.onShippingAddressChange}. */
     public void onShippingAddressChange(PaymentAddress address) {
         // Every caller should stop referencing this class once close() is called.
         assert mClient != null;
 
+        redactShippingAddress(address);
         mClient.onShippingAddressChange(address);
     }
 
-    /** Invokes {@link PaymentRequest.onShippingOptionChange}. */
+    /** Invokes {@link PaymentRequestClient.onShippingOptionChange}. */
     public void onShippingOptionChange(String shippingOptionId) {
         // Every caller should stop referencing this class once close() is called.
         assert mClient != null;
@@ -488,7 +618,7 @@ public class ComponentPaymentRequestImpl {
         mClient.onShippingOptionChange(shippingOptionId);
     }
 
-    /** Invokes {@link PaymentRequest.onPayerDetailChange}. */
+    /** Invokes {@link PaymentRequestClient.onPayerDetailChange}. */
     public void onPayerDetailChange(PayerDetail detail) {
         // Every caller should stop referencing this class once close() is called.
         assert mClient != null;
@@ -496,7 +626,7 @@ public class ComponentPaymentRequestImpl {
         mClient.onPayerDetailChange(detail);
     }
 
-    /** Invokes {@link PaymentRequest.onPaymentResponse}. */
+    /** Invokes {@link PaymentRequestClient.onPaymentResponse}. */
     public void onPaymentResponse(PaymentResponse response) {
         // Every caller should stop referencing this class once close() is called.
         assert mClient != null;
@@ -504,7 +634,7 @@ public class ComponentPaymentRequestImpl {
         mClient.onPaymentResponse(response);
     }
 
-    /** Invokes {@link PaymentRequest.onError}. */
+    /** Invokes {@link PaymentRequestClient.onError}. */
     public void onError(int error, String errorMessage) {
         // Every caller should stop referencing this class once close() is called.
         assert mClient != null;
@@ -512,7 +642,7 @@ public class ComponentPaymentRequestImpl {
         mClient.onError(error, errorMessage);
     }
 
-    /** Invokes {@link PaymentRequest.onComplete}. */
+    /** Invokes {@link PaymentRequestClient.onComplete}. */
     public void onComplete() {
         // Every caller should stop referencing this class once close() is called.
         assert mClient != null;
@@ -520,7 +650,7 @@ public class ComponentPaymentRequestImpl {
         mClient.onComplete();
     }
 
-    /** Invokes {@link PaymentRequest.onAbort}. */
+    /** Invokes {@link PaymentRequestClient.onAbort}. */
     public void onAbort(boolean abortedSuccessfully) {
         // Every caller should stop referencing this class once close() is called.
         assert mClient != null;
@@ -528,7 +658,7 @@ public class ComponentPaymentRequestImpl {
         mClient.onAbort(abortedSuccessfully);
     }
 
-    /** Invokes {@link PaymentRequest.onCanMakePayment}. */
+    /** Invokes {@link PaymentRequestClient.onCanMakePayment}. */
     public void onCanMakePayment(int result) {
         // Every caller should stop referencing this class once close() is called.
         assert mClient != null;
@@ -536,7 +666,7 @@ public class ComponentPaymentRequestImpl {
         mClient.onCanMakePayment(result);
     }
 
-    /** Invokes {@link PaymentRequest.onHasEnrolledInstrument}. */
+    /** Invokes {@link PaymentRequestClient.onHasEnrolledInstrument}. */
     public void onHasEnrolledInstrument(int result) {
         // Every caller should stop referencing this class once close() is called.
         assert mClient != null;
@@ -544,7 +674,7 @@ public class ComponentPaymentRequestImpl {
         mClient.onHasEnrolledInstrument(result);
     }
 
-    /** Invokes {@link PaymentRequest.warnNoFavicon}. */
+    /** Invokes {@link PaymentRequestClient.warnNoFavicon}. */
     public void warnNoFavicon() {
         // Every caller should stop referencing this class once close() is called.
         assert mClient != null;
@@ -563,5 +693,66 @@ public class ComponentPaymentRequestImpl {
     /** @return The WebContents of the merchant's page, cannot be null. */
     public WebContents getWebContents() {
         return mWebContents;
+    }
+
+    /** @return Whether the WebContents is currently showing an off-the-record tab. */
+    public boolean isOffTheRecord() {
+        return mIsOffTheRecord;
+    }
+
+    /** @return The certificate chain from the merchant page's WebContents, can be null. */
+    @Nullable
+    public byte[][] getCertificateChain() {
+        return mCertificateChain;
+    }
+
+    /** @return The origin of the page at which the PaymentRequest is created. */
+    public String getPaymentRequestOrigin() {
+        return mPaymentRequestOrigin;
+    }
+
+    /** @return The merchant page's title. */
+    public String getMerchantName() {
+        return mMerchantName;
+    }
+
+    /** @return The origin of the top level frame of the merchant page. */
+    public String getTopLevelOrigin() {
+        return mTopLevelOrigin;
+    }
+
+    /** @return The payment options requested by the merchant, can be null. */
+    @Nullable
+    public PaymentOptions getPaymentOptions() {
+        return mPaymentOptions;
+    }
+
+    /** @return The RendererFrameHost of the merchant page. */
+    public RenderFrameHost getRenderFrameHost() {
+        return mRenderFrameHost;
+    }
+
+    /**
+     * @return The origin of the iframe that invoked the PaymentRequest API. Can be opaque. Used by
+     * security features like 'Sec-Fetch-Site' and 'Cross-Origin-Resource-Policy'. Should not be
+     * null.
+     */
+    public Origin getPaymentRequestSecurityOrigin() {
+        return mPaymentRequestSecurityOrigin;
+    }
+
+    /**
+     * Redact shipping address before exposing it in ShippingAddressChangeEvent.
+     * https://w3c.github.io/payment-request/#shipping-address-changed-algorithm
+     * @param shippingAddress The shipping address to redact in place.
+     */
+    private static void redactShippingAddress(PaymentAddress shippingAddress) {
+        if (PaymentFeatureList.isEnabledOrExperimentalFeaturesEnabled(
+                    PaymentFeatureList.WEB_PAYMENTS_REDACT_SHIPPING_ADDRESS)) {
+            shippingAddress.organization = "";
+            shippingAddress.phone = "";
+            shippingAddress.recipient = "";
+            shippingAddress.addressLine = new String[0];
+        }
     }
 }

@@ -65,6 +65,12 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
 
   using OnNewFramePresentedCB = base::OnceClosure;
 
+  enum UpdateType {
+    kNormal,
+    kBypassClient,  // Disregards whether |client| is driving frame updates, and
+                    // forces an attempt to update the frame.
+  };
+
   // |task_runner| is the task runner on which this class will live,
   // though it may be constructed on any thread.
   VideoFrameCompositor(
@@ -82,7 +88,6 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   // submit video frames given by VideoFrameCompositor.
   virtual void EnableSubmission(
       const viz::SurfaceId& id,
-      base::TimeTicks local_surface_id_allocation_time,
       VideoRotation rotation,
       bool force_submit);
 
@@ -121,7 +126,7 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   // where the <video> tag is invisible (possibly not even in the DOM) and thus
   // does not receive a |client_|.  In this case, frame acquisition is driven by
   // the frequency of canvas or WebGL paints requested via JavaScript.
-  void UpdateCurrentFrameIfStale();
+  virtual void UpdateCurrentFrameIfStale(UpdateType type = UpdateType::kNormal);
 
   // Sets the callback to be run when the new frame has been processed. The
   // callback is only run once and then reset.

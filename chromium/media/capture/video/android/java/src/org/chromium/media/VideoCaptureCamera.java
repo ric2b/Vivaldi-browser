@@ -189,7 +189,7 @@ public class VideoCaptureCamera
         return VideoCaptureApi.ANDROID_API1;
     }
 
-    static boolean isPanTiltZoomSupported(int id) {
+    static boolean isZoomSupported(int id) {
         android.hardware.Camera camera;
         try {
             camera = android.hardware.Camera.open(id);
@@ -199,6 +199,7 @@ public class VideoCaptureCamera
         }
         android.hardware.Camera.Parameters parameters = getCameraParameters(camera);
         if (parameters == null) {
+            camera.release();
             return false;
         }
 
@@ -231,6 +232,10 @@ public class VideoCaptureCamera
                 + (cameraInfo.facing == android.hardware.Camera.CameraInfo.CAMERA_FACING_FRONT
                                   ? "front"
                                   : "back");
+    }
+
+    static String getDeviceId(int id) {
+        return Integer.toString(id);
     }
 
     static VideoCaptureFormat[] getDeviceSupportedFormats(int id) {
@@ -504,6 +509,7 @@ public class VideoCaptureCamera
     public void getPhotoCapabilitiesAsync(long callbackId) {
         final android.hardware.Camera.Parameters parameters = getCameraParameters(mCamera);
         if (parameters == null) {
+            mCamera = null;
             VideoCaptureJni.get().onGetPhotoCapabilitiesReply(
                     mNativeVideoCaptureDeviceAndroid, VideoCaptureCamera.this, callbackId, null);
             return;
@@ -690,6 +696,7 @@ public class VideoCaptureCamera
             int fillLightMode, boolean hasTorch, boolean torch, double colorTemperature) {
         android.hardware.Camera.Parameters parameters = getCameraParameters(mCamera);
         if (parameters == null) {
+            mCamera = null;
             return;
         }
 
@@ -841,12 +848,14 @@ public class VideoCaptureCamera
         }
         mPreviewParameters = getCameraParameters(mCamera);
         if (mPreviewParameters == null) {
+            mCamera = null;
             notifyTakePhotoError(callbackId);
             return;
         }
 
         android.hardware.Camera.Parameters photoParameters = getCameraParameters(mCamera);
         if (photoParameters == null) {
+            mCamera = null;
             notifyTakePhotoError(callbackId);
             return;
         }

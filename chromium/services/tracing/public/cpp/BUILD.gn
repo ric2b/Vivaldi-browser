@@ -8,13 +8,16 @@ import("//build/config/compiler/compiler.gni")
 import("//build_overrides/build.gni")
 import("//services/tracing/public/cpp/stack_sampling/loader_lock_sampling.gni")
 
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
 buildflag_header("buildflags") {
   header = "buildflags.h"
   flags = [ "ENABLE_LOADER_LOCK_SAMPLING=$enable_loader_lock_sampling" ]
-}
-
-config("wrap_find_exidx") {
-  ldflags = [ "-Wl,-wrap,dl_unwind_find_exidx" ]
 }
 
 source_set("traced_process") {
@@ -119,6 +122,13 @@ target(tracing_lib_type, "cpp") {
       "tracing_features.h",
     ]
 
+    if (is_android && current_cpu == "arm64") {
+      sources += [
+        "stack_sampling/stack_unwinder_arm64_android.cc",
+        "stack_sampling/stack_unwinder_arm64_android.h",
+      ]
+    }
+
     if (enable_loader_lock_sampling) {
       sources += [
         "stack_sampling/loader_lock_sampler_win.cc",
@@ -155,9 +165,6 @@ target(tracing_lib_type, "cpp") {
       ]
       deps += [ "//buildtools/third_party/libunwind" ]
       include_dirs = [ "//buildtools/third_party/libunwind/trunk/include" ]
-
-      # stack_unwinder_android.cc overrides the dl_unwind_find_exidx function.
-      all_dependent_configs += [ ":wrap_find_exidx" ]
     }
   }  # !is_ios && !is_nacl
 }

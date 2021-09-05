@@ -18,6 +18,7 @@
 #include "ash/public/cpp/window_animation_types.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/pattern.h"
@@ -63,11 +64,11 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/settings/chromeos/app_management/app_management_uma.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
@@ -213,7 +214,7 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
 
   DCHECK(model_);
 
-  if (!web_app::SystemWebAppManager::IsEnabled()) {
+  if (chrome::SettingsWindowManager::UseDeprecatedSettingsWindow(profile)) {
     settings_window_observer_ = std::make_unique<SettingsWindowObserver>();
     discover_window_observer_ = std::make_unique<DiscoverWindowObserver>();
   }
@@ -1153,7 +1154,13 @@ ash::ShelfID ChromeLauncherController::InsertAppLauncherItem(
     ash::ShelfItemType shelf_item_type,
     const base::string16& title) {
   CHECK(item_delegate);
-  CHECK(!GetItem(item_delegate->shelf_id()));
+  if (GetItem(item_delegate->shelf_id())) {
+    // TODO(crbug.com/1090134): try and identify why this would be called when
+    // there is an already existing shelf item for this ID.
+    base::debug::DumpWithoutCrashing();
+    return item_delegate->shelf_id();
+  }
+
   ash::ShelfItem item;
   item.status = status;
   item.type = shelf_item_type;

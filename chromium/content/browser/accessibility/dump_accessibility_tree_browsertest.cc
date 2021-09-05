@@ -151,11 +151,9 @@ class DumpAccessibilityTreeTest : public DumpAccessibilityTestBase {
     std::unique_ptr<AccessibilityTreeFormatter> formatter(formatter_factory_());
     formatter->SetPropertyFilters(property_filters_);
     formatter->SetNodeFilters(node_filters_);
-    base::string16 actual_contents_utf16;
+    std::string actual_contents;
     formatter->FormatAccessibilityTreeForTesting(
-        GetRootAccessibilityNode(shell()->web_contents()),
-        &actual_contents_utf16);
-    std::string actual_contents = base::UTF16ToUTF8(actual_contents_utf16);
+        GetRootAccessibilityNode(shell()->web_contents()), &actual_contents);
     return base::SplitString(actual_contents, "\n", base::KEEP_WHITESPACE,
                              base::SPLIT_WANT_NONEMPTY);
   }
@@ -258,6 +256,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSFontFamily) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSFontSize) {
   RunCSSTest(FILE_PATH_LITERAL("font-size.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityCSSDisplayNone) {
+  RunCSSTest(FILE_PATH_LITERAL("display-none.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
@@ -526,13 +528,47 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 #define MAYBE_AccessibilityAriaCombobox AccessibilityAriaCombobox
 #endif
 
+// DISABLE A BUNCH OF TESTS FOR ANDROID
+// ------------------------------------
+// TODO(crbug.com/1137967): tests are flaky on android.
+#if defined(OS_ANDROID)
+#define MAYBE_AccessibilityAriaMenuItemRadio \
+  DISABLED_AccessibilityAriaMenuItemRadio
+#define MAYBE_AccessibilityAriaComboboxUneditable \
+  DISABLED_AccessibilityAriaComboboxUneditable
+#define MAYBE_AccessibilityAriaListBox DISABLED_AccessibilityAriaListBox
+#define MAYBE_AccessibilityAriaListBoxDisabled \
+  DISABLED_AccessibilityAriaListBoxDisabled
+#define MAYBE_AccessibilityAriaOption DISABLED_AccessibilityAriaOption
+#define MAYBE_AccessibilityAriaPosinset DISABLED_AccessibilityAriaPosinset
+#define MAYBE_AccessibilityAriaSelected DISABLED_AccessibilityAriaSelected
+#define MAYBE_AccessibilityAriaSetsize DISABLED_AccessibilityAriaSetsize
+#define MAYBE_AccessibilityAriaTree DISABLED_AccessibilityAriaTree
+#define MAYBE_AccessibilityButtonWithListboxPopup \
+  DISABLED_AccessibilityButtonWithListboxPopup
+#else
+#define MAYBE_AccessibilityAriaMenuItemRadio AccessibilityAriaMenuItemRadio
+#define MAYBE_AccessibilityAriaComboboxUneditable \
+  AccessibilityAriaComboboxUneditable
+#define MAYBE_AccessibilityAriaListBox AccessibilityAriaListBox
+#define MAYBE_AccessibilityAriaListBoxDisabled AccessibilityAriaListBoxDisabled
+#define MAYBE_AccessibilityAriaOption AccessibilityAriaOption
+#define MAYBE_AccessibilityAriaPosinset AccessibilityAriaPosinset
+#define MAYBE_AccessibilityAriaSelected AccessibilityAriaSelected
+#define MAYBE_AccessibilityAriaSetsize AccessibilityAriaSetsize
+#define MAYBE_AccessibilityAriaTree AccessibilityAriaTree
+#define MAYBE_AccessibilityButtonWithListboxPopup \
+  AccessibilityButtonWithListboxPopup
+#endif
+// ------------------------------------
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        MAYBE_AccessibilityAriaCombobox) {
   RunAriaTest(FILE_PATH_LITERAL("aria-combobox.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityAriaComboboxUneditable) {
+                       MAYBE_AccessibilityAriaComboboxUneditable) {
   RunAriaTest(FILE_PATH_LITERAL("aria-combobox-uneditable.html"));
 }
 
@@ -797,12 +833,13 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaList) {
   RunAriaTest(FILE_PATH_LITERAL("aria-list.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaListBox) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       MAYBE_AccessibilityAriaListBox) {
   RunAriaTest(FILE_PATH_LITERAL("aria-listbox.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityAriaListBoxDisabled) {
+                       MAYBE_AccessibilityAriaListBoxDisabled) {
   RunAriaTest(FILE_PATH_LITERAL("aria-listbox-disabled.html"));
 }
 // TODO(crbug.com/983802): Flaky.
@@ -882,7 +919,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 // crbug.com/442278 will stop creating new text elements representing title.
 // Re-baseline after the Blink change goes in
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityAriaMenuItemRadio) {
+                       MAYBE_AccessibilityAriaMenuItemRadio) {
   RunAriaTest(FILE_PATH_LITERAL("aria-menuitemradio.html"));
 }
 
@@ -957,7 +994,8 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaNone) {
   RunAriaTest(FILE_PATH_LITERAL("aria-none.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaOption) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       MAYBE_AccessibilityAriaOption) {
   RunAriaTest(FILE_PATH_LITERAL("aria-option.html"));
 }
 
@@ -965,7 +1003,8 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaParagraph) {
   RunAriaTest(FILE_PATH_LITERAL("aria-paragraph.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaPosinset) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       MAYBE_AccessibilityAriaPosinset) {
   RunAriaTest(FILE_PATH_LITERAL("aria-posinset.html"));
 }
 
@@ -1061,7 +1100,8 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunAriaTest(FILE_PATH_LITERAL("aria-searchbox-with-selection.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaSelected) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       MAYBE_AccessibilityAriaSelected) {
   RunAriaTest(FILE_PATH_LITERAL("aria-selected.html"));
 }
 
@@ -1069,7 +1109,8 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaSeparator) {
   RunAriaTest(FILE_PATH_LITERAL("aria-separator.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaSetsize) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       MAYBE_AccessibilityAriaSetsize) {
   RunAriaTest(FILE_PATH_LITERAL("aria-setsize.html"));
 }
 
@@ -1182,7 +1223,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaTooltip) {
   RunAriaTest(FILE_PATH_LITERAL("aria-tooltip.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityAriaTree) {
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, MAYBE_AccessibilityAriaTree) {
   RunAriaTest(FILE_PATH_LITERAL("aria-tree.html"));
 }
 
@@ -1306,6 +1347,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityBoundsAbsolute) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessiblitiyBoundsFixed) {
   RunHtmlTest(FILE_PATH_LITERAL("bounds-fixed.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessiblitiyBoundsFixedScrolling) {
+  RunHtmlTest(FILE_PATH_LITERAL("bounds-fixed-scrolling.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityBR) {
@@ -1536,6 +1582,16 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityFramesetPostEnable) {
   enable_accessibility_after_navigating_ = true;
   RunHtmlTest(FILE_PATH_LITERAL("frameset.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityGeneratedContentAfterHiddenInput) {
+  RunHtmlTest(FILE_PATH_LITERAL("generated-content-after-hidden-input.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
+                       AccessibilityGeneratedContentInEmptyPage) {
+  RunHtmlTest(FILE_PATH_LITERAL("generated-content-in-empty-page.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityHead) {
@@ -2157,6 +2213,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityReplaceData) {
   RunHtmlTest(FILE_PATH_LITERAL("replace-data.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityRoleChange) {
+  RunAriaTest(FILE_PATH_LITERAL("role-change.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityRuby) {
   RunHtmlTest(FILE_PATH_LITERAL("ruby.html"));
 }
@@ -2257,8 +2317,14 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilitySvg) {
   RunHtmlTest(FILE_PATH_LITERAL("svg.html"));
 }
 
+// On ChromeOS, SVG <g> elements are included.
+#if defined(OS_CHROMEOS)
+#define AccessibilitySvgG_TestFile FILE_PATH_LITERAL("svg-g-for-cros.html")
+#else
+#define AccessibilitySvgG_TestFile FILE_PATH_LITERAL("svg-g.html")
+#endif
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilitySvgG) {
-  RunHtmlTest(FILE_PATH_LITERAL("svg-g.html"));
+  RunHtmlTest(AccessibilitySvgG_TestFile);
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityTableSimple) {
@@ -2322,6 +2388,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("text-decoration-styles.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityTextIndent) {
+  RunHtmlTest(FILE_PATH_LITERAL("text-indent.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityTextarea) {
   RunHtmlTest(FILE_PATH_LITERAL("textarea.html"));
 }
@@ -2342,6 +2412,10 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityTime) {
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityTitle) {
   RunHtmlTest(FILE_PATH_LITERAL("title.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityTitleEmpty) {
+  RunHtmlTest(FILE_PATH_LITERAL("title-empty.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityTitleChanged) {
@@ -2451,7 +2525,7 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityNestedList) {
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
-                       AccessibilityButtonWithListboxPopup) {
+                       MAYBE_AccessibilityButtonWithListboxPopup) {
   RunHtmlTest(FILE_PATH_LITERAL("button-with-listbox-popup.html"));
 }
 

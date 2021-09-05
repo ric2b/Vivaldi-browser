@@ -52,6 +52,7 @@
 <translation id="1291286136605998134">Перемикач</translation>
 <translation id="1299774449519412690">Світлий небесно-блакитний</translation>
 <translation id="1303806948938513162">Торкніться 4 пальцями, щоб відкрити меню ChromeVox</translation>
+<translation id="1313373992684326101">Перейти до попереднього розділу. Приклади: "Панель статусу" або "Панель запуску".</translation>
 <translation id="1325363694295259631">Скасовано вибір перемикача пункту меню "<ph name="NAME" />"</translation>
 <translation id="1325946044405407859">Жовто-брунатний</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> з <ph name="TOTAL" /></translation>
@@ -79,6 +80,7 @@
 <translation id="1506187449813838456">Збільшити висоту звуку</translation>
 <translation id="151784044608172266">Наступне речення</translation>
 <translation id="1524531499102321782">Наступний рядок шрифтом Брайля</translation>
+<translation id="1542513807034338907">Прокрутити до попередньої сторінки</translation>
 <translation id="1546370775711804143">Панель прокручування</translation>
 <translation id="1555130319947370107">Синій</translation>
 <translation id="1559739829547075274">Перейти назад</translation>
@@ -280,6 +282,7 @@
 <translation id="3103579948980282461">Помірний фіолетово-червоний</translation>
 <translation id="3104705064753753826">вікно сповіщення</translation>
 <translation id="3109724472072898302">Згорнуто</translation>
+<translation id="311015743332597320">Проведіть чотирма пальцями праворуч</translation>
 <translation id="3112457281078985179">Щоб увімкнути чи вимкнути ChromeVox, натисніть комбінацію клавіш Control+Alt+Z.</translation>
 <translation id="3131002934070407451">Зачитувати числа як:</translation>
 <translation id="3134461040845705080">лише читання</translation>
@@ -345,6 +348,7 @@
 <translation id="3549141990712742152">вирізати <ph name="TEXT" />.</translation>
 <translation id="3549680091535286226">Торкніться 2 пальцями, щоб тимчасово припинити озвучення</translation>
 <translation id="3564729643041517261">Поточний стиль дисплея – паралельний перегляд</translation>
+<translation id="3587482841069643663">Все</translation>
 <translation id="3589661172894441357">Глосарій</translation>
 <translation id="3591784666823501596">Королівський синій</translation>
 <translation id="3594207934078151302">Помірний зелене море</translation>
@@ -436,6 +440,7 @@
 <translation id="4278486392851938658">Немає попереднього натиснутого посилання</translation>
 <translation id="4281245629646759298">Світло-жовтий</translation>
 <translation id="4289540628985791613">Огляд</translation>
+<translation id="4294967782363273192">Посортовано за зростанням</translation>
 <translation id="4300318234632215983">Повідомити URL-адресу посилання</translation>
 <translation id="4322625298640984693">Охра</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{крапка}=3{трикрапка}one{# крапка}few{# крапки}many{# крапок}other{# dots}}</translation>
@@ -447,6 +452,7 @@
 <translation id="4384583879834880242">Запитання</translation>
 <translation id="4391478986194775161">інформація про вміст</translation>
 <translation id="4402014469255336455">Насичений небесно-голубий</translation>
+<translation id="4406249099130339147">Озвучення розділових знаків:</translation>
 <translation id="4432457053224379116">Індійський червоний</translation>
 <translation id="4437615272777527928">Щоб шукати параметри в меню, введіть текст. Щоб переходити між результатами, натискайте стрілки вгору та вниз. Щоб змінити місце введення тексту або переходити між меню, натискайте стрілки вліво та вправо.</translation>
 <translation id="4457472090507035117">Виберіть поточний голос:</translation>
@@ -481,6 +487,7 @@
 <translation id="4763480195061959176">відео</translation>
 <translation id="4764692524839457597">за умовчанням</translation>
 <translation id="4772771694153161212">Без підкреслення</translation>
+<translation id="4780458943471935919">Прокрутити до наступної сторінки</translation>
 <translation id="4784215347943747396">Керувати пристроєм за допомогою 1 або 2 перемикачів</translation>
 <translation id="4786285211967466855">Немає попереднього заголовка рівня 1</translation>
 <translation id="4787577491510559358">Озвучувати формат поточного елемента</translation>
@@ -644,6 +651,7 @@
 <translation id="5999630716831179808">Голоси</translation>
 <translation id="6006050241733874051">Форма</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{обернена скісна риска}one{# обернена скісна риска}few{# обернені скісні риски}many{# обернених скісних рисок}other{# backslashes}}</translation>
+<translation id="6010616110396250088">Посортовано за спаданням</translation>
 <translation id="6017514345406065928">Зелений</translation>
 <translation id="602001110135236999">Прокрутити ліворуч</translation>
 <translation id="6034000775414344507">Світло-сірий</translation>
@@ -814,6 +822,7 @@
 <translation id="744163271241493234">пароль</translation>
 <translation id="7484805699335881122">Змінювати тон під час озвучування типів елементів і цитованого чи видаленого тексту, а також фраз жирним шрифтом, у дужках або великими літерами.</translation>
 <translation id="7491962110804786152">вкладка</translation>
+<translation id="7492497529767769458">Перейти до наступного розділу. Приклади: "Панель статусу" або "Панель запуску".</translation>
 <translation id="7505149250476994901">Казати "велика літера" перед буквою</translation>
 <translation id="7518543783849163354">Щоб тимчасово припинити звучання голосових підказок у ChromeVox, натисніть клавішу Control.</translation>
 <translation id="7533226154149229506">Світлий золотисто-жовтий</translation>
@@ -821,6 +830,7 @@
 <translation id="7552432549459840808">Корисні комбінації клавіш у Chrome</translation>
 <translation id="7569983096843329377">Чорний</translation>
 <translation id="7579911500627256166">крапка <ph name="DOT" /></translation>
+<translation id="7592060599656252486">Деякі розділові знаки</translation>
 <translation id="7595446402663080101">Немає попередньої таблиці</translation>
 <translation id="7596131838331109045">Світло-лососевий</translation>
 <translation id="7604026522577407655">Перейти на початок поточного стовпця</translation>
@@ -840,6 +850,7 @@
 <translation id="7684431668231950609">Редагування введеного тексту, URL-адреси</translation>
 <translation id="7685589220304187312">панель інструментів</translation>
 <translation id="7693840228159394336">Попередній перемикач</translation>
+<translation id="7701040980221191251">Немає</translation>
 <translation id="7701196182766842984">список автозавершення</translation>
 <translation id="7714340021005120797">Немає наступного поля зі списком</translation>
 <translation id="772146615414628379">Вітаємо! Ви дізналися про основні функції ChromeVox. Ви завжди можете відкрити командне меню ChromeVox, натиснувши клавішу пошуку й клавішу крапки. Щоб дізнатися більше про ChromeVox і ОС Chrome, перегляньте статті нижче.
@@ -898,7 +909,9 @@
 <translation id="812886159861361726">Завантаження файлу <ph name="FILE_NAME" /> припинено</translation>
 <translation id="8129445297241948503">Немає клітинки вище</translation>
 <translation id="8138880386467279117">Торкнутися</translation>
+<translation id="8173092779156526980">Проведіть чотирма пальцями ліворуч</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{підкреслення}one{# підкреслення}few{# підкреслення}many{# підкреслень}other{# underscores}}</translation>
+<translation id="8179976553408161302">Enter</translation>
 <translation id="8184828902145951186">рядок</translation>
 <translation id="8186185314313222077">увімкнути або вимкнути повноекранний режим</translation>
 <translation id="8199231515320852133">Повідомити заголовки поточної клітинки</translation>
@@ -984,6 +997,7 @@
 <translation id="8946628535652548639">р<ph name="TABLECELLROWINDEX" />с<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">Немає попереднього перемикача</translation>
 <translation id="8970172509886453271">Немає попереднього розділу</translation>
+<translation id="89720367119469899">Escape</translation>
 <translation id="8978496506222343566">підказка</translation>
 <translation id="8986362086234534611">Видалити</translation>
 <translation id="9040132695316389094">Заголовок 1</translation>

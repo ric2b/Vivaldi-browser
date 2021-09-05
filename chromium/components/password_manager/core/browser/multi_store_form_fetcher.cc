@@ -5,13 +5,12 @@
 #include "components/password_manager/core/browser/multi_store_form_fetcher.h"
 
 #include "base/check_op.h"
+#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
 #include "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/statistics_table.h"
-
-using autofill::PasswordForm;
 
 using Logger = autofill::SavePasswordProgressLogger;
 
@@ -55,6 +54,11 @@ void MultiStoreFormFetcher::Fetch() {
   if (account_password_store) {
     state_ = State::WAITING;
     account_password_store->GetLogins(form_digest_, this);
+#if !defined(OS_IOS) && !defined(OS_ANDROID)
+    // The desktop bubble needs this information.
+    account_password_store->GetMatchingCompromisedCredentials(
+        form_digest_.signon_realm, this);
+#endif
   }
 }
 
@@ -70,8 +74,8 @@ bool MultiStoreFormFetcher::IsBlacklisted() const {
 bool MultiStoreFormFetcher::IsMovingBlocked(
     const autofill::GaiaIdHash& destination,
     const base::string16& username) const {
-  for (const std::vector<std::unique_ptr<autofill::PasswordForm>>*
-           matches_vector : {&federated_, &non_federated_}) {
+  for (const std::vector<std::unique_ptr<PasswordForm>>* matches_vector :
+       {&federated_, &non_federated_}) {
     for (const auto& form : *matches_vector) {
       // Only local entries can be moved to the account store (though
       // account store matches should never have |moving_blocked_for_list|
@@ -156,6 +160,14 @@ void MultiStoreFormFetcher::ProcessMigratedForms(
   // The migration from HTTP to HTTPS (within the profile store) was finished.
   // Continue processing with the migrated results.
   AggregatePasswordStoreResults(std::move(forms));
+}
+
+void MultiStoreFormFetcher::OnGetCompromisedCredentials(
+    std::vector<CompromisedCredentials> compromised_credentials) {
+  // Both the profile and account store has been queried. Therefore, append the
+  // received credentials to the existing ones.
+  base::ranges::move(compromised_credentials,
+                     std::back_inserter(compromised_credentials_));
 }
 
 void MultiStoreFormFetcher::SplitResults(

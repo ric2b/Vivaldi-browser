@@ -10,6 +10,7 @@ Polymer({
   is: 'os-settings-people-page',
 
   behaviors: [
+    DeepLinkingBehavior,
     settings.RouteObserverBehavior,
     I18nBehavior,
     WebUIListenerBehavior,
@@ -160,6 +161,23 @@ Polymer({
     setModes_: {
       type: Object,
     },
+
+    /**
+     * Used by DeepLinkingBehavior to focus this page's deep links.
+     * @type {!Set<!chromeos.settings.mojom.Setting>}
+     */
+    supportedSettingIds: {
+      type: Object,
+      value: () => new Set([
+        chromeos.settings.mojom.Setting.kSetUpParentalControls,
+
+        // Perform Sync page deep links here since it's a shared page.
+        chromeos.settings.mojom.Setting.kNonSplitSyncEncryptionOptions,
+        chromeos.settings.mojom.Setting.kAutocompleteSearchesAndUrls,
+        chromeos.settings.mojom.Setting.kMakeSearchesAndBrowsingBetter,
+        chromeos.settings.mojom.Setting.kGoogleDriveSearchSuggestions,
+      ]),
+    },
   },
 
   /** @private {?settings.SyncBrowserProxy} */
@@ -206,8 +224,96 @@ Polymer({
     }
   },
 
-  /** @protected */
-  currentRouteChanged() {
+  /**
+   * Helper function for manually showing deep links on this page.
+   * @param {!chromeos.settings.mojom.Setting} settingId
+   * @param {!function():?Element} getElementCallback
+   * @private
+   */
+  afterRenderShowDeepLink_(settingId, getElementCallback) {
+    // Wait for element to load.
+    Polymer.RenderStatus.afterNextRender(this, () => {
+      const deepLinkElement = getElementCallback();
+      if (!deepLinkElement || deepLinkElement.hidden) {
+        console.warn(`Element with deep link id ${settingId} not focusable.`);
+        return;
+      }
+      this.showDeepLinkElement(deepLinkElement);
+    });
+  },
+
+  /**
+   * Overridden from DeepLinkingBehavior.
+   * @param {!chromeos.settings.mojom.Setting} settingId
+   * @return {boolean}
+   */
+  beforeDeepLinkAttempt(settingId) {
+    switch (settingId) {
+      // Manually show the deep links for settings nested within elements.
+      case chromeos.settings.mojom.Setting.kSetUpParentalControls:
+        this.afterRenderShowDeepLink_(settingId, () => {
+          const parentalPage =
+              /** @type {?SettingsParentalControlsPageElement} */ (
+                  this.$$('settings-parental-controls-page'));
+          return parentalPage && parentalPage.getSetupButton();
+        });
+        // Stop deep link attempt since we completed it manually.
+        return false;
+
+      // Handle the settings within the old sync page since its a shared
+      // component.
+      case chromeos.settings.mojom.Setting.kNonSplitSyncEncryptionOptions:
+        this.afterRenderShowDeepLink_(settingId, () => {
+          const syncPage = /** @type {?SettingsSyncPageElement} */ (
+              this.$$('settings-sync-page'));
+          // Expand the encryption collapse.
+          syncPage.forceEncryptionExpanded = true;
+          Polymer.dom.flush();
+          return syncPage && syncPage.getEncryptionOptions() &&
+              syncPage.getEncryptionOptions().getEncryptionsRadioButtons();
+        });
+        return false;
+
+      case chromeos.settings.mojom.Setting.kAutocompleteSearchesAndUrls:
+        this.afterRenderShowDeepLink_(settingId, () => {
+          const syncPage = /** @type {?SettingsSyncPageElement} */ (
+              this.$$('settings-sync-page'));
+          return syncPage && syncPage.getPersonalizationOptions() &&
+              syncPage.getPersonalizationOptions().getSearchSuggestToggle();
+        });
+        return false;
+
+      case chromeos.settings.mojom.Setting.kMakeSearchesAndBrowsingBetter:
+        this.afterRenderShowDeepLink_(settingId, () => {
+          const syncPage = /** @type {?SettingsSyncPageElement} */ (
+              this.$$('settings-sync-page'));
+          return syncPage && syncPage.getPersonalizationOptions() &&
+              syncPage.getPersonalizationOptions().getUrlCollectionToggle();
+        });
+        return false;
+
+      case chromeos.settings.mojom.Setting.kGoogleDriveSearchSuggestions:
+        this.afterRenderShowDeepLink_(settingId, () => {
+          const syncPage = /** @type {?SettingsSyncPageElement} */ (
+              this.$$('settings-sync-page'));
+          return syncPage && syncPage.getPersonalizationOptions() &&
+              syncPage.getPersonalizationOptions().getDriveSuggestToggle();
+        });
+        return false;
+
+      default:
+        // Continue with deep linking attempt.
+        return true;
+    }
+  },
+
+  /**
+   * settings.RouteObserverBehavior
+   * @param {!settings.Route} route
+   * @param {!settings.Route} oldRoute
+   * @protected
+   */
+  currentRouteChanged(route, oldRoute) {
     if (settings.Router.getInstance().getCurrentRoute() ==
         settings.routes.OS_SIGN_OUT) {
       // If the sync status has not been fetched yet, optimistically display
@@ -218,6 +324,12 @@ Polymer({
       } else {
         this.showSignoutDialog_ = true;
       }
+    }
+
+    // The old sync page is a shared subpage, so we handle deep links for
+    // both this page and the sync page. Not ideal.
+    if (route === settings.routes.SYNC || route === settings.routes.OS_PEOPLE) {
+      this.attemptDeepLink();
     }
   },
 

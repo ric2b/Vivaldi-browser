@@ -17,11 +17,10 @@
 #include "build/build_config.h"
 #include "chrome/browser/media/router/event_page_request_manager.h"
 #include "chrome/browser/media/router/event_page_request_manager_factory.h"
-#include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/test/media_router_mojo_test.h"
-#include "chrome/browser/media/router/test/test_helper.h"
-#include "chrome/common/media_router/media_source.h"
+#include "chrome/browser/media/router/test/provider_test_helpers.h"
+#include "components/media_router/common/media_source.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -114,7 +113,7 @@ TEST_F(MediaRouterDesktopTest, EnableMdnsAfterEachRegister) {
 
 TEST_F(MediaRouterDesktopTest, OnUserGesture) {
   EXPECT_CALL(mock_extension_provider_,
-              UpdateMediaSinks(MediaSource::ForDesktop().id()));
+              UpdateMediaSinks(MediaSource::ForUnchosenDesktop().id()));
   router()->OnUserGesture();
   base::RunLoop().RunUntilIdle();
 }

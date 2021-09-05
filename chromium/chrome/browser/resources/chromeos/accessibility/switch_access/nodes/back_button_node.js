@@ -88,13 +88,11 @@ class BackButtonNode extends SAChildNode {
         true /* show */, this.group_.location);
     BackButtonNode.findAutomationNode_();
 
-    if (this.group_.automationNode) {
-      this.locationChangedHandler_ = new RepeatedEventHandler(
-          this.group_.automationNode,
-          chrome.automation.EventType.LOCATION_CHANGED,
-          () => FocusRingManager.setFocusedNode(this),
-          {exactMatch: true, allAncestors: true});
-    }
+    this.locationChangedHandler_ = new RepeatedEventHandler(
+        this.group_.automationNode,
+        chrome.automation.EventType.LOCATION_CHANGED,
+        () => FocusRingManager.setFocusedNode(this),
+        {exactMatch: true, allAncestors: true});
   }
 
   /** @override */
@@ -105,7 +103,7 @@ class BackButtonNode extends SAChildNode {
         false /* show */);
 
     if (this.locationChangedHandler_) {
-      this.locationChangedHandler_.stopListening();
+      this.locationChangedHandler_.stop();
     }
   }
 
@@ -121,8 +119,11 @@ class BackButtonNode extends SAChildNode {
   // ================= Debug methods =================
 
   /** @override */
-  debugString() {
-    return 'BackButtonNode';
+  debugString(wholeTree, prefix = '', currentNode = null) {
+    if (!this.automationNode) {
+      return 'BackButtonNode';
+    }
+    return super.debugString(wholeTree, prefix, currentNode);
   }
 
   // ================= Static methods =================

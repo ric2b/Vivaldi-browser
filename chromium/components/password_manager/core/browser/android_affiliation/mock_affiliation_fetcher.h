@@ -5,9 +5,8 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_ANDROID_AFFILIATION_MOCK_AFFILIATION_FETCHER_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_ANDROID_AFFILIATION_MOCK_AFFILIATION_FETCHER_H_
 
-#include <string>
-
 #include "components/password_manager/core/browser/android_affiliation/affiliation_fetcher_interface.h"
+
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace password_manager {
@@ -17,7 +16,10 @@ class MockAffiliationFetcher : public AffiliationFetcherInterface {
   MockAffiliationFetcher();
   ~MockAffiliationFetcher() override;
 
-  MOCK_METHOD(void, StartRequest, (const std::vector<FacetURI>&), (override));
+  MOCK_METHOD(void,
+              StartRequest,
+              (const std::vector<FacetURI>&, RequestInfo),
+              (override));
   MOCK_METHOD(std::vector<FacetURI>&,
               GetRequestedFacetURIs,
               (),

@@ -53,6 +53,7 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/svg/animation/smil_time_container.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_chrome_client.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_preserve_aspect_ratio.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
 #include "third_party/blink/renderer/core/svg/svg_fe_image_element.h"
 #include "third_party/blink/renderer/core/svg/svg_image_element.h"
@@ -410,7 +411,7 @@ void SVGImage::DrawForContainer(cc::PaintCanvas* canvas,
 PaintImage SVGImage::PaintImageForCurrentFrame() {
   auto builder =
       CreatePaintImageBuilder().set_completion_state(completion_state());
-  PopulatePaintRecordForCurrentFrameForContainer(builder, NullURL(), Size());
+  PopulatePaintRecordForCurrentFrameForContainer(builder, Size(), 1, NullURL());
   return builder.TakePaintImage();
 }
 
@@ -467,38 +468,23 @@ void SVGImage::DrawPatternForContainer(GraphicsContext& context,
   StartAnimation();
 }
 
-sk_sp<PaintRecord> SVGImage::PaintRecordForContainer(
-    const KURL& url,
-    const IntSize& container_size,
-    const IntRect& draw_src_rect,
-    const IntRect& draw_dst_rect,
-    bool flip_y) {
-  if (!page_)
-    return nullptr;
-
-  PaintRecorder recorder;
-  cc::PaintCanvas* canvas = recorder.beginRecording(draw_src_rect);
-  if (flip_y) {
-    canvas->translate(0, draw_dst_rect.Height());
-    canvas->scale(1, -1);
-  }
-  DrawForContainer(canvas, PaintFlags(), FloatSize(container_size), 1,
-                   FloatRect(draw_dst_rect), FloatRect(draw_src_rect), url);
-  return recorder.finishRecordingAsPicture();
-}
-
 void SVGImage::PopulatePaintRecordForCurrentFrameForContainer(
     PaintImageBuilder& builder,
-    const KURL& url,
-    const IntSize& container_size) {
+    const IntSize& zoomed_container_size,
+    float zoom,
+    const KURL& url) {
   if (!page_)
     return;
 
-  const IntRect container_rect(IntPoint(), container_size);
+  const IntRect container_rect(IntPoint(), zoomed_container_size);
+  // Compute a new container size based on the zoomed (and potentially
+  // rounded) size.
+  FloatSize container_size(zoomed_container_size);
+  container_size.Scale(1 / zoom);
 
   PaintRecorder recorder;
   cc::PaintCanvas* canvas = recorder.beginRecording(container_rect);
-  DrawForContainer(canvas, PaintFlags(), FloatSize(container_rect.Size()), 1,
+  DrawForContainer(canvas, PaintFlags(), container_size, zoom,
                    FloatRect(container_rect), FloatRect(container_rect), url);
   builder.set_paint_record(recorder.finishRecordingAsPicture(), container_rect,
                            PaintImage::GetNextContentId());
@@ -867,9 +853,10 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
     TRACE_EVENT0("blink", "SVGImage::dataChanged::createFrame");
     DCHECK(!frame_client_);
     frame_client_ = MakeGarbageCollected<SVGImageLocalFrameClient>(this);
-    frame = MakeGarbageCollected<LocalFrame>(frame_client_, *page, nullptr,
-                                             base::UnguessableToken::Create(),
-                                             nullptr, nullptr);
+    frame = MakeGarbageCollected<LocalFrame>(
+        frame_client_, *page, nullptr, nullptr, nullptr,
+        FrameInsertType::kInsertInConstructor, base::UnguessableToken::Create(),
+        nullptr, nullptr);
     frame->SetView(MakeGarbageCollected<LocalFrameView>(*frame));
     frame->Init(nullptr);
   }
@@ -924,33 +911,6 @@ bool SVGImage::IsSizeAvailable() {
 
 String SVGImage::FilenameExtension() const {
   return "svg";
-}
-
-SkBitmap SVGImage::AsSkBitmapForCursor(float device_scale_factor) {
-  // The size should be scaled by the device scale factor for the cursor so that
-  // the SVG can be drawn at the correct resolution for a crisp image on high
-  // DPI displays. Scaling the size here causes the SVG to be rasterized at the
-  // correct resolution and causes the canvas that it is rasterized into being
-  // the correct size so that the cursor is not clipped.
-  IntSize scaled_size = Size();
-  scaled_size.Scale(device_scale_factor);
-
-  auto builder =
-      CreatePaintImageBuilder().set_completion_state(completion_state());
-  PopulatePaintRecordForCurrentFrameForContainer(builder, NullURL(),
-                                                 scaled_size);
-
-  PaintImage paint_image = builder.TakePaintImage();
-  if (!paint_image)
-    return {};
-
-  sk_sp<SkImage> sk_image = paint_image.GetSkImage();
-  if (!sk_image)
-    return {};
-
-  SkBitmap bitmap;
-  sk_image->asLegacyBitmap(&bitmap);
-  return bitmap;
 }
 
 }  // namespace blink

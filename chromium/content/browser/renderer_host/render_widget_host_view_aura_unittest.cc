@@ -37,11 +37,12 @@
 #include "components/viz/test/test_latest_local_surface_id_lookup_delegate.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/compositor/test/test_image_transport_factory.h"
-#include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/renderer_host/agent_scheduling_group_host.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/delegated_frame_host_client_aura.h"
 #include "content/browser/renderer_host/frame_token_message_queue.h"
+#include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/input/input_router.h"
 #include "content/browser/renderer_host/input/mouse_wheel_event_queue.h"
 #include "content/browser/renderer_host/overscroll_controller.h"
@@ -128,6 +129,8 @@
 #endif
 
 #if defined(OS_WIN)
+#include "ui/base/view_prop.h"
+#include "ui/base/win/window_event_target.h"
 #include "ui/display/win/test/scoped_screen_win.h"
 #endif
 
@@ -390,10 +393,12 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
     return widget_.ReceivedScreenRects();
   }
 
-  static MockRenderWidgetHostImpl* Create(RenderWidgetHostDelegate* delegate,
-                                          RenderProcessHost* process,
-                                          int32_t routing_id) {
-    return new MockRenderWidgetHostImpl(delegate, process, routing_id);
+  static MockRenderWidgetHostImpl* Create(
+      RenderWidgetHostDelegate* delegate,
+      AgentSchedulingGroupHost& agent_scheduling_group,
+      int32_t routing_id) {
+    return new MockRenderWidgetHostImpl(delegate, agent_scheduling_group,
+                                        routing_id);
   }
   ui::LatencyInfo lastWheelOrTouchEventLatencyInfo;
 
@@ -417,17 +422,17 @@ class MockRenderWidgetHostImpl : public RenderWidgetHostImpl {
 
  private:
   MockRenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
-                           RenderProcessHost* process,
+                           AgentSchedulingGroupHost& agent_scheduling_group,
                            int32_t routing_id)
       : RenderWidgetHostImpl(delegate,
-                             process,
+                             agent_scheduling_group,
                              routing_id,
                              /*hidden=*/false,
                              std::make_unique<FrameTokenMessageQueue>()) {
     lastWheelOrTouchEventLatencyInfo = ui::LatencyInfo();
     mojo::AssociatedRemote<blink::mojom::WidgetHost> blink_widget_host;
     BindWidgetInterfaces(
-        blink_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting(),
+        blink_widget_host.BindNewEndpointAndPassDedicatedReceiver(),
         widget_.GetNewRemote());
   }
 
@@ -504,7 +509,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     int32_t routing_id = process_host_->GetNextRoutingID();
     delegates_.push_back(base::WrapUnique(new MockRenderWidgetHostDelegate));
     auto* widget_host = MockRenderWidgetHostImpl::Create(
-        delegates_.back().get(), process_host_, routing_id);
+        delegates_.back().get(), *agent_scheduling_group_host_, routing_id);
     delegates_.back()->set_widget_host(widget_host);
     delegates_.back()->set_frame_tree(GetFrameTree());
     widget_host->Init();
@@ -536,6 +541,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     browser_context_ = std::make_unique<TestBrowserContext>();
     process_host_ = new MockRenderProcessHost(browser_context_.get());
     process_host_->Init();
+    agent_scheduling_group_host_ =
+        std::make_unique<AgentSchedulingGroupHost>(*process_host_);
 
     sink_ = &process_host_->sink();
 
@@ -544,8 +551,18 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
 
     int32_t routing_id = process_host_->GetNextRoutingID();
     delegates_.push_back(std::make_unique<MockRenderWidgetHostDelegate>());
-    parent_host_ = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
-                                                    process_host_, routing_id);
+    parent_host_ = MockRenderWidgetHostImpl::Create(
+        delegates_.back().get(), *agent_scheduling_group_host_, routing_id);
+    mojo::AssociatedRemote<blink::mojom::FrameWidgetHost>
+        parent_frame_widget_host;
+    auto parent_frame_widget_host_receiver =
+        parent_frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
+    mojo::AssociatedRemote<blink::mojom::FrameWidget> parent_frame_widget;
+    auto parent_frame_widget_receiver =
+        parent_frame_widget.BindNewEndpointAndPassDedicatedReceiver();
+    parent_host_->BindFrameWidgetInterfaces(
+        std::move(parent_frame_widget_host_receiver),
+        parent_frame_widget.Unbind());
     delegates_.back()->set_widget_host(parent_host_);
     delegates_.back()->set_frame_tree(GetFrameTree());
     parent_view_ = new RenderWidgetHostViewAura(parent_host_);
@@ -555,6 +572,14 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
                                           gfx::Rect());
     view_ = CreateView();
     widget_host_ = static_cast<MockRenderWidgetHostImpl*>(view_->host());
+    mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
+    auto frame_widget_host_receiver =
+        frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
+    mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
+    auto frame_widget_receiver =
+        frame_widget.BindNewEndpointAndPassDedicatedReceiver();
+    widget_host_->BindFrameWidgetInterfaces(
+        std::move(frame_widget_host_receiver), frame_widget.Unbind());
     // Set the mouse_wheel_phase_handler_ timer timeout to 100ms.
     view_->event_handler()->set_mouse_wheel_wheel_phase_handler_timeout(
         base::TimeDelta::FromMilliseconds(100));
@@ -575,8 +600,9 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     parent_view_->Destroy();
     delete parent_host_;
 
-    web_contents_.reset();
-    browser_context_.reset();
+    agent_scheduling_group_host_ = nullptr;
+    web_contents_ = nullptr;
+    browser_context_ = nullptr;
     aura_test_helper_->TearDown();
 
     base::RunLoop().RunUntilIdle();
@@ -626,6 +652,12 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     return view_->GetMouseWheelPhaseHandler();
   }
 
+  TextInputManager* GetTextInputManager(RenderWidgetHostViewBase* view) const {
+    return static_cast<RenderWidgetHostImpl*>(view->GetRenderWidgetHost())
+        ->delegate()
+        ->GetTextInputManager();
+  }
+
   // Sets the |view| active in TextInputManager with the given |type|. |type|
   // cannot be ui::TEXT_INPUT_TYPE_NONE.
   // Must not be called in the destruction path of |view|.
@@ -638,10 +670,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
       render_widget_host_delegate()->set_focused_widget(view->host());
     }
 
-    TextInputManager* manager =
-        static_cast<RenderWidgetHostImpl*>(view->GetRenderWidgetHost())
-            ->delegate()
-            ->GetTextInputManager();
+    TextInputManager* manager = GetTextInputManager(view);
     if (manager->GetActiveWidget()) {
       manager->active_view_for_testing()->TextInputStateChanged(
           ui::mojom::TextInputState());
@@ -662,6 +691,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   std::unique_ptr<WebContents> web_contents_;
   std::vector<std::unique_ptr<MockRenderWidgetHostDelegate>> delegates_;
   MockRenderProcessHost* process_host_;
+  std::unique_ptr<AgentSchedulingGroupHost> agent_scheduling_group_host_;
 
   // Tests should set these to nullptr if they've already triggered their
   // destruction.
@@ -2643,15 +2673,14 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithScale) {
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
 
-  viz::LocalSurfaceIdAllocation host_local_surface_id_allocation =
-      view_->GetLocalSurfaceIdAllocation();
-  EXPECT_TRUE(host_local_surface_id_allocation.IsValid());
+  viz::LocalSurfaceId host_local_surface_id = view_->GetLocalSurfaceId();
+  EXPECT_TRUE(host_local_surface_id.is_valid());
 
   widget_host_->ClearVisualProperties();
 
   view_->EnableAutoResize(gfx::Size(50, 50), gfx::Size(100, 100));
 
-  // Update to the renderer. It includes the current LocalSurfaceIdAllocation.
+  // Update to the renderer. It includes the current LocalSurfaceId.
   base::RunLoop().RunUntilIdle();
   ASSERT_EQ(1u, widget_host_->visual_properties().size());
   {
@@ -2662,26 +2691,21 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithScale) {
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.max_size_for_auto_resize);
     // Default DSF is 1.
     EXPECT_EQ(1, visual_properties.screen_info.device_scale_factor);
-    // Passed the original LocalSurfaceIdAllocation.
-    EXPECT_TRUE(visual_properties.local_surface_id_allocation.has_value());
-    EXPECT_EQ(host_local_surface_id_allocation,
-              visual_properties.local_surface_id_allocation.value());
+    // Passed the original LocalSurfaceId.
+    EXPECT_TRUE(visual_properties.local_surface_id.has_value());
+    EXPECT_EQ(host_local_surface_id,
+              visual_properties.local_surface_id.value());
   }
 
-  // Receive a changed LocalSurfaceIdAllocation from the renderer with a size.
-  viz::LocalSurfaceIdAllocation renderer_local_surface_id_allocation(
-      viz::LocalSurfaceId(
-          host_local_surface_id_allocation.local_surface_id()
-              .parent_sequence_number(),
-          host_local_surface_id_allocation.local_surface_id()
-                  .child_sequence_number() +
-              1,
-          host_local_surface_id_allocation.local_surface_id().embed_token()),
-      base::TimeTicks::Now());
+  // Receive a changed LocalSurfaceId from the renderer with a size.
+  viz::LocalSurfaceId renderer_local_surface_id(
+      host_local_surface_id.parent_sequence_number(),
+      host_local_surface_id.child_sequence_number() + 1,
+      host_local_surface_id.embed_token());
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-    metadata.local_surface_id_allocation = renderer_local_surface_id_allocation;
+    metadata.local_surface_id = renderer_local_surface_id;
     static_cast<RenderFrameMetadataProvider::Observer*>(widget_host_)
         ->OnLocalSurfaceIdChanged(metadata);
   }
@@ -2703,12 +2727,12 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithScale) {
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.max_size_for_auto_resize);
     // Updated DSF for the renderer.
     EXPECT_EQ(2, visual_properties.screen_info.device_scale_factor);
-    // The LocalSurfaceIdAllocation has changed to the one from the renderer.
-    EXPECT_TRUE(visual_properties.local_surface_id_allocation.has_value());
-    EXPECT_NE(host_local_surface_id_allocation,
-              visual_properties.local_surface_id_allocation.value());
-    EXPECT_NE(renderer_local_surface_id_allocation,
-              visual_properties.local_surface_id_allocation.value());
+    // The LocalSurfaceId has changed to the one from the renderer.
+    EXPECT_TRUE(visual_properties.local_surface_id.has_value());
+    EXPECT_NE(host_local_surface_id,
+              visual_properties.local_surface_id.value());
+    EXPECT_NE(renderer_local_surface_id,
+              visual_properties.local_surface_id.value());
   }
 }
 
@@ -2720,9 +2744,8 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithBrowserInitiatedResize) {
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
-  viz::LocalSurfaceIdAllocation host_local_surface_id_allocation(
-      view_->GetLocalSurfaceIdAllocation());
-  EXPECT_TRUE(host_local_surface_id_allocation.IsValid());
+  viz::LocalSurfaceId host_local_surface_id(view_->GetLocalSurfaceId());
+  EXPECT_TRUE(host_local_surface_id.is_valid());
 
   widget_host_->ClearVisualProperties();
   view_->EnableAutoResize(gfx::Size(50, 50), gfx::Size(100, 100));
@@ -2736,26 +2759,21 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithBrowserInitiatedResize) {
     // Auto-resizve limits sent to the renderer.
     EXPECT_EQ(gfx::Size(50, 50), visual_properties.min_size_for_auto_resize);
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.max_size_for_auto_resize);
-    // The original LocalSurfaceIdAllocation is sent.
-    EXPECT_TRUE(visual_properties.local_surface_id_allocation.has_value());
-    EXPECT_EQ(host_local_surface_id_allocation,
-              visual_properties.local_surface_id_allocation.value());
+    // The original LocalSurfaceId is sent.
+    EXPECT_TRUE(visual_properties.local_surface_id.has_value());
+    EXPECT_EQ(host_local_surface_id,
+              visual_properties.local_surface_id.value());
   }
 
-  // A size arrives from the renderer with a changed LocalSurfaceIdAllocation.
-  viz::LocalSurfaceIdAllocation renderer_local_surface_id_allocation(
-      viz::LocalSurfaceId(
-          host_local_surface_id_allocation.local_surface_id()
-              .parent_sequence_number(),
-          host_local_surface_id_allocation.local_surface_id()
-                  .child_sequence_number() +
-              1,
-          host_local_surface_id_allocation.local_surface_id().embed_token()),
-      base::TimeTicks::Now());
+  // A size arrives from the renderer with a changed LocalSurfaceId.
+  viz::LocalSurfaceId renderer_local_surface_id(
+      host_local_surface_id.parent_sequence_number(),
+      host_local_surface_id.child_sequence_number() + 1,
+      host_local_surface_id.embed_token());
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-    metadata.local_surface_id_allocation = renderer_local_surface_id_allocation;
+    metadata.local_surface_id = renderer_local_surface_id;
     static_cast<RenderFrameMetadataProvider::Observer*>(widget_host_)
         ->OnLocalSurfaceIdChanged(metadata);
   }
@@ -2776,12 +2794,12 @@ TEST_F(RenderWidgetHostViewAuraTest, AutoResizeWithBrowserInitiatedResize) {
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.max_size_for_auto_resize);
     EXPECT_EQ(gfx::Size(120, 120), visual_properties.new_size);
     EXPECT_EQ(1, visual_properties.screen_info.device_scale_factor);
-    // A newly generated LocalSurfaceIdAllocation is sent.
-    EXPECT_TRUE(visual_properties.local_surface_id_allocation.has_value());
-    EXPECT_NE(host_local_surface_id_allocation,
-              visual_properties.local_surface_id_allocation.value());
-    EXPECT_NE(renderer_local_surface_id_allocation,
-              visual_properties.local_surface_id_allocation.value());
+    // A newly generated LocalSurfaceId is sent.
+    EXPECT_TRUE(visual_properties.local_surface_id.has_value());
+    EXPECT_NE(host_local_surface_id,
+              visual_properties.local_surface_id.value());
+    EXPECT_NE(renderer_local_surface_id,
+              visual_properties.local_surface_id.value());
   }
 }
 
@@ -2793,29 +2811,27 @@ TEST_F(RenderWidgetHostViewAuraTest, ChildAllocationAcceptedInParent) {
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
   sink_->ClearMessages();
-  viz::LocalSurfaceIdAllocation local_surface_id_allocation1(
-      view_->GetLocalSurfaceIdAllocation());
-  EXPECT_TRUE(local_surface_id_allocation1.IsValid());
+  viz::LocalSurfaceId local_surface_id1(view_->GetLocalSurfaceId());
+  EXPECT_TRUE(local_surface_id1.is_valid());
 
   widget_host_->SetAutoResize(true, gfx::Size(50, 50), gfx::Size(100, 100));
   viz::ChildLocalSurfaceIdAllocator child_allocator;
-  child_allocator.UpdateFromParent(local_surface_id_allocation1);
+  child_allocator.UpdateFromParent(local_surface_id1);
   child_allocator.GenerateId();
-  viz::LocalSurfaceIdAllocation local_surface_id_allocation2 =
-      child_allocator.GetCurrentLocalSurfaceIdAllocation();
+  viz::LocalSurfaceId local_surface_id2 =
+      child_allocator.GetCurrentLocalSurfaceId();
 
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-    metadata.local_surface_id_allocation = local_surface_id_allocation2;
+    metadata.local_surface_id = local_surface_id2;
     static_cast<RenderFrameMetadataProvider::Observer*>(widget_host_)
         ->OnLocalSurfaceIdChanged(metadata);
   }
 
-  viz::LocalSurfaceIdAllocation local_surface_id_allocation3(
-      view_->GetLocalSurfaceIdAllocation());
-  EXPECT_NE(local_surface_id_allocation1, local_surface_id_allocation3);
-  EXPECT_EQ(local_surface_id_allocation2, local_surface_id_allocation3);
+  viz::LocalSurfaceId local_surface_id3(view_->GetLocalSurfaceId());
+  EXPECT_NE(local_surface_id1, local_surface_id3);
+  EXPECT_EQ(local_surface_id2, local_surface_id3);
 }
 
 // This test verifies that if the parent is hidden when the child sends a
@@ -2828,16 +2844,15 @@ TEST_F(RenderWidgetHostViewAuraTest,
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
   widget_host_->ClearVisualProperties();
-  viz::LocalSurfaceIdAllocation local_surface_id_allocation1(
-      view_->GetLocalSurfaceIdAllocation());
-  EXPECT_TRUE(local_surface_id_allocation1.IsValid());
+  viz::LocalSurfaceId local_surface_id1(view_->GetLocalSurfaceId());
+  EXPECT_TRUE(local_surface_id1.is_valid());
 
   widget_host_->SetAutoResize(true, gfx::Size(50, 50), gfx::Size(100, 100));
   viz::ChildLocalSurfaceIdAllocator child_allocator;
-  child_allocator.UpdateFromParent(local_surface_id_allocation1);
+  child_allocator.UpdateFromParent(local_surface_id1);
   child_allocator.GenerateId();
-  viz::LocalSurfaceIdAllocation local_surface_id_allocation2 =
-      child_allocator.GetCurrentLocalSurfaceIdAllocation();
+  viz::LocalSurfaceId local_surface_id2 =
+      child_allocator.GetCurrentLocalSurfaceId();
 
   view_->WasOccluded();
   EXPECT_TRUE(widget_host_->is_hidden());
@@ -2845,15 +2860,14 @@ TEST_F(RenderWidgetHostViewAuraTest,
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-    metadata.local_surface_id_allocation = local_surface_id_allocation2;
+    metadata.local_surface_id = local_surface_id2;
     static_cast<RenderFrameMetadataProvider::Observer*>(widget_host_)
         ->OnLocalSurfaceIdChanged(metadata);
   }
 
-  viz::LocalSurfaceIdAllocation local_surface_id_allocation3(
-      view_->GetLocalSurfaceIdAllocation());
-  EXPECT_NE(local_surface_id_allocation1, local_surface_id_allocation3);
-  EXPECT_EQ(local_surface_id_allocation2, local_surface_id_allocation3);
+  viz::LocalSurfaceId local_surface_id3(view_->GetLocalSurfaceId());
+  EXPECT_NE(local_surface_id1, local_surface_id3);
+  EXPECT_EQ(local_surface_id2, local_surface_id3);
 
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0u, widget_host_->visual_properties().size());
@@ -2867,39 +2881,33 @@ TEST_F(RenderWidgetHostViewAuraTest, ConflictingAllocationsResolve) {
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
   sink_->ClearMessages();
-  viz::LocalSurfaceIdAllocation local_surface_id_allocation1(
-      view_->GetLocalSurfaceIdAllocation());
-  EXPECT_TRUE(local_surface_id_allocation1.IsValid());
+  viz::LocalSurfaceId local_surface_id1(view_->GetLocalSurfaceId());
+  EXPECT_TRUE(local_surface_id1.is_valid());
 
   widget_host_->SetAutoResize(true, gfx::Size(50, 50), gfx::Size(100, 100));
   viz::ChildLocalSurfaceIdAllocator child_allocator;
-  child_allocator.UpdateFromParent(local_surface_id_allocation1);
+  child_allocator.UpdateFromParent(local_surface_id1);
   child_allocator.GenerateId();
-  viz::LocalSurfaceIdAllocation local_surface_id_allocation2 =
-      child_allocator.GetCurrentLocalSurfaceIdAllocation();
+  viz::LocalSurfaceId local_surface_id2 =
+      child_allocator.GetCurrentLocalSurfaceId();
 
   {
     cc::RenderFrameMetadata metadata;
     metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-    metadata.local_surface_id_allocation = local_surface_id_allocation2;
+    metadata.local_surface_id = local_surface_id2;
     static_cast<RenderFrameMetadataProvider::Observer*>(widget_host_)
         ->OnLocalSurfaceIdChanged(metadata);
   }
 
   // Cause a conflicting viz::LocalSurfaceId allocation
   aura_test_helper_->GetTestScreen()->SetDeviceScaleFactor(2.0f);
-  viz::LocalSurfaceIdAllocation merged_local_surface_id_allocation(
-      view_->GetLocalSurfaceIdAllocation());
-  EXPECT_NE(local_surface_id_allocation1, merged_local_surface_id_allocation);
-  EXPECT_NE(local_surface_id_allocation2, merged_local_surface_id_allocation);
-  EXPECT_GT(
-      merged_local_surface_id_allocation.local_surface_id()
-          .parent_sequence_number(),
-      local_surface_id_allocation2.local_surface_id().parent_sequence_number());
-  EXPECT_EQ(
-      merged_local_surface_id_allocation.local_surface_id()
-          .child_sequence_number(),
-      local_surface_id_allocation2.local_surface_id().child_sequence_number());
+  viz::LocalSurfaceId merged_local_surface_id(view_->GetLocalSurfaceId());
+  EXPECT_NE(local_surface_id1, merged_local_surface_id);
+  EXPECT_NE(local_surface_id2, merged_local_surface_id);
+  EXPECT_GT(merged_local_surface_id.parent_sequence_number(),
+            local_surface_id2.parent_sequence_number());
+  EXPECT_EQ(merged_local_surface_id.child_sequence_number(),
+            local_surface_id2.child_sequence_number());
 }
 
 // Checks that WidgetInputHandler::CursorVisibilityChange IPC messages are
@@ -3034,8 +3042,7 @@ TEST_F(RenderWidgetHostViewAuraTest, UpdateCursorIfOverSelf) {
 TEST_F(RenderWidgetHostViewAuraTest, ZeroSizeStillGetsLocalSurfaceId) {
   parent_local_surface_id_allocator_.GenerateId();
   viz::LocalSurfaceId local_surface_id =
-      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id();
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceId();
 
   view_->InitAsChild(nullptr);
 
@@ -3056,9 +3063,9 @@ TEST_F(RenderWidgetHostViewAuraTest, ZeroSizeStillGetsLocalSurfaceId) {
         widget_host_->visual_properties().at(0);
     // Empty size is sent.
     EXPECT_EQ(gfx::Size(), visual_properties.new_size);
-    // A LocalSurfaceIdAllocation is sent too.
-    ASSERT_TRUE(visual_properties.local_surface_id_allocation.has_value());
-    EXPECT_TRUE(visual_properties.local_surface_id_allocation->IsValid());
+    // A LocalSurfaceId is sent too.
+    ASSERT_TRUE(visual_properties.local_surface_id.has_value());
+    EXPECT_TRUE(visual_properties.local_surface_id->is_valid());
   }
 }
 
@@ -3066,8 +3073,7 @@ TEST_F(RenderWidgetHostViewAuraTest, BackgroundColorMatchesCompositorFrame) {
   gfx::Size frame_size(100, 100);
   parent_local_surface_id_allocator_.GenerateId();
   viz::LocalSurfaceId local_surface_id =
-      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id();
+      parent_local_surface_id_allocator_.GetCurrentLocalSurfaceId();
 
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
@@ -3216,8 +3222,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
   for (size_t i = 0; i < renderer_count; ++i) {
     int32_t routing_id = process_host_->GetNextRoutingID();
     delegates_.push_back(base::WrapUnique(new MockRenderWidgetHostDelegate));
-    hosts[i] = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
-                                                process_host_, routing_id);
+    hosts[i] = MockRenderWidgetHostImpl::Create(
+        delegates_.back().get(), *agent_scheduling_group_host_, routing_id);
     delegates_.back()->set_widget_host(hosts[i]);
     delegates_.back()->set_frame_tree(GetFrameTree());
     hosts[i]->Init();
@@ -3331,8 +3337,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
     int32_t routing_id = process_host_->GetNextRoutingID();
 
     delegates_.push_back(base::WrapUnique(new MockRenderWidgetHostDelegate));
-    hosts[i] = MockRenderWidgetHostImpl::Create(delegates_.back().get(),
-                                                process_host_, routing_id);
+    hosts[i] = MockRenderWidgetHostImpl::Create(
+        delegates_.back().get(), *agent_scheduling_group_host_, routing_id);
     delegates_.back()->set_widget_host(hosts[i]);
     delegates_.back()->set_frame_tree(GetFrameTree());
     hosts[i]->Init();
@@ -5271,6 +5277,109 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
   view_ = nullptr;
 }
 
+#if defined(OS_WIN)
+class MockWindowEventTarget : public ui::WindowEventTarget {
+ public:
+  MockWindowEventTarget() = default;
+
+  LRESULT HandleMouseMessage(unsigned int message,
+                             WPARAM w_param,
+                             LPARAM l_param,
+                             bool* handled) override {
+    return S_OK;
+  }
+
+  LRESULT HandlePointerMessage(unsigned int message,
+                               WPARAM w_param,
+                               LPARAM l_param,
+                               bool* handled) override {
+    return S_OK;
+  }
+
+  LRESULT HandleKeyboardMessage(unsigned int message,
+                                WPARAM w_param,
+                                LPARAM l_param,
+                                bool* handled) override {
+    return S_OK;
+  }
+
+  LRESULT HandleTouchMessage(unsigned int message,
+                             WPARAM w_param,
+                             LPARAM l_param,
+                             bool* handled) override {
+    return S_OK;
+  }
+
+  LRESULT HandleInputMessage(unsigned int message,
+                             WPARAM w_param,
+                             LPARAM l_param,
+                             bool* handled) override {
+    return S_OK;
+  }
+
+  LRESULT HandleScrollMessage(unsigned int message,
+                              WPARAM w_param,
+                              LPARAM l_param,
+                              bool* handled) override {
+    return S_OK;
+  }
+
+  LRESULT HandleNcHitTestMessage(unsigned int message,
+                                 WPARAM w_param,
+                                 LPARAM l_param,
+                                 bool* handled) override {
+    return S_OK;
+  }
+
+  void HandleParentChanged() override {}
+  void ApplyPinchZoomScale(float scale) override {}
+  void ApplyPinchZoomBegin() override {}
+  void ApplyPinchZoomEnd() override {}
+  void ApplyPanGestureScroll(int scroll_x, int scroll_y) override {}
+  void ApplyPanGestureFling(int scroll_x, int scroll_y) override {}
+  void ApplyPanGestureScrollBegin(int scroll_x, int scroll_y) override {}
+  void ApplyPanGestureFlingBegin() override {}
+  void ApplyPanGestureFlingEnd() override {}
+  void ApplyPanGestureScrollEnd(bool tranisitioning_to_pinch) override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockWindowEventTarget);
+};
+
+// On Windows, a native HWND (Chrome_RenderWidgetHostHWND) forwards mouse events
+// to the browser window so that they can reach the tooltip controller. Since we
+// reparent this HWND when the view is occluded, some mouse exits might not be
+// forwarded, resulting in stuck tooltips. Test that tooltips are cleared.
+TEST_F(RenderWidgetHostViewAuraTest, OcclusionHidesTooltip) {
+  // Give the host window an event target, which allows the view to create the
+  // Chrome_RenderWidgetHostHWND window.
+  MockWindowEventTarget event_target;
+  auto prop_window_target = std::make_unique<ui::ViewProp>(
+      parent_view_->GetHostWindowHWND(),
+      ui::WindowEventTarget::kWin32InputEventTarget,
+      static_cast<ui::WindowEventTarget*>(&event_target));
+
+  // Initialize the view.
+  view_->InitAsChild(nullptr);
+  aura::client::ParentWindowWithContext(
+      view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
+      gfx::Rect());
+  view_->Show();
+  EXPECT_TRUE(view_->UsesNativeWindowFrame());
+
+  // Simulate a tooltip.
+  base::string16 tooltip_text(base::ASCIIToUTF16("The tooltip!"));
+  view_->SetTooltipText(tooltip_text);
+  EXPECT_FALSE(widget_host_->is_hidden());
+  EXPECT_EQ(tooltip_text, view_->tooltip_);
+
+  // Simulate occlusion, which should clear the tooltip.
+  view_->WasOccluded();
+  EXPECT_TRUE(widget_host_->is_hidden());
+  EXPECT_EQ(base::string16(), view_->tooltip_);
+}
+#endif
+
 class TouchpadRenderWidgetHostViewAuraTest
     : public base::test::WithFeatureOverride,
       public RenderWidgetHostViewAuraTest {
@@ -5451,8 +5560,7 @@ TEST_F(RenderWidgetHostViewAuraTest, NewContentRenderingTimeout) {
 
   widget_host_->set_new_content_rendering_delay_for_testing(kTimeout);
 
-  viz::LocalSurfaceId id0 =
-      view_->GetLocalSurfaceIdAllocation().local_surface_id();
+  viz::LocalSurfaceId id0 = view_->GetLocalSurfaceId();
   EXPECT_TRUE(id0.is_valid());
 
   // No LocalSurfaceId will be allocated if the view is hidden during
@@ -5461,8 +5569,7 @@ TEST_F(RenderWidgetHostViewAuraTest, NewContentRenderingTimeout) {
   // No new LocalSurfaceId should be allocated for the first navigation and the
   // timer should not fire.
   widget_host_->DidNavigate();
-  viz::LocalSurfaceId id1 =
-      view_->GetLocalSurfaceIdAllocation().local_surface_id();
+  viz::LocalSurfaceId id1 = view_->GetLocalSurfaceId();
   EXPECT_EQ(id0, id1);
   {
     base::RunLoop run_loop;
@@ -5476,8 +5583,7 @@ TEST_F(RenderWidgetHostViewAuraTest, NewContentRenderingTimeout) {
 
   // Start the timer. Verify that a new LocalSurfaceId is allocated.
   widget_host_->DidNavigate();
-  viz::LocalSurfaceId id2 =
-      view_->GetLocalSurfaceIdAllocation().local_surface_id();
+  viz::LocalSurfaceId id2 = view_->GetLocalSurfaceId();
   EXPECT_TRUE(id2.is_valid());
   EXPECT_LT(id1.parent_sequence_number(), id2.parent_sequence_number());
 
@@ -5502,14 +5608,12 @@ TEST_F(RenderWidgetHostViewAuraTest, AllocateLocalSurfaceIdOnEviction) {
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
   view_->Show();
-  viz::LocalSurfaceId id1 =
-      view_->GetLocalSurfaceIdAllocation().local_surface_id();
+  viz::LocalSurfaceId id1 = view_->GetLocalSurfaceId();
   view_->Hide();
   static_cast<viz::FrameEvictorClient*>(view_->delegated_frame_host_.get())
       ->EvictDelegatedFrame();
   view_->Show();
-  viz::LocalSurfaceId id2 =
-      view_->GetLocalSurfaceIdAllocation().local_surface_id();
+  viz::LocalSurfaceId id2 = view_->GetLocalSurfaceId();
   EXPECT_NE(id1, id2);
 }
 
@@ -5537,8 +5641,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DontDropFallbackIfNotResizedWhileHidden) {
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
   view_->Show();
-  viz::LocalSurfaceId id1 =
-      view_->GetLocalSurfaceIdAllocation().local_surface_id();
+  viz::LocalSurfaceId id1 = view_->GetLocalSurfaceId();
   // Force fallback being set.
   view_->DidNavigate();
   view_->ResetFallbackToFirstNavigationSurface();
@@ -5592,7 +5695,7 @@ class RenderWidgetHostViewAuraWithViewHarnessTest
     RenderViewHostImplTestHarness::SetUp();
     // Delete the current RenderWidgetHostView instance before setting
     // the RWHVA as the view.
-    delete contents()->GetRenderViewHost()->GetWidget()->GetView();
+    contents()->GetRenderViewHost()->GetWidget()->GetView()->Destroy();
     // This instance is destroyed in the TearDown method below.
     view_ = new RenderWidgetHostViewAura(
         contents()->GetRenderViewHost()->GetWidget());
@@ -5716,27 +5819,34 @@ TEST_F(RenderWidgetHostViewAuraWithViewHarnessTest,
 // the other two are in distinct processes (this makes a total of 4 RWHVs).
 class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
  public:
-  InputMethodAuraTestBase() {}
-  ~InputMethodAuraTestBase() override {}
+  InputMethodAuraTestBase() = default;
+  ~InputMethodAuraTestBase() override = default;
 
   void SetUp() override {
     RenderWidgetHostViewAuraTest::SetUp();
     InitializeAura();
 
     widget_host_for_first_process_ =
-        CreateRenderWidgetHostForProcess(tab_process());
+        CreateRenderWidgetHostForAgentSchedulingGroup(
+            tab_agent_scheduling_group());
     view_for_first_process_ =
         CreateViewForProcess(widget_host_for_first_process_);
 
     second_process_host_ = CreateNewProcessHost();
+    second_agent_scheduling_group_host_ =
+        std::make_unique<AgentSchedulingGroupHost>(*second_process_host_);
     widget_host_for_second_process_ =
-        CreateRenderWidgetHostForProcess(second_process_host_);
+        CreateRenderWidgetHostForAgentSchedulingGroup(
+            *second_agent_scheduling_group_host_);
     view_for_second_process_ =
         CreateViewForProcess(widget_host_for_second_process_);
 
     third_process_host_ = CreateNewProcessHost();
+    third_agent_scheduling_group_host_ =
+        std::make_unique<AgentSchedulingGroupHost>(*third_process_host_);
     widget_host_for_third_process_ =
-        CreateRenderWidgetHostForProcess(third_process_host_);
+        CreateRenderWidgetHostForAgentSchedulingGroup(
+            *third_agent_scheduling_group_host_);
     view_for_third_process_ =
         CreateViewForProcess(widget_host_for_third_process_);
 
@@ -5780,11 +5890,11 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
     return process_host;
   }
 
-  MockRenderWidgetHostImpl* CreateRenderWidgetHostForProcess(
-      MockRenderProcessHost* process_host) {
-    return MockRenderWidgetHostImpl::Create(render_widget_host_delegate(),
-                                            process_host,
-                                            process_host->GetNextRoutingID());
+  MockRenderWidgetHostImpl* CreateRenderWidgetHostForAgentSchedulingGroup(
+      AgentSchedulingGroupHost& agent_scheduling_group_host) {
+    return MockRenderWidgetHostImpl::Create(
+        render_widget_host_delegate(), agent_scheduling_group_host,
+        agent_scheduling_group_host.GetProcess()->GetNextRoutingID());
   }
 
   TestRenderWidgetHostView* CreateViewForProcess(
@@ -5802,6 +5912,10 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
   }
 
   MockRenderProcessHost* tab_process() const { return process_host_; }
+
+  AgentSchedulingGroupHost& tab_agent_scheduling_group() const {
+    return *agent_scheduling_group_host_;
+  }
 
   RenderWidgetHostViewAura* tab_view() const { return view_; }
 
@@ -5826,9 +5940,11 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
   MockRenderWidgetHostImpl* widget_host_for_first_process_;
   TestRenderWidgetHostView* view_for_first_process_;
   MockRenderProcessHost* second_process_host_;
+  std::unique_ptr<AgentSchedulingGroupHost> second_agent_scheduling_group_host_;
   MockRenderWidgetHostImpl* widget_host_for_second_process_;
   TestRenderWidgetHostView* view_for_second_process_;
   MockRenderProcessHost* third_process_host_;
+  std::unique_ptr<AgentSchedulingGroupHost> third_agent_scheduling_group_host_;
   MockRenderWidgetHostImpl* widget_host_for_third_process_;
   TestRenderWidgetHostView* view_for_third_process_;
 
@@ -5988,11 +6104,10 @@ TEST_F(InputMethodResultAuraTest, ChangeTextDirectionAndLayoutAlignment) {
     mojo::AssociatedRemote<blink::mojom::FrameWidgetHost>
         blink_frame_widget_host;
     auto blink_frame_widget_host_receiver =
-        blink_frame_widget_host
-            .BindNewEndpointAndPassDedicatedReceiverForTesting();
+        blink_frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
     mojo::AssociatedRemote<blink::mojom::FrameWidget> blink_frame_widget;
     auto blink_frame_widget_receiver =
-        blink_frame_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
+        blink_frame_widget.BindNewEndpointAndPassDedicatedReceiver();
 
     static_cast<RenderWidgetHostImpl*>(views_[index]->GetRenderWidgetHost())
         ->BindFrameWidgetInterfaces(std::move(blink_frame_widget_host_receiver),
@@ -6355,9 +6470,7 @@ class RenderWidgetHostViewAuraInputMethodTest
 TEST_F(RenderWidgetHostViewAuraInputMethodTest, OnCaretBoundsChanged) {
   ui::InputMethod* input_method = parent_view_->GetInputMethod();
   if (input_method != input_method_) {
-    // Some platform doesn't support mocking input method. e.g. InputMethodMus.
-    // In that case, ignore this test.
-    // TODO(shuchen): support mocking InputMethodMus, http://crbug.com/905518.
+    // Some platforms don't support mocking input method. In that case, ignore this test.
     return;
   }
   ActivateViewForTextInputManager(parent_view_, ui::TEXT_INPUT_TYPE_TEXT);
@@ -6375,6 +6488,70 @@ TEST_F(RenderWidgetHostViewAuraInputMethodTest, OnCaretBoundsChanged) {
   EXPECT_EQ(parent_view_, text_input_client_);
 
   input_method->RemoveObserver(this);
+}
+
+// The input method should still receive caret bounds changes even if inputmode
+// is NONE. See crbug.com/1114559.
+TEST_F(RenderWidgetHostViewAuraInputMethodTest,
+       OnCaretBoundsChangedInputModeNone) {
+  ui::InputMethod* input_method = parent_view_->GetInputMethod();
+  if (input_method != input_method_) {
+    // Some platforms don't support mocking input method. In that case, ignore
+    // this test.
+    return;
+  }
+  ActivateViewForTextInputManager(parent_view_, ui::TEXT_INPUT_TYPE_TEXT);
+  input_method->SetFocusedTextInputClient(parent_view_);
+  input_method->AddObserver(this);
+
+  text_input_client_ = nullptr;
+
+  ui::mojom::TextInputState state;
+  state.type = ui::TEXT_INPUT_TYPE_TEXT;
+  state.mode = ui::TEXT_INPUT_MODE_NONE;
+  state.value = base::ASCIIToUTF16("a");
+  state.selection = gfx::Range(1, 1);
+
+  GetTextInputManager(parent_view_)->UpdateTextInputState(parent_view_, state);
+
+  EXPECT_EQ(parent_view_, text_input_client_);
+
+  input_method->RemoveObserver(this);
+}
+
+class RenderWidgetHostViewAuraInputMethodFocusTest
+    : public RenderWidgetHostViewAuraInputMethodTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  RenderWidgetHostViewAuraInputMethodFocusTest() = default;
+  ~RenderWidgetHostViewAuraInputMethodFocusTest() override = default;
+
+  bool ignore_input_events() { return GetParam(); }
+};
+
+INSTANTIATE_TEST_SUITE_P(RenderWidgetHostViewAuraInputMethodFocusTest,
+                         RenderWidgetHostViewAuraInputMethodFocusTest,
+                         testing::Bool());
+
+TEST_P(RenderWidgetHostViewAuraInputMethodFocusTest, OnFocusLost) {
+  render_widget_host_delegate()->set_should_ignore_input_events(
+      ignore_input_events());
+
+  ui::InputMethod* input_method = view_->GetInputMethod();
+  if (input_method != input_method_) {
+    // Some platforms doesn't support mocking input method. In that case, ignore this test.
+    return;
+  }
+  EXPECT_EQ(input_method, input_method_);
+  ActivateViewForTextInputManager(view_, ui::TEXT_INPUT_TYPE_TEXT);
+  input_method->SetFocusedTextInputClient(view_);
+
+  EXPECT_EQ(input_method->GetTextInputClient(), view_);
+  view_->OnWindowFocused(nullptr, view_->GetNativeView());
+  if (ignore_input_events())
+    EXPECT_EQ(input_method->GetTextInputClient(), view_);
+  else
+    EXPECT_EQ(input_method->GetTextInputClient(), nullptr);
 }
 
 #if defined(OS_WIN)
@@ -6651,7 +6828,11 @@ TEST_P(DelegatedInkPointTest, EventForwardedToCompositor) {
 
   // Then set it to true and confirm that the DelegatedInkPointRenderer is
   // initialized and the connection is made.
-  view_->SetIsDrawingDelegatedInkTrailsForTest(true);
+  {
+    cc::RenderFrameMetadata metadata;
+    metadata.has_delegated_ink_metadata = true;
+    view_->SetRenderFrameMetadata(metadata);
+  }
   viz::DelegatedInkPoint expected_point(gfx::PointF(10, 10),
                                         base::TimeTicks::Now());
 
@@ -6725,7 +6906,11 @@ TEST_P(DelegatedInkPointTest, EventForwardedToCompositor) {
 
   // Finally, confirm that points aren't sent whenever the flag is changed back
   // to false.
-  view_->SetIsDrawingDelegatedInkTrailsForTest(false);
+  {
+    cc::RenderFrameMetadata metadata;
+    metadata.has_delegated_ink_metadata = false;
+    view_->SetRenderFrameMetadata(metadata);
+  }
 
   if (GetParam() == TestEvent::kTouchEvent) {
     ui::TouchEvent touch_event(
@@ -6760,7 +6945,11 @@ TEST_P(DelegatedInkPointTest, MojoInterfaceReboundOnDisconnect) {
   view_->GetNativeView()->layer()->SetCompositorForTesting(&compositor);
 
   // First make sure the connection exists.
-  view_->SetIsDrawingDelegatedInkTrailsForTest(true);
+  {
+    cc::RenderFrameMetadata metadata;
+    metadata.has_delegated_ink_metadata = true;
+    view_->SetRenderFrameMetadata(metadata);
+  }
   if (GetParam() == TestEvent::kTouchEvent) {
     // Touch needs a pressed event first to properly handle future move events.
     ui::TouchEvent press(ui::ET_TOUCH_PRESSED, gfx::PointF(15, 15),

@@ -11,7 +11,6 @@
 #include "ash/public/cpp/app_menu_constants.h"
 #include "base/bind.h"
 #include "base/json/json_file_value_serializer.h"
-#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -40,10 +39,12 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/services/app_service/public/cpp/app_update.h"
 #include "extensions/common/manifest_constants.h"
+#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/display/test/test_screen.h"
@@ -55,19 +56,22 @@ namespace {
 class FakeAppContextMenuDelegate : public app_list::AppContextMenuDelegate {
  public:
   FakeAppContextMenuDelegate() = default;
+  FakeAppContextMenuDelegate(const FakeAppContextMenuDelegate&) = delete;
+  FakeAppContextMenuDelegate& operator=(const FakeAppContextMenuDelegate&) =
+      delete;
   ~FakeAppContextMenuDelegate() override = default;
 
   // app_list::AppContextMenuDelegate overrides:
   void ExecuteLaunchCommand(int event_flags) override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(FakeAppContextMenuDelegate);
 };
 
 class FakeAppListControllerDelegate
     : public test::TestAppListControllerDelegate {
  public:
   FakeAppListControllerDelegate() = default;
+  FakeAppListControllerDelegate(const FakeAppListControllerDelegate&) = delete;
+  FakeAppListControllerDelegate& operator=(
+      const FakeAppListControllerDelegate&) = delete;
   ~FakeAppListControllerDelegate() override = default;
 
   void SetAppPinnable(const std::string& app_id, Pinnable type) {
@@ -97,8 +101,6 @@ class FakeAppListControllerDelegate
  private:
   std::map<std::string, Pinnable> pinnable_apps_;
   std::unordered_set<std::string> open_apps_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeAppListControllerDelegate);
 };
 
 std::unique_ptr<KeyedService> MenuManagerFactory(
@@ -160,11 +162,9 @@ class AppContextMenuTest : public AppListTestBase,
           features::kDesktopPWAsWithoutExtensions);
     }
   }
-
-  ~AppContextMenuTest() override {
-    // Release profile file in order to keep right sequence.
-    profile_.reset();
-  }
+  AppContextMenuTest(const AppContextMenuTest&) = delete;
+  AppContextMenuTest& operator=(const AppContextMenuTest&) = delete;
+  ~AppContextMenuTest() override = default;
 
   void SetUp() override {
     AppListTestBase::SetUp();
@@ -179,6 +179,9 @@ class AppContextMenuTest : public AppListTestBase,
   }
 
   void TearDown() override {
+    // Let any in-flight tasks finish, otherwise the test might flake
+    // (crbug.com/1115763).
+    app_service_test().WaitForAppService();
     menu_delegate_.reset();
     controller_.reset();
     menu_manager_.reset();
@@ -334,16 +337,17 @@ class AppContextMenuTest : public AppListTestBase,
     ValidateMenuState(menu_model.get(), states);
   }
 
+  apps::AppServiceTest& app_service_test() { return app_service_test_; }
+
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
+  data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
   display::test::TestScreen test_screen_;
   std::unique_ptr<KeyedService> menu_manager_;
   std::unique_ptr<FakeAppListControllerDelegate> controller_;
   std::unique_ptr<FakeAppContextMenuDelegate> menu_delegate_;
   std::unique_ptr<FakeAppListModelUpdater> model_updater_;
   apps::AppServiceTest app_service_test_;
-
-  DISALLOW_COPY_AND_ASSIGN(AppContextMenuTest);
 };
 
 TEST_P(AppContextMenuTest, ExtensionApp) {
@@ -379,8 +383,7 @@ TEST_P(AppContextMenuTest, NonExistingExtensionApp) {
 }
 
 TEST_P(AppContextMenuTest, ArcMenu) {
-  apps::AppServiceTest app_service_test;
-  app_service_test.SetUp(profile());
+  app_service_test().SetUp(profile());
   ArcAppTest arc_test;
   arc_test.SetUp(profile());
 
@@ -389,7 +392,7 @@ TEST_P(AppContextMenuTest, ArcMenu) {
   controller()->SetAppPinnable(app_id, AppListControllerDelegate::PIN_EDITABLE);
 
   arc_test.app_instance()->SendRefreshAppList(arc_test.fake_apps());
-  app_service_test.FlushMojoCalls();
+  app_service_test().FlushMojoCalls();
 
   std::unique_ptr<AppServiceAppItem> item = GetAppListItem(profile(), app_id);
 
@@ -412,7 +415,7 @@ TEST_P(AppContextMenuTest, ArcMenu) {
   EXPECT_EQ(0u, arc_test.app_instance()->launch_requests().size());
 
   menu->ActivatedAt(0);
-  app_service_test.FlushMojoCalls();
+  app_service_test().FlushMojoCalls();
 
   const std::vector<std::unique_ptr<arc::FakeAppInstance::Request>>&
       launch_requests = arc_test.app_instance()->launch_requests();
@@ -449,7 +452,7 @@ TEST_P(AppContextMenuTest, ArcMenu) {
   // Test launching app shortcut item.
   EXPECT_EQ(0, arc_test.app_instance()->launch_app_shortcut_item_count());
   menu->ActivatedAt(menu->GetItemCount() - 1);
-  app_service_test.FlushMojoCalls();
+  app_service_test().FlushMojoCalls();
   EXPECT_EQ(1, arc_test.app_instance()->launch_app_shortcut_item_count());
 
   // This makes all apps non-ready.
@@ -484,7 +487,7 @@ TEST_P(AppContextMenuTest, ArcMenu) {
   // Uninstall all apps.
   arc_test.app_instance()->SendRefreshAppList(
       std::vector<arc::mojom::AppInfo>());
-  app_service_test.FlushMojoCalls();
+  app_service_test().FlushMojoCalls();
   controller()->SetAppOpen(app_id, false);
 
   // No app available case.
@@ -493,8 +496,7 @@ TEST_P(AppContextMenuTest, ArcMenu) {
 }
 
 TEST_P(AppContextMenuTest, ArcMenuShortcut) {
-  apps::AppServiceTest app_service_test;
-  app_service_test.SetUp(profile());
+  app_service_test().SetUp(profile());
   ArcAppTest arc_test;
   arc_test.SetUp(profile());
 
@@ -503,7 +505,7 @@ TEST_P(AppContextMenuTest, ArcMenuShortcut) {
   controller()->SetAppPinnable(app_id, AppListControllerDelegate::PIN_EDITABLE);
 
   arc_test.app_instance()->SendInstallShortcuts(arc_test.fake_shortcuts());
-  app_service_test.FlushMojoCalls();
+  app_service_test().FlushMojoCalls();
 
   std::unique_ptr<AppServiceAppItem> item = GetAppListItem(profile(), app_id);
 
@@ -558,13 +560,12 @@ TEST_P(AppContextMenuTest, ArcMenuShortcut) {
 }
 
 TEST_P(AppContextMenuTest, ArcMenuStickyItem) {
-  apps::AppServiceTest app_service_test;
-  app_service_test.SetUp(profile());
+  app_service_test().SetUp(profile());
   ArcAppTest arc_test;
   arc_test.SetUp(profile());
 
   arc_test.app_instance()->SendRefreshAppList(arc_test.fake_apps());
-  app_service_test.FlushMojoCalls();
+  app_service_test().FlushMojoCalls();
 
   {
     // Verify menu of store
@@ -600,10 +601,8 @@ TEST_P(AppContextMenuTest, ArcMenuStickyItem) {
 }
 
 // In suspended state app does not have launch item.
-// Disabled for being flaky. crbug.com/1115762
-TEST_P(AppContextMenuTest, DISABLED_ArcMenuSuspendedItem) {
-  apps::AppServiceTest app_service_test;
-  app_service_test.SetUp(profile());
+TEST_P(AppContextMenuTest, ArcMenuSuspendedItem) {
+  app_service_test().SetUp(profile());
   ArcAppTest arc_test;
   arc_test.SetUp(profile());
 
@@ -611,7 +610,7 @@ TEST_P(AppContextMenuTest, DISABLED_ArcMenuSuspendedItem) {
   app.suspended = true;
 
   arc_test.app_instance()->SendRefreshAppList({app});
-  app_service_test.FlushMojoCalls();
+  app_service_test().FlushMojoCalls();
 
   const std::string app_id = ArcAppTest::GetAppId(app);
   controller()->SetAppPinnable(app_id, AppListControllerDelegate::PIN_EDITABLE);
@@ -674,8 +673,46 @@ TEST_P(AppContextMenuTest, InternalAppMenu) {
   }
 }
 
+// Lacros has its own test suite because the feature needs to be enabled before
+// SetUp().
+class AppContextMenuLacrosTest : public AppContextMenuTest {
+ public:
+  AppContextMenuLacrosTest() {
+    feature_list_.InitAndEnableFeature(chromeos::features::kLacrosSupport);
+  }
+  AppContextMenuLacrosTest(const AppContextMenuLacrosTest&) = delete;
+  AppContextMenuLacrosTest& operator=(const AppContextMenuLacrosTest&) = delete;
+  ~AppContextMenuLacrosTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_P(AppContextMenuLacrosTest, LacrosApp) {
+  app_service_test().SetUp(profile());
+  app_service_test().FlushMojoCalls();
+
+  // Create the context menu.
+  AppServiceContextMenu menu(menu_delegate(), profile(),
+                             extension_misc::kLacrosAppId, controller());
+  std::unique_ptr<ui::MenuModel> menu_model = GetMenuModel(&menu);
+  ASSERT_NE(menu_model, nullptr);
+
+  // Verify expected menu items.
+  EXPECT_EQ(menu_model->GetItemCount(), 1);
+  std::vector<MenuState> states;
+  AddToStates(menu, MenuState(ash::APP_CONTEXT_MENU_NEW_WINDOW), &states);
+  ValidateMenuState(menu_model.get(), states);
+}
+
 INSTANTIATE_TEST_SUITE_P(All,
                          AppContextMenuTest,
+                         ::testing::Values(ProviderType::kBookmarkApps,
+                                           ProviderType::kWebApps),
+                         web_app::ProviderTypeParamToString);
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         AppContextMenuLacrosTest,
                          ::testing::Values(ProviderType::kBookmarkApps,
                                            ProviderType::kWebApps),
                          web_app::ProviderTypeParamToString);

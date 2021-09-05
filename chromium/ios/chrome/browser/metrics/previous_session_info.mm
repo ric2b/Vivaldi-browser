@@ -66,6 +66,9 @@ DeviceThermalState GetThermalStateFromNSProcessInfoThermalState(
 NSString* const kLastRanVersion = @"LastRanVersion";
 // - The (string) device language.
 NSString* const kLastRanLanguage = @"LastRanLanguage";
+// - The (Integer) representing UIApplicationState.
+NSString* const kPreviousSessionInfoApplicationState =
+    @"PreviousSessionInfoApplicationState";
 // - The (integer) available device storage, in kilobytes.
 NSString* const kPreviousSessionInfoAvailableDeviceStorage =
     @"PreviousSessionInfoAvailableDeviceStorage";
@@ -91,6 +94,7 @@ NSString* const kPreviousSessionInfoLowPowerMode =
 //   version of the application.
 NSString* const kPreviousSessionInfoMultiWindowEnabled =
     @"PreviousSessionInfoMultiWindowEnabled";
+
 }  // namespace
 
 namespace previous_session_info_constants {
@@ -99,6 +103,8 @@ NSString* const kDidSeeMemoryWarningShortlyBeforeTerminating =
 NSString* const kOSStartTime = @"OSStartTime";
 NSString* const kPreviousSessionInfoRestoringSession =
     @"PreviousSessionInfoRestoringSession";
+NSString* const kPreviousSessionInfoConnectedSceneSessionIDs =
+    @"PreviousSessionInfoConnectedSceneSessionIDs";
 }  // namespace previous_session_info_constants
 
 @interface PreviousSessionInfo ()
@@ -124,10 +130,13 @@ NSString* const kPreviousSessionInfoRestoringSession =
 @property(nonatomic, strong) NSString* OSVersion;
 @property(nonatomic, strong) NSDate* sessionEndTime;
 @property(nonatomic, assign) BOOL terminatedDuringSessionRestoration;
+@property(nonatomic, strong) NSMutableSet<NSString*>* connectedSceneSessionsIDs;
 
 @end
 
-@implementation PreviousSessionInfo
+@implementation PreviousSessionInfo {
+  std::unique_ptr<UIApplicationState> _applicationState;
+}
 
 // Singleton PreviousSessionInfo.
 static PreviousSessionInfo* gSharedInstance = nil;
@@ -138,6 +147,14 @@ static PreviousSessionInfo* gSharedInstance = nil;
 
     // Load the persisted information.
     NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+
+    gSharedInstance->_applicationState.reset();
+    if ([defaults objectForKey:kPreviousSessionInfoApplicationState]) {
+      gSharedInstance->_applicationState =
+          std::make_unique<UIApplicationState>(static_cast<UIApplicationState>(
+              [defaults integerForKey:kPreviousSessionInfoApplicationState]));
+    }
+
     gSharedInstance.availableDeviceStorage = -1;
     if ([defaults objectForKey:kPreviousSessionInfoAvailableDeviceStorage]) {
       gSharedInstance.availableDeviceStorage =
@@ -171,6 +188,12 @@ static PreviousSessionInfo* gSharedInstance = nil;
     // sessions is done.
     gSharedInstance.isMultiWindowEnabledSession =
         [defaults boolForKey:kPreviousSessionInfoMultiWindowEnabled];
+
+    gSharedInstance.connectedSceneSessionsIDs = [NSMutableSet
+        setWithArray:[defaults
+                         stringArrayForKey:
+                             previous_session_info_constants::
+                                 kPreviousSessionInfoConnectedSceneSessionIDs]];
 
     NSTimeInterval lastSystemStartTime =
         [defaults doubleForKey:previous_session_info_constants::kOSStartTime];
@@ -223,16 +246,32 @@ static PreviousSessionInfo* gSharedInstance = nil;
   NSString* currentLanguage = [[NSLocale preferredLanguages] objectAtIndex:0];
   [defaults setObject:currentLanguage forKey:kLastRanLanguage];
 
-  // Set the current Multi-Window support state.
-  // TODO(crbug.com/1109280): Remove after the migration to Multi-Window
-  // sessions is done.
-  [defaults setBool:IsMultiwindowSupported()
-             forKey:kPreviousSessionInfoMultiWindowEnabled];
-
   // Clear the memory warning flag.
   [defaults
       removeObjectForKey:previous_session_info_constants::
                              kDidSeeMemoryWarningShortlyBeforeTerminating];
+
+  [self updateApplicationState];
+  [[NSNotificationCenter defaultCenter]
+      addObserver:self
+         selector:@selector(updateApplicationState)
+             name:UIApplicationDidEnterBackgroundNotification
+           object:nil];
+  [[NSNotificationCenter defaultCenter]
+      addObserver:self
+         selector:@selector(updateApplicationState)
+             name:UIApplicationWillEnterForegroundNotification
+           object:nil];
+  [[NSNotificationCenter defaultCenter]
+      addObserver:self
+         selector:@selector(updateApplicationState)
+             name:UIApplicationDidBecomeActiveNotification
+           object:nil];
+  [[NSNotificationCenter defaultCenter]
+      addObserver:self
+         selector:@selector(updateApplicationState)
+             name:UIApplicationWillResignActiveNotification
+           object:nil];
 
   [UIDevice currentDevice].batteryMonitoringEnabled = YES;
   [self updateStoredBatteryLevel];
@@ -267,6 +306,10 @@ static PreviousSessionInfo* gSharedInstance = nil;
   [defaults synchronize];
 }
 
+- (UIApplicationState*)applicationState {
+  return _applicationState.get();
+}
+
 - (void)updateAvailableDeviceStorage:(NSInteger)availableStorage {
   if (!self.didBeginRecordingCurrentSession)
     return;
@@ -287,6 +330,13 @@ static PreviousSessionInfo* gSharedInstance = nil;
   [[NSUserDefaults standardUserDefaults]
       setFloat:[UIDevice currentDevice].batteryLevel
         forKey:kPreviousSessionInfoBatteryLevel];
+  [self updateSessionEndTime];
+}
+
+- (void)updateApplicationState {
+  [[NSUserDefaults standardUserDefaults]
+      setInteger:UIApplication.sharedApplication.applicationState
+          forKey:kPreviousSessionInfoApplicationState];
 
   [self updateSessionEndTime];
 }
@@ -357,6 +407,37 @@ static PreviousSessionInfo* gSharedInstance = nil;
   [defaults synchronize];
 }
 
+- (void)synchronizeSceneSessionIDs {
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  [defaults setObject:[self.connectedSceneSessionsIDs allObjects]
+               forKey:previous_session_info_constants::
+                          kPreviousSessionInfoConnectedSceneSessionIDs];
+  [defaults synchronize];
+}
+
+- (void)addSceneSessionID:(NSString*)sessionID {
+  [self.connectedSceneSessionsIDs addObject:sessionID];
+  [self synchronizeSceneSessionIDs];
+}
+
+- (void)removeSceneSessionID:(NSString*)sessionID {
+  [self.connectedSceneSessionsIDs removeObject:sessionID];
+  [self synchronizeSceneSessionIDs];
+}
+
+- (void)resetConnectedSceneSessionIDs {
+  self.connectedSceneSessionsIDs = [[NSMutableSet alloc] init];
+  [self synchronizeSceneSessionIDs];
+}
+
+- (void)updateMultiWindowSupportStatus {
+  gSharedInstance.isMultiWindowEnabledSession = IsMultiwindowSupported();
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  [defaults setBool:gSharedInstance.isMultiWindowEnabledSession
+             forKey:kPreviousSessionInfoMultiWindowEnabled];
+  [defaults synchronize];
+}
+
 - (base::ScopedClosureRunner)startSessionRestoration {
   if (self.numberOfSessionsBeingRestored == 0) {
     [NSUserDefaults.standardUserDefaults
@@ -372,11 +453,6 @@ static PreviousSessionInfo* gSharedInstance = nil;
     --self.numberOfSessionsBeingRestored;
     if (self.numberOfSessionsBeingRestored == 0) {
       [self resetSessionRestorationFlag];
-      // Once the first patch of sessions is restored. Update the Multi-Window
-      // flag so it's not used again in the same run.
-      // TODO(crbug.com/1109280): Remove after the migration to Multi-Window
-      // sessions is done.
-      gSharedInstance.isMultiWindowEnabledSession = IsMultiwindowSupported();
     }
   }));
 }

@@ -18,13 +18,13 @@ var MockAccessibilityPrivate = {
 
   /** @private {!Array<!chrome.accessibilityPrivate.ScreenRect>} */
   focusRingRects_: [],
-  onScrollableBoundsForPointFoundCallback_: null,
+  handleScrollableBoundsForPointFoundCallback_: null,
 
   // Methods from AccessibilityPrivate API. //
 
-  findScrollableBoundsForPoint: {
+  onScrollableBoundsForPointRequested: {
     /**
-     * Adds a listener to findScrollableBoundsForPoint.
+     * Adds a listener to onScrollableBoundsForPointRequested.
      * @param {function<number, number>} listener
      */
     addListener: (listener) => {
@@ -45,9 +45,9 @@ var MockAccessibilityPrivate = {
    * Called when AccessibilityCommon finds scrollable bounds at a point.
    * @param {!chrome.accessibilityPrivate.ScreenRect} bounds
    */
-  onScrollableBoundsForPointFound: (bounds) => {
+  handleScrollableBoundsForPointFound: (bounds) => {
     scrollableBounds_ = bounds;
-    onScrollableBoundsForPointFoundCallback_();
+    handleScrollableBoundsForPointFoundCallback_();
   },
 
   /**
@@ -67,16 +67,16 @@ var MockAccessibilityPrivate = {
    * to find the scrollable bounds at a point. In Automatic Clicks, this would
    * actually be initiated by ash/autoclick/autoclick_controller calling the
    * AccessibilityPrivate API call.
-   * When the bounds are found, onScrollableBoundsForPointFoundCallback will
+   * When the bounds are found, handleScrollableBoundsForPointFoundCallback will
    * be called to inform the test that work is complete.
    * @param {number} x
    * @param {number} y
-   * @param {!function<>} onScrollableBoundsForPointFoundCallback
+   * @param {!function<>} handleScrollableBoundsForPointFoundCallback
    */
-  callFindScrollableBoundsForPoint:
-      (x, y, onScrollableBoundsForPointFoundCallback) => {
-        onScrollableBoundsForPointFoundCallback_ =
-            onScrollableBoundsForPointFoundCallback;
+  callOnScrollableBoundsForPointRequested:
+      (x, y, handleScrollableBoundsForPointFoundCallback) => {
+        handleScrollableBoundsForPointFoundCallback_ =
+            handleScrollableBoundsForPointFoundCallback;
         boundsListener_(x, y);
       },
 

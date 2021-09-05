@@ -7,6 +7,9 @@ package org.chromium.chrome.browser.compositor.layouts;
 import android.content.Context;
 import android.view.ViewGroup;
 
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.OneshotSupplierImpl;
+import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.compositor.layouts.phone.SimpleAnimationLayout;
 import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
@@ -44,10 +47,14 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
      * @param contentContainer A {@link ViewGroup} for Android views to be bound to.
      * @param startSurface An interface to talk to the Grid Tab Switcher. If it's NULL, VTS
      *                     should be used, otherwise GTS should be used.
+     * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
      */
-    public LayoutManagerChromePhone(
-            LayoutManagerHost host, ViewGroup contentContainer, StartSurface startSurface) {
-        super(host, contentContainer, true, startSurface);
+    public LayoutManagerChromePhone(LayoutManagerHost host, ViewGroup contentContainer,
+            StartSurface startSurface,
+            ObservableSupplier<TabContentManager> tabContentManagerSupplier,
+            OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier) {
+        super(host, contentContainer, true, startSurface, tabContentManagerSupplier,
+                overviewModeBehaviorSupplier);
 
         // Vivaldi
         Context context = mHost.getContext();
@@ -62,6 +69,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             }
         };
         SharedPreferencesManager.getInstance().addObserver(mPreferenceObserver);
+        updateGlobalSceneOverlay();
     }
 
     @Override
@@ -72,31 +80,32 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
     @Override
     public void init(TabModelSelector selector, TabCreatorManager creator,
-            TabContentManager content, ControlContainer controlContainer,
+            ControlContainer controlContainer,
             ContextualSearchManagementDelegate contextualSearchDelegate,
-            DynamicResourceLoader dynamicResourceLoader) {
+            DynamicResourceLoader dynamicResourceLoader, ActivityTabProvider tabProvider) {
         Context context = mHost.getContext();
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
 
         // Build Layouts
         mSimpleAnimationLayout = new SimpleAnimationLayout(context, this, renderHost);
 
+        super.init(selector, creator, controlContainer, contextualSearchDelegate,
+                dynamicResourceLoader, tabProvider);
+
         // Set up layout parameters
         mStaticLayout.setLayoutHandlesTabLifecycles(false);
-
-        super.init(selector, creator, content, controlContainer, contextualSearchDelegate,
-                dynamicResourceLoader);
 
         mToolbarSwipeLayout.setMovesToolbar(true);
 
         // Initialize Layouts
-        mSimpleAnimationLayout.setTabModelSelector(selector, content);
+        TabContentManager tabContentManager = mTabContentManagerSupplier.get();
+        assert tabContentManager != null;
+        mSimpleAnimationLayout.setTabModelSelector(selector, tabContentManager);
 
         // Vivaldi
         if (mTabStripLayoutHelperManager != null) {
             mTabStripLayoutHelperManager.setTabModelSelector(selector, creator);
         }
-        updateGlobalSceneOverlay();
     }
 
     @Override
@@ -118,12 +127,6 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                 if (animate) tabClosing(tab.getId());
             }
         };
-    }
-
-    @Override
-    protected void addGlobalSceneOverlay(SceneOverlay helper) {
-        super.addGlobalSceneOverlay(helper);
-        mSimpleAnimationLayout.addSceneOverlay(helper);
     }
 
     @Override
@@ -167,7 +170,8 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
 
     @Override
     protected void tabCreating(int sourceId, String url, boolean isIncognito) {
-        if (!getActiveLayout().isHiding() && getActiveLayout().handlesTabCreating()) {
+        if (!getActiveLayout().isHiding() && overlaysHandleTabCreating()
+                && getActiveLayout().handlesTabCreating()) {
             // If the current layout in the foreground, let it handle the tab creation animation.
             // This check allows us to switch from the StackLayout to the SimpleAnimationLayout
             // smoothly.
@@ -184,6 +188,25 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             }
             getActiveLayout().onTabCreating(sourceId);
         }
+    }
+
+    /** @return Whether the {@link SceneOverlay}s handle tab creation. */
+    private boolean overlaysHandleTabCreating() {
+        Layout layout = getActiveLayout();
+        if (layout == null || layout.getLayoutTabsToRender() == null
+                || layout.getLayoutTabsToRender().length != 1) {
+            return false;
+        }
+        for (int i = 0; i < mSceneOverlays.size(); i++) {
+            if (!mSceneOverlays.get(i).isSceneOverlayTreeShowing()) continue;
+            if (mSceneOverlays.get(i).handlesTabCreating()) {
+                // Prevent animation from happening if the overlay handles creation.
+                startHiding(layout.getLayoutTabsToRender()[0].getId(), false);
+                doneHiding();
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -217,7 +240,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     // Vivaldi: Update the {@link SceneOverlay} according to the tab strip setting.
     private void updateGlobalSceneOverlay() {
             if(!mTabStripAdded) {
-                addGlobalSceneOverlay(mTabStripLayoutHelperManager);
+                addSceneOverlay(mTabStripLayoutHelperManager);
                 if (getTabModelSelector() != null)
                     tabModelSwitched(getTabModelSelector().isIncognitoSelected()); //!! TODO(jarle): CHECK IF THIS IS CORRECT
                 mTabStripAdded = true;

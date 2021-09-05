@@ -61,8 +61,7 @@ public class SyncPromoPreference extends Preference
     public SyncPromoPreference(Context context, AttributeSet attrs) {
         super(context, attrs);
 
-        mProfileDataCache =
-                ProfileDataCache.createProfileDataCache(context, R.drawable.ic_sync_badge_off_20dp);
+        mProfileDataCache = ProfileDataCache.createProfileDataCache(context);
         mAccountManagerFacade = AccountManagerFacadeProvider.getInstance();
 
         // State will be updated in registerForUpdates.
@@ -70,11 +69,9 @@ public class SyncPromoPreference extends Preference
         setVisible(false);
     }
 
-    /**
-     * Starts listening for updates to the sign-in and sync state.
-     * TODO(https://crbug.com/1109713): Remove this method and use onAttached() instead
-     */
-    public void registerForUpdates() {
+    @Override
+    public void onAttached() {
+        super.onAttached();
         mAccountManagerFacade.addObserver(this);
         mProfileDataCache.addObserver(this);
         FirstRunSignInProcessor.updateSigninManagerFirstRunCheckDone();
@@ -87,12 +84,9 @@ public class SyncPromoPreference extends Preference
         update();
     }
 
-    /**
-     * Stops listening for updates to the sign-in and sync state. Every call to registerForUpdates()
-     * must be matched with a call to this method.
-     * TODO(https://crbug.com/1109713): Remove this method and use onAttached() instead
-     */
-    public void unregisterForUpdates() {
+    @Override
+    public void onDetached() {
+        super.onDetached();
         mAccountManagerFacade.removeObserver(this);
         mProfileDataCache.removeObserver(this);
         AndroidSyncSettings.get().unregisterObserver(this);
@@ -128,12 +122,6 @@ public class SyncPromoPreference extends Preference
                 ChromePreferenceKeys.SIGNIN_PROMO_SETTINGS_PERSONALIZED_DISMISSED, false);
         if (isSignedInButNotSyncing() && !personalizedPromoDismissed
                 && SigninPromoController.hasNotReachedImpressionLimit(SigninAccessPoint.SETTINGS)) {
-            setupPersonalizedSyncPromo();
-            return;
-        }
-
-        if (mSigninPromoController != null) {
-            // Don't change the promo type if the new promo is already being shown.
             setupPersonalizedSyncPromo();
             return;
         }

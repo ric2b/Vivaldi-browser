@@ -14,7 +14,6 @@ class BrowserURLHandler;
 class RenderProcessHost;
 class RenderViewHost;
 class SiteInstance;
-struct WebPreferences;
 }  // namespace content
 
 namespace storage {
@@ -32,7 +31,7 @@ class VivaldiContentBrowserClientParts
 
   void BrowserURLHandlerCreated(content::BrowserURLHandler* handler) override;
   void OverrideWebkitPrefs(content::RenderViewHost* rvh,
-                           content::WebPreferences* web_prefs) override;
+                           blink::web_pref::WebPreferences* web_prefs) override;
 };
 
 #endif  // CLIENTPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_PARTS_H_

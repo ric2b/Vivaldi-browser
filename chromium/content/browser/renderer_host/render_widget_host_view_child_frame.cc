@@ -19,7 +19,6 @@
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/cursor_manager.h"
@@ -45,6 +44,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_clipboard_utils.h"
+#include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 
 namespace content {
@@ -72,6 +72,7 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
       frame_sink_id_, this, viz::ReportFirstSurfaceActivation::kNo);
   GetHostFrameSinkManager()->SetFrameSinkDebugLabel(
       frame_sink_id_, "RenderWidgetHostViewChildFrame");
+  host()->render_frame_metadata_provider()->AddObserver(this);
 }
 
 RenderWidgetHostViewChildFrame::~RenderWidgetHostViewChildFrame() {
@@ -215,7 +216,10 @@ void RenderWidgetHostViewChildFrame::SetBounds(const gfx::Rect& rect) {
   }
 }
 
-void RenderWidgetHostViewChildFrame::Focus() {}
+void RenderWidgetHostViewChildFrame::Focus() {
+  if (frame_connector_ && !frame_connector_->HasFocus())
+    return frame_connector_->FocusRootView();
+}
 
 bool RenderWidgetHostViewChildFrame::HasFocus() {
   if (frame_connector_)
@@ -224,7 +228,7 @@ bool RenderWidgetHostViewChildFrame::HasFocus() {
 }
 
 bool RenderWidgetHostViewChildFrame::IsSurfaceAvailableForCopy() {
-  return GetLocalSurfaceIdAllocation().IsValid();
+  return GetLocalSurfaceId().is_valid();
 }
 
 void RenderWidgetHostViewChildFrame::EnsureSurfaceSynchronizedForWebTest() {
@@ -245,7 +249,7 @@ void RenderWidgetHostViewChildFrame::Show() {
   if (!CanBecomeVisible())
     return;
 
-  host()->WasShown(base::nullopt /* record_tab_switch_time_request */);
+  host()->WasShown({} /* record_tab_switch_time_request */);
 
   if (frame_connector_)
     frame_connector_->SetVisibilityForChildViews(true);
@@ -384,6 +388,8 @@ void RenderWidgetHostViewChildFrame::RenderProcessGone() {
 }
 
 void RenderWidgetHostViewChildFrame::Destroy() {
+  host()->render_frame_metadata_provider()->RemoveObserver(this);
+
   // FrameSinkIds registered with RenderWidgetHostInputEventRouter
   // have already been cleared when RenderWidgetHostViewBase notified its
   // observers of our impending destruction.
@@ -675,11 +681,11 @@ const viz::FrameSinkId& RenderWidgetHostViewChildFrame::GetFrameSinkId() const {
   return frame_sink_id_;
 }
 
-const viz::LocalSurfaceIdAllocation&
-RenderWidgetHostViewChildFrame::GetLocalSurfaceIdAllocation() const {
+const viz::LocalSurfaceId& RenderWidgetHostViewChildFrame::GetLocalSurfaceId()
+    const {
   if (frame_connector_)
-    return frame_connector_->local_surface_id_allocation();
-  return viz::ParentLocalSurfaceIdAllocator::InvalidLocalSurfaceIdAllocation();
+    return frame_connector_->local_surface_id();
+  return viz::ParentLocalSurfaceIdAllocator::InvalidLocalSurfaceId();
 }
 
 void RenderWidgetHostViewChildFrame::NotifyHitTestRegionUpdated(
@@ -714,10 +720,8 @@ bool RenderWidgetHostViewChildFrame::ScreenRectIsUnstableFor(
 
 void RenderWidgetHostViewChildFrame::PreProcessTouchEvent(
     const blink::WebTouchEvent& event) {
-  if (event.GetType() == blink::WebInputEvent::Type::kTouchStart &&
-      frame_connector_ && !frame_connector_->HasFocus()) {
-    frame_connector_->FocusRootView();
-  }
+  if (event.GetType() == blink::WebInputEvent::Type::kTouchStart)
+    Focus();
 }
 
 viz::FrameSinkId RenderWidgetHostViewChildFrame::GetRootFrameSinkId() {
@@ -733,8 +737,7 @@ viz::FrameSinkId RenderWidgetHostViewChildFrame::GetRootFrameSinkId() {
 }
 
 viz::SurfaceId RenderWidgetHostViewChildFrame::GetCurrentSurfaceId() const {
-  return viz::SurfaceId(frame_sink_id_,
-                        GetLocalSurfaceIdAllocation().local_surface_id());
+  return viz::SurfaceId(frame_sink_id_, GetLocalSurfaceId());
 }
 
 bool RenderWidgetHostViewChildFrame::HasSize() const {
@@ -889,7 +892,6 @@ RenderWidgetHostViewChildFrame::GetTouchSelectionControllerClientManager() {
 
 void RenderWidgetHostViewChildFrame::
     OnRenderFrameMetadataChangedAfterActivation() {
-  RenderWidgetHostViewBase::OnRenderFrameMetadataChangedAfterActivation();
   if (selection_controller_client_) {
     const cc::RenderFrameMetadata& metadata =
         host()->render_frame_metadata_provider()->LastRenderFrameMetadata();

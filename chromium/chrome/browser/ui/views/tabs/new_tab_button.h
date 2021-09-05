@@ -29,7 +29,7 @@ class NewTabButton : public views::ImageButton,
 
   static const gfx::Size kButtonSize;
 
-  NewTabButton(TabStrip* tab_strip, views::ButtonListener* listener);
+  NewTabButton(TabStrip* tab_strip, PressedCallback callback);
   NewTabButton(const NewTabButton&) = delete;
   NewTabButton& operator=(const NewTabButton&) = delete;
   ~NewTabButton() override;
@@ -37,11 +37,11 @@ class NewTabButton : public views::ImageButton,
   // Called when the tab strip transitions to/from single tab mode, the frame
   // state changes or the accent color changes.  Updates the glyph colors for
   // the best contrast on the background.
-  void FrameColorsChanged();
+  virtual void FrameColorsChanged();
 
   void AnimateInkDropToStateForTesting(views::InkDropState state);
 
-  // views::View:
+  // views::ImageButton:
   const char* GetClassName() const override;
   void AddLayerBeneathView(ui::Layer* new_layer) override;
   void RemoveLayerBeneathView(ui::Layer* old_layer) override;
@@ -49,9 +49,11 @@ class NewTabButton : public views::ImageButton,
  protected:
   virtual void PaintIcon(gfx::Canvas* canvas);
 
+  TabStrip* tab_strip() { return tab_strip_; }
+
   SkColor GetForegroundColor() const;
 
-  // views::View:
+  // views::ImageButton:
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
  private:

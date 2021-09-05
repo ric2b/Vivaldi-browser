@@ -6,6 +6,7 @@
 
 #include "ui/gl/gl_utils.h"
 
+#include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/logging.h"
 #include "ui/gl/gl_bindings.h"
@@ -119,9 +120,10 @@ UINT GetOverlaySupportFlags(DXGI_FORMAT format) {
 
 bool ShouldForceDirectCompositionRootSurfaceFullDamage() {
   static bool should_force = []() {
-    if (!base::FeatureList::IsEnabled(
-            features::kDirectCompositionForceFullDamage)) {
-      return false;
+    const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
+    if (cmd_line->HasSwitch(
+            switches::kDirectCompositionForceFullDamageForTesting)) {
+      return true;
     }
     UINT brga_flags = DirectCompositionSurfaceWin::GetOverlaySupportFlags(
         DXGI_FORMAT_B8G8R8A8_UNORM);
@@ -129,6 +131,10 @@ bool ShouldForceDirectCompositionRootSurfaceFullDamage() {
         DXGI_OVERLAY_SUPPORT_FLAG_DIRECT | DXGI_OVERLAY_SUPPORT_FLAG_SCALING;
     if ((brga_flags & kSupportBits) == 0)
       return false;
+    if (!base::FeatureList::IsEnabled(
+            features::kDirectCompositionForceFullDamage)) {
+      return false;
+    }
     return true;
   }();
   return should_force;

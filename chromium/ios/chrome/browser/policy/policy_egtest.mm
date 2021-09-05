@@ -14,6 +14,11 @@
 #include "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/translate/translate_app_interface.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
+#import "ios/chrome/browser/ui/settings/elements/elements_constants.h"
+#import "ios/chrome/browser/ui/settings/password/passwords_table_view_constants.h"
+#import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
+#import "ios/chrome/browser/ui/table_view/cells/table_view_cells_constants.h"
+#include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -94,6 +99,30 @@ id<GREYMatcher> ToolsMenuTranslateButton() {
                     grey_interactable(), nil);
 }
 
+// Verifies that a managed setting item is shown and react properly.
+void VerifyManagedSettingItem(NSString* accessibilityID,
+                              NSString* accessibilityValue,
+                              id<GREYMatcher> goBackMatcher) {
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(accessibilityID)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+  // Click the info button.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityValue(accessibilityValue)]
+      performAction:grey_tap()];
+  // Check if the contextual bubble is shown.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kEnterpriseInfoBubbleViewId)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Tap outside of the bubble.
+  [[EarlGrey selectElementWithMatcher:goBackMatcher] performAction:grey_tap()];
+
+  // Check if the contextual bubble is hidden.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kEnterpriseInfoBubbleViewId)]
+      assertWithMatcher:grey_notVisible()];
+}
+
 }  // namespace
 
 // Test case to verify that enterprise policies are set and respected.
@@ -121,17 +150,49 @@ id<GREYMatcher> ToolsMenuTranslateButton() {
 }
 
 // Tests for the DefaultSearchProviderEnabled policy.
+// 1. Test if the policy can be properly set.
+// 2. Test the managed UI item and clicking action.
 - (void)testDefaultSearchProviderEnabled {
   // Disable default search provider via policy and make sure it does not crash
   // the omnibox UI.
   SetPolicy(false, policy::key::kDefaultSearchProviderEnabled);
   [ChromeEarlGrey loadURL:GURL("chrome://policy")];
+  [EarlGrey dismissKeyboardWithError:nil];
+
+  // Open settings menu.
+  [ChromeEarlGreyUI openSettingsMenu];
+
+  VerifyManagedSettingItem(
+      kSettingsManagedSearchEngineCellId,
+      l10n_util::GetNSString(IDS_IOS_SEARCH_ENGINE_SETTING_DISABLED_STATUS),
+      chrome_test_util::SettingsDoneButton());
 }
 
 // Tests for the PasswordManagerEnabled policy.
 - (void)testPasswordManagerEnabled {
   VerifyBoolPolicy(policy::key::kPasswordManagerEnabled,
                    password_manager::prefs::kCredentialsEnableService);
+}
+
+// Tests for the PasswordManagerEnabled policy Settings UI.
+- (void)testPasswordManagerEnabledSettingsUI {
+  // Force the preference off via policy.
+  SetPolicy(false, policy::key::kPasswordManagerEnabled);
+  GREYAssertFalse(
+      [ChromeEarlGrey
+          userBooleanPref:password_manager::prefs::kCredentialsEnableService],
+      @"Preference was unexpectedly true");
+  // Open settings menu and tap password settings.
+  [ChromeEarlGreyUI openSettingsMenu];
+  [[[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(kSettingsPasswordsCellId)]
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 200)
+      onElementWithMatcher:grey_accessibilityID(kSettingsTableViewId)]
+      performAction:grey_tap()];
+
+  VerifyManagedSettingItem(kSavePasswordManagedTableViewId,
+                           l10n_util::GetNSString(IDS_IOS_SETTING_OFF),
+                           chrome_test_util::SettingsMenuBackButton());
 }
 
 // Tests for the SavingBrowserHistoryDisabled policy.
@@ -230,6 +291,48 @@ id<GREYMatcher> ToolsMenuTranslateButton() {
 
   // Enable the policy.
   SetPolicy(true, policy::key::kTranslateEnabled);
+}
+
+// Test whether the managed item will be shown if a policy is set.
+- (void)testPopupMenuItem {
+  // Setup a machine level policy.
+  SetPolicy(false, policy::key::kTranslateEnabled);
+
+  // Open the menu and click on the item.
+  [ChromeEarlGreyUI openToolsMenu];
+  [ChromeEarlGreyUI
+      tapToolsMenuButton:grey_accessibilityID(kTextMenuEnterpriseInfo)];
+  [ChromeEarlGrey waitForPageToFinishLoading];
+
+  // Check the navigation.
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
+                                          "chrome://management")]
+      assertWithMatcher:grey_notNil()];
+}
+
+// Test the chrome://management page when no machine level policy is set.
+- (void)testManagementPageUnmanaged {
+  // Open the management page and check if the content is expected.
+  [ChromeEarlGrey loadURL:GURL("chrome://management")];
+  [ChromeEarlGrey
+      waitForWebStateContainingText:l10n_util::GetStringUTF8(
+                                        IDS_IOS_MANAGEMENT_UI_UNMANAGED_DESC)];
+}
+
+// Test the chrome://management page when one or more machine level policies are
+// set.
+- (void)testManagementPageManaged {
+  // Setup a machine level policy.
+  SetPolicy(false, policy::key::kTranslateEnabled);
+
+  // Open the management page and check if the content is expected.
+  [ChromeEarlGrey loadURL:GURL("chrome://management")];
+  [ChromeEarlGrey
+      waitForWebStateContainingText:l10n_util::GetStringUTF8(
+                                        IDS_IOS_MANAGEMENT_UI_MESSAGE)];
+
+  // Open the "learn more" link.
+  [ChromeEarlGrey tapWebStateElementWithID:@"learn-more-link"];
 }
 
 @end

@@ -156,6 +156,8 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void DidSwapWithSize(const gfx::Size& pixel_size) override;
   void DidReceivePresentationFeedback(
       const gfx::PresentationFeedback& feedback) override;
+  void DidReceiveReleasedOverlays(
+      const std::vector<gpu::Mailbox>& released_overlays) override;
 
   // LatestLocalSurfaceIdLookupDelegate implementation.
   LocalSurfaceId GetSurfaceAtAggregation(
@@ -279,8 +281,6 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
       pending_presentation_group_timings_;
 
   bool disable_swap_until_resize_ = true;
-
-  bool enable_quad_splitting_ = true;
 
   // Callback that will be run after all pending swaps have acked.
   base::OnceClosure no_pending_swaps_callback_;

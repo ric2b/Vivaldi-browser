@@ -41,7 +41,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/web/web_ax_object.h"
@@ -70,7 +69,7 @@ namespace {
 #if !defined(OS_ANDROID)
 bool IsSelected(const WebAXObject& obj) {
   ui::AXNodeData node_data;
-  obj.Serialize(&node_data);
+  obj.Serialize(&node_data, ui::kAXModeComplete);
   return node_data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected);
 }
 #endif  // !defined(OS_ANDROID)
@@ -180,9 +179,23 @@ class RenderAccessibilityHostInterceptor
     std::move(callback).Run();
   }
 
+  void HandleAXLocationChanges(
+      std::vector<mojom::LocationChangesPtr> changes) override {
+    for (auto& change : changes)
+      location_changes_.emplace_back(std::move(change));
+  }
+
   ui::AXTreeUpdate& last_update() {
     CHECK_GE(handled_updates_.size(), 1U);
     return handled_updates_.back();
+  }
+
+  const std::vector<ui::AXTreeUpdate>& handled_updates() const {
+    return handled_updates_;
+  }
+
+  std::vector<mojom::LocationChangesPtr>& location_changes() {
+    return location_changes_;
   }
 
   void ClearHandledUpdates() { handled_updates_.clear(); }
@@ -196,6 +209,7 @@ class RenderAccessibilityHostInterceptor
       local_frame_host_remote_;
 
   std::vector<::ui::AXTreeUpdate> handled_updates_;
+  std::vector<mojom::LocationChangesPtr> location_changes_;
 };
 
 class RenderAccessibilityTestRenderFrame : public TestRenderFrame {
@@ -225,8 +239,16 @@ class RenderAccessibilityTestRenderFrame : public TestRenderFrame {
     return render_accessibility_host_->last_update();
   }
 
+  const std::vector<ui::AXTreeUpdate>& HandledUpdates() {
+    return render_accessibility_host_->handled_updates();
+  }
+
   void ClearHandledUpdates() {
     render_accessibility_host_->ClearHandledUpdates();
+  }
+
+  std::vector<mojom::LocationChangesPtr>& LocationChanges() {
+    return render_accessibility_host_->location_changes();
   }
 
  private:
@@ -354,9 +376,19 @@ class RenderAccessibilityImplTest : public RenderViewTest {
         ->LastUpdate();
   }
 
+  const std::vector<ui::AXTreeUpdate>& GetHandledAccUpdates() {
+    return static_cast<RenderAccessibilityTestRenderFrame*>(frame())
+        ->HandledUpdates();
+  }
+
   void ClearHandledUpdates() {
     return static_cast<RenderAccessibilityTestRenderFrame*>(frame())
         ->ClearHandledUpdates();
+  }
+
+  std::vector<mojom::LocationChangesPtr>& GetLocationChanges() {
+    return static_cast<RenderAccessibilityTestRenderFrame*>(frame())
+        ->LocationChanges();
   }
 
   int CountAccessibilityNodesSentToBrowser() {
@@ -525,7 +557,7 @@ TEST_F(RenderAccessibilityImplTest, HideAccessibilityObject) {
   ExecuteJavaScriptForTests(
       "document.getElementById('B').style.visibility = 'hidden';");
   // Force layout now.
-  root_obj.UpdateLayoutAndCheckValidity();
+  root_obj.MaybeUpdateLayoutAndCheckValidity();
 
   // Send a childrenChanged on "A".
   ClearHandledUpdates();
@@ -574,7 +606,7 @@ TEST_F(RenderAccessibilityImplTest, ShowAccessibilityObject) {
   ExecuteJavaScriptForTests(
       "document.getElementById('B').style.visibility = 'visible';");
 
-  root_obj.UpdateLayoutAndCheckValidity();
+  root_obj.MaybeUpdateLayoutAndCheckValidity();
   ClearHandledUpdates();
 
   GetRenderAccessibilityImpl()->HandleAXEvent(
@@ -591,6 +623,196 @@ TEST_F(RenderAccessibilityImplTest, ShowAccessibilityObject) {
   EXPECT_EQ(node_a.AxID(), update.nodes[0].id);
   EXPECT_EQ(node_b.AxID(), update.nodes[1].id);
   EXPECT_EQ(2, CountAccessibilityNodesSentToBrowser());
+}
+
+// Tests if the bounds of the fixed positioned node is updated after scrolling.
+TEST_F(RenderAccessibilityImplTest, TestBoundsForFixedNodeAfterScroll) {
+  constexpr char html[] = R"HTML(
+      <div id="positioned" style="position:fixed; top:10px; font-size:40px;"
+        aria-label="first">title</div>
+      <div style="padding-top: 50px; font-size:40px;">
+        <h2>Heading #1</h2>
+        <h2>Heading #2</h2>
+        <h2>Heading #3</h2>
+        <h2>Heading #4</h2>
+        <h2>Heading #5</h2>
+        <h2>Heading #6</h2>
+        <h2>Heading #7</h2>
+        <h2>Heading #8</h2>
+      </div>
+      )HTML";
+  LoadHTMLAndRefreshAccessibilityTree(html);
+
+  int scroll_offset_y = 50;
+
+  int32_t expected_id;
+  ui::AXRelativeBounds expected_bounds;
+
+  // Prepare the expected information from the tree.
+  ui::AXTreeUpdate update = GetLastAccUpdate();
+  for (ui::AXNodeData& node : update.nodes) {
+    std::string name;
+    if (node.GetStringAttribute(ax::mojom::StringAttribute::kName, &name) &&
+        name == "first") {
+      expected_id = node.id;
+      expected_bounds = node.relative_bounds;
+      expected_bounds.bounds.set_y(expected_bounds.bounds.y() +
+                                   scroll_offset_y);
+      break;
+    }
+  }
+
+  ClearHandledUpdates();
+
+  // Simulate scrolling down using JS.
+  std::string js("window.scrollTo(0, " + base::NumberToString(scroll_offset_y) +
+                 ");");
+  ExecuteJavaScriptForTests(js.c_str());
+
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebAXObject root_obj = WebAXObject::FromWebDocument(document);
+  GetRenderAccessibilityImpl()->HandleAXEvent(
+      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kScrollPositionChanged));
+  SendPendingAccessibilityEvents();
+
+  EXPECT_EQ(1, CountAccessibilityNodesSentToBrowser());
+
+  // Make sure it's the root object that was updated for scrolling.
+  update = GetLastAccUpdate();
+  EXPECT_EQ(root_obj.AxID(), update.nodes[0].id);
+
+  // Make sure that a location change is sent for the fixed-positioned node.
+  std::vector<mojom::LocationChangesPtr>& changes = GetLocationChanges();
+  EXPECT_EQ(changes.size(), 1u);
+  EXPECT_EQ(changes[0]->id, expected_id);
+  EXPECT_EQ(changes[0]->new_location, expected_bounds);
+}
+
+// Tests if the bounds are updated when it has multiple fixed nodes.
+TEST_F(RenderAccessibilityImplTest, TestBoundsForMultipleFixedNodeAfterScroll) {
+  constexpr char html[] = R"HTML(
+    <div id="positioned" style="position:fixed; top:10px; font-size:40px;"
+      aria-label="first">title1</div>
+    <div id="positioned" style="position:fixed; top:50px; font-size:40px;"
+      aria-label="second">title2</div>
+    <div style="padding-top: 50px; font-size:40px;">
+      <h2>Heading #1</h2>
+      <h2>Heading #2</h2>
+      <h2>Heading #3</h2>
+      <h2>Heading #4</h2>
+      <h2>Heading #5</h2>
+      <h2>Heading #6</h2>
+      <h2>Heading #7</h2>
+      <h2>Heading #8</h2>
+    </div>)HTML";
+  LoadHTMLAndRefreshAccessibilityTree(html);
+
+  int scroll_offset_y = 50;
+
+  std::map<int32_t, ui::AXRelativeBounds> expected;
+
+  // Prepare the expected information from the tree.
+  ui::AXTreeUpdate update = GetLastAccUpdate();
+  for (ui::AXNodeData& node : update.nodes) {
+    std::string name;
+    node.GetStringAttribute(ax::mojom::StringAttribute::kName, &name);
+    if (name == "first" || name == "second") {
+      ui::AXRelativeBounds ax_bounds = node.relative_bounds;
+      ax_bounds.bounds.set_y(ax_bounds.bounds.y() + scroll_offset_y);
+      expected[node.id] = ax_bounds;
+    }
+  }
+
+  ClearHandledUpdates();
+
+  // Simulate scrolling down using JS.
+  std::string js("window.scrollTo(0, " + base::NumberToString(scroll_offset_y) +
+                 ");");
+  ExecuteJavaScriptForTests(js.c_str());
+
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebAXObject root_obj = WebAXObject::FromWebDocument(document);
+  GetRenderAccessibilityImpl()->HandleAXEvent(
+      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kScrollPositionChanged));
+  SendPendingAccessibilityEvents();
+
+  EXPECT_EQ(1, CountAccessibilityNodesSentToBrowser());
+
+  // Make sure it's the root object that was updated for scrolling.
+  update = GetLastAccUpdate();
+  EXPECT_EQ(root_obj.AxID(), update.nodes[0].id);
+
+  // Make sure that a location change is sent for the fixed-positioned node.
+  std::vector<mojom::LocationChangesPtr>& changes = GetLocationChanges();
+  EXPECT_EQ(changes.size(), 2u);
+  for (auto& change : changes) {
+    auto search = expected.find(change->id);
+    EXPECT_NE(search, expected.end());
+    EXPECT_EQ(search->second, change->new_location);
+  }
+}
+
+TEST_F(RenderAccessibilityImplTest, TestFocusConsistency) {
+  constexpr char html[] = R"HTML(
+      <body>
+        <a id="link" tabindex=0>link</a>
+        <button id="button" style="visibility:hidden" tabindex=0>button</button>
+        <script>
+          link.addEventListener("click", () => {
+            button.style.visibility = "visible";
+            button.focus();
+          });
+        </script>
+      </body>
+      )HTML";
+  LoadHTMLAndRefreshAccessibilityTree(html);
+
+  WebDocument document = GetMainFrame()->GetDocument();
+  WebAXObject root_obj = WebAXObject::FromWebDocument(document);
+  WebAXObject body = root_obj.ChildAt(0);
+  WebAXObject link = body.ChildAt(0);
+  WebAXObject button = body.ChildAt(1);
+
+  // Set focus to the <a>, this will queue up an initial set of deferred
+  // accessibility events to be queued up on AXObjectCacheImpl.
+  ui::AXActionData action;
+  action.target_node_id = link.AxID();
+  action.action = ax::mojom::Action::kFocus;
+  GetRenderAccessibilityImpl()->PerformAction(action);
+
+  // Update layout so that the AXEvents themselves are queued up to
+  // RenderAccessibilityImpl.
+  ASSERT_TRUE(root_obj.MaybeUpdateLayoutAndCheckValidity());
+
+  // Now perform the default action on the link, which will bounce focus to
+  // the button element.
+  action.target_node_id = link.AxID();
+  action.action = ax::mojom::Action::kDoDefault;
+  GetRenderAccessibilityImpl()->PerformAction(action);
+
+  // The events and updates from the previous operation would normally be
+  // processed in the next frame, but the initial focus operation caused a
+  // ScheduleSendPendingAccessibilityEvents.
+  SendPendingAccessibilityEvents();
+
+  // The pattern up DOM/style updates above result in multiple AXTreeUpdates
+  // sent over mojo. Search the updates to ensure that the button
+  const std::vector<ui::AXTreeUpdate>& updates = GetHandledAccUpdates();
+  ui::AXNode::AXID focused_node = ui::AXNode::kInvalidAXID;
+  bool found_button_update = false;
+  for (const auto& update : updates) {
+    if (update.has_tree_data)
+      focused_node = update.tree_data.focus_id;
+
+    for (const auto& node_data : update.nodes) {
+      if (node_data.id == button.AxID() &&
+          !node_data.HasState(ax::mojom::State::kIgnored))
+        found_button_update = true;
+    }
+  }
+
+  EXPECT_EQ(focused_node, button.AxID());
+  EXPECT_TRUE(found_button_update);
 }
 
 class MockPluginAccessibilityTreeSource : public content::PluginAXTreeSource {
@@ -795,16 +1017,16 @@ TEST_F(BlinkAXActionTargetTest, TestMethods) {
   EXPECT_TRUE(input_range_action_target->Focus());
   EXPECT_TRUE(input_range.IsFocused());
 
-  blink::WebFloatRect expected_bounds;
+  gfx::RectF expected_bounds;
   blink::WebAXObject offset_container;
   SkMatrix44 container_transform;
   input_checkbox.GetRelativeBounds(offset_container, expected_bounds,
                                    container_transform);
   gfx::Rect actual_bounds = input_checkbox_action_target->GetRelativeBounds();
-  EXPECT_EQ(static_cast<int>(expected_bounds.x), actual_bounds.x());
-  EXPECT_EQ(static_cast<int>(expected_bounds.y), actual_bounds.y());
-  EXPECT_EQ(static_cast<int>(expected_bounds.width), actual_bounds.width());
-  EXPECT_EQ(static_cast<int>(expected_bounds.height), actual_bounds.height());
+  EXPECT_EQ(static_cast<int>(expected_bounds.x()), actual_bounds.x());
+  EXPECT_EQ(static_cast<int>(expected_bounds.y()), actual_bounds.y());
+  EXPECT_EQ(static_cast<int>(expected_bounds.width()), actual_bounds.width());
+  EXPECT_EQ(static_cast<int>(expected_bounds.height()), actual_bounds.height());
 
   gfx::Point offset_to_set(500, 500);
   scroller_action_target->SetScrollOffset(gfx::Point(500, 500));
@@ -816,6 +1038,8 @@ TEST_F(BlinkAXActionTargetTest, TestMethods) {
 #if !defined(OS_ANDROID)
   EXPECT_FALSE(IsSelected(option));
   EXPECT_TRUE(option_action_target->SetSelected(true));
+  // Seleting option requires layout to be clean.
+  ASSERT_TRUE(root_obj.MaybeUpdateLayoutAndCheckValidity());
   EXPECT_TRUE(IsSelected(option));
 #endif
 
@@ -824,7 +1048,7 @@ TEST_F(BlinkAXActionTargetTest, TestMethods) {
   EXPECT_EQ(value_to_set, input_text.StringValue().Utf8());
 
   // Setting selection requires layout to be clean.
-  ASSERT_TRUE(root_obj.UpdateLayoutAndCheckValidity());
+  ASSERT_TRUE(root_obj.MaybeUpdateLayoutAndCheckValidity());
 
   EXPECT_TRUE(text_one_action_target->SetSelection(
       text_one_action_target.get(), 3, text_two_action_target.get(), 4));
@@ -933,7 +1157,7 @@ TEST_F(AXImageAnnotatorTest, OnImageAdded) {
   ExecuteJavaScriptForTests(
       "document.getElementById('B').style.visibility = 'visible';");
   ClearHandledUpdates();
-  root_obj.UpdateLayoutAndCheckValidity();
+  root_obj.MaybeUpdateLayoutAndCheckValidity();
 
   // This should update the annotations of all images on the page, including the
   // already visible one.

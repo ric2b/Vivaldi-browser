@@ -19,6 +19,7 @@
 #include "device/fido/cable/cable_discovery_data.h"
 #include "device/fido/client_data.h"
 #include "device/fido/fido_constants.h"
+#include "device/fido/large_blob.h"
 #include "device/fido/pin.h"
 #include "device/fido/public_key_credential_descriptor.h"
 
@@ -57,6 +58,10 @@ struct COMPONENT_EXPORT(DEVICE_FIDO) CtapGetAssertionOptions {
   // it will be the first element and all others will have |credential_id|s.
   // Elements are sorted by |credential_id|s, where present.
   std::vector<PRFInput> prf_inputs;
+
+  // large_blob_operation indicates whether we should attempt to read or write a
+  // large blob after a successful assertion.
+  LargeBlobOperation large_blob_operation;
 };
 
 // Object that encapsulates request parameters for AuthenticatorGetAssertion as
@@ -121,6 +126,7 @@ struct COMPONENT_EXPORT(DEVICE_FIDO) CtapGetAssertionRequest {
   base::Optional<std::array<uint8_t, crypto::kSHA256Length>>
       alternative_application_parameter;
   base::Optional<HMACSecret> hmac_secret;
+  bool large_blob_key = false;
 
   bool is_incognito_mode = false;
   bool is_u2f_only = false;

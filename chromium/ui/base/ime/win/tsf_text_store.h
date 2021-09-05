@@ -102,7 +102,6 @@ class TextInputClient;
 class COMPONENT_EXPORT(UI_BASE_IME_WIN) TSFTextStore
     : public ITextStoreACP,
       public ITfContextOwnerCompositionSink,
-      public ITfLanguageProfileNotifySink,
       public ITfKeyTraceEventSink,
       public ITfTextEditSink {
  public:
@@ -217,10 +216,6 @@ class COMPONENT_EXPORT(UI_BASE_IME_WIN) TSFTextStore
                                      ITfRange* range) override;
   IFACEMETHODIMP OnEndComposition(
       ITfCompositionView* composition_view) override;
-
-  // ITfLanguageProfileNotifySink:
-  IFACEMETHODIMP OnLanguageChange(LANGID langid, BOOL* pfAccept) override;
-  IFACEMETHODIMP OnLanguageChanged() override;
 
   // ITfTextEditSink:
   IFACEMETHODIMP OnEndEdit(ITfContext* context,
@@ -386,6 +381,10 @@ class COMPONENT_EXPORT(UI_BASE_IME_WIN) TSFTextStore
   // TextInputClient::GetEditableSelectionRange();
   gfx::Range selection_from_client_;
 
+  // |composition_range_from_client_| indicates the composition range returned
+  // from TextInputClient::GetCompositionTextRange();
+  gfx::Range composition_from_client_;
+
   // |wparam_keydown_cached_| and |lparam_keydown_cached_| contains key event
   // info that is used to synthesize key event during composition.
   // |wparam_keydown_fired_| indicates if a keydown event has been fired.
@@ -421,6 +420,9 @@ class COMPONENT_EXPORT(UI_BASE_IME_WIN) TSFTextStore
 
   // Checks for re-entrancy while notifying changes to TSF.
   bool is_notification_in_progress_ = false;
+
+  // Checks for re-entrancy while writing to text input client.
+  bool is_tic_write_in_progress_ = false;
 
   // The type of current lock.
   //   0: No lock.

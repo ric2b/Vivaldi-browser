@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.when;
 
 import android.app.Activity;
 import android.support.test.rule.ActivityTestRule;
@@ -21,12 +22,12 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
@@ -56,18 +57,24 @@ public final class ShareSheetCoordinatorTest {
     public TestRule mFeatureProcessor = new Features.JUnitProcessor();
 
     @Mock
+    private ActivityLifecycleDispatcher mLifecycleDispatcher;
+
+    @Mock
+    private BottomSheetController mController;
+
+    @Mock
     private ShareSheetPropertyModelBuilder mPropertyModelBuilder;
 
     @Mock
     private ShareParams mParams;
 
-    @Mock
-    private BottomSheetController mController;
-
+    private Activity mActivity;
     private ShareSheetCoordinator mShareSheetCoordinator;
 
     @Before
     public void setUp() {
+        mActivity = mActivityTestRule.getActivity();
+
         MockitoAnnotations.initMocks(this);
         PropertyModel testModel1 = new PropertyModel.Builder(ShareSheetItemViewProperties.ALL_KEYS)
                                            .with(ShareSheetItemViewProperties.ICON, null)
@@ -82,41 +89,39 @@ public final class ShareSheetCoordinatorTest {
 
         ArrayList<PropertyModel> thirdPartyPropertyModels =
                 new ArrayList<>(Arrays.asList(testModel1, testModel2));
-        Mockito.when(mPropertyModelBuilder.selectThirdPartyApps(
-                             any(), anySet(), any(), anyBoolean(), any(), anyLong()))
+        when(mPropertyModelBuilder.selectThirdPartyApps(
+                     any(), anySet(), any(), anyBoolean(), any(), anyLong()))
                 .thenReturn(thirdPartyPropertyModels);
 
-        mShareSheetCoordinator =
-                new ShareSheetCoordinator(mController, null, mPropertyModelBuilder, null);
+        mShareSheetCoordinator = new ShareSheetCoordinator(mController, mLifecycleDispatcher, null,
+                mPropertyModelBuilder, null, null, null, false);
     }
 
     @Test
     @MediumTest
     public void disableFirstPartyFeatures() {
         mShareSheetCoordinator.disableFirstPartyFeaturesForTesting();
-        Activity activity = mActivityTestRule.getActivity();
 
-        List<PropertyModel> propertyModels = mShareSheetCoordinator.createTopRowPropertyModels(
-                activity, mParams, /*chromeShareExtras=*/null,
+        List<PropertyModel> propertyModels = mShareSheetCoordinator.createFirstPartyPropertyModels(
+                mActivity, mParams, /*chromeShareExtras=*/null,
                 ShareSheetPropertyModelBuilder.ALL_CONTENT_TYPES);
         assertEquals("Property model list should be empty.", 0, propertyModels.size());
     }
 
     @Test
     @MediumTest
-    public void testCreateBottomRowPropertyModels() {
-        Activity activity = mActivityTestRule.getActivity();
-
-        List<PropertyModel> propertyModels = mShareSheetCoordinator.createBottomRowPropertyModels(
-                activity, mParams, ShareSheetPropertyModelBuilder.ALL_CONTENT_TYPES,
+    public void testCreateThirdPartyPropertyModels() {
+        List<PropertyModel> propertyModels = mShareSheetCoordinator.createThirdPartyPropertyModels(
+                mActivity, mParams, ShareSheetPropertyModelBuilder.ALL_CONTENT_TYPES,
                 /*saveLastUsed=*/false);
+
         assertEquals("Incorrect number of property models.", 3, propertyModels.size());
         assertEquals("First property model isn't testModel1.", "testModel1",
                 propertyModels.get(0).get(ShareSheetItemViewProperties.LABEL));
         assertEquals("Second property model isn't testModel2.", "testModel2",
                 propertyModels.get(1).get(ShareSheetItemViewProperties.LABEL));
         assertEquals("Third property model isn't More.",
-                activity.getResources().getString(R.string.sharing_more_icon_label),
+                mActivity.getResources().getString(R.string.sharing_more_icon_label),
                 propertyModels.get(2).get(ShareSheetItemViewProperties.LABEL));
     }
 }

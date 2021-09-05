@@ -43,7 +43,6 @@
 ../../third_party/catapult/devil/devil/android/constants/file_system.py
 ../../third_party/catapult/devil/devil/android/crash_handler.py
 ../../third_party/catapult/devil/devil/android/decorators.py
-../../third_party/catapult/devil/devil/android/device_blacklist.py
 ../../third_party/catapult/devil/devil/android/device_denylist.py
 ../../third_party/catapult/devil/devil/android/device_errors.py
 ../../third_party/catapult/devil/devil/android/device_list.py
@@ -154,6 +153,7 @@ pylib/base/environment.py
 pylib/base/environment_factory.py
 pylib/base/output_manager.py
 pylib/base/output_manager_factory.py
+pylib/base/result_sink.py
 pylib/base/test_collection.py
 pylib/base/test_exception.py
 pylib/base/test_instance.py

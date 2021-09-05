@@ -150,10 +150,13 @@ class CC_EXPORT ScrollbarController {
   void ResetState();
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(ScrollUnifiedLayerTreeHostImplTest,
+                           ThumbDragAfterJumpClick);
+
   // "Autoscroll" here means the continuous scrolling that occurs when the
   // pointer is held down on a hit-testable area of the scrollbar such as an
   // arrows of the track itself.
-  enum AutoScrollDirection { AUTOSCROLL_FORWARD, AUTOSCROLL_BACKWARD };
+  enum class AutoScrollDirection { AUTOSCROLL_FORWARD, AUTOSCROLL_BACKWARD };
 
   struct CC_EXPORT AutoScrollState {
     // Can only be either AUTOSCROLL_FORWARD or AUTOSCROLL_BACKWARD.

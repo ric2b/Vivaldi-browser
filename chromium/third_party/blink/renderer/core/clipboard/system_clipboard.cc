@@ -138,6 +138,19 @@ void SystemClipboard::WriteHTML(const String& markup,
     clipboard_->WriteSmartPasteMarker();
 }
 
+void SystemClipboard::ReadSvg(
+    mojom::blink::ClipboardHost::ReadSvgCallback callback) {
+  if (!IsValidBufferType(buffer_) || !clipboard_.is_bound()) {
+    std::move(callback).Run(String());
+    return;
+  }
+  clipboard_->ReadSvg(buffer_, std::move(callback));
+}
+
+void SystemClipboard::WriteSvg(const String& markup) {
+  clipboard_->WriteSvg(NonNullString(markup));
+}
+
 String SystemClipboard::ReadRTF() {
   if (!IsValidBufferType(buffer_) || !clipboard_.is_bound())
     return String();
@@ -167,7 +180,7 @@ void SystemClipboard::WriteImageWithTag(Image* image,
 
   PaintImage paint_image = image->PaintImageForCurrentFrame();
   SkBitmap bitmap;
-  if (sk_sp<SkImage> sk_image = paint_image.GetSkImage())
+  if (sk_sp<SkImage> sk_image = paint_image.GetSwSkImage())
     sk_image->asLegacyBitmap(&bitmap);
   clipboard_->WriteImage(bitmap);
 

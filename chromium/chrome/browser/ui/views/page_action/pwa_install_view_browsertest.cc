@@ -20,9 +20,9 @@
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
-#include "chrome/browser/web_applications/components/app_shortcut_manager.h"
 #include "chrome/browser/web_applications/components/install_bounce_metric.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
@@ -130,8 +130,8 @@ class PwaInstallViewBrowserTest
     extensions::ExtensionBrowserTest::SetUpOnMainThread();
 
     web_app::WebAppProvider::Get(browser()->profile())
-        ->shortcut_manager()
-        .SuppressShortcutsForTesting();
+        ->os_integration_manager()
+        .SuppressOsHooksForTesting();
 
     pwa_install_view_ =
         BrowserView::GetBrowserViewForBrowser(browser())
@@ -311,8 +311,8 @@ IN_PROC_BROWSER_TEST_P(PwaInstallViewBrowserTest,
   EXPECT_FALSE(pwa_install_view_->GetVisible());
 }
 
-// Tests that the plus icon is shown when an existing app is installed and set
-// to open in a tab.
+// Tests that the install icon is shown when an existing app is installed and
+// set to open in a tab.
 IN_PROC_BROWSER_TEST_P(PwaInstallViewBrowserTest,
                        PwaSetToOpenInTabIsInstallable) {
   bool installable = OpenTab(GetInstallableAppURL()).installable;
@@ -322,7 +322,8 @@ IN_PROC_BROWSER_TEST_P(PwaInstallViewBrowserTest,
   // Change launch container to open in tab.
   web_app::WebAppProvider::Get(browser()->profile())
       ->registry_controller()
-      .SetAppUserDisplayMode(app_id, web_app::DisplayMode::kBrowser);
+      .SetAppUserDisplayMode(app_id, web_app::DisplayMode::kBrowser,
+                             /*is_user_action=*/false);
 
   // Use a new tab because installed app may have opened in new window.
   OpenTabResult result = OpenTab(GetInstallableAppURL());
@@ -331,6 +332,18 @@ IN_PROC_BROWSER_TEST_P(PwaInstallViewBrowserTest,
       result.app_banner_manager->GetInstallableWebAppCheckResultForTesting(),
       banners::AppBannerManager::InstallableWebAppCheckResult::kPromotable);
   EXPECT_TRUE(pwa_install_view_->GetVisible());
+}
+
+// Test that the accept metrics is reported correctly.
+IN_PROC_BROWSER_TEST_P(PwaInstallViewBrowserTest, PwaInstalledMetricRecorded) {
+  bool installable = OpenTab(GetInstallableAppURL()).installable;
+  ASSERT_TRUE(installable);
+
+  base::HistogramTester histograms;
+  ExecutePwaInstallIcon();
+  histograms.ExpectUniqueSample(
+      "WebApp.InstallConfirmation.CloseReason",
+      views::Widget::ClosedReason::kAcceptButtonClicked, 1);
 }
 
 // Tests that the plus icon updates its visibility when switching between
@@ -360,7 +373,7 @@ IN_PROC_BROWSER_TEST_P(PwaInstallViewBrowserTest,
   EXPECT_FALSE(pwa_install_view_->GetVisible());
 }
 
-// Tests that the plus icon updates its visibility when tab crashes.
+// Tests that the install icon updates its visibility when tab crashes.
 IN_PROC_BROWSER_TEST_P(PwaInstallViewBrowserTest,
                        IconVisibilityAfterTabCrashed) {
   StartNavigateToUrl(GetInstallableAppURL());

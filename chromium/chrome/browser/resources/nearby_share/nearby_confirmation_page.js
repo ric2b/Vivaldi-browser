@@ -16,10 +16,37 @@ import './nearby_preview.js';
 import './nearby_progress.js';
 import './nearby_share_target_types.mojom-lite.js';
 import './nearby_share.mojom-lite.js';
+import './shared/nearby_page_template.m.js';
 import './strings.m.js';
 
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+/** @implements {nearbyShare.mojom.TransferUpdateListenerInterface} */
+class TransferUpdateListener {
+  /**
+   * @param {!NearbyConfirmationPageElement} page
+   * @param {!nearbyShare.mojom.TransferUpdateListenerPendingReceiver}
+   *     transferUpdateListener
+   */
+  constructor(page, transferUpdateListener) {
+    this.page_ = page;
+    this.transferUpdateListenerReceiver_ =
+        new nearbyShare.mojom.TransferUpdateListenerReceiver(this);
+    this.transferUpdateListenerReceiver_.$.bindHandle(
+        transferUpdateListener.handle);
+  }
+
+  /**
+   * @param {!nearbyShare.mojom.TransferStatus} status The status update.
+   * @param {?string} token The optional token to show to the user.
+   * @private
+   * @override
+   */
+  onTransferUpdate(status, token) {
+    this.page_.onTransferUpdate(status, token);
+  }
+}
 
 Polymer({
   is: 'nearby-confirmation-page',
@@ -41,14 +68,15 @@ Polymer({
     },
 
     /**
-     * Token to show to the user to confirm the selected share target. Expected
-     * to start as null, then change to a valid object before this component is
-     * shown.
-     * @type {?string}
+     * TransferUpdateListener interface for the currently selected share target.
+     * Expected to start as null, then change to a valid object before this
+     * component is shown.
+     * @type {?nearbyShare.mojom.TransferUpdateListenerPendingReceiver}
      */
-    confirmationToken: {
-      type: String,
+    transferUpdateListener: {
+      type: Object,
       value: null,
+      observer: 'onTransferUpdateListenerChanged_'
     },
 
     /**
@@ -60,21 +88,142 @@ Polymer({
       type: Object,
       value: null,
     },
+
+    /**
+     * Token to show to the user to confirm the selected share target. Expected
+     * to start as null, then change to a valid object via updates from the
+     * transferUpdateListener.
+     * @private {?string}
+     */
+    confirmationToken_: {
+      type: String,
+      value: null,
+    },
+
+    /**
+     * Whether the user needs to confirm this transfer on the local device. This
+     * affects which buttons are displayed to the user.
+     * @private
+     * */
+    needsConfirmation_: {
+      type: Boolean,
+      value: false,
+    },
+  },
+
+  listeners: {
+    'accept': 'onAccept_',
+    'reject': 'onReject_',
+    'cancel': 'onCancel_',
+  },
+
+  /** @private {?TransferUpdateListener} */
+  transferUpdateListener_: null,
+
+  /**
+   * @param {?nearbyShare.mojom.TransferUpdateListenerPendingReceiver}
+   *     transferUpdateListener
+   * @private
+   */
+  onTransferUpdateListenerChanged_(transferUpdateListener) {
+    if (!transferUpdateListener) {
+      return;
+    }
+
+    this.transferUpdateListener_ =
+        new TransferUpdateListener(this, transferUpdateListener);
+  },
+
+  /**
+   * @param {!nearbyShare.mojom.TransferStatus} status The status update.
+   * @param {?string} token The optional token to show to the user.
+   */
+  onTransferUpdate(status, token) {
+    if (token) {
+      this.confirmationToken_ = token;
+    }
+
+    switch (status) {
+      case nearbyShare.mojom.TransferStatus.kAwaitingLocalConfirmation:
+        this.needsConfirmation_ = true;
+        break;
+      case nearbyShare.mojom.TransferStatus.kAwaitingRemoteAcceptance:
+        this.needsConfirmation_ = false;
+        break;
+      case nearbyShare.mojom.TransferStatus.kInProgress:
+        this.fire('close');
+        break;
+    }
+  },
+
+  /**
+   * @return {string} The contact name of the selected ShareTarget.
+   * @private
+   */
+  contactName_() {
+    // TODO(crbug.com/1123943): Get contact name from ShareTarget.
+    const contactName = null;
+    if (!contactName) {
+      return '';
+    }
+    return this.i18n('nearbyShareConfirmationPageAddContactTitle', contactName);
   },
 
   /** @private */
-  onAcceptTap_() {
+  onAccept_() {
     this.confirmationManager.accept().then(
         result => {
-            // TODO(knollr): Close dialog as send is now in progress.
+            // TODO(crbug.com/1123934): Show error if !result.success
         });
   },
 
   /** @private */
-  onCancelTap_() {
-    this.confirmationManager.reject().then(
-        result => {
-            // TODO(knollr): Close dialog or go back to device discovery.
-        });
+  onReject_() {
+    this.confirmationManager.reject().then(result => {
+      this.fire('close');
+    });
+  },
+
+  /** @private */
+  onCancel_() {
+    this.confirmationManager.cancel().then(result => {
+      this.fire('close');
+    });
+  },
+
+  /**
+   * @param {boolean} needsConfirmation
+   * @return {?string} Localized string or null if the button should be hidden.
+   */
+  getActionButtonLabel_(needsConfirmation) {
+    return needsConfirmation ? this.i18n('nearbyShareActionsConfirm') : null;
+  },
+
+  /**
+   * @param {boolean} needsConfirmation
+   * @return {string} Localized string to show on the cancel button.
+   * @private
+   */
+  getCancelButtonLabel_(needsConfirmation) {
+    return needsConfirmation ? this.i18n('nearbyShareActionsReject') :
+                               this.i18n('nearbyShareActionsCancel');
+  },
+
+  /**
+   * @param {boolean} needsConfirmation
+   * @return {string} The event name fire when the cancel button is clicked.
+   * @private
+   */
+  getCancelEventName_(needsConfirmation) {
+    return needsConfirmation ? 'reject' : 'cancel';
+  },
+
+  /**
+   * @return {!string} The title of the attachment to be shared.
+   * @private
+   */
+  attachmentTitle_() {
+    // TODO(crbug.com/1123942): Pass attachments to UI.
+    return 'Unknown file';
   },
 });

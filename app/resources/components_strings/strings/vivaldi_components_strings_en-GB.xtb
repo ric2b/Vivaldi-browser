@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="en-GB">
 <translation id="1038842779957582377">unknown name</translation>
+<translation id="1089439967362294234">Change Password</translation>
 <translation id="1110994991967754504">Select permission for <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> unexpectedly closed the connection.</translation>
 <translation id="1161325031994447685">Reconnecting to Wi-Fi</translation>
@@ -16,12 +17,14 @@
 <translation id="1710259589646384581">OS</translation>
 <translation id="1728677426644403582">You're viewing the source of a web page</translation>
 <translation id="1734878702283171397">Try contacting the system admin.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Try running Windows Network Diagnostics<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">This site contains harmful programs</translation>
 <translation id="1916770123977586577">To apply your updated settings to this site, reload this page</translation>
 <translation id="1919345977826869612">Ads</translation>
 <translation id="1974060860693918893">Advanced</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Checking the proxy and the firewall<ph name="END_LINK" /></translation>
 <translation id="2091887806945687916">Sound</translation>
+<translation id="2119505898009119320">Issued to: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2147827593068025794">Background Sync</translation>
 <translation id="2166378884831602661">This site can’t provide a secure connection</translation>
 <translation id="2187317261103489799">Detect (default)</translation>
@@ -34,7 +37,9 @@
 <translation id="2355395290879513365">Attackers might be able to see the images you’re looking at on this site and trick you by modifying them.</translation>
 <translation id="2356070529366658676">Ask</translation>
 <translation id="2359808026110333948">Continue</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Running Network Diagnostics<ph name="END_LINK" /></translation>
 <translation id="2482878487686419369">Notifications</translation>
+<translation id="2501278716633472235">Go back</translation>
 <translation id="2539524384386349900">Detect</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> sent an invalid response.</translation>
 <translation id="2586657967955657006">Clipboard</translation>
@@ -43,6 +48,7 @@
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Access to the file was denied</translation>
 <translation id="2705137772291741111">The saved (cached) copy of this site was unreadable.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Running Connectivity Diagnostics<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">The connection was reset.</translation>
 <translation id="2826760142808435982">The connection is encrypted and authenticated using <ph name="CIPHER" /> and uses <ph name="KX" /> as the key exchange mechanism.</translation>
 <translation id="2856444702002559011">Attackers might be trying to steal your information from <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (for example, passwords, messages, or credit cards). <ph name="BEGIN_LEARN_MORE_LINK" />Learn more<ph name="END_LEARN_MORE_LINK" /></translation>
@@ -51,7 +57,9 @@
 <translation id="2991571918955627853">You cannot visit <ph name="SITE" /> right now because the website uses HSTS. Network errors and attacks are usually temporary, so this page will probably work later.</translation>
 <translation id="3005723025932146533">Show saved copy</translation>
 <translation id="301521992641321250">Automatically blocked</translation>
+<translation id="3041612393474885105">Certificate Information</translation>
 <translation id="3109728660330352905">You don't have authorisation to view this page.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Try running Connectivity Diagnostics<ph name="END_LINK" />.</translation>
 <translation id="3154506275960390542">This page includes a form that may not submit securely. Data that you send can be viewed by others while in transit or could be modified by an attacker to change what the server receives.</translation>
 <translation id="3176929007561373547">Check your proxy settings or contact your network administrator to
       make sure that the proxy server is working. If you don't believe you should
@@ -60,19 +68,23 @@
 <translation id="3226128629678568754">Press the reload button to resubmit the data needed to load the page.</translation>
 <translation id="3227137524299004712">Microphone</translation>
 <translation id="3234666976984236645">Always detect important content on this site</translation>
+<translation id="3308738399950580893">ads</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> is currently unreachable.</translation>
 <translation id="3427092606871434483">Allow (default)</translation>
 <translation id="3447661539832366887">The owner of this device turned off the dinosaur game.</translation>
 <translation id="3447884698081792621">Show certificate (issued by <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Hide advanced</translation>
+<translation id="3484560055331845446">You could lose access to your Google Account. Chrome recommends changing your password now. You'll be asked to sign in.</translation>
 <translation id="3566021033012934673">Your connection is not private</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Hide details</translation>
 <translation id="3630155396527302611">If it is already listed as a program allowed to access the network, try
       removing it from the list and adding it again.</translation>
 <translation id="3658742229777143148">Revision</translation>
+<translation id="3681007416295224113">Certificate information</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Checking the proxy, firewall, and DNS configuration<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">If you use a proxy server...</translation>
+<translation id="3894751534882749287">If you wish to view the page anyway, you can change its tracking protection level in the Tracker-blocker popup or by clicking the Allow button</translation>
 <translation id="3950820424414687140">Sign in</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> is blocked</translation>
 <translation id="3987940399970879459">Less than 1 MB</translation>
@@ -82,9 +94,11 @@
 <translation id="4151403195736952345">Use global default (Detect)</translation>
 <translation id="4165986682804962316">Site settings</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Checking firewall and antivirus configurations<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Try running Network Diagnostics<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">Valid</translation>
 <translation id="4250431568374086873">Your connection to this site is not fully secure</translation>
 <translation id="4265872034478892965">Allowed by your administrator</translation>
+<translation id="4305666528087210886">Your file couldn’t be accessed</translation>
 <translation id="4312866146174492540">Block (default)</translation>
 <translation id="4356973930735388585">Attackers on this site might attempt to install dangerous programs on your computer that steal or delete your information (for example, photos, passwords, messages, and credit cards).</translation>
 <translation id="4408413947728134509">Cookies <ph name="NUM_COOKIES" /></translation>
@@ -94,13 +108,19 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Try disabling your extensions.</translation>
 <translation id="4592951414987517459">Your connection to <ph name="DOMAIN" /> is encrypted using a modern cipher suite.</translation>
+<translation id="4690462567478992370">Stop using an invalid certificate</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Your connection was interrupted</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Running Windows Network Diagnostics<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Tracker Blocker</translation>
 <translation id="4744603770635761495">Executable Path</translation>
 <translation id="4750917950439032686">Your information (for example, passwords or credit card numbers) is private when it is sent to this site.</translation>
 <translation id="4764776831041365478">The web page at <ph name="URL" /> might be temporarily down or it may have moved permanently to a new web address.</translation>
+<translation id="4943872375798546930">No results</translation>
+<translation id="4974590756084640048">Re-enable warnings</translation>
 <translation id="5023310440958281426">Check your administrator's policies</translation>
 <translation id="5039804452771397117">Allow</translation>
+<translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 in use)} other {(# in use)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Checking the proxy address<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
 <translation id="5287240709317226393">Show cookies</translation>
@@ -147,15 +167,18 @@
 <translation id="6657585470893396449">Password</translation>
 <translation id="6685834062052613830">Sign out and complete setup</translation>
 <translation id="6711464428925977395">There is something wrong with the proxy server or the address is incorrect.</translation>
+<translation id="6757797048963528358">Your device went to sleep.</translation>
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="7053983685419859001">Block</translation>
 <translation id="7079718277001814089">This site contains malware</translation>
 <translation id="7108819624672055576">Allowed by an extension</translation>
 <translation id="7111012039238467737">(Valid)</translation>
+<translation id="7113310725918019676">Allow <ph name="BLOCKED_TYPE" /> from <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> doesn't adhere to security standards.</translation>
 <translation id="7219179957768738017">The connection uses <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Revoke access</translation>
 <translation id="7353601530677266744">Command Line</translation>
+<translation id="7364115444476960850">The page you were trying to access was blocked by Vivaldi's <ph name="BLOCKER_NAME" /></translation>
 <translation id="7419106976560586862">Profile Path</translation>
 <translation id="7445762425076701745">The identity of the server to which you are connected cannot be fully validated. You are connected to a server using a name valid only within your network, and an external certificate authority has no way to validate ownership. As some certificate authorities will issue certificates for these names regardless, there is no way to ensure that you are connected to the intended website and not to an attacker.</translation>
 <translation id="7455133967321480974">Use global default (Block)</translation>
@@ -177,13 +200,16 @@
 <translation id="8025119109950072390">Attackers on this site may trick you into doing something dangerous like installing software or revealing your personal information (for example, passwords, phone numbers, or credit cards).</translation>
 <translation id="8037357227543935929">Ask (default)</translation>
 <translation id="8041940743680923270">Use global default (Ask)</translation>
-<translation id="8142868475871995937">Visit &lt;strong&gt;vivaldi://policy&lt;/strong&gt; to see the list of blacklisted URLs and other policies enforced by your system administrator.</translation>
+<translation id="808894953321890993">Change password</translation>
+<translation id="8119307142152921512">trackers and ads</translation>
+<translation id="8149426793427495338">Your computer went to sleep.</translation>
 <translation id="8150722005171944719">The file at <ph name="URL" /> is not readable.  It may have been removed, moved or file permissions may be preventing access.</translation>
 <translation id="8184538546369750125">Use global default (Allow)</translation>
 <translation id="8211406090763984747">Connection is secure</translation>
 <translation id="8225771182978767009">The person who set up this computer has chosen to block this site.</translation>
 <translation id="8241707690549784388">The page that you're looking for used information that you entered. Returning to that page might cause any action you took to be repeated. Do you want to continue?</translation>
 <translation id="8241712895048303527">Block on this site</translation>
+<translation id="8286036467436129157">Sign In</translation>
 <translation id="8288807391153049143">Show certificate</translation>
 <translation id="8289355894181816810">Contact your network administrator if you're not sure what this means.</translation>
 <translation id="8332188693563227489">Access to <ph name="HOST_NAME" /> was denied</translation>
@@ -191,15 +217,20 @@
 <translation id="8503813439785031346">Username</translation>
 <translation id="8703575177326907206">Your connection to <ph name="DOMAIN" /> is not encrypted.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />’s &lt;abbr id="dnsDefinition"&gt;DNS address&lt;/abbr&gt; could not be found. Diagnosing the problem.</translation>
+<translation id="8820817407110198400">Bookmarks</translation>
+<translation id="8940028675168378100">Blocked by <ph name="BLOCKER_NAME" /></translation>
 <translation id="9001074447101275817">The proxy <ph name="DOMAIN" /> requires a username and password.</translation>
 <translation id="9008201768610948239">Ignore</translation>
 <translation id="9011424611726486705">Open site settings</translation>
 <translation id="9025348182339809926">(Invalid)</translation>
 <translation id="9039213469156557790">Furthermore, this page includes other resources which are not secure. These resources can be viewed by others while in transit, and can be modified by an attacker to change the behaviour of the page.</translation>
+<translation id="9062620674789239642">It may have been moved, edited, or deleted.</translation>
 <translation id="9069693763241529744">Blocked by an extension</translation>
 <translation id="9169664750068251925">Always block on this site</translation>
+<translation id="9180553614777056266">Ad Blocker</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> uses an unsupported protocol.</translation>
 <translation id="9219103736887031265">Images</translation>
+<translation id="936602727769022409">You could lose access to your Google Account. Chromium recommends changing your password now. You'll be asked to sign in.</translation>
 <translation id="969892804517981540">Official Build</translation>
 <translation id="988159990683914416">Developer Build</translation>
 </translationbundle>

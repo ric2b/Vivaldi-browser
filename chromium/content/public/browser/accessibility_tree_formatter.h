@@ -14,7 +14,6 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/process/process_handle.h"
-#include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -92,10 +91,33 @@ class CONTENT_EXPORT AccessibilityTreeFormatter
   //   {property='internalRole', pattern='inlineTextBox'};
   struct NodeFilter {
     std::string property;
-    base::string16 pattern;
+    std::string pattern;
 
-    NodeFilter(std::string property, base::string16 pattern)
+    NodeFilter(const std::string& property, const std::string& pattern)
         : property(property), pattern(pattern) {}
+  };
+
+  // Tree selector used to identify an accessible tree to traverse, it can be
+  // built by a pre-defined tree type like Chromium to indicate that Chromium
+  // browser tree should be traversed and/or by a string pattern which matches
+  // an accessible name of a root of some accessible subtree.
+  struct TreeSelector {
+    enum Type {
+      None = 0,
+      ActiveTab = 1 << 0,
+      Chrome = 1 << 1,
+      Chromium = 1 << 2,
+      Firefox = 1 << 3,
+      Safari = 1 << 4,
+    };
+    int types;
+    std::string pattern;
+
+    TreeSelector() : types(None) {}
+    TreeSelector(int types, const std::string& pattern)
+        : types(types), pattern(pattern) {}
+
+    bool empty() const { return types == None && pattern.empty(); }
   };
 
   // Create the appropriate native subclass of AccessibilityTreeFormatter.
@@ -127,10 +149,6 @@ class CONTENT_EXPORT AccessibilityTreeFormatter
   static bool MatchesNodeFilters(const std::vector<NodeFilter>& node_filters,
                                  const base::DictionaryValue& dict);
 
-  // Build an accessibility tree for any process with a window.
-  virtual std::unique_ptr<base::DictionaryValue>
-  BuildAccessibilityTreeForProcess(base::ProcessId pid) = 0;
-
   // Build an accessibility tree for any window.
   virtual std::unique_ptr<base::DictionaryValue>
   BuildAccessibilityTreeForWindow(gfx::AcceleratedWidget widget) = 0;
@@ -138,7 +156,7 @@ class CONTENT_EXPORT AccessibilityTreeFormatter
   // Build an accessibility tree for an application with a name matching the
   // given pattern.
   virtual std::unique_ptr<base::DictionaryValue>
-  BuildAccessibilityTreeForPattern(const base::StringPiece& pattern) = 0;
+  BuildAccessibilityTreeForSelector(const TreeSelector&) = 0;
 
   // Returns a filtered accesibility tree using the current property and node
   // filters.
@@ -147,13 +165,13 @@ class CONTENT_EXPORT AccessibilityTreeFormatter
 
   // Dumps a BrowserAccessibility tree into a string.
   virtual void FormatAccessibilityTree(const base::DictionaryValue& tree_node,
-                                       base::string16* contents) = 0;
+                                       std::string* contents) = 0;
 
   // Test version of FormatAccessibilityTree().
   // |root| must be non-null and must be in web content.
   virtual void FormatAccessibilityTreeForTesting(
       ui::AXPlatformNodeDelegate* root,
-      base::string16* contents) = 0;
+      std::string* contents) = 0;
 
   // Set regular expression filters that apply to each property of every node
   // before it's output.

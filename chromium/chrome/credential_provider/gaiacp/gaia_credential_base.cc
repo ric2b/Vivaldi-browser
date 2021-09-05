@@ -38,6 +38,7 @@
 #include "chrome/credential_provider/common/gcp_strings.h"
 #include "chrome/credential_provider/gaiacp/associated_user_validator.h"
 #include "chrome/credential_provider/gaiacp/auth_utils.h"
+#include "chrome/credential_provider/gaiacp/device_policies_manager.h"
 #include "chrome/credential_provider/gaiacp/event_logs_upload_manager.h"
 #include "chrome/credential_provider/gaiacp/gaia_credential_provider.h"
 #include "chrome/credential_provider/gaiacp/gaia_credential_provider_i.h"
@@ -70,8 +71,6 @@ namespace credential_provider {
 
 namespace {
 
-constexpr wchar_t kEmailDomainsKey[] = L"ed";  // deprecated.
-constexpr wchar_t kEmailDomainsKeyNew[] = L"domains_allowed_to_login";
 constexpr wchar_t kPermittedAccounts[] = L"permitted_accounts";
 constexpr wchar_t kPermittedAccountsSeparator[] = L",";
 constexpr char kGetAccessTokenBodyWithScopeFormat[] =
@@ -115,6 +114,14 @@ base::string16 GetEmailDomains(
 }
 
 base::string16 GetEmailDomains() {
+  if (DevicePoliciesManager::Get()->CloudPoliciesEnabled()) {
+    DevicePolicies device_policies;
+    DevicePoliciesManager::Get()->GetDevicePolicies(&device_policies);
+    return device_policies.GetAllowedDomainsStr();
+  }
+
+  // TODO (crbug.com/1135458): Clean up directly reading from registry after
+  // cloud policies is launched.
   base::string16 email_domains_reg = GetEmailDomains(kEmailDomainsKey);
   base::string16 email_domains_reg_new = GetEmailDomains(kEmailDomainsKeyNew);
   return email_domains_reg.empty() ? email_domains_reg_new : email_domains_reg;
@@ -246,9 +253,11 @@ HRESULT GetUserAndDomainInfo(
     BSTR* error_text) {
   base::string16 user_name;
   base::string16 domain_name;
+  OSUserManager* os_user_manager = OSUserManager::Get();
+  DCHECK(os_user_manager);
 
   bool is_ad_user =
-      OSUserManager::Get()->IsDeviceDomainJoined() && !sam_account_name.empty();
+      os_user_manager->IsDeviceDomainJoined() && !sam_account_name.empty();
   // Login via existing AD account mapping when the device is domain joined if
   // the AD account mapping is available.
   if (is_ad_user) {
@@ -301,6 +310,14 @@ HRESULT GetUserAndDomainInfo(
       re2::RE2::FullMatch(local_account_name, "un:([^,]+)(?:,sn:([^,]+))?",
                           &username, &serial_number);
 
+      // Only collect those user names that exist on the windows device.
+      base::string16 existing_sid;
+      HRESULT hr = os_user_manager->GetUserSID(
+          OSUserManager::GetLocalDomain().c_str(),
+          base::UTF8ToUTF16(username).c_str(), &existing_sid);
+      if (FAILED(hr))
+        continue;
+
       LOGFN(VERBOSE) << "RE2 username : " << username;
       LOGFN(VERBOSE) << "RE2 serial_number : " << serial_number;
 
@@ -333,8 +350,6 @@ HRESULT GetUserAndDomainInfo(
     domain_name = OSUserManager::GetLocalDomain();
   }
 
-  OSUserManager* os_user_manager = OSUserManager::Get();
-  DCHECK(os_user_manager);
   LOGFN(VERBOSE) << "Get user sid for user " << user_name << " and domain name "
                  << domain_name;
   HRESULT hr = os_user_manager->GetUserSID(domain_name.c_str(),
@@ -2051,6 +2066,11 @@ HRESULT CGaiaCredentialBase::PerformActions(const base::Value& properties) {
   if (FAILED(hr) && hr != E_NOTIMPL)
     LOGFN(ERROR) << "StoreWindowsPasswordIfNeeded hr=" << putHR(hr);
 
+  hr = GenerateGCPWDmToken(sid);
+  if (FAILED(hr)) {
+    LOGFN(ERROR) << "GenerateGCPWDmToken hr=" << putHR(hr);
+  }
+
   // Upload device details to gem database.
   hr = GemDeviceDetailsManager::Get()->UploadDeviceDetails(access_token, sid,
                                                            username, domain);
@@ -2092,6 +2112,11 @@ HRESULT CGaiaCredentialBase::PerformPostSigninActions(
     hr = credential_provider::EnrollToGoogleMdmIfNeeded(properties);
     if (FAILED(hr))
       LOGFN(ERROR) << "EnrollToGoogleMdmIfNeeded hr=" << putHR(hr);
+  }
+
+  // Ensure GCPW gets updated to the correct version.
+  if (DevicePoliciesManager::Get()->CloudPoliciesEnabled()) {
+    DevicePoliciesManager::Get()->EnforceGcpwUpdatePolicy();
   }
 
   // TODO(crbug.com/976744): Use the down scoped kKeyMdmAccessToken instead
@@ -2469,11 +2494,18 @@ HRESULT CGaiaCredentialBase::OnUserAuthenticated(BSTR authentication_info,
 
   base::string16 sid = OLE2CW(user_sid_);
   if (UserPoliciesManager::Get()->CloudPoliciesEnabled() &&
-      UserPoliciesManager::Get()->GetTimeDeltaSinceLastPolicyFetch(sid) >
-          kMaxTimeDeltaSinceLastUserPolicyRefresh) {
+      UserPoliciesManager::Get()->IsUserPolicyStaleOrMissing(sid)) {
+    // Save gaia id since it is needed for the cloud policies server request.
+    base::string16 gaia_id = GetDictString(*authentication_results_, kKeyId);
+    HRESULT hr = SetUserProperty(sid, kUserId, gaia_id);
+    if (FAILED(hr)) {
+      LOGFN(ERROR) << "SetUserProperty(id) hr=" << putHR(hr);
+    }
+
     // TODO(crbug.com/976744) Use downscoped token here.
-    base::string16 access_token = GetDictString(*properties, kKeyAccessToken);
-    HRESULT hr = UserPoliciesManager::Get()->FetchAndStoreCloudUserPolicies(
+    base::string16 access_token =
+        GetDictString(*authentication_results_, kKeyAccessToken);
+    hr = UserPoliciesManager::Get()->FetchAndStoreCloudUserPolicies(
         sid, base::UTF16ToUTF8(access_token));
     SecurelyClearString(access_token);
     if (FAILED(hr)) {

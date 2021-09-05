@@ -66,8 +66,7 @@ void FileManagerPrivateInternalGetContentMimeTypeFunction::SniffMimeType(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   std::string mime_type;
-  if (!net::SniffMimeTypeFromLocalData(sniff_bytes->data(), sniff_bytes->size(),
-                                       &mime_type)) {
+  if (!net::SniffMimeTypeFromLocalData(*sniff_bytes, &mime_type)) {
     Respond(Error("Could not deduce the content mime type."));
     return;
   }
@@ -91,17 +90,11 @@ FileManagerPrivateInternalGetContentMetadataFunction::Run() {
     return RespondNow(Error("fileEntry.file() blob error."));
   }
 
-  bool include_images = false;
-  if (params->type ==
-      api::file_manager_private::CONTENT_METADATA_TYPE_METADATATAGSIMAGES) {
-    include_images = true;
-  }
-
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(
           &FileManagerPrivateInternalGetContentMetadataFunction::ReadBlobSize,
-          this, params->blob_uuid, params->mime_type, include_images));
+          this, params->blob_uuid, params->mime_type, params->include_images));
 
   return RespondLater();
 }

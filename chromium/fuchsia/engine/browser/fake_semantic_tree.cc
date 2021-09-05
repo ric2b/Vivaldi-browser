@@ -35,6 +35,7 @@ bool FakeSemanticTree::IsTreeValid(
     fuchsia::accessibility::semantics::Node* child = GetNodeWithId(c);
     if (!child)
       return false;
+
     is_valid &= IsTreeValid(child, tree_size);
   }
   return is_valid;
@@ -60,29 +61,49 @@ void FakeSemanticTree::RunUntilNodeCountAtLeast(size_t count) {
   run_loop.Run();
 }
 
+void FakeSemanticTree::RunUntilCommitCountIs(size_t count) {
+  DCHECK(!on_commit_updates_);
+  if (count == num_commit_calls_)
+    return;
+
+  base::RunLoop run_loop;
+  base::AutoReset<base::RepeatingClosure> auto_reset(
+      &on_commit_updates_,
+      base::BindLambdaForTesting([this, count, &run_loop]() {
+        if (static_cast<size_t>(num_commit_calls_) == count) {
+          run_loop.Quit();
+        }
+      }));
+  run_loop.Run();
+}
+
+void FakeSemanticTree::SetNodeUpdatedCallback(
+    uint32_t node_id,
+    base::OnceClosure node_updated_callback) {
+  node_wait_id_ = node_id;
+  on_node_updated_callback_ = std::move(node_updated_callback);
+}
+
 fuchsia::accessibility::semantics::Node* FakeSemanticTree::GetNodeWithId(
     uint32_t id) {
-  for (auto& node : nodes_) {
-    if (node.has_node_id() && node.node_id() == id) {
-      return &node;
-    }
-  }
-  return nullptr;
+  auto it = nodes_.find(id);
+  return it == nodes_.end() ? nullptr : &it->second;
 }
 
 fuchsia::accessibility::semantics::Node* FakeSemanticTree::GetNodeFromLabel(
     base::StringPiece label) {
   fuchsia::accessibility::semantics::Node* to_return = nullptr;
-  for (auto& node : nodes_) {
-    if (node.has_attributes() && node.attributes().has_label() &&
-        node.attributes().label() == label) {
+  for (auto& n : nodes_) {
+    auto* node = &n.second;
+    if (node->has_attributes() && node->attributes().has_label() &&
+        node->attributes().label() == label) {
       // There are sometimes multiple semantic nodes with the same label. Hit
       // testing should return the node with the smallest node ID so behaviour
       // is consistent with the hit testing API being called.
       if (!to_return) {
-        to_return = &node;
-      } else if (node.node_id() < to_return->node_id()) {
-        to_return = &node;
+        to_return = node;
+      } else if (node->node_id() < to_return->node_id()) {
+        to_return = node;
       }
     }
   }
@@ -90,27 +111,40 @@ fuchsia::accessibility::semantics::Node* FakeSemanticTree::GetNodeFromLabel(
   return to_return;
 }
 
+fuchsia::accessibility::semantics::Node* FakeSemanticTree::GetNodeFromRole(
+    fuchsia::accessibility::semantics::Role role) {
+  for (auto& n : nodes_) {
+    auto* node = &n.second;
+    if (node->has_role() && node->role() == role)
+      return node;
+  }
+
+  return nullptr;
+}
+
 void FakeSemanticTree::UpdateSemanticNodes(
     std::vector<fuchsia::accessibility::semantics::Node> nodes) {
-  nodes_.reserve(nodes.size() + nodes_.size());
+  num_update_calls_++;
+  bool wait_node_updated = false;
   for (auto& node : nodes) {
-    // Delete an existing node that's being updated to avoid having duplicate
-    // nodes.
-    DeleteSemanticNodes({node.node_id()});
-    nodes_.push_back(std::move(node));
+    if (node.node_id() == node_wait_id_ && on_node_updated_callback_)
+      wait_node_updated = true;
+
+    nodes_[node.node_id()] = std::move(node);
   }
+
+  if (wait_node_updated)
+    std::move(on_node_updated_callback_).Run();
 }
 
 void FakeSemanticTree::DeleteSemanticNodes(std::vector<uint32_t> node_ids) {
-  for (auto id : node_ids) {
-    for (uint i = 0; i < nodes_.size(); i++) {
-      if (nodes_.at(i).node_id() == id)
-        nodes_.erase(nodes_.begin() + i);
-    }
-  }
+  num_delete_calls_++;
+  for (auto id : node_ids)
+    nodes_.erase(id);
 }
 
 void FakeSemanticTree::CommitUpdates(CommitUpdatesCallback callback) {
+  num_commit_calls_++;
   callback();
   if (on_commit_updates_)
     on_commit_updates_.Run();
@@ -123,4 +157,8 @@ void FakeSemanticTree::CommitUpdates(CommitUpdatesCallback callback) {
 
 void FakeSemanticTree::NotImplemented_(const std::string& name) {
   NOTIMPLEMENTED() << name;
+}
+
+void FakeSemanticTree::Clear() {
+  nodes_.clear();
 }

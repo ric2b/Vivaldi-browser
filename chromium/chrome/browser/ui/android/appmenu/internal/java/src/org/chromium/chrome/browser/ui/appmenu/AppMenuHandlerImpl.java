@@ -136,14 +136,13 @@ class AppMenuHandlerImpl
      *                      dragging down on the menu button, this should be true. Note that if
      *                      anchorView is null, this must be false since we no longer support
      *                      hardware menu button dragging.
-     * @param showFromBottom Whether the menu should be shown from the bottom up.
      * @return              True, if the menu is shown, false, if menu is not shown, example
      *                      reasons: the menu is not yet available to be shown, or the menu is
      *                      already showing.
      */
     // TODO(crbug.com/635567): Fix this properly.
     @SuppressLint("ResourceType")
-    boolean showAppMenu(View anchorView, boolean startDragging, boolean showFromBottom) {
+    boolean showAppMenu(View anchorView, boolean startDragging) {
         if (!shouldShowAppMenu() || isAppMenuShowing()) return false;
 
         TextBubble.dismissBubbles();
@@ -188,14 +187,14 @@ class AppMenuHandlerImpl
                 new ContextThemeWrapper(context, R.style.OverflowMenuThemeOverlay);
 
         if (mAppMenu == null) {
-            TypedArray a = wrapper.obtainStyledAttributes(new int[] {
-                    android.R.attr.listPreferredItemHeightSmall, android.R.attr.listDivider});
+            TypedArray a = wrapper.obtainStyledAttributes(
+                    new int[] {android.R.attr.listPreferredItemHeightSmall});
             int itemRowHeight = a.getDimensionPixelSize(0, 0);
             Drawable itemDivider = a.getDrawable(1);
             int itemDividerHeight = itemDivider != null ? itemDivider.getIntrinsicHeight() : 0;
             a.recycle();
-            mAppMenu = new AppMenu(mMenu, itemRowHeight, itemDividerHeight, this,
-                    context.getResources(), mDelegate.shouldShowIconBeforeItem());
+            mAppMenu = new AppMenu(mMenu, itemRowHeight, this, context.getResources(),
+                    mDelegate.shouldShowIconBeforeItem());
             mAppMenuDragHelper = new AppMenuDragHelper(context, mAppMenu, itemRowHeight);
         }
 
@@ -223,7 +222,7 @@ class AppMenuHandlerImpl
         }
         mAppMenu.show(wrapper, anchorView, isByPermanentButton, rotation, appRect, pt.y,
                 footerResourceId, headerResourceId, mDelegate.getGroupDividerId(), mHighlightMenuId,
-                mCircleHighlight, showFromBottom, mDelegate.getCustomViewBinders());
+                mCircleHighlight, mDelegate.getCustomViewBinders());
         mAppMenuDragHelper.onShow(startDragging);
         clearMenuHighlight();
         RecordUserAction.record("MobileMenuShow");

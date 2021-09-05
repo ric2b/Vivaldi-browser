@@ -26,6 +26,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -164,7 +165,7 @@ class GenerateRSAKeyState : public NSSOperationState {
  public:
   GenerateRSAKeyState(ServiceWeakPtr weak_ptr,
                       unsigned int modulus_length_bits,
-                      const GenerateKeyCallback& callback);
+                      GenerateKeyCallback callback);
   ~GenerateRSAKeyState() override = default;
 
   void OnError(const base::Location& from, Status status) override {
@@ -182,8 +183,10 @@ class GenerateRSAKeyState : public NSSOperationState {
   void CallBack(const base::Location& from,
                 const std::string& public_key_spki_der,
                 Status status) {
+    UMA_HISTOGRAM_BOOLEAN("ChromeOS.PlatformKeysService.GenerateKey.RSA",
+                          status == Status::kSuccess);
     auto bound_callback =
-        base::BindOnce(callback_, public_key_spki_der, status);
+        base::BindOnce(std::move(callback_), public_key_spki_der, status);
     origin_task_runner_->PostTask(
         from, base::BindOnce(&NSSOperationState::RunCallback,
                              std::move(bound_callback), service_weak_ptr_));
@@ -197,7 +200,7 @@ class GenerateECKeyState : public NSSOperationState {
  public:
   GenerateECKeyState(ServiceWeakPtr weak_ptr,
                      const std::string& named_curve,
-                     const GenerateKeyCallback& callback);
+                     GenerateKeyCallback callback);
   ~GenerateECKeyState() override = default;
 
   void OnError(const base::Location& from, Status status) override {
@@ -215,8 +218,10 @@ class GenerateECKeyState : public NSSOperationState {
   void CallBack(const base::Location& from,
                 const std::string& public_key_spki_der,
                 Status status) {
+    UMA_HISTOGRAM_BOOLEAN("ChromeOS.PlatformKeysService.GenerateKey.EC",
+                          status == Status::kSuccess);
     auto bound_callback =
-        base::BindOnce(callback_, public_key_spki_der, status);
+        base::BindOnce(std::move(callback_), public_key_spki_der, status);
     origin_task_runner_->PostTask(
         from, base::BindOnce(&NSSOperationState::RunCallback,
                              std::move(bound_callback), service_weak_ptr_));
@@ -234,7 +239,7 @@ class SignState : public NSSOperationState {
             bool raw_pkcs1,
             HashAlgorithm hash_algorithm,
             const KeyType key_type,
-            const SignCallback& callback);
+            SignCallback callback);
   ~SignState() override = default;
 
   void OnError(const base::Location& from, Status status) override {
@@ -270,10 +275,25 @@ class SignState : public NSSOperationState {
   void CallBack(const base::Location& from,
                 const std::string& signature,
                 Status status) {
-    auto bound_callback = base::BindOnce(callback_, signature, status);
+    EmitOperationStatusToHistogram(status == Status::kSuccess);
+    auto bound_callback =
+        base::BindOnce(std::move(callback_), signature, status);
     origin_task_runner_->PostTask(
         from, base::BindOnce(&NSSOperationState::RunCallback,
                              std::move(bound_callback), service_weak_ptr_));
+  }
+
+  void EmitOperationStatusToHistogram(bool success) const {
+    switch (key_type_) {
+      case KeyType::kRsassaPkcs1V15:
+        UMA_HISTOGRAM_BOOLEAN("ChromeOS.PlatformKeysService.SignKey.RSA",
+                              success);
+        break;
+      case KeyType::kEcdsa:
+        UMA_HISTOGRAM_BOOLEAN("ChromeOS.PlatformKeysService.SignKey.EC",
+                              success);
+        break;
+    }
   }
 
   // Must be called on origin thread, therefore use CallBack().
@@ -285,7 +305,7 @@ class SelectCertificatesState : public NSSOperationState {
   explicit SelectCertificatesState(
       ServiceWeakPtr weak_ptr,
       const scoped_refptr<net::SSLCertRequestInfo>& request,
-      const SelectCertificatesCallback& callback);
+      SelectCertificatesCallback callback);
   ~SelectCertificatesState() override = default;
 
   void OnError(const base::Location& from, Status status) override {
@@ -305,7 +325,8 @@ class SelectCertificatesState : public NSSOperationState {
   void CallBack(const base::Location& from,
                 std::unique_ptr<net::CertificateList> matches,
                 Status status) {
-    auto bound_callback = base::BindOnce(callback_, std::move(matches), status);
+    auto bound_callback =
+        base::BindOnce(std::move(callback_), std::move(matches), status);
     origin_task_runner_->PostTask(
         from, base::BindOnce(&NSSOperationState::RunCallback,
                              std::move(bound_callback), service_weak_ptr_));
@@ -318,7 +339,7 @@ class SelectCertificatesState : public NSSOperationState {
 class GetCertificatesState : public NSSOperationState {
  public:
   explicit GetCertificatesState(ServiceWeakPtr weak_ptr,
-                                const GetCertificatesCallback& callback);
+                                GetCertificatesCallback callback);
   ~GetCertificatesState() override = default;
 
   void OnError(const base::Location& from, Status status) override {
@@ -338,7 +359,8 @@ class GetCertificatesState : public NSSOperationState {
   void CallBack(const base::Location& from,
                 std::unique_ptr<net::CertificateList> certs,
                 Status status) {
-    auto bound_callback = base::BindOnce(callback_, std::move(certs), status);
+    auto bound_callback =
+        base::BindOnce(std::move(callback_), std::move(certs), status);
     origin_task_runner_->PostTask(
         from, base::BindOnce(&NSSOperationState::RunCallback,
                              std::move(bound_callback), service_weak_ptr_));
@@ -383,7 +405,7 @@ class ImportCertificateState : public NSSOperationState {
  public:
   ImportCertificateState(ServiceWeakPtr weak_ptr,
                          const scoped_refptr<net::X509Certificate>& certificate,
-                         const ImportCertificateCallback& callback);
+                         ImportCertificateCallback callback);
   ~ImportCertificateState() override = default;
 
   void OnError(const base::Location& from, Status status) override {
@@ -398,7 +420,7 @@ class ImportCertificateState : public NSSOperationState {
 
  private:
   void CallBack(const base::Location& from, Status status) {
-    auto bound_callback = base::BindOnce(callback_, status);
+    auto bound_callback = base::BindOnce(std::move(callback_), status);
     origin_task_runner_->PostTask(
         from, base::BindOnce(&NSSOperationState::RunCallback,
                              std::move(bound_callback), service_weak_ptr_));
@@ -412,7 +434,7 @@ class RemoveCertificateState : public NSSOperationState {
  public:
   RemoveCertificateState(ServiceWeakPtr weak_ptr,
                          const scoped_refptr<net::X509Certificate>& certificate,
-                         const RemoveCertificateCallback& callback);
+                         RemoveCertificateCallback callback);
   ~RemoveCertificateState() override = default;
 
   void OnError(const base::Location& from, Status status) override {
@@ -427,7 +449,7 @@ class RemoveCertificateState : public NSSOperationState {
 
  private:
   void CallBack(const base::Location& from, Status status) {
-    auto bound_callback = base::BindOnce(callback_, status);
+    auto bound_callback = base::BindOnce(std::move(callback_), status);
     origin_task_runner_->PostTask(
         from, base::BindOnce(&NSSOperationState::RunCallback,
                              std::move(bound_callback), service_weak_ptr_));
@@ -469,8 +491,7 @@ class RemoveKeyState : public NSSOperationState {
 
 class GetTokensState : public NSSOperationState {
  public:
-  explicit GetTokensState(ServiceWeakPtr weak_ptr,
-                          const GetTokensCallback& callback);
+  explicit GetTokensState(ServiceWeakPtr weak_ptr, GetTokensCallback callback);
   ~GetTokensState() override = default;
 
   void OnError(const base::Location& from, Status status) override {
@@ -488,7 +509,7 @@ class GetTokensState : public NSSOperationState {
                 std::unique_ptr<std::vector<TokenId>> token_ids,
                 Status status) {
     auto bound_callback =
-        base::BindOnce(callback_, std::move(token_ids), status);
+        base::BindOnce(std::move(callback_), std::move(token_ids), status);
     origin_task_runner_->PostTask(
         from, base::BindOnce(&NSSOperationState::RunCallback,
                              std::move(bound_callback), service_weak_ptr_));
@@ -502,7 +523,7 @@ class GetKeyLocationsState : public NSSOperationState {
  public:
   GetKeyLocationsState(ServiceWeakPtr weak_ptr,
                        const std::string& public_key_spki_der,
-                       const GetKeyLocationsCallback& callback);
+                       GetKeyLocationsCallback callback);
   ~GetKeyLocationsState() override = default;
 
   void OnError(const base::Location& from, Status status) override {
@@ -521,7 +542,8 @@ class GetKeyLocationsState : public NSSOperationState {
   void CallBack(const base::Location& from,
                 const std::vector<TokenId>& token_ids,
                 Status status) {
-    auto bound_callback = base::BindOnce(callback_, token_ids, status);
+    auto bound_callback =
+        base::BindOnce(std::move(callback_), token_ids, status);
     origin_task_runner_->PostTask(
         from, base::BindOnce(&NSSOperationState::RunCallback,
                              std::move(bound_callback), service_weak_ptr_));
@@ -601,23 +623,56 @@ class GetAttributeForKeyState : public NSSOperationState {
   GetAttributeForKeyCallback callback_;
 };
 
+class IsKeyOnTokenState : public NSSOperationState {
+ public:
+  IsKeyOnTokenState(ServiceWeakPtr weak_ptr,
+                    const std::string& public_key_spki_der,
+                    IsKeyOnTokenCallback callback);
+  ~IsKeyOnTokenState() override = default;
+
+  void OnError(const base::Location& from, Status status) override {
+    CallBack(from, /*on_token=*/base::nullopt, status);
+  }
+
+  void OnSuccess(const base::Location& from, bool on_token) {
+    CallBack(from, on_token, Status::kSuccess);
+  }
+
+  // Must be a DER encoding of a SubjectPublicKeyInfo.
+  const std::string public_key_spki_der_;
+
+ private:
+  void CallBack(const base::Location& from,
+                base::Optional<bool> on_token,
+                Status status) {
+    auto bound_callback =
+        base::BindOnce(std::move(callback_), on_token, status);
+    origin_task_runner_->PostTask(
+        from, base::BindOnce(&NSSOperationState::RunCallback,
+                             std::move(bound_callback), service_weak_ptr_));
+  }
+
+  // Must be called on origin thread, therefore use CallBack().
+  IsKeyOnTokenCallback callback_;
+};
+
 NSSOperationState::NSSOperationState(ServiceWeakPtr weak_ptr)
     : service_weak_ptr_(weak_ptr),
       origin_task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
 
 GenerateRSAKeyState::GenerateRSAKeyState(ServiceWeakPtr weak_ptr,
                                          unsigned int modulus_length_bits,
-                                         const GenerateKeyCallback& callback)
+                                         GenerateKeyCallback callback)
     : NSSOperationState(weak_ptr),
       modulus_length_bits_(modulus_length_bits),
-      callback_(callback) {}
+      callback_(std::move(callback)) {}
 
 GenerateECKeyState::GenerateECKeyState(ServiceWeakPtr weak_ptr,
                                        const std::string& named_curve,
-                                       const GenerateKeyCallback& callback)
+                                       GenerateKeyCallback callback)
     : NSSOperationState(weak_ptr),
       named_curve_(named_curve),
-      callback_(callback) {}
+      callback_(std::move(callback)) {}
 
 SignState::SignState(ServiceWeakPtr weak_ptr,
                      const std::string& data,
@@ -625,27 +680,26 @@ SignState::SignState(ServiceWeakPtr weak_ptr,
                      bool raw_pkcs1,
                      HashAlgorithm hash_algorithm,
                      const KeyType key_type,
-                     const SignCallback& callback)
+                     SignCallback callback)
     : NSSOperationState(weak_ptr),
       data_(data),
       public_key_spki_der_(public_key_spki_der),
       raw_pkcs1_(raw_pkcs1),
       hash_algorithm_(hash_algorithm),
       key_type_(key_type),
-      callback_(callback) {}
+      callback_(std::move(callback)) {}
 
 SelectCertificatesState::SelectCertificatesState(
     ServiceWeakPtr weak_ptr,
     const scoped_refptr<net::SSLCertRequestInfo>& cert_request_info,
-    const SelectCertificatesCallback& callback)
+    SelectCertificatesCallback callback)
     : NSSOperationState(weak_ptr),
       cert_request_info_(cert_request_info),
-      callback_(callback) {}
+      callback_(std::move(callback)) {}
 
-GetCertificatesState::GetCertificatesState(
-    ServiceWeakPtr weak_ptr,
-    const GetCertificatesCallback& callback)
-    : NSSOperationState(weak_ptr), callback_(callback) {}
+GetCertificatesState::GetCertificatesState(ServiceWeakPtr weak_ptr,
+                                           GetCertificatesCallback callback)
+    : NSSOperationState(weak_ptr), callback_(std::move(callback)) {}
 
 GetAllKeysState::GetAllKeysState(ServiceWeakPtr weak_ptr,
                                  GetAllKeysCallback callback)
@@ -654,18 +708,18 @@ GetAllKeysState::GetAllKeysState(ServiceWeakPtr weak_ptr,
 ImportCertificateState::ImportCertificateState(
     ServiceWeakPtr weak_ptr,
     const scoped_refptr<net::X509Certificate>& certificate,
-    const ImportCertificateCallback& callback)
+    ImportCertificateCallback callback)
     : NSSOperationState(weak_ptr),
       certificate_(certificate),
-      callback_(callback) {}
+      callback_(std::move(callback)) {}
 
 RemoveCertificateState::RemoveCertificateState(
     ServiceWeakPtr weak_ptr,
     const scoped_refptr<net::X509Certificate>& certificate,
-    const RemoveCertificateCallback& callback)
+    RemoveCertificateCallback callback)
     : NSSOperationState(weak_ptr),
       certificate_(certificate),
-      callback_(callback) {}
+      callback_(std::move(callback)) {}
 
 RemoveKeyState::RemoveKeyState(ServiceWeakPtr weak_ptr,
                                const std::string& public_key_spki_der,
@@ -675,16 +729,16 @@ RemoveKeyState::RemoveKeyState(ServiceWeakPtr weak_ptr,
       callback_(std::move(callback)) {}
 
 GetTokensState::GetTokensState(ServiceWeakPtr weak_ptr,
-                               const GetTokensCallback& callback)
-    : NSSOperationState(weak_ptr), callback_(callback) {}
+                               GetTokensCallback callback)
+    : NSSOperationState(weak_ptr), callback_(std::move(callback)) {}
 
 GetKeyLocationsState::GetKeyLocationsState(
     ServiceWeakPtr weak_ptr,
     const std::string& public_key_spki_der,
-    const GetKeyLocationsCallback& callback)
+    GetKeyLocationsCallback callback)
     : NSSOperationState(weak_ptr),
       public_key_spki_der_(public_key_spki_der),
-      callback_(callback) {}
+      callback_(std::move(callback)) {}
 
 SetAttributeForKeyState::SetAttributeForKeyState(
     ServiceWeakPtr weak_ptr,
@@ -708,16 +762,22 @@ GetAttributeForKeyState::GetAttributeForKeyState(
       attribute_type_(attribute_type),
       callback_(std::move(callback)) {}
 
+IsKeyOnTokenState::IsKeyOnTokenState(ServiceWeakPtr weak_ptr,
+                                     const std::string& public_key_spki_der,
+                                     IsKeyOnTokenCallback callback)
+    : NSSOperationState(weak_ptr),
+      public_key_spki_der_(public_key_spki_der),
+      callback_(std::move(callback)) {}
+
 // Returns the private key corresponding to the der-encoded
 // |public_key_spki_der| if found in |slot|. If |slot| is nullptr, the
 // private key will be searched in all slots.
 crypto::ScopedSECKEYPrivateKey GetPrivateKey(
     const std::string& public_key_spki_der,
-    const crypto::ScopedPK11Slot& slot) {
+    PK11SlotInfo* slot) {
   auto public_key_bytes = base::as_bytes(base::make_span(public_key_spki_der));
   if (slot) {
-    return crypto::FindNSSKeyFromPublicKeyInfoInSlot(public_key_bytes,
-                                                     slot.get());
+    return crypto::FindNSSKeyFromPublicKeyInfoInSlot(public_key_bytes, slot);
   }
   return crypto::FindNSSKeyFromPublicKeyInfo(public_key_bytes);
 }
@@ -826,7 +886,7 @@ void GenerateECKeyWithDB(std::unique_ptr<GenerateECKeyState> state,
 // Does the actual RSA signing on a worker thread.
 void SignRSAOnWorkerThread(std::unique_ptr<SignState> state) {
   crypto::ScopedSECKEYPrivateKey rsa_key =
-      GetPrivateKey(state->public_key_spki_der_, state->slot_);
+      GetPrivateKey(state->public_key_spki_der_, state->slot_.get());
 
   // Fail if the key was not found or is of the wrong type.
   if (!rsa_key || SECKEY_GetPrivateKeyType(rsa_key.get()) != rsaKey) {
@@ -897,7 +957,7 @@ void SignRSAOnWorkerThread(std::unique_ptr<SignState> state) {
 // Does the actual EC Signing on a worker thread.
 void SignECOnWorkerThread(std::unique_ptr<SignState> state) {
   crypto::ScopedSECKEYPrivateKey ec_key =
-      GetPrivateKey(state->public_key_spki_der_, state->slot_);
+      GetPrivateKey(state->public_key_spki_der_, state->slot_.get());
 
   // Fail if the key was not found or is of the wrong type.
   if (!ec_key || SECKEY_GetPrivateKeyType(ec_key.get()) != ecKey) {
@@ -944,7 +1004,7 @@ void SignECOnWorkerThread(std::unique_ptr<SignState> state) {
 // Decides which signing algorithm will be used. Used by SignWithDB().
 void SignOnWorkerThread(std::unique_ptr<SignState> state) {
   crypto::ScopedSECKEYPrivateKey key =
-      GetPrivateKey(state->public_key_spki_der_, state->slot_);
+      GetPrivateKey(state->public_key_spki_der_, state->slot_.get());
 
   if (!key) {
     state->OnError(FROM_HERE, Status::kErrorKeyNotFound);
@@ -1192,7 +1252,7 @@ void RemoveKeyOnWorkerThread(std::unique_ptr<RemoveKeyState> state) {
   DCHECK(state->slot_.get());
 
   crypto::ScopedSECKEYPrivateKey private_key =
-      GetPrivateKey(state->public_key_spki_der_, state->slot_);
+      GetPrivateKey(state->public_key_spki_der_, state->slot_.get());
 
   if (!private_key) {
     state->OnError(FROM_HERE, Status::kErrorKeyNotFound);
@@ -1326,7 +1386,7 @@ void SetAttributeForKeyWithDb(std::unique_ptr<SetAttributeForKeyState> state,
   DCHECK(state->slot_.get());
 
   crypto::ScopedSECKEYPrivateKey private_key =
-      GetPrivateKey(state->public_key_spki_der_, state->slot_);
+      GetPrivateKey(state->public_key_spki_der_, state->slot_.get());
 
   if (!private_key) {
     state->OnError(FROM_HERE, Status::kErrorKeyNotFound);
@@ -1359,7 +1419,7 @@ void GetAttributeForKeyWithDb(std::unique_ptr<GetAttributeForKeyState> state,
   DCHECK(state->slot_.get());
 
   crypto::ScopedSECKEYPrivateKey private_key =
-      GetPrivateKey(state->public_key_spki_der_, state->slot_);
+      GetPrivateKey(state->public_key_spki_der_, state->slot_.get());
 
   if (!private_key) {
     state->OnError(FROM_HERE, Status::kErrorKeyNotFound);
@@ -1398,15 +1458,24 @@ void GetAttributeForKeyWithDb(std::unique_ptr<GetAttributeForKeyState> state,
   state->OnSuccess(FROM_HERE, attribute_value_str);
 }
 
+void IsKeyOnTokenWithDb(std::unique_ptr<IsKeyOnTokenState> state,
+                        net::NSSCertDatabase* cert_db) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(state->slot_.get());
+
+  bool key_on_slot =
+      GetPrivateKey(state->public_key_spki_der_, state->slot_.get()) != nullptr;
+  state->OnSuccess(FROM_HERE, key_on_slot);
+}
+
 }  // namespace
 
-void PlatformKeysServiceImpl::GenerateRSAKey(
-    TokenId token_id,
-    unsigned int modulus_length_bits,
-    const GenerateKeyCallback& callback) {
+void PlatformKeysServiceImpl::GenerateRSAKey(TokenId token_id,
+                                             unsigned int modulus_length_bits,
+                                             GenerateKeyCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto state = std::make_unique<GenerateRSAKeyState>(
-      weak_factory_.GetWeakPtr(), modulus_length_bits, callback);
+      weak_factory_.GetWeakPtr(), modulus_length_bits, std::move(callback));
   if (delegate_->IsShutDown()) {
     state->OnError(FROM_HERE, Status::kErrorShutDown);
     return;
@@ -1423,13 +1492,12 @@ void PlatformKeysServiceImpl::GenerateRSAKey(
                   delegate_.get(), state_ptr);
 }
 
-void PlatformKeysServiceImpl::GenerateECKey(
-    TokenId token_id,
-    const std::string& named_curve,
-    const GenerateKeyCallback& callback) {
+void PlatformKeysServiceImpl::GenerateECKey(TokenId token_id,
+                                            const std::string& named_curve,
+                                            GenerateKeyCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  auto state = std::make_unique<GenerateECKeyState>(weak_factory_.GetWeakPtr(),
-                                                    named_curve, callback);
+  auto state = std::make_unique<GenerateECKeyState>(
+      weak_factory_.GetWeakPtr(), named_curve, std::move(callback));
   if (delegate_->IsShutDown()) {
     state->OnError(FROM_HERE, Status::kErrorShutDown);
     return;
@@ -1446,12 +1514,12 @@ void PlatformKeysServiceImpl::SignRSAPKCS1Digest(
     const std::string& data,
     const std::string& public_key_spki_der,
     HashAlgorithm hash_algorithm,
-    const SignCallback& callback) {
+    SignCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto state = std::make_unique<SignState>(
       weak_factory_.GetWeakPtr(), data, public_key_spki_der,
       /*raw_pkcs1=*/false, hash_algorithm,
-      /*key_type=*/KeyType::kRsassaPkcs1V15, callback);
+      /*key_type=*/KeyType::kRsassaPkcs1V15, std::move(callback));
   if (delegate_->IsShutDown()) {
     state->OnError(FROM_HERE, Status::kErrorShutDown);
     return;
@@ -1471,12 +1539,12 @@ void PlatformKeysServiceImpl::SignRSAPKCS1Raw(
     base::Optional<TokenId> token_id,
     const std::string& data,
     const std::string& public_key_spki_der,
-    const SignCallback& callback) {
+    SignCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto state = std::make_unique<SignState>(
       weak_factory_.GetWeakPtr(), data, public_key_spki_der,
       /*raw_pkcs1=*/true, HASH_ALGORITHM_NONE,
-      /*key_type=*/KeyType::kRsassaPkcs1V15, callback);
+      /*key_type=*/KeyType::kRsassaPkcs1V15, std::move(callback));
   if (delegate_->IsShutDown()) {
     state->OnError(FROM_HERE, Status::kErrorShutDown);
     return;
@@ -1497,12 +1565,12 @@ void PlatformKeysServiceImpl::SignECDSADigest(
     const std::string& data,
     const std::string& public_key_spki_der,
     HashAlgorithm hash_algorithm,
-    const SignCallback& callback) {
+    SignCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto state = std::make_unique<SignState>(
       weak_factory_.GetWeakPtr(), data, public_key_spki_der,
       /*raw_pkcs1=*/false, hash_algorithm,
-      /*key_type=*/KeyType::kEcdsa, callback);
+      /*key_type=*/KeyType::kEcdsa, std::move(callback));
   if (delegate_->IsShutDown()) {
     state->OnError(FROM_HERE, Status::kErrorShutDown);
     return;
@@ -1520,7 +1588,7 @@ void PlatformKeysServiceImpl::SignECDSADigest(
 
 void PlatformKeysServiceImpl::SelectClientCertificates(
     const std::vector<std::string>& certificate_authorities,
-    const SelectCertificatesCallback& callback) {
+    SelectCertificatesCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   auto cert_request_info = base::MakeRefCounted<net::SSLCertRequestInfo>();
@@ -1532,7 +1600,7 @@ void PlatformKeysServiceImpl::SelectClientCertificates(
   cert_request_info->cert_authorities = certificate_authorities;
 
   auto state = std::make_unique<SelectCertificatesState>(
-      weak_factory_.GetWeakPtr(), cert_request_info, callback);
+      weak_factory_.GetWeakPtr(), cert_request_info, std::move(callback));
   if (delegate_->IsShutDown()) {
     state->OnError(FROM_HERE, Status::kErrorShutDown);
     return;
@@ -1675,10 +1743,10 @@ bool GetPublicKeyBySpki(const std::string& spki,
 
 void PlatformKeysServiceImpl::GetCertificates(
     TokenId token_id,
-    const GetCertificatesCallback& callback) {
+    GetCertificatesCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto state = std::make_unique<GetCertificatesState>(
-      weak_factory_.GetWeakPtr(), callback);
+      weak_factory_.GetWeakPtr(), std::move(callback));
   if (delegate_->IsShutDown()) {
     state->OnError(FROM_HERE, Status::kErrorShutDown);
     return;
@@ -1710,10 +1778,10 @@ void PlatformKeysServiceImpl::GetAllKeys(TokenId token_id,
 void PlatformKeysServiceImpl::ImportCertificate(
     TokenId token_id,
     const scoped_refptr<net::X509Certificate>& certificate,
-    const ImportCertificateCallback& callback) {
+    ImportCertificateCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto state = std::make_unique<ImportCertificateState>(
-      weak_factory_.GetWeakPtr(), certificate, callback);
+      weak_factory_.GetWeakPtr(), certificate, std::move(callback));
   if (delegate_->IsShutDown()) {
     state->OnError(FROM_HERE, Status::kErrorShutDown);
     return;
@@ -1732,10 +1800,10 @@ void PlatformKeysServiceImpl::ImportCertificate(
 void PlatformKeysServiceImpl::RemoveCertificate(
     TokenId token_id,
     const scoped_refptr<net::X509Certificate>& certificate,
-    const RemoveCertificateCallback& callback) {
+    RemoveCertificateCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto state = std::make_unique<RemoveCertificateState>(
-      weak_factory_.GetWeakPtr(), certificate, callback);
+      weak_factory_.GetWeakPtr(), certificate, std::move(callback));
   if (delegate_->IsShutDown()) {
     state->OnError(FROM_HERE, Status::kErrorShutDown);
     return;
@@ -1772,10 +1840,10 @@ void PlatformKeysServiceImpl::RemoveKey(TokenId token_id,
                   delegate_.get(), state_ptr);
 }
 
-void PlatformKeysServiceImpl::GetTokens(const GetTokensCallback& callback) {
+void PlatformKeysServiceImpl::GetTokens(GetTokensCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  auto state =
-      std::make_unique<GetTokensState>(weak_factory_.GetWeakPtr(), callback);
+  auto state = std::make_unique<GetTokensState>(weak_factory_.GetWeakPtr(),
+                                                std::move(callback));
   if (delegate_->IsShutDown()) {
     state->OnError(FROM_HERE, Status::kErrorShutDown);
     return;
@@ -1789,10 +1857,10 @@ void PlatformKeysServiceImpl::GetTokens(const GetTokensCallback& callback) {
 
 void PlatformKeysServiceImpl::GetKeyLocations(
     const std::string& public_key_spki_der,
-    const GetKeyLocationsCallback& callback) {
+    GetKeyLocationsCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto state = std::make_unique<GetKeyLocationsState>(
-      weak_factory_.GetWeakPtr(), public_key_spki_der, callback);
+      weak_factory_.GetWeakPtr(), public_key_spki_der, std::move(callback));
   if (delegate_->IsShutDown()) {
     state->OnError(FROM_HERE, Status::kErrorShutDown);
     return;
@@ -1862,6 +1930,29 @@ void PlatformKeysServiceImpl::GetAttributeForKey(
   GetCertDatabase(
       token_id, base::BindOnce(&GetAttributeForKeyWithDb, base::Passed(&state)),
       delegate_.get(), state_ptr);
+}
+
+void PlatformKeysServiceImpl::IsKeyOnToken(
+    TokenId token_id,
+    const std::string& public_key_spki_der,
+    IsKeyOnTokenCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  auto state = std::make_unique<IsKeyOnTokenState>(
+      weak_factory_.GetWeakPtr(), public_key_spki_der, std::move(callback));
+  if (delegate_->IsShutDown()) {
+    state->OnError(FROM_HERE, Status::kErrorShutDown);
+    return;
+  }
+
+  // Get the pointer to |state| before base::Passed releases |state|.
+  NSSOperationState* state_ptr = state.get();
+
+  // The NSSCertDatabase object is not required. Only setting the state slot is
+  // required.
+  GetCertDatabase(token_id,
+                  base::BindOnce(&IsKeyOnTokenWithDb, base::Passed(&state)),
+                  delegate_.get(), state_ptr);
 }
 
 void PlatformKeysServiceImpl::SetMapToSoftokenAttrsForTesting(

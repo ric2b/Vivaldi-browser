@@ -9,7 +9,7 @@ import android.view.MenuItem;
 import androidx.annotation.VisibleForTesting;
 import androidx.lifecycle.LifecycleObserver;
 
-import org.chromium.chrome.browser.help.HelpAndFeedback;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.password_check.helper.PasswordCheckChangePasswordHelper;
 import org.chromium.chrome.browser.password_check.helper.PasswordCheckIconHelper;
 import org.chromium.chrome.browser.password_check.helper.PasswordCheckReauthenticationHelper;
@@ -103,6 +103,7 @@ class PasswordCheckCoordinator implements PasswordCheckComponentUi, LifecycleObs
 
     @Override
     public void onResumeFragment() {
+        mMediator.onResumeFragment();
         mReauthenticationHelper.onReauthenticationMaybeHappened();
     }
 
@@ -110,6 +111,8 @@ class PasswordCheckCoordinator implements PasswordCheckComponentUi, LifecycleObs
     public void onDestroyFragment() {
         mMediator.stopCheck();
         if (mFragmentView.getActivity() == null || mFragmentView.getActivity().isFinishing()) {
+            mMediator
+                    .onUserLeavesCheckPage(); // Should be called only if the activity is finishing.
             mMediator.destroy();
             mModel = null;
         }
@@ -119,7 +122,7 @@ class PasswordCheckCoordinator implements PasswordCheckComponentUi, LifecycleObs
     @Override
     public boolean handleHelp(MenuItem item) {
         if (item.getItemId() == org.chromium.chrome.R.id.menu_id_targeted_help) {
-            HelpAndFeedback.getInstance().show(mFragmentView.getActivity(),
+            HelpAndFeedbackLauncherImpl.getInstance().show(mFragmentView.getActivity(),
                     mFragmentView.getActivity().getString(
                             org.chromium.chrome.R.string.help_context_check_passwords),
                     Profile.getLastUsedRegularProfile(), null);

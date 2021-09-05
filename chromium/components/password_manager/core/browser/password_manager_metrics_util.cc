@@ -65,8 +65,6 @@ void LogSaveUIDismissalReason(
                                 NUM_UI_RESPONSES);
 
   if (user_state.has_value()) {
-    DCHECK(base::FeatureList::IsEnabled(
-        password_manager::features::kEnablePasswordsAccountStorage));
     std::string suffix =
         GetPasswordAccountStorageUserStateHistogramSuffix(user_state.value());
     base::UmaHistogramEnumeration(
@@ -286,7 +284,7 @@ void LogGenerationDialogChoice(GenerationDialogChoice choice,
   };
 }  // namespace metrics_util
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
 void LogGaiaPasswordHashChange(GaiaPasswordHashChange event,
                                bool is_sync_password) {
   if (is_sync_password) {
@@ -335,6 +333,22 @@ void LogProtectedPasswordHashCounts(size_t gaia_hash_count,
 
 void LogProtectedPasswordReuse(PasswordType reused_password_type) {}
 #endif
+
+void LogPasswordEditResult(IsUsernameChanged username_changed,
+                           IsPasswordChanged password_changed) {
+  PasswordEditUpdatedValues values;
+  if (username_changed && password_changed) {
+    values = PasswordEditUpdatedValues::kBoth;
+  } else if (username_changed) {
+    values = PasswordEditUpdatedValues::kUsername;
+  } else if (password_changed) {
+    values = PasswordEditUpdatedValues::kPassword;
+  } else {
+    values = PasswordEditUpdatedValues::kNone;
+  }
+  base::UmaHistogramEnumeration("PasswordManager.PasswordEditUpdatedValues",
+                                values);
+}
 
 }  // namespace metrics_util
 

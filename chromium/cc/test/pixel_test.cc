@@ -69,7 +69,7 @@ PixelTest::PixelTest(GraphicsBackend backend)
     init_vulkan = true;
   } else if (backend == kSkiaDawn) {
     scoped_feature_list_.InitAndEnableFeature(features::kSkiaDawn);
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     init_vulkan = true;
 #elif defined(OS_WIN)
     // TODO(sgilhuly): Initialize D3D12 for Windows.
@@ -90,7 +90,7 @@ PixelTest::PixelTest(GraphicsBackend backend)
 
 PixelTest::~PixelTest() = default;
 
-bool PixelTest::RunPixelTest(viz::RenderPassList* pass_list,
+bool PixelTest::RunPixelTest(viz::AggregatedRenderPassList* pass_list,
                              const base::FilePath& ref_file,
                              const PixelComparator& comparator) {
   return RunPixelTestWithReadbackTarget(pass_list, pass_list->back().get(),
@@ -98,8 +98,8 @@ bool PixelTest::RunPixelTest(viz::RenderPassList* pass_list,
 }
 
 bool PixelTest::RunPixelTestWithReadbackTarget(
-    viz::RenderPassList* pass_list,
-    viz::RenderPass* target,
+    viz::AggregatedRenderPassList* pass_list,
+    viz::AggregatedRenderPass* target,
     const base::FilePath& ref_file,
     const PixelComparator& comparator) {
   return RunPixelTestWithReadbackTargetAndArea(
@@ -107,8 +107,8 @@ bool PixelTest::RunPixelTestWithReadbackTarget(
 }
 
 bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
-    viz::RenderPassList* pass_list,
-    viz::RenderPass* target,
+    viz::AggregatedRenderPassList* pass_list,
+    viz::AggregatedRenderPass* target,
     const base::FilePath& ref_file,
     const PixelComparator& comparator,
     const gfx::Rect* copy_rect) {
@@ -145,11 +145,11 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
   return PixelsMatchReference(ref_file, comparator);
 }
 
-bool PixelTest::RunPixelTest(viz::RenderPassList* pass_list,
+bool PixelTest::RunPixelTest(viz::AggregatedRenderPassList* pass_list,
                              std::vector<SkColor>* ref_pixels,
                              const PixelComparator& comparator) {
   base::RunLoop run_loop;
-  viz::RenderPass* target = pass_list->back().get();
+  auto* target = pass_list->back().get();
 
   std::unique_ptr<viz::CopyOutputRequest> request =
       std::make_unique<viz::CopyOutputRequest>(
@@ -306,8 +306,7 @@ void PixelTest::SetUpSkiaRenderer(gfx::SurfaceOrigin output_surface_origin) {
   renderer_ = std::make_unique<viz::SkiaRenderer>(
       &renderer_settings_, &debug_settings_, output_surface_.get(),
       resource_provider_.get(), nullptr,
-      static_cast<viz::SkiaOutputSurface*>(output_surface_.get()),
-      viz::SkiaRenderer::DrawMode::DDL);
+      static_cast<viz::SkiaOutputSurface*>(output_surface_.get()));
   renderer_->Initialize();
   renderer_->SetVisible(true);
 

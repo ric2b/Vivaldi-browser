@@ -47,6 +47,7 @@
 #include "components/send_tab_to_self/features.h"
 #include "components/signin/core/browser/account_reconcilor.h"
 #include "components/signin/ios/browser/features.h"
+#include "components/signin/public/base/account_consistency_method.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/base/sync_base_switches.h"
@@ -59,8 +60,9 @@
 #include "ios/chrome/browser/crash_report/features.h"
 #include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
 #include "ios/chrome/browser/flags/ios_chrome_flag_descriptions.h"
-#include "ios/chrome/browser/passwords/password_manager_features.h"
+#import "ios/chrome/browser/open_in/features.h"
 #include "ios/chrome/browser/policy/policy_features.h"
+#include "ios/chrome/browser/screen_time/features.h"
 #include "ios/chrome/browser/system_flags.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/download/features.h"
@@ -68,8 +70,8 @@
 #import "ios/chrome/browser/ui/infobars/infobar_feature.h"
 #import "ios/chrome/browser/ui/page_info/features.h"
 #include "ios/chrome/browser/ui/settings/autofill/features.h"
+#import "ios/chrome/browser/ui/tab_grid/features.h"
 #import "ios/chrome/browser/ui/table_view/feature_flags.h"
-#import "ios/chrome/browser/ui/toolbar/public/features.h"
 #import "ios/chrome/browser/ui/toolbar_container/toolbar_container_features.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/browser/web/features.h"
@@ -121,6 +123,13 @@ const FeatureEntry::Choice kAutofillIOSDelayBetweenFieldsChoices[] = {
     {"200", autofill::switches::kAutofillIOSDelayBetweenFields, "200"},
     {"500", autofill::switches::kAutofillIOSDelayBetweenFields, "500"},
     {"1000", autofill::switches::kAutofillIOSDelayBetweenFields, "1000"},
+};
+
+const FeatureEntry::Choice kDelayThresholdMinutesToUpdateGaiaCookieChoices[] = {
+    {flags_ui::kGenericExperimentChoiceDefault, "", ""},
+    {"0", signin::kDelayThresholdMinutesToUpdateGaiaCookie, "0"},
+    {"10", signin::kDelayThresholdMinutesToUpdateGaiaCookie, "10"},
+    {"60", signin::kDelayThresholdMinutesToUpdateGaiaCookie, "60"},
 };
 
 const FeatureEntry::FeatureVariation
@@ -292,11 +301,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAutofillCreditCardUploadName,
      flag_descriptions::kAutofillCreditCardUploadDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(autofill::features::kAutofillUpstream)},
-    {"enable-sync-device-info-in-transport-mode",
-     flag_descriptions::kSyncDeviceInfoInTransportModeName,
-     flag_descriptions::kSyncDeviceInfoInTransportModeDescription,
-     flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(switches::kSyncDeviceInfoInTransportMode)},
     {"use-sync-sandbox", flag_descriptions::kSyncSandboxName,
      flag_descriptions::kSyncSandboxDescription, flags_ui::kOsIos,
      SINGLE_VALUE_TYPE_AND_VALUE(
@@ -319,12 +323,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAutofillIOSDelayBetweenFieldsName,
      flag_descriptions::kAutofillIOSDelayBetweenFieldsDescription,
      flags_ui::kOsIos, MULTI_VALUE_TYPE(kAutofillIOSDelayBetweenFieldsChoices)},
-    {"autofill-show-all-profiles-on-prefilled-forms",
-     flag_descriptions::kAutofillShowAllSuggestionsOnPrefilledFormsName,
-     flag_descriptions::kAutofillShowAllSuggestionsOnPrefilledFormsDescription,
-     flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(
-         autofill::features::kAutofillShowAllSuggestionsOnPrefilledForms)},
     {"autofill-restrict-formless-form-extraction",
      flag_descriptions::kAutofillRestrictUnownedFieldsToFormlessCheckoutName,
      flag_descriptions::
@@ -365,10 +363,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kAutofillCacheQueryResponsesDescription,
      flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(autofill::features::kAutofillCacheQueryResponses)},
-    {"autofill-enable-company-name",
-     flag_descriptions::kAutofillEnableCompanyNameName,
-     flag_descriptions::kAutofillEnableCompanyNameDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(autofill::features::kAutofillEnableCompanyName)},
     {"webpage-default-zoom-from-dynamic-type",
      flag_descriptions::kWebPageDefaultZoomFromDynamicTypeName,
      flag_descriptions::kWebPageDefaultZoomFromDynamicTypeDescription,
@@ -378,6 +372,10 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kWebPageTextAccessibilityName,
      flag_descriptions::kWebPageTextAccessibilityDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(web::kWebPageTextAccessibility)},
+    {"webpage-alternative-text-zoom",
+     flag_descriptions::kWebPageAlternativeTextZoomName,
+     flag_descriptions::kWebPageAlternativeTextZoomDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(web::kWebPageAlternativeTextZoom)},
     {"toolbar-container", flag_descriptions::kToolbarContainerName,
      flag_descriptions::kToolbarContainerDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(toolbar_container::kToolbarContainerEnabled)},
@@ -430,13 +428,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"send-uma-cellular", flag_descriptions::kSendUmaOverAnyNetwork,
      flag_descriptions::kSendUmaOverAnyNetworkDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kUmaCellular)},
-    {"omnibox-preserve-default-match-against-async-update",
-     flag_descriptions::kOmniboxPreserveDefaultMatchAgainstAsyncUpdateName,
-     flag_descriptions::
-         kOmniboxPreserveDefaultMatchAgainstAsyncUpdateDescription,
-     flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(
-         omnibox::kOmniboxPreserveDefaultMatchAgainstAsyncUpdate)},
     {"autofill-use-mobile-label-disambiguation",
      flag_descriptions::kAutofillUseMobileLabelDisambiguationName,
      flag_descriptions::kAutofillUseMobileLabelDisambiguationDescription,
@@ -526,9 +517,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(
          autofill::features::kAutofillSaveCardInfobarEditSupport)},
-    {"reload-sad-tab", flag_descriptions::kReloadSadTabName,
-     flag_descriptions::kReloadSadTabDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(web::kReloadSadTab)},
     {"page-info-refactoring", flag_descriptions::kPageInfoRefactoringName,
      flag_descriptions::kPageInfoRefactoringDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kPageInfoRefactoring)},
@@ -536,10 +524,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kSSLCommittedInterstitialsName,
      flag_descriptions::kSSLCommittedInterstitialsDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(web::features::kSSLCommittedInterstitials)},
-    {"change-tab-switcher-position",
-     flag_descriptions::kChangeTabSwitcherPositionName,
-     flag_descriptions::kChangeTabSwitcherPositionDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kChangeTabSwitcherPosition)},
     {"fullscreen-controller-browser-scoped",
      flag_descriptions::kFullscreenControllerBrowserScopedName,
      flag_descriptions::kFullscreenControllerBrowserScopedDescription,
@@ -564,12 +548,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kSafeBrowsingRealTimeLookupDescription,
      flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(safe_browsing::kRealTimeUrlLookupEnabled)},
-    {"autofill-enable-surfacing-server-card-nickname",
-     flag_descriptions::kAutofillEnableSurfacingServerCardNicknameName,
-     flag_descriptions::kAutofillEnableSurfacingServerCardNicknameDescription,
-     flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(
-         autofill::features::kAutofillEnableSurfacingServerCardNickname)},
     {"managed-bookmarks-ios", flag_descriptions::kManagedBookmarksIOSName,
      flag_descriptions::kManagedBookmarksIOSDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kManagedBookmarksIOS)},
@@ -668,10 +646,26 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flag_descriptions::kEnableAutofillPasswordReauthIOSName,
      flag_descriptions::kEnableAutofillPasswordReauthIOSDescription,
      flags_ui::kOsIos, FEATURE_VALUE_TYPE(kEnableAutofillPasswordReauthIOS)},
+    {"extend-open-in-files-support",
+     flag_descriptions::kExtendOpenInFilesSupportName,
+     flag_descriptions::kExtendOpenInFilesSupportDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kExtendOpenInFilesSupport)},
     {"well-known-change-password",
      flag_descriptions::kWellKnownChangePasswordName,
      flag_descriptions::kWellKnownChangePasswordDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(password_manager::features::kWellKnownChangePassword)},
+    {"enable-close-all-tabs-confirmation",
+     flag_descriptions::kEnableCloseAllTabsConfirmationName,
+     flag_descriptions::kEnableCloseAllTabsConfirmationDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kEnableCloseAllTabsConfirmation)},
+    {"screen-time-integration-ios",
+     flag_descriptions::kScreenTimeIntegrationName,
+     flag_descriptions::kScreenTimeIntegrationDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kScreenTimeIntegration)},
+    {"mobile-identity-consistency",
+     flag_descriptions::kMobileIdentityConsistencyName,
+     flag_descriptions::kMobileIdentityConsistencyDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(signin::kMobileIdentityConsistency)},
     {"default-browser-fullscreen-promo",
      flag_descriptions::kDefaultBrowserFullscreenPromoName,
      flag_descriptions::kDefaultBrowserFullscreenPromoDescription,
@@ -679,6 +673,24 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"default-browser-setting", flag_descriptions::kDefaultBrowserSettingsName,
      flag_descriptions::kDefaultBrowserSettingsDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kDefaultBrowserSettings)},
+    {"modern-tab-strip", flag_descriptions::kModernTabStripName,
+     flag_descriptions::kModernTabStripDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kModernTabStrip)},
+    {"autofill-use-renderer-ids",
+     flag_descriptions::kAutofillUseRendererIDsName,
+     flag_descriptions::kAutofillUseRendererIDsDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(
+         autofill::features::kAutofillUseUniqueRendererIDsOnIOS)},
+    {"restore-gaia-cookies-if-deleted",
+     flag_descriptions::kRestoreGaiaCookiesIfDeletedName,
+     flag_descriptions::kRestoreGaiaCookiesIfDeletedDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(signin::kRestoreGaiaCookiesIfDeleted)},
+    {"minutes-delay-to-restore-gaia-cookies-if-deleted",
+     flag_descriptions::kDelayThresholdMinutesToUpdateGaiaCookieName,
+     flag_descriptions::kDelayThresholdMinutesToUpdateGaiaCookieDescription,
+     flags_ui::kOsIos,
+     MULTI_VALUE_TYPE(kDelayThresholdMinutesToUpdateGaiaCookieChoices)},
 };
 
 bool SkipConditionalFeatureEntry(const flags_ui::FeatureEntry& entry) {

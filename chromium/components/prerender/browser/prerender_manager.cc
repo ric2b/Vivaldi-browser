@@ -52,7 +52,6 @@
 #include "content/public/common/url_constants.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_request_headers.h"
-#include "third_party/blink/public/common/prerender/prerender_rel_type.h"
 #include "ui/gfx/geometry/rect.h"
 
 using content::BrowserThread;
@@ -170,13 +169,20 @@ PrerenderManager::AddPrerenderFromLinkRelPrerender(
     int process_id,
     int route_id,
     const GURL& url,
-    const uint32_t rel_types,
+    blink::mojom::PrerenderRelType rel_type,
     const content::Referrer& referrer,
     const url::Origin& initiator_origin,
     const gfx::Size& size) {
-  Origin origin = rel_types & blink::kPrerenderRelTypePrerender
-                      ? ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN
-                      : ORIGIN_LINK_REL_NEXT;
+  Origin origin = ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN;
+  switch (rel_type) {
+    case blink::mojom::PrerenderRelType::kPrerender:
+      origin = ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN;
+      break;
+    case blink::mojom::PrerenderRelType::kNext:
+      origin = ORIGIN_LINK_REL_NEXT;
+      break;
+  }
+
   SessionStorageNamespace* session_storage_namespace = nullptr;
   // Unit tests pass in a process_id == -1.
   if (process_id != -1) {
@@ -279,16 +285,9 @@ void PrerenderManager::MoveEntryToPendingDelete(PrerenderContents* entry,
 }
 
 bool PrerenderManager::IsWebContentsPrerendering(
-    const WebContents* web_contents,
-    Origin* origin) const {
+    const WebContents* web_contents) const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  PrerenderContents* prerender_contents = GetPrerenderContents(web_contents);
-  if (!prerender_contents)
-    return false;
-
-  if (origin)
-    *origin = prerender_contents->origin();
-  return true;
+  return GetPrerenderContents(web_contents);
 }
 
 bool PrerenderManager::HasPrerenderedUrl(
@@ -509,12 +508,14 @@ bool PrerenderManager::IsLowEndDevice() const {
 bool PrerenderManager::IsPredictionEnabled(Origin origin) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  // <link rel=prerender> origins ignore the network state and the privacy
+  // <link rel=prerender> and <link rel=next> origins ignore the network state
+  // and the privacy
   // settings. Web developers should be able prefetch with all possible privacy
   // settings. This would avoid web devs coming up with creative ways to
   // prefetch in cases they are not allowed to do so.
   if (origin == ORIGIN_LINK_REL_PRERENDER_SAMEDOMAIN ||
-      origin == ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN) {
+      origin == ORIGIN_LINK_REL_PRERENDER_CROSSDOMAIN ||
+      origin == ORIGIN_LINK_REL_NEXT) {
     return true;
   }
 

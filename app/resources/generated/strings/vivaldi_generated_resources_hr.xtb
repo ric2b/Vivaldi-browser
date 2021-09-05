@@ -10,10 +10,10 @@
 <translation id="1163931534039071049">&amp;Pogledaj izvor okvira</translation>
 <translation id="1165039591588034296">Pogreška</translation>
 <translation id="1175364870820465910">&amp;Ispis...</translation>
-<translation id="1177863135347784049">Prilagođeno</translation>
 <translation id="1187722533808055681">Buđenja iz stanja mirovanja</translation>
 <translation id="119944043368869598">Očisti sve</translation>
 <translation id="1244303850296295656">Pogreška proširenja</translation>
+<translation id="125220115284141797">Zadano</translation>
 <translation id="1274977772557788323">Postavke pohrane Adobe Flash Playera</translation>
 <translation id="1297175357211070620">Odredište</translation>
 <translation id="1303101771013849280">HTML datoteka oznaka</translation>
@@ -32,6 +32,7 @@
 <translation id="1708338024780164500">(Neaktivno)</translation>
 <translation id="1723824996674794290">&amp;Novi prozor</translation>
 <translation id="1729533290416704613">Upravlja i time koja se stranica prikazuje prilikom pretraživanja putem višenamjenskog okvira.</translation>
+<translation id="174123615272205933">Prilagođeno</translation>
 <translation id="1744108098763830590">Pozadinska stranica</translation>
 <translation id="176587472219019965">&amp;Novi prozor</translation>
 <translation id="1886996562706621347">Dopusti web-lokacijama traženje dopuštenja da postanu zadani rukovatelji za protokole (preporučeno)</translation>
@@ -158,7 +159,6 @@
 <translation id="5027562294707732951">Dodaj proširenje</translation>
 <translation id="5036662165765606524">Ne dozvoli nijednoj web-lokaciji automatsko preuzimanje više datoteka</translation>
 <translation id="5039804452771397117">Dopusti</translation>
-<translation id="5068918910148307423">Ne dozvoli nedavno zatvorenim web-lokacijama dovršetak slanja i primanja podataka</translation>
 <translation id="5143374789336132547">Proširenje "<ph name="EXTENSION_NAME" />" promijenilo je stranicu koja se prikazuje kada se klikne gumb Početna.</translation>
 <translation id="5154108062446123722">Napredne postavke za <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5233231016133573565">ID procesa</translation>

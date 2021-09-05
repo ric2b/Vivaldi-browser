@@ -82,6 +82,9 @@ const char* JobTypeToRequestType(
     case DeviceManagementService::JobConfiguration::
         TYPE_CERT_PROVISIONING_REQUEST:
       return dm_protocol::kValueRequestCertProvisioningRequest;
+    case DeviceManagementService::JobConfiguration::
+        TYPE_PSM_HAS_DEVICE_STATE_REQUEST:
+      return dm_protocol::kValueRequestPsmHasDeviceState;
   }
   NOTREACHED() << "Invalid job type " << type;
   return "";
@@ -179,6 +182,9 @@ DMServerJobConfiguration::MapNetErrorAndResponseCodeToDMStatus(
         break;
       case DeviceManagementService::kInvalidSerialNumber:
         code = DM_STATUS_SERVICE_INVALID_SERIAL_NUMBER;
+        break;
+      case DeviceManagementService::kTooManyRequests:
+        code = DM_STATUS_SERVICE_TOO_MANY_REQUESTS;
         break;
       case DeviceManagementService::kDomainMismatch:
         code = DM_STATUS_SERVICE_DOMAIN_MISMATCH;

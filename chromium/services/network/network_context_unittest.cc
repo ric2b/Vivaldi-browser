@@ -78,6 +78,7 @@
 #include "net/dns/host_resolver_source.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/dns/public/dns_query_type.h"
+#include "net/dns/public/secure_dns_mode.h"
 #include "net/dns/resolve_context.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_cache.h"
@@ -674,45 +675,46 @@ TEST_F(NetworkContextTest, QuicUserAgentId) {
                                   ->user_agent_id);
 }
 
-TEST_F(NetworkContextTest, DataUrlSupport) {
-  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(std::move(context_params));
-  EXPECT_FALSE(
-      network_context->url_request_context()->job_factory()->IsHandledProtocol(
-          url::kDataScheme));
-}
+TEST_F(NetworkContextTest, UnhandedProtocols) {
+  const GURL kUnsupportedUrls[] = {
+      // These are handled outside the network service.
+      GURL("data:,foo"),
+      GURL("file:///not/a/path/that/leads/anywhere/but/it/should/not/matter/"
+           "anyways"),
 
-TEST_F(NetworkContextTest, FileUrlSupportDisabled) {
-  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(std::move(context_params));
-  EXPECT_FALSE(
-      network_context->url_request_context()->job_factory()->IsHandledProtocol(
-          url::kFileScheme));
-}
+      // FTP is handled by the network service on some platforms, but support
+      // for it is not enabled by default.
+      GURL("ftp://foo.test/"),
+  };
 
-TEST_F(NetworkContextTest, DisableFtpUrlSupport) {
-  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->enable_ftp_url_support = false;
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(std::move(context_params));
-  EXPECT_FALSE(
-      network_context->url_request_context()->job_factory()->IsHandledProtocol(
-          url::kFtpScheme));
-}
+  for (const GURL& url : kUnsupportedUrls) {
+    mojom::NetworkContextParamsPtr context_params = CreateContextParams();
+    std::unique_ptr<NetworkContext> network_context =
+        CreateContextWithParams(std::move(context_params));
 
-#if !BUILDFLAG(DISABLE_FTP_SUPPORT)
-TEST_F(NetworkContextTest, EnableFtpUrlSupport) {
-  mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-  context_params->enable_ftp_url_support = true;
-  std::unique_ptr<NetworkContext> network_context =
-      CreateContextWithParams(std::move(context_params));
-  EXPECT_TRUE(
-      network_context->url_request_context()->job_factory()->IsHandledProtocol(
-          url::kFtpScheme));
+    mojo::Remote<mojom::URLLoaderFactory> loader_factory;
+    mojom::URLLoaderFactoryParamsPtr params =
+        mojom::URLLoaderFactoryParams::New();
+    params->process_id = mojom::kBrowserProcessId;
+    params->is_corb_enabled = false;
+    network_context->CreateURLLoaderFactory(
+        loader_factory.BindNewPipeAndPassReceiver(), std::move(params));
+
+    mojo::PendingRemote<mojom::URLLoader> loader;
+    TestURLLoaderClient client;
+    ResourceRequest request;
+    request.url = url;
+    loader_factory->CreateLoaderAndStart(
+        loader.InitWithNewPipeAndPassReceiver(), 0 /* routing_id */,
+        0 /* request_id */, 0 /* options */, request, client.CreateRemote(),
+        net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
+
+    client.RunUntilComplete();
+    EXPECT_TRUE(client.has_received_completion());
+    EXPECT_EQ(net::ERR_UNKNOWN_URL_SCHEME,
+              client.completion_status().error_code);
+  }
 }
-#endif  // !BUILDFLAG(DISABLE_FTP_SUPPORT)
 
 #if BUILDFLAG(ENABLE_REPORTING)
 TEST_F(NetworkContextTest, DisableReporting) {
@@ -982,10 +984,10 @@ TEST_F(NetworkContextTest, HttpServerPropertiesToDisk) {
           ->http_server_properties()
           ->GetSupportsSpdy(kSchemeHostPort, net::NetworkIsolationKey()));
 
-  // Now check that ClearNetworkingHistorySince clears the data.
+  // Now check that ClearNetworkingHistoryBetween clears the data.
   base::RunLoop run_loop2;
-  network_context->ClearNetworkingHistorySince(
-      base::Time::Now() - base::TimeDelta::FromHours(1),
+  network_context->ClearNetworkingHistoryBetween(
+      base::Time::Now() - base::TimeDelta::FromHours(1), base::Time::Max(),
       run_loop2.QuitClosure());
   run_loop2.Run();
   EXPECT_FALSE(
@@ -1000,7 +1002,7 @@ TEST_F(NetworkContextTest, HttpServerPropertiesToDisk) {
   ASSERT_TRUE(temp_dir.Delete());
 }
 
-// Checks that ClearNetworkingHistorySince() clears in-memory pref stores and
+// Checks that ClearNetworkingHistoryBetween() clears in-memory pref stores and
 // invokes the closure passed to it.
 TEST_F(NetworkContextTest, ClearHttpServerPropertiesInMemory) {
   const url::SchemeHostPort kSchemeHostPort("https", "foo", 443);
@@ -1021,8 +1023,8 @@ TEST_F(NetworkContextTest, ClearHttpServerPropertiesInMemory) {
           ->GetSupportsSpdy(kSchemeHostPort, net::NetworkIsolationKey()));
 
   base::RunLoop run_loop;
-  network_context->ClearNetworkingHistorySince(
-      base::Time::Now() - base::TimeDelta::FromHours(1),
+  network_context->ClearNetworkingHistoryBetween(
+      base::Time::Now() - base::TimeDelta::FromHours(1), base::Time::Max(),
       run_loop.QuitClosure());
   run_loop.Run();
   EXPECT_FALSE(
@@ -1031,7 +1033,7 @@ TEST_F(NetworkContextTest, ClearHttpServerPropertiesInMemory) {
           ->GetSupportsSpdy(kSchemeHostPort, net::NetworkIsolationKey()));
 }
 
-// Checks that ClearNetworkingHistorySince() clears network quality prefs.
+// Checks that ClearNetworkingHistoryBetween() clears network quality prefs.
 TEST_F(NetworkContextTest, ClearingNetworkingHistoryClearNetworkQualityPrefs) {
   const url::SchemeHostPort kSchemeHostPort("https", "foo", 443);
   net::TestNetworkQualityEstimator estimator;
@@ -1057,8 +1059,8 @@ TEST_F(NetworkContextTest, ClearingNetworkingHistoryClearNetworkQualityPrefs) {
   // Clear the networking history.
   base::RunLoop run_loop;
   base::HistogramTester histogram_tester;
-  network_context->ClearNetworkingHistorySince(
-      base::Time::Now() - base::TimeDelta::FromHours(1),
+  network_context->ClearNetworkingHistoryBetween(
+      base::Time::Now() - base::TimeDelta::FromHours(1), base::Time::Max(),
       run_loop.QuitClosure());
   run_loop.Run();
 
@@ -1765,20 +1767,38 @@ TEST_F(NetworkContextTest, ClearHttpAuthCache) {
   ASSERT_NE(nullptr, cache->Lookup(origin, net::HttpAuth::AUTH_PROXY, "Realm2",
                                    net::HttpAuth::AUTH_SCHEME_BASIC,
                                    net::NetworkIsolationKey()));
+  {
+    base::RunLoop run_loop;
+    base::Time test_time;
+    ASSERT_TRUE(base::Time::FromString("30 May 2018 12:30:00", &test_time));
+    network_context->ClearHttpAuthCache(base::Time(), test_time,
+                                        run_loop.QuitClosure());
+    run_loop.Run();
 
-  base::RunLoop run_loop;
-  base::Time test_time;
-  ASSERT_TRUE(base::Time::FromString("30 May 2018 12:30:00", &test_time));
-  network_context->ClearHttpAuthCache(test_time, run_loop.QuitClosure());
-  run_loop.Run();
+    EXPECT_EQ(1u, cache->GetEntriesSizeForTesting());
+    EXPECT_EQ(nullptr, cache->Lookup(origin, net::HttpAuth::AUTH_SERVER,
+                                     "Realm1", net::HttpAuth::AUTH_SCHEME_BASIC,
+                                     net::NetworkIsolationKey()));
+    EXPECT_NE(nullptr, cache->Lookup(origin, net::HttpAuth::AUTH_PROXY,
+                                     "Realm2", net::HttpAuth::AUTH_SCHEME_BASIC,
+                                     net::NetworkIsolationKey()));
+  }
+  {
+    base::RunLoop run_loop;
+    base::Time test_time;
+    ASSERT_TRUE(base::Time::FromString("30 May 2018 12:30:00", &test_time));
+    network_context->ClearHttpAuthCache(test_time, base::Time::Max(),
+                                        run_loop.QuitClosure());
+    run_loop.Run();
 
-  EXPECT_EQ(1u, cache->GetEntriesSizeForTesting());
-  EXPECT_NE(nullptr, cache->Lookup(origin, net::HttpAuth::AUTH_SERVER, "Realm1",
-                                   net::HttpAuth::AUTH_SCHEME_BASIC,
-                                   net::NetworkIsolationKey()));
-  EXPECT_EQ(nullptr, cache->Lookup(origin, net::HttpAuth::AUTH_PROXY, "Realm2",
-                                   net::HttpAuth::AUTH_SCHEME_BASIC,
-                                   net::NetworkIsolationKey()));
+    EXPECT_EQ(0u, cache->GetEntriesSizeForTesting());
+    EXPECT_EQ(nullptr, cache->Lookup(origin, net::HttpAuth::AUTH_SERVER,
+                                     "Realm1", net::HttpAuth::AUTH_SCHEME_BASIC,
+                                     net::NetworkIsolationKey()));
+    EXPECT_EQ(nullptr, cache->Lookup(origin, net::HttpAuth::AUTH_PROXY,
+                                     "Realm2", net::HttpAuth::AUTH_SCHEME_BASIC,
+                                     net::NetworkIsolationKey()));
+  }
 }
 
 TEST_F(NetworkContextTest, ClearAllHttpAuthCache) {
@@ -1816,7 +1836,8 @@ TEST_F(NetworkContextTest, ClearAllHttpAuthCache) {
                                    net::NetworkIsolationKey()));
 
   base::RunLoop run_loop;
-  network_context->ClearHttpAuthCache(base::Time(), run_loop.QuitClosure());
+  network_context->ClearHttpAuthCache(base::Time(), base::Time::Max(),
+                                      run_loop.QuitClosure());
   run_loop.Run();
 
   EXPECT_EQ(0u, cache->GetEntriesSizeForTesting());
@@ -1840,6 +1861,7 @@ TEST_F(NetworkContextTest, ClearEmptyHttpAuthCache) {
 
   base::RunLoop run_loop;
   network_context->ClearHttpAuthCache(base::Time::UnixEpoch(),
+                                      base::Time::Max(),
                                       base::BindOnce(run_loop.QuitClosure()));
   run_loop.Run();
 
@@ -3698,7 +3720,7 @@ TEST_F(NetworkContextTest, CreateHostResolverWithConfigOverrides) {
   ASSERT_EQ(1u, factory->resolvers().size());
   net::ContextHostResolver* internal_resolver = factory->resolvers().front();
 
-  EXPECT_TRUE(internal_resolver->GetDnsConfigAsValue());
+  EXPECT_TRUE(internal_resolver->GetDnsConfigAsValue().is_dict());
 
   // Override DnsClient with a basic mock.
   net::DnsConfig base_configuration;
@@ -4455,7 +4477,7 @@ TEST_F(NetworkContextTest, TrustedParams_DisableSecureDns) {
     EXPECT_EQ(disable_secure_dns,
               resolver->last_secure_dns_mode_override().has_value());
     if (disable_secure_dns) {
-      EXPECT_EQ(net::DnsConfig::SecureDnsMode::OFF,
+      EXPECT_EQ(net::SecureDnsMode::kOff,
                 resolver->last_secure_dns_mode_override().value());
     }
   }
@@ -4501,7 +4523,7 @@ TEST_F(NetworkContextTest, FactoryParams_DisableSecureDns) {
     EXPECT_EQ(disable_secure_dns,
               resolver.last_secure_dns_mode_override().has_value());
     if (disable_secure_dns) {
-      EXPECT_EQ(net::DnsConfig::SecureDnsMode::OFF,
+      EXPECT_EQ(net::SecureDnsMode::kOff,
                 resolver.last_secure_dns_mode_override().value());
     }
   }
@@ -5558,12 +5580,7 @@ TEST_F(NetworkContextTest, HangingHeaderClientAbortDuringOnBeforeSendHeaders) {
 
   client.RunUntilComplete();
 
-  // The reported error differs, but eventually URLLoader returns
-  // net::ERR_ABORTED once OOR-CORS clean-up is finished.
-  if (features::ShouldEnableOutOfBlinkCorsForTesting())
-    EXPECT_EQ(client.completion_status().error_code, net::ERR_ABORTED);
-  else
-    EXPECT_EQ(client.completion_status().error_code, net::ERR_FAILED);
+  EXPECT_EQ(client.completion_status().error_code, net::ERR_ABORTED);
 }
 
 // Test destroying the mojom::URLLoader after the OnHeadersReceived event and
@@ -5611,12 +5628,7 @@ TEST_F(NetworkContextTest, HangingHeaderClientAbortDuringOnHeadersReceived) {
 
   client.RunUntilComplete();
 
-  // The reported error differs, but eventually URLLoader returns
-  // net::ERR_ABORTED once OOR-CORS clean-up is finished.
-  if (features::ShouldEnableOutOfBlinkCorsForTesting())
-    EXPECT_EQ(client.completion_status().error_code, net::ERR_ABORTED);
-  else
-    EXPECT_EQ(client.completion_status().error_code, net::ERR_FAILED);
+  EXPECT_EQ(client.completion_status().error_code, net::ERR_ABORTED);
 }
 
 // Custom proxy does not apply to localhost, so resolve kMockHost to localhost,
@@ -5654,7 +5666,7 @@ class NetworkContextMockHostTest : public NetworkContextTest {
   }
 };
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 // Flaky crashes on Linux: https://crbug.com/1115201
 #define MAYBE_CustomProxyUsesSpecifiedProxyList \
   DISABLED_CustomProxyUsesSpecifiedProxyList

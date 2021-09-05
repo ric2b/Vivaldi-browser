@@ -893,7 +893,7 @@ TEST_F(DiscardableImageMapTest, CapturesImagesInPaintFilters) {
   display_list->StartPaint();
   PaintFlags flags;
   flags.setImageFilter(sk_make_sp<RecordPaintFilter>(
-      filter_record, SkRect::MakeWH(100.f, 100.f)));
+      filter_record, SkRect::MakeWH(150.f, 150.f)));
   display_list->push<DrawRectOp>(SkRect::MakeWH(200, 200), flags);
   display_list->EndPaintOfUnpaired(visible_rect);
   display_list->Finalize();
@@ -913,8 +913,9 @@ TEST_F(DiscardableImageMapTest, CapturesImagesInPaintFilters) {
   ASSERT_EQ(draw_images.size(), 1u);
   EXPECT_EQ(draw_images[0].image, animated_image);
   // The position of the image is the position of the DrawRectOp that uses the
-  // filter.
-  EXPECT_EQ(gfx::Rect(200, 200), inset_rects[0]);
+  // filter. Since the bounds of the filter does not depend on the source/input,
+  // the resulting bounds is that of the RecordPaintFilter.
+  EXPECT_EQ(gfx::Rect(150, 150), inset_rects[0]);
   // Images in a filter are decoded at the original size.
   EXPECT_EQ(SkSize::Make(1.f, 1.f), draw_images[0].scale);
 }

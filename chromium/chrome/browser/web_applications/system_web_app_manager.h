@@ -41,7 +41,7 @@ class Profile;
 namespace web_app {
 
 class WebAppUiManager;
-class FileHandlerManager;
+class OsIntegrationManager;
 class AppRegistryController;
 
 // An enum that lists the different System Apps that exist. Can be used to
@@ -55,10 +55,16 @@ enum class SystemAppType {
   HELP,
   PRINT_MANAGEMENT,
   SCANNING,
+  DIAGNOSTICS,
 #if !defined(OFFICIAL_BUILD)
+  FILE_MANAGER,
   TELEMETRY,
   SAMPLE,
 #endif  // !defined(OFFICIAL_BUILD)
+
+  // When adding a new System App, add a corresponding histogram suffix in
+  // WebAppSystemAppInternalName (histograms.xml). The suffix name should match
+  // the App's |internal_name|. This is for reporting per-app install results.
 };
 
 using OriginTrialsMap = std::map<url::Origin, std::vector<std::string>>;
@@ -67,19 +73,21 @@ using WebApplicationInfoFactory =
 
 // The configuration options for a System App.
 struct SystemAppInfo {
-  SystemAppInfo(const std::string& name_for_logging, const GURL& install_url);
+  SystemAppInfo(const std::string& internal_name, const GURL& install_url);
   // When installing via a WebApplicationInfo, the url is never loaded. It's
   // needed only for various legacy reasons, maps for tracking state, and
   // generating the AppId and things of that nature.
-  SystemAppInfo(const std::string& name_for_logging,
+  SystemAppInfo(const std::string& internal_name,
                 const GURL& install_url,
                 const WebApplicationInfoFactory& info_factory);
   SystemAppInfo(const SystemAppInfo& other);
   ~SystemAppInfo();
 
-  // A developer-friendly name for reporting metrics. Should follow UMA naming
-  // conventions.
-  std::string name_for_logging;
+  // A developer-friendly name for, among other things, reporting metrics and
+  // interacting with tast tests. It should follow PascalCase convention, and
+  // have a corresponding entry in WebAppSystemAppInternalName histogram
+  // suffixes. The internal name shouldn't be changed afterwards.
+  std::string internal_name;
 
   // The URL that the System App will be installed from.
   GURL install_url;
@@ -138,7 +146,7 @@ class SystemWebAppManager {
   static constexpr char kInstallResultHistogramName[] =
       "Webapp.InstallResult.System";
   static constexpr char kInstallDurationHistogramName[] =
-      "Webapp.InstallDuration.System";
+      "Webapp.SystemApps.FreshInstallDuration";
 
   // Returns whether the given app type is enabled.
   static bool IsAppEnabled(SystemAppType type);
@@ -150,16 +158,9 @@ class SystemWebAppManager {
                      AppRegistrar* registrar,
                      AppRegistryController* registry_controller,
                      WebAppUiManager* ui_manager,
-                     FileHandlerManager* file_handler_manager);
+                     OsIntegrationManager* os_integration_manager);
 
   void Start();
-
-  static bool IsEnabled();
-
-  // This call will instruct System Web App Manager to include all registered
-  // System Apps for installation. Must be called before SystemWebAppManager is
-  // constructed.
-  static void EnableAllSystemAppsForTesting();
 
   // The SystemWebAppManager is disabled in browser tests by default because it
   // pollutes the startup state (several tests expect the Extensions state to be
@@ -215,6 +216,11 @@ class SystemWebAppManager {
   // doesn't specify a minimum.
   gfx::Size GetMinimumWindowSize(const AppId& app_id) const;
 
+  // Returns a map of registered system app types and infos, these apps will be
+  // installed on the system.
+  const base::flat_map<SystemAppType, SystemAppInfo>&
+  GetRegisteredSystemAppsForTesting() const;
+
   const base::OneShotEvent& on_apps_synchronized() const {
     return *on_apps_synchronized_;
   }
@@ -224,6 +230,8 @@ class SystemWebAppManager {
   void SetSystemAppsForTesting(
       base::flat_map<SystemAppType, SystemAppInfo> system_apps);
 
+  // Overrides the update policy. If AlwaysReinstallSystemWebApps feature is
+  // enabled, this method does nothing, and system apps will be reinstalled.
   void SetUpdatePolicyForTesting(UpdatePolicy policy);
 
   void ResetOnAppsSynchronizedForTesting();
@@ -246,18 +254,21 @@ class SystemWebAppManager {
 
   bool AppHasFileHandlingOriginTrial(SystemAppType type);
 
-  void OnAppsSynchronized(const base::TimeTicks& install_start_time,
+  void OnAppsSynchronized(bool did_force_install_apps,
+                          const base::TimeTicks& install_start_time,
                           std::map<GURL, InstallResultCode> install_results,
                           std::map<GURL, bool> uninstall_results);
-  bool NeedsUpdate() const;
+  bool ShouldForceInstallApps() const;
   void UpdateLastAttemptedInfo();
   // Returns if we have exceeded the number of retry attempts allowed for this
   // version.
   bool CheckAndIncrementRetryAttempts();
 
-  void RecordSystemWebAppInstallMetrics(
-      const std::map<GURL, InstallResultCode>& install_results,
-      const base::TimeDelta& install_duration) const;
+  void RecordSystemWebAppInstallResults(
+      const std::map<GURL, InstallResultCode>& install_results) const;
+
+  void RecordSystemWebAppInstallDuration(
+      const base::TimeDelta& time_duration) const;
 
   Profile* profile_;
 
@@ -284,7 +295,7 @@ class SystemWebAppManager {
 
   WebAppUiManager* ui_manager_ = nullptr;
 
-  FileHandlerManager* file_handler_manager_ = nullptr;
+  OsIntegrationManager* os_integration_manager_ = nullptr;
 
   PrefChangeRegistrar local_state_pref_change_registrar_;
 

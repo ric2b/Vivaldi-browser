@@ -7,11 +7,11 @@ package org.chromium.chrome.browser.ntp;
 import android.content.Context;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.invalidation.SessionsInvalidationManager;
 import org.chromium.chrome.browser.ntp.ForeignSessionHelper.ForeignSession;
@@ -68,6 +68,8 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
 
     private static final int RECENTLY_CLOSED_MAX_TAB_COUNT = 5;
 
+    private static @Nullable @PromoState Integer sPromoStateForTests;
+
     private static RecentlyClosedTabManager sRecentlyClosedTabManagerForTests;
 
     private final Profile mProfile;
@@ -111,7 +113,7 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
                 : new RecentlyClosedBridge(profile);
         mSignInManager = IdentityServicesProvider.get().getSigninManager(mProfile);
 
-        mProfileDataCache = ProfileDataCache.createProfileDataCache(context, 0);
+        mProfileDataCache = ProfileDataCache.createProfileDataCache(context);
         mSigninPromoController = new SigninPromoController(SigninAccessPoint.RECENT_TABS);
 
         mRecentlyClosedTabManager.setTabsUpdatedRunnable(() -> {
@@ -379,6 +381,10 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
      */
     @PromoState
     int getPromoType() {
+        if (sPromoStateForTests != null) {
+            return sPromoStateForTests;
+        }
+
         if (!mSignInManager.getIdentityManager().hasPrimaryAccount()) {
             if (!mSignInManager.isSignInAllowed()) {
                 return PromoState.PROMO_NONE;
@@ -390,10 +396,6 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
                 return PromoState.PROMO_SYNC_PERSONALIZED;
             }
             return PromoState.PROMO_SIGNIN_PERSONALIZED;
-        }
-
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
-            return PromoState.PROMO_SYNC_PERSONALIZED;
         }
 
         if (AndroidSyncSettings.get().isSyncEnabled()
@@ -408,13 +410,11 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
      * @param view The view to be configured.
      */
     void setupPersonalizedSigninPromo(PersonalizedSigninPromoView view) {
-        mProfileDataCache.updateBadgeConfig(0);
         SigninPromoUtil.setupSigninPromoViewFromCache(
                 mSigninPromoController, mProfileDataCache, view, null);
     }
 
     void setupPersonalizedSyncPromo(PersonalizedSigninPromoView view) {
-        mProfileDataCache.updateBadgeConfig(R.drawable.ic_sync_badge_off_20dp);
         SigninPromoUtil.setupSyncPromoViewFromCache(
                 mSigninPromoController, mProfileDataCache, view, null);
     }
@@ -455,11 +455,23 @@ public class RecentTabsManager implements AndroidSyncSettingsObserver, SignInSta
     }
 
     private void update() {
+        // TODO(crbug.com/1129853): Re-evaluate whether it's necessary to post
+        // a task.
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
             if (mIsDestroyed) return;
             updateForeignSessions();
             postUpdate();
         });
+    }
+
+    /**
+     * Forces the promo state to a particular value for testing purposes.
+     * @param promoState The promo state to which the manager will be set to.
+     * TODO(https://crbug.com/1123478): Create a different method to enforce promo state.
+     */
+    @VisibleForTesting
+    static void forcePromoStateForTests(@Nullable @PromoState Integer promoState) {
+        sPromoStateForTests = promoState;
     }
 
     @VisibleForTesting

@@ -60,6 +60,7 @@
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/renderer/core/exported/web_remote_frame_impl.h"
+#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
@@ -116,6 +117,9 @@ T* CreateDefaultClientIfNeeded(T* client, std::unique_ptr<T>& owned_client) {
   owned_client = std::make_unique<T>();
   return owned_client.get();
 }
+
+// A static increasing count of frame sinks created so they are all unique.
+static uint32_t s_frame_sink_count = 0;
 
 }  // namespace
 
@@ -257,17 +261,16 @@ WebLocalFrameImpl* CreateProvisional(WebRemoteFrame& old_frame,
   mojo::AssociatedRemote<mojom::blink::FrameWidget> frame_widget_remote;
   mojo::PendingAssociatedReceiver<mojom::blink::FrameWidget>
       frame_widget_receiver =
-          frame_widget_remote
-              .BindNewEndpointAndPassDedicatedReceiverForTesting();
+          frame_widget_remote.BindNewEndpointAndPassDedicatedReceiver();
 
   mojo::AssociatedRemote<mojom::blink::FrameWidgetHost> frame_widget_host;
   mojo::PendingAssociatedReceiver<mojom::blink::FrameWidgetHost>
       frame_widget_host_receiver =
-          frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting();
+          frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
 
   mojo::AssociatedRemote<mojom::blink::Widget> widget_remote;
   mojo::PendingAssociatedReceiver<mojom::blink::Widget> widget_receiver =
-      widget_remote.BindNewEndpointAndPassDedicatedReceiverForTesting();
+      widget_remote.BindNewEndpointAndPassDedicatedReceiver();
 
   // Create a local root, if necessary.
   if (!frame->Parent()) {
@@ -283,7 +286,7 @@ WebLocalFrameImpl* CreateProvisional(WebRemoteFrame& old_frame,
     cc::LayerTreeSettings layer_tree_settings =
         GetSynchronousSingleThreadLayerTreeSettings();
     widget_client->set_layer_tree_host(frame_widget->InitializeCompositing(
-        false, widget_client->main_thread_scheduler(),
+        widget_client->main_thread_scheduler(),
         widget_client->task_graph_runner(), true,
         widget_client->GetInitialScreenInfo(),
         std::make_unique<cc::TestUkmRecorderFactory>(), &layer_tree_settings));
@@ -300,7 +303,7 @@ WebLocalFrameImpl* CreateProvisional(WebRemoteFrame& old_frame,
     cc::LayerTreeSettings layer_tree_settings =
         GetSynchronousSingleThreadLayerTreeSettings();
     widget_client->set_layer_tree_host(frame_widget->InitializeCompositing(
-        false, widget_client->main_thread_scheduler(),
+        widget_client->main_thread_scheduler(),
         widget_client->task_graph_runner(), true,
         widget_client->GetInitialScreenInfo(),
         std::make_unique<cc::TestUkmRecorderFactory>(), &layer_tree_settings));
@@ -346,17 +349,16 @@ WebLocalFrameImpl* CreateLocalChild(WebRemoteFrame& parent,
   mojo::AssociatedRemote<mojom::blink::FrameWidget> frame_widget_remote;
   mojo::PendingAssociatedReceiver<mojom::blink::FrameWidget>
       frame_widget_receiver =
-          frame_widget_remote
-              .BindNewEndpointAndPassDedicatedReceiverForTesting();
+          frame_widget_remote.BindNewEndpointAndPassDedicatedReceiver();
 
   mojo::AssociatedRemote<mojom::blink::FrameWidgetHost> frame_widget_host;
   mojo::PendingAssociatedReceiver<mojom::blink::FrameWidgetHost>
       frame_widget_host_receiver =
-          frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting();
+          frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
 
   mojo::AssociatedRemote<mojom::blink::Widget> widget_remote;
   mojo::PendingAssociatedReceiver<mojom::blink::Widget> widget_receiver =
-      widget_remote.BindNewEndpointAndPassDedicatedReceiverForTesting();
+      widget_remote.BindNewEndpointAndPassDedicatedReceiver();
 
   WebFrameWidget* frame_widget = WebFrameWidget::CreateForChildLocalRoot(
       widget_client, frame, frame_widget_host.Unbind(),
@@ -367,7 +369,7 @@ WebLocalFrameImpl* CreateLocalChild(WebRemoteFrame& parent,
   cc::LayerTreeSettings layer_tree_settings =
       GetSynchronousSingleThreadLayerTreeSettings();
   widget_client->set_layer_tree_host(frame_widget->InitializeCompositing(
-      false, widget_client->main_thread_scheduler(),
+      widget_client->main_thread_scheduler(),
       widget_client->task_graph_runner(), true,
       widget_client->GetInitialScreenInfo(),
       std::make_unique<cc::TestUkmRecorderFactory>(), &layer_tree_settings));
@@ -434,16 +436,16 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
   mojo::AssociatedRemote<mojom::blink::FrameWidget> frame_widget;
   mojo::PendingAssociatedReceiver<mojom::blink::FrameWidget>
       frame_widget_receiver =
-          frame_widget.BindNewEndpointAndPassDedicatedReceiverForTesting();
+          frame_widget.BindNewEndpointAndPassDedicatedReceiver();
 
   mojo::AssociatedRemote<mojom::blink::FrameWidgetHost> frame_widget_host;
   mojo::PendingAssociatedReceiver<mojom::blink::FrameWidgetHost>
       frame_widget_host_receiver =
-          frame_widget_host.BindNewEndpointAndPassDedicatedReceiverForTesting();
+          frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
 
   mojo::AssociatedRemote<mojom::blink::Widget> widget_remote;
   mojo::PendingAssociatedReceiver<mojom::blink::Widget> widget_receiver =
-      widget_remote.BindNewEndpointAndPassDedicatedReceiverForTesting();
+      widget_remote.BindNewEndpointAndPassDedicatedReceiver();
 
   // TODO(dcheng): The main frame widget currently has a special case.
   // Eliminate this once WebView is no longer a WebWidget.
@@ -456,7 +458,7 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
   cc::LayerTreeSettings layer_tree_settings =
       GetSynchronousSingleThreadLayerTreeSettings();
   test_web_widget_client_->set_layer_tree_host(widget->InitializeCompositing(
-      false, test_web_widget_client_->main_thread_scheduler(),
+      test_web_widget_client_->main_thread_scheduler(),
       test_web_widget_client_->task_graph_runner(), true,
       test_web_widget_client_->GetInitialScreenInfo(),
       std::make_unique<cc::TestUkmRecorderFactory>(), &layer_tree_settings));
@@ -467,7 +469,8 @@ WebViewImpl* WebViewHelper::InitializeWithOpener(
   // the case by this point).
   web_view_->DidAttachLocalMainFrame();
 
-  widget->UpdateScreenInfo(test_web_widget_client_->GetInitialScreenInfo());
+  static_cast<WebFrameWidgetBase*>(widget)->UpdateScreenInfo(
+      test_web_widget_client_->GetInitialScreenInfo());
 
   // Set an initial size for subframes.
   if (frame->Parent())
@@ -716,6 +719,21 @@ TestWebFrameClient::GetRemoteNavigationAssociatedInterfaces() {
   return associated_interface_provider_.get();
 }
 
+void TestWebFrameClient::DidMeaningfulLayout(
+    WebMeaningfulLayout meaningful_layout) {
+  switch (meaningful_layout) {
+    case WebMeaningfulLayout::kVisuallyNonEmpty:
+      visually_non_empty_layout_count_++;
+      break;
+    case WebMeaningfulLayout::kFinishedParsing:
+      finished_parsing_layout_count_++;
+      break;
+    case WebMeaningfulLayout::kFinishedLoading:
+      finished_loading_layout_count_++;
+      break;
+  }
+}
+
 TestWebRemoteFrameClient::TestWebRemoteFrameClient()
     : associated_interface_provider_(new AssociatedInterfaceProvider(nullptr)) {
 }
@@ -734,7 +752,8 @@ void TestWebRemoteFrameClient::FrameDetached(DetachType type) {
   self_owned_.reset();
 }
 
-TestWebWidgetClient::TestWebWidgetClient() = default;
+TestWebWidgetClient::TestWebWidgetClient()
+    : frame_sink_id_(viz::FrameSinkId(++s_frame_sink_count, 1)) {}
 
 void TestWebWidgetClient::SetFrameWidget(
     WebFrameWidget* widget,
@@ -760,30 +779,15 @@ ScreenInfo TestWebWidgetClient::GetInitialScreenInfo() {
 mojo::PendingAssociatedRemote<mojom::blink::WidgetHost>
 TestWebWidgetClient::BindNewWidgetHost() {
   receiver_.reset();
-  return receiver_.BindNewEndpointAndPassDedicatedRemoteForTesting();
+  return receiver_.BindNewEndpointAndPassDedicatedRemote();
 }
 
 bool TestWebWidgetClient::HaveScrollEventHandlers() const {
   return layer_tree_host()->have_scroll_event_handlers();
 }
 
-void TestWebWidgetClient::DidMeaningfulLayout(
-    WebMeaningfulLayout meaningful_layout) {
-  switch (meaningful_layout) {
-    case WebMeaningfulLayout::kVisuallyNonEmpty:
-      visually_non_empty_layout_count_++;
-      break;
-    case WebMeaningfulLayout::kFinishedParsing:
-      finished_parsing_layout_count_++;
-      break;
-    case WebMeaningfulLayout::kFinishedLoading:
-      finished_loading_layout_count_++;
-      break;
-  }
-}
-
 viz::FrameSinkId TestWebWidgetClient::GetFrameSinkId() {
-  return viz::FrameSinkId();
+  return frame_sink_id_;
 }
 
 void TestWebWidgetClient::RequestNewLayerTreeFrameSink(

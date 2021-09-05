@@ -5,11 +5,11 @@ from __future__ import print_function
 from subprocess import check_output
 import re
 import json
-import os.path
+from os.path import exists, join, normpath
 from licenses_vivaldi_texts import onlineLicenses
 
 try:
-  f = open("gen/vivaldi/vivapp/module_list", 'r')
+  f = open(normpath("gen/vivaldi/vivapp/module_list"), 'r')
   maindeps = f.read()
   f.close()
 except:
@@ -17,7 +17,7 @@ except:
 
 modules = {}
 
-for m in re.findall(r"(.*node_modules/((@[^/]+)?[^@][^/]+))", maindeps):
+for m in re.findall(r"(.*node_modules[/\\]((@[^/\\]+)?[^@][^/\\]+))", maindeps):
   moduledir = m[0]
   modulename = m[1]
   if (moduledir in modules
@@ -39,8 +39,8 @@ for m in re.findall(r"(.*node_modules/((@[^/]+)?[^@][^/]+))", maindeps):
   for l in ["LICENSE-MIT", "LICENSE-MIT.TXT", "LICENSE.MIT", "LICENSE.BSD",
       "LICENSE.APACHE2", "LICENSE", "LICENSE.txt", "LICENSE.md", "License",
       "license.txt", "License.md", "LICENSE.mkd", "UNLICENSE"]:
-    file_name = moduledir+"/"+l
-    if os.path.exists(file_name):
+    file_name = join(moduledir, l)
+    if exists(file_name):
       entry["License File"] = file_name
       f = open(file_name)
       entry["license"] = f.read()
@@ -48,7 +48,7 @@ for m in re.findall(r"(.*node_modules/((@[^/]+)?[^@][^/]+))", maindeps):
       break
 
   # get one word license type from package.json
-  f = open(moduledir+"/package.json")
+  f = open(join(moduledir, "package.json"))
   pjson = json.loads(f.read())
   f.close()
   preferred = None
@@ -124,53 +124,53 @@ for m in re.findall(r"(.*node_modules/((@[^/]+)?[^@][^/]+))", maindeps):
 
 
 ADDITIONAL_PATHS = (
-    os.path.join('..', 'third_party', '_winsparkle_lib'),
-    os.path.join('..', 'third_party', 'sparkle_lib'),
-    os.path.join('..', 'platform_media'),
-    os.path.join('..', 'scripts', 'licenses'),
-    os.path.join('..', 'vivapp', 'src', 'browserjs'),
-    os.path.join('..', 'vivapp', 'src', 'components', 'image-inspector'),
-    os.path.join('..', 'vivapp', 'src', 'util'),
+    join('..', 'third_party', '_winsparkle_lib'),
+    join('..', 'third_party', 'sparkle_lib'),
+    join('..', 'platform_media'),
+    join('..', 'scripts', 'licenses'),
+    join('..', 'vivapp', 'src', 'browserjs'),
+    join('..', 'vivapp', 'src', 'components', 'image-inspector'),
+    join('..', 'vivapp', 'src', 'util'),
 )
 
 SPECIAL_CASES = {
-    os.path.join('..', 'platform_media'): {
+    join('..', 'platform_media'): {
         "Name": "Opera",
         "URL": "http://www.opera.com/",
         "License": "BSD",
         "License File": "/../platform_media/OPERA_LICENSE.txt",
     },
-    os.path.join('..', 'third_party', '_winsparkle_lib'): {
+    join('..', 'third_party', '_winsparkle_lib'): {
         "Name": "WinSparkle",
         "URL": "http://winsparkle.org/",
         "License": "MIT",
         "License File": "/../third_party/_winsparkle_lib/COPYING",
     },
-    os.path.join('..', 'thirdparty', 'macsparkle'): {
+    join('..', 'thirdparty', 'macsparkle'): {
         "Name": "Sparkle",
         "URL": "http://sparkle-project.org/",
         "License": "MIT",
         "License File": "/../thirdparty/macsparkle/LICENSE",
     },
-    os.path.join('..', 'vivapp', 'src', 'browserjs'): {
+    join('..', 'vivapp', 'src', 'browserjs'): {
         "Name": "boss-select",
         "URL": "https://github.com/grks/boss-select#readme",
         "License": "MIT",
         "License File": "/../vivapp/src/browserjs/boss-select-license.txt",
     },
-    os.path.join('..', 'vivapp', 'src', 'components', 'image-inspector'): {
+    join('..', 'vivapp', 'src', 'components', 'image-inspector'): {
         "Name": "Exif.js",
         "URL": "https://github.com/exif-js/exif-js",
         "License": "MIT",
         "License File": "/../vivapp/src/components/image-inspector/exif_js_license.txt",
     },
-    os.path.join('..', 'scripts', 'licenses'): {
+    join('..', 'scripts', 'licenses'): {
         "Name": "Profile avatar illustrations",
         "URL": "https://www.flaticon.com/",
         "License": "attribution required",
         "License File": "/../scripts/licenses/avatar_profiles_license.txt",
     },
-    os.path.join('..', 'vivapp', 'src', 'util'): {
+    join('..', 'vivapp', 'src', 'util'): {
         "Name": "Boyer-Moore-Horspool Search",
         "URL": "https://github.com/Chocobo1/bmhs",
         "License": "BSD-3-Clause",

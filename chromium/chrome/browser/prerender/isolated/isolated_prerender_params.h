@@ -21,6 +21,15 @@ extern const char kIsolatedPrerenderLimitNSPSubresourcesCmdLineFlag[];
 // Returns true if the Isolated Prerender feature is enabled.
 bool IsolatedPrerenderIsEnabled();
 
+// The url of the tunnel proxy.
+GURL IsolatedPrerenderProxyHost();
+
+// The header name used to connect to the tunnel proxy.
+std::string IsolatedPrerenderProxyHeaderKey();
+
+// Whether the feature is only enabled for Lite Mode users.
+bool IsolatedPrerenderOnlyForLiteMode();
+
 // Returns true when prefetched pages should run no state prefetch.
 bool IsolatedPrerenderNoStatePrefetchSubresources();
 
@@ -72,5 +81,9 @@ bool IsolatedPrerenderMustHTTPProbeInsteadOfTLS();
 
 // The maximum number of subresources that will be fetched per prefetched page.
 size_t IsolatedPrerenderMaxSubresourcesPerPrerender();
+
+// Whether a spare renderer should be started after all prefetching and NSP is
+// complete.
+bool IsolatedPrerenderStartsSpareRenderer();
 
 #endif  // CHROME_BROWSER_PRERENDER_ISOLATED_ISOLATED_PRERENDER_PARAMS_H_

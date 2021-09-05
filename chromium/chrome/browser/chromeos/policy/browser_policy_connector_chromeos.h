@@ -100,6 +100,10 @@ class BrowserPolicyConnectorChromeOS
   // before the custom display domain can be used.
   std::string GetEnterpriseDisplayDomain() const;
 
+  // Returns the manager of the domain for use in UI if specified, otherwise the
+  // enterprise display domain.
+  std::string GetEnterpriseDomainManager() const;
+
   // Returns the Kerberos realm (aka Windows Domain) if the device is managed by
   // Active Directory.
   std::string GetRealm() const;
@@ -225,6 +229,10 @@ class BrowserPolicyConnectorChromeOS
   void OnDeviceCloudPolicyManagerDisconnected() override;
 
   chromeos::AffiliationIDSet GetDeviceAffiliationIDs() const;
+
+  // BrowserPolicyConnector:
+  // Always returns true as command line flag can be set under dev mode only.
+  bool IsCommandLineSwitchSupported() const override;
 
  protected:
   // ChromeBrowserPolicyConnector:

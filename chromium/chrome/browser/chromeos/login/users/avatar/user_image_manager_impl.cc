@@ -59,16 +59,6 @@ const int kProfileDataDownloadRetryIntervalSec = 300;
 // Delay betweeen subsequent profile refresh attempts (24 hrs).
 const int kProfileRefreshIntervalSec = 24 * 3600;
 
-// Time histogram suffix for a profile image download after login.
-const char kProfileDownloadReasonLoggedIn[] = "LoggedIn";
-// Time histogram suffix for a profile image download when the user chooses the
-// profile image but it has not been downloaded yet.
-const char kProfileDownloadReasonProfileImageChosen[] = "ProfileImageChosen";
-// Time histogram suffix for a scheduled profile image download.
-const char kProfileDownloadReasonScheduled[] = "Scheduled";
-// Time histogram suffix for a profile image download retry.
-const char kProfileDownloadReasonRetry[] = "Retry";
-
 static bool g_ignore_profile_data_download_delay_ = false;
 
 // Converts |image_index| to UMA histogram value.
@@ -555,20 +545,24 @@ void UserImageManagerImpl::LoadUserImage() {
 }
 
 void UserImageManagerImpl::UserLoggedIn(bool user_is_new, bool user_is_local) {
+  // Reset the downloaded profile image as a new user logged in.
+  downloaded_profile_image_ = gfx::ImageSkia();
+  profile_image_url_ = GURL();
+  profile_image_requested_ = false;
+
+  is_random_image_set_ = false;
   const user_manager::User* user = GetUser();
   if (user_is_new) {
-    if (!user_is_local)
+    if (!user_is_local) {
       SetInitialUserImage();
+      is_random_image_set_ = true;
+      DownloadProfileImage();
+    }
   } else {
     UMA_HISTOGRAM_EXACT_LINEAR("UserImage.LoggedIn",
                                ImageIndexToHistogramIndex(user->image_index()),
                                default_user_image::kHistogramImagesCount);
   }
-
-  // Reset the downloaded profile image as a new user logged in.
-  downloaded_profile_image_ = gfx::ImageSkia();
-  profile_image_url_ = GURL();
-  profile_image_requested_ = false;
 
   user_image_sync_observer_.reset();
   TryToCreateImageSyncObserver();
@@ -586,12 +580,12 @@ void UserImageManagerImpl::UserProfileCreated() {
             ? base::TimeDelta()
             : base::TimeDelta::FromSeconds(kProfileDataDownloadDelaySec),
         base::BindOnce(&UserImageManagerImpl::DownloadProfileData,
-                       base::Unretained(this), kProfileDownloadReasonLoggedIn));
+                       base::Unretained(this)));
     // Schedule periodic refreshes of the profile data.
     profile_download_periodic_timer_.Start(
         FROM_HERE, base::TimeDelta::FromSeconds(kProfileRefreshIntervalSec),
         base::Bind(&UserImageManagerImpl::DownloadProfileData,
-                   base::Unretained(this), kProfileDownloadReasonScheduled));
+                   base::Unretained(this)));
   } else {
     profile_download_one_shot_timer_.Stop();
     profile_download_periodic_timer_.Stop();
@@ -599,6 +593,7 @@ void UserImageManagerImpl::UserProfileCreated() {
 }
 
 void UserImageManagerImpl::SaveUserDefaultImageIndex(int default_image_index) {
+  is_random_image_set_ = false;
   if (IsUserImageManaged())
     return;
   job_.reset(new Job(this));
@@ -640,7 +635,7 @@ void UserImageManagerImpl::SaveUserImageFromProfileImage() {
   // If no profile image has been downloaded yet, ensure that a download is
   // started.
   if (downloaded_profile_image_.isNull())
-    DownloadProfileData(kProfileDownloadReasonProfileImageChosen);
+    DownloadProfileData();
 }
 
 void UserImageManagerImpl::DeleteUserImage() {
@@ -648,9 +643,9 @@ void UserImageManagerImpl::DeleteUserImage() {
   DeleteUserImageAndLocalStateEntry(kUserImageProperties);
 }
 
-void UserImageManagerImpl::DownloadProfileImage(const std::string& reason) {
+void UserImageManagerImpl::DownloadProfileImage() {
   profile_image_requested_ = true;
-  DownloadProfileData(reason);
+  DownloadProfileData();
 }
 
 const gfx::ImageSkia& UserImageManagerImpl::DownloadedProfileImage() const {
@@ -772,7 +767,9 @@ void UserImageManagerImpl::OnProfileDownloadSuccess(
       gfx::ImageSkia::CreateFrom1xBitmap(downloader->GetProfilePicture());
   profile_image_url_ = GURL(downloader->GetProfilePictureURL());
 
-  if (user->image_index() == user_manager::User::USER_IMAGE_PROFILE) {
+  if (user->image_index() == user_manager::User::USER_IMAGE_PROFILE ||
+      is_random_image_set_) {
+    is_random_image_set_ = false;
     VLOG(1) << "Updating profile image for logged-in user.";
     // This will persist |downloaded_profile_image_| to disk.
     SaveUserImageFromProfileImage();
@@ -794,7 +791,7 @@ void UserImageManagerImpl::OnProfileDownloadFailure(
         FROM_HERE,
         base::TimeDelta::FromSeconds(kProfileDataDownloadRetryIntervalSec),
         base::BindOnce(&UserImageManagerImpl::DownloadProfileData,
-                       base::Unretained(this), kProfileDownloadReasonRetry));
+                       base::Unretained(this)));
   }
 
   user_manager_->NotifyUserProfileImageUpdateFailed(*GetUser());
@@ -829,7 +826,7 @@ bool UserImageManagerImpl::NeedProfileImage() const {
           profile_image_requested_);
 }
 
-void UserImageManagerImpl::DownloadProfileData(const std::string& reason) {
+void UserImageManagerImpl::DownloadProfileData() {
   if (!IsUserLoggedInAndHasGaiaAccount())
     return;
 

@@ -6,12 +6,14 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/callback.h"
 #include "base/notreached.h"
 #include "pdf/document_layout.h"
+#include "pdf/ppapi_migration/url_loader.h"
 
 namespace chrome_pdf {
 
@@ -22,7 +24,7 @@ void PreviewModeClient::ProposeDocumentLayout(const DocumentLayout& layout) {
   // occurs if and only if loading a non-PDF document with more than 1 page.
 }
 
-void PreviewModeClient::Invalidate(const pp::Rect& rect) {
+void PreviewModeClient::Invalidate(const gfx::Rect& rect) {
   NOTREACHED();
 }
 
@@ -57,7 +59,7 @@ void PreviewModeClient::UpdateCursor(PP_CursorType_Dev cursor) {
 }
 
 void PreviewModeClient::UpdateTickMarks(
-    const std::vector<pp::Rect>& tickmarks) {
+    const std::vector<gfx::Rect>& tickmarks) {
   NOTREACHED();
 }
 
@@ -114,9 +116,9 @@ void PreviewModeClient::SubmitForm(const std::string& url,
   NOTREACHED();
 }
 
-pp::URLLoader PreviewModeClient::CreateURLLoader() {
+std::unique_ptr<UrlLoader> PreviewModeClient::CreateUrlLoader() {
   NOTREACHED();
-  return pp::URLLoader();
+  return nullptr;
 }
 
 std::vector<PDFEngine::Client::SearchStringResult>

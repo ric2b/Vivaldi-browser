@@ -11,6 +11,7 @@
 #include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/media/feeds/media_feeds_contents_observer.h"
 #include "chrome/browser/media/feeds/media_feeds_service.h"
 #include "chrome/browser/media/feeds/media_feeds_store.mojom-forward.h"
@@ -319,8 +320,11 @@ IN_PROC_BROWSER_TEST_F(MediaFeedsBrowserTest, DiscoverAndFetch) {
   {
     mojom::MediaFeedItemPtr expected_item = mojom::MediaFeedItem::New();
     expected_item->id = 1;
-    expected_item->name =
-        base::ASCIIToUTF16("Anatomy of a Web Media Experience");
+
+    const std::string name = "Anatomy of a Web Media Experience 😊";
+    ASSERT_TRUE(
+        base::UTF8ToUTF16(name.c_str(), name.size(), &expected_item->name));
+
     expected_item->type = mojom::MediaFeedItemType::kVideo;
     expected_item->author = mojom::Author::New();
     expected_item->author->name = "Google Chrome Developers";
@@ -915,8 +919,16 @@ IN_PROC_BROWSER_TEST_F(MediaFeedsBrowserTest,
   }
 }
 
+// Flaky on lacros: crbug.com/1124983
+#if BUILDFLAG(IS_LACROS)
+#define MAYBE_ResetMediaFeed_WebContentsDestroyed \
+  DISABLED_ResetMediaFeed_WebContentsDestroyed
+#else
+#define MAYBE_ResetMediaFeed_WebContentsDestroyed \
+  ResetMediaFeed_WebContentsDestroyed
+#endif
 IN_PROC_BROWSER_TEST_F(MediaFeedsBrowserTest,
-                       ResetMediaFeed_WebContentsDestroyed) {
+                       MAYBE_ResetMediaFeed_WebContentsDestroyed) {
   DiscoverFeed(kMediaFeedsTestURL);
 
   {

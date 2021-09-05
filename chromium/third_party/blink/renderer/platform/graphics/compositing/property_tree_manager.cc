@@ -439,6 +439,9 @@ int PropertyTreeManager::EnsureCompositorTransformNode(
   compositor_node.in_subtree_of_page_scale_layer =
       transform_node.IsInSubtreeOfPageScale();
 
+  compositor_node.will_change_transform =
+      transform_node.RequiresCompositingForWillChangeTransform();
+
   if (const auto* sticky_constraint = transform_node.GetStickyConstraint()) {
     cc::StickyPositionNodeData& sticky_data =
         GetTransformTree().EnsureStickyPositionData(id);
@@ -586,11 +589,11 @@ void PropertyTreeManager::CreateCompositorScrollNode(
       scroll_node.MaxScrollOffsetAffectedByPageScale();
   compositor_node.main_thread_scrolling_reasons =
       scroll_node.GetMainThreadScrollingReasons();
-  compositor_node.overscroll_behavior = cc::OverscrollBehavior(
-      static_cast<cc::OverscrollBehavior::OverscrollBehaviorType>(
-          scroll_node.OverscrollBehaviorX()),
-      static_cast<cc::OverscrollBehavior::OverscrollBehaviorType>(
-          scroll_node.OverscrollBehaviorY()));
+  compositor_node.overscroll_behavior =
+      cc::OverscrollBehavior(static_cast<cc::OverscrollBehavior::Type>(
+                                 scroll_node.OverscrollBehaviorX()),
+                             static_cast<cc::OverscrollBehavior::Type>(
+                                 scroll_node.OverscrollBehaviorY()));
   compositor_node.snap_container_data = scroll_node.GetSnapContainerData();
 
   auto compositor_element_id = scroll_node.GetCompositorElementId();
@@ -1005,20 +1008,18 @@ int PropertyTreeManager::SynthesizeCcEffectsForClipsIfNeeded(
                 : cc::RenderSurfaceReason::kClipPath;
       }
       pending_synthetic_mask_layers_.insert(synthetic_effect.id);
-    } else {
-      DCHECK(pending_clip.type & CcEffectType::kSyntheticFor2dAxisAlignment);
+    }
+
+    if (pending_clip.type & CcEffectType::kSyntheticFor2dAxisAlignment) {
       synthetic_effect.stable_id =
           CompositorElementIdFromUniqueObjectId(NewUniqueObjectId())
               .GetStableId();
+      synthetic_effect.render_surface_reason =
+          cc::RenderSurfaceReason::kClipAxisAlignment;
       // The clip of the synthetic effect is the parent of the clip, so that
       // the clip itself will be applied in the render surface.
       DCHECK(pending_clip.clip->UnaliasedParent());
       clip_id = EnsureCompositorClipNode(*pending_clip.clip->UnaliasedParent());
-    }
-
-    if (pending_clip.type & CcEffectType::kSyntheticFor2dAxisAlignment) {
-      synthetic_effect.render_surface_reason =
-          cc::RenderSurfaceReason::kClipAxisAlignment;
     }
 
     const TransformPaintPropertyNode* transform = nullptr;

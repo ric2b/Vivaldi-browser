@@ -84,7 +84,9 @@ class CORE_EXPORT NGInkOverflow {
   PhysicalRect SelfAndContents(Type type, const PhysicalSize& size) const;
 
   // Reset to |kNone|.
-  Type Reset(Type type);
+  Type Reset(Type type) { return Reset(type, kNone); }
+  // Reset to |kNotSet|.
+  Type Invalidate(Type type) { return Reset(type, kNotSet); }
 
   // Set self ink overflow rect.
   // If |this| had contents ink overflow, it is cleared.
@@ -114,11 +116,28 @@ class CORE_EXPORT NGInkOverflow {
       const ComputedStyle& style,
       const PhysicalSize& size);
 
+#if DCHECK_IS_ON()
+  struct ReadUnsetAsNoneScope {
+    STACK_ALLOCATED();
+
+   public:
+    ReadUnsetAsNoneScope() { ++read_unset_as_none_; }
+    ~ReadUnsetAsNoneScope() { --read_unset_as_none_; }
+  };
+#endif
+
  private:
+  static LayoutRect ComputeTextDecorationOverflow(
+      const NGTextFragmentPaintInfo& text_info,
+      const ComputedStyle& style,
+      const LayoutRect& ink_overflow);
+
   PhysicalRect FromOutsets(const PhysicalSize& size) const;
 
   void CheckType(Type type) const;
   Type SetType(Type type);
+
+  Type Reset(Type type, Type new_type);
 
   bool TrySetOutsets(Type type,
                      LayoutUnit left_outset,
@@ -156,6 +175,8 @@ class CORE_EXPORT NGInkOverflow {
 
 #if DCHECK_IS_ON()
   Type type_ = Type::kNotSet;
+
+  static unsigned read_unset_as_none_;
 #endif
 };
 

@@ -50,8 +50,6 @@ enum GraphicsLayerPaintingPhaseFlags {
 };
 typedef unsigned GraphicsLayerPaintingPhase;
 
-enum class DisplayLockContextLifecycleTarget { kSelf, kChildren };
-
 class PLATFORM_EXPORT GraphicsLayerClient {
  public:
   virtual ~GraphicsLayerClient() = default;
@@ -76,8 +74,6 @@ class PLATFORM_EXPORT GraphicsLayerClient {
   // painting and hit testing.
   virtual bool IsUnderSVGHiddenContainer() const { return false; }
 
-  virtual bool IsSVGRoot() const { return false; }
-
   virtual bool IsTrackingRasterInvalidations() const { return false; }
 
   virtual void GraphicsLayersDidChange() {}
@@ -92,8 +88,7 @@ class PLATFORM_EXPORT GraphicsLayerClient {
   // Returns true if this client is prevented from painting by its own
   // display-lock (in case of target = kSelf) or by any of its ancestors (in
   // case of target = kSelf or kChildren).
-  virtual bool PaintBlockedByDisplayLockIncludingAncestors(
-      DisplayLockContextLifecycleTarget) const {
+  virtual bool PaintBlockedByDisplayLockIncludingAncestors() const {
     return false;
   }
   virtual void NotifyDisplayLockNeedsGraphicsLayerCollection() {}

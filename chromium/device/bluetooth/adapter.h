@@ -11,12 +11,13 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "device/bluetooth/bluetooth_adapter.h"
+#include "device/bluetooth/bluetooth_advertisement.h"
 #include "device/bluetooth/bluetooth_gatt_connection.h"
 #include "device/bluetooth/public/cpp/bluetooth_uuid.h"
 #include "device/bluetooth/public/mojom/adapter.mojom.h"
 #include "device/bluetooth/public/mojom/device.mojom-forward.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/remote_set.h"
 
 namespace bluetooth {
 
@@ -35,8 +36,11 @@ class Adapter : public mojom::Adapter,
                        ConnectToDeviceCallback callback) override;
   void GetDevices(GetDevicesCallback callback) override;
   void GetInfo(GetInfoCallback callback) override;
-  void SetClient(mojo::PendingRemote<mojom::AdapterClient> client,
-                 SetClientCallback callback) override;
+  void AddObserver(mojo::PendingRemote<mojom::AdapterObserver> observer,
+                   AddObserverCallback callback) override;
+  void RegisterAdvertisement(const device::BluetoothUUID& service_uuid,
+                             const std::vector<uint8_t>& service_data,
+                             RegisterAdvertisementCallback callback) override;
   void SetDiscoverable(bool discoverable,
                        SetDiscoverableCallback callback) override;
   void SetName(const std::string& name, SetNameCallback callback) override;
@@ -74,6 +78,13 @@ class Adapter : public mojom::Adapter,
   void OnConnectError(ConnectToDeviceCallback callback,
                       device::BluetoothDevice::ConnectErrorCode error_code);
 
+  void OnRegisterAdvertisement(
+      RegisterAdvertisementCallback callback,
+      scoped_refptr<device::BluetoothAdvertisement> advertisement);
+  void OnRegisterAdvertisementError(
+      RegisterAdvertisementCallback callback,
+      device::BluetoothAdvertisement::ErrorCode error_code);
+
   void OnSetDiscoverable(SetDiscoverableCallback callback);
   void OnSetDiscoverableError(SetDiscoverableCallback callback);
 
@@ -98,8 +109,8 @@ class Adapter : public mojom::Adapter,
   // The current Bluetooth adapter.
   scoped_refptr<device::BluetoothAdapter> adapter_;
 
-  // The adapter client that listens to this service.
-  mojo::Remote<mojom::AdapterClient> client_;
+  // The adapter observers that listen to this service.
+  mojo::RemoteSet<mojom::AdapterObserver> observers_;
 
   base::WeakPtrFactory<Adapter> weak_ptr_factory_{this};
 

@@ -8,8 +8,9 @@
 
 #include "components/viz/service/display_embedder/skia_output_surface_dependency.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
+#include "gpu/command_buffer/service/shared_image_factory.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
-#include "third_party/skia/include/gpu/GrContext.h"
+#include "third_party/skia/include/gpu/GrDirectContext.h"
 
 namespace viz {
 
@@ -93,8 +94,11 @@ void OutputPresenter::Image::EndWriteSkia() {
         .fSignalSemaphores = end_semaphores_.data(),
     };
     scoped_skia_write_access_->surface()->flush(flush_info);
-    DCHECK(scoped_skia_write_access_->surface()->getContext());
-    scoped_skia_write_access_->surface()->getContext()->submit();
+    auto* direct_context = scoped_skia_write_access_->surface()
+                               ->recordingContext()
+                               ->asDirectContext();
+    DCHECK(direct_context);
+    direct_context->submit();
   }
   scoped_skia_write_access_.reset();
   end_semaphores_.clear();
@@ -109,40 +113,6 @@ void OutputPresenter::Image::PreGrContextSubmit() {
     scoped_skia_write_access_->surface()->flush(
         {}, scoped_skia_write_access_->end_state());
   }
-}
-
-OutputPresenter::OverlayData::OverlayData(
-    std::unique_ptr<gpu::SharedImageRepresentationOverlay> representation,
-    std::unique_ptr<gpu::SharedImageRepresentationOverlay::ScopedReadAccess>
-        scoped_read_access)
-    : representation_(std::move(representation)),
-      scoped_read_access_(std::move(scoped_read_access)) {}
-OutputPresenter::OverlayData::OverlayData(OverlayData&&) = default;
-OutputPresenter::OverlayData::~OverlayData() = default;
-
-OutputPresenter::OverlayData& OutputPresenter::OverlayData::operator=(
-    OverlayData&& other) {
-  // If the default assignment operator is called when |this| is populated, then
-  // the members will be moved in declared order. As a consequence,
-  // |this->representation_| will be overwritten and therefore deleted before
-  // |this_->scoped_read_access_|, which will cause a DCHECK (because scoped
-  // accesses may not outlive their representation).
-  scoped_read_access_ = std::move(other.scoped_read_access_);
-  representation_ = std::move(other.representation_);
-  return *this;
-}
-
-const gpu::Mailbox& OutputPresenter::OverlayData::mailbox() const {
-  return representation_->mailbox();
-}
-
-bool OutputPresenter::OverlayData::IsInUseByWindowServer() const {
-  if (!scoped_read_access_)
-    return false;
-  auto* gl_image = scoped_read_access_->gl_image();
-  if (!gl_image)
-    return false;
-  return gl_image->IsInUseByWindowServer();
 }
 
 }  // namespace viz

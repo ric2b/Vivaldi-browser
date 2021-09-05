@@ -292,14 +292,12 @@ class WidgetScrollViewTest : public test::WidgetTest,
 
     const gfx::Rect default_bounds(50, 50, kDefaultWidth, kDefaultHeight);
     widget_ = CreateTopLevelFramelessPlatformWidget();
-
-    ScrollView* scroll_view = new ScrollView();
-    scroll_view->SetContents(std::move(contents));
-
     widget_->SetBounds(default_bounds);
     widget_->Show();
 
-    widget_->SetContentsView(scroll_view);
+    ScrollView* scroll_view =
+        widget_->SetContentsView(std::make_unique<ScrollView>());
+    scroll_view->SetContents(std::move(contents));
     scroll_view->Layout();
 
     widget_->GetCompositor()->AddObserver(this);
@@ -1095,7 +1093,7 @@ TEST_F(WidgetScrollViewTest,
   ScrollBar* scroll_bar = test_api.GetScrollBar(HORIZONTAL);
 
   // Verify scroll bar is unable to process events.
-  EXPECT_FALSE(scroll_bar->CanProcessEventsWithinSubtree());
+  EXPECT_FALSE(scroll_bar->GetCanProcessEventsWithinSubtree());
 
   ui::test::EventGenerator generator(
       GetContext(), scroll_view->GetWidget()->GetNativeWindow());
@@ -1104,7 +1102,7 @@ TEST_F(WidgetScrollViewTest,
 
   // Since the scroll bar will become visible, it should now be able to process
   // events.
-  EXPECT_TRUE(scroll_bar->CanProcessEventsWithinSubtree());
+  EXPECT_TRUE(scroll_bar->GetCanProcessEventsWithinSubtree());
 }
 
 // Test overlay scrollbar behavior when just resting fingers on the trackpad.

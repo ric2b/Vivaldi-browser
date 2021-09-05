@@ -122,7 +122,7 @@ class TestSharedImageInterface : public gpu::SharedImageInterface {
              collection_it->second->GetNumBuffers());
 
     auto result = gpu::Mailbox::Generate();
-    mailoxes_.insert(result);
+    mailboxes_.insert(result);
     return result;
   }
 
@@ -138,7 +138,7 @@ class TestSharedImageInterface : public gpu::SharedImageInterface {
 
   void DestroySharedImage(const gpu::SyncToken& sync_token,
                           const gpu::Mailbox& mailbox) override {
-    CHECK_EQ(mailoxes_.erase(mailbox), 1U);
+    CHECK_EQ(mailboxes_.erase(mailbox), 1U);
   }
 
   SwapChainMailboxes CreateSwapChain(viz::ResourceFormat format,
@@ -158,7 +158,8 @@ class TestSharedImageInterface : public gpu::SharedImageInterface {
   void RegisterSysmemBufferCollection(gfx::SysmemBufferCollectionId id,
                                       zx::channel token,
                                       gfx::BufferFormat format,
-                                      gfx::BufferUsage usage) override {
+                                      gfx::BufferUsage usage,
+                                      bool register_with_image_pipe) override {
     EXPECT_EQ(format, gfx::BufferFormat::YUV_420_BIPLANAR);
     EXPECT_EQ(usage, gfx::BufferUsage::GPU_READ);
     std::unique_ptr<TestBufferCollection>& collection =
@@ -196,7 +197,7 @@ class TestSharedImageInterface : public gpu::SharedImageInterface {
                  std::unique_ptr<TestBufferCollection>>
       sysmem_buffer_collections_;
 
-  base::flat_set<gpu::Mailbox> mailoxes_;
+  base::flat_set<gpu::Mailbox> mailboxes_;
 };
 
 }  // namespace
@@ -260,10 +261,10 @@ class FuchsiaVideoDecoderTest : public testing::Test {
     DecodeBuffer(ReadTestDataFile(name));
   }
 
-  void OnFrameDecoded(size_t frame_pos, DecodeStatus status) {
+  void OnFrameDecoded(size_t frame_pos, Status status) {
     EXPECT_EQ(frame_pos, num_decoded_buffers_);
     num_decoded_buffers_ += 1;
-    last_decode_status_ = status;
+    last_decode_status_ = std::move(status);
     if (run_loop_)
       run_loop_->Quit();
   }
@@ -276,7 +277,7 @@ class FuchsiaVideoDecoderTest : public testing::Test {
       run_loop_ = &run_loop;
       run_loop.Run();
       run_loop_ = nullptr;
-      ASSERT_EQ(last_decode_status_, DecodeStatus::OK);
+      ASSERT_TRUE(last_decode_status_.is_ok());
     }
   }
 
@@ -298,7 +299,7 @@ class FuchsiaVideoDecoderTest : public testing::Test {
   std::list<scoped_refptr<VideoFrame>> output_frames_;
   size_t num_output_frames_ = 0;
 
-  DecodeStatus last_decode_status_ = DecodeStatus::OK;
+  Status last_decode_status_;
   base::RunLoop* run_loop_ = nullptr;
 
   // Number of frames that OnVideoFrame() should keep in |output_frames_|.

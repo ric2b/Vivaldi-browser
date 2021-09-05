@@ -10,13 +10,20 @@
 #include "ash/style/ash_color_provider.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
+#include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/text_elider.h"
+#include "ui/views/background.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
+
+constexpr int kDeskNameViewBorderRadius = 4;
+constexpr int kDeskNameViewMinHeight = 24;
+constexpr int kDeskNameViewHorizontalPadding = 6;
 
 namespace {
 
@@ -40,14 +47,11 @@ bool IsDesksBarWidget(const views::Widget* widget) {
 }  // namespace
 
 DeskNameView::DeskNameView() {
-  auto border = std::make_unique<WmHighlightItemBorder>(/*corner_radius=*/4);
+  auto border = std::make_unique<WmHighlightItemBorder>(
+      /*corner_radius=*/4, gfx::Insets(0, kDeskNameViewHorizontalPadding));
   border_ptr_ = border.get();
   SetBorder(std::move(border));
 
-  SetBackgroundColor(SK_ColorTRANSPARENT);
-  SetTextColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorPrimary,
-      AshColorProvider::AshColorMode::kDark));
   SetCursorEnabled(true);
   SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_CENTER);
 }
@@ -69,8 +73,15 @@ void DeskNameView::CommitChanges(views::Widget* widget) {
 }
 
 void DeskNameView::SetTextAndElideIfNeeded(const base::string16& text) {
-  SetText(gfx::ElideText(text, GetFontList(), GetContentsBounds().width(),
+  SetText(gfx::ElideText(text, GetFontList(),
+                         parent()->GetPreferredSize().width(),
                          gfx::ELIDE_TAIL));
+  full_text_ = text;
+}
+
+void DeskNameView::UpdateViewAppearance() {
+  background()->SetNativeControlColor(GetBackgroundColor());
+  UpdateBorderState();
 }
 
 const char* DeskNameView::GetClassName() const {
@@ -86,6 +97,7 @@ gfx::Size DeskNameView::CalculatePreferredSize() const {
   gfx::Size size{width + GetCaretBounds().width(), height};
   const auto insets = GetInsets();
   size.Enlarge(insets.width(), insets.height());
+  size.SetToMax(gfx::Size(0, kDeskNameViewMinHeight));
   return size;
 }
 
@@ -98,6 +110,36 @@ bool DeskNameView::SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) {
     return true;
 
   return false;
+}
+
+void DeskNameView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ax::mojom::Role::kTextField;
+  node_data->SetName(full_text_);
+}
+
+void DeskNameView::OnMouseEntered(const ui::MouseEvent& event) {
+  UpdateViewAppearance();
+}
+
+void DeskNameView::OnMouseExited(const ui::MouseEvent& event) {
+  UpdateViewAppearance();
+}
+
+void DeskNameView::OnThemeChanged() {
+  Textfield::OnThemeChanged();
+
+  SetBackground(views::CreateRoundedRectBackground(GetBackgroundColor(),
+                                                   kDeskNameViewBorderRadius));
+
+  AshColorProvider* color_provider = AshColorProvider::Get();
+  const SkColor text_color = color_provider->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary);
+  SetTextColor(text_color);
+  SetSelectionTextColor(text_color);
+
+  const SkColor selection_color = color_provider->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kFocusAuraColor);
+  SetSelectionBackgroundColor(selection_color);
 }
 
 views::View* DeskNameView::GetView() {
@@ -119,8 +161,16 @@ void DeskNameView::OnViewUnhighlighted() {
 }
 
 void DeskNameView::UpdateBorderState() {
-  border_ptr_->SetFocused(IsViewHighlighted());
+  border_ptr_->SetFocused(IsViewHighlighted() || HasFocus());
   SchedulePaint();
+}
+
+SkColor DeskNameView::GetBackgroundColor() const {
+  return HasFocus() || IsMouseHovered()
+             ? AshColorProvider::Get()->GetControlsLayerColor(
+                   AshColorProvider::ControlsLayerType::
+                       kControlBackgroundColorInactive)
+             : SK_ColorTRANSPARENT;
 }
 
 }  // namespace ash

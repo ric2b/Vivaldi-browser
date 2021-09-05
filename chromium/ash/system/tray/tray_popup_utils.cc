@@ -14,7 +14,6 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/default_color_constants.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/size_range_layout.h"
 #include "ash/system/tray/tray_constants.h"
@@ -228,8 +227,7 @@ views::ToggleButton* TrayPopupUtils::CreateToggleButton(
         is_on ? AshColorProvider::ContentLayerType::kIconColorProminent
               : AshColorProvider::ContentLayerType::kTextColorPrimary;
 
-    return SkColorSetA(AshColorProvider::Get()->GetContentLayerColor(
-                           type, AshColorProvider::AshColorMode::kDark),
+    return SkColorSetA(AshColorProvider::Get()->GetContentLayerColor(type),
                        alpha);
   };
   views::ToggleButton* toggle = new views::ToggleButton(listener);
@@ -257,7 +255,7 @@ void TrayPopupUtils::ConfigureTrayPopupButton(views::Button* button) {
   button->SetInstallFocusRingOnFocus(true);
   button->SetFocusForPlatform();
   button->SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
-  button->set_has_ink_drop_action_on_click(true);
+  button->SetHasInkDropActionOnClick(true);
 }
 
 void TrayPopupUtils::ConfigureAsStickyHeader(views::View* view) {
@@ -285,8 +283,7 @@ views::Separator* TrayPopupUtils::CreateVerticalSeparator() {
   views::Separator* separator = new views::Separator();
   separator->SetPreferredHeight(24);
   separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kSeparatorColor,
-      AshColorProvider::AshColorMode::kDark));
+      AshColorProvider::ContentLayerType::kSeparatorColor));
   return separator;
 }
 
@@ -303,21 +300,18 @@ std::unique_ptr<views::InkDrop> TrayPopupUtils::CreateInkDrop(
 std::unique_ptr<views::InkDropRipple> TrayPopupUtils::CreateInkDropRipple(
     TrayPopupInkDropStyle ink_drop_style,
     const views::View* host,
-    const gfx::Point& center_point,
-    SkColor background_color) {
+    const gfx::Point& center_point) {
   const AshColorProvider::RippleAttributes ripple_attributes =
-      AshColorProvider::Get()->GetRippleAttributes(background_color);
+      AshColorProvider::Get()->GetRippleAttributes();
   return std::make_unique<views::FloodFillInkDropRipple>(
       host->size(), GetInkDropInsets(ink_drop_style), center_point,
       ripple_attributes.base_color, ripple_attributes.inkdrop_opacity);
 }
 
 std::unique_ptr<views::InkDropHighlight> TrayPopupUtils::CreateInkDropHighlight(
-    TrayPopupInkDropStyle ink_drop_style,
-    const views::View* host,
-    SkColor background_color) {
+    const views::View* host) {
   const AshColorProvider::RippleAttributes ripple_attributes =
-      AshColorProvider::Get()->GetRippleAttributes(background_color);
+      AshColorProvider::Get()->GetRippleAttributes();
   auto highlight = std::make_unique<views::InkDropHighlight>(
       gfx::SizeF(host->size()), ripple_attributes.base_color);
   highlight->set_visible_opacity(ripple_attributes.highlight_opacity);
@@ -334,8 +328,7 @@ void TrayPopupUtils::InstallHighlightPathGenerator(
 views::Separator* TrayPopupUtils::CreateListItemSeparator(bool left_inset) {
   views::Separator* separator = new views::Separator();
   separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kSeparatorColor,
-      AshColorProvider::AshColorMode::kLight));
+      AshColorProvider::ContentLayerType::kSeparatorColor));
   separator->SetBorder(views::CreateEmptyBorder(
       kMenuSeparatorVerticalPadding - views::Separator::kThickness,
       left_inset ? kMenuExtraMarginFromLeftEdge + kMenuButtonSize +
@@ -353,8 +346,10 @@ void TrayPopupUtils::InitializeAsCheckableRow(HoverHighlightView* container,
                                               bool checked,
                                               bool enterprise_managed) {
   const int dip_size = GetDefaultSizeOfVectorIcon(kCheckCircleIcon);
-  gfx::ImageSkia check_mark =
-      CreateVectorIcon(kHollowCheckCircleIcon, dip_size, gfx::kGoogleGreen300);
+  gfx::ImageSkia check_mark = CreateVectorIcon(
+      kHollowCheckCircleIcon, dip_size,
+      AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kIconColorProminent));
   if (enterprise_managed) {
     gfx::ImageSkia enterprise_managed_icon = CreateVectorIcon(
         kLoginScreenEnterpriseIcon, dip_size, gfx::kGoogleGrey100);

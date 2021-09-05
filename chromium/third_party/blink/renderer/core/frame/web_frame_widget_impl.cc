@@ -117,7 +117,9 @@ WebFrameWidget* WebFrameWidget::CreateForMainFrame(
         mojo_widget_host,
     CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
         mojo_widget,
-    bool is_for_nested_main_frame) {
+    bool is_for_nested_main_frame,
+    bool hidden,
+    bool never_composited) {
   DCHECK(client) << "A valid WebWidgetClient must be supplied.";
   DCHECK(!main_frame->Parent());  // This is the main frame.
 
@@ -137,7 +139,7 @@ WebFrameWidget* WebFrameWidget::CreateForMainFrame(
       util::PassKey<WebFrameWidget>(), *client, web_view_impl,
       std::move(mojo_frame_widget_host), std::move(mojo_frame_widget),
       std::move(mojo_widget_host), std::move(mojo_widget),
-      is_for_nested_main_frame);
+      is_for_nested_main_frame, hidden, never_composited);
   widget->BindLocalRoot(*main_frame);
   return widget;
 }
@@ -152,7 +154,9 @@ WebFrameWidget* WebFrameWidget::CreateForChildLocalRoot(
     CrossVariantMojoAssociatedRemote<mojom::blink::WidgetHostInterfaceBase>
         mojo_widget_host,
     CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
-        mojo_widget) {
+        mojo_widget,
+    bool hidden,
+    bool never_composited) {
   DCHECK(client) << "A valid WebWidgetClient must be supplied.";
   DCHECK(local_root->Parent());  // This is not the main frame.
   // Frames whose direct ancestor is a remote frame are local roots. Verify this
@@ -165,7 +169,8 @@ WebFrameWidget* WebFrameWidget::CreateForChildLocalRoot(
   auto* widget = MakeGarbageCollected<WebFrameWidgetImpl>(
       util::PassKey<WebFrameWidget>(), *client,
       std::move(mojo_frame_widget_host), std::move(mojo_frame_widget),
-      std::move(mojo_widget_host), std::move(mojo_widget));
+      std::move(mojo_widget_host), std::move(mojo_widget), hidden,
+      never_composited);
   widget->BindLocalRoot(*local_root);
   return widget;
 }
@@ -180,12 +185,16 @@ WebFrameWidgetImpl::WebFrameWidgetImpl(
     CrossVariantMojoAssociatedRemote<mojom::blink::WidgetHostInterfaceBase>
         widget_host,
     CrossVariantMojoAssociatedReceiver<mojom::blink::WidgetInterfaceBase>
-        widget)
+        widget,
+    bool hidden,
+    bool never_composited)
     : WebFrameWidgetBase(client,
                          std::move(frame_widget_host),
                          std::move(frame_widget),
                          std::move(widget_host),
-                         std::move(widget)),
+                         std::move(widget),
+                         hidden,
+                         never_composited),
       self_keep_alive_(PERSISTENT_FROM_HERE, this) {}
 
 WebFrameWidgetImpl::~WebFrameWidgetImpl() = default;
@@ -291,8 +300,16 @@ void WebFrameWidgetImpl::BeginMainFrame(base::TimeTicks last_frame_time) {
   if (!LocalRootImpl())
     return;
 
+  // Dirty bit on MouseEventManager is not cleared in OOPIFs after scroll
+  // or layout changes. Ensure the hover state is recomputed if necessary.
+  LocalRootImpl()
+      ->GetFrame()
+      ->GetEventHandler()
+      .RecomputeMouseHoverStateIfNeeded();
+
   DocumentLifecycle::AllowThrottlingScope throttling_scope(
       LocalRootImpl()->GetFrame()->GetDocument()->Lifecycle());
+
   if (WidgetBase::ShouldRecordBeginMainFrameMetrics()) {
     SCOPED_UMA_AND_UKM_TIMER(
         LocalRootImpl()->GetFrame()->View()->EnsureUkmAggregator(),
@@ -629,7 +646,6 @@ void WebFrameWidgetImpl::FocusChanged(bool enable) {
       ime_accept_events_ = false;
     }
   }
-  Client()->FocusChanged(enable);
 }
 
 void WebFrameWidgetImpl::EnableDeviceEmulation(
@@ -1166,6 +1182,36 @@ void WebFrameWidgetImpl::GetScrollParamsForFocusedEditableElement(
 
 gfx::Rect WebFrameWidgetImpl::ViewportVisibleRect() {
   return compositor_visible_rect_;
+}
+
+void WebFrameWidgetImpl::ApplyVisualPropertiesSizing(
+    const VisualProperties& visual_properties) {
+  SetWindowSegments(visual_properties.root_widget_window_segments);
+  widget_base_->UpdateSurfaceAndScreenInfo(
+      visual_properties.local_surface_id.value_or(viz::LocalSurfaceId()),
+      visual_properties.compositor_viewport_pixel_rect,
+      visual_properties.screen_info);
+
+  // Store this even when auto-resizing, it is the size of the full viewport
+  // used for clipping, and this value is propagated down the Widget
+  // hierarchy via the VisualProperties waterfall.
+  widget_base_->SetVisibleViewportSizeInDIPs(
+      visual_properties.visible_viewport_size);
+
+  // Widgets in a WebView's frame tree without a local main frame
+  // set the size of the WebView to be the |visible_viewport_size|, in order
+  // to limit compositing in (out of process) child frames to what is visible.
+  //
+  // Note that child frames in the same process/WebView frame tree as the
+  // main frame do not do this in order to not clobber the source of truth in
+  // the main frame.
+  if (!View()->MainFrameImpl()) {
+    View()->Resize(WebSize(widget_base_->DIPsToCeiledBlinkSpace(
+        widget_base_->VisibleViewportSizeInDIPs())));
+  }
+
+  Resize(WebSize(
+      widget_base_->DIPsToCeiledBlinkSpace(visual_properties.new_size)));
 }
 
 }  // namespace blink

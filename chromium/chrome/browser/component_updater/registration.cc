@@ -4,14 +4,17 @@
 
 #include "chrome/browser/component_updater/registration.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/component_updater/autofill_states_component_installer.h"
 #include "chrome/browser/component_updater/crl_set_component_installer.h"
 #include "chrome/browser/component_updater/crowd_deny_component_installer.h"
 #include "chrome/browser/component_updater/file_type_policies_component_installer.h"
-#include "chrome/browser/component_updater/floc_blocklist_component_installer.h"
+#include "chrome/browser/component_updater/first_party_sets_component_installer.h"
+#include "chrome/browser/component_updater/floc_component_installer.h"
 #include "chrome/browser/component_updater/games_component_installer.h"
 #include "chrome/browser/component_updater/mei_preload_component_installer.h"
 #include "chrome/browser/component_updater/optimization_hints_component_installer.h"
@@ -49,6 +52,7 @@
 #if !defined(OS_ANDROID)
 #include "chrome/browser/component_updater/soda_component_installer.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
+#include "media/base/media_switches.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -117,11 +121,13 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
 #endif
 
   RegisterSubresourceFilterComponent(cus);
-  RegisterFlocBlocklistComponent(cus,
-                                 g_browser_process->floc_blocklist_service());
+  RegisterFlocComponent(cus, g_browser_process->floc_blocklist_service(),
+                        g_browser_process->floc_sorting_lsh_clusters_service());
   RegisterOnDeviceHeadSuggestComponent(
       cus, g_browser_process->GetApplicationLocale());
   RegisterOptimizationHintsComponent(cus, is_off_the_record_profile);
+  RegisterTrustTokenKeyCommitmentsComponentIfTrustTokensEnabled(cus);
+  RegisterFirstPartySetsComponent(cus);
 
   base::FilePath path;
   if (base::PathService::Get(chrome::DIR_USER_DATA, &path)) {
@@ -136,23 +142,17 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
     // Chrome OS: On Chrome OS, this cleanup is delayed until user login.
     component_updater::DeleteLegacySTHSet(path);
 #endif
-
+  }
+  RegisterSSLErrorAssistantComponent(cus);
+  RegisterFileTypePoliciesComponent(cus);
 #if !defined(OS_CHROMEOS)
-    // CRLSetFetcher attempts to load a CRL set from either the local disk or
-    // network.
-    // For Chrome OS this registration is delayed until user login.
-    component_updater::RegisterCRLSetComponent(cus, path);
+  // CRLSetFetcher attempts to load a CRL set from either the local disk or
+  // network.
+  // For Chrome OS this registration is delayed until user login.
+  component_updater::RegisterCRLSetComponent(cus);
 #endif  // !defined(OS_CHROMEOS)
 
-    RegisterOriginTrialsComponent(cus, path);
-
-    RegisterFileTypePoliciesComponent(cus, path);
-
-    RegisterTrustTokenKeyCommitmentsComponentIfTrustTokensEnabled(cus, path);
-
-    RegisterSSLErrorAssistantComponent(cus, path);
-  }
-
+  RegisterOriginTrialsComponent(cus);
   RegisterMediaEngagementPreloadComponent(cus, base::OnceClosure());
 
 #if defined(OS_WIN)
@@ -172,17 +172,20 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
   }
 #endif
 
-  RegisterSafetyTipsComponent(cus, path);
-  RegisterCrowdDenyComponent(cus, path);
-  RegisterTLSDeprecationConfigComponent(cus, path);
+  RegisterSafetyTipsComponent(cus);
+  RegisterCrowdDenyComponent(cus);
+  RegisterTLSDeprecationConfigComponent(cus);
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING) && defined(OS_ANDROID)
   component_updater::RegisterGamesComponent(cus, profile_prefs);
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && defined(OS_ANDROID)
 
 #if !defined(OS_ANDROID)
+  base::UmaHistogramBoolean("Accessibility.LiveCaption.FeatureEnabled",
+                            base::FeatureList::IsEnabled(media::kLiveCaption));
   component_updater::RegisterSODAComponent(cus, profile_prefs,
                                            base::OnceClosure());
+  component_updater::RegisterSodaLanguageComponent(cus, profile_prefs);
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -190,6 +193,8 @@ void RegisterComponentsForUpdate(bool is_off_the_record_profile,
 #endif  // !defined(OS_CHROMEOS)
 
   RegisterZxcvbnDataComponent(cus);
+
+  RegisterAutofillStatesComponent(cus, profile_prefs);
 }
 
 }  // namespace component_updater

@@ -216,8 +216,10 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
     test_hooks_->BeginMainFrameAbortedOnThread(this, reason);
   }
 
-  void ReadyToCommit(const viz::BeginFrameArgs& commit_args) override {
-    LayerTreeHostImpl::ReadyToCommit(commit_args);
+  void ReadyToCommit(
+      const viz::BeginFrameArgs& commit_args,
+      const BeginMainFrameMetrics* begin_main_frame_metrics) override {
+    LayerTreeHostImpl::ReadyToCommit(commit_args, begin_main_frame_metrics);
     test_hooks_->ReadyToCommitOnThread(this);
   }
 
@@ -418,11 +420,6 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
     test_hooks_->NotifyThroughputTrackerResults(std::move(results));
   }
 
-  void SubmitThroughputData(ukm::SourceId source_id,
-                            int aggregated_percent,
-                            int impl_percent,
-                            base::Optional<int> main_percent) override {}
-
   void UpdateLayerTreeHost() override { test_hooks_->UpdateLayerTreeHost(); }
 
   void ApplyViewportChanges(const ApplyViewportChangesArgs& args) override {
@@ -546,7 +543,13 @@ class LayerTreeHostForTesting : public LayerTreeHost {
             rendering_stats_instrumentation(), image_worker_task_runner_);
 
     host_impl->InitializeUkm(ukm_recorder_factory_->CreateRecorder());
-    input_handler_weak_ptr_ = host_impl->AsWeakPtr();
+    compositor_delegate_weak_ptr_ = host_impl->AsWeakPtr();
+
+    // Many tests using this class are specifically meant as input tests so
+    // we'll need an input handler. Ideally these would be split out into a
+    // separate test harness.
+    InputHandler::Create(*compositor_delegate_weak_ptr_);
+
     return host_impl;
   }
 
@@ -600,8 +603,9 @@ class LayerTreeTestLayerTreeFrameSinkClient
       const viz::CompositorFrame& frame) override {
     hooks_->DisplayReceivedCompositorFrameOnThread(frame);
   }
-  void DisplayWillDrawAndSwap(bool will_draw_and_swap,
-                              viz::RenderPassList* render_passes) override {
+  void DisplayWillDrawAndSwap(
+      bool will_draw_and_swap,
+      viz::AggregatedRenderPassList* render_passes) override {
     hooks_->DisplayWillDrawAndSwapOnThread(will_draw_and_swap, *render_passes);
   }
   void DisplayDidDrawAndSwap() override {
@@ -612,7 +616,7 @@ class LayerTreeTestLayerTreeFrameSinkClient
   TestHooks* hooks_;
 };
 
-LayerTreeTest::LayerTreeTest(TestRendererType renderer_type)
+LayerTreeTest::LayerTreeTest(viz::RendererType renderer_type)
     : renderer_type_(renderer_type),
       initial_root_bounds_(1, 1),
       layer_tree_frame_sink_client_(
@@ -660,12 +664,12 @@ LayerTreeTest::LayerTreeTest(TestRendererType renderer_type)
 
   // Check if the graphics backend needs to initialize Vulkan.
   bool init_vulkan = false;
-  if (renderer_type_ == TestRendererType::kSkiaVk) {
+  if (renderer_type_ == viz::RendererType::kSkiaVk) {
     scoped_feature_list_.InitAndEnableFeature(features::kVulkan);
     init_vulkan = true;
-  } else if (renderer_type_ == TestRendererType::kSkiaDawn) {
+  } else if (renderer_type_ == viz::RendererType::kSkiaDawn) {
     scoped_feature_list_.InitAndEnableFeature(features::kSkiaDawn);
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
     init_vulkan = true;
 #elif defined(OS_WIN)
     // TODO(sgilhuly): Initialize D3D12 for Windows.
@@ -749,12 +753,11 @@ void LayerTreeTest::PostAddOpacityAnimationToMainThreadDelayed(
                      base::Unretained(animation_to_receive_animation), 1.0));
 }
 
-void LayerTreeTest::PostSetLocalSurfaceIdAllocationToMainThread(
-    const viz::LocalSurfaceIdAllocation& local_surface_id_allocation) {
+void LayerTreeTest::PostSetLocalSurfaceIdToMainThread(
+    const viz::LocalSurfaceId& local_surface_id) {
   main_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&LayerTreeTest::DispatchSetLocalSurfaceIdAllocation,
-                     main_thread_weak_ptr_, local_surface_id_allocation));
+      FROM_HERE, base::BindOnce(&LayerTreeTest::DispatchSetLocalSurfaceId,
+                                main_thread_weak_ptr_, local_surface_id));
 }
 
 void LayerTreeTest::PostRequestNewLocalSurfaceIdToMainThread() {
@@ -894,8 +897,7 @@ void LayerTreeTest::DoBeginTest() {
     GenerateNewLocalSurfaceId();
   BeginTest();
   if (!skip_allocate_initial_local_surface_id_) {
-    PostSetLocalSurfaceIdAllocationToMainThread(
-        GetCurrentLocalSurfaceIdAllocation());
+    PostSetLocalSurfaceIdToMainThread(GetCurrentLocalSurfaceId());
   }
   beginning_ = false;
   if (end_when_begin_returns_)
@@ -913,9 +915,8 @@ void LayerTreeTest::SkipAllocateInitialLocalSurfaceId() {
   skip_allocate_initial_local_surface_id_ = true;
 }
 
-const viz::LocalSurfaceIdAllocation&
-LayerTreeTest::GetCurrentLocalSurfaceIdAllocation() const {
-  return allocator_.GetCurrentLocalSurfaceIdAllocation();
+const viz::LocalSurfaceId& LayerTreeTest::GetCurrentLocalSurfaceId() const {
+  return allocator_.GetCurrentLocalSurfaceId();
 }
 
 void LayerTreeTest::GenerateNewLocalSurfaceId() {
@@ -934,7 +935,7 @@ void LayerTreeTest::SetupTree() {
       gfx::ScaleToCeiledSize(root_bounds, initial_device_scale_factor_);
   layer_tree_host()->SetViewportRectAndScale(gfx::Rect(device_root_bounds),
                                              initial_device_scale_factor_,
-                                             viz::LocalSurfaceIdAllocation());
+                                             viz::LocalSurfaceId());
   root_layer->SetIsDrawable(true);
   root_layer->SetHitTestable(true);
   layer_tree_host()->SetElementIdsForTesting();
@@ -987,12 +988,11 @@ void LayerTreeTest::DispatchAddOpacityAnimation(
   }
 }
 
-void LayerTreeTest::DispatchSetLocalSurfaceIdAllocation(
-    const viz::LocalSurfaceIdAllocation& local_surface_id_allocation) {
+void LayerTreeTest::DispatchSetLocalSurfaceId(
+    const viz::LocalSurfaceId& local_surface_id) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   if (layer_tree_host_) {
-    layer_tree_host_->SetLocalSurfaceIdAllocationFromParent(
-        local_surface_id_allocation);
+    layer_tree_host_->SetLocalSurfaceIdFromParent(local_surface_id);
   }
 }
 

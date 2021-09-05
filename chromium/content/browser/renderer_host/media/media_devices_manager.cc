@@ -736,8 +736,8 @@ void MediaDevicesManager::GetAudioInputCapabilities(
   state.video_input_capabilities_requested = request_video_input_capabilities;
   state.audio_input_capabilities_requested = request_audio_input_capabilities;
   state.completion_cb = std::move(callback);
-  state.raw_enumeration_results = std::move(raw_enumeration_results);
-  state.hashed_enumeration_results = std::move(hashed_enumeration_results);
+  state.raw_enumeration_results = raw_enumeration_results;
+  state.hashed_enumeration_results = hashed_enumeration_results;
   state.num_pending_audio_input_capabilities =
       hashed_enumeration_results[blink::MEDIA_DEVICE_TYPE_AUDIO_INPUT].size();
 
@@ -913,6 +913,7 @@ void MediaDevicesManager::AudioDevicesEnumerated(
   for (const media::AudioDeviceDescription& description : device_descriptions) {
     snapshot.emplace_back(description.unique_id, description.device_name,
                           description.group_id,
+                          media::VideoCaptureControlSupport(),
                           media::VideoFacingMode::MEDIA_VIDEO_FACING_NONE);
   }
   DevicesEnumerated(type, snapshot);

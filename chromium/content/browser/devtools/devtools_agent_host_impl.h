@@ -20,6 +20,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "net/cookies/site_for_cookies.h"
 
 namespace content {
 
@@ -28,6 +29,9 @@ class BrowserContext;
 // Describes interface for managing devtools agents from the browser process.
 class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
  public:
+  // Returns DevToolsAgentHost with a given |id| or nullptr of it doesn't exist.
+  static scoped_refptr<DevToolsAgentHostImpl> GetForId(const std::string& id);
+
   // DevToolsAgentHost implementation.
   bool AttachClient(DevToolsAgentHostClient* client) override;
   bool AttachClientWithoutWakeLock(DevToolsAgentHostClient* client) override;
@@ -41,6 +45,7 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
       scoped_refptr<base::RefCountedMemory> data) override;
   std::string GetParentId() override;
   std::string GetOpenerId() override;
+  std::string GetOpenerFrameId() override;
   bool CanAccessOpener() override;
   std::string GetDescription() override;
   GURL GetFaviconURL() override;
@@ -50,6 +55,24 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
   WebContents* GetWebContents() override;
   void DisconnectWebContents() override;
   void ConnectWebContents(WebContents* wc) override;
+  RenderProcessHost* GetProcessHost() override;
+
+  struct NetworkLoaderFactoryParamsAndInfo {
+    NetworkLoaderFactoryParamsAndInfo();
+    NetworkLoaderFactoryParamsAndInfo(
+        url::Origin,
+        net::SiteForCookies,
+        network::mojom::URLLoaderFactoryParamsPtr);
+    NetworkLoaderFactoryParamsAndInfo(NetworkLoaderFactoryParamsAndInfo&&);
+    ~NetworkLoaderFactoryParamsAndInfo();
+    url::Origin origin;
+    net::SiteForCookies site_for_cookies;
+    network::mojom::URLLoaderFactoryParamsPtr factory_params;
+  };
+  // Creates network factory parameters for devtools-initiated subresource
+  // requests.
+  virtual NetworkLoaderFactoryParamsAndInfo
+  CreateNetworkFactoryParamsForDevTools();
 
   bool Inspect();
 
@@ -67,7 +90,7 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
   }
 
  protected:
-  DevToolsAgentHostImpl(const std::string& id);
+  explicit DevToolsAgentHostImpl(const std::string& id);
   ~DevToolsAgentHostImpl() override;
 
   static bool ShouldForceCreation();

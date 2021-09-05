@@ -5,7 +5,7 @@
 #ifndef IOS_CHROME_BROWSER_METRICS_PREVIOUS_SESSION_INFO_H_
 #define IOS_CHROME_BROWSER_METRICS_PREVIOUS_SESSION_INFO_H_
 
-#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 #include "base/callback_helpers.h"
 
@@ -17,6 +17,9 @@ extern NSString* const kOSStartTime;
 // Key in the UserDefaults for a boolean describing whether or not the session
 // restoration is in progress.
 extern NSString* const kPreviousSessionInfoRestoringSession;
+// Key in the UserDefaults for an array which contains the ids for the connected
+// scene sessions on the previous run.
+extern NSString* const kPreviousSessionInfoConnectedSceneSessionIDs;
 
 // The values of this enum are persisted (both to NSUserDefaults and logs) and
 // represent the state of the last session (which may have been running a
@@ -54,6 +57,10 @@ enum class DeviceBatteryState {
 // - Persist information about the current session, for use in a next session.
 @interface PreviousSessionInfo : NSObject
 
+// UIApplicationState at the end of the previous session or nil if state is
+// unknown.
+@property(nonatomic, assign, readonly) UIApplicationState* applicationState;
+
 // The battery level of the device at the end of the previous session.
 @property(nonatomic, assign, readonly) float deviceBatteryLevel;
 
@@ -88,7 +95,9 @@ enum class DeviceBatteryState {
 @property(nonatomic, assign, readonly) BOOL OSRestartedAfterPreviousSession;
 
 // Whether the previous session was on Multi Window enabled version of the
-// application.
+// application. A previous session doesn't have to be from a previous run, in
+// the case of single window to multiple windows migration, after the first
+// session created/restored the flag value should be updated to |YES|.
 // TODO(crbug.com/1109280): Remove after the migration to Multi-Window sessions
 // is done.
 @property(nonatomic, assign, readonly) BOOL isMultiWindowEnabledSession;
@@ -104,6 +113,11 @@ enum class DeviceBatteryState {
 // YES if the previous session was terminated during session restoration.
 // Reset to NO after resetSessionRestorationFlag call.
 @property(nonatomic, readonly) BOOL terminatedDuringSessionRestoration;
+
+// The list of the session IDs for all the connected scenes, used for crash
+// restoration.
+@property(nonatomic, readonly)
+    NSMutableSet<NSString*>* connectedSceneSessionsIDs;
 
 // Singleton PreviousSessionInfo. During the lifetime of the app, the returned
 // object is the same, and describes the previous session, even after a new
@@ -138,6 +152,20 @@ enum class DeviceBatteryState {
 // When a session has begun, records that any memory warning flagged can be
 // ignored.
 - (void)resetMemoryWarningFlag;
+
+// Adds |sessionID| to the list of connected sessions.
+- (void)addSceneSessionID:(NSString*)sessionID;
+
+// Removes |sessionID| from the list of connected sessions.
+- (void)removeSceneSessionID:(NSString*)sessionID;
+
+// Empties the list of connected session.
+- (void)resetConnectedSceneSessionIDs;
+
+// Updates the local and the saved Multi Window support status.
+// TODO(crbug.com/1109280): Remove after the migration to Multi-Window
+// sessions is done.
+- (void)updateMultiWindowSupportStatus;
 
 // Must be called when Chrome starts session restoration. The returned closure
 // runner will clear up the flag when destroyed. Can be used on different

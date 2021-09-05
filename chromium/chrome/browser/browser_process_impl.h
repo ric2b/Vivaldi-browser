@@ -158,7 +158,9 @@ class BrowserProcessImpl : public BrowserProcess,
   printing::PrintPreviewDialogController* print_preview_dialog_controller()
       override;
   printing::BackgroundPrintingManager* background_printing_manager() override;
+#if !defined(OS_ANDROID)
   IntranetRedirectDetector* intranet_redirect_detector() override;
+#endif
   const std::string& GetApplicationLocale() override;
   void SetApplicationLocale(const std::string& actual_locale) override;
   DownloadStatusUpdater* download_status_updater() override;
@@ -171,6 +173,8 @@ class BrowserProcessImpl : public BrowserProcess,
   subresource_filter::RulesetService* subresource_filter_ruleset_service()
       override;
   federated_learning::FlocBlocklistService* floc_blocklist_service() override;
+  federated_learning::FlocSortingLshClustersService*
+  floc_sorting_lsh_clusters_service() override;
   optimization_guide::OptimizationGuideService* optimization_guide_service()
       override;
 
@@ -188,7 +192,9 @@ class BrowserProcessImpl : public BrowserProcess,
   MediaFileSystemRegistry* media_file_system_registry() override;
   WebRtcLogUploader* webrtc_log_uploader() override;
   network_time::NetworkTimeTracker* network_time_tracker() override;
+#if !defined(OS_ANDROID)
   gcm::GCMDriver* gcm_driver() override;
+#endif
   resource_coordinator::TabManager* GetTabManager() override;
   resource_coordinator::ResourceCoordinatorParts* resource_coordinator_parts()
       override;
@@ -211,7 +217,6 @@ class BrowserProcessImpl : public BrowserProcess,
   void CreateWatchdogThread();
   void CreateProfileManager();
   void CreateIconManager();
-  void CreateIntranetRedirectDetector();
   void CreateNotificationPlatformBridge();
   void CreateNotificationUIManager();
   void CreatePrintPreviewDialogController();
@@ -219,6 +224,7 @@ class BrowserProcessImpl : public BrowserProcess,
   void CreateSafeBrowsingService();
   void CreateSubresourceFilterRulesetService();
   void CreateFlocBlocklistService();
+  void CreateFlocSortingLshClustersService();
   void CreateOptimizationGuideService();
   void CreateStatusTray();
   void CreateBackgroundModeManager();
@@ -295,7 +301,9 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<NotificationUIManager> notification_ui_manager_;
 #endif
 
+#if !defined(OS_ANDROID)
   std::unique_ptr<IntranetRedirectDetector> intranet_redirect_detector_;
+#endif
 
   std::unique_ptr<StatusTray> status_tray_;
 
@@ -321,6 +329,9 @@ class BrowserProcessImpl : public BrowserProcess,
 
   std::unique_ptr<federated_learning::FlocBlocklistService>
       floc_blocklist_service_;
+
+  std::unique_ptr<federated_learning::FlocSortingLshClustersService>
+      floc_sorting_lsh_clusters_service_;
 
   bool created_optimization_guide_service_ = false;
   std::unique_ptr<optimization_guide::OptimizationGuideService>

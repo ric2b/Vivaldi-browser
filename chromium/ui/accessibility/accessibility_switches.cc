@@ -28,10 +28,6 @@ const char kEnableExperimentalAccessibilityLanguageDetection[] =
 const char kEnableExperimentalAccessibilityLanguageDetectionDynamic[] =
     "enable-experimental-accessibility-language-detection-dynamic";
 
-// Shows setting to enable Switch Access before it has launched.
-const char kEnableExperimentalAccessibilitySwitchAccess[] =
-    "enable-experimental-accessibility-switch-access";
-
 // Enables in progress Switch Access features for text input.
 const char kEnableExperimentalAccessibilitySwitchAccessText[] =
     "enable-experimental-accessibility-switch-access-text";
@@ -40,17 +36,14 @@ const char kEnableExperimentalAccessibilitySwitchAccessText[] =
 const char kEnableExperimentalAccessibilityChromeVoxAnnotations[] =
     "enable-experimental-accessibility-chromevox-annotations";
 
-// Disables ChromeVox language switching feature.
-const char kDisableExperimentalAccessibilityChromeVoxLanguageSwitching[] =
-    "disable-experimental-accessibility-chromevox-language-switching";
-
-// Disables ChromeVox search menus feature.
-const char kDisableExperimentalAccessibilityChromeVoxSearchMenus[] =
-    "disable-experimental-accessibility-chromevox-search-menus";
-
 // Enables interactive tutorial for ChromeVox.
 const char kEnableExperimentalAccessibilityChromeVoxTutorial[] =
     "enable-experimental-accessibility-chromevox-tutorial";
+
+// Enables new magnifier focus following feature, which provides richer focus
+// following experience.
+const char kEnableExperimentalAccessibilityMagnifierNewFocusFollowing[] =
+    "enable-experimental-accessibility-magnifier-new-focus-following";
 
 // Enables Switch Access point scanning. This feature hasn't launched yet.
 const char kEnableSwitchAccessPointScanning[] =

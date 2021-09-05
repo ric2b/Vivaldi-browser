@@ -24,7 +24,7 @@ class TabCloseButton : public views::ImageButton,
   // middle clicks to be handled by the parent.
   //
   // See note on SetTabColor.
-  TabCloseButton(views::ButtonListener* listener,
+  TabCloseButton(PressedCallback pressed_callback,
                  MouseEventCallback mouse_event_callback);
   TabCloseButton(const TabCloseButton&) = delete;
   TabCloseButton& operator=(const TabCloseButton&) = delete;
@@ -39,6 +39,13 @@ class TabCloseButton : public views::ImageButton,
   // theme changes.
   void SetIconColors(SkColor foreground_color, SkColor background_color);
 
+  // Sets the desired padding around the icon. Only the icon is a target for
+  // mouse clicks, but the entire button is a target for touch events, since the
+  // button itself is small. Note that this is cheaper than, for example,
+  // installing a new EmptyBorder every time we want to change the padding
+  // around the icon.
+  void SetButtonPadding(const gfx::Insets& padding);
+
   // views::ImageButton:
   const char* GetClassName() const override;
   View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
@@ -46,6 +53,7 @@ class TabCloseButton : public views::ImageButton,
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnMouseMoved(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
+  gfx::Insets GetInsets() const override;
 
  protected:
   // views::ImageButton:

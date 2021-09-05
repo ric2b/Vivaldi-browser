@@ -59,15 +59,33 @@ enum UpdateEventFields {
   RRULE = 1 << 21,
   ORGANIZER = 1 << 22,
   TIMEZONE = 1 << 23,
+  DUE = 1 << 24,
+  PRIORITY = 1 << 25,
+  STATUS = 1 << 26,
+  PERCENTAGE_COMPLETE = 1 << 27,
+  CATEGORIES = 1 << 28,
+  COMPONENT_CLASS = 1 << 29,
+  ATTACHMENT = 1 << 30,
+  COMPLETED = 1 << 31,
 };
 
-// Represents a simplified version of a event.
-struct CalendarEvent {
-  CalendarEvent();
-  CalendarEvent(const CalendarEvent& event);
-  ~CalendarEvent();
+// EventRow -------------------------------------------------------------------
+
+// Holds all information associated with a specific event.
+class EventRow {
+ public:
+  EventRow();
+  ~EventRow();
+
+  EventRow(const EventRow& row);
+
+  EventRow(const EventRow&&) noexcept;
+
+  EventRow& operator=(const EventRow& other);
+
+  EventID id;
   CalendarID calendar_id;
-  AlarmID alarm_id;
+  AlarmID alarm_id = 0;
   base::string16 title;
   base::string16 description;
   base::Time start;
@@ -78,221 +96,35 @@ struct CalendarEvent {
   base::Time end_recurring;
   base::string16 location;
   base::string16 url;
+  RecurrenceExceptionRows recurrence_exceptions;
   std::string etag;
   std::string href;
   std::string uid;
-  EventTypeID event_type_id;
+  EventTypeID event_type_id = 0;
   bool task;
   bool complete;
-  bool trash;
+  bool trash = false;
   base::Time trash_time;
   int sequence;
   base::string16 ical;
+  EventExceptions event_exceptions;
   std::string rrule;
+  NotificationRows notifications;
+  InviteRows invites;
   std::string organizer;
+  NotificationsToCreate notifications_to_create;
+  InvitesToCreate invites_to_create;
   std::string timezone;
+  bool is_template;
+  base::Time due;
+  int priority;
+  std::string status;
+  int percentage_complete;
+  base::string16 categories;
+  base::string16 component_class;
+  base::string16 attachment;
+  base::Time completed;
   int updateFields;
-};
-
-// EventRow -------------------------------------------------------------------
-
-// Holds all information associated with a specific event.
-class EventRow {
- public:
-  EventRow();
-  EventRow(EventID id,
-           CalendarID calendar_id,
-           AlarmID alarm_id,
-           base::string16 title,
-           base::string16 description,
-           base::Time start,
-           base::Time end,
-           bool all_day,
-           bool is_recurring,
-           base::Time start_recurring,
-           base::Time end_recurring,
-           base::string16 location,
-           base::string16 url,
-           std::string etag,
-           std::string href,
-           std::string uid,
-           EventTypeID event_type_id,
-           bool task,
-           bool complete,
-           bool trash,
-           base::Time trash_time,
-           int sequence,
-           base::string16 ical,
-           std::string rrule,
-           std::string organizer,
-           NotificationsToCreate notifications_to_create,
-           InvitesToCreate invites_to_create,
-           std::string timezone);
-  ~EventRow();
-
-  EventRow(const EventRow& row);
-
-  EventRow(const EventRow&&) noexcept;
-
-  EventRow& operator=(const EventRow& other);
-
-  EventID id() const { return id_; }
-  void set_id(EventID id) { id_ = id; }
-
-  CalendarID calendar_id() const { return calendar_id_; }
-  void set_calendar_id(CalendarID calendar_id) { calendar_id_ = calendar_id; }
-
-  AlarmID alarm_id() const { return alarm_id_; }
-  void set_alarm_id(AlarmID alarm_id) { alarm_id_ = alarm_id; }
-
-  base::string16 title() const { return title_; }
-  void set_title(base::string16 title) { title_ = title; }
-
-  base::string16 description() const { return description_; }
-  void set_description(base::string16 description) {
-    description_ = description;
-  }
-
-  base::Time start() const { return start_; }
-  void set_start(base::Time start) { start_ = start; }
-
-  base::Time end() const { return end_; }
-  void set_end(base::Time end) { end_ = end; }
-
-  bool all_day() const { return all_day_; }
-  void set_all_day(bool all_day) { all_day_ = all_day; }
-
-  bool is_recurring() const { return is_recurring_; }
-  void set_is_recurring(bool is_recurring) { is_recurring_ = is_recurring; }
-
-  base::Time start_recurring() const { return start_recurring_; }
-  void set_start_recurring(base::Time start_recurring) {
-    start_recurring_ = start_recurring;
-  }
-
-  base::Time end_recurring() const { return end_recurring_; }
-  void set_end_recurring(base::Time end_recurring) {
-    end_recurring_ = end_recurring;
-  }
-
-  base::string16 location() const { return location_; }
-  void set_location(base::string16 location) { location_ = location; }
-
-  base::string16 url() const { return url_; }
-  void set_url(base::string16 url) { url_ = url; }
-
-  std::string etag() const { return etag_; }
-  void set_etag(std::string etag) { etag_ = etag; }
-
-  std::string href() const { return href_; }
-  void set_href(std::string href) { href_ = href; }
-
-  std::string uid() const { return uid_; }
-  void set_uid(std::string uid) { uid_ = uid; }
-
-  RecurrenceExceptionRows recurrence_exceptions() const {
-    return recurrence_exceptions_;
-  }
-  void set_recurrence_exceptions(
-      RecurrenceExceptionRows recurrence_exceptions) {
-    recurrence_exceptions_ = recurrence_exceptions;
-  }
-
-  EventTypeID event_type_id() const { return event_type_id_; }
-  void set_event_type_id(EventTypeID event_type_id) {
-    event_type_id_ = event_type_id;
-  }
-
-  bool task() const { return task_; }
-  void set_task(bool task) { task_ = task; }
-
-  bool complete() const { return complete_; }
-  void set_complete(bool complete) { complete_ = complete; }
-
-  bool trash() const { return trash_; }
-  void set_trash(bool trash) { trash_ = trash; }
-
-  base::Time trash_time() const { return trash_time_; }
-  void set_trash_time(base::Time trash_time) { trash_time_ = trash_time; }
-
-  int sequence() const { return sequence_; }
-  void set_sequence(int sequence) { sequence_ = sequence; }
-
-  base::string16 ical() const { return ical_; }
-  void set_ical(base::string16 ical) { ical_ = ical; }
-
-  EventExceptions event_exceptions() const { return event_exceptions_; }
-  void set_event_exceptions(EventExceptions event_exceptions) {
-    event_exceptions_ = event_exceptions;
-  }
-
-  std::string rrule() const { return rrule_; }
-  void set_rrule(std::string rrule) { rrule_ = rrule; }
-
-  NotificationRows notifications() const { return notifications_; }
-  void set_notifications(NotificationRows notifications) {
-    notifications_ = notifications;
-  }
-
-  InviteRows invites() const { return invites_; }
-  void set_invites(InviteRows invites) { invites_ = invites; }
-
-  std::string organizer() const { return organizer_; }
-  void set_organizer(std::string organizer) { organizer_ = organizer; }
-
-  NotificationsToCreate notifications_to_create() const {
-    return notifications_to_create_;
-  }
-  void set_notifications_to_create(
-      NotificationsToCreate notifications_to_create) {
-    notifications_to_create_ = notifications_to_create;
-  }
-
-  InvitesToCreate invites_to_create() const { return invites_to_create_; }
-
-  void set_invites_to_create(InvitesToCreate invites_to_create) {
-    invites_to_create_ = invites_to_create;
-  }
-
-  std::string timezone() const { return timezone_; }
-  void set_timezone(std::string timezone) { timezone_ = timezone; }
-
-  bool is_template() const { return is_template_; }
-  void set_is_template(bool is_template) { is_template_ = is_template; }
-
-  EventID id_;
-  CalendarID calendar_id_;
-  AlarmID alarm_id_ = 0;
-  base::string16 title_;
-  base::string16 description_;
-  base::Time start_;
-  base::Time end_;
-  bool all_day_;
-  bool is_recurring_;
-  base::Time start_recurring_;
-  base::Time end_recurring_;
-  base::string16 location_;
-  base::string16 url_;
-  RecurrenceExceptionRows recurrence_exceptions_;
-  std::string etag_;
-  std::string href_;
-  std::string uid_;
-  EventTypeID event_type_id_ = 0;
-  bool task_;
-  bool complete_;
-  bool trash_ = false;
-  base::Time trash_time_;
-  int sequence_;
-  base::string16 ical_;
-  EventExceptions event_exceptions_;
-  std::string rrule_;
-  NotificationRows notifications_;
-  InviteRows invites_;
-  std::string organizer_;
-  NotificationsToCreate notifications_to_create_;
-  InvitesToCreate invites_to_create_;
-  std::string timezone_;
-  bool is_template_;
 
  protected:
   void Swap(EventRow* other);
@@ -375,7 +207,7 @@ class CreateEventsResult {
 
 class UpdateEventResult {
  public:
-  UpdateEventResult();
+  UpdateEventResult() = default;
   bool success;
   std::string message;
 

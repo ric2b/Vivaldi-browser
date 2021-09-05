@@ -7,7 +7,8 @@ import("//build/config/sanitizers/sanitizers.gni")
 
 # Temporarily disable tcmalloc on arm64 linux to get rid of compilation errors.
 if (is_android || is_apple || is_asan || is_lsan || is_tsan || is_msan ||
-    is_win || is_fuchsia || ((is_linux || is_chromeos) && target_cpu == "arm64") ||
+    is_win || is_fuchsia ||
+    ((is_linux || is_chromeos) && target_cpu == "arm64") ||
     (is_cast_audio_only && target_cpu == "arm")) {
   _default_allocator = "none"
 } else {
@@ -31,6 +32,26 @@ declare_args() {
 
   # Causes all the allocations to be routed via allocator_shim.cc.
   use_allocator_shim = _default_use_allocator_shim
+
+  # Whether PartitionAlloc should be available for use or not.
+  # true makes PartitionAlloc linked to the executable or shared library and
+  # makes it available for use, but it doesn't mean that the default allocator
+  # is PartitionAlloc.  PartitionAlloc may or may not be the default allocator.
+  #
+  # |use_allocator = "partition"| makes PartitionAlloc the default allocator
+  # but it's effective only when |use_partition_alloc = true|.
+  #
+  # TODO(lizeb, yukishiino): Determine if |use_partition_alloc| is necessary or
+  # not, and redesign or remove the flag accordingly.  We may want to assert a
+  # possible conflict between |use_allocator = "partition"| and
+  # |use_partition_alloc = true| rather than prioritizing use_partition_alloc.
+  use_partition_alloc = !is_ios  # Never use PartitionAlloc on iOS.
+}
+
+if (!use_partition_alloc && use_allocator == "partition") {
+  # If there is a conflict, prioritize |use_partition_alloc| over
+  # |use_allocator|.
+  use_allocator = "none"
 }
 
 assert(use_allocator == "none" || use_allocator == "tcmalloc" ||
@@ -39,12 +60,15 @@ assert(use_allocator == "none" || use_allocator == "tcmalloc" ||
 # Don't ship this configuration, not ready yet.
 assert(!(use_allocator == "partition" && is_official_build))
 
-assert(!is_win || use_allocator == "none", "Tcmalloc doesn't work on Windows.")
-assert(!is_mac || use_allocator == "none", "Tcmalloc doesn't work on macOS.")
-assert(!is_ios || use_allocator == "none", "Tcmalloc doesn't work on iOS.")
+assert(!is_win || use_allocator != "tcmalloc",
+       "Tcmalloc doesn't work on Windows.")
+assert(!is_mac || use_allocator != "tcmalloc",
+       "Tcmalloc doesn't work on macOS.")
+assert(!is_ios || use_allocator != "tcmalloc", "Tcmalloc doesn't work on iOS.")
 
 assert(
-    !use_allocator_shim || is_linux || is_chromeos || is_android || is_win || is_apple,
+    !use_allocator_shim || is_linux || is_chromeos || is_android || is_win ||
+        is_apple,
     "use_allocator_shim works only on Android, iOS, Linux, macOS, and Windows.")
 
 if (is_win && use_allocator_shim) {

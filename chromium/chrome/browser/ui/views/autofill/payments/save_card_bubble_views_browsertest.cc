@@ -8,7 +8,6 @@
 #include "base/bind.h"
 #include "base/callback_list.h"
 #include "base/command_line.h"
-#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
@@ -83,6 +82,7 @@
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/animating_layout_manager.h"
 #include "ui/views/layout/animating_layout_manager_test_util.h"
+#include "ui/views/test/ax_event_counter.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
@@ -138,6 +138,13 @@ class SaveCardBubbleViewsFullFormBrowserTest
  protected:
   SaveCardBubbleViewsFullFormBrowserTest() : SyncTest(SINGLE_CLIENT) {}
 
+ public:
+  SaveCardBubbleViewsFullFormBrowserTest(
+      const SaveCardBubbleViewsFullFormBrowserTest&) = delete;
+  SaveCardBubbleViewsFullFormBrowserTest& operator=(
+      const SaveCardBubbleViewsFullFormBrowserTest&) = delete;
+
+ protected:
   ~SaveCardBubbleViewsFullFormBrowserTest() override = default;
 
   // Various events that can be waited on by the DialogEventWaiter.
@@ -813,8 +820,6 @@ class SaveCardBubbleViewsFullFormBrowserTest
   std::unique_ptr<net::FakeURLFetcherFactory> url_fetcher_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
   std::unique_ptr<device::ScopedGeolocationOverrider> geolocation_overrider_;
-
-  DISALLOW_COPY_AND_ASSIGN(SaveCardBubbleViewsFullFormBrowserTest);
 };
 
 // TODO(crbug.com/932818): Remove this class after experiment flag is cleaned
@@ -993,6 +998,29 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTest,
   EXPECT_EQ(
       1, user_action_tester.GetActionCount("Signin_Signin_FromSaveCardBubble"));
 }
+
+IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTest,
+                       DiceBubbleSyncPromoViewAlertAccessibleEvent) {
+  FillForm();
+  SubmitFormAndWaitForCardLocalSaveBubble();
+
+  views::test::AXEventCounter counter(views::AXEventManager::Get());
+  EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kAlert));
+
+  // Adding an event observer to the controller so we can wait for the bubble to
+  // show.
+  AddEventObserverToController();
+  ReduceAnimationTime();
+  ResetEventWaiterForSequence(
+      {DialogEvent::BUBBLE_CLOSED, DialogEvent::BUBBLE_SHOWN});
+
+  // Click [Save] should close the offer-to-save bubble
+  // and pop up the sign-in promo.
+  ClickOnDialogViewWithId(DialogViewId::OK_BUTTON);
+  WaitForObservedEvent();
+
+  EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kAlert));
+}
 #endif
 
 class SaveCardBubbleViewsFullFormBrowserTestSettings
@@ -1098,6 +1126,13 @@ class SaveCardBubbleViewsSyncTransportFullFormBrowserTest
         /*disabled_features=*/{});
   }
 
+ public:
+  SaveCardBubbleViewsSyncTransportFullFormBrowserTest(
+      const SaveCardBubbleViewsSyncTransportFullFormBrowserTest&) = delete;
+  SaveCardBubbleViewsSyncTransportFullFormBrowserTest& operator=(
+      const SaveCardBubbleViewsSyncTransportFullFormBrowserTest&) = delete;
+
+ protected:
   void SetUpInProcessBrowserTestFixture() override {
     test_signin_client_factory_ =
         secondary_account_helper::SetUpSigninClient(test_url_loader_factory());
@@ -1124,8 +1159,6 @@ class SaveCardBubbleViewsSyncTransportFullFormBrowserTest
   base::test::ScopedFeatureList feature_list_;
   secondary_account_helper::ScopedSigninClientFactory
       test_signin_client_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(SaveCardBubbleViewsSyncTransportFullFormBrowserTest);
 };
 
 // Tests the upload save bubble. Ensures that clicking the [Save] button
@@ -2209,37 +2242,8 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 // Tests to ensure the card nickname is shown correctly in the Upstream bubble.
-// The param indicates whether the experiment is enabled.
-class SaveCardBubbleViewsFullFormBrowserTestWithUpstreamForNickname
-    : public SaveCardBubbleViewsFullFormBrowserTest,
-      public ::testing::WithParamInterface<bool> {
- protected:
-  SaveCardBubbleViewsFullFormBrowserTestWithUpstreamForNickname() {
-    if (GetParam()) {
-      feature_list_.InitWithFeatures(
-          /*enabled_features=*/{features::
-                                    kAutofillEnableSurfacingServerCardNickname,
-                                features::kAutofillUpstream},
-          /*disabled_features=*/{});
-    } else {
-      feature_list_.InitWithFeatures(
-          /*enabled_features=*/{features::kAutofillUpstream},
-          /*disabled_features=*/{
-              features::kAutofillEnableSurfacingServerCardNickname});
-    }
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-INSTANTIATE_TEST_SUITE_P(
-    ,
-    SaveCardBubbleViewsFullFormBrowserTestWithUpstreamForNickname,
-    testing::Bool());
-
-IN_PROC_BROWSER_TEST_P(
-    SaveCardBubbleViewsFullFormBrowserTestWithUpstreamForNickname,
+IN_PROC_BROWSER_TEST_F(
+    SaveCardBubbleViewsFullFormBrowserTestWithAutofillUpstream,
     LocalCardHasNickname) {
   base::HistogramTester histogram_tester;
   CreditCard card = test::GetCreditCard();
@@ -2255,12 +2259,11 @@ IN_PROC_BROWSER_TEST_P(
   SubmitFormAndWaitForCardUploadSaveBubble();
 
   EXPECT_EQ(GetSaveCardBubbleViews()->GetCardIdentifierString(),
-            (GetParam() ? card.NicknameAndLastFourDigitsForTesting()
-                        : card.NetworkAndLastFourDigits()));
+            card.NicknameAndLastFourDigitsForTesting());
 }
 
-IN_PROC_BROWSER_TEST_P(
-    SaveCardBubbleViewsFullFormBrowserTestWithUpstreamForNickname,
+IN_PROC_BROWSER_TEST_F(
+    SaveCardBubbleViewsFullFormBrowserTestWithAutofillUpstream,
     LocalCardHasNoNickname) {
   base::HistogramTester histogram_tester;
   CreditCard card = test::GetCreditCard();

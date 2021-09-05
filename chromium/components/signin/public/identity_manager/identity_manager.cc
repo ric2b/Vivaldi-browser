@@ -421,7 +421,7 @@ base::android::ScopedJavaLocalRef<jobject> IdentityManager::
           base::android::ConvertJavaStringToUTF8(env, j_email));
   if (!account_info.has_value())
     return nullptr;
-  return ConvertToJavaCoreAccountInfo(env, account_info.value());
+  return ConvertToJavaAccountInfo(env, account_info.value());
 }
 
 base::android::ScopedJavaLocalRef<jobjectArray>
@@ -583,6 +583,12 @@ void IdentityManager::OnGaiaCookieDeletedByUserAction() {
   for (auto& observer : observer_list_) {
     observer.OnAccountsCookieDeletedByUserAction();
   }
+#if defined(OS_ANDROID)
+  if (java_identity_manager_) {
+    Java_IdentityManager_onAccountsCookieDeletedByUserAction(
+        base::android::AttachCurrentThread(), java_identity_manager_);
+  }
+#endif
 }
 
 void IdentityManager::OnAccessTokenRequested(const CoreAccountId& account_id,
@@ -637,6 +643,13 @@ void IdentityManager::OnAccountUpdated(const AccountInfo& info) {
   for (auto& observer : observer_list_) {
     observer.OnExtendedAccountInfoUpdated(info);
   }
+#if defined(OS_ANDROID)
+  if (java_identity_manager_) {
+    JNIEnv* env = base::android::AttachCurrentThread();
+    Java_IdentityManager_onExtendedAccountInfoUpdated(
+        env, java_identity_manager_, ConvertToJavaAccountInfo(env, info));
+  }
+#endif
 }
 
 void IdentityManager::OnAccountRemoved(const AccountInfo& info) {

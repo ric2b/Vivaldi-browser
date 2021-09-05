@@ -192,12 +192,17 @@ GuestViewBase::GuestViewBase(WebContents* owner_web_contents)
       is_being_destroyed_(false),
       guest_host_(nullptr),
       auto_size_enabled_(false),
-      is_full_page_plugin_(false),
-      guest_proxy_routing_id_(MSG_ROUTING_NONE) {
+      is_full_page_plugin_(false) {
   SetOwnerHost();
 }
 
 GuestViewBase::~GuestViewBase() {
+  // NOTE(andre@vivaldi.com) : This is only set in Vivaldi. See
+  // BrowserPluginGuestDelegate::delegate_to_browser_plugin_.
+  if (delegate_to_browser_plugin_) {
+    delegate_to_browser_plugin_->set_delegate(nullptr);
+  }
+
   // Make sure destroy is called so the guestview manager is updated.
   // This can happen when the guest is automatically deleted via webcontents
   // being destroyed when attached to a widget. (I.e. an AppWindow.)
@@ -280,14 +285,6 @@ void GuestViewBase::InitWithWebContents(
 
   // Give the derived class an opportunity to perform additional initialization.
   DidInitialize(create_params);
-}
-
-void GuestViewBase::LoadURLWithParams(
-      const content::NavigationController::LoadURLParams& load_params) {
-  int guest_proxy_routing_id = host()->LoadURLWithParams(load_params);
-  DCHECK(guest_proxy_routing_id_ == MSG_ROUTING_NONE ||
-         guest_proxy_routing_id == guest_proxy_routing_id_);
-  guest_proxy_routing_id_ = guest_proxy_routing_id;
 }
 
 void GuestViewBase::DispatchOnResizeEvent(const gfx::Size& old_size,
@@ -456,10 +453,6 @@ void GuestViewBase::DidAttach(int guest_proxy_routing_id) {
   DCHECK(attach_in_progress_);
   // Clear this flag here, as functions called below may check attached().
   attach_in_progress_ = false;
-
-  DCHECK(guest_proxy_routing_id_ == MSG_ROUTING_NONE ||
-         guest_proxy_routing_id == guest_proxy_routing_id_);
-  guest_proxy_routing_id_ = guest_proxy_routing_id;
 
   opener_lifetime_observer_.reset();
 
@@ -922,6 +915,14 @@ void GuestViewBase::CompleteInit(
     return;
   }
 
+  // web_contents() will not be set in some cases (like when we avctivate an
+  // non-loaded pdf-tab). We can deal with an unset delegate_to_browser_plugin_.
+  if (vivaldi::IsVivaldiRunning() && guest_web_contents) {
+    delegate_to_browser_plugin_ =
+      static_cast<content::WebContentsImpl*>(guest_web_contents)
+      ->GetBrowserPluginGuest();
+  }
+
   InitWithWebContents(*create_params, guest_web_contents);
   std::move(callback).Run(guest_web_contents);
 }
@@ -1048,6 +1049,10 @@ void GuestViewBase::SetOwnerHost() {
   owner_host_ = manager->IsOwnedByExtension(this)
                     ? owner_web_contents()->GetLastCommittedURL().host()
                     : std::string();
+}
+
+bool GuestViewBase::CanBeEmbeddedInsideCrossProcessFrames() {
+  return false;
 }
 
 }  // namespace guest_view

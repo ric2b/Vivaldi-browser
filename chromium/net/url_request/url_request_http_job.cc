@@ -216,21 +216,12 @@ void MarkSameSiteCompatPairs(
 
 namespace net {
 
-// TODO(darin): make sure the port blocking code is not lost
-// static
-URLRequestJob* URLRequestHttpJob::Factory(URLRequest* request,
-                                          NetworkDelegate* network_delegate,
-                                          const std::string& scheme) {
-  DCHECK(scheme == "http" || scheme == "https" || scheme == "ws" ||
-         scheme == "wss");
-
-  if (!request->context()->http_transaction_factory()) {
-    NOTREACHED() << "requires a valid context";
-    return new URLRequestErrorJob(
-        request, network_delegate, ERR_INVALID_ARGUMENT);
-  }
-
+std::unique_ptr<URLRequestJob> URLRequestHttpJob::Create(URLRequest* request) {
   const GURL& url = request->url();
+
+  // URLRequestContext must have been initialized.
+  DCHECK(request->context()->http_transaction_factory());
+  DCHECK(url.SchemeIsHTTPOrHTTPS() || url.SchemeIsWSOrWSS());
 
   // Check for reasons not to return a URLRequestHttpJob. These don't apply to
   // https and wss requests.
@@ -241,10 +232,9 @@ URLRequestJob* URLRequestHttpJob::Factory(URLRequest* request,
     if (hsts && hsts->ShouldUpgradeToSSL(url.host())) {
       GURL::Replacements replacements;
       replacements.SetSchemeStr(
-
           url.SchemeIs(url::kHttpScheme) ? url::kHttpsScheme : url::kWssScheme);
-      return new URLRequestRedirectJob(
-          request, network_delegate, url.ReplaceComponents(replacements),
+      return std::make_unique<URLRequestRedirectJob>(
+          request, url.ReplaceComponents(replacements),
           // Use status code 307 to preserve the method, so POST requests work.
           URLRequestRedirectJob::REDIRECT_307_TEMPORARY_REDIRECT, "HSTS");
     }
@@ -254,22 +244,20 @@ URLRequestJob* URLRequestHttpJob::Factory(URLRequest* request,
     // ERR_CLEARTEXT_NOT_PERMITTED if not.
     if (request->context()->check_cleartext_permitted() &&
         !android::IsCleartextPermitted(url.host())) {
-      return new URLRequestErrorJob(request, network_delegate,
-                                    ERR_CLEARTEXT_NOT_PERMITTED);
+      return std::make_unique<URLRequestErrorJob>(request,
+                                                  ERR_CLEARTEXT_NOT_PERMITTED);
     }
 #endif
   }
 
-  return new URLRequestHttpJob(request,
-                               network_delegate,
-                               request->context()->http_user_agent_settings());
+  return base::WrapUnique<URLRequestJob>(new URLRequestHttpJob(
+      request, request->context()->http_user_agent_settings()));
 }
 
 URLRequestHttpJob::URLRequestHttpJob(
     URLRequest* request,
-    NetworkDelegate* network_delegate,
     const HttpUserAgentSettings* http_user_agent_settings)
-    : URLRequestJob(request, network_delegate),
+    : URLRequestJob(request),
       num_cookie_lines_left_(0),
       priority_(DEFAULT_PRIORITY),
       response_info_(nullptr),
@@ -415,14 +403,15 @@ void URLRequestHttpJob::DestroyTransaction() {
 }
 
 void URLRequestHttpJob::StartTransaction() {
-  if (network_delegate()) {
+  NetworkDelegate* network_delegate = request()->network_delegate();
+  if (network_delegate) {
     OnCallToDelegate(
         NetLogEventType::NETWORK_DELEGATE_BEFORE_START_TRANSACTION);
     // The NetworkDelegate must watch for OnRequestDestroyed and not modify
     // |extra_headers| after it's called.
     // TODO(mattm): change the API to remove the out-params and take the
     // results as params of the callback.
-    int rv = network_delegate()->NotifyBeforeStartTransaction(
+    int rv = network_delegate->NotifyBeforeStartTransaction(
         request_,
         base::BindOnce(&URLRequestHttpJob::NotifyBeforeStartTransactionCallback,
                        weak_factory_.GetWeakPtr()),
@@ -575,7 +564,10 @@ void URLRequestHttpJob::AddExtraHeaders() {
 
 void URLRequestHttpJob::AddCookieHeaderAndStart() {
   CookieStore* cookie_store = request_->context()->cookie_store();
-  if (cookie_store && !(request_info_.load_flags & LOAD_DO_NOT_SEND_COOKIES)) {
+  // Read cookies whenever allow_credentials() is true, even if the PrivacyMode
+  // is being overridden by NetworkDelegate and will eventually block them, as
+  // blocked cookies still need to be logged in that case.
+  if (cookie_store && request_->allow_credentials()) {
     CookieOptions options;
     options.set_return_excluded_cookies();
     options.set_include_httponly();
@@ -606,16 +598,14 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
     const CookieAccessResultList& excluded_list) {
   DCHECK(request_->maybe_sent_cookies().empty());
 
-  bool can_get_cookies = CanGetCookies();
+  bool can_get_cookies =
+      (request_info_.privacy_mode == PRIVACY_MODE_DISABLED && CanGetCookies());
   if (!cookies_with_access_result_list.empty() && can_get_cookies) {
     std::string cookie_line =
         CanonicalCookie::BuildCookieLine(cookies_with_access_result_list);
     UMA_HISTOGRAM_COUNTS_10000("Cookie.HeaderLength", cookie_line.length());
     request_info_.extra_headers.SetHeader(HttpRequestHeaders::kCookie,
                                           cookie_line);
-
-    // Disable privacy mode as we are sending cookies anyway.
-    request_info_.privacy_mode = PRIVACY_MODE_DISABLED;
 
     // TODO(crbug.com/1031664): Reduce the number of times the cookie list is
     // iterated over. Get metrics for every cookie which is included.
@@ -915,7 +905,8 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
   if (result == OK) {
     scoped_refptr<HttpResponseHeaders> headers = GetResponseHeaders();
 
-    if (network_delegate()) {
+    NetworkDelegate* network_delegate = request()->network_delegate();
+    if (network_delegate) {
       // Note that |this| may not be deleted until
       // |URLRequestHttpJob::OnHeadersReceivedCallback()| or
       // |NetworkDelegate::URLRequestDestroyed()| has been called.
@@ -928,7 +919,7 @@ void URLRequestHttpJob::OnStartCompleted(int result) {
       // any of the arguments after it's called.
       // TODO(mattm): change the API to remove the out-params and take the
       // results as params of the callback.
-      int error = network_delegate()->NotifyHeadersReceived(
+      int error = network_delegate->NotifyHeadersReceived(
           request_,
           base::BindOnce(&URLRequestHttpJob::OnHeadersReceivedCallback,
                          weak_factory_.GetWeakPtr()),

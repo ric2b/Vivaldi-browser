@@ -265,10 +265,8 @@ bool MenuListSelectType::ShouldOpenPopupForKeyDownEvent(
 
   return ((layout_theme.PopsMenuByArrowKeys() &&
            (key == "ArrowDown" || key == "ArrowUp")) ||
-          (layout_theme.PopsMenuByAltDownUpOrF4Key() &&
-           (key == "ArrowDown" || key == "ArrowUp") && event.altKey()) ||
-          (layout_theme.PopsMenuByAltDownUpOrF4Key() &&
-           (!event.altKey() && !event.ctrlKey() && key == "F4")));
+          ((key == "ArrowDown" || key == "ArrowUp") && event.altKey()) ||
+          ((!event.altKey() && !event.ctrlKey() && key == "F4")));
 }
 
 bool MenuListSelectType::ShouldOpenPopupForKeyPressEvent(
@@ -1068,7 +1066,7 @@ void ListBoxSelectType::ScrollToOptionTask() {
 
   // The following code will not scroll parent boxes unlike ScrollRectToVisible.
   auto* box = select_->GetLayoutBox();
-  if (!box->HasOverflowClip())
+  if (!box->IsScrollContainer())
     return;
   DCHECK(box->Layer());
   DCHECK(box->Layer()->GetScrollableArea());

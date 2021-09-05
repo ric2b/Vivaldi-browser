@@ -143,8 +143,8 @@ std::unique_ptr<network::SimpleURLLoader> CreateURLLoader(
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->url = url;
   resource_request->load_flags =
-      net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE |
-      net::LOAD_DO_NOT_SEND_COOKIES | net::LOAD_DO_NOT_SAVE_COOKIES;
+      net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE;
+  resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   resource_request->method = "POST";
 
   auto url_loader = network::SimpleURLLoader::Create(
@@ -363,7 +363,8 @@ void StatsReporterImpl::Worker::Run(
 
   std::string os_profile_reporting_data_file_contents;
   if (os_profile_reporting_data_file_.IsValid()) {
-    base::File::Error lock_result = os_profile_reporting_data_file_.Lock();
+    base::File::Error lock_result =
+        os_profile_reporting_data_file_.Lock(base::File::LockMode::kExclusive);
     if (lock_result != base::File::FILE_OK) {
       original_task_runner_->PostTask(
           FROM_HERE,

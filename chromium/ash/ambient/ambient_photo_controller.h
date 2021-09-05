@@ -44,6 +44,11 @@ class ASH_EXPORT AmbientURLLoader {
   virtual void Download(
       const std::string& url,
       network::SimpleURLLoader::BodyAsStringCallback callback) = 0;
+
+  virtual void DownloadToFile(
+      const std::string& url,
+      network::SimpleURLLoader::DownloadToFileCompleteCallback callback,
+      const base::FilePath& file_path) = 0;
 };
 
 // A wrapper class of |data_decoder| to decode the photo raw data. In the test,
@@ -87,12 +92,18 @@ class ASH_EXPORT AmbientPhotoController : public AmbientBackendModelObserver {
   void StartScreenUpdate();
   void StopScreenUpdate();
 
+  void ScheduleFetchBackupImages();
+
   AmbientBackendModel* ambient_backend_model() {
     return &ambient_backend_model_;
   }
 
   const base::OneShotTimer& photo_refresh_timer_for_testing() const {
     return photo_refresh_timer_;
+  }
+
+  const base::OneShotTimer& backup_photo_refresh_timer_for_testing() const {
+    return backup_photo_refresh_timer_;
   }
 
   // AmbientBackendModelObserver:
@@ -106,9 +117,19 @@ class ASH_EXPORT AmbientPhotoController : public AmbientBackendModelObserver {
 
   void FetchTopics();
 
+  void FetchWeather();
+
   void ScheduleFetchTopics(bool backoff);
 
   void ScheduleRefreshImage();
+
+  // Create the backup cache directory and start downloading images.
+  void PrepareFetchBackupImages();
+
+  // Download backup cache images.
+  void FetchBackupImages();
+
+  void OnBackupImageFetched(base::FilePath file_path);
 
   void GetScreenUpdateInfo();
 
@@ -118,6 +139,9 @@ class ASH_EXPORT AmbientPhotoController : public AmbientBackendModelObserver {
 
   void OnScreenUpdateInfoFetched(const ash::ScreenUpdate& screen_update);
 
+  // Clear temporary image data to prepare next photos.
+  void ResetImageData();
+
   // Fetch photo raw data by downloading or reading from cache.
   void FetchPhotoRawData();
 
@@ -125,16 +149,24 @@ class ASH_EXPORT AmbientPhotoController : public AmbientBackendModelObserver {
   void TryReadPhotoRawData();
 
   void OnPhotoRawDataAvailable(bool from_downloading,
+                               bool is_related_image,
+                               base::RepeatingClosure on_done,
                                std::unique_ptr<std::string> details,
                                std::unique_ptr<std::string> data);
 
+  void OnAllPhotoRawDataAvailable(bool from_downloading);
+
   void DecodePhotoRawData(bool from_downloading,
-                          std::unique_ptr<std::string> details,
+                          bool is_related_image,
+                          base::RepeatingClosure on_done,
                           std::unique_ptr<std::string> data);
 
   void OnPhotoDecoded(bool from_downloading,
-                      std::unique_ptr<std::string> details,
+                      bool is_related_image,
+                      base::RepeatingClosure on_done,
                       const gfx::ImageSkia& image);
+
+  void OnAllPhotoDecoded(bool from_downloading, const std::string& hash);
 
   void StartDownloadingWeatherConditionIcon(
       const base::Optional<WeatherInfo>& weather_info);
@@ -165,21 +197,30 @@ class ASH_EXPORT AmbientPhotoController : public AmbientBackendModelObserver {
 
   void FetchImageForTesting();
 
+  void FetchBackupImagesForTesting();
+
   AmbientBackendModel ambient_backend_model_;
 
   // The timer to refresh photos.
   base::OneShotTimer photo_refresh_timer_;
 
+  // The timer to refresh backup cache photos.
+  base::OneShotTimer backup_photo_refresh_timer_;
+
+  // The timer to refresh weather information.
+  base::RepeatingTimer weather_refresh_timer_;
+
   // The index of a topic to download.
   size_t topic_index_ = 0;
-
-  // Tracking how many batches of topics have been fetched.
-  int topics_batch_fetched_ = 0;
 
   // Current index of cached image to read and display when failure happens.
   // The image file of this index may not exist or may not be valid. It will try
   // to read from the next cached file by increasing this index by 1.
   int cache_index_for_display_ = 0;
+
+  // Current index of backup cached image to display when no other cached images
+  // are available.
+  size_t backup_cache_index_for_display_ = 0;
 
   // Current index of cached image to save for the latest downloaded photo.
   // The write command could fail. This index will increase 1 no matter writing
@@ -193,6 +234,8 @@ class ASH_EXPORT AmbientPhotoController : public AmbientBackendModelObserver {
   // Cached image may not exist or valid. This is the max times of attempts to
   // read cached images.
   int retries_to_read_from_cache_ = kMaxNumberOfCachedImages;
+
+  int backup_retries_to_read_from_cache_ = 0;
 
   // Backoff for fetch topics retries.
   net::BackoffEntry fetch_topic_retry_backoff_;
@@ -208,6 +251,13 @@ class ASH_EXPORT AmbientPhotoController : public AmbientBackendModelObserver {
   std::unique_ptr<AmbientImageDecoder> image_decoder_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  // Temporary data store when fetching images and details.
+  std::unique_ptr<std::string> image_data_;
+  std::unique_ptr<std::string> related_image_data_;
+  std::unique_ptr<std::string> image_details_;
+  gfx::ImageSkia image_;
+  gfx::ImageSkia related_image_;
 
   base::WeakPtrFactory<AmbientPhotoController> weak_factory_{this};
 

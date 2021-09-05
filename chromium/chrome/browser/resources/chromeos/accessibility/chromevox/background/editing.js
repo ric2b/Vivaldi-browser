@@ -54,13 +54,19 @@ editing.TextEditHandler = class {
     this.editableText_;
 
     chrome.automation.getDesktop(function(desktop) {
+      // ChromeVox handles two general groups of text fields:
       // A rich text field is one where selection gets placed on a DOM
       // descendant to a root text field. This is one of:
       // - content editables (detected via richly editable state)
+      // - text areas (<textarea>) detected via its html tag
       //
-      // The only other editables we expect are all single line (including those
-      // from ARC++).
-      const useRichText = node.state[StateType.RICHLY_EDITABLE];
+      // A non-rich text field is one where accessibility only provides a value,
+      // and a pair of numbers for the selection start and end. ChromeVox places
+      // single-lined text fields, including those from web content, and ARC++
+      // in this group. In addition, multiline ARC++ text fields are treated
+      // this way.
+      const useRichText =
+          node.state[StateType.RICHLY_EDITABLE] || node.htmlTag === 'textarea';
 
       this.editableText_ = useRichText ? new AutomationRichEditableText(node) :
                                          new AutomationEditableText(node);
@@ -81,14 +87,7 @@ editing.TextEditHandler = class {
    * @param {!ChromeVoxEvent} evt
    */
   onEvent(evt) {
-    if (evt.type !== EventType.TEXT_CHANGED &&
-        evt.type !== EventType.TEXT_SELECTION_CHANGED &&
-        evt.type !== EventType.DOCUMENT_SELECTION_CHANGED &&
-        evt.type !== EventType.VALUE_CHANGED && evt.type !== EventType.FOCUS) {
-      return;
-    }
-    if (!evt.target.state.focused || !evt.target.state.editable ||
-        evt.target != this.node_) {
+    if (!evt.target.state.focused || evt.target != this.node_) {
       return;
     }
 
@@ -937,13 +936,13 @@ const AutomationRichEditableText = class extends AutomationEditableText {
 
     // Only consider selection moves.
     const intent = intents.find(
-        i => i.command == chrome.automation.EventCommandType.MOVE_SELECTION);
+        i => i.command == chrome.automation.IntentCommandType.MOVE_SELECTION);
     if (!intent) {
       return false;
     }
 
     if (intent.textBoundary ==
-        chrome.automation.EventTextBoundaryType.CHARACTER) {
+        chrome.automation.IntentTextBoundaryType.CHARACTER) {
       this.updateIntraLineState_(cur);
 
       // Read character to the right of the cursor. It is assumed to be a new
@@ -956,9 +955,9 @@ const AutomationRichEditableText = class extends AutomationEditableText {
     }
 
     if (intent.textBoundary ==
-            chrome.automation.EventTextBoundaryType.LINE_START ||
+            chrome.automation.IntentTextBoundaryType.LINE_START ||
         intent.textBoundary ==
-            chrome.automation.EventTextBoundaryType.LINE_END) {
+            chrome.automation.IntentTextBoundaryType.LINE_END) {
       this.updateIntraLineState_(cur);
       this.speakCurrentRichLine_(prev);
       return true;
@@ -1049,14 +1048,16 @@ editing.EditableLine = class {
     if (!AutomationPredicate.text(startNode) ||
         (this.start_.node != startNode &&
          this.start_.node.parent != startNode)) {
-      startIndex = this.start_.index == cursors.NODE_INDEX ?
+      startIndex =
+          (this.start_.index == cursors.NODE_INDEX && this.start_.node.name) ?
           this.start_.node.name.length :
           this.start_.index;
     }
 
     if (!AutomationPredicate.text(endNode) ||
         (this.end_.node != endNode && this.end_.node.parent != endNode)) {
-      endIndex = this.end_.index == cursors.NODE_INDEX ?
+      endIndex =
+          (this.end_.index == cursors.NODE_INDEX && this.end_.node.name) ?
           this.end_.node.name.length :
           this.end_.index;
     }

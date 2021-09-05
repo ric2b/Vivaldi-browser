@@ -20,6 +20,7 @@
 #include "base/cancelable_callback.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -28,6 +29,7 @@
 #include "cc/benchmarks/micro_benchmark_controller.h"
 #include "cc/cc_export.h"
 #include "cc/input/browser_controls_state.h"
+#include "cc/input/compositor_input_interfaces.h"
 #include "cc/input/event_listener_properties.h"
 #include "cc/input/input_handler.h"
 #include "cc/input/layer_selection_bound.h"
@@ -52,7 +54,7 @@
 #include "cc/trees/viewport_layers.h"
 #include "components/viz/common/delegated_ink_metadata.h"
 #include "components/viz/common/resources/resource_format.h"
-#include "components/viz/common/surfaces/local_surface_id_allocation.h"
+#include "components/viz/common/surfaces/local_surface_id.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/overlay_transform.h"
@@ -296,9 +298,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
                                   BrowserControlsState current,
                                   bool animate);
 
-  // Returns a reference to the InputHandler used to respond to input events on
-  // the compositor thread.
-  const base::WeakPtr<InputHandler>& GetInputHandler() const;
+  // Returns the delegate that the input handler uses to communicate with the
+  // LayerTreeHostImpl on the compositor thread. Must be dereferenced only on
+  // the input handling thread.
+  const base::WeakPtr<CompositorDelegateForInput>& GetDelegateForInput() const;
 
   // Debugging and benchmarks ---------------------------------
   void SetDebugState(const LayerTreeDebugState& debug_state);
@@ -400,10 +403,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // to prioritize lower power/CPU use.
   void SetEnableFrameRateThrottling(bool enable_frame_rate_throttling);
 
-  void SetViewportRectAndScale(const gfx::Rect& device_viewport_rect,
-                               float device_scale_factor,
-                               const viz::LocalSurfaceIdAllocation&
-                                   local_surface_id_allocation_from_parent);
+  void SetViewportRectAndScale(
+      const gfx::Rect& device_viewport_rect,
+      float device_scale_factor,
+      const viz::LocalSurfaceId& local_surface_id_from_parent);
 
   void SetViewportVisibleRect(const gfx::Rect& visible_rect);
 
@@ -450,13 +453,11 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   // If this LayerTreeHost needs a valid viz::LocalSurfaceId then commits will
   // be deferred until a valid viz::LocalSurfaceId is provided.
-  void SetLocalSurfaceIdAllocationFromParent(
-      const viz::LocalSurfaceIdAllocation&
-          local_surface_id_allocation_from_parent);
+  void SetLocalSurfaceIdFromParent(
+      const viz::LocalSurfaceId& local_surface_id_from_parent);
 
-  const viz::LocalSurfaceIdAllocation& local_surface_id_allocation_from_parent()
-      const {
-    return local_surface_id_allocation_from_parent_;
+  const viz::LocalSurfaceId& local_surface_id_from_parent() const {
+    return local_surface_id_from_parent_;
   }
 
   // Requests the allocation of a new LocalSurfaceId on the compositor thread.
@@ -614,10 +615,6 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time,
                                ActiveFrameSequenceTrackers trackers);
   void NotifyThroughputTrackerResults(CustomTrackerResults results);
-  void SubmitThroughputData(ukm::SourceId source_id,
-                            int aggregated_percent,
-                            int impl_percent,
-                            base::Optional<int> main_percent);
 
   LayerTreeHostClient* client() { return client_; }
   LayerTreeHostSchedulingClient* scheduling_client() {
@@ -697,6 +694,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   float recording_scale_factor() const { return recording_scale_factor_; }
 
   void SetSourceURL(ukm::SourceId source_id, const GURL& url);
+  base::ReadOnlySharedMemoryRegion CreateSharedMemoryForSmoothnessUkm();
 
   void SetRenderFrameObserver(
       std::unique_ptr<RenderFrameMetadataObserver> observer);
@@ -704,8 +702,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   std::string LayersAsString() const;
 
   // Captures the on-screen text content, if success, fills the associated
-  // NodeId in |content| and return true, otherwise return false.
-  bool CaptureContent(std::vector<NodeId>* content);
+  // NodeInfo in |content| and return true, otherwise return false.
+  bool CaptureContent(std::vector<NodeInfo>* content);
 
   std::unique_ptr<BeginMainFrameMetrics> begin_main_frame_metrics() {
     return std::move(begin_main_frame_metrics_);
@@ -756,7 +754,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   MicroBenchmarkController micro_benchmark_controller_;
 
-  base::WeakPtr<InputHandler> input_handler_weak_ptr_;
+  // The pointer that input uses to communicate with the layer tree host impl.
+  // Must be dereferenced only from the input-handling thread.
+  base::WeakPtr<CompositorDelegateForInput> compositor_delegate_weak_ptr_;
 
   scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner_;
   std::unique_ptr<UkmRecorderFactory> ukm_recorder_factory_;
@@ -856,7 +856,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   gfx::DisplayColorSpaces display_color_spaces_;
 
   bool clear_caches_on_next_commit_ = false;
-  viz::LocalSurfaceIdAllocation local_surface_id_allocation_from_parent_;
+  viz::LocalSurfaceId local_surface_id_from_parent_;
   bool new_local_surface_id_request_ = false;
   uint32_t defer_main_frame_update_count_ = 0;
 

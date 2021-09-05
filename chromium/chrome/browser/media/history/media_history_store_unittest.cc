@@ -179,6 +179,23 @@ class MediaHistoryStoreUnitTest
     return out;
   }
 
+  media::mojom::GetCollectionsResponsePtr GetKaleidoscopeDataSync(
+      MediaHistoryKeyedService* service,
+      const std::string& gaia_id) {
+    base::RunLoop run_loop;
+    media::mojom::GetCollectionsResponsePtr out;
+
+    service->GetKaleidoscopeData(
+        gaia_id, base::BindLambdaForTesting(
+                     [&](media::mojom::GetCollectionsResponsePtr data) {
+                       out = std::move(data);
+                       run_loop.Quit();
+                     }));
+
+    run_loop.Run();
+    return out;
+  }
+
   std::vector<mojom::MediaHistoryPlaybackRowPtr> GetPlaybackRowsSync(
       MediaHistoryKeyedService* service) {
     base::RunLoop run_loop;
@@ -267,6 +284,13 @@ class MediaHistoryStoreUnitTest
   bool IsReadOnly() const { return GetParam() != TestState::kNormal; }
 
   Profile* GetProfile() { return profile_.get(); }
+
+  media::mojom::GetCollectionsResponsePtr GetExpectedKaleidoscopeData() {
+    auto data = media::mojom::GetCollectionsResponse::New();
+    data->response = "abcd";
+    data->result = media::mojom::GetCollectionsResult::kFailed;
+    return data;
+  }
 
  private:
   base::ScopedTempDir temp_dir_;
@@ -610,6 +634,64 @@ TEST_P(MediaHistoryStoreUnitTest, SavePlayback_IncrementAggregateWatchtime) {
 
   // The OTR service should have the same data.
   EXPECT_EQ(origins, GetOriginRowsSync(otr_service()));
+}
+
+TEST_P(MediaHistoryStoreUnitTest, KaleidoscopeData) {
+  {
+    // The data should be empty at the start.
+    auto data = GetKaleidoscopeDataSync(service(), "123");
+    EXPECT_TRUE(data.is_null());
+  }
+
+  service()->SetKaleidoscopeData(GetExpectedKaleidoscopeData(), "123");
+  WaitForDB();
+
+  {
+    // We should be able to get the data.
+    auto data = GetKaleidoscopeDataSync(service(), "123");
+
+    if (IsReadOnly()) {
+      EXPECT_TRUE(data.is_null());
+    } else {
+      EXPECT_EQ(GetExpectedKaleidoscopeData(), data);
+    }
+  }
+
+  {
+    // Getting with a different GAIA ID should wipe the data and return an
+    // empty string.
+    auto data = GetKaleidoscopeDataSync(service(), "1234");
+    EXPECT_TRUE(data.is_null());
+  }
+
+  {
+    // The data should be empty for the other GAIA ID too.
+    auto data = GetKaleidoscopeDataSync(service(), "123");
+    EXPECT_TRUE(data.is_null());
+  }
+
+  service()->SetKaleidoscopeData(GetExpectedKaleidoscopeData(), "123");
+  WaitForDB();
+
+  {
+    // We should be able to get the data.
+    auto data = GetKaleidoscopeDataSync(service(), "123");
+
+    if (IsReadOnly()) {
+      EXPECT_TRUE(data.is_null());
+    } else {
+      EXPECT_EQ(GetExpectedKaleidoscopeData(), data);
+    }
+  }
+
+  service()->DeleteKaleidoscopeData();
+  WaitForDB();
+
+  {
+    // The data should have been deleted.
+    auto data = GetKaleidoscopeDataSync(service(), "123");
+    EXPECT_TRUE(data.is_null());
+  }
 }
 
 TEST_P(MediaHistoryStoreUnitTest, GetOriginsWithHighWatchTime) {
@@ -2954,6 +3036,40 @@ TEST_P(MediaHistoryStoreFeedsTest, GetItemsForFeed) {
 
     // Do not return anything since we don't have any movies.
     EXPECT_TRUE(items.empty());
+  }
+}
+
+TEST_P(MediaHistoryStoreFeedsTest, GetSelectedFeedsForFetch) {
+  const GURL feed_url_a("https://www.google.com/feed");
+  const GURL feed_url_b("https://www.google.co.uk/feed");
+  const GURL feed_url_c("https://www.google.co.tv/feed");
+
+  DiscoverMediaFeed(feed_url_a);
+  DiscoverMediaFeed(feed_url_b);
+  DiscoverMediaFeed(feed_url_c);
+  WaitForDB();
+
+  // If we are read only we should use -1 as a placeholder feed id because the
+  // feed will not have been stored. This is so we can run the rest of the test
+  // to ensure a no-op.
+  const int feed_id_a = IsReadOnly() ? -1 : GetMediaFeedsSync(service())[0]->id;
+  const int feed_id_b = IsReadOnly() ? -1 : GetMediaFeedsSync(service())[1]->id;
+
+  service()->UpdateFeedUserStatus(
+      feed_id_a, media_feeds::mojom::FeedUserStatus::kDisabled);
+  service()->UpdateFeedUserStatus(feed_id_b,
+                                  media_feeds::mojom::FeedUserStatus::kEnabled);
+  WaitForDB();
+
+  auto feeds = GetMediaFeedsSync(
+      service(), MediaHistoryKeyedService::GetMediaFeedsRequest::
+                     CreateSelectedFeedsForFetch());
+
+  if (IsReadOnly()) {
+    EXPECT_TRUE(feeds.empty());
+  } else {
+    ASSERT_EQ(1u, feeds.size());
+    EXPECT_EQ(feed_id_b, feeds[0]->id);
   }
 }
 

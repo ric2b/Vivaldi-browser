@@ -240,7 +240,7 @@ void RecordForceSyncNowResult(ForceCryptAuthOperationResult result) {
 }  // namespace
 
 // static
-DeviceSyncImpl::Factory* DeviceSyncImpl::Factory::test_factory_instance_ =
+DeviceSyncImpl::Factory* DeviceSyncImpl::Factory::custom_factory_instance_ =
     nullptr;
 
 // static
@@ -252,8 +252,8 @@ std::unique_ptr<DeviceSyncBase> DeviceSyncImpl::Factory::Create(
     ClientAppMetadataProvider* client_app_metadata_provider,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     std::unique_ptr<base::OneShotTimer> timer) {
-  if (test_factory_instance_) {
-    return test_factory_instance_->CreateInstance(
+  if (custom_factory_instance_) {
+    return custom_factory_instance_->CreateInstance(
         identity_manager, gcm_driver, profile_prefs, gcm_device_info_provider,
         client_app_metadata_provider, std::move(url_loader_factory),
         std::move(timer));
@@ -266,8 +266,13 @@ std::unique_ptr<DeviceSyncBase> DeviceSyncImpl::Factory::Create(
 }
 
 // static
-void DeviceSyncImpl::Factory::SetFactoryForTesting(Factory* test_factory) {
-  test_factory_instance_ = test_factory;
+void DeviceSyncImpl::Factory::SetCustomFactory(Factory* custom_factory) {
+  custom_factory_instance_ = custom_factory;
+}
+
+// static
+bool DeviceSyncImpl::Factory::IsCustomFactorySet() {
+  return custom_factory_instance_ != nullptr;
 }
 
 DeviceSyncImpl::Factory::~Factory() = default;
@@ -321,26 +326,6 @@ void DeviceSyncImpl::PendingSetSoftwareFeatureRequest::InvokeCallback(
   // Callback should only be invoked once.
   DCHECK(callback_);
   std::move(callback_).Run(result);
-}
-
-// static
-void DeviceSyncImpl::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  CryptAuthGCMManager::RegisterPrefs(registry);
-  CryptAuthDeviceManager::RegisterPrefs(registry);
-  if (base::FeatureList::IsEnabled(
-          chromeos::features::kCryptAuthV2Enrollment)) {
-    CryptAuthV2EnrollmentManagerImpl::RegisterPrefs(registry);
-    CryptAuthKeyRegistryImpl::RegisterPrefs(registry);
-    CryptAuthSchedulerImpl::RegisterPrefs(registry);
-  } else {
-    CryptAuthEnrollmentManagerImpl::RegisterPrefs(registry);
-  }
-
-  if (features::ShouldUseV2DeviceSync()) {
-    CryptAuthDeviceRegistryImpl::RegisterPrefs(registry);
-    CryptAuthMetadataSyncerImpl::RegisterPrefs(registry);
-    SyncedBluetoothAddressTrackerImpl::RegisterPrefs(registry);
-  }
 }
 
 DeviceSyncImpl::PendingSetFeatureStatusRequest::PendingSetFeatureStatusRequest(
@@ -553,10 +538,10 @@ void DeviceSyncImpl::SetSoftwareFeatureState(
 
   software_feature_manager_->SetSoftwareFeatureState(
       device_public_key, software_feature, enabled,
-      base::Bind(&DeviceSyncImpl::OnSetSoftwareFeatureStateSuccess,
-                 weak_ptr_factory_.GetWeakPtr()),
-      base::Bind(&DeviceSyncImpl::OnSetSoftwareFeatureStateError,
-                 weak_ptr_factory_.GetWeakPtr(), request_id),
+      base::BindOnce(&DeviceSyncImpl::OnSetSoftwareFeatureStateSuccess,
+                     weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&DeviceSyncImpl::OnSetSoftwareFeatureStateError,
+                     weak_ptr_factory_.GetWeakPtr(), request_id),
       is_exclusive);
 }
 
@@ -628,10 +613,10 @@ void DeviceSyncImpl::FindEligibleDevices(
   auto callback_holder = base::AdaptCallbackForRepeating(std::move(callback));
   software_feature_manager_->FindEligibleDevices(
       software_feature,
-      base::Bind(&DeviceSyncImpl::OnFindEligibleDevicesSuccess,
-                 weak_ptr_factory_.GetWeakPtr(), callback_holder),
-      base::Bind(&DeviceSyncImpl::OnFindEligibleDevicesError,
-                 weak_ptr_factory_.GetWeakPtr(), callback_holder));
+      base::BindOnce(&DeviceSyncImpl::OnFindEligibleDevicesSuccess,
+                     weak_ptr_factory_.GetWeakPtr(), callback_holder),
+      base::BindOnce(&DeviceSyncImpl::OnFindEligibleDevicesError,
+                     weak_ptr_factory_.GetWeakPtr(), callback_holder));
 }
 
 void DeviceSyncImpl::NotifyDevices(

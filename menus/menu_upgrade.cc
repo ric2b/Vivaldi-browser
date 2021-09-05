@@ -356,11 +356,30 @@ bool MenuUpgrade::Insert(const base::Value& bundle_value,
 bool MenuUpgrade::Remove(const base::Value& profile_value,
                          const std::string& parent_guid,
                          base::Value* profile_root) {
-  base::Value* matched_value = FindNodeByGuid(*profile_root, parent_guid);
-  if (matched_value) {
-    base::Value* children = matched_value->FindPath("children");
-    if (children && children->is_list()) {
-      return children->EraseListValue(profile_value) == 1;
+  if (parent_guid.empty()) {
+    // An entire menu.
+    if (profile_root->is_list()) {
+      const std::string* guid = profile_value.FindStringPath("guid");
+      if (!guid) {
+        return false;
+      }
+      for (int i = profile_root->GetList().size() - 1; i >= 0; i--) {
+        // Not all toplevel items have a guid so test it exists before matching.
+        const auto& item = profile_root->GetList()[i];
+        const std::string* item_guid = item.FindStringPath("guid");
+        if (item_guid && *item_guid == *guid) {
+          return profile_root->EraseListValue(profile_value) == 1;
+        }
+      }
+    }
+  } else {
+    // A folder or item within a menu.
+    base::Value* matched_value = FindNodeByGuid(*profile_root, parent_guid);
+    if (matched_value) {
+      base::Value* children = matched_value->FindPath("children");
+      if (children && children->is_list()) {
+        return children->EraseListValue(profile_value) == 1;
+      }
     }
   }
   return false;

@@ -115,9 +115,10 @@ void UserInputMonitorLinuxCore::DispatchXEvent(x11::Event* event) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
 
   auto* raw = event->As<x11::Input::RawDeviceEvent>();
-  DCHECK(raw);
-  DCHECK(raw->opcode == x11::Input::RawDeviceEvent::RawKeyPress ||
-         raw->opcode == x11::Input::RawDeviceEvent::RawKeyRelease);
+  if (!raw || (raw->opcode != x11::Input::RawDeviceEvent::RawKeyPress &&
+               raw->opcode != x11::Input::RawDeviceEvent::RawKeyRelease)) {
+    return;
+  }
 
   ui::EventType type = raw->opcode == x11::Input::RawDeviceEvent::RawKeyPress
                            ? ui::ET_KEY_PRESSED
@@ -179,7 +180,7 @@ void UserInputMonitorLinuxCore::StartMonitor() {
   // Register OnConnectionData() to be called every time there is something to
   // read from |connection_|.
   watch_controller_ = base::FileDescriptorWatcher::WatchReadable(
-      ConnectionNumber(connection_->display()),
+      connection_->GetFd(),
       base::BindRepeating(&UserInputMonitorLinuxCore::OnConnectionData,
                           base::Unretained(this)));
 

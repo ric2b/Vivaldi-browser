@@ -8,6 +8,7 @@
 #include "base/callback_forward.h"
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "chromeos/dbus/cros_healthd/cros_healthd_client.h"
 #include "chromeos/dbus/cros_healthd/fake_cros_healthd_service.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom.h"
@@ -58,6 +59,9 @@ class COMPONENT_EXPORT(CROS_HEALTHD) FakeCrosHealthdClient
   // ProbeProcessInfo IPCs received.
   void SetProbeProcessInfoResponseForTesting(mojom::ProcessResultPtr& result);
 
+  // Adds a delay before the passed callback is called.
+  void SetCallbackDelay(base::TimeDelta delay);
+
   // Calls the power event OnAcInserted on all registered power observers.
   void EmitAcInsertedEventForTesting();
 
@@ -67,6 +71,9 @@ class COMPONENT_EXPORT(CROS_HEALTHD) FakeCrosHealthdClient
 
   // Calls the lid event OnLidClosed on all registered lid observers.
   void EmitLidClosedEventForTesting();
+
+  // Calls the lid event OnLidOpened on all registered lid observers.
+  void EmitLidOpenedEventForTesting();
 
   // Requests the network health state using the NetworkHealthService remote.
   void RequestNetworkHealthForTesting(

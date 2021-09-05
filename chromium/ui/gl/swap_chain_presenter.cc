@@ -5,6 +5,7 @@
 #include "ui/gl/swap_chain_presenter.h"
 
 #include <d3d11_1.h>
+#include <d3d11_4.h>
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
@@ -20,6 +21,7 @@
 #include "ui/gl/gl_image_memory.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/gl_utils.h"
+#include "ui/gl/hdr_metadata_helper_win.h"
 
 namespace gl {
 namespace {
@@ -842,9 +844,15 @@ bool SwapChainPresenter::PresentToSwapChain(
   if (image_dxgi && image_dxgi->color_space().IsValid())
     src_color_space = image_dxgi->color_space();
 
+  base::Optional<DXGI_HDR_METADATA_HDR10> stream_metadata;
+  if (params.hdr_metadata.IsValid()) {
+    stream_metadata =
+        gl::HDRMetadataHelperWin::HDRMetadataToDXGI(params.hdr_metadata);
+  }
+
   if (!VideoProcessorBlt(input_texture, input_level, keyed_mutex,
-                         params.content_rect, src_color_space,
-                         content_is_hdr)) {
+                         params.content_rect, src_color_space, content_is_hdr,
+                         stream_metadata)) {
     return false;
   }
 
@@ -969,23 +977,15 @@ bool SwapChainPresenter::VideoProcessorBlt(
     Microsoft::WRL::ComPtr<IDXGIKeyedMutex> keyed_mutex,
     const gfx::Rect& content_rect,
     const gfx::ColorSpace& src_color_space,
-    bool content_is_hdr) {
+    bool content_is_hdr,
+    base::Optional<DXGI_HDR_METADATA_HDR10> stream_hdr_metadata) {
   TRACE_EVENT2("gpu", "SwapChainPresenter::VideoProcessorBlt", "content_rect",
                content_rect.ToString(), "swap_chain_size",
                swap_chain_size_.ToString());
-  if (!layer_tree_->InitializeVideoProcessor(content_rect.size(),
-                                             swap_chain_size_)) {
-    return false;
-  }
-  Microsoft::WRL::ComPtr<ID3D11VideoContext> video_context =
-      layer_tree_->video_context();
-  Microsoft::WRL::ComPtr<ID3D11VideoProcessor> video_processor =
-      layer_tree_->video_processor();
 
   gfx::ColorSpace output_color_space = IsYUVSwapChainFormat(swap_chain_format_)
                                            ? src_color_space
                                            : gfx::ColorSpace::CreateSRGB();
-
   if (base::FeatureList::IsEnabled(kFallbackBT709VideoToBT601) &&
       (output_color_space == gfx::ColorSpace::CreateREC709())) {
     output_color_space = gfx::ColorSpace::CreateREC601();
@@ -993,37 +993,32 @@ bool SwapChainPresenter::VideoProcessorBlt(
   if (content_is_hdr)
     output_color_space = gfx::ColorSpace::CreateHDR10();
 
-  Microsoft::WRL::ComPtr<IDXGISwapChain3> swap_chain3;
-  Microsoft::WRL::ComPtr<ID3D11VideoContext1> context1;
-  if (SUCCEEDED(swap_chain_.As(&swap_chain3)) &&
-      SUCCEEDED(video_context.As(&context1))) {
-    DCHECK(swap_chain3);
-    DCHECK(context1);
-    // Set input color space.
-    context1->VideoProcessorSetStreamColorSpace1(
-        video_processor.Get(), 0,
-        gfx::ColorSpaceWin::GetDXGIColorSpace(src_color_space));
-    // Set output color space.
-    DXGI_COLOR_SPACE_TYPE output_dxgi_color_space =
-        gfx::ColorSpaceWin::GetDXGIColorSpace(
-            output_color_space,
-            IsYUVSwapChainFormat(swap_chain_format_) /* force_yuv */);
+  if (!layer_tree_->InitializeVideoProcessor(content_rect.size(),
+                                             swap_chain_size_, src_color_space,
+                                             output_color_space)) {
+    return false;
+  }
+  layer_tree_->SetColorspaceForVideoProcessor(
+      src_color_space, output_color_space, swap_chain_,
+      IsYUVSwapChainFormat(swap_chain_format_));
 
-    if (SUCCEEDED(swap_chain3->SetColorSpace1(output_dxgi_color_space))) {
-      context1->VideoProcessorSetOutputColorSpace1(video_processor.Get(),
-                                                   output_dxgi_color_space);
+  Microsoft::WRL::ComPtr<ID3D11VideoContext> video_context =
+      layer_tree_->video_context();
+  Microsoft::WRL::ComPtr<ID3D11VideoProcessor> video_processor =
+      layer_tree_->video_processor();
+  Microsoft::WRL::ComPtr<ID3D11VideoContext2> context2;
+  base::Optional<DXGI_HDR_METADATA_HDR10> display_metadata =
+      layer_tree_->GetHDRMetadataHelper()->GetDisplayMetadata();
+  if (display_metadata.has_value() && SUCCEEDED(video_context.As(&context2))) {
+    if (stream_hdr_metadata.has_value()) {
+      context2->VideoProcessorSetStreamHDRMetaData(
+          video_processor.Get(), 0, DXGI_HDR_METADATA_TYPE_HDR10,
+          sizeof(DXGI_HDR_METADATA_HDR10), &(*stream_hdr_metadata));
     }
-  } else {
-    // This can't handle as many different types of color spaces, so use it
-    // only if ID3D11VideoContext1 isn't available.
-    D3D11_VIDEO_PROCESSOR_COLOR_SPACE src_d3d11_color_space =
-        gfx::ColorSpaceWin::GetD3D11ColorSpace(src_color_space);
-    video_context->VideoProcessorSetStreamColorSpace(video_processor.Get(), 0,
-                                                     &src_d3d11_color_space);
-    D3D11_VIDEO_PROCESSOR_COLOR_SPACE output_d3d11_color_space =
-        gfx::ColorSpaceWin::GetD3D11ColorSpace(output_color_space);
-    video_context->VideoProcessorSetOutputColorSpace(video_processor.Get(),
-                                                     &output_d3d11_color_space);
+
+    context2->VideoProcessorSetOutputHDRMetaData(
+        video_processor.Get(), DXGI_HDR_METADATA_TYPE_HDR10,
+        sizeof(DXGI_HDR_METADATA_HDR10), &(*display_metadata));
   }
 
   {
@@ -1131,20 +1126,6 @@ bool SwapChainPresenter::ReallocateSwapChain(
 
   DCHECK(!swap_chain_size.IsEmpty());
   swap_chain_size_ = swap_chain_size;
-
-  // ResizeBuffers can't change YUV flags so only attempt it when size changes.
-  if (swap_chain_ && (swap_chain_format_ == swap_chain_format) &&
-      (protected_video_type_ == protected_video_type)) {
-    output_view_.Reset();
-    DXGI_SWAP_CHAIN_DESC1 desc = {};
-    swap_chain_->GetDesc1(&desc);
-    HRESULT hr = swap_chain_->ResizeBuffers(
-        desc.BufferCount, swap_chain_size.width(), swap_chain_size.height(),
-        desc.Format, desc.Flags);
-    if (SUCCEEDED(hr))
-      return true;
-    DLOG(ERROR) << "ResizeBuffers failed with error 0x" << std::hex << hr;
-  }
 
   protected_video_type_ = protected_video_type;
 
@@ -1285,7 +1266,29 @@ void SwapChainPresenter::SetSwapChainPresentDuration() {
       GetSwapChainMedia();
   if (swap_chain_media) {
     UINT duration_100ns = FrameRateToPresentDuration(frame_rate_);
-    HRESULT hr = swap_chain_media->SetPresentDuration(duration_100ns);
+    UINT requested_duration = 0u;
+    if (duration_100ns > 0) {
+      UINT smaller_duration = 0u, larger_duration = 0u;
+      HRESULT hr = swap_chain_media->CheckPresentDurationSupport(
+          duration_100ns, &smaller_duration, &larger_duration);
+      if (FAILED(hr)) {
+        DLOG(ERROR) << "CheckPresentDurationSupport failed with error "
+                    << std::hex << hr;
+        return;
+      }
+      constexpr UINT kDurationThreshold = 1000u;
+      // Smaller duration should be used to avoid frame loss. However, we want
+      // to take into consideration the larger duration is the same as the
+      // requested duration but was slightly different due to frame rate
+      // estimation errors.
+      if (larger_duration > 0 &&
+          larger_duration - duration_100ns < kDurationThreshold) {
+        requested_duration = larger_duration;
+      } else if (smaller_duration > 0) {
+        requested_duration = smaller_duration;
+      }
+    }
+    HRESULT hr = swap_chain_media->SetPresentDuration(requested_duration);
     if (FAILED(hr)) {
       DLOG(ERROR) << "SetPresentDuration failed with error " << std::hex << hr;
     }

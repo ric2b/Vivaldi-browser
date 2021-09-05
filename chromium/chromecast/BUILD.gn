@@ -10,8 +10,11 @@ import("//chromecast/build/tests/cast_test.gni")
 import("//chromecast/chromecast.gni")
 import("//media/media_options.gni")
 import("//tools/grit/repack.gni")
-import("//ui/ozone/ozone.gni")
 import("//v8/gni/v8.gni")
+
+if (chromecast_branding != "public") {
+  import("//chromecast/internal/chromecast_internal.gni")
+}
 
 if (is_android) {
   import("//build/config/android/rules.gni")
@@ -89,6 +92,12 @@ cast_test_group("cast_tests") {
     "//storage:storage_unittests",
     "//ui/base:ui_base_unittests",
   ]
+
+  if (enable_chromecast_extensions) {
+    tests += [
+      "//chromecast/browser/accessibility/flutter:cast_accessibility_unittests",
+    ]
+  }
 
   if (!is_cast_audio_only) {
     tests += [ "//gpu:gpu_unittests" ]
@@ -411,10 +420,7 @@ cast_test_group_list("cast_test_lists") {
   test_groups = [ ":cast_tests" ]
 
   if (chromecast_branding != "public") {
-    test_groups += [
-      "//chromecast/internal:internal_cast_tests",
-      "//chromecast/internal/iot_services:iot_tests",
-    ]
+    test_groups += internal_cast_test_groups
   }
 }
 
@@ -495,7 +501,7 @@ cast_executable("cast_shell") {
 repack("cast_shell_pak") {
   sources = [
     "$root_gen_dir/chromecast/app/shell_resources.pak",
-    "$root_gen_dir/chromecast/bindings/bindings_resources.pak",
+    "$root_gen_dir/components/cast/named_message_port_connector/named_message_port_connector_resources.pak",
     "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
     "$root_gen_dir/content/content_resources.pak",
     "$root_gen_dir/content/dev_ui_content_resources.pak",
@@ -514,7 +520,7 @@ repack("cast_shell_pak") {
 
   deps = [
     "//chromecast/app:resources",
-    "//chromecast/bindings:bindings_resources_grit",
+    "//components/cast/named_message_port_connector:resources",
     "//content:content_resources",
     "//content:dev_ui_content_resources",
     "//content/app/resources",
@@ -606,6 +612,7 @@ buildflag_header("chromecast_buildflags") {
     "SUPPORTS_MULTIZONE=$supports_multizone",
     "USE_ANDROID_USER_AGENT=$use_android_user_agent",
     "USE_CHROMECAST_CDMS=$use_chromecast_cdms",
+    "ENABLE_CHROMIUM_RUNTIME_CAST_RENDERER=$enable_chromium_runtime_cast_renderer",
   ]
 }
 

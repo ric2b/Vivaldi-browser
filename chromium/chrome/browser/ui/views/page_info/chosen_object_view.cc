@@ -72,8 +72,8 @@ ChosenObjectView::ChosenObjectView(
   icon_ = layout->AddView(std::make_unique<views::ImageView>());
 
   // Create the label that displays the chosen object name.
-  auto label =
-      std::make_unique<views::Label>(display_name, CONTEXT_BODY_TEXT_LARGE);
+  auto label = std::make_unique<views::Label>(
+      display_name, views::style::CONTEXT_DIALOG_BODY_TEXT);
   layout->AddView(std::move(label));
 
   // Create the delete button.
@@ -81,10 +81,10 @@ ChosenObjectView::ChosenObjectView(
       views::CreateVectorImageButton(this);
   views::SetImageFromVectorIcon(
       delete_button.get(), vector_icons::kCloseRoundedIcon,
-      views::style::GetColor(*this, CONTEXT_BODY_TEXT_LARGE,
+      views::style::GetColor(*this, views::style::CONTEXT_DIALOG_BODY_TEXT,
                              views::style::STYLE_PRIMARY));
   delete_button->SetFocusForPlatform();
-  delete_button->set_request_focus_on_press(true);
+  delete_button->SetRequestFocusOnPress(true);
   delete_button->SetTooltipText(
       l10n_util::GetStringUTF16(info_->ui_info.delete_tooltip_string_id));
   delete_button_ = layout->AddView(std::move(delete_button));

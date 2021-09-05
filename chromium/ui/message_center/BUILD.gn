@@ -8,10 +8,10 @@ import("//components/vector_icons/vector_icons.gni")
 import("//testing/test.gni")
 import("//ui/base/ui_features.gni")
 
-aggregate_vector_icons("message_center_vector_icons") {
+aggregate_vector_icons2("message_center_vector_icons") {
   icon_directory = "vector_icons"
 
-  icons = [
+  sources = [
     "notification_close_button.icon",
     "notification_expand_less.icon",
     "notification_expand_more.icon",
@@ -95,7 +95,6 @@ component("message_center") {
         "views/message_popup_collection.h",
         "views/message_popup_view.cc",
         "views/message_popup_view.h",
-        "views/message_popup_view_mac.mm",
         "views/message_view.cc",
         "views/message_view.h",
         "views/message_view_factory.cc",
@@ -115,6 +114,9 @@ component("message_center") {
         "views/relative_time_formatter.cc",
         "views/relative_time_formatter.h",
       ]
+      if (is_mac) {
+        sources += [ "views/message_popup_view_mac.mm" ]
+      }
       deps += [
         "//ui/compositor",
         "//ui/events",
@@ -156,9 +158,7 @@ if (enable_message_center) {
   }
 
   test("message_center_unittests") {
-    if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
-      use_xvfb = true
-    }
+    use_xvfb = use_xvfb_in_this_config
 
     sources = [
       "message_center_impl_unittest.cc",

@@ -17,6 +17,8 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.DisplayableProfileData;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
+import org.chromium.components.browser_ui.contacts_picker.ContactDetails;
+import org.chromium.components.browser_ui.contacts_picker.PickerAdapter;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -43,7 +45,10 @@ public class ChromePickerAdapter extends PickerAdapter implements ProfileDataCac
     // Whether owner info is being fetched asynchronously.
     private boolean mWaitingOnOwnerInfo;
 
-    public ChromePickerAdapter() {}
+    public ChromePickerAdapter(Context context) {
+        mProfileDataCache = new ProfileDataCache(context,
+                context.getResources().getDimensionPixelSize(R.dimen.contact_picker_icon_size));
+    }
 
     // Adapter:
 
@@ -95,13 +100,6 @@ public class ChromePickerAdapter extends PickerAdapter implements ProfileDataCac
     }
 
     // PickerAdapter:
-
-    @Override
-    public void init(PickerCategoryView categoryView, Context context, String formattedOrigin) {
-        mProfileDataCache = new ProfileDataCache(context,
-                context.getResources().getDimensionPixelSize(R.dimen.contact_picker_icon_size));
-        super.init(categoryView, context, formattedOrigin);
-    }
 
     /**
      * Returns the email for the currently signed-in user. If that is not available, return the

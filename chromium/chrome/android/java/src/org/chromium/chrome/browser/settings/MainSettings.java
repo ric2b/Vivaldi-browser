@@ -16,7 +16,6 @@ import androidx.annotation.VisibleForTesting;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
-import org.chromium.base.BuildConfig;
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.datareduction.settings.DataReductionPreferenceFragment;
@@ -33,8 +32,10 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.safety_check.SafetyCheckSettingsFragment;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.SigninActivityLauncherImpl;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
+import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.browser.sync.settings.SignInPreference;
 import org.chromium.chrome.browser.sync.settings.SyncPromoPreference;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
@@ -44,6 +45,9 @@ import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
+import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -136,7 +140,6 @@ public class MainSettings extends PreferenceFragmentCompat
                 Profile.getLastUsedRegularProfile());
         if (signinManager.isSigninSupported()) {
             signinManager.addSignInStateObserver(this);
-            mSyncPromoPreference.registerForUpdates();
             mSignInPreference.registerForUpdates();
         }
         ProfileSyncService syncService = ProfileSyncService.get();
@@ -153,7 +156,6 @@ public class MainSettings extends PreferenceFragmentCompat
                 Profile.getLastUsedRegularProfile());
         if (signinManager.isSigninSupported()) {
             signinManager.removeSignInStateObserver(this);
-            mSyncPromoPreference.unregisterForUpdates();
             mSignInPreference.unregisterForUpdates();
         }
         ProfileSyncService syncService = ProfileSyncService.get();
@@ -170,10 +172,13 @@ public class MainSettings extends PreferenceFragmentCompat
     }
 
     private void createPreferences() {
-        if(ChromeApplication.isVivaldi())
+        if (ChromeApplication.isVivaldi())
             SettingsUtils.addPreferencesFromResource(this, R.xml.vivaldi_main_preferences);
         else
         SettingsUtils.addPreferencesFromResource(this, R.xml.main_preferences);
+
+        // Vivaldi should not move settings to other places.
+        if (!ChromeApplication.isVivaldi())
         // If the flag for elevating the privacy is enabled, put the "Privacy"
         // into the reserved space in the Basics section and move the "Homepage"
         // down to Advanced to where "Privacy" was. See (crbug.com/1099233) for
@@ -189,6 +194,8 @@ public class MainSettings extends PreferenceFragmentCompat
             getPreferenceScreen().addPreference(homepagePreference);
         }
 
+        // Vivaldi should not alter this.
+        if (!ChromeApplication.isVivaldi())
         // If the flag for adding a "Security" section is enabled, the "Privacy" section will be
         // renamed to a "Privacy and security" section and the "Security" section will be added
         // under the renamed section. See (go/esb-clank-dd) for more context.
@@ -254,6 +261,8 @@ public class MainSettings extends PreferenceFragmentCompat
                             getContext()));
         }
 
+        // Vivaldi should not alter this.
+        if (!ChromeApplication.isVivaldi())
         // Replace the account section header, replace SyncAndServicesSettings with
         // ManageSyncSettings and add GoogleServicesSettings row if this flag is enabled.
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
@@ -264,9 +273,6 @@ public class MainSettings extends PreferenceFragmentCompat
             mManageSync.setVisible(true);
             findPreference(PREF_GOOGLE_SERVICES).setVisible(true);
         }
-
-        if (BuildConfig.IS_OFFICIAL_VIVALDI_BUILD && !BuildConfig.IS_FORCE_SOPRANOS_BUILD)
-            getPreferenceScreen().removePreference(findPreference(PREF_VIVALDI_GAME));
     }
 
     /**
@@ -301,16 +307,7 @@ public class MainSettings extends PreferenceFragmentCompat
             removePreferenceIfPresent(PREF_SIGN_IN);
         }
 
-        boolean hasPrimaryAccount = IdentityServicesProvider.get()
-                                            .getIdentityManager(Profile.getLastUsedRegularProfile())
-                                            .hasPrimaryAccount();
-        boolean isSyncPromoHidden =
-                mSyncPromoPreference.getState() == SyncPromoPreference.State.PROMO_HIDDEN;
-        mManageSync.setVisible(
-                ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
-                && hasPrimaryAccount && isSyncPromoHidden);
-
-        updateSyncAndServicesPreference();
+        updateSyncPreference();
         updateSearchEnginePreference();
 
         Preference homepagePref = addPreferenceIfAbsent(PREF_HOMEPAGE);
@@ -346,14 +343,51 @@ public class MainSettings extends PreferenceFragmentCompat
         if (preference != null) getPreferenceScreen().removePreference(preference);
     }
 
+    private void updateSyncPreference() {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)) {
+            updateManageSyncPreference();
+        } else {
+            updateSyncAndServicesPreference();
+        }
+    }
+
     private void updateSyncAndServicesPreference() {
         if (ChromeApplication.isVivaldi()) return;
-        ChromeBasePreference preference = findPreference(
-                ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
-                        ? PREF_MANAGE_SYNC
-                        : PREF_SYNC_AND_SERVICES);
+        ChromeBasePreference preference = findPreference(PREF_SYNC_AND_SERVICES);
         preference.setIcon(SyncSettingsUtils.getSyncStatusIcon(getActivity()));
         preference.setSummary(SyncSettingsUtils.getSyncStatusSummary(getActivity()));
+    }
+
+    private void updateManageSyncPreference() {
+        String primaryAccountName = CoreAccountInfo.getEmailFrom(
+                IdentityServicesProvider.get()
+                        .getIdentityManager(Profile.getLastUsedRegularProfile())
+                        .getPrimaryAccountInfo(ConsentLevel.NOT_REQUIRED));
+        boolean showManageSync =
+                ChromeFeatureList.isEnabled(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
+                && primaryAccountName != null;
+        mManageSync.setVisible(showManageSync);
+        if (!showManageSync) {
+            return;
+        }
+
+        boolean isSyncConsentAvailable =
+                IdentityServicesProvider.get()
+                        .getIdentityManager(Profile.getLastUsedRegularProfile())
+                        .getPrimaryAccountInfo(ConsentLevel.SYNC)
+                != null;
+        mManageSync.setIcon(SyncSettingsUtils.getSyncStatusIcon(getActivity()));
+        mManageSync.setSummary(SyncSettingsUtils.getSyncStatusSummary(getActivity()));
+        mManageSync.setOnPreferenceClickListener(pref -> {
+            if (isSyncConsentAvailable) {
+                SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+                settingsLauncher.launchSettingsActivity(getContext(), ManageSyncSettings.class);
+            } else {
+                SigninActivityLauncherImpl.get().launchActivityForPromoDefaultFlow(
+                        getContext(), SigninAccessPoint.SETTINGS, primaryAccountName);
+            }
+            return true;
+        });
     }
 
     private void updateSearchEnginePreference() {
@@ -424,7 +458,7 @@ public class MainSettings extends PreferenceFragmentCompat
 
     @Override
     public void syncStateChanged() {
-        updateSyncAndServicesPreference();
+        updateSyncPreference();
     }
 
     @VisibleForTesting

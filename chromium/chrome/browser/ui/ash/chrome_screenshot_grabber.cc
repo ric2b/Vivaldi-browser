@@ -93,6 +93,7 @@ class ScreenshotGrabberNotificationDelegate
         platform_util::ShowItemInFolder(profile_, screenshot_path_);
         NotificationDisplayService::GetForProfile(profile_)->Close(
             NotificationHandler::Type::TRANSIENT, kNotificationId);
+        base::RecordAction(base::UserMetricsAction("Screenshot_ShowInFolder"));
       }
       return;
     }
@@ -566,7 +567,7 @@ void ChromeScreenshotGrabber::OnReadScreenshotFileForPreviewCompleted(
   if (success && ash::features::IsTemporaryHoldingSpaceEnabled()) {
     ash::HoldingSpaceKeyedServiceFactory::GetInstance()
         ->GetService(GetProfile())
-        ->AddScreenshot(screenshot_path, image.AsImageSkia());
+        ->AddScreenshot(screenshot_path);
   }
 }
 

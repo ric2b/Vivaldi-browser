@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <memory>
+#include <queue>
 #include <set>
 #include <vector>
 
@@ -16,8 +17,11 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/scoped_observer.h"
 #include "base/time/time.h"
+#include "chrome/browser/permissions/abusive_origin_permission_revocation_request.h"
 #include "chrome/browser/push_messaging/push_messaging_notification_manager.h"
+#include "chrome/browser/push_messaging/push_messaging_refresher.h"
 #include "chrome/common/buildflags.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -58,17 +62,34 @@ namespace instance_id {
 class InstanceIDDriver;
 }  // namespace instance_id
 
+namespace {
+struct PendingMessage {
+  PendingMessage(std::string app_id, gcm::IncomingMessage message);
+  PendingMessage(PendingMessage&& other);
+  ~PendingMessage();
+
+  PendingMessage& operator=(PendingMessage&& other);
+
+  std::string app_id;
+  gcm::IncomingMessage message;
+};
+}  // namespace
+
 class PushMessagingServiceImpl : public content::PushMessagingService,
                                  public gcm::GCMAppHandler,
                                  public content_settings::Observer,
                                  public KeyedService,
-                                 public content::NotificationObserver {
+                                 public content::NotificationObserver,
+                                 public PushMessagingRefresher::Observer {
  public:
   // If any Service Workers are using push, starts GCM and adds an app handler.
   static void InitializeForProfile(Profile* profile);
 
   explicit PushMessagingServiceImpl(Profile* profile);
   ~PushMessagingServiceImpl() override;
+
+  // Check and remove subscriptions that are expired when |this| is initialized
+  void RemoveExpiredSubscriptions();
 
   // Gets the permission status for the given |origin|.
   blink::mojom::PermissionStatus GetPermissionStatus(const GURL& origin,
@@ -137,19 +158,34 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
   // KeyedService implementation.
   void Shutdown() override;
 
-  // content::NotificationObserver:
+  // content::NotificationObserver implementation
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
+  // WARNING: Only call this function if features::kPushSubscriptionChangeEvent
+  // is enabled, will be later used by the Push Service to trigger subscription
+  // refreshes
+  void OnSubscriptionInvalidation(const std::string& app_id);
+
+  // PushMessagingRefresher::Observer implementation
+  // Initiate unsubscribe task when old subscription becomes invalid
+  void OnOldSubscriptionExpired(const std::string& app_id,
+                                const std::string& sender_id) override;
+  void OnRefreshFinished(
+      const PushMessagingAppIdentifier& app_identifier) override;
+
   void SetMessageCallbackForTesting(const base::Closure& callback);
   void SetUnsubscribeCallbackForTesting(const base::Closure& callback);
+  void SetInvalidationCallbackForTesting(base::OnceClosure callback);
   void SetContentSettingChangedCallbackForTesting(
       base::RepeatingClosure callback);
   void SetServiceWorkerUnregisteredCallbackForTesting(
       base::RepeatingClosure callback);
   void SetServiceWorkerDatabaseWipedCallbackForTesting(
       base::RepeatingClosure callback);
+  void SetRemoveExpiredSubscriptionsCallbackForTesting(
+      base::OnceClosure closure);
 
  private:
   friend class PushMessagingBrowserTest;
@@ -173,6 +209,19 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
                         const std::string& push_message_id,
                         base::OnceClosure completion_closure,
                         bool did_show_generic_notification);
+
+  void OnCheckedOriginForAbuse(
+      const std::string& app_id,
+      const gcm::IncomingMessage& message,
+      AbusiveOriginPermissionRevocationRequest::Outcome outcome);
+
+  void CheckOriginForAbuseAndDispatchNextMessage();
+
+  base::OnceClosure message_handled_callback() {
+    return message_callback_for_testing_.is_null()
+               ? base::DoNothing()
+               : message_callback_for_testing_;
+  }
 
   // Subscribe methods ---------------------------------------------------------
 
@@ -251,15 +300,6 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
 
   // OnContentSettingChanged methods -------------------------------------------
 
-  void UnsubscribePermissionRevoked(
-      const PushMessagingAppIdentifier& app_identifier,
-      UnregisterCallback unregister_callback);
-
-  void DidGetSenderIdUnsubscribePermissionRevoked(
-      const PushMessagingAppIdentifier& app_identifier,
-      UnregisterCallback callback,
-      const std::string& sender_id);
-
   void GetPushSubscriptionFromAppIdentifier(
       const PushMessagingAppIdentifier& app_identifier,
       base::OnceCallback<void(blink::mojom::PushSubscriptionPtr)> callback);
@@ -279,28 +319,66 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
       const std::vector<uint8_t>& p256dh,
       const std::vector<uint8_t>& auth);
 
+  // OnSubscriptionInvalidation methods-----------------------------------------
+
+  void GetOldSubscription(PushMessagingAppIdentifier old_app_identifier,
+                          const std::string& sender_id);
+
+  // After gathering all relavent information to start the refresh,
+  // generate a new app id and initiate refresh
+  void StartRefresh(PushMessagingAppIdentifier old_app_identifier,
+                    const std::string& sender_id,
+                    blink::mojom::PushSubscriptionPtr old_subscription);
+
+  // Makes a new susbcription and replaces the old subscription by new
+  // subscription in preferences and service worker database
+  void UpdateSubscription(PushMessagingAppIdentifier app_identifier,
+                          blink::mojom::PushSubscriptionOptionsPtr options,
+                          RegisterCallback callback);
+
+  // After the subscription is updated, fire a `pushsubscriptionchange` event
+  // and notify the |refresher_|
+  void DidUpdateSubscription(const std::string& new_app_id,
+                             const std::string& old_app_id,
+                             blink::mojom::PushSubscriptionPtr old_subscription,
+                             const std::string& sender_id,
+                             const std::string& registration_id,
+                             const GURL& endpoint,
+                             const base::Optional<base::Time>& expiration_time,
+                             const std::vector<uint8_t>& p256dh,
+                             const std::vector<uint8_t>& auth,
+                             blink::mojom::PushRegistrationStatus status);
   // Helper methods ------------------------------------------------------------
+
+  // The subscription given in |identifier| will be unsubscribed (and a
+  // `pushsubscriptionchange` event fires if
+  // features::kPushSubscriptionChangeEvent is enabled)
+  void UnexpectedChange(PushMessagingAppIdentifier identifier,
+                        blink::mojom::PushUnregistrationReason reason,
+                        base::OnceClosure completed_closure);
+
+  void UnexpectedUnsubscribe(const PushMessagingAppIdentifier& app_identifier,
+                             blink::mojom::PushUnregistrationReason reason,
+                             UnregisterCallback unregister_callback);
+
+  void DidGetSenderIdUnexpectedUnsubscribe(
+      const PushMessagingAppIdentifier& app_identifier,
+      blink::mojom::PushUnregistrationReason reason,
+      UnregisterCallback callback,
+      const std::string& sender_id);
+
   void FirePushSubscriptionChangeCallback(
       const PushMessagingAppIdentifier& app_identifier,
       blink::mojom::PushEventStatus status);
 
-  // Normalizes the |sender_info|. In most cases the |sender_info| will be
-  // passed through to the GCM Driver as-is, but NIST P-256 application server
-  // keys have to be encoded using the URL-safe variant of the base64 encoding.
-  std::string NormalizeSenderInfo(const std::string& sender_info) const;
-
   // Checks if a given origin is allowed to use Push.
-  bool IsPermissionSet(const GURL& origin);
+  bool IsPermissionSet(const GURL& origin, bool user_visible = true);
 
   // Wrapper around {GCMDriver, InstanceID}::GetEncryptionInfo.
   void GetEncryptionInfoForAppId(
       const std::string& app_id,
       const std::string& sender_id,
       gcm::GCMEncryptionProvider::EncryptionInfoCallback callback);
-
-  // Returns the URL used to send push messages to the subscription identified
-  // by |subscription_id|.
-  GURL CreateEndpoint(const std::string& subscription_id) const;
 
   gcm::GCMDriver* GetGCMDriver() const;
 
@@ -325,6 +403,9 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
   }
 
   Profile* profile_;
+  std::unique_ptr<AbusiveOriginPermissionRevocationRequest>
+      abusive_origin_revocation_request_;
+  std::queue<PendingMessage> messages_pending_permission_check_;
 
   int push_subscription_count_;
   int pending_push_subscription_count_;
@@ -334,9 +415,15 @@ class PushMessagingServiceImpl : public content::PushMessagingService,
   base::Closure content_setting_changed_callback_for_testing_;
   base::Closure service_worker_unregistered_callback_for_testing_;
   base::Closure service_worker_database_wiped_callback_for_testing_;
+  base::OnceClosure remove_expired_subscriptions_callback_for_testing_;
+  base::OnceClosure invalidation_callback_for_testing_;
 
   PushMessagingNotificationManager notification_manager_;
 
+  PushMessagingRefresher refresher_;
+
+  ScopedObserver<PushMessagingRefresher, PushMessagingRefresher::Observer>
+      refresh_observer_{this};
   // A multiset containing one entry for each in-flight push message delivery,
   // keyed by the receiver's app id.
   std::multiset<std::string> in_flight_message_deliveries_;

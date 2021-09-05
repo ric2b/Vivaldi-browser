@@ -12,6 +12,7 @@
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "components/payments/content/payment_app_factory.h"
+#include "content/public/browser/global_routing_id.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -43,7 +44,7 @@ class PaymentAppServiceBridge : public PaymentAppFactory::Delegate {
       size_t number_of_factories,
       content::RenderFrameHost* render_frame_host,
       const GURL& top_origin,
-      PaymentRequestSpec* spec,
+      base::WeakPtr<PaymentRequestSpec> spec,
       const std::string& twa_package_name,
       scoped_refptr<PaymentManifestWebDataService> web_data_service,
       bool may_crawl_for_installable_payment_apps,
@@ -78,7 +79,7 @@ class PaymentAppServiceBridge : public PaymentAppFactory::Delegate {
   bool IsRequestedAutofillDataAvailable() override;
   ContentPaymentRequestDelegate* GetPaymentRequestDelegate() const override;
   void ShowProcessingSpinner() override;
-  PaymentRequestSpec* GetSpec() const override;
+  base::WeakPtr<PaymentRequestSpec> GetSpec() const override;
   std::string GetTwaPackageName() const override;
   void OnPaymentAppCreated(std::unique_ptr<PaymentApp> app) override;
   void OnPaymentAppCreationError(const std::string& error_message) override;
@@ -93,7 +94,7 @@ class PaymentAppServiceBridge : public PaymentAppFactory::Delegate {
       size_t number_of_factories,
       content::RenderFrameHost* render_frame_host,
       const GURL& top_origin,
-      PaymentRequestSpec* spec,
+      base::WeakPtr<PaymentRequestSpec> spec,
       const std::string& twa_package_name,
       scoped_refptr<PaymentManifestWebDataService> web_data_service,
       bool may_crawl_for_installable_payment_apps,
@@ -103,8 +104,7 @@ class PaymentAppServiceBridge : public PaymentAppFactory::Delegate {
       base::OnceClosure done_creating_payment_apps_callback);
 
   size_t number_of_pending_factories_;
-  content::WebContents* web_contents_;
-  content::RenderFrameHost* render_frame_host_;
+  content::GlobalFrameRoutingId frame_routing_id_;
   const GURL top_origin_;
   const GURL frame_origin_;
   const url::Origin frame_security_origin_;

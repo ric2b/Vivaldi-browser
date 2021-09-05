@@ -75,7 +75,7 @@ class ThumbnailCaptureContents
                              const blink::WebGestureEvent& event) override;
   bool CanDragEnter(content::WebContents* source,
                     const content::DropData& data,
-                    blink::WebDragOperationsMask operations_allowed) override;
+                    blink::DragOperationsMask operations_allowed) override;
   bool EmbedsFullscreenWidget() override;
   void RequestMediaAccessPermission(
       content::WebContents* contents,
@@ -101,7 +101,15 @@ class ThumbnailCaptureContents
   void TryCapture(bool last_try);
 
   // "this" is no longer valid after the call
-  void RespondAndDelete(CapturePage::Result captured = CapturePage::Result());
+  void RespondAndDelete(SkBitmap bitmap = SkBitmap());
+
+  void OnCopyImageReady(const SkBitmap& bitmap);
+
+  void CaptureViaIpc();
+
+  void OnIpcCaptureDone(::vivaldi::CapturePage::Result captured);
+
+  void OnCaptureTimeout();
 
   // The initial navigation URL, which may or may not match the current URL if
   // page-initiated navigations have occurred.

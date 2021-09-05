@@ -31,8 +31,8 @@
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
-#include "net/dns/dns_config_overrides.h"
 #include "net/dns/host_resolver.h"
+#include "net/dns/public/dns_config_overrides.h"
 #include "net/http/http_auth_preferences.h"
 #include "services/network/cors/preflight_controller.h"
 #include "services/network/http_cache_data_counter.h"
@@ -54,7 +54,6 @@
 #include "services/network/public/mojom/udp_socket.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/websocket.mojom.h"
-#include "services/network/sct_auditing_cache.h"
 #include "services/network/socket_factory.h"
 #include "services/network/url_request_context_owner.h"
 
@@ -205,8 +204,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const url::Origin& top_frame_origin) override;
   void ClearTrustTokenData(mojom::ClearDataFilterPtr filter,
                            base::OnceClosure done) override;
-  void ClearNetworkingHistorySince(
-      base::Time time,
+  void ClearNetworkingHistoryBetween(
+      base::Time start_time,
+      base::Time end_time,
       base::OnceClosure completion_callback) override;
   void ClearHttpCache(base::Time start_time,
                       base::Time end_time,
@@ -221,6 +221,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   void ClearHostCache(mojom::ClearDataFilterPtr filter,
                       ClearHostCacheCallback callback) override;
   void ClearHttpAuthCache(base::Time start_time,
+                          base::Time end_time,
                           ClearHttpAuthCacheCallback callback) override;
   void ClearReportingCacheReports(
       mojom::ClearDataFilterPtr filter,
@@ -478,8 +479,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
     return domain_reliability_monitor_.get();
   }
 
-  bool IsCorsEnabled() const { return cors_enabled_; }
-
   // The http_auth_dynamic_params_ would be used to populate
   // the |http_auth_merged_preferences| of the given NetworkContext.
   void OnHttpAuthDynamicParamsChanged(
@@ -717,9 +716,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   // Manages CORS preflight requests and its cache.
   cors::PreflightController cors_preflight_controller_;
-
-  // Manages if OOR-CORS is enabled.
-  bool cors_enabled_ = false;
 
   std::unique_ptr<NetworkQualitiesPrefDelegate>
       network_qualities_pref_delegate_;

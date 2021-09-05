@@ -37,9 +37,12 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
+#include "net/base/ip_address.h"
+#include "net/base/ip_endpoint.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink.h"
 #include "services/network/public/mojom/websocket.mojom-blink.h"
+#include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
@@ -57,6 +60,7 @@
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/inspector/inspected_frames.h"
 #include "third_party/blink/renderer/core/inspector/network_resources_data.h"
+#include "third_party/blink/renderer/core/inspector/request_debug_header_scope.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
@@ -80,7 +84,6 @@
 #include "third_party/blink/renderer/platform/loader/fetch/unique_identifier.h"
 #include "third_party/blink/renderer/platform/network/http_header_map.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -426,7 +429,7 @@ String GetReferrerPolicy(network::mojom::ReferrerPolicy policy) {
     case network::mojom::ReferrerPolicy::kAlways:
       return protocol::Network::Request::ReferrerPolicyEnum::UnsafeUrl;
     case network::mojom::ReferrerPolicy::kDefault:
-      if (RuntimeEnabledFeatures::ReducedReferrerGranularityEnabled()) {
+      if (ReferrerUtils::IsReducedReferrerGranularityEnabled()) {
         return protocol::Network::Request::ReferrerPolicyEnum::
             StrictOriginWhenCrossOrigin;
       } else {
@@ -487,6 +490,15 @@ void SetNetworkStateOverride(bool offline,
   } else {
     GetNetworkStateNotifier().ClearOverride();
   }
+}
+
+String IPAddressToString(const net::IPAddress& address) {
+  String unbracketed = String::FromUTF8(address.ToString());
+  if (!address.IsIPv6()) {
+    return unbracketed;
+  }
+
+  return "[" + unbracketed + "]";
 }
 
 }  // namespace
@@ -640,9 +652,11 @@ BuildObjectForResourceResponse(const ResourceResponse& response,
       break;
   }
 
-  // Use mime type from cached resource in case the one in response is empty.
+  // Use mime type from cached resource in case the one in response is empty
+  // or the response is a 304 Not Modified.
   String mime_type = response.MimeType();
-  if (mime_type.IsEmpty() && cached_resource)
+  if (cached_resource &&
+      (mime_type.IsEmpty() || response.HttpStatusCode() == 304))
     mime_type = cached_resource->GetResponse().MimeType();
 
   if (is_empty)
@@ -695,10 +709,11 @@ BuildObjectForResourceResponse(const ResourceResponse& response,
     }
   }
 
-  String remote_ip_address = response.RemoteIPAddress();
-  if (!remote_ip_address.IsEmpty()) {
-    response_object->setRemoteIPAddress(remote_ip_address);
-    response_object->setRemotePort(response.RemotePort());
+  const net::IPEndPoint& remote_ip_endpoint = response.RemoteIPEndpoint();
+  if (remote_ip_endpoint.address().IsValid()) {
+    response_object->setRemoteIPAddress(
+        IPAddressToString(remote_ip_endpoint.address()));
+    response_object->setRemotePort(remote_ip_endpoint.port());
   }
 
   String protocol = response.AlpnNegotiatedProtocol();
@@ -1009,6 +1024,22 @@ void InspectorNetworkAgent::PrepareRequest(
   }
   if (bypass_service_worker_.Get())
     request.SetSkipServiceWorker(true);
+
+  if (debug_header_enabled_.Get() &&
+      request.HttpHeaderField(RequestDebugHeaderScope::kHeaderName).IsNull()) {
+    ExecutionContext* context = nullptr;
+    if (worker_global_scope_) {
+      context = worker_global_scope_.Get();
+    } else if (loader && loader->GetFrame()) {
+      context = loader->GetFrame()->GetDocument()->ExecutingWindow();
+    }
+    String header =
+        RequestDebugHeaderScope::CaptureHeaderForCurrentLocation(context);
+    if (!header.IsNull()) {
+      request.SetHttpHeaderField(RequestDebugHeaderScope::kHeaderName,
+                                 AtomicString(header));
+    }
+  }
 }
 
 void InspectorNetworkAgent::WillSendRequest(
@@ -1522,6 +1553,13 @@ Response InspectorNetworkAgent::setExtraHTTPHeaders(
   return Response::Success();
 }
 
+Response InspectorNetworkAgent::setAttachDebugHeader(bool enabled) {
+  if (enabled && !enabled_.Get())
+    return Response::InvalidParams("Domain must be enabled");
+  debug_header_enabled_.Set(enabled);
+  return Response::Success();
+}
+
 bool InspectorNetworkAgent::CanGetResponseBodyBlob(const String& request_id) {
   NetworkResourcesData::ResourceData const* resource_data =
       resources_data_->Data(request_id);
@@ -1801,7 +1839,7 @@ bool InspectorNetworkAgent::FetchResourceContent(Document* document,
   Resource* cached_resource = document->Fetcher()->CachedResource(url);
   if (!cached_resource) {
     cached_resource = GetMemoryCache()->ResourceForURL(
-        url, document->Fetcher()->GetCacheIdentifier());
+        url, document->Fetcher()->GetCacheIdentifier(url));
   }
   if (cached_resource && InspectorPageAgent::CachedResourceContent(
                              cached_resource, content, base64_encoded))
@@ -1857,6 +1895,7 @@ InspectorNetworkAgent::InspectorNetworkAgent(
       bypass_service_worker_(&agent_state_, /*default_value=*/false),
       blocked_urls_(&agent_state_, /*default_value=*/false),
       extra_request_headers_(&agent_state_, /*default_value=*/WTF::String()),
+      debug_header_enabled_(&agent_state_, /*default_value=*/false),
       total_buffer_size_(&agent_state_,
                          /*default_value=*/kDefaultTotalBufferSize),
       resource_buffer_size_(&agent_state_,

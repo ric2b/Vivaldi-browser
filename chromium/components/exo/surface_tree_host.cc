@@ -17,7 +17,7 @@
 #include "components/exo/wm_helper.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/quads/compositor_frame.h"
-#include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/common/quads/shared_quad_state.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -34,6 +34,7 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/dip_util.h"
+#include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/presentation_feedback.h"
 
 namespace exo {
@@ -291,7 +292,7 @@ void SurfaceTreeHost::SubmitCompositorFrame() {
 void SurfaceTreeHost::SubmitEmptyCompositorFrame() {
   viz::CompositorFrame frame = PrepareToSubmitCompositorFrame();
 
-  const std::unique_ptr<viz::RenderPass>& render_pass =
+  const std::unique_ptr<viz::CompositorRenderPass>& render_pass =
       frame.render_pass_list.back();
   const gfx::Rect quad_rect = gfx::Rect(0, 0, 1, 1);
   viz::SharedQuadState* quad_state =
@@ -346,11 +347,11 @@ viz::CompositorFrame SurfaceTreeHost::PrepareToSubmitCompositorFrame() {
   frame.metadata.begin_frame_ack =
       viz::BeginFrameAck::CreateManualAckWithDamage();
   frame.metadata.frame_token = ++next_token_;
-  frame.render_pass_list.push_back(viz::RenderPass::Create());
-  const std::unique_ptr<viz::RenderPass>& render_pass =
+  frame.render_pass_list.push_back(viz::CompositorRenderPass::Create());
+  const std::unique_ptr<viz::CompositorRenderPass>& render_pass =
       frame.render_pass_list.back();
 
-  const viz::RenderPassId kRenderPassId{1};
+  const viz::CompositorRenderPassId kRenderPassId{1};
   // Compute a temporally stable (across frames) size for the render pass output
   // rectangle that is consistent with the window size. It is used to set the
   // size of the output surface. Note that computing the actual coverage while
@@ -365,8 +366,10 @@ viz::CompositorFrame SurfaceTreeHost::PrepareToSubmitCompositorFrame() {
   // because  the size is different.
   const float device_scale_factor =
       host_window()->layer()->device_scale_factor();
-  gfx::Size output_surface_size_in_pixels = gfx::ConvertSizeToPixel(
-      device_scale_factor, host_window_->bounds().size());
+  // TODO(crbug.com/1131628): Should this be ceil? Why do we choose floor?
+  gfx::Size output_surface_size_in_pixels =
+      gfx::ToFlooredSize(gfx::ConvertSizeToPixels(host_window_->bounds().size(),
+                                                  device_scale_factor));
   // Viz will crash if the frame size is empty. Ensure it's not empty.
   // crbug.com/1041932.
   if (output_surface_size_in_pixels.IsEmpty())
@@ -375,8 +378,6 @@ viz::CompositorFrame SurfaceTreeHost::PrepareToSubmitCompositorFrame() {
   render_pass->SetNew(kRenderPassId, gfx::Rect(output_surface_size_in_pixels),
                       gfx::Rect(), gfx::Transform());
   frame.metadata.device_scale_factor = device_scale_factor;
-  frame.metadata.local_surface_id_allocation_time =
-      host_window()->GetLocalSurfaceIdAllocation().allocation_time();
 
   return frame;
 }

@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "base/version.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_result.h"
 #include "components/permissions/permission_util.h"
@@ -50,6 +51,9 @@ enum class PermissionSourceUI {
   // through the notification UI.
   INLINE_SETTINGS = 5,
 
+  // Permission settings changes as part of the abusive origins revocation.
+  AUTO_REVOCATION = 6,
+
   // Always keep this at the end.
   NUM,
 };
@@ -69,7 +73,7 @@ enum class PermissionEmbargoStatus {
 // Enum used in UKMs and UMAs, do not re-order or change values. Deprecated
 // items should only be commented out. New items should be added at the end,
 // and the "PermissionPromptDisposition" histogram suffix needs to be updated to
-// match (tools/metrics/histograms/histograms.xml).
+// match (tools/metrics/histograms/histograms_xml/histogram_suffixes_list.xml).
 enum class PermissionPromptDisposition {
   // Not all permission actions will have an associated permission prompt (e.g.
   // changing permission via the settings page).
@@ -92,6 +96,14 @@ enum class PermissionPromptDisposition {
   // Only used on Android, an initially-collapsed infobar at the bottom of the
   // page.
   MINI_INFOBAR = 5,
+
+  // Only used on desktop, a chip on the left-hand side of the location bar that
+  // shows a bubble when clicked.
+  LOCATION_BAR_LEFT_CHIP = 6,
+
+  // There was no UI being shown. This is usually because the user closed an
+  // inactive tab that had a pending permission request.
+  NONE_VISIBLE = 7,
 };
 
 enum class AdaptiveTriggers {
@@ -101,6 +113,14 @@ enum class AdaptiveTriggers {
 
   // User denied permission prompt 3 or more times.
   THREE_CONSECUTIVE_DENIES = 0x01,
+};
+
+enum class PermissionAutoRevocationHistory {
+  // Permission has not been automatically revoked.
+  NONE = 0,
+
+  // Permission has been automatically revoked.
+  PREVIOUSLY_AUTO_REVOKED = 0x01,
 };
 
 // Provides a convenient way of logging UMA for permission related operations.
@@ -153,6 +173,11 @@ class PermissionUmaUtil {
 
   static void RecordInfobarDetailsExpanded(bool expanded);
 
+  static void RecordCrowdDenyIsLoadedAtAbuseCheckTime(bool loaded);
+
+  static void RecordCrowdDenyVersionAtAbuseCheckTime(
+      const base::Optional<base::Version>& version);
+
   // Record UMAs related to the Android "Missing permissions" infobar.
   static void RecordMissingPermissionInfobarShouldShow(
       bool should_show,
@@ -160,6 +185,12 @@ class PermissionUmaUtil {
   static void RecordMissingPermissionInfobarAction(
       PermissionAction action,
       const std::vector<ContentSettingsType>& content_settings_types);
+
+  static void RecordTimeElapsedBetweenGrantAndUse(ContentSettingsType type,
+                                                  base::TimeDelta delta);
+
+  static void RecordTimeElapsedBetweenGrantAndRevoke(ContentSettingsType type,
+                                                     base::TimeDelta delta);
 
   // A scoped class that will check the current resolved content setting on
   // construction and report a revocation metric accordingly if the revocation
@@ -187,6 +218,7 @@ class PermissionUmaUtil {
     ContentSettingsType content_type_;
     PermissionSourceUI source_ui_;
     bool is_initially_allowed_;
+    base::Time last_modified_date_;
   };
 
  private:

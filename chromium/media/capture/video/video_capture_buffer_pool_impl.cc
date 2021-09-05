@@ -12,18 +12,18 @@
 #include "build/build_config.h"
 #include "media/capture/video/video_capture_buffer_handle.h"
 #include "media/capture/video/video_capture_buffer_tracker.h"
+#include "media/capture/video/video_capture_buffer_tracker_factory_impl.h"
 #include "ui/gfx/buffer_format_util.h"
 
 namespace media {
 
 VideoCaptureBufferPoolImpl::VideoCaptureBufferPoolImpl(
-    std::unique_ptr<VideoCaptureBufferTrackerFactory> buffer_tracker_factory,
     VideoCaptureBufferType buffer_type,
     int count)
     : buffer_type_(buffer_type),
       count_(count),
-      next_buffer_id_(0),
-      buffer_tracker_factory_(std::move(buffer_tracker_factory)) {
+      buffer_tracker_factory_(
+          std::make_unique<media::VideoCaptureBufferTrackerFactoryImpl>()) {
   DCHECK_GT(count, 0);
 }
 
@@ -58,7 +58,7 @@ VideoCaptureBufferPoolImpl::CreateSharedMemoryViaRawFileDescriptorStruct(
     int buffer_id) {
 // This requires platforms where base::SharedMemoryHandle is backed by a
 // file descriptor.
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   base::AutoLock lock(lock_);
 
   VideoCaptureBufferTracker* tracker = GetTracker(buffer_id);
@@ -135,6 +135,31 @@ void VideoCaptureBufferPoolImpl::RelinquishProducerReservation(int buffer_id) {
   }
   DCHECK(tracker->held_by_producer());
   tracker->set_held_by_producer(false);
+}
+
+int VideoCaptureBufferPoolImpl::ReserveIdForExternalBuffer(
+    std::vector<int>* buffer_ids_to_drop) {
+  base::AutoLock lock(lock_);
+  int buffer_id = next_buffer_id_++;
+  external_buffers_[buffer_id] = false;
+
+  for (auto it = external_buffers_.begin(); it != external_buffers_.end();) {
+    if (it->second) {
+      buffer_ids_to_drop->push_back(it->first);
+      it = external_buffers_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  return buffer_id;
+}
+
+void VideoCaptureBufferPoolImpl::RelinquishExternalBufferReservation(
+    int buffer_id) {
+  base::AutoLock lock(lock_);
+  auto found = external_buffers_.find(buffer_id);
+  CHECK(found != external_buffers_.end());
+  found->second = true;
 }
 
 void VideoCaptureBufferPoolImpl::HoldForConsumers(int buffer_id,

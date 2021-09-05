@@ -28,8 +28,8 @@ extern const char kSyncShortNudgeDelayForTest[];
 extern const base::Feature kStopSyncInPausedState;
 extern const base::Feature
     kSyncAllowWalletDataInTransportModeWithCustomPassphrase;
+extern const base::Feature kSyncAutofillWalletOfferData;
 extern const base::Feature kSyncWifiConfigurations;
-extern const base::Feature kSyncDeviceInfoInTransportMode;
 extern const base::Feature kDecoupleSyncFromAndroidMasterSync;
 extern const base::Feature kFollowTrustedVaultKeyRotation;
 

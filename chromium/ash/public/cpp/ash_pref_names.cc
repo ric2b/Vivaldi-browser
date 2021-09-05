@@ -573,6 +573,31 @@ const char kNaturalScroll[] = "settings.touchpad.natural_scroll";
 // A boolean pref which is true if mouse reverse scroll is enabled.
 const char kMouseReverseScroll[] = "settings.mouse.reverse_scroll";
 
+// A dictionary storing the number of times and most recent time the multipaste
+// contextual nudge was shown.
+const char kMultipasteNudges[] = "ash.clipboard.multipaste_nudges";
+
+// A boolean pref that indicates whether dark mode is enabled.
+const char kDarkModeEnabled[] = "cros.system.dark_mode_enabled";
+// A boolean pref that indicates whether the color mode is themed. If true, the
+// background color will be calculated based on extracted wallpaper color.
+const char kColorModeThemed[] = "cros.system.color_mode_themed";
+
+// A boolean pref that indicates whether app badging is shown in launcher and
+// shelf.
+const char kAppNotificationBadgingEnabled[] =
+    "ash.app_notification_badging_enabled";
+
+// An integer pref that counts how many times the reverse gesture notification
+// shows.
+const char kReverseGestureNotificationCount[] =
+    "ash.wm.reverse_gesture_notification_count";
+
+// An integer pref that indicates whether global media controls is pinned to
+// shelf or it's unset and need to be determined by screen size during runtime.
+const char kGlobalMediaControlsPinned[] =
+    "ash.system.global_media_controls_pinned";
+
 // NOTE: New prefs should start with the "ash." prefix. Existing prefs moved
 // into this file should not be renamed, since they may be synced.
 

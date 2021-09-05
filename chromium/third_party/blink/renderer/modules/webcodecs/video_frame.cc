@@ -12,10 +12,12 @@
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_frame_metadata.h"
+#include "media/base/wait_and_replace_sync_token_client.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
-#include "media/renderers/yuv_util.h"
+#include "media/renderers/video_frame_yuv_converter.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_video_frame_init.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_video_pixel_format.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap_factories.h"
@@ -94,9 +96,9 @@ VideoFrame* VideoFrame::Create(ImageBitmap* source,
   base::TimeDelta timestamp =
       base::TimeDelta::FromMicroseconds(init->timestamp());
 
-  auto sk_image =
-      source->BitmapImage()->PaintImageForCurrentFrame().GetSkImage();
-  auto sk_color_space = sk_image->refColorSpace();
+  auto sk_image_info =
+      source->BitmapImage()->PaintImageForCurrentFrame().GetSkImageInfo();
+  auto sk_color_space = sk_image_info.refColorSpace();
   if (!sk_color_space) {
     sk_color_space = SkColorSpace::MakeSRGB();
   }
@@ -105,7 +107,7 @@ VideoFrame* VideoFrame::Create(ImageBitmap* source,
                                       "Invalid color space");
     return nullptr;
   }
-  auto sk_color_type = sk_image->colorType();
+  auto sk_color_type = sk_image_info.colorType();
   if (!IsValidSkColorType(sk_color_type)) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Invalid pixel format");
@@ -171,10 +173,12 @@ VideoFrame* VideoFrame::Create(ImageBitmap* source,
 
 // static
 bool VideoFrame::IsSupportedPlanarFormat(media::VideoFrame* frame) {
-  // For now only I420 in CPU memory is supported.
-  return frame && frame->IsMappable() &&
-         frame->format() == media::PIXEL_FORMAT_I420 &&
-         frame->layout().num_planes() == 3;
+  // For now only I420 or NV12 in CPU or GPU memory is supported.
+  return frame && (frame->IsMappable() || frame->HasGpuMemoryBuffer()) &&
+         ((frame->format() == media::PIXEL_FORMAT_I420 &&
+           frame->layout().num_planes() == 3) ||
+          (frame->format() == media::PIXEL_FORMAT_NV12 &&
+           frame->layout().num_planes() == 2));
 }
 
 String VideoFrame::format() const {
@@ -184,7 +188,9 @@ String VideoFrame::format() const {
 
   switch (local_frame->format()) {
     case media::PIXEL_FORMAT_I420:
-      return "I420";
+      return V8VideoPixelFormat(V8VideoPixelFormat::Enum::kI420);
+    case media::PIXEL_FORMAT_NV12:
+      return V8VideoPixelFormat(V8VideoPixelFormat::Enum::kNV12);
 
     default:
       NOTREACHED();
@@ -343,8 +349,9 @@ ScriptPromise VideoFrame::CreateImageBitmap(ScriptState* script_state,
 
   if ((local_frame->IsMappable() || local_frame->HasTextures()) &&
       (local_frame->format() == media::PIXEL_FORMAT_I420 ||
-       (local_frame->format() == media::PIXEL_FORMAT_NV12 &&
-        local_frame->HasTextures()))) {
+       (local_frame->HasTextures() &&
+        (local_frame->format() == media::PIXEL_FORMAT_NV12 ||
+         local_frame->format() == media::PIXEL_FORMAT_ABGR)))) {
     scoped_refptr<StaticBitmapImage> image;
     gfx::ColorSpace gfx_color_space = local_frame->ColorSpace();
     gfx_color_space = gfx_color_space.GetWithMatrixAndRange(
@@ -376,6 +383,8 @@ ScriptPromise VideoFrame::CreateImageBitmap(ScriptState* script_state,
     } else {
       viz::RasterContextProvider* raster_context_provider =
           Platform::Current()->SharedMainThreadContextProvider();
+      auto* ri = raster_context_provider->RasterInterface();
+
       gpu::SharedImageInterface* shared_image_interface =
           raster_context_provider->SharedImageInterface();
       uint32_t usage = gpu::SHARED_IMAGE_USAGE_GLES2;
@@ -393,23 +402,24 @@ ScriptPromise VideoFrame::CreateImageBitmap(ScriptState* script_state,
       dest_holder.sync_token = shared_image_interface->GenUnverifiedSyncToken();
       dest_holder.texture_target = GL_TEXTURE_2D;
 
-      media::ConvertFromVideoFrameYUV(local_frame.get(),
-                                      raster_context_provider, dest_holder);
+      if (local_frame->NumTextures() == 1) {
+        ri->WaitSyncTokenCHROMIUM(dest_holder.sync_token.GetConstData());
+        ri->CopySubTexture(
+            local_frame->mailbox_holder(0).mailbox, dest_holder.mailbox,
+            GL_TEXTURE_2D, 0, 0, 0, 0, local_frame->coded_size().width(),
+            local_frame->coded_size().height(), GL_FALSE, GL_FALSE);
+      } else {
+        media::VideoFrameYUVConverter::ConvertYUVVideoFrameNoCaching(
+            local_frame.get(), raster_context_provider, dest_holder);
+      }
       gpu::SyncToken sync_token;
-      raster_context_provider->RasterInterface()
-          ->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
+      ri->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
 
       auto release_callback = viz::SingleReleaseCallback::Create(base::BindOnce(
-          [](viz::RasterContextProvider* context, gpu::Mailbox mailbox,
-             const gpu::SyncToken& sync_token, bool is_lost) {
-            auto* ri = context->RasterInterface();
-            auto* sii = context->SharedImageInterface();
-            ri->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
-            gpu::SyncToken ri_sync_token;
-            ri->GenUnverifiedSyncTokenCHROMIUM(ri_sync_token.GetData());
-            sii->DestroySharedImage(ri_sync_token, mailbox);
-          },
-          base::Unretained(raster_context_provider), dest_holder.mailbox));
+          [](gpu::SharedImageInterface* sii, gpu::Mailbox mailbox,
+             const gpu::SyncToken& sync_token,
+             bool is_lost) { sii->DestroySharedImage(sync_token, mailbox); },
+          base::Unretained(shared_image_interface), dest_holder.mailbox));
 
       const SkImageInfo sk_image_info =
           SkImageInfo::Make(codedWidth(), codedHeight(), kN32_SkColorType,
@@ -421,6 +431,13 @@ ScriptPromise VideoFrame::CreateImageBitmap(ScriptState* script_state,
           SharedGpuContext::ContextProviderWrapper(),
           base::PlatformThread::CurrentRef(),
           Thread::Current()->GetTaskRunner(), std::move(release_callback));
+
+      if (local_frame->HasTextures()) {
+        // Attach a new sync token to |local_frame|, so it's not destroyed
+        // before |image| is fully created.
+        media::WaitAndReplaceSyncTokenClient client(ri);
+        local_frame->UpdateReleaseSyncToken(&client);
+      }
     }
 
     ImageBitmap* image_bitmap =

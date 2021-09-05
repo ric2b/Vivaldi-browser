@@ -11,13 +11,13 @@
 #include "base/run_loop.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
-#include "cc/test/pixel_test.h"
 #include "cc/test/pixel_test_utils.h"
 #include "cc/test/render_pass_test_utils.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/frame_sinks/copy_output_util.h"
-#include "components/viz/common/quads/render_pass.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
+#include "components/viz/service/display/viz_pixel_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -30,20 +30,22 @@
 namespace viz {
 namespace {
 
-template <typename RendererType>
 class CopyOutputScalingPixelTest
-    : public cc::RendererPixelTest<RendererType>,
-      public testing::WithParamInterface<
-          std::tuple<gfx::Vector2d, gfx::Vector2d, CopyOutputResult::Format>> {
+    : public VizPixelTest,
+      public testing::WithParamInterface<std::tuple<RendererType,
+                                                    gfx::Vector2d,
+                                                    gfx::Vector2d,
+                                                    CopyOutputResult::Format>> {
  public:
-  // Include the public accessor method from the parent class.
-  using cc::RendererPixelTest<RendererType>::renderer;
+  CopyOutputScalingPixelTest() : VizPixelTest(std::get<0>(GetParam())) {}
+
+  DirectRenderer* renderer() { return renderer_.get(); }
 
   void SetUp() override {
-    cc::RendererPixelTest<RendererType>::SetUp();
-    scale_from_ = std::get<0>(GetParam());
-    scale_to_ = std::get<1>(GetParam());
-    result_format_ = std::get<2>(GetParam());
+    VizPixelTest::SetUp();
+    scale_from_ = std::get<1>(GetParam());
+    scale_to_ = std::get<2>(GetParam());
+    result_format_ = std::get<3>(GetParam());
   }
 
   // This tests that copy requests requesting scaled results execute correctly.
@@ -91,13 +93,14 @@ class CopyOutputScalingPixelTest
                                                 SK_ColorBLUE, SK_ColorYELLOW};
     constexpr SkColor root_pass_color = SK_ColorWHITE;
 
-    RenderPassList list;
+    AggregatedRenderPassList list;
 
     // Create the render passes drawn on top of the root render pass.
-    RenderPass* smaller_passes[4];
+    AggregatedRenderPass* smaller_passes[4];
     gfx::Rect smaller_pass_rects[4];
-    RenderPassId pass_id{5};
-    for (int i = 0; i < 4; ++i, pass_id = RenderPassId{pass_id.value() - 1}) {
+    AggregatedRenderPassId pass_id{5};
+    for (int i = 0; i < 4;
+         ++i, pass_id = AggregatedRenderPassId{pass_id.value() - 1}) {
       smaller_pass_rects[i] = gfx::Rect(
           i % 2 == 0 ? x_block : (viewport_size.width() - 2 * x_block),
           i / 2 == 0 ? y_block : (viewport_size.height() - 2 * y_block),
@@ -110,7 +113,7 @@ class CopyOutputScalingPixelTest
     }
 
     // Create the root render pass and add all the child passes to it.
-    RenderPass* root_pass =
+    auto* root_pass =
         cc::AddRenderPass(&list, pass_id, gfx::Rect(viewport_size),
                           gfx::Transform(), cc::FilterOperations());
     for (int i = 0; i < 4; ++i)
@@ -292,7 +295,8 @@ class CopyOutputScalingPixelTest
 // Parameters common to all test instantiations. These are tuples consisting of
 // {scale_from, scale_to, i420_format}.
 const auto kParameters =
-    testing::Combine(testing::Values(gfx::Vector2d(1, 1),
+    testing::Combine(testing::ValuesIn(GetRendererTypesNoDawn()),
+                     testing::Values(gfx::Vector2d(1, 1),
                                      gfx::Vector2d(2, 1),
                                      gfx::Vector2d(1, 2),
                                      gfx::Vector2d(2, 2)),
@@ -302,30 +306,10 @@ const auto kParameters =
                      testing::Values(CopyOutputResult::Format::RGBA_BITMAP,
                                      CopyOutputResult::Format::I420_PLANES));
 
-using GLCopyOutputScalingPixelTest = CopyOutputScalingPixelTest<GLRenderer>;
-TEST_P(GLCopyOutputScalingPixelTest, ScaledCopyOfDrawnFrame) {
+TEST_P(CopyOutputScalingPixelTest, ScaledCopyOfDrawnFrame) {
   RunTest();
 }
-INSTANTIATE_TEST_SUITE_P(All, GLCopyOutputScalingPixelTest, kParameters);
-
-#if defined(OS_FUCHSIA)
-// TODO(crbug.com/1052351): Enable after flake is fixed.
-#define MAYBE_ScaledCopyOfDrawnFrame DISABLED_ScaledCopyOfDrawnFrame
-#else
-#define MAYBE_ScaledCopyOfDrawnFrame ScaledCopyOfDrawnFrame
-#endif
-using SkiaCopyOutputScalingPixelTest = CopyOutputScalingPixelTest<SkiaRenderer>;
-TEST_P(SkiaCopyOutputScalingPixelTest, MAYBE_ScaledCopyOfDrawnFrame) {
-  RunTest();
-}
-INSTANTIATE_TEST_SUITE_P(All, SkiaCopyOutputScalingPixelTest, kParameters);
-
-using SoftwareCopyOutputScalingPixelTest =
-    CopyOutputScalingPixelTest<SoftwareRenderer>;
-TEST_P(SoftwareCopyOutputScalingPixelTest, ScaledCopyOfDrawnFrame) {
-  RunTest();
-}
-INSTANTIATE_TEST_SUITE_P(All, SoftwareCopyOutputScalingPixelTest, kParameters);
+INSTANTIATE_TEST_SUITE_P(, CopyOutputScalingPixelTest, kParameters);
 
 }  // namespace
 }  // namespace viz

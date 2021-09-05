@@ -8,8 +8,11 @@ namespace location {
 namespace nearby {
 namespace chrome {
 
-BluetoothAdapter::BluetoothAdapter(bluetooth::mojom::Adapter* adapter)
-    : adapter_(adapter) {}
+BluetoothAdapter::BluetoothAdapter(
+    const mojo::SharedRemote<bluetooth::mojom::Adapter>& adapter)
+    : adapter_(adapter) {
+  DCHECK(adapter_.is_bound());
+}
 
 BluetoothAdapter::~BluetoothAdapter() = default;
 
@@ -55,13 +58,19 @@ bool BluetoothAdapter::SetScanMode(BluetoothAdapter::ScanMode scan_mode) {
 std::string BluetoothAdapter::GetName() const {
   bluetooth::mojom::AdapterInfoPtr info;
   bool success = adapter_->GetInfo(&info);
-  return success ? info->name : "";
+  return success ? info->name : std::string();
 }
 
 bool BluetoothAdapter::SetName(absl::string_view name) {
   bool set_name_success = false;
   bool call_success = adapter_->SetName(name.data(), &set_name_success);
   return call_success && set_name_success;
+}
+
+std::string BluetoothAdapter::GetMacAddress() const {
+  bluetooth::mojom::AdapterInfoPtr info;
+  bool success = adapter_->GetInfo(&info);
+  return success ? info->address : std::string();
 }
 
 }  // namespace chrome

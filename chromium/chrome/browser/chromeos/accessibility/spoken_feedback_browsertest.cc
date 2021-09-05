@@ -43,6 +43,7 @@
 #include "extensions/browser/browsertest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/test/ui_controls.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -454,6 +455,58 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, SpeakingTextUnderMouseForShelfItem) {
   sm_.Replay();
 }
 
+class ShelfNotificationBadgeSpokenFeedbackTest : public SpokenFeedbackTest {
+ protected:
+  ShelfNotificationBadgeSpokenFeedbackTest() {
+    scoped_features_.InitWithFeatures({::features::kNotificationIndicator}, {});
+  }
+  ~ShelfNotificationBadgeSpokenFeedbackTest() override = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_features_;
+};
+
+INSTANTIATE_TEST_SUITE_P(TestAsNormalAndGuestUser,
+                         ShelfNotificationBadgeSpokenFeedbackTest,
+                         ::testing::Values(kTestAsNormalUser,
+                                           kTestAsGuestUser));
+
+// Verifies that an announcement is triggered when focusing a ShelfItem with a
+// notification badge shown.
+IN_PROC_BROWSER_TEST_P(ShelfNotificationBadgeSpokenFeedbackTest,
+                       ShelfNotificationBadgeAnnouncement) {
+  EnableChromeVox();
+
+  // Create and add a test app to the shelf model.
+  ash::ShelfItem item;
+  item.id = ash::ShelfID("TestApp");
+  item.title = base::ASCIIToUTF16("TestAppTitle");
+  item.type = ash::ShelfItemType::TYPE_APP;
+  ash::ShelfModel::Get()->Add(item);
+
+  // Set the notification badge to be shown for the test app.
+  ash::ShelfModel::Get()->UpdateItemNotification("TestApp", /*has_badge=*/true);
+
+  // Focus on the shelf.
+  sm_.Call([this]() { PerformAcceleratorAction(ash::FOCUS_SHELF); });
+  sm_.ExpectSpeech("Launcher");
+  sm_.ExpectSpeech("Button");
+  sm_.ExpectSpeech("Shelf");
+  sm_.ExpectSpeech("Tool bar");
+
+  // Press right key twice to focus the test app.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("TestAppTitle");
+  sm_.ExpectSpeech("Button");
+
+  // Check that when a shelf app button with a notification badge is focused,
+  // the correct announcement occurs.
+  sm_.ExpectSpeech("TestAppTitle requests your attention.");
+
+  sm_.Replay();
+}
+
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OpenStatusTray) {
   EnableChromeVox();
 
@@ -537,8 +590,9 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OverviewMode) {
   sm_.Call([this]() { SendKeyPressWithShift(ui::VKEY_TAB); });
   sm_.ExpectSpeechPattern(
       "Chrom* - data:text slash html;charset equal utf-8, less than button "
-      "autofocus greater than Click me less than slash button greater than , "
-      "window");
+      "autofocus greater than Click me less than slash button greater than");
+  sm_.ExpectSpeechPattern("Press Ctrl plus W to close.");
+  sm_.ExpectSpeechPattern(", window");
 
   sm_.Replay();
 }
@@ -815,6 +869,26 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, SmartStickyMode) {
 
   sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_LEFT); });
   sm_.ExpectSpeech("Sticky mode enabled");
+  sm_.ExpectSpeech("start");
+
+  // Try a few jump commands and linear nav with no Search modifier. We never
+  // leave sticky mode.
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_E); });
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() { SendKeyPressWithShift(ui::VKEY_F); });
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("end");
+
+  sm_.Call([this]() { SendKeyPress(ui::VKEY_F); });
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() { SendKeyPressWithShift(ui::VKEY_E); });
+  sm_.ExpectSpeech("Edit text");
+
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_LEFT); });
   sm_.ExpectSpeech("start");
 
   // Now, navigate with sticky mode off.

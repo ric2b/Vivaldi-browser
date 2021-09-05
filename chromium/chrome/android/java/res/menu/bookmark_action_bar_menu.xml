@@ -23,6 +23,13 @@
             app:iconTint="?attr/vivaldiIconTint" />
         <!-- Vivaldi -->
         <item
+            android:id="@+id/sort_bookmarks_id"
+            android:title=""
+            android:icon="@drawable/vivaldi_sort_button_24dp"
+            app:showAsAction="ifRoom"
+            app:iconTint="?attr/vivaldiIconTint"
+            />
+        <item
             android:id="@+id/close_menu_id"
             android:icon="@drawable/vivaldi_close_mobile_24dp"
             android:title="@string/panel_close"

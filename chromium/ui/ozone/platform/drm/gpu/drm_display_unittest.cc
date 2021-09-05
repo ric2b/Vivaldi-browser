@@ -14,7 +14,6 @@
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager.h"
 #include "ui/ozone/platform/drm/gpu/mock_drm_device.h"
-#include "ui/ozone/platform/drm/gpu/screen_manager.h"
 
 using ::testing::_;
 using ::testing::SizeIs;
@@ -53,17 +52,11 @@ class MockHardwareDisplayPlaneManager : public HardwareDisplayPlaneManager {
                     const std::vector<display::GammaRampRGBEntry>& degamma_lut,
                     const std::vector<display::GammaRampRGBEntry>& gamma_lut));
 
-  bool Modeset(uint32_t crtc_id,
-               uint32_t framebuffer_id,
-               uint32_t connector_id,
-               const drmModeModeInfo& mode,
-               const HardwareDisplayPlaneList& plane_list) override {
-    return false;
-  }
-  bool DisableModeset(uint32_t crtc_id, uint32_t connector) override {
+  bool Commit(CommitRequest commit_request, uint32_t flags) override {
     return false;
   }
   bool Commit(HardwareDisplayPlaneList* plane_list,
+              bool should_modeset,
               scoped_refptr<PageFlipRequest> page_flip_request,
               std::unique_ptr<gfx::GpuFence>* out_fence) override {
     return false;
@@ -117,7 +110,7 @@ class DrmDisplayTest : public testing::Test {
   DrmDisplayTest()
       : mock_drm_device_(base::MakeRefCounted<MockDrmDevice>(
             std::make_unique<MockGbmDevice>())),
-        drm_display_(&screen_manager_, mock_drm_device_) {}
+        drm_display_(mock_drm_device_) {}
 
   MockHardwareDisplayPlaneManager* AddMockHardwareDisplayPlaneManager() {
     auto mock_hardware_display_plane_manager =
@@ -132,7 +125,6 @@ class DrmDisplayTest : public testing::Test {
 
   base::test::TaskEnvironment env_;
   scoped_refptr<DrmDevice> mock_drm_device_;
-  ScreenManager screen_manager_;
   DrmDisplay drm_display_;
 };
 

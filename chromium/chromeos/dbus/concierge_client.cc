@@ -31,7 +31,7 @@ namespace chromeos {
 
 class ConciergeClientImpl : public ConciergeClient {
  public:
-  ConciergeClientImpl() {}
+  ConciergeClientImpl() = default;
 
   ~ConciergeClientImpl() override = default;
 
@@ -233,6 +233,12 @@ class ConciergeClientImpl : public ConciergeClient {
     CallMethod(concierge::kResizeDiskImageMethod, request, std::move(callback));
   }
 
+  void SetVmId(const vm_tools::concierge::SetVmIdRequest& request,
+               DBusMethodCallback<vm_tools::concierge::SetVmIdResponse>
+                   callback) override {
+    CallMethod(concierge::kSetVmIdMethod, request, std::move(callback));
+  }
+
  protected:
   void Init(dbus::Bus* bus) override {
     concierge_proxy_ = bus->GetObjectProxy(
@@ -421,10 +427,14 @@ class ConciergeClientImpl : public ConciergeClient {
 
   dbus::ObjectProxy* concierge_proxy_ = nullptr;
 
-  base::ObserverList<Observer> observer_list_;
-  base::ObserverList<VmObserver>::Unchecked vm_observer_list_;
-  base::ObserverList<ContainerObserver>::Unchecked container_observer_list_;
-  base::ObserverList<DiskImageObserver>::Unchecked disk_image_observer_list_;
+  base::ObserverList<Observer> observer_list_{
+      base::ObserverListPolicy::EXISTING_ONLY};
+  base::ObserverList<VmObserver>::Unchecked vm_observer_list_{
+      base::ObserverListPolicy::EXISTING_ONLY};
+  base::ObserverList<ContainerObserver>::Unchecked container_observer_list_{
+      base::ObserverListPolicy::EXISTING_ONLY};
+  base::ObserverList<DiskImageObserver>::Unchecked disk_image_observer_list_{
+      base::ObserverListPolicy::EXISTING_ONLY};
 
   bool is_vm_started_signal_connected_ = false;
   bool is_vm_stopped_signal_connected_ = false;

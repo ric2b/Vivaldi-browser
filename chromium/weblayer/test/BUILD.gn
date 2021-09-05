@@ -73,6 +73,8 @@ if (is_android) {
 }
 
 test("weblayer_browsertests") {
+  use_xvfb = use_xvfb_in_this_config
+
   data = [
     "$root_out_dir/weblayer_shell.pak",
     "data/",
@@ -82,7 +84,6 @@ test("weblayer_browsertests") {
   ]
 
   data_deps = [
-    "//testing/buildbot/filters:weblayer_browsertests_filters",
     "//third_party/mesa_headers",
     "//weblayer/shell:pak",
   ]
@@ -131,6 +132,7 @@ test("weblayer_browsertests") {
     "../browser/client_hints_browsertest.cc",
     "../browser/content_settings_browsertest.cc",
     "../browser/cookie_manager_browsertest.cc",
+    "../browser/default_search_engine_browsertest.cc",
     "../browser/download_browsertest.cc",
     "../browser/errorpage_browsertest.cc",
     "../browser/favicon/favicon_fetcher_browsertest.cc",
@@ -147,6 +149,7 @@ test("weblayer_browsertests") {
     "../browser/profile_browsertest.cc",
     "../browser/site_isolation_browsertest.cc",
     "../browser/ssl_browsertest.cc",
+    "../browser/subresource_filter_browsertest.cc",
     "../browser/translate_browsertest.cc",
     "../browser/url_bar/url_bar_browsertest.cc",
     "../browser/weblayer_variations_http_browsertest.cc",

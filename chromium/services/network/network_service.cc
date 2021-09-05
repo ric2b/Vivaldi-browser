@@ -35,9 +35,9 @@
 #include "net/cert/cert_database.h"
 #include "net/cert/ct_log_response_parser.h"
 #include "net/cert/signed_tree_head.h"
-#include "net/dns/dns_config_overrides.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/host_resolver_manager.h"
+#include "net/dns/public/dns_config_overrides.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/log/file_net_log_observer.h"
 #include "net/log/net_log.h"
@@ -50,6 +50,7 @@
 #include "services/network/crl_set_distributor.h"
 #include "services/network/cross_origin_read_blocking_exception_for_plugin.h"
 #include "services/network/dns_config_change_manager.h"
+#include "services/network/first_party_sets/preloaded_first_party_sets.h"
 #include "services/network/http_auth_cache_copier.h"
 #include "services/network/legacy_tls_config_distributor.h"
 #include "services/network/net_log_exporter.h"
@@ -62,7 +63,6 @@
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
 #include "services/network/public/cpp/load_info_util.h"
 #include "services/network/public/cpp/network_switches.h"
-#include "services/network/sct_auditing_cache.h"
 #include "services/network/url_loader.h"
 
 #if defined(OS_ANDROID) && defined(ARCH_CPU_ARMEL)
@@ -77,6 +77,10 @@
 #if defined(OS_ANDROID)
 #include "base/android/application_status_listener.h"
 #include "net/android/http_auth_negotiate_android.h"
+#endif
+
+#if BUILDFLAG(IS_CT_SUPPORTED)
+#include "services/network/sct_auditing_cache.h"
 #endif
 
 namespace network {
@@ -369,6 +373,8 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
 
   trust_token_key_commitments_ = std::make_unique<TrustTokenKeyCommitments>();
 
+  preloaded_first_party_sets_ = std::make_unique<PreloadedFirstPartySets>();
+
 #if BUILDFLAG(IS_CT_SUPPORTED)
   constexpr size_t kMaxSCTAuditingCacheEntries = 1024;
   sct_auditing_cache_ =
@@ -505,7 +511,7 @@ void NetworkService::CreateNetworkContext(
 
 void NetworkService::ConfigureStubHostResolver(
     bool insecure_dns_client_enabled,
-    net::DnsConfig::SecureDnsMode secure_dns_mode,
+    net::SecureDnsMode secure_dns_mode,
     base::Optional<std::vector<mojom::DnsOverHttpsServerPtr>>
         dns_over_https_servers) {
   DCHECK(!dns_over_https_servers || !dns_over_https_servers->empty());
@@ -535,7 +541,7 @@ void NetworkService::ConfigureStubHostResolver(
   // a quick hack to increase the timeout for these requests.
   // TODO(crbug.com/1105138): Rethink the timeout logic to be less aggressive in
   // cases where there is no fallback, without needing to make so many retries.
-  if (secure_dns_mode == net::DnsConfig::SecureDnsMode::SECURE)
+  if (secure_dns_mode == net::SecureDnsMode::kSecure)
     overrides.doh_attempts = 3;
 
   host_resolver_manager_->SetDnsConfigOverrides(overrides);
@@ -757,6 +763,19 @@ void NetworkService::SetTrustTokenKeyCommitments(
 void NetworkService::ClearSCTAuditingCache() {
   sct_auditing_cache_->ClearCache();
 }
+
+void NetworkService::ConfigureSCTAuditing(
+    bool enabled,
+    double sampling_rate,
+    const GURL& reporting_uri,
+    const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
+    mojo::PendingRemote<mojom::URLLoaderFactory> factory) {
+  sct_auditing_cache_->set_enabled(enabled);
+  sct_auditing_cache_->set_sampling_rate(sampling_rate);
+  sct_auditing_cache_->set_report_uri(reporting_uri);
+  sct_auditing_cache_->set_traffic_annotation(traffic_annotation);
+  sct_auditing_cache_->set_url_loader_factory(std::move(factory));
+}
 #endif
 
 #if defined(OS_ANDROID)
@@ -777,6 +796,10 @@ void NetworkService::BindTestInterface(
     auto pipe = receiver.PassPipe();
     registry_->TryBindInterface(mojom::NetworkServiceTest::Name_, &pipe);
   }
+}
+
+void NetworkService::SetPreloadedFirstPartySets(const std::string& raw_sets) {
+  preloaded_first_party_sets_->ParseAndSet(raw_sets);
 }
 
 std::unique_ptr<net::HttpAuthHandlerFactory>

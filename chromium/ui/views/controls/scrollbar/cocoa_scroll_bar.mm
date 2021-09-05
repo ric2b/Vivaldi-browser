@@ -221,11 +221,11 @@ void CocoaScrollBar::OnPaint(gfx::Canvas* canvas) {
                           ui::NativeTheme::kNormal, GetLocalBounds(), params);
 }
 
-bool CocoaScrollBar::CanProcessEventsWithinSubtree() const {
+bool CocoaScrollBar::GetCanProcessEventsWithinSubtree() const {
   // If using overlay scrollbars, do not process events when fully hidden.
   return scroller_style_ == NSScrollerStyleOverlay
              ? !IsScrollbarFullyHidden()
-             : ScrollBar::CanProcessEventsWithinSubtree();
+             : ScrollBar::GetCanProcessEventsWithinSubtree();
 }
 
 bool CocoaScrollBar::OnMousePressed(const ui::MouseEvent& event) {
@@ -508,8 +508,7 @@ base::RetainingOneShotTimer* ScrollBar::GetHideTimerForTesting(
   return &static_cast<CocoaScrollBar*>(scroll_bar)->hide_scrollbar_timer_;
 }
 
-BEGIN_METADATA(CocoaScrollBar)
-METADATA_PARENT_CLASS(ScrollBar)
-END_METADATA()
+BEGIN_METADATA(CocoaScrollBar, ScrollBar)
+END_METADATA
 
 }  // namespace views

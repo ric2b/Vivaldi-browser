@@ -11,15 +11,14 @@
 #include <functional>
 #include <tuple>
 
-#include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 
 namespace blink {
 
 // An identifiable surface.
 //
-// This class intends to be a lightweight wrapper over a simple integer. It
-// exhibits the following characteristics:
+// This class intends to be a lightweight wrapper over a simple 64-bit integer.
+// It exhibits the following characteristics:
 //
 //   * All methods are constexpr.
 //   * Immutable.
@@ -30,7 +29,28 @@ namespace blink {
 //
 // The least-significant |kTypeBits| of the value is used to store
 // a IdentifiableSurface::Type value. The remainder stores the 56
-// least-significant bits of an IdentifiableToken.
+// least-significant bits of an `IdentifiableToken` as illustrated below:
+//              ✂
+//    ┌─────────┊────────────────────────────────────────┐ ┌──────────┐
+//    │(discard)✂           IdentifiableToken            │ │   Type   │
+//    └─────────┊───────────────────┬────────────────────┘ └────┬─────┘
+// Bit 64       ┊55                 ┊                   0   7   ┊    0
+//              ✂                   ↓                           ↓
+//              ┌────────────────────────────────────────┬──────────┐
+//              │                                        │          │
+//              └────────────────────────────────────────┴──────────┘
+//           Bit 64                                     8 7        0
+//              │←────────────── IdentifiableSurface ──────────────→│
+//
+// Only the lower 56 bits of `IdentifiableToken` contribute to an
+// `IdentifiableSurface`.
+//
+// See descriptions for the `Type` enum values for details on how the
+// `IdentifiableToken` is generated for each type. The descriptions use the
+// following notation to indicate how the value is recorded:
+//
+//     IdentifiableSurface = { IdentifiableToken value, Type value }
+//     Value = [description of how the value is constructed]
 class IdentifiableSurface {
  public:
   // Number of bits used by Type.
@@ -47,7 +67,7 @@ class IdentifiableSurface {
   // (Type::kCanvasReadback), bits [4-6] are skipped ops, sensitive ops, and
   // partial image ops bits, respectively. The remaining bits are for the canvas
   // operations digest. If the digest wasn't calculated (there's no digest for
-  // webgl, for instance), the digest field is 0.
+  // WebGL, for instance), the digest field is 0.
   enum CanvasTaintBit : uint64_t {
     // At least one drawing operation didn't update the digest -- this is ether
     // due to performance or resource consumption reasons.
@@ -72,9 +92,27 @@ class IdentifiableSurface {
   enum class Type : uint64_t {
     // This type is reserved for internal use and should not be used for
     // reporting any identifiability metrics.
+    //
+    // All metrics defined under the Identifiability event in
+    // tools/metrics/ukm.xml fall into this type. Hence using
+    // `ukm::builders::Identifiability` results in metrics with this type.
     kReservedInternal = 0,
 
-    // Input is a mojom::WebFeature
+    // Represents a web feature whose output directly contributes to
+    // identifiability.
+    //
+    // These APIs are annotated with the `[HighEntropy=Direct]` extended WebIDL
+    // attribute in their respective IDL file. Each such API also has an
+    // associated `UseCounter` value specified directly via the
+    // `[MeasureAs=??]` attribute or indirectly via the `[Measure]` attribute.
+    // This `UseCounter` value is the key for recording the output of the API.
+    // `web_feature.mojom`[1] defines all the `UseCounter` values and is
+    // available as mojom::WebFeature.
+    //
+    //     IdentifiableSurface = { mojom::WebFeature, kWebFeature }
+    //     Value = IdentifiableToken( $(output of the attribute or method) )
+    //
+    // [1]: //blink/public/mojom/web_feature/web_feature.mojom
     kWebFeature = 1,
 
     // Represents a readback of a canvas. Input is the
@@ -93,10 +131,14 @@ class IdentifiableSurface {
     // GenericFamilyType.
     kGenericFontLookup = 4,
 
-    // Attempt to access extension URLs.
+    // Represents an attempt to access files made publicly accessible by
+    // extensions via web_accessible_resources. This may be recorded both in the
+    // renderer and the browser. Browser-side events will be associated with
+    // the top frame's navigation ID, not a child frame. Render-side events are
+    // associated with document's ID.
     kExtensionFileAccess = 5,
 
-    // Extension running content-script.
+    // Extension running content-script. Input is the extension ID.
     kExtensionContentScript = 6,
 
     // Represents making a measurement of one of the above surfacess. This
@@ -129,9 +171,36 @@ class IdentifiableSurface {
     // FontSelectionRequest (i.e. weight, width and slope).
     kLocalFontLookupByFallbackCharacter = 13,
 
-    // Represents loading a font locally as a last resort. Input is the
+    // Represents looking up a font locally as a last resort. Input is the
     // FontSelectionRequest (i.e. weight, width and slope).
     kLocalFontLookupAsLastResort = 14,
+
+    // Extension cancelled a network request. Input is the extension ID.
+    kExtensionCancelRequest = 15,
+
+    // WebGLRenderingContext.getShaderPrecisionFormat() is a high entropy API
+    // that leaks entropy about the underlying GL implementation.
+    // The output is keyed on two enums, but for the identifiability study we
+    // will key this type on a digest of both the enums' values.
+    kWebGLShaderPrecisionFormat = 16,
+
+    // MediaCapabilities.decodingInfo() reveals information about whether
+    // media decoding will be supported, smooth and/or power efficient,
+    // according to its codec, size, and other parameters. It can further reveal
+    // details about encrypted decoding support according to the key system
+    // configuration provided.
+    kMediaCapabilities_DecodingInfo = 25,
+
+    // Represents determining that a local font exists or does not, based on a
+    // name lookup that is only allowed to match a unique name. This occurs in
+    // @font-face CSS rules with a src:local attribute, as well as calls to
+    // FontFace.load() for a FontFace object with a src:local attribute. The
+    // latter can reveal whether a font exists before the full font data are
+    // obtained. Input is the lookup name. Output is a bool.
+    kLocalFontExistenceByUniqueNameOnly = 26,
+
+    // Represents loading a font locally. Input is the PostScript name.
+    kLocalFontLoadPostScriptName = 29,
 
     // We can use values up to and including |kMax|.
     kMax = (1 << kTypeBits) - 1
@@ -144,12 +213,6 @@ class IdentifiableSurface {
   // also be used as the first step in decoding an encoded metric hash.
   static constexpr IdentifiableSurface FromMetricHash(uint64_t metric_hash) {
     return IdentifiableSurface(metric_hash);
-  }
-
-  // Construct an IdentifiableSurface based on a surface type and an input hash.
-  static constexpr IdentifiableSurface FromTypeAndInput(Type type,
-                                                        uint64_t input) {
-    return IdentifiableSurface(KeyFromSurfaceTypeAndInput(type, input));
   }
 
   // Construct an IdentifiableSurface based on a surface type and an input
@@ -176,7 +239,7 @@ class IdentifiableSurface {
   // Returns the input hash for this IdentifiableSurface.
   //
   // The value that's returned can be different from what's used for
-  // constructing the IdentifiableSurface via FromTypeAndInput() if the input is
+  // constructing the IdentifiableSurface via FromTypeAndToken() if the input is
   // >= 2^56.
   constexpr uint64_t GetInputHash() const {
     return std::get<1>(SurfaceTypeAndInputFromMetricKey(metric_hash_));

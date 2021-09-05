@@ -18,6 +18,7 @@
 #include "base/unguessable_token.h"
 #include "components/paint_preview/common/capture_result.h"
 #include "components/paint_preview/common/mojom/paint_preview_recorder.mojom-forward.h"
+#include "components/paint_preview/common/version.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -274,17 +275,31 @@ void PaintPreviewClient::CapturePaintPreview(
     const PaintPreviewParams& params,
     content::RenderFrameHost* render_frame_host,
     PaintPreviewCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (base::Contains(all_document_data_, params.inner.document_guid)) {
     std::move(callback).Run(params.inner.document_guid,
                             mojom::PaintPreviewStatus::kGuidCollision, {});
     return;
   }
+  if (!render_frame_host || params.inner.document_guid.is_empty()) {
+    std::move(callback).Run(params.inner.document_guid,
+                            mojom::PaintPreviewStatus::kFailed, {});
+    return;
+  }
+  const GURL& url = render_frame_host->GetLastCommittedURL();
+  if (!url.is_valid()) {
+    std::move(callback).Run(params.inner.document_guid,
+                            mojom::PaintPreviewStatus::kFailed, {});
+    return;
+  }
+
   InProgressDocumentCaptureState document_data;
   document_data.should_clean_up_files = true;
   document_data.persistence = params.persistence;
   document_data.root_dir = params.root_dir;
-  document_data.proto.mutable_metadata()->set_url(
-      render_frame_host->GetLastCommittedURL().spec());
+  auto* metadata = document_data.proto.mutable_metadata();
+  metadata->set_url(url.spec());
+  metadata->set_version(kPaintPreviewVersion);
   document_data.callback = std::move(callback);
   document_data.source_id =
       ukm::GetSourceIdForWebContentsDocument(web_contents());
@@ -303,6 +318,9 @@ void PaintPreviewClient::CaptureSubframePaintPreview(
     const base::UnguessableToken& guid,
     const gfx::Rect& rect,
     content::RenderFrameHost* render_subframe_host) {
+  if (guid.is_empty())
+    return;
+
   auto it = all_document_data_.find(guid);
   if (it == all_document_data_.end())
     return;

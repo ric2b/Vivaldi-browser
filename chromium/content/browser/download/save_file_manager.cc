@@ -252,7 +252,7 @@ void SaveFileManager::SaveURL(SaveItemId save_item_id,
     request->mode = network::mojom::RequestMode::kNavigate;
 
     network::mojom::URLLoaderFactory* factory = nullptr;
-    std::unique_ptr<network::mojom::URLLoaderFactory> url_loader_factory;
+    mojo::Remote<network::mojom::URLLoaderFactory> factory_remote;
     auto* rfh = RenderFrameHostImpl::FromID(render_process_host_id,
                                             render_frame_routing_id);
 
@@ -261,26 +261,25 @@ void SaveFileManager::SaveURL(SaveItemId save_item_id,
     // can handle blob, file, webui, embedder provided schemes etc?
     // https://crbug.com/953967
     if (url.SchemeIs(url::kDataScheme)) {
-      url_loader_factory = std::make_unique<DataURLLoaderFactory>();
-      factory = url_loader_factory.get();
+      factory_remote.Bind(DataURLLoaderFactory::Create());
+      factory = factory_remote.get();
     } else if (url.SchemeIsFile()) {
-      url_loader_factory = std::make_unique<FileURLLoaderFactory>(
+      factory_remote.Bind(FileURLLoaderFactory::Create(
           context->GetPath(), context->GetSharedCorsOriginAccessList(),
-          base::TaskPriority::USER_VISIBLE);
-      factory = url_loader_factory.get();
+          base::TaskPriority::USER_VISIBLE));
+      factory = factory_remote.get();
     } else if (url.SchemeIsFileSystem() && rfh) {
       auto* storage_partition_impl =
           static_cast<StoragePartitionImpl*>(storage_partition);
       auto partition_domain =
           rfh->GetSiteInstance()->GetPartitionDomain(storage_partition_impl);
-      url_loader_factory = CreateFileSystemURLLoaderFactory(
+      factory_remote.Bind(CreateFileSystemURLLoaderFactory(
           rfh->GetProcess()->GetID(), rfh->GetFrameTreeNodeId(),
-          storage_partition->GetFileSystemContext(), partition_domain);
-      factory = url_loader_factory.get();
+          storage_partition->GetFileSystemContext(), partition_domain));
+      factory = factory_remote.get();
     } else if (rfh && url.SchemeIs(content::kChromeUIScheme)) {
-      url_loader_factory = CreateWebUIURLLoader(rfh, url.scheme(),
-                                                base::flat_set<std::string>());
-      factory = url_loader_factory.get();
+      factory_remote.Bind(CreateWebUIURLLoaderFactory(rfh, url.scheme(), {}));
+      factory = factory_remote.get();
     } else {
       factory = storage_partition->GetURLLoaderFactoryForBrowserProcess().get();
     }

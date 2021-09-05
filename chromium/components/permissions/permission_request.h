@@ -6,6 +6,7 @@
 #define COMPONENTS_PERMISSIONS_PERMISSION_REQUEST_H_
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -57,6 +58,7 @@ enum class PermissionRequestType {
   PERMISSION_CAMERA_PAN_TILT_ZOOM = 24,
   PERMISSION_WINDOW_PLACEMENT = 25,
   PERMISSION_FONT_ACCESS = 26,
+  PERMISSION_IDLE_DETECTION = 27,
   // NUM must be the last value in the enum.
   NUM
 };
@@ -114,20 +116,13 @@ class PermissionRequest {
 
 #if !defined(OS_ANDROID)
   // Returns the short text for the chip button related to this permission.
-  virtual base::string16 GetChipText() const;
+  virtual base::Optional<base::string16> GetChipText() const;
 #endif
 
   // Returns the shortened prompt text for this permission. The permission
   // bubble may coalesce different requests, and if it does, this text will
   // be displayed next to an image and indicate the user grants the permission.
   virtual base::string16 GetMessageTextFragment() const = 0;
-
-  // Returns a warning prompt text related to this permission.
-  virtual base::string16 GetMessageTextWarningFragment() const;
-
-  // Get the top-level origin currently displayed in the address bar associated
-  // with this request.
-  virtual GURL GetEmbeddingOrigin() const;
 
   // Get the origin on whose behalf this permission request is being made.
   virtual GURL GetOrigin() const = 0;

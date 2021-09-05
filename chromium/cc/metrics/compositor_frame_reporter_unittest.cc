@@ -32,7 +32,9 @@ class CompositorFrameReporterTest : public testing::Test {
             CompositorFrameReporter::ActiveTrackers(),
             viz::BeginFrameArgs(),
             nullptr,
-            /*should_report_metrics=*/true)) {
+            /*should_report_metrics=*/true,
+            CompositorFrameReporter::SmoothThread::kSmoothBoth,
+            /*layer_tree_host_id=*/1)) {
     pipeline_reporter_->set_tick_clock(&test_tick_clock_);
     AdvanceNowByMs(1);
   }
@@ -233,9 +235,12 @@ TEST_F(CompositorFrameReporterTest,
 
   const base::TimeTicks event_time = Now();
   std::unique_ptr<EventMetrics> event_metrics_ptrs[] = {
-      EventMetrics::Create(ui::ET_TOUCH_PRESSED, event_time, base::nullopt),
-      EventMetrics::Create(ui::ET_TOUCH_MOVED, event_time, base::nullopt),
-      EventMetrics::Create(ui::ET_TOUCH_MOVED, event_time, base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_PRESSED, base::nullopt, event_time,
+                           base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_MOVED, base::nullopt, event_time,
+                           base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_MOVED, base::nullopt, event_time,
+                           base::nullopt),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
   std::vector<EventMetrics> events_metrics = {
@@ -287,7 +292,8 @@ TEST_F(CompositorFrameReporterTest,
 
   const base::TimeTicks event_time = Now();
   std::unique_ptr<EventMetrics> event_metrics_ptrs[] = {
-      EventMetrics::Create(ui::ET_TOUCH_PRESSED, event_time, base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_PRESSED, base::nullopt, event_time,
+                           base::nullopt),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
   std::vector<EventMetrics> events_metrics = {*event_metrics_ptrs[0]};
@@ -434,12 +440,14 @@ TEST_F(CompositorFrameReporterTest,
 
   const base::TimeTicks event_time = Now();
   std::unique_ptr<EventMetrics> event_metrics_ptrs[] = {
-      EventMetrics::Create(ui::ET_GESTURE_SCROLL_BEGIN, event_time,
+      EventMetrics::Create(ui::ET_GESTURE_SCROLL_BEGIN, base::nullopt,
+                           event_time, ui::ScrollInputType::kWheel),
+      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE,
+                           EventMetrics::ScrollUpdateType::kStarted, event_time,
                            ui::ScrollInputType::kWheel),
-      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE, event_time,
-                           ui::ScrollInputType::kWheel),
-      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE, event_time,
-                           ui::ScrollInputType::kWheel),
+      EventMetrics::Create(ui::ET_GESTURE_SCROLL_UPDATE,
+                           EventMetrics::ScrollUpdateType::kContinued,
+                           event_time, ui::ScrollInputType::kWheel),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
   std::vector<EventMetrics> events_metrics = {
@@ -479,22 +487,22 @@ TEST_F(CompositorFrameReporterTest,
   struct {
     const char* name;
     const int64_t latency_ms;
-    const int count;
-  } expected_counts[] = {
-      {"EventLatency.GestureScrollBegin.Wheel.TotalLatency", total_latency_ms,
-       1},
+  } expected_metrics[] = {
+      {"EventLatency.GestureScrollBegin.Wheel.TotalLatency", total_latency_ms},
       {"EventLatency.GestureScrollBegin.Wheel.TotalLatencyToSwapBegin",
-       swap_begin_latency_ms, 1},
-      {"EventLatency.GestureScrollUpdate.Wheel.TotalLatency", total_latency_ms,
-       2},
+       swap_begin_latency_ms},
+      {"EventLatency.FirstGestureScrollUpdate.Wheel.TotalLatency",
+       total_latency_ms},
+      {"EventLatency.FirstGestureScrollUpdate.Wheel.TotalLatencyToSwapBegin",
+       swap_begin_latency_ms},
+      {"EventLatency.GestureScrollUpdate.Wheel.TotalLatency", total_latency_ms},
       {"EventLatency.GestureScrollUpdate.Wheel.TotalLatencyToSwapBegin",
-       swap_begin_latency_ms, 2},
+       swap_begin_latency_ms},
   };
-  for (const auto& expected_count : expected_counts) {
-    histogram_tester.ExpectTotalCount(expected_count.name,
-                                      expected_count.count);
-    histogram_tester.ExpectBucketCount(
-        expected_count.name, expected_count.latency_ms, expected_count.count);
+  for (const auto& expected_metric : expected_metrics) {
+    histogram_tester.ExpectTotalCount(expected_metric.name, 1);
+    histogram_tester.ExpectBucketCount(expected_metric.name,
+                                       expected_metric.latency_ms, 1);
   }
   histogram_tester.ExpectTotalCount("EventLatency.TotalLatency", 3);
 }
@@ -507,9 +515,12 @@ TEST_F(CompositorFrameReporterTest,
 
   const base::TimeTicks event_time = Now();
   std::unique_ptr<EventMetrics> event_metrics_ptrs[] = {
-      EventMetrics::Create(ui::ET_TOUCH_PRESSED, event_time, base::nullopt),
-      EventMetrics::Create(ui::ET_TOUCH_MOVED, event_time, base::nullopt),
-      EventMetrics::Create(ui::ET_TOUCH_MOVED, event_time, base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_PRESSED, base::nullopt, event_time,
+                           base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_MOVED, base::nullopt, event_time,
+                           base::nullopt),
+      EventMetrics::Create(ui::ET_TOUCH_MOVED, base::nullopt, event_time,
+                           base::nullopt),
   };
   EXPECT_THAT(event_metrics_ptrs, Each(NotNull()));
   std::vector<EventMetrics> events_metrics = {

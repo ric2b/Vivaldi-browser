@@ -59,7 +59,7 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
       public SynchronousInputHandlerProxy,
       public cc::SnapFlingClient {
  public:
-  InputHandlerProxy(cc::InputHandler* input_handler,
+  InputHandlerProxy(cc::InputHandler& input_handler,
                     InputHandlerProxyClient* client,
                     bool force_input_to_main_thread);
   ~InputHandlerProxy() override;
@@ -229,9 +229,19 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
       const blink::WebGestureEvent& event,
       const blink::WebInputEventAttribution& original_attribution);
   EventDisposition HandleGestureScrollEnd(const blink::WebGestureEvent& event);
-  EventDisposition HandleTouchStart(const blink::WebTouchEvent& event);
-  EventDisposition HandleTouchMove(const blink::WebTouchEvent& event);
-  EventDisposition HandleTouchEnd(const blink::WebTouchEvent& event);
+  EventDisposition HandleTouchStart(EventWithCallback* event_with_callback);
+  EventDisposition HandleTouchMove(EventWithCallback* event_with_callback);
+  EventDisposition HandleTouchEnd(EventWithCallback* event_with_callback);
+
+  const cc::InputHandlerPointerResult HandlePointerDown(
+      EventWithCallback* event_with_callback,
+      const gfx::PointF& position);
+  const cc::InputHandlerPointerResult HandlePointerMove(
+      EventWithCallback* event_with_callback,
+      const gfx::PointF& position);
+  const cc::InputHandlerPointerResult HandlePointerUp(
+      EventWithCallback* event_with_callback,
+      const gfx::PointF& position);
 
   void InputHandlerScrollEnd();
 
@@ -263,7 +273,6 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
 
   EventDisposition RouteToTypeSpecificHandler(
       EventWithCallback* event_with_callback,
-      const ui::LatencyInfo& original_latency_info,
       const blink::WebInputEventAttribution& original_attribution);
 
   void set_event_attribution_enabled(bool enabled) {
@@ -271,6 +280,10 @@ class BLINK_PLATFORM_EXPORT InputHandlerProxy
   }
 
   InputHandlerProxyClient* client_;
+
+  // The input handler object is owned by the compositor delegate. The input
+  // handler must call WillShutdown() on this class before it is deleted at
+  // which point this pointer will be cleared.
   cc::InputHandler* input_handler_;
 
   SynchronousInputHandler* synchronous_input_handler_;

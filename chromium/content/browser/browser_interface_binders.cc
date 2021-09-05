@@ -18,19 +18,21 @@
 #include "content/browser/cookie_store/cookie_store_context.h"
 #include "content/browser/eye_dropper_chooser_impl.h"
 #include "content/browser/feature_observer.h"
-#include "content/browser/frame_host/clipboard_host_impl.h"
-#include "content/browser/frame_host/raw_clipboard_host_impl.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/federated_learning/floc_service_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/image_capture/image_capture_impl.h"
 #include "content/browser/keyboard_lock/keyboard_lock_service_impl.h"
 #include "content/browser/loader/content_security_notifier.h"
+#include "content/browser/media/midi_host.h"
 #include "content/browser/media/session/media_session_service_impl.h"
 #include "content/browser/picture_in_picture/picture_in_picture_service_impl.h"
 #include "content/browser/process_internals/process_internals.mojom.h"
 #include "content/browser/process_internals/process_internals_ui.h"
+#include "content/browser/renderer_host/clipboard_host_impl.h"
 #include "content/browser/renderer_host/media/media_devices_dispatcher_host.h"
 #include "content/browser/renderer_host/media/media_stream_dispatcher_host.h"
+#include "content/browser/renderer_host/raw_clipboard_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/screen_enumeration/screen_enumeration_impl.h"
 #include "content/browser/service_worker/service_worker_host.h"
@@ -64,6 +66,8 @@
 #include "media/mojo/services/video_decode_perf_history.h"
 #include "services/device/public/mojom/sensor_provider.mojom.h"
 #include "services/device/public/mojom/vibration_manager.mojom.h"
+#include "services/metrics/public/mojom/ukm_interface.mojom.h"
+#include "services/metrics/ukm_recorder_interface.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom.h"
 #include "services/shape_detection/public/mojom/barcodedetection_provider.mojom.h"
@@ -73,6 +77,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/appcache/appcache.mojom.h"
 #include "third_party/blink/public/mojom/background_fetch/background_fetch.mojom.h"
+#include "third_party/blink/public/mojom/background_sync/background_sync.mojom.h"
 #include "third_party/blink/public/mojom/badging/badging.mojom.h"
 #include "third_party/blink/public/mojom/bluetooth/web_bluetooth.mojom.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom.h"
@@ -81,6 +86,7 @@
 #include "third_party/blink/public/mojom/cookie_store/cookie_store.mojom.h"
 #include "third_party/blink/public/mojom/credentialmanager/credential_manager.mojom.h"
 #include "third_party/blink/public/mojom/feature_observer/feature_observer.mojom.h"
+#include "third_party/blink/public/mojom/file_system_access/native_file_system_manager.mojom.h"
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom.h"
 #include "third_party/blink/public/mojom/geolocation/geolocation_service.mojom.h"
 #include "third_party/blink/public/mojom/idle/idle_manager.mojom.h"
@@ -96,7 +102,6 @@
 #include "third_party/blink/public/mojom/mediasession/media_session.mojom.h"
 #include "third_party/blink/public/mojom/mediastream/media_devices.mojom.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
-#include "third_party/blink/public/mojom/native_file_system/native_file_system_manager.mojom.h"
 #include "third_party/blink/public/mojom/native_io/native_io.mojom.h"
 #include "third_party/blink/public/mojom/notifications/notification_service.mojom.h"
 #include "third_party/blink/public/mojom/payments/payment_app.mojom.h"
@@ -121,6 +126,7 @@
 #include "third_party/blink/public/public_buildflags.h"
 
 #if !defined(OS_ANDROID)
+#include "content/browser/direct_sockets/direct_sockets_service_impl.h"
 #include "content/browser/installedapp/installed_app_provider_impl.h"
 #include "content/public/common/content_switches.h"
 #include "media/mojo/mojom/speech_recognition_service.mojom.h"
@@ -145,6 +151,10 @@
 #if defined(OS_MAC)
 #include "content/browser/renderer_host/text_input_host_impl.h"
 #include "third_party/blink/public/mojom/input/text_input_host.mojom.h"
+#endif
+
+#if defined(OS_MAC) && defined(ARCH_CPU_ARM_FAMILY)
+#include "media/mojo/mojom/cdm_infobar_service.mojom.h"
 #endif
 
 namespace content {
@@ -199,6 +209,12 @@ void BindTextInputHost(
       base::BindOnce(&TextInputHostImpl::Create, std::move(receiver)));
 }
 #endif
+
+void BindUkmRecorderInterface(
+    mojo::PendingReceiver<ukm::mojom::UkmRecorderInterface> receiver) {
+  metrics::UkmRecorderInterface::Create(ukm::UkmRecorder::Get(),
+                                        std::move(receiver));
+}
 
 void BindBadgeServiceForServiceWorkerOnUI(
     int service_worker_process_id,
@@ -322,8 +338,7 @@ void BindTextSuggestionHostForFrame(
     content::RenderFrameHost* host,
     mojo::PendingReceiver<blink::mojom::TextSuggestionHost> receiver) {
   auto* view = static_cast<RenderWidgetHostViewAndroid*>(host->GetView());
-  DCHECK(view);
-  if (!view->text_suggestion_host())
+  if (!view || !view->text_suggestion_host())
     return;
 
   view->text_suggestion_host()->BindTextSuggestionHost(std::move(receiver));
@@ -438,7 +453,7 @@ BindServiceWorkerReceiverForOrigin(
              const url::Origin&, mojo::PendingReceiver<Interface>),
          const ServiceWorkerVersionInfo& info,
          mojo::PendingReceiver<Interface> receiver) {
-        auto origin = info.script_origin;
+        auto origin = info.origin;
         RunOrPostTaskToBindServiceWorkerReceiver<
             const url::Origin&, mojo::PendingReceiver<Interface>>(
             host, method, origin, std::move(receiver));
@@ -460,7 +475,7 @@ BindServiceWorkerReceiverForOriginAndFrameId(
              int, const url::Origin&, mojo::PendingReceiver<Interface>),
          const ServiceWorkerVersionInfo& info,
          mojo::PendingReceiver<Interface> receiver) {
-        auto origin = info.script_origin;
+        auto origin = info.origin;
         RunOrPostTaskToBindServiceWorkerReceiver<
             int, const url::Origin&, mojo::PendingReceiver<Interface>>(
             host, method, MSG_ROUTING_NONE, origin, std::move(receiver));
@@ -523,10 +538,8 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::FeatureObserver>(base::BindRepeating(
       &RenderFrameHostImpl::GetFeatureObserver, base::Unretained(host)));
 
-  if (base::FeatureList::IsEnabled(blink::features::kFontAccess)) {
-    map->Add<blink::mojom::FontAccessManager>(base::BindRepeating(
-        &RenderFrameHostImpl::GetFontAccessManager, base::Unretained(host)));
-  }
+  map->Add<blink::mojom::FontAccessManager>(base::BindRepeating(
+      &RenderFrameHostImpl::GetFontAccessManager, base::Unretained(host)));
 
   map->Add<blink::mojom::FileSystemManager>(base::BindRepeating(
       &RenderFrameHostImpl::GetFileSystemManager, base::Unretained(host)));
@@ -537,10 +550,17 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::IdleManager>(base::BindRepeating(
       &RenderFrameHostImpl::BindIdleManager, base::Unretained(host)));
 
-  if (base::FeatureList::IsEnabled(blink::features::kNativeFileSystemAPI)) {
-    map->Add<blink::mojom::NativeFileSystemManager>(
-        base::BindRepeating(&RenderFrameHostImpl::GetNativeFileSystemManager,
-                            base::Unretained(host)));
+  map->Add<blink::mojom::NativeFileSystemManager>(
+      base::BindRepeating(&RenderFrameHostImpl::GetNativeFileSystemManager,
+                          base::Unretained(host)));
+
+  // BrowserMainLoop::GetInstance() may be null on unit tests.
+  if (BrowserMainLoop::GetInstance()) {
+    map->Add<midi::mojom::MidiSessionProvider>(
+        base::BindRepeating(&MidiHost::BindReceiver,
+                            host->GetProcess()->GetID(),
+                            BrowserMainLoop::GetInstance()->midi_service()),
+        GetIOThreadTaskRunner({}));
   }
 
   map->Add<blink::mojom::NotificationService>(base::BindRepeating(
@@ -669,6 +689,14 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
                           base::Unretained(host)));
 #endif
 
+  map->Add<blink::mojom::OneShotBackgroundSyncService>(
+      base::BindRepeating(&RenderProcessHost::CreateOneShotSyncService,
+                          base::Unretained(host->GetProcess())));
+
+  map->Add<blink::mojom::PeriodicBackgroundSyncService>(
+      base::BindRepeating(&RenderProcessHost::CreatePeriodicSyncService,
+                          base::Unretained(host->GetProcess())));
+
   map->Add<media::mojom::VideoDecodePerfHistory>(
       base::BindRepeating(&RenderProcessHost::BindVideoDecodePerfHistory,
                           base::Unretained(host->GetProcess())));
@@ -740,6 +768,10 @@ void PopulateBinderMapWithContext(
   map->Add<blink::mojom::CredentialManager>(base::BindRepeating(
       &EmptyBinderForFrame<blink::mojom::CredentialManager>));
 #if !defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(features::kDirectSockets)) {
+    map->Add<blink::mojom::DirectSocketsService>(
+        base::BindRepeating(&DirectSocketsServiceImpl::CreateForFrame));
+  }
   map->Add<media::mojom::SpeechRecognitionContext>(base::BindRepeating(
       &EmptyBinderForFrame<media::mojom::SpeechRecognitionContext>));
 #endif
@@ -760,6 +792,8 @@ void PopulateBinderMapWithContext(
       base::BindRepeating(&ContentIndexServiceImpl::CreateForFrame));
   map->Add<blink::mojom::KeyboardLockService>(
       base::BindRepeating(&KeyboardLockServiceImpl::CreateMojoService));
+  map->Add<blink::mojom::FlocService>(
+      base::BindRepeating(&FlocServiceImpl::CreateMojoService));
   map->Add<blink::mojom::MediaSessionService>(
       base::BindRepeating(&MediaSessionServiceImpl::Create));
   map->Add<blink::mojom::PictureInPictureService>(
@@ -793,6 +827,11 @@ void PopulateBinderMapWithContext(
   map->Add<blink::mojom::RawClipboardHost>(
       base::BindRepeating(&RawClipboardHostImpl::Create));
 
+#if defined(OS_MAC) && defined(ARCH_CPU_ARM_FAMILY)
+  map->Add<media::mojom::CdmInfobarService>(base::BindRepeating(
+      &EmptyBinderForFrame<media::mojom::CdmInfobarService>));
+#endif
+
   GetContentClient()->browser()->RegisterBrowserInterfaceBindersForFrame(host,
                                                                          map);
 }
@@ -823,6 +862,8 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
       base::BindRepeating(&BindFaceDetectionProvider));
   map->Add<shape_detection::mojom::TextDetection>(
       base::BindRepeating(&BindTextDetection));
+  map->Add<ukm::mojom::UkmRecorderInterface>(
+      base::BindRepeating(&BindUkmRecorderInterface));
 
   // worker host binders
   // base::Unretained(host) is safe because the map is owned by
@@ -870,10 +911,8 @@ void PopulateBinderMapWithContext(
       &RenderProcessHostImpl::CreatePermissionService, host));
   map->Add<blink::mojom::FileSystemManager>(BindWorkerReceiverForOrigin(
       &RenderProcessHostImpl::BindFileSystemManager, host));
-  if (base::FeatureList::IsEnabled(blink::features::kNativeFileSystemAPI)) {
-    map->Add<blink::mojom::NativeFileSystemManager>(BindWorkerReceiverForOrigin(
-        &RenderProcessHostImpl::BindNativeFileSystemManager, host));
-  }
+  map->Add<blink::mojom::NativeFileSystemManager>(BindWorkerReceiverForOrigin(
+      &RenderProcessHostImpl::BindNativeFileSystemManager, host));
   map->Add<blink::mojom::NativeIOHost>(BindWorkerReceiverForOrigin(
       &RenderProcessHostImpl::BindNativeIOHost, host));
   map->Add<blink::mojom::NotificationService>(BindWorkerReceiverForOrigin(
@@ -916,6 +955,8 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
       base::BindRepeating(&BindFaceDetectionProvider));
   map->Add<shape_detection::mojom::TextDetection>(
       base::BindRepeating(&BindTextDetection));
+  map->Add<ukm::mojom::UkmRecorderInterface>(
+      base::BindRepeating(&BindUkmRecorderInterface));
 
   // worker host binders
   // base::Unretained(host) is safe because the map is owned by
@@ -944,10 +985,8 @@ void PopulateBinderMapWithContext(
       &RenderProcessHostImpl::CreatePaymentManagerForOrigin, host));
   map->Add<blink::mojom::PermissionService>(BindWorkerReceiverForOrigin(
       &RenderProcessHostImpl::CreatePermissionService, host));
-  if (base::FeatureList::IsEnabled(blink::features::kNativeFileSystemAPI)) {
-    map->Add<blink::mojom::NativeFileSystemManager>(BindWorkerReceiverForOrigin(
-        &RenderProcessHostImpl::BindNativeFileSystemManager, host));
-  }
+  map->Add<blink::mojom::NativeFileSystemManager>(BindWorkerReceiverForOrigin(
+      &RenderProcessHostImpl::BindNativeFileSystemManager, host));
   map->Add<blink::mojom::NativeIOHost>(BindWorkerReceiverForOrigin(
       &RenderProcessHostImpl::BindNativeIOHost, host));
   map->Add<blink::mojom::NotificationService>(BindWorkerReceiverForOrigin(
@@ -996,6 +1035,8 @@ void PopulateServiceWorkerBinders(ServiceWorkerHost* host,
       base::BindRepeating(&BindFaceDetectionProvider));
   map->Add<shape_detection::mojom::TextDetection>(
       base::BindRepeating(&BindTextDetection));
+  map->Add<ukm::mojom::UkmRecorderInterface>(
+      base::BindRepeating(&BindUkmRecorderInterface));
 
   // worker host binders
   map->Add<blink::mojom::QuicTransportConnector>(
@@ -1009,6 +1050,12 @@ void PopulateServiceWorkerBinders(ServiceWorkerHost* host,
   // render process host binders
   map->Add<media::mojom::VideoDecodePerfHistory>(BindServiceWorkerReceiver(
       &RenderProcessHostImpl::BindVideoDecodePerfHistory, host));
+  map->Add<blink::mojom::OneShotBackgroundSyncService>(
+      BindServiceWorkerReceiver(
+          &RenderProcessHostImpl::CreateOneShotSyncService, host));
+  map->Add<blink::mojom::PeriodicBackgroundSyncService>(
+      BindServiceWorkerReceiver(
+          &RenderProcessHostImpl::CreatePeriodicSyncService, host));
 }
 
 void PopulateBinderMapWithContext(
@@ -1043,11 +1090,9 @@ void PopulateBinderMapWithContext(
       &RenderProcessHostImpl::CreatePaymentManagerForOrigin, host));
   map->Add<blink::mojom::PermissionService>(BindServiceWorkerReceiverForOrigin(
       &RenderProcessHostImpl::CreatePermissionService, host));
-  if (base::FeatureList::IsEnabled(blink::features::kNativeFileSystemAPI)) {
-    map->Add<blink::mojom::NativeFileSystemManager>(
-        BindServiceWorkerReceiverForOrigin(
-            &RenderProcessHostImpl::BindNativeFileSystemManager, host));
-  }
+  map->Add<blink::mojom::NativeFileSystemManager>(
+      BindServiceWorkerReceiverForOrigin(
+          &RenderProcessHostImpl::BindNativeFileSystemManager, host));
   map->Add<blink::mojom::NativeIOHost>(BindServiceWorkerReceiverForOrigin(
       &RenderProcessHostImpl::BindNativeIOHost, host));
   map->Add<blink::mojom::NotificationService>(

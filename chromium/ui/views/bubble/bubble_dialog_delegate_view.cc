@@ -121,14 +121,16 @@ Widget* CreateBubbleWidget(BubbleDialogDelegate* bubble) {
     bubble_params.shadow_type = Widget::InitParams::ShadowType::kNone;
   else
     bubble_params.shadow_type = Widget::InitParams::ShadowType::kDrop;
-  if (bubble->parent_window())
+  if (bubble->parent_window()) {
     bubble_params.parent = bubble->parent_window();
-  else if (bubble->anchor_widget())
+  } else if (bubble->anchor_widget()) {
     bubble_params.parent = bubble->anchor_widget()->GetNativeView();
+  }
   bubble_params.activatable = bubble->CanActivate()
                                   ? Widget::InitParams::ACTIVATABLE_YES
                                   : Widget::InitParams::ACTIVATABLE_NO;
   bubble->OnBeforeBubbleWidgetInit(&bubble_params, bubble_widget);
+  DCHECK(bubble_params.parent);
   bubble_widget->Init(std::move(bubble_params));
 #if !defined(OS_APPLE)
   // On Mac, having a parent window creates a permanent stacking order, so
@@ -341,6 +343,10 @@ Widget* BubbleDialogDelegate::CreateBubble(
   return bubble_widget;
 }
 
+Widget* BubbleDialogDelegateView::CreateBubble(
+    std::unique_ptr<BubbleDialogDelegateView> delegate) {
+  return CreateBubble(delegate.release());
+}
 Widget* BubbleDialogDelegateView::CreateBubble(BubbleDialogDelegateView* view) {
   return BubbleDialogDelegate::CreateBubble(view);
 }
@@ -353,6 +359,7 @@ BubbleDialogDelegateView::BubbleDialogDelegateView(View* anchor_view,
                                                    BubbleBorder::Shadow shadow)
     : BubbleDialogDelegate(anchor_view, arrow, shadow) {
   set_owned_by_client();
+  SetOwnedByWidget(true);
   WidgetDelegate::SetShowCloseButton(false);
 
   SetArrow(arrow);
@@ -442,17 +449,18 @@ View* BubbleDialogDelegateView::GetContentsView() {
   return this;
 }
 
-void BubbleDialogDelegateView::DeleteDelegate() {
-  delete this;
-}
-
 void BubbleDialogDelegate::OnBubbleWidgetClosing() {
   // To prevent keyboard focus traversal issues, the anchor view's
   // kAnchoredDialogKey property is cleared immediately upon Close(). This
   // avoids a bug that occured when a focused anchor view is made unfocusable
   // right after the bubble is closed. Previously, focus would advance into the
   // bubble then would be lost when the bubble was destroyed.
-  if (GetAnchorView())
+  //
+  // If kAnchoredDialogKey does not point to |this|, then |this| is not on the
+  // focus traversal path. Don't reset kAnchoredDialogKey or we risk detaching
+  // a widget from the traversal path.
+  if (GetAnchorView() &&
+      GetAnchorView()->GetProperty(kAnchoredDialogKey) == this)
     GetAnchorView()->ClearProperty(kAnchoredDialogKey);
 }
 
@@ -647,7 +655,8 @@ void BubbleDialogDelegate::SetAnchorView(View* anchor_view) {
     anchor_widget_observer_.reset();
   }
   if (GetAnchorView()) {
-    GetAnchorView()->ClearProperty(kAnchoredDialogKey);
+    if (GetAnchorView()->GetProperty(kAnchoredDialogKey) == this)
+      GetAnchorView()->ClearProperty(kAnchoredDialogKey);
     anchor_view_observer_.reset();
   }
 
@@ -690,6 +699,11 @@ void BubbleDialogDelegate::SetAnchorView(View* anchor_view) {
   if (anchor_view && focus_traversable_from_anchor_view_) {
     // Make sure that focus can move into here from the anchor view (but not
     // out, focus will cycle inside the dialog once it gets here).
+    // It is possible that a view anchors more than one widgets,
+    // but among them there should be at most one widget that is focusable.
+    auto* old_anchored_dialog = anchor_view->GetProperty(kAnchoredDialogKey);
+    if (old_anchored_dialog && old_anchored_dialog != this)
+      DLOG(WARNING) << "|anchor_view| has already anchored a focusable widget.";
     anchor_view->SetProperty(kAnchoredDialogKey, this);
   }
 }
@@ -762,8 +776,7 @@ void BubbleDialogDelegate::UpdateHighlightedButton(bool highlighted) {
     button->SetHighlighted(highlighted);
 }
 
-BEGIN_METADATA(BubbleDialogDelegateView)
-METADATA_PARENT_CLASS(DialogDelegateView)
-END_METADATA()
+BEGIN_METADATA(BubbleDialogDelegateView, View)
+END_METADATA
 
 }  // namespace views

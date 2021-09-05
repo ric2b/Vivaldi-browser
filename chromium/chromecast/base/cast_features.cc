@@ -151,16 +151,8 @@ const base::Feature kDisableIdleSocketsCloseOnMemoryPressure{
 const base::Feature kEnableGeneralAudienceBrowsing{
     "enable_general_audience_browsing", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Uses unified IPC QueryableData bindings backend instead of v8 injection.
-const base::Feature kUseQueryableDataBackend{"use_queryable_data_backend",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kEnableSideGesturePassThrough{
     "enable_side_gesture_pass_through", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Lowers frame rate for headless
-const base::Feature kReduceHeadlessFrameRate{"reduce_headless_frame_rate",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Uses AudioManagerAndroid, instead of CastAudioManagerAndroid. This will
 // disable lots of Cast features, so it should only be used for development and
@@ -176,9 +168,7 @@ const base::Feature* kFeatures[] = {
     &kSingleBuffer,
     &kDisableIdleSocketsCloseOnMemoryPressure,
     &kEnableGeneralAudienceBrowsing,
-    &kUseQueryableDataBackend,
     &kEnableSideGesturePassThrough,
-    &kReduceHeadlessFrameRate,
     &kEnableChromeAudioManagerAndroid,
 };
 

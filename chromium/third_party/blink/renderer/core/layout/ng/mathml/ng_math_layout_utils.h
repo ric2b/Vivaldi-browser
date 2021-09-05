@@ -15,6 +15,7 @@ struct MinMaxSizes;
 class NGBlockNode;
 class NGConstraintSpace;
 class NGLayoutInputNode;
+class SimpleFontData;
 
 // Creates a new constraint space for the current child.
 NGConstraintSpace CreateConstraintSpaceForMathChild(
@@ -30,10 +31,12 @@ bool IsValidMathMLFraction(const NGBlockNode&);
 bool IsValidMathMLScript(const NGBlockNode&);
 bool IsValidMathMLRadical(const NGBlockNode&);
 
+// https://mathml-refresh.github.io/mathml-core/#dfn-default-rule-thickness
 inline float RuleThicknessFallback(const ComputedStyle& style) {
-  // This function returns a value for the default rule thickness (TeX's
-  // \xi_8) to be used as a fallback when we lack a MATH table.
-  return 0.05f * style.FontSize();
+  const SimpleFontData* font_data = style.GetFont().PrimaryFont();
+  if (!font_data)
+    return 0;
+  return font_data->GetFontMetrics().UnderlineThickness().value_or(0);
 }
 
 LayoutUnit MathAxisHeight(const ComputedStyle& style);
@@ -41,15 +44,16 @@ LayoutUnit MathAxisHeight(const ComputedStyle& style);
 inline base::Optional<float> MathConstant(
     const ComputedStyle& style,
     OpenTypeMathSupport::MathConstants constant) {
-  return OpenTypeMathSupport::MathConstant(
-      style.GetFont().PrimaryFont()->PlatformData().GetHarfBuzzFace(),
-      constant);
+  const SimpleFontData* font_data = style.GetFont().PrimaryFont();
+  return font_data ? OpenTypeMathSupport::MathConstant(
+                         font_data->PlatformData().GetHarfBuzzFace(), constant)
+                   : constant;
 }
 
 LayoutUnit FractionLineThickness(const ComputedStyle&);
 
 inline bool HasDisplayStyle(const ComputedStyle& style) {
-  return style.MathStyle() == EMathStyle::kDisplay;
+  return style.MathStyle() == EMathStyle::kNormal;
 }
 
 // Get parameters for horizontal positioning of mroot.
@@ -78,6 +82,7 @@ RadicalVerticalParameters GetRadicalVerticalParameters(const ComputedStyle&,
 MinMaxSizes GetMinMaxSizesForVerticalStretchyOperator(const ComputedStyle&,
                                                       UChar character);
 
+bool IsUnderOverLaidOutAsSubSup(const NGBlockNode& node);
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_MATHML_NG_MATH_LAYOUT_UTILS_H_

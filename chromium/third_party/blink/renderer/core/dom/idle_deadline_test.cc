@@ -8,6 +8,7 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/testing/scoped_scheduler_overrider.h"
 
@@ -17,6 +18,9 @@ namespace {
 class MockIdleDeadlineScheduler final : public ThreadScheduler {
  public:
   MockIdleDeadlineScheduler() = default;
+  MockIdleDeadlineScheduler(const MockIdleDeadlineScheduler&) = delete;
+  MockIdleDeadlineScheduler& operator=(const MockIdleDeadlineScheduler&) =
+      delete;
   ~MockIdleDeadlineScheduler() override = default;
 
   // ThreadScheduler implementation:
@@ -34,6 +38,9 @@ class MockIdleDeadlineScheduler final : public ThreadScheduler {
                                Thread::IdleTask) override {}
   std::unique_ptr<PageScheduler> CreatePageScheduler(
       PageScheduler::Delegate*) override {
+    return nullptr;
+  }
+  AgentGroupScheduler* GetCurrentAgentGroupScheduler() override {
     return nullptr;
   }
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override {
@@ -67,9 +74,6 @@ class MockIdleDeadlineScheduler final : public ThreadScheduler {
   }
 
   void SetV8Isolate(v8::Isolate* isolate) override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockIdleDeadlineScheduler);
 };
 
 }  // namespace

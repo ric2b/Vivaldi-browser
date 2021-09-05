@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "components/content_settings/browser/test_page_specific_content_settings_delegate.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/security_state/core/security_state.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -48,7 +49,8 @@ class PageSpecificContentSettingsTest
     RenderViewHostTestHarness::SetUp();
     HostContentSettingsMap::RegisterProfilePrefs(prefs_.registry());
     settings_map_ = base::MakeRefCounted<HostContentSettingsMap>(
-        &prefs_, false, false, false, false);
+        &prefs_, false /* is_off_the_record */, false /* store_last_modified */,
+        false /* restore_session*/);
     PageSpecificContentSettings::CreateForWebContents(
         web_contents(),
         std::make_unique<TestPageSpecificContentSettingsDelegate>(
@@ -420,8 +422,9 @@ TEST_F(PageSpecificContentSettingsTest,
       ContentSettingsPattern::FromURL(web_contents()->GetVisibleURL());
 
   map->SetWebsiteSettingCustomScope(
-      pattern, pattern, ContentSettingsType::CLIPBOARD_READ_WRITE,
-      std::string(), std::make_unique<base::Value>(CONTENT_SETTING_ALLOW));
+      pattern, ContentSettingsPattern::Wildcard(),
+      ContentSettingsType::CLIPBOARD_READ_WRITE, std::string(),
+      std::make_unique<base::Value>(CONTENT_SETTING_ALLOW));
 
   // Now the indicator is set to allowed.
   EXPECT_TRUE(content_settings->IsContentAllowed(
@@ -431,8 +434,9 @@ TEST_F(PageSpecificContentSettingsTest,
 
   // Simulate the user modifying the setting back to blocked.
   map->SetWebsiteSettingCustomScope(
-      pattern, pattern, ContentSettingsType::CLIPBOARD_READ_WRITE,
-      std::string(), std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
+      pattern, ContentSettingsPattern::Wildcard(),
+      ContentSettingsType::CLIPBOARD_READ_WRITE, std::string(),
+      std::make_unique<base::Value>(CONTENT_SETTING_BLOCK));
 
   // Now the indicator is set to allowed.
   EXPECT_TRUE(content_settings->IsContentBlocked(

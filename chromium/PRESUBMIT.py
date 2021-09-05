@@ -56,8 +56,10 @@ _TEST_CODE_EXCLUDED_PATHS = (
     r'.+_(fuzz|fuzzer)(_[a-z]+)?%s' % _IMPLEMENTATION_EXTENSIONS,
     r'.+profile_sync_service_harness%s' % _IMPLEMENTATION_EXTENSIONS,
     r'.*[\\/](test|tool(s)?)[\\/].*',
-    # content_shell is used for running layout tests.
+    # content_shell is used for running content_browsertests.
     r'content[\\/]shell[\\/].*',
+    # Web test harness.
+    r'content[\\/]web_test[\\/].*',
     # Non-production example code.
     r'mojo[\\/]examples[\\/].*',
     # Launcher for running iOS tests on the simulator.
@@ -72,11 +74,15 @@ _THIRD_PARTY_EXCEPT_BLINK = 'third_party/(?!blink/)'
 
 _TEST_ONLY_WARNING = (
     'You might be calling functions intended only for testing from\n'
-    'production code.  It is OK to ignore this warning if you know what\n'
-    'you are doing, as the heuristics used to detect the situation are\n'
-    'not perfect.  The commit queue will not block on this warning,\n'
-    'however the android-binary-size trybot will block if the method\n'
-    'exists in the release apk.')
+    'production code.  If you are doing this from inside another method\n'
+    'named as *ForTesting(), then consider exposing things to have tests\n'
+    'make that same call directly.\n'
+    'If that is not possible, you may put a comment on the same line with\n'
+    '  // IN-TEST \n'
+    'to tell the PRESUBMIT script that the code is inside a *ForTesting()\n'
+    'method and can be ignored. Do not do this inside production code.\n'
+    'The android-binary-size trybot will block if the method exists in the\n'
+    'release apk.')
 
 
 _INCLUDE_ORDER_WARNING = (
@@ -105,8 +111,8 @@ _BANNED_JAVA_IMPORTS = (
       'android.support.test.rule.UiThreadTestRule;',
       (
        'Do not use UiThreadTestRule, just use '
-       '@org.chromium.base.test.UiThreadTest on test methods that should run on '
-       'the UI thread. See https://crbug.com/1111893.',
+       '@org.chromium.base.test.UiThreadTest on test methods that should run '
+       'on the UI thread. See https://crbug.com/1111893.',
       ),
       (),
     ),
@@ -313,17 +319,14 @@ _NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
   '^base/callback.h',  # Intentional.
   '^chrome/browser/android/webapps/add_to_homescreen_data_fetcher_unittest.cc',
   '^chrome/browser/apps/guest_view/',
-  '^chrome/browser/apps/platform_apps/shortcut_manager.cc',
   '^chrome/browser/browsing_data/',
   '^chrome/browser/captive_portal/captive_portal_browsertest.cc',
   '^chrome/browser/chromeos/',
   '^chrome/browser/component_updater/',
-  '^chrome/browser/custom_handlers/protocol_handler_registry.cc',
   '^chrome/browser/device_identity/chromeos/device_oauth2_token_store_chromeos.cc', # pylint: disable=line-too-long
   '^chrome/browser/devtools/',
   '^chrome/browser/download/',
   '^chrome/browser/extensions/',
-  '^chrome/browser/external_protocol/external_protocol_handler.cc',
   '^chrome/browser/history/',
   '^chrome/browser/installable/installable_manager_browsertest.cc',
   '^chrome/browser/lifetime/',
@@ -337,7 +340,6 @@ _NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
   '^chrome/browser/ntp_tiles/ntp_tiles_browsertest.cc',
   '^chrome/browser/offline_pages/',
   '^chrome/browser/page_load_metrics/observers/data_saver_site_breakdown_metrics_observer_browsertest.cc', # pylint: disable=line-too-long
-  '^chrome/browser/password_manager/',
   '^chrome/browser/payments/payment_manifest_parser_browsertest.cc',
   '^chrome/browser/pdf/pdf_extension_test.cc',
   '^chrome/browser/plugins/',
@@ -368,7 +370,6 @@ _NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
   '^chrome/browser/sync/',
   '^chrome/browser/themes/theme_service.cc',
   '^chrome/browser/thumbnail/cc/',
-  '^chrome/browser/tracing/chrome_tracing_delegate_browsertest.cc',
   '^chrome/browser/translate/',
   '^chrome/browser/ui/',
   '^chrome/browser/web_applications/',
@@ -379,10 +380,7 @@ _NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
   '^chromecast/media/',
   '^chromeos/attestation/',
   '^chromeos/components/',
-  '^chromeos/services/',
   '^components/arc/',
-  '^components/autofill/',
-  '^components/autofill_assistant/',
   '^components/cast_channel/',
   '^components/component_updater/',
   '^components/content_settings/',
@@ -390,7 +388,6 @@ _NOT_CONVERTED_TO_MODERN_BIND_AND_CALLBACK = '|'.join((
   '^components/nacl/',
   '^components/navigation_interception/',
   '^components/ownership/',
-  '^components/password_manager/',
   '^components/policy/',
   '^components/search_engines/',
   '^components/security_interstitials/',
@@ -457,43 +454,6 @@ _BANNED_CPP_FUNCTIONS = (
       ),
       False,
       (),
-    ),
-    (
-      r'/XSelectInput|CWEventMask|XCB_CW_EVENT_MASK',
-      (
-       'Chrome clients wishing to select events on X windows should use',
-       'ui::XScopedEventSelector.  It is safe to ignore this warning only if',
-       'you are selecting events from the GPU process, or if you are using',
-       'an XDisplay other than gfx::GetXDisplay().',
-      ),
-      True,
-      (
-        r"^ui[\\/]events[\\/]x[\\/].*\.cc$",
-        r"^ui[\\/]gl[\\/].*\.cc$",
-        r"^media[\\/]gpu[\\/].*\.cc$",
-        r"^gpu[\\/].*\.cc$",
-        r"^ui[\\/]base[\\/]x[\\/]xwmstartupcheck[\\/]xwmstartupcheck\.cc$",
-        ),
-    ),
-    (
-      r'/\WX?(((Width|Height)(MM)?OfScreen)|(Display(Width|Height)))\(',
-      (
-       'Use the corresponding fields in x11::Screen instead.',
-      ),
-      True,
-      (),
-    ),
-    (
-      r'/XInternAtom|xcb_intern_atom',
-      (
-       'Use gfx::GetAtom() instead of interning atoms directly.',
-      ),
-      True,
-      (
-        r"^gpu[\\/]ipc[\\/]service[\\/]gpu_watchdog_thread\.cc$",
-        r"^remoting[\\/]host[\\/]linux[\\/]x_server_clipboard\.cc$",
-        r"^ui[\\/]gfx[\\/]x[\\/]x11_atom_cache\.cc$",
-      ),
     ),
     (
       'setMatrixClip',
@@ -849,6 +809,14 @@ _BANNED_CPP_FUNCTIONS = (
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
     (
+      r'/\b#include <X11/',
+      (
+        'Do not use Xlib. Use xproto (from //ui/gfx/x:xproto) instead.',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
+    ),
+    (
       r'/\bstd::ratio\b',
       (
         'std::ratio is banned by the Google Style Guide.',
@@ -979,7 +947,7 @@ _BANNED_CPP_FUNCTIONS = (
       (
         'Improper use of Microsoft::WRL::ComPtr<T>::GetAddressOf() has been ',
         'implicated in a few leaks. ReleaseAndGetAddressOf() is safe but ',
-        'operator& is generally recommended. So always use operator& instead. '
+        'operator& is generally recommended. So always use operator& instead. ',
         'See http://crbug.com/914910 for more conversion guidance.'
       ),
       True,
@@ -1228,7 +1196,7 @@ _DEPRECATED_MOJO_TYPES = (
       (
         'mojo::MakeRequest is deprecated.',
         'Use mojo::AssociatedRemote::'
-        'BindNewEndpointAndPassDedicatedReceiverForTesting() instead.',
+        'BindNewEndpointAndPassDedicatedReceiver() instead.',
       ),
     ),
     (
@@ -1473,9 +1441,17 @@ def CheckNoProductionCodeUsingTestOnlyFunctions(input_api, output_api):
   base_function_pattern = r'[ :]test::[^\s]+|ForTest(s|ing)?|for_test(s|ing)?'
   inclusion_pattern = input_api.re.compile(r'(%s)\s*\(' % base_function_pattern)
   comment_pattern = input_api.re.compile(r'//.*(%s)' % base_function_pattern)
+  allowlist_pattern = input_api.re.compile(r'// IN-TEST$')
   exclusion_pattern = input_api.re.compile(
     r'::[A-Za-z0-9_]+(%s)|(%s)[^;]+\{' % (
       base_function_pattern, base_function_pattern))
+  # Avoid a false positive in this case, where the method name, the ::, and
+  # the closing { are all on different lines due to line wrapping.
+  # HelperClassForTesting::
+  #   HelperClassForTesting(
+  #       args)
+  #     : member(0) {}
+  method_defn_pattern = input_api.re.compile(r'[A-Za-z0-9_]+::$')
 
   def FilterFile(affected_file):
     files_to_skip = (_EXCLUDED_PATHS +
@@ -1489,12 +1465,16 @@ def CheckNoProductionCodeUsingTestOnlyFunctions(input_api, output_api):
   problems = []
   for f in input_api.AffectedSourceFiles(FilterFile):
     local_path = f.LocalPath()
+    in_method_defn = False
     for line_number, line in f.ChangedContents():
       if (inclusion_pattern.search(line) and
           not comment_pattern.search(line) and
-          not exclusion_pattern.search(line)):
+          not exclusion_pattern.search(line) and
+          not allowlist_pattern.search(line) and
+          not in_method_defn):
         problems.append(
           '%s:%d\n    %s' % (local_path, line_number, line.strip()))
+      in_method_defn = method_defn_pattern.search(line)
 
   if problems:
     return [output_api.PresubmitPromptOrNotify(_TEST_ONLY_WARNING, problems)]
@@ -4880,8 +4860,11 @@ def CheckStrings(input_api, output_api):
       for f in input_api.AffectedFiles(include_deletes=True)
       if f.Action() == 'D')
 
-  affected_grds = [f for f in input_api.AffectedFiles()
-      if (f.LocalPath().endswith(('.grd', '.grdp')))]
+  affected_grds = [
+      f for f in input_api.AffectedFiles()
+      if f.LocalPath().endswith(('.grd', '.grdp'))
+  ]
+  affected_grds = [f for f in affected_grds if not 'testdata' in f.LocalPath()]
   if not affected_grds:
     return []
 
@@ -5112,17 +5095,18 @@ def CheckStrings(input_api, output_api):
     removed_ids = old_ids - new_ids
     modified_ids = set([])
     for key in old_ids.intersection(new_ids):
-      if (old_id_to_msg_map[key].FormatXml()
-          != new_id_to_msg_map[key].FormatXml()):
-        sha1_path = input_api.os_path.join(
-          screenshots_dir, key + '.png.sha1')
-        if sha1_path not in new_or_added_paths and \
-           not input_api.os_path.exists(sha1_path):
-          # This message does not yet have a screenshot. Require one.
-          modified_ids.add(key)
-        elif (old_id_to_msg_map[key].ContentsAsXml('', True)
+      if (old_id_to_msg_map[key].ContentsAsXml('', True)
           != new_id_to_msg_map[key].ContentsAsXml('', True)):
           # The message content itself changed. Require an updated screenshot.
+          modified_ids.add(key)
+      elif old_id_to_msg_map[key].attrs['meaning'] != \
+          new_id_to_msg_map[key].attrs['meaning']:
+        # The message meaning changed. Ensure there is a screenshot for it.
+        sha1_path = input_api.os_path.join(screenshots_dir, key + '.png.sha1')
+        if sha1_path not in new_or_added_paths and not \
+            input_api.os_path.exists(sha1_path):
+          # There is neither a previous screenshot nor is a new one added now.
+          # Require a screenshot.
           modified_ids.add(key)
 
     if run_screenshot_check:

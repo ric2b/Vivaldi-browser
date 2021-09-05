@@ -882,5 +882,51 @@ std::string TracedValueJSON::ToFormattedJSON() const {
   return str;
 }
 
+TracedValue::ArrayScope::ArrayScope(TracedValue* value) : value_(value) {}
+
+TracedValue::ArrayScope::~ArrayScope() {
+  value_->EndArray();
+}
+
+TracedValue::ArrayScope TracedValue::AppendArrayScoped() {
+  BeginArray();
+  return TracedValue::ArrayScope(this);
+}
+
+TracedValue::ArrayScope TracedValue::BeginArrayScoped(const char* name) {
+  BeginArray(name);
+  return TracedValue::ArrayScope(this);
+}
+
+TracedValue::ArrayScope TracedValue::BeginArrayScopedWithCopiedName(
+    base::StringPiece name) {
+  BeginArrayWithCopiedName(name);
+  return TracedValue::ArrayScope(this);
+}
+
+TracedValue::DictionaryScope::DictionaryScope(TracedValue* value)
+    : value_(value) {}
+
+TracedValue::DictionaryScope::~DictionaryScope() {
+  value_->EndDictionary();
+}
+
+TracedValue::DictionaryScope TracedValue::AppendDictionaryScoped() {
+  BeginDictionary();
+  return TracedValue::DictionaryScope(this);
+}
+
+TracedValue::DictionaryScope TracedValue::BeginDictionaryScoped(
+    const char* name) {
+  BeginDictionary(name);
+  return TracedValue::DictionaryScope(this);
+}
+
+TracedValue::DictionaryScope TracedValue::BeginDictionaryScopedWithCopiedName(
+    base::StringPiece name) {
+  BeginDictionaryWithCopiedName(name);
+  return TracedValue::DictionaryScope(this);
+}
+
 }  // namespace trace_event
 }  // namespace base

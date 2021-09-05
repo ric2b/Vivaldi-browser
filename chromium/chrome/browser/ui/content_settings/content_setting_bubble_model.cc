@@ -69,14 +69,15 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "content/public/common/origin_util.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/device/public/cpp/device_features.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/loader/network_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/window_open_disposition.h"
+#include "ui/events/event.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/resources/grit/ui_resources.h"
 
@@ -793,7 +794,7 @@ class ContentSettingPopupBubbleModel
   void BlockedUrlAdded(int32_t id, const GURL& url) override;
 
  private:
-  void OnListItemClicked(int index, int event_flags) override;
+  void OnListItemClicked(int index, const ui::Event& event) override;
 
   int32_t item_id_from_item_index(int index) const {
     return bubble_content().list_items[index].item_id;
@@ -833,11 +834,11 @@ void ContentSettingPopupBubbleModel::BlockedUrlAdded(int32_t id,
 }
 
 void ContentSettingPopupBubbleModel::OnListItemClicked(int index,
-                                                       int event_flags) {
+                                                       const ui::Event& event) {
   auto* helper =
       blocked_content::PopupBlockerTabHelper::FromWebContents(web_contents());
   helper->ShowBlockedPopup(item_id_from_item_index(index),
-                           ui::DispositionFromEventFlags(event_flags));
+                           ui::DispositionFromEventFlags(event.flags()));
   RemoveListItem(index);
   content_settings::RecordPopupsAction(
       content_settings::POPUPS_ACTION_CLICKED_LIST_ITEM_CLICKED);
@@ -1040,7 +1041,7 @@ void ContentSettingMediaStreamBubbleModel::SetRadioGroup() {
   int radio_block_label_id = 0;
   if (state_ & (PageSpecificContentSettings::MICROPHONE_BLOCKED |
                 PageSpecificContentSettings::CAMERA_BLOCKED)) {
-    if (content::IsOriginSecure(url)) {
+    if (blink::network_utils::IsOriginSecure(url)) {
       radio_item_setting_[0] = CONTENT_SETTING_ALLOW;
       radio_allow_label_id = IDS_BLOCKED_MEDIASTREAM_CAMERA_ALLOW;
       if (MicrophoneAccessed())
@@ -1309,30 +1310,35 @@ ContentSettingGeolocationBubbleModel::ContentSettingGeolocationBubbleModel(
     : ContentSettingSingleRadioGroup(delegate,
                                      web_contents,
                                      ContentSettingsType::GEOLOCATION) {
-  PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents->GetMainFrame());
-  if (!content_settings)
-    return;
-
-  is_allowed_ =
-      content_settings->IsContentAllowed(ContentSettingsType::GEOLOCATION);
-
-  // If the permission is turned off in MacOS system preferences, overwrite
-  // the bubble to enable the user to trigger the system dialog.
-  if (ShouldShowSystemGeolocationPermissions()) {
 #if defined(OS_MAC)
-    InitializeSystemGeolocationPermissionBubble();
-    set_radio_group(RadioGroup());
-    return;
-#endif  // defined(OS_MAC)
+  if (base::FeatureList::IsEnabled(
+          ::features::kMacCoreLocationImplementation)) {
+    PageSpecificContentSettings* content_settings =
+        PageSpecificContentSettings::GetForFrame(web_contents->GetMainFrame());
+    if (!content_settings)
+      return;
+
+    bool is_allowed =
+        content_settings->IsContentAllowed(ContentSettingsType::GEOLOCATION);
+
+    GeolocationSystemPermissionManager* permission_delegate =
+        g_browser_process->platform_part()->location_permission_manager();
+    SystemPermissionStatus permission =
+        permission_delegate->GetSystemPermission();
+    if (permission != SystemPermissionStatus::kAllowed && is_allowed) {
+      // If the permission is turned off in MacOS system preferences, overwrite
+      // the bubble to enable the user to trigger the system dialog.
+      InitializeSystemGeolocationPermissionBubble();
+    }
   }
+#endif  // defined(OS_MAC)
 }
 
 ContentSettingGeolocationBubbleModel::~ContentSettingGeolocationBubbleModel() =
     default;
 
 void ContentSettingGeolocationBubbleModel::OnDoneButtonClicked() {
-  if (ShouldShowSystemGeolocationPermissions()) {
+  if (show_system_geolocation_bubble_) {
 #if defined(OS_MAC)
     ExternalProtocolHandler::LaunchUrlWithoutSecurityCheck(
         GURL(kLocationSettingsURI), web_contents());
@@ -1346,9 +1352,16 @@ void ContentSettingGeolocationBubbleModel::OnManageButtonClicked() {
     delegate()->ShowContentSettingsPage(ContentSettingsType::GEOLOCATION);
 }
 
-#if defined(OS_MAC)
+void ContentSettingGeolocationBubbleModel::CommitChanges() {
+  if (show_system_geolocation_bubble_)
+    return;
+
+  ContentSettingSingleRadioGroup::CommitChanges();
+}
+
 void ContentSettingGeolocationBubbleModel::
     InitializeSystemGeolocationPermissionBubble() {
+#if defined(OS_MAC)
   set_title(l10n_util::GetStringUTF16(IDS_GEOLOCATION_TURNED_OFF_IN_MACOS));
   clear_message();
   AddListItem(ContentSettingBubbleModel::ListItem(
@@ -1357,22 +1370,9 @@ void ContentSettingGeolocationBubbleModel::
       l10n_util::GetStringUTF16(IDS_TURNED_OFF), false, true, 0));
   set_manage_text_style(ContentSettingBubbleModel::ManageTextStyle::kNone);
   set_done_button_text(l10n_util::GetStringUTF16(IDS_OPEN_PREFERENCES_LINK));
-}
+  set_radio_group(RadioGroup());
+  show_system_geolocation_bubble_ = true;
 #endif  // defined(OS_MAC)
-
-bool ContentSettingGeolocationBubbleModel::
-    ShouldShowSystemGeolocationPermissions() {
-#if defined(OS_MAC)
-  if (base::FeatureList::IsEnabled(
-          ::features::kMacCoreLocationImplementation)) {
-    GeolocationSystemPermissionManager* permission_delegate =
-        g_browser_process->platform_part()->location_permission_manager();
-    SystemPermissionStatus permission =
-        permission_delegate->GetSystemPermission();
-    return (permission != SystemPermissionStatus::kAllowed) && is_allowed_;
-  }
-#endif
-  return false;
 }
 
 // ContentSettingSubresourceFilterBubbleModel ----------------------------------
@@ -1550,7 +1550,7 @@ ContentSettingFramebustBlockBubbleModel::
 
 void ContentSettingFramebustBlockBubbleModel::OnListItemClicked(
     int index,
-    int event_flags) {
+    const ui::Event& event) {
   FramebustBlockTabHelper::FromWebContents(web_contents())
       ->OnBlockedUrlClicked(index);
 }

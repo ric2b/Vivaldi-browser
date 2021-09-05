@@ -28,7 +28,6 @@
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
 
-class Browser;
 class ScopedKeepAlive;
 
 #if defined(OS_WIN)
@@ -147,6 +146,10 @@ class VivaldiBrowserWindow final
     return web_contents_.get();
   }
 
+  SessionID::id_type id() const {
+    return browser()->session_id().id();
+  }
+
   VivaldiNativeAppWindowViews* views() const { return views_.get(); }
 
   // Used when the tabstrip closes all tabs on exit.
@@ -261,7 +264,6 @@ class VivaldiBrowserWindow final
   void ConfirmBrowserCloseWithPendingDownloads(
       int download_count,
       Browser::DownloadCloseType dialog_type,
-      bool app_modal,
       const base::Callback<void(bool)>& callback) override;
   void UserChangedTheme(BrowserThemeChangeType theme_change_type) override {}
   void VivaldiShowWebsiteSettingsAt(
@@ -290,6 +292,7 @@ class VivaldiBrowserWindow final
   void OnTabDetached(content::WebContents* contents, bool was_active) override {
   }
   void TabDraggingStatusChanged(bool is_dragging) override {}
+  void LinkOpeningFromGesture(WindowOpenDisposition disposition) override {}
   // Shows in-product help for the given feature.
   void ShowInProductHelpPromo(InProductHelpFeature iph_feature) override {}
   void UpdateFrameColor() override {}
@@ -406,6 +409,8 @@ class VivaldiBrowserWindow final
   void ShowCaretBrowsingDialog() override {}
 
   void CreateTabSearchBubble() override {}
+
+  FeaturePromoController* GetFeaturePromoController() override;
 
  private:
   class VivaldiManagePasswordsIconView : public ManagePasswordsIconView {

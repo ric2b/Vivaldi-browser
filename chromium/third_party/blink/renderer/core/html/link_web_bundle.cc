@@ -5,10 +5,16 @@
 #include "third_party/blink/renderer/core/html/link_web_bundle.h"
 
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
+#include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_local_frame_client.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader_client.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors.h"
 #include "third_party/blink/renderer/platform/loader/fetch/bytes_consumer.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
@@ -22,11 +28,21 @@ class WebBundleLoader : public GarbageCollected<WebBundleLoader>,
                         public ThreadableLoaderClient {
  public:
   WebBundleLoader(LinkWebBundle& link_web_bundle,
-                  ExecutionContext& execution_context,
+                  Document& document,
                   const KURL& url)
       : link_web_bundle_(&link_web_bundle),
-        pending_factory_receiver_(loader_factory_.BindNewPipeAndPassReceiver()),
-        url_(url) {
+        url_(url),
+        security_origin_(SecurityOrigin::Create(url)) {
+    blink::CrossVariantMojoReceiver<
+        network::mojom::URLLoaderFactoryInterfaceBase>
+        receiver(loader_factory_.BindNewPipeAndPassReceiver());
+    document.GetFrame()
+        ->Client()
+        ->GetWebFrame()
+        ->Client()
+        ->MaybeProxyURLLoaderFactory(&receiver);
+    pending_factory_receiver_ = std::move(receiver);
+
     ResourceRequest request(url);
     request.SetUseStreamOnResponse(true);
     // TODO(crbug.com/1082020): Revisit these once the fetch and process the
@@ -37,11 +53,12 @@ class WebBundleLoader : public GarbageCollected<WebBundleLoader>,
     request.SetMode(network::mojom::blink::RequestMode::kCors);
     request.SetCredentialsMode(network::mojom::blink::CredentialsMode::kOmit);
 
+    ExecutionContext* execution_context = document.GetExecutionContext();
     ResourceLoaderOptions resource_loader_options(
-        execution_context.GetCurrentWorld());
+        execution_context->GetCurrentWorld());
     resource_loader_options.data_buffering_policy = kDoNotBufferData;
 
-    loader_ = MakeGarbageCollected<ThreadableLoader>(execution_context, this,
+    loader_ = MakeGarbageCollected<ThreadableLoader>(*execution_context, this,
                                                      resource_loader_options);
     loader_->Start(std::move(request));
   }
@@ -82,6 +99,9 @@ class WebBundleLoader : public GarbageCollected<WebBundleLoader>,
   void DidFailRedirectCheck() override { DidFailInternal(); }
 
   const KURL& url() const { return url_; }
+  scoped_refptr<SecurityOrigin> GetSecurityOrigin() const {
+    return security_origin_;
+  }
 
  private:
   void DidFailInternal() {
@@ -111,9 +131,13 @@ class WebBundleLoader : public GarbageCollected<WebBundleLoader>,
       pending_factory_receiver_;
   bool failed_ = false;
   KURL url_;
+  scoped_refptr<SecurityOrigin> security_origin_;
 };
 
-LinkWebBundle::LinkWebBundle(HTMLLinkElement* owner) : LinkResource(owner) {}
+LinkWebBundle::LinkWebBundle(HTMLLinkElement* owner) : LinkResource(owner) {
+  UseCounter::Count(owner_->GetDocument().GetExecutionContext(),
+                    WebFeature::kSubresourceWebBundles);
+}
 LinkWebBundle::~LinkWebBundle() = default;
 
 void LinkWebBundle::Trace(Visitor* visitor) const {
@@ -127,7 +151,7 @@ void LinkWebBundle::NotifyLoaded() {
     owner_->ScheduleEvent();
 }
 
-void LinkWebBundle::OnWebBundleError(const String& message) {
+void LinkWebBundle::OnWebBundleError(const String& message) const {
   if (!owner_)
     return;
   ExecutionContext* context = owner_->GetDocument().GetExecutionContext();
@@ -150,7 +174,7 @@ void LinkWebBundle::Process() {
 
   if (!bundle_loader_ || bundle_loader_->url() != owner_->Href()) {
     bundle_loader_ = MakeGarbageCollected<WebBundleLoader>(
-        *this, *owner_->GetDocument().GetExecutionContext(), owner_->Href());
+        *this, owner_->GetDocument(), owner_->Href());
   }
 
   resource_fetcher->AddSubresourceWebBundle(*this);
@@ -175,13 +199,28 @@ void LinkWebBundle::OwnerRemoved() {
 }
 
 bool LinkWebBundle::CanHandleRequest(const KURL& url) const {
-  return owner_ && owner_->ValidResourceUrls().Contains(url);
+  if (!owner_ || !owner_->ValidResourceUrls().Contains(url))
+    return false;
+  DCHECK(bundle_loader_);
+  if (!bundle_loader_->GetSecurityOrigin()->IsSameOriginWith(
+          SecurityOrigin::Create(url).get())) {
+    OnWebBundleError(url.ElidedString() + " cannot be loaded from WebBundle " +
+                     bundle_loader_->url().ElidedString() +
+                     ": bundled resource must be same origin with the bundle.");
+    return false;
+  }
+  return true;
 }
 
 mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>
 LinkWebBundle::GetURLLoaderFactory() {
   DCHECK(bundle_loader_);
   return bundle_loader_->GetURLLoaderFactory();
+}
+
+String LinkWebBundle::GetCacheIdentifier() const {
+  DCHECK(bundle_loader_);
+  return bundle_loader_->url().GetString();
 }
 
 // static

@@ -6,12 +6,12 @@
 #define ASH_WM_DESKS_DESK_ANIMATION_BASE_H_
 
 #include "ash/public/cpp/metrics_util.h"
+#include "ash/wm/desks/desks_histogram_enums.h"
 #include "ash/wm/desks/root_window_desk_switch_animator.h"
 #include "ui/compositor/throughput_tracker.h"
 
 namespace ash {
 
-class Desk;
 class DesksController;
 
 // An abstract class that handles the shared operations need to be performed
@@ -21,12 +21,14 @@ class DesksController;
 // each animation type.
 class DeskAnimationBase : public RootWindowDeskSwitchAnimator::Delegate {
  public:
-  DeskAnimationBase(DesksController* controller, const Desk* ending_desk);
+  DeskAnimationBase(DesksController* controller,
+                    int ending_desk_index,
+                    bool is_continuous_gesture_animation);
   DeskAnimationBase(const DeskAnimationBase&) = delete;
   DeskAnimationBase& operator=(const DeskAnimationBase&) = delete;
   ~DeskAnimationBase() override;
 
-  const Desk* ending_desk() const { return ending_desk_; }
+  int ending_desk_index() const { return ending_desk_index_; }
 
   // Launches the animation. This should be done once all animators
   // are created and added to `desk_switch_animators_`. This is to avoid any
@@ -34,8 +36,21 @@ class DeskAnimationBase : public RootWindowDeskSwitchAnimator::Delegate {
   // (1) of the animation while other animators are still being constructed.
   void Launch();
 
+  // Replaces a current animation with an animation to an adjacent desk. By
+  // default returns false as most animations do not support replacing.
+  virtual bool Replace(bool moving_left, DesksSwitchSource source);
+
+  // Updates a current animation by shifting its animating layer.
+  // |scroll_delta_x| is the amount of scroll change since the last scroll
+  // update event. Returns false if the animation does not support updating.
+  virtual bool UpdateSwipeAnimation(float scroll_delta_x);
+
+  // Ends a current animation, animating to a desk determined by the
+  // implementation. Returns false if the animation does not support ending.
+  virtual bool EndSwipeAnimation();
+
   // RootWindowDeskSwitchAnimator::Delegate:
-  void OnStartingDeskScreenshotTaken(const Desk* ending_desk) override;
+  void OnStartingDeskScreenshotTaken(int ending_desk_index) override;
   void OnEndingDeskScreenshotTaken() override;
   void OnDeskSwitchAnimationFinished() override;
 
@@ -44,8 +59,7 @@ class DeskAnimationBase : public RootWindowDeskSwitchAnimator::Delegate {
   // things when phase (1), and phase (3) completes. Note that
   // `OnDeskSwitchAnimationFinishedInternal()` will be called before the desks
   // screenshot layers, stored in `desk_switch_animators_`, are destroyed.
-  virtual void OnStartingDeskScreenshotTakenInternal(
-      const Desk* ending_desk) = 0;
+  virtual void OnStartingDeskScreenshotTakenInternal(int ending_desk_index) = 0;
   virtual void OnDeskSwitchAnimationFinishedInternal() = 0;
 
   // Since performance here matters, we have to use the UMA histograms macros to
@@ -62,10 +76,14 @@ class DeskAnimationBase : public RootWindowDeskSwitchAnimator::Delegate {
   std::vector<std::unique_ptr<RootWindowDeskSwitchAnimator>>
       desk_switch_animators_;
 
-  // The desk that will be active after this animation ends.
-  const Desk* const ending_desk_;
+  // The index of the desk that will be active after this animation ends.
+  int ending_desk_index_;
 
- private:
+  // True if this animation is a continuous gesture animation. Update and End
+  // only work when this is true, and we do not start the animation when
+  // OnEndingDeskScreenshotTaken is called.
+  const bool is_continuous_gesture_animation_;
+
   // ThroughputTracker used for measuring this animation smoothness.
   ui::ThroughputTracker throughput_tracker_;
 };

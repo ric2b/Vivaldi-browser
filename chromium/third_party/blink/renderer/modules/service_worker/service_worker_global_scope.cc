@@ -36,6 +36,7 @@
 #include "base/bind_helpers.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/time/time.h"
@@ -54,16 +55,19 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
 #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_background_fetch_event_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_content_index_event_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_notification_event_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_payment_request_event_init.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
+#include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fetch/global_fetch.h"
 #include "third_party/blink/renderer/core/frame/reporting_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/inspector/request_debug_header_scope.h"
 #include "third_party/blink/renderer/core/inspector/worker_inspector_controller.h"
 #include "third_party/blink/renderer/core/inspector/worker_thread_debugger.h"
 #include "third_party/blink/renderer/core/loader/threadable_loader.h"
@@ -353,7 +357,7 @@ ServiceWorkerGlobalScope::GetInstalledScriptsManager() {
 
 void ServiceWorkerGlobalScope::CountWorkerScript(size_t script_size,
                                                  size_t cached_metadata_size) {
-  DCHECK_EQ(GetScriptType(), mojom::ScriptType::kClassic);
+  DCHECK_EQ(GetScriptType(), mojom::blink::ScriptType::kClassic);
   base::UmaHistogramCustomCounts(
       "ServiceWorker.ScriptSize",
       base::saturated_cast<base::Histogram::Sample>(script_size), 1000, 5000000,
@@ -372,7 +376,7 @@ void ServiceWorkerGlobalScope::CountWorkerScript(size_t script_size,
 void ServiceWorkerGlobalScope::CountImportedScript(
     size_t script_size,
     size_t cached_metadata_size) {
-  DCHECK_EQ(GetScriptType(), mojom::ScriptType::kClassic);
+  DCHECK_EQ(GetScriptType(), mojom::blink::ScriptType::kClassic);
   CountScriptInternal(script_size, cached_metadata_size);
 }
 
@@ -385,7 +389,7 @@ void ServiceWorkerGlobalScope::DidEvaluateScript() {
   // Skip recording UMAs for module scripts because there're no ways to get the
   // number of static-imported scripts and the total size of the imported
   // scripts.
-  if (GetScriptType() == mojom::ScriptType::kModule) {
+  if (GetScriptType() == mojom::blink::ScriptType::kModule) {
     return;
   }
 
@@ -708,8 +712,9 @@ ServiceWorker* ServiceWorkerGlobalScope::GetOrCreateServiceWorker(
     return nullptr;
   ::blink::ServiceWorker* worker = service_worker_objects_.at(info.version_id);
   if (!worker) {
+    const int64_t version_id = info.version_id;
     worker = ::blink::ServiceWorker::Create(this, std::move(info));
-    service_worker_objects_.Set(info.version_id, worker);
+    service_worker_objects_.Set(version_id, worker);
   }
   return worker;
 }
@@ -822,22 +827,29 @@ int ServiceWorkerGlobalScope::GetOutstandingThrottledLimit() const {
   return features::kInstallingServiceWorkerOutstandingThrottledLimit.Get();
 }
 
-void ServiceWorkerGlobalScope::importScripts(const Vector<String>& urls,
-                                             ExceptionState& exception_state) {
+bool ServiceWorkerGlobalScope::CrossOriginIsolatedCapability() const {
+  // TODO(crbug.com/1131404): Return Agent::IsCrossOriginIsolated().
+  return false;
+}
+
+void ServiceWorkerGlobalScope::importScripts(const Vector<String>& urls) {
   for (const String& string_url : urls) {
     KURL completed_url = CompleteURL(string_url);
     if (installed_scripts_manager_ &&
         !installed_scripts_manager_->IsScriptInstalled(completed_url)) {
       DCHECK(installed_scripts_manager_->IsScriptInstalled(Url()));
-      exception_state.ThrowDOMException(
-          DOMExceptionCode::kNetworkError,
-          "Failed to import '" + completed_url.ElidedString() +
-              "'. importScripts() of new scripts after service worker "
-              "installation is not allowed.");
+      v8::Isolate* isolate = GetThread()->GetIsolate();
+      V8ThrowException::ThrowException(
+          isolate,
+          V8ThrowDOMException::CreateOrEmpty(
+              isolate, DOMExceptionCode::kNetworkError,
+              "Failed to import '" + completed_url.ElidedString() +
+                  "'. importScripts() of new scripts after service worker "
+                  "installation is not allowed."));
       return;
     }
   }
-  WorkerGlobalScope::importScripts(urls, exception_state);
+  WorkerGlobalScope::importScripts(urls);
 }
 
 SingleCachedMetadataHandler*
@@ -894,8 +906,9 @@ void ServiceWorkerGlobalScope::DidHandleInstallEvent(
       TRACE_ID_WITH_SCOPE(kServiceWorkerGlobalScopeTraceScope,
                           TRACE_ID_LOCAL(install_event_id)),
       TRACE_EVENT_FLAG_FLOW_IN, "status", MojoEnumToString(status));
+  GlobalFetch::ScopedFetcher* fetcher = GlobalFetch::ScopedFetcher::From(*this);
   RunEventCallback(&install_event_callbacks_, event_queue_.get(),
-                   install_event_id, status);
+                   install_event_id, status, fetcher->FetchCount());
 }
 
 void ServiceWorkerGlobalScope::DidHandleActivateEvent(
@@ -1509,6 +1522,12 @@ void ServiceWorkerGlobalScope::StartFetchEvent(
       !params->request->is_main_resource_load ? String() : params->client_id);
   event_init->setIsReload(params->request->is_reload);
 
+  mojom::blink::FetchAPIRequest& fetch_request = *params->request;
+  auto debug_header_it =
+      fetch_request.headers.find(RequestDebugHeaderScope::kHeaderName);
+  auto stack_string = debug_header_it == fetch_request.headers.end()
+                          ? String()
+                          : debug_header_it->value;
   Request* request = Request::Create(
       ScriptController()->GetScriptState(), std::move(params->request),
       Request::ForServiceWorkerFetchEvent::kTrue);
@@ -1532,6 +1551,7 @@ void ServiceWorkerGlobalScope::StartFetchEvent(
 
   NoteNewFetchEvent(request->url());
 
+  RequestDebugHeaderScope debug_header_scope(this, stack_string);
   DispatchExtendableEventWithRespondWith(fetch_event, wait_until_observer,
                                          respond_with_observer);
 }
@@ -1659,7 +1679,20 @@ void ServiceWorkerGlobalScope::DispatchInstallEvent(
   event_queue_->EnqueueNormal(
       WTF::Bind(&ServiceWorkerGlobalScope::StartInstallEvent,
                 WrapWeakPersistent(this), std::move(callback)),
-      CreateAbortCallback(&install_event_callbacks_), base::nullopt);
+      WTF::Bind(&ServiceWorkerGlobalScope::AbortInstallEvent,
+                WrapWeakPersistent(this)),
+      base::nullopt);
+}
+
+void ServiceWorkerGlobalScope::AbortInstallEvent(
+    int event_id,
+    mojom::blink::ServiceWorkerEventStatus status) {
+  DCHECK(IsContextThread());
+  auto iter = install_event_callbacks_.find(event_id);
+  DCHECK(iter != install_event_callbacks_.end());
+  GlobalFetch::ScopedFetcher* fetcher = GlobalFetch::ScopedFetcher::From(*this);
+  std::move(iter->value).Run(status, fetcher->FetchCount());
+  install_event_callbacks_.erase(iter);
 }
 
 void ServiceWorkerGlobalScope::StartInstallEvent(
@@ -1910,6 +1943,11 @@ void ServiceWorkerGlobalScope::DispatchFetchEventForMainResource(
     DispatchFetchEventForMainResourceCallback callback) {
   DCHECK(IsContextThread());
 
+  // The timeout for offline events in a service worker. The default value is
+  // the same as the default timeout (5 mins) of all events.
+  static const base::FeatureParam<int> kCustomTimeoutForOfflineEvent{
+      &features::kCheckOfflineCapability, "timeout_second", 5 * 60};
+
   // We can use nullptr as a |corp_checker| for the main resource because it
   // must be the same origin.
   if (params->is_offline_capability_check) {
@@ -1918,7 +1956,8 @@ void ServiceWorkerGlobalScope::DispatchFetchEventForMainResource(
                   WrapWeakPersistent(this), std::move(params),
                   /*corp_checker=*/nullptr, std::move(response_callback),
                   std::move(callback), base::nullopt),
-        CreateAbortCallback(&fetch_event_callbacks_), base::nullopt);
+        CreateAbortCallback(&fetch_event_callbacks_),
+        base::TimeDelta::FromSeconds(kCustomTimeoutForOfflineEvent.Get()));
   } else {
     event_queue_->EnqueueNormal(
         WTF::Bind(&ServiceWorkerGlobalScope::StartFetchEvent,
@@ -2431,9 +2470,8 @@ void ServiceWorkerGlobalScope::NoteRespondedToFetchEvent(
 }
 
 void ServiceWorkerGlobalScope::RecordQueuingTime(base::TimeTicks created_time) {
-  base::UmaHistogramMediumTimes(
-      "ServiceWorker.FetchEvent.QueuingTime",
-      base::TimeTicks::Now() - created_time);
+  base::UmaHistogramMediumTimes("ServiceWorker.FetchEvent.QueuingTime",
+                                base::TimeTicks::Now() - created_time);
 }
 
 }  // namespace blink

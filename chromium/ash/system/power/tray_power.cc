@@ -33,6 +33,7 @@
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/view.h"
 
@@ -44,6 +45,8 @@ namespace ash {
 namespace tray {
 
 PowerTrayView::PowerTrayView(Shelf* shelf) : TrayItemView(shelf) {
+  SetBorder(
+      views::CreateEmptyBorder(0, 0, kUnifiedTrayBatteryBottomPadding, 0));
   CreateImageView();
   UpdateImage();
   UpdateStatus();
@@ -119,8 +122,7 @@ void PowerTrayView::UpdateImage() {
   const SkColor icon_fg_color = TrayIconColor(session_state);
   const SkColor icon_bg_color = color_utils::GetResultingPaintColor(
       ShelfConfig::Get()->GetShelfControlButtonColor(),
-      AshColorProvider::Get()->GetBackgroundColor(
-          AshColorProvider::AshColorMode::kDark));
+      AshColorProvider::Get()->GetBackgroundColor());
 
   image_view()->SetImage(PowerStatus::GetBatteryImage(
       info, kUnifiedTrayIconSize, icon_bg_color, icon_fg_color));

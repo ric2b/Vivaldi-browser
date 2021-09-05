@@ -132,6 +132,8 @@ class CORE_EXPORT InputTypeView : public GarbageCollectedMixin {
   virtual void ValueAttributeChanged();
   virtual void DidSetValue(const String&, bool value_changed);
   virtual void ListAttributeTargetChanged();
+  virtual void CapsLockStateMayHaveChanged();
+  virtual bool ShouldDrawCapsLockIndicator() const;
   virtual void UpdateClearButtonVisibility();
   virtual void UpdatePlaceholderText();
   virtual AXObject* PopupRootAXObject();
@@ -145,7 +147,7 @@ class CORE_EXPORT InputTypeView : public GarbageCollectedMixin {
   // Validation functions
   virtual bool HasBadInput() const;
 
-  virtual String RawValue() const;
+  virtual wtf_size_t FocusedFieldIndex() const { return 0; }
 
  protected:
   InputTypeView(HTMLInputElement& element) : element_(&element) {}

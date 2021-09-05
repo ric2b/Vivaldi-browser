@@ -344,10 +344,10 @@ UserMessageImpl::~UserMessageImpl() {
 
 // static
 std::unique_ptr<ports::UserMessageEvent>
-UserMessageImpl::CreateEventForNewMessage() {
+UserMessageImpl::CreateEventForNewMessage(MojoCreateMessageFlags flags) {
   auto message_event = std::make_unique<ports::UserMessageEvent>(0);
   message_event->AttachMessage(
-      base::WrapUnique(new UserMessageImpl(message_event.get())));
+      base::WrapUnique(new UserMessageImpl(message_event.get(), flags)));
   return message_event;
 }
 
@@ -515,7 +515,8 @@ MojoResult UserMessageImpl::AppendData(uint32_t additional_payload_size,
     }
   }
 
-  if (user_payload_size_ > GetConfiguration().max_message_num_bytes) {
+  if (!unlimited_size_ &&
+      user_payload_size_ > GetConfiguration().max_message_num_bytes) {
     // We want to be aware of new undocumented cases of very large IPCs. Crashes
     // which result from this stack should be addressed by either marking the
     // corresponding mojom interface method with an [UnlimitedSize] attribute;
@@ -664,8 +665,11 @@ void UserMessageImpl::FailHandleSerializationForTesting(bool fail) {
   g_always_fail_handle_serialization = fail;
 }
 
-UserMessageImpl::UserMessageImpl(ports::UserMessageEvent* message_event)
-    : ports::UserMessage(&kUserMessageTypeInfo), message_event_(message_event) {
+UserMessageImpl::UserMessageImpl(ports::UserMessageEvent* message_event,
+                                 MojoCreateMessageFlags flags)
+    : ports::UserMessage(&kUserMessageTypeInfo),
+      message_event_(message_event),
+      unlimited_size_((flags & MOJO_CREATE_MESSAGE_FLAG_UNLIMITED_SIZE) != 0) {
   EnsureMemoryDumpProviderExists();
   IncrementMessageCount();
 }

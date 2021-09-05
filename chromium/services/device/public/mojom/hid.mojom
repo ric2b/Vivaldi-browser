@@ -2,8 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// TODO(crbug.com/1110184): We have to mark this mojom as [Stable] before
+// lacros begins the process of launching.
+
 module device.mojom;
 
+[Stable, Extensible]
 enum HidBusType {
   kHIDBusTypeUSB = 0,
   kHIDBusTypeBluetooth = 1,
@@ -131,6 +135,7 @@ const uint32 kHIDCollectionTypeUsageModifier = 0x06;
 const uint32 kHIDCollectionTypeVendorMin = 0x80;
 const uint32 kHIDCollectionTypeVendorMax = 0xff;
 
+[Stable]
 struct HidUsageAndPage {
   uint16 usage@0;
   uint16 usage_page@1;
@@ -146,6 +151,7 @@ struct HidUsageAndPage {
 // See section 6.2.2 of the Device Class Definition for HID for additional
 // information about the HID report descriptor and parser behavior.
 // https://www.usb.org/sites/default/files/documents/hid1_11.pdf
+[Stable]
 struct HidReportItem {
   // True if the usages for this item are defined by |usage_minimum| and
   // |usage_maximum|. False if the usages for this item are defined by |usages|.
@@ -218,14 +224,14 @@ struct HidReportItem {
   // fields that define the unit system and the exponents on units of length,
   // mass, time, temperature, current, and luminous intensity. Bits [28:31] are
   // reserved and should be set to zero.
-  uint32 unit@21;
+  uint32 unit@22;
 
   // A single report item may define multiple same-sized fields within a report.
   // |report_size| and |report_count| define the size of one field (in bits) and
   // the number of fields within the item. The total size of this item in bits
   // is equal to the product of these values.
-  uint32 report_size@22;
-  uint32 report_count@23;
+  uint32 report_size@23;
+  uint32 report_count@24;
 };
 
 // Contains information collected from the HID report descriptor regarding a
@@ -234,6 +240,7 @@ struct HidReportItem {
 // (bi-directional). When a device requires multiple reports of a single
 // category, each report is assigned a unique 8-bit ID. Devices that do not use
 // more than one report of any type may omit report IDs.
+[Stable]
 struct HidReportDescription {
   // Report ID associated with this report, or zero if the device does not use
   // report IDs.
@@ -252,6 +259,7 @@ struct HidReportDescription {
 // See section 6.2.2.6 of the Device Class Definition for HID for more
 // information about HID collections.
 // https://www.usb.org/sites/default/files/documents/hid1_11.pdf
+[Stable]
 struct HidCollectionInfo {
   // Collection's usage ID.
   HidUsageAndPage usage@0;
@@ -280,6 +288,7 @@ struct HidCollectionInfo {
 // single physical device may expose multiple logical devices, for instance a
 // keyboard/mouse combo device would expose separate logical HID devices for
 // keyboard and mouse functionality.
+[Stable]
 struct HidDeviceInfo {
   // A random GUID assigned to the device during enumeration. The device GUID is
   // stable as long as the application is running and the device remains
@@ -336,6 +345,7 @@ struct HidDeviceInfo {
 
 // A client interface for receiving a notification when HID devices are
 // physically connected or disconnected.
+[Stable]
 interface HidManagerClient {
   // Notifies the client that a device is added.
   DeviceAdded@0(HidDeviceInfo device_info);
@@ -348,6 +358,7 @@ interface HidManagerClient {
 // Provides an interface for enumerating available HID devices, registering for
 // device connection and disconnection notifications, and opening a connection
 // for reading from and writing to a HID device.
+[Stable]
 interface HidManager {
   // Enumerates available devices and set as a client of HidManager.
   // The implementation of HidManager guarantees that the returned callback
@@ -372,12 +383,16 @@ interface HidManager {
           pending_remote<HidConnectionClient>? connection_client,
           pending_remote<HidConnectionWatcher>? watcher)
       => (pending_remote<HidConnection>? connection);
+
+  // Binds a HidManager endpoint.
+  AddReceiver@3(pending_receiver<HidManager> receiver);
 };
 
 // Provides an interface for communication with a HID device. The HID spec
 // allows a device to define its own packet formats (reports) for sending or
 // receiving data. The methods in HidConnection send or receive data and specify
 // which report is used.
+[Stable]
 interface HidConnection {
   // A |report_id| of 0 is returned via callback if report IDs are not
   // supported by the device.
@@ -397,6 +412,7 @@ interface HidConnection {
 
 // A client interface for receiving a notification when input reports are
 // received.
+[Stable]
 interface HidConnectionClient {
   // Notifies the client that an input report was received. A |report_id| of 0
   // is passed if report IDs are not used by the device.
@@ -413,5 +429,6 @@ interface HidConnectionClient {
 // itself as a watcher so it can be notified when the connection is closed. This
 // allows the service to keep track of whether there are open connections for
 // the purpose of drawing an indicator icon when a tab is using a HID device.
+[Stable]
 interface HidConnectionWatcher {
 };

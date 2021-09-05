@@ -5,45 +5,39 @@
 #ifndef UI_GFX_GPU_FENCE_HANDLE_H_
 #define UI_GFX_GPU_FENCE_HANDLE_H_
 
+#include "base/macros.h"
 #include "build/build_config.h"
 #include "ui/gfx/gfx_export.h"
 
 #if defined(OS_POSIX) || defined(OS_FUCHSIA)
-#include "base/file_descriptor_posix.h"
+#include "base/files/scoped_file.h"
 #endif
 
 namespace gfx {
 
-enum class GpuFenceHandleType {
-  // A null handle for transport. It cannot be used for making a waitable fence
-  // object.
-  kEmpty,
-
-  // A file descriptor for a native fence object as used by the
-  // EGL_ANDROID_native_fence_sync extension.
-  kAndroidNativeFenceSync,
-
-  kLast = kAndroidNativeFenceSync
-};
-
 struct GFX_EXPORT GpuFenceHandle {
+  GpuFenceHandle(const GpuFenceHandle&) = delete;
+  GpuFenceHandle& operator=(const GpuFenceHandle&) = delete;
+
   GpuFenceHandle();
-  GpuFenceHandle(const GpuFenceHandle& other);
-  GpuFenceHandle& operator=(const GpuFenceHandle& other);
+  GpuFenceHandle(GpuFenceHandle&& other);
+  GpuFenceHandle& operator=(GpuFenceHandle&& other);
   ~GpuFenceHandle();
 
-  bool is_null() const { return type == GpuFenceHandleType::kEmpty; }
+  bool is_null() const;
 
-  GpuFenceHandleType type;
+  // Returns an instance of |handle| which can be sent over IPC. This duplicates
+  // the handle so that IPC code can take ownership of it without invalidating
+  // |handle| itself.
+  GpuFenceHandle Clone() const;
+
+  // owned_fd is defined here for both OS_FUCHSIA and OS_POSIX but all
+  // of the handling for owned_fd is only for POSIX. Consider adjusting the
+  // defines in the future.
 #if defined(OS_POSIX) || defined(OS_FUCHSIA)
-  base::FileDescriptor native_fd;
+  base::ScopedFD owned_fd;
 #endif
 };
-
-// Returns an instance of |handle| which can be sent over IPC. This duplicates
-// the file-handles as appropriate, so that the IPC code take ownership of them,
-// without invalidating |handle| itself.
-GFX_EXPORT GpuFenceHandle CloneHandleForIPC(const GpuFenceHandle& handle);
 
 }  // namespace gfx
 

@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "components/sync/invalidations/fcm_registration_token_observer.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync_device_info/device_info.h"
 #include "components/sync_device_info/local_device_info_provider.h"
 #include "components/version_info/version_info.h"
@@ -20,22 +20,15 @@
 namespace syncer {
 
 class DeviceInfoSyncClient;
-class SyncInvalidationsService;
 
-class LocalDeviceInfoProviderImpl
-    : public MutableLocalDeviceInfoProvider,
-      public syncer::FCMRegistrationTokenObserver {
+class LocalDeviceInfoProviderImpl : public MutableLocalDeviceInfoProvider {
  public:
 
   using SessionNameOverrideCallback = base::RepeatingCallback<std::string()>;
 
-  // |sync_invalidations_service| is used to get an FCM registration token. It
-  // may be nullptr if sync invalidations are disabled.
-  LocalDeviceInfoProviderImpl(
-      version_info::Channel channel,
-      const std::string& version,
-      const DeviceInfoSyncClient* sync_client,
-      SyncInvalidationsService* sync_invalidations_service);
+  LocalDeviceInfoProviderImpl(version_info::Channel channel,
+                              const std::string& version,
+                              const DeviceInfoSyncClient* sync_client);
   ~LocalDeviceInfoProviderImpl() override;
 
   // MutableLocalDeviceInfoProvider implementation.
@@ -50,17 +43,12 @@ class LocalDeviceInfoProviderImpl
   std::unique_ptr<Subscription> RegisterOnInitializedCallback(
       const base::RepeatingClosure& callback) override;
 
-  // syncer::FCMRegistrationTokenObserver implementation.
-  void OnFCMRegistrationTokenChanged() override;
-
   void set_session_name_override_callback(
         SessionNameOverrideCallback session_name_override_callback) {
       session_name_override_callback_ = session_name_override_callback;
   }
 
  private:
-  std::string GetFCMRegistrationToken() const;
-
   // The channel (CANARY, DEV, BETA, etc.) of the current client.
   const version_info::Channel channel_;
 
@@ -68,7 +56,6 @@ class LocalDeviceInfoProviderImpl
   const std::string version_;
 
   const DeviceInfoSyncClient* const sync_client_;
-  SyncInvalidationsService* sync_invalidations_service_ = nullptr;
 
   SessionNameOverrideCallback session_name_override_callback_;
 

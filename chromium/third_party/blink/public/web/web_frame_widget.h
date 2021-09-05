@@ -34,7 +34,7 @@
 #include <stdint.h>
 
 #include "base/callback_forward.h"
-#include "third_party/blink/public/common/page/web_drag_operation.h"
+#include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-shared.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/viewport_intersection_state.h"
@@ -65,7 +65,9 @@ class WebFrameWidget : public WebWidget {
       CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
           widget_host,
       CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget,
-      bool is_for_nested_main_frame = false);
+      bool is_for_nested_main_frame = false,
+      bool hidden = false,
+      bool never_composited = false);
   // Makes a WebFrameWidget that wraps a WebLocalFrame that is not a main frame,
   // providing a WebWidget to interact with the child local root frame.
   BLINK_EXPORT static WebFrameWidget* CreateForChildLocalRoot(
@@ -77,7 +79,9 @@ class WebFrameWidget : public WebWidget {
           frame_widget,
       CrossVariantMojoAssociatedRemote<mojom::WidgetHostInterfaceBase>
           widget_host,
-      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget);
+      CrossVariantMojoAssociatedReceiver<mojom::WidgetInterfaceBase> widget,
+      bool hidden = false,
+      bool never_composited = false);
 
   // Returns the local root of this WebFrameWidget.
   virtual WebLocalFrame* LocalRoot() const = 0;
@@ -96,18 +100,18 @@ class WebFrameWidget : public WebWidget {
 
   // Callback methods when a drag-and-drop operation is trying to drop something
   // on the WebFrameWidget.
-  virtual WebDragOperation DragTargetDragEnter(
+  virtual DragOperation DragTargetDragEnter(
       const WebDragData&,
       const gfx::PointF& point_in_viewport,
       const gfx::PointF& screen_point,
-      WebDragOperationsMask operations_allowed,
+      DragOperationsMask operations_allowed,
       uint32_t key_modifiers) = 0;
   virtual void DragTargetDragOver(
       const gfx::PointF& point_in_viewport,
       const gfx::PointF& screen_point,
-      WebDragOperationsMask operations_allowed,
+      DragOperationsMask operations_allowed,
       uint32_t key_modifiers,
-      base::OnceCallback<void(blink::WebDragOperation)> callback) = 0;
+      base::OnceCallback<void(blink::DragOperation)> callback) = 0;
   virtual void DragTargetDragLeave(const gfx::PointF& point_in_viewport,
                                    const gfx::PointF& screen_point) = 0;
   virtual void DragTargetDrop(const WebDragData&,
@@ -118,7 +122,7 @@ class WebFrameWidget : public WebWidget {
   // Notifies the WebFrameWidget that a drag has terminated.
   virtual void DragSourceEndedAt(const gfx::PointF& point_in_viewport,
                                  const gfx::PointF& screen_point,
-                                 WebDragOperation) = 0;
+                                 DragOperation) = 0;
 
   // Notifies the WebFrameWidget that the system drag and drop operation has
   // ended.
@@ -205,6 +209,10 @@ class WebFrameWidget : public WebWidget {
 
   // Override the device scale factor for testing.
   virtual void SetDeviceScaleFactorForTesting(float factor) = 0;
+
+  // Get the window segments for this widget.
+  // See https://github.com/webscreens/window-segments/blob/master/EXPLAINER.md
+  virtual const WebVector<gfx::Rect>& WindowSegments() const = 0;
 
  private:
   // This private constructor and the class/friend declaration ensures that

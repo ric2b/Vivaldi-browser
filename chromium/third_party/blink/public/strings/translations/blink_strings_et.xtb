@@ -13,9 +13,11 @@
 <translation id="1211441953136645838">järelmärkus</translation>
 <translation id="1281252709823657822">dialoog</translation>
 <translation id="1306460908038601864">Väljas</translation>
+<translation id="1311894908970423688">Väärtus peab olema <ph name="VALUE_DATE_OR_TIME" />.</translation>
 <translation id="1335095011850992622">tiitrid</translation>
 <translation id="1342835525016946179">artikkel</translation>
 <translation id="1359897965706325498">bänner</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> üksust</translation>
 <translation id="1480676835519562650">mitme valikuga, valitud on <ph name="SELECTED" /> <ph name="COUNT" />-st.</translation>
 <translation id="1589122976691792535">piirkond</translation>
 <translation id="1591562245178063882">See kuu</translation>
@@ -45,6 +47,7 @@
 <translation id="2247351761944213033">Nädal <ph name="WEEKNUMBER" />, <ph name="YEAR" /></translation>
 <translation id="2277199496770840904"><ph name="NUMBER" />. lugu</translation>
 <translation id="2291999235780842123">märkeruut</translation>
+<translation id="2307576640803031502">loendis, üksus <ph name="INDEX" />/<ph name="COUNT" /></translation>
 <translation id="2311842470354187719">leheküljepiir</translation>
 <translation id="2335594187091864976">kuupäeva ja kellaaja valija</translation>
 <translation id="2393030564806080191">Värvi väärtus kuueteistkümnendsüsteemis</translation>
@@ -155,9 +158,11 @@
 <translation id="5677946354068040947">rohkem valikuid</translation>
 <translation id="576709008726043716">sissejuhatus</translation>
 <translation id="57838592816432529">Vaigista</translation>
+<translation id="5860033963881614850">Väljas</translation>
 <translation id="588258955323874662">Täisekraan</translation>
 <translation id="5888666972993069672">Nüüd kantakse üle seadmesse <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">otsingukast</translation>
+<translation id="5916664084637901428">Sees</translation>
 <translation id="5939518447894949180">Lähtesta</translation>
 <translation id="5966707198760109579">Nädal</translation>
 <translation id="5987525920412732405">pöördnupp</translation>
@@ -185,6 +190,7 @@
 <translation id="6643016212128521049">Tühjenda</translation>
 <translation id="668171684555832681">Muu...</translation>
 <translation id="6692633176391053278">stepper</translation>
+<translation id="6709093583001123835">Väärtus peab olema <ph name="VALUE" />.</translation>
 <translation id="6709570249143506788">Kehv esituskvaliteet</translation>
 <translation id="6755330956360078551">tööriistavihje</translation>
 <translation id="6790428901817661496">Esita</translation>
@@ -285,6 +291,7 @@
 <translation id="9155987714137265666"><ph name="WEEK" /> alates kuupäevast <ph name="WEEK_START_DATE" /></translation>
 <translation id="916607977885256133">Pilt pildis</translation>
 <translation id="9168329111483466115">allmärkus</translation>
+<translation id="945780513535800434">Osaliselt märgitud</translation>
 <translation id="954003015749068518">aktiveeri režiim Pilt pildis</translation>
 <translation id="966787709310836684">menüü</translation>
 </translationbundle>

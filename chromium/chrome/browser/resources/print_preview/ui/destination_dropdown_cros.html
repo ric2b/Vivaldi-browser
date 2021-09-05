@@ -29,14 +29,13 @@
     --iron-icon-height: 24px;
     --iron-icon-width: 44px;
     align-items: center;
+    left: 2px;
     margin-inline-start: -4px;
-    right: 0;
     top: 50%;
   }
 
   :host-context([dir='rtl']) #dropdown-icon {
-    left: 0;
-    right: unset;
+    right: 2px;
   }
 
   #dropdown-box {
@@ -93,9 +92,8 @@
   #destination-display {
     box-sizing: border-box;
     overflow: hidden;
-    padding-inline-end: 32px;
     padding-inline-start: 8px;
-    text-overflow: clip;
+    text-overflow: ellipsis;
     white-space: nowrap;
     width: 100%;
   }
@@ -106,16 +104,11 @@
     aria-description$="[[destinationStatusText]]">
   <div id="destination-display-container">
     <div id="destination-icon-box">
-      <iron-icon icon="[[destinationIcon]]"
-          hidden="[[isCurrentDestinationCrosLocal]]">
-      </iron-icon>
-      <printer-status-icon-cros id="destination-badge"
-          hidden="[[!isCurrentDestinationCrosLocal]]"
-          icon-location="[[IconLocation.DISPLAY]]"
-          printer-state="[[computePrinterState_( value.printerStatusReason)]]">
-      </printer-status-icon-cros>
+      <iron-icon icon="[[destinationIcon]]"></iron-icon>
     </div>
-    <div id="destination-display">[[value.displayName]]</div>
+    <div id="destination-display" title="[[value.displayName]]">
+      [[value.displayName]]
+    </div>
     <iron-icon id="dropdown-icon" icon="cr:arrow-drop-down"></iron-icon>
   </div>
   <div id="dropdown-box">
@@ -131,11 +124,9 @@
                   highlightedIndex_)]]"
               aria-description$="[[getPrinterStatusErrorString_(
                   item.printerStatusReason)]]">
-            <printer-status-icon-cros icon-location="[[IconLocation.DROPDOWN]]"
-                printer-state="[[computePrinterState_(
-                    item.printerStatusReason)]]"
-                class$="[[getHighlightedClass_(item.key, highlightedIndex_)]]">
-            </printer-status-icon-cros>
+            <iron-icon icon="[[getPrinterStatusIcon_(
+                item.printerStatusReason)]]">
+            </iron-icon>
             <span class="printer-display-name">[[item.displayName]]</span>
           </button>
         </template>

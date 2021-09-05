@@ -14,8 +14,8 @@
 #include "base/unguessable_token.h"
 #include "content/browser/browsing_data/clear_site_data_handler.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
-#include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/loader/webrtc_connections_observer.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/ssl/ssl_manager.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -257,15 +257,6 @@ void NetworkServiceClient::OnCorsPreflightRequestCompleted(
     const network::URLLoaderCompletionStatus& status) {
   devtools_instrumentation::OnCorsPreflightRequestCompleted(
       process_id, render_frame_id, devtools_request_id, status);
-}
-
-void NetworkServiceClient::LogCrossOriginFetchFromContentScript3(
-    const std::string& isolated_world_host) {
-  ContentBrowserClient* client = GetContentClient()->browser();
-  if (client) {
-    client->LogUkmEventForCrossOriginFetchFromContentScript3(
-        isolated_world_host);
-  }
 }
 
 }  // namespace content

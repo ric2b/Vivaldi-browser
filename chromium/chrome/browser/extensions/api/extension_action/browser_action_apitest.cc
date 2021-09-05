@@ -148,32 +148,23 @@ class BrowserActionApiCanvasTest : public BrowserActionApiTest {
   }
 };
 
-enum TestFlags {
-  kNone = 0,
-  kUseServiceWorker = 1,
-  kUseExtensionsMenuUi = 1 << 1,
-};
+using ContextType = ExtensionBrowserTest::ContextType;
 
-class BrowserActionApiLazyTest : public BrowserActionApiTest,
-                                 public testing::WithParamInterface<int> {
+class BrowserActionApiLazyTest
+    : public BrowserActionApiTest,
+      public testing::WithParamInterface<ContextType> {
  public:
   BrowserActionApiLazyTest() {
     // Service Workers are currently only available on certain channels, so set
     // the channel for those tests.
-    if ((GetParam() & kUseServiceWorker) != 0)
+    if (GetParam() == ContextType::kServiceWorker)
       current_channel_ = std::make_unique<ScopedWorkerBasedExtensionsChannel>();
-
-    if ((GetParam() & kUseExtensionsMenuUi) != 0) {
-      feature_list_.InitAndEnableFeature(features::kExtensionsToolbarMenu);
-    } else {
-      feature_list_.InitAndDisableFeature(features::kExtensionsToolbarMenu);
-    }
   }
 
   const extensions::Extension* LoadExtensionWithParamFlags(
       const base::FilePath& path) {
     int flags = kFlagEnableFileAccess;
-    if ((GetParam() & kUseServiceWorker) != 0)
+    if (GetParam() == ContextType::kServiceWorker)
       flags |= ExtensionBrowserTest::kFlagRunAsServiceWorkerBasedExtension;
     return LoadExtensionWithFlags(path, flags);
   }
@@ -247,32 +238,23 @@ IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, Basic) {
 }
 
 IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, Update) {
-  ASSERT_NO_FATAL_FAILURE(RunUpdateTest("browser_action/update", false))
-      << GetParam();
+  ASSERT_NO_FATAL_FAILURE(RunUpdateTest("browser_action/update", false));
 }
 
 IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, UpdateSvg) {
   // TODO(crbug.com/1064671): Service Workers currently don't support loading
   // SVG images.
-  const bool expect_failure = GetParam() & kUseServiceWorker;
+  const bool expect_failure = GetParam() == ContextType::kServiceWorker;
   ASSERT_NO_FATAL_FAILURE(
-      RunUpdateTest("browser_action/update_svg", expect_failure))
-      << GetParam();
+      RunUpdateTest("browser_action/update_svg", expect_failure));
 }
 
-INSTANTIATE_TEST_SUITE_P(EventPageAndLegacyToolbar,
+INSTANTIATE_TEST_SUITE_P(EventPage,
                          BrowserActionApiLazyTest,
-                         ::testing::Values(kNone));
-INSTANTIATE_TEST_SUITE_P(EventPageAndExtensionsMenu,
+                         ::testing::Values(ContextType::kEventPage));
+INSTANTIATE_TEST_SUITE_P(ServiceWorker,
                          BrowserActionApiLazyTest,
-                         ::testing::Values(kUseExtensionsMenuUi));
-INSTANTIATE_TEST_SUITE_P(ServiceWorkerAndLegacyToolbar,
-                         BrowserActionApiLazyTest,
-                         ::testing::Values(kUseServiceWorker));
-INSTANTIATE_TEST_SUITE_P(ServiceWorkerAndExtensionsMenu,
-                         BrowserActionApiLazyTest,
-                         ::testing::Values(kUseServiceWorker |
-                                           kUseExtensionsMenuUi));
+                         ::testing::Values(ContextType::kServiceWorker));
 
 IN_PROC_BROWSER_TEST_F(BrowserActionApiCanvasTest, DynamicBrowserAction) {
   ASSERT_TRUE(RunExtensionTest("browser_action/no_icon")) << message_;
@@ -516,7 +498,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiCanvasTest, InvisibleIconBrowserAction) {
   }
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, TabSpecificBrowserActionState) {
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest,
+                       TabSpecificBrowserActionState) {
   ASSERT_TRUE(RunExtensionTest("browser_action/tab_specific_state")) <<
       message_;
   const Extension* extension = GetSingleLoadedExtension();
@@ -548,7 +531,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, TabSpecificBrowserActionState) {
 
 // Test that calling chrome.browserAction.setPopup() can enable and change
 // a popup.
-IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionAddPopup) {
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, BrowserActionAddPopup) {
   ASSERT_TRUE(RunExtensionTest("browser_action/add_popup")) << message_;
   const Extension* extension = GetSingleLoadedExtension();
   ASSERT_TRUE(extension) << message_;
@@ -603,7 +586,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionAddPopup) {
 }
 
 // Test that calling chrome.browserAction.setPopup() can remove a popup.
-IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionRemovePopup) {
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, BrowserActionRemovePopup) {
   // Load the extension, which has a browser action with a default popup.
   ASSERT_TRUE(RunExtensionTest("browser_action/remove_popup")) << message_;
   const Extension* extension = GetSingleLoadedExtension();
@@ -755,7 +738,7 @@ IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, IncognitoUpdate) {
 
 // Tests that events are dispatched to the correct profile for split mode
 // extensions.
-IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, IncognitoSplit) {
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, IncognitoSplit) {
   ResultCatcher catcher;
   const Extension* extension = LoadExtensionWithFlags(
       test_data_dir_.AppendASCII("browser_action/split_mode"),
@@ -835,7 +818,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, CloseBackgroundPage) {
             action->GetExplicitlySetBadgeText(ExtensionAction::kDefaultTabId));
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BadgeBackgroundColor) {
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, BadgeBackgroundColor) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(RunExtensionTest("browser_action/color")) << message_;
   const Extension* extension = GetSingleLoadedExtension();
@@ -884,7 +867,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BadgeBackgroundColor) {
             action->GetBadgeBackgroundColor(ExtensionAction::kDefaultTabId));
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, Getters) {
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, Getters) {
   ASSERT_TRUE(RunExtensionTest("browser_action/getters")) << message_;
   const Extension* extension = GetSingleLoadedExtension();
   ASSERT_TRUE(extension) << message_;
@@ -905,7 +888,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, Getters) {
 }
 
 // Verify triggering browser action.
-IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, TestTriggerBrowserAction) {
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, TestTriggerBrowserAction) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   ASSERT_TRUE(RunExtensionTest("trigger_actions/browser_action")) << message_;
@@ -941,7 +924,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, TestTriggerBrowserAction) {
   EXPECT_EQ(result, "red");
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserActionApiTest, BrowserActionWithRectangularIcon) {
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest,
+                       BrowserActionWithRectangularIcon) {
   ExtensionTestMessageListener ready_listener("ready", true);
 
   const Extension* extension = LoadExtension(

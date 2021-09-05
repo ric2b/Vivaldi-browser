@@ -19,13 +19,13 @@
 #include "ash/app_list/views/search_result_page_view.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
+#include "ash/search_box/search_box_constants.h"
+#include "ash/search_box/search_box_view_delegate.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "ui/base/ime/composition_text.h"
-#include "ui/chromeos/search_box/search_box_constants.h"
-#include "ui/chromeos/search_box/search_box_view_delegate.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_unittest_util.h"
@@ -64,7 +64,7 @@ class KeyPressCounterView : public ContentsView {
 };
 
 class SearchBoxViewTest : public views::test::WidgetTest,
-                          public search_box::SearchBoxViewDelegate {
+                          public SearchBoxViewDelegate {
  public:
   SearchBoxViewTest() = default;
   ~SearchBoxViewTest() override = default;
@@ -168,15 +168,15 @@ class SearchBoxViewTest : public views::test::WidgetTest,
 
  private:
   // Overridden from SearchBoxViewDelegate:
-  void QueryChanged(search_box::SearchBoxViewBase* sender) override {
+  void QueryChanged(SearchBoxViewBase* sender) override {
     ++query_changed_count_;
     last_query_ = sender->search_box()->GetText();
   }
 
   void AssistantButtonPressed() override {}
   void BackButtonPressed() override {}
-  void ActiveChanged(search_box::SearchBoxViewBase* sender) override {}
-  void SearchBoxFocusChanged(search_box::SearchBoxViewBase* sender) override {}
+  void ActiveChanged(SearchBoxViewBase* sender) override {}
+  void SearchBoxFocusChanged(SearchBoxViewBase* sender) override {}
 
   AppListTestViewDelegate view_delegate_;
   views::Widget* widget_;
@@ -255,9 +255,8 @@ TEST_F(SearchBoxViewTest, SearchBoxInactiveByDefault) {
 TEST_F(SearchBoxViewTest, SearchBoxInactiveSearchBoxGoogle) {
   SetSearchEngineIsGoogle(true);
   SetSearchBoxActive(false, ui::ET_UNKNOWN);
-  const gfx::ImageSkia expected_icon =
-      gfx::CreateVectorIcon(kGoogleBlackIcon, search_box::kIconSize,
-                            search_box::kDefaultSearchboxColor);
+  const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
+      kGoogleBlackIcon, kSearchBoxIconSize, kDefaultSearchboxColor);
   view()->ModelChanged();
 
   const gfx::ImageSkia actual_icon =
@@ -271,9 +270,8 @@ TEST_F(SearchBoxViewTest, SearchBoxInactiveSearchBoxGoogle) {
 TEST_F(SearchBoxViewTest, SearchBoxActiveSearchEngineGoogle) {
   SetSearchEngineIsGoogle(true);
   SetSearchBoxActive(true, ui::ET_MOUSE_PRESSED);
-  const gfx::ImageSkia expected_icon =
-      gfx::CreateVectorIcon(kGoogleColorIcon, search_box::kIconSize,
-                            search_box::kDefaultSearchboxColor);
+  const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
+      kGoogleColorIcon, kSearchBoxIconSize, kDefaultSearchboxColor);
   view()->ModelChanged();
 
   const gfx::ImageSkia actual_icon =
@@ -287,9 +285,8 @@ TEST_F(SearchBoxViewTest, SearchBoxActiveSearchEngineGoogle) {
 TEST_F(SearchBoxViewTest, SearchBoxInactiveSearchEngineNotGoogle) {
   SetSearchEngineIsGoogle(false);
   SetSearchBoxActive(false, ui::ET_UNKNOWN);
-  const gfx::ImageSkia expected_icon =
-      gfx::CreateVectorIcon(kSearchEngineNotGoogleIcon, search_box::kIconSize,
-                            search_box::kDefaultSearchboxColor);
+  const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
+      kSearchEngineNotGoogleIcon, kSearchBoxIconSize, kDefaultSearchboxColor);
   view()->ModelChanged();
 
   const gfx::ImageSkia actual_icon =
@@ -303,9 +300,8 @@ TEST_F(SearchBoxViewTest, SearchBoxInactiveSearchEngineNotGoogle) {
 TEST_F(SearchBoxViewTest, SearchBoxActiveSearchEngineNotGoogle) {
   SetSearchEngineIsGoogle(false);
   SetSearchBoxActive(true, ui::ET_UNKNOWN);
-  const gfx::ImageSkia expected_icon =
-      gfx::CreateVectorIcon(kSearchEngineNotGoogleIcon, search_box::kIconSize,
-                            search_box::kDefaultSearchboxColor);
+  const gfx::ImageSkia expected_icon = gfx::CreateVectorIcon(
+      kSearchEngineNotGoogleIcon, kSearchBoxIconSize, kDefaultSearchboxColor);
   view()->ModelChanged();
 
   const gfx::ImageSkia actual_icon =
@@ -671,30 +667,7 @@ TEST_F(SearchBoxViewTest, NavigatePrivacyNotice) {
   EXPECT_TRUE(selection->is_default_result());
   EXPECT_EQ(selection, privacy_container_view->GetResultViewAt(0));
 
-  // The privacy view should have two additional non-default actions.
-  KeyPress(ui::VKEY_TAB);
-  selection = selection_controller->selected_result();
-  EXPECT_EQ(selection, privacy_container_view->GetResultViewAt(0));
-
-  KeyPress(ui::VKEY_TAB);
-  selection = selection_controller->selected_result();
-  EXPECT_EQ(selection, privacy_container_view->GetResultViewAt(0));
-
-  KeyPress(ui::VKEY_TAB);
-  selection = selection_controller->selected_result();
-  ASSERT_TRUE(selection->result());
-  EXPECT_EQ(selection->result()->title(), base::ASCIIToUTF16("test"));
-
-  // Move focus forward to the close button and then the privacy view again.
-  // The privacy view should now have only two actions.
-  KeyPress(ui::VKEY_TAB);
-  selection = selection_controller->selected_result();
-  EXPECT_FALSE(selection);
-
-  KeyPress(ui::VKEY_TAB);
-  selection = selection_controller->selected_result();
-  EXPECT_EQ(selection, privacy_container_view->GetResultViewAt(0));
-
+  // The privacy view should have one additional action.
   KeyPress(ui::VKEY_TAB);
   selection = selection_controller->selected_result();
   EXPECT_EQ(selection, privacy_container_view->GetResultViewAt(0));
@@ -704,7 +677,7 @@ TEST_F(SearchBoxViewTest, NavigatePrivacyNotice) {
   ASSERT_TRUE(selection->result());
   EXPECT_EQ(selection->result()->title(), base::ASCIIToUTF16("test"));
 
-  // When navigating backwards, the privacy notice should have two actions.
+  // The privacy notice should also have two actions when navigating backwards.
   KeyPress(ui::VKEY_TAB, /*is_shift_down=*/true);
   selection = selection_controller->selected_result();
   EXPECT_EQ(selection, privacy_container_view->GetResultViewAt(0));
@@ -744,7 +717,6 @@ TEST_F(SearchBoxViewTest, KeyboardEventClosesPrivacyNotice) {
   // Navigate to the close button and press enter. The privacy info should no
   // longer be shown.
   KeyPress(ui::VKEY_TAB);
-  KeyPress(ui::VKEY_TAB);
   KeyPress(ui::VKEY_RETURN);
   EXPECT_FALSE(view_delegate()->ShouldShowAssistantPrivacyInfo());
 }
@@ -773,21 +745,17 @@ TEST_F(SearchBoxViewTest, PrivacyViewActionNotOverriddenByNewResults) {
       selection_controller->selected_result();
   EXPECT_EQ(selection, privacy_container_view->GetResultViewAt(0));
 
-  // The privacy view should have two additional actions. Tab to the next
-  // privacy view action.
+  // The privacy view should have one additional action. Tab to the next privacy
+  // view action.
   KeyPress(ui::VKEY_TAB);
   selection = selection_controller->selected_result();
   EXPECT_EQ(selection, privacy_container_view->GetResultViewAt(0));
 
-  // Create a new search result. The privacy view should only have one action
+  // Create a new search result. The privacy view should have no actions
   // remaining.
   CreateSearchResult(ash::SearchResultDisplayType::kList, 0.5,
                      base::ASCIIToUTF16("testing"), base::string16());
   base::RunLoop().RunUntilIdle();
-
-  KeyPress(ui::VKEY_TAB);
-  selection = selection_controller->selected_result();
-  EXPECT_EQ(selection, privacy_container_view->GetResultViewAt(0));
 
   KeyPress(ui::VKEY_TAB);
   selection = selection_controller->selected_result();

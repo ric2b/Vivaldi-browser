@@ -58,6 +58,7 @@ android_library("internal_java") {
     "//base:jni_java",
     "//chrome/android:chrome_app_java_resources",
     "//chrome/android:chrome_java",
+    "//chrome/browser/feedback/android:java",
     "//chrome/browser/password_check/android:password_check_java_enums",
     "//chrome/browser/password_check/android:public_ui_java",
     "//chrome/browser/password_manager/android:java",
@@ -118,7 +119,6 @@ android_resources("java_resources") {
     "java/res/layout/password_check_view_credential_dialog.xml",
     "java/res/values/dimens.xml",
   ]
-  create_srcjar = false
 }
 
 java_strings_grd("java_strings_grd") {

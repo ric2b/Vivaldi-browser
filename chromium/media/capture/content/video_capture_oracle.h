@@ -10,6 +10,7 @@
 #include "base/callback.h"
 #include "base/time/time.h"
 #include "media/base/feedback_signal_accumulator.h"
+#include "media/base/video_frame_feedback.h"
 #include "media/capture/capture_export.h"
 #include "media/capture/content/animated_content_sampler.h"
 #include "media/capture/content/capture_resolution_chooser.h"
@@ -104,12 +105,13 @@ class CAPTURE_EXPORT VideoCaptureOracle {
   // utilization relative to a sustainable maximum (not the absolute maximum).
   // This method should only be called for frames where CompleteCapture()
   // returned true.
-  void RecordConsumerFeedback(int frame_number, double resource_utilization);
+  void RecordConsumerFeedback(int frame_number,
+                              const media::VideoFrameFeedback& feedback);
 
   // Sets the minimum amount of time that must pass between changes to the
-  // capture size. This throttles the rate of size changes, to avoid stressing
-  // consumers and to allow the end-to-end system sufficient time to stabilize
-  // before re-evaluating the capture size.
+  // capture size due to autothrottling. This throttles the rate of size
+  // changes, to avoid stressing consumers and to allow the end-to-end system
+  // sufficient time to stabilize before re-evaluating the capture size.
   void SetMinSizeChangePeriod(base::TimeDelta period);
 
   // Returns the oracle's estimate of the duration of the next frame.  This
@@ -230,6 +232,11 @@ class CAPTURE_EXPORT VideoCaptureOracle {
   // playback) and decides which events to sample to "lock into" that content.
   SmoothEventSampler smoothing_sampler_;
   AnimatedContentSampler content_sampler_;
+
+  // This is the overall setting, provided in the last call to
+  // SetMinCapturePeriod(), but the live setting in |smoothing_sampler_| and
+  // |content_sampler_| could be greater if the consumer feedback requests it.
+  base::TimeDelta min_capture_period_;
 
   // Determines video capture frame sizes.
   CaptureResolutionChooser resolution_chooser_;

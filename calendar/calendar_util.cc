@@ -15,89 +15,89 @@ using vivaldi::GetTime;
 calendar::EventRow GetEventRow(
     const extensions::vivaldi::calendar::CreateDetails& event) {
   calendar::EventRow row;
-  row.set_title(base::UTF8ToUTF16(event.title));
+  row.title = base::UTF8ToUTF16(event.title);
 
   if (event.description.get()) {
-    row.set_description(base::UTF8ToUTF16(*event.description));
+    row.description = base::UTF8ToUTF16(*event.description);
   }
 
   if (event.start.get()) {
-    row.set_start(GetTime(*event.start.get()));
+    row.start = GetTime(*event.start.get());
   }
 
   if (event.end.get()) {
-    row.set_end(GetTime(*event.end.get()));
+    row.end = GetTime(*event.end.get());
   }
 
   if (event.all_day.get()) {
-    row.set_all_day(*event.all_day.get());
+    row.all_day = *event.all_day.get();
   }
 
   if (event.is_recurring.get()) {
-    row.set_is_recurring(*event.is_recurring.get());
+    row.is_recurring = *event.is_recurring.get();
   }
 
   if (event.start_recurring.get()) {
-    row.set_start_recurring(GetTime(*event.start_recurring.get()));
+    row.start_recurring = GetTime(*event.start_recurring.get());
   }
 
   if (event.end_recurring.get()) {
-    row.set_end_recurring(GetTime(*event.end_recurring.get()));
+    row.end_recurring = GetTime(*event.end_recurring.get());
   }
 
   if (event.location.get()) {
-    row.set_location(base::UTF8ToUTF16(*event.location));
+    row.location = base::UTF8ToUTF16(*event.location);
   }
 
   if (event.url.get()) {
-    row.set_url(base::UTF8ToUTF16(*event.url));
+    row.url = base::UTF8ToUTF16(*event.url);
   }
 
   if (event.etag.get()) {
-    row.set_etag(*event.etag);
+    row.etag = *event.etag;
   }
 
   if (event.href.get()) {
-    row.set_href(*event.href);
+    row.href = *event.href;
   }
 
   if (event.uid.get()) {
-    row.set_uid(*event.uid);
+    row.uid = *event.uid;
   }
 
   calendar::CalendarID calendar_id;
   if (GetStdStringAsInt64(event.calendar_id, &calendar_id)) {
-    row.set_calendar_id(calendar_id);
+    row.calendar_id = calendar_id;
   }
 
   if (event.task.get()) {
-    row.set_task(*event.task);
+    row.task = *event.task;
   }
 
   if (event.complete.get()) {
-    row.set_complete(*event.complete);
+    row.complete = *event.complete;
   }
 
   if (event.sequence.get()) {
-    row.set_sequence(*event.sequence);
+    row.sequence = *event.sequence;
   }
 
   if (event.ical.get()) {
-    row.set_ical(base::UTF8ToUTF16(*event.ical));
+    row.ical = base::UTF8ToUTF16(*event.ical);
   }
 
   if (event.rrule.get()) {
-    row.set_rrule(*event.rrule);
+    row.rrule = *event.rrule;
   }
 
   if (event.organizer.get()) {
-    row.set_organizer(*event.organizer);
+    row.organizer = *event.organizer;
   }
 
   if (event.event_type_id.get()) {
     calendar::EventTypeID event_type_id;
     if (GetStdStringAsInt64(*event.event_type_id, &event_type_id)) {
-      row.set_event_type_id(event_type_id);
+      row.event_type_id = event_type_id;
     }
   }
 
@@ -106,7 +106,7 @@ calendar::EventRow GetEventRow(
     for (const auto& exception : *event.event_exceptions) {
       event_exceptions.push_back(CreateEventException(exception));
     }
-    row.set_event_exceptions(event_exceptions);
+    row.event_exceptions = event_exceptions;
   }
 
   if (event.notifications.get()) {
@@ -114,7 +114,7 @@ calendar::EventRow GetEventRow(
     for (const auto& notification : *event.notifications) {
       event_noficications.push_back(CreateNotificationRow(notification));
     }
-    row.set_notifications_to_create(event_noficications);
+    row.notifications_to_create = event_noficications;
   }
 
   if (event.invites.get()) {
@@ -122,14 +122,46 @@ calendar::EventRow GetEventRow(
     for (const auto& invite : *event.invites) {
       event_invites.push_back(CreateInviteRow(invite));
     }
-    row.set_invites_to_create(event_invites);
+    row.invites_to_create = event_invites;
   }
 
   if (event.timezone.get()) {
-    row.set_timezone(*event.timezone);
+    row.timezone = *event.timezone;
   }
 
-  row.set_is_template(event.is_template);
+  row.is_template = event.is_template;
+
+  if (event.due.get()) {
+    row.due = GetTime(*event.due.get());
+  }
+
+  if (event.priority.get()) {
+    row.priority = *event.priority;
+  }
+
+  if (event.status.get()) {
+    row.status = *event.status;
+  }
+
+  if (event.percentage_complete.get()) {
+    row.percentage_complete = *event.percentage_complete;
+  }
+
+  if (event.categories.get()) {
+    row.categories = base::UTF8ToUTF16(*event.categories);
+  }
+
+  if (event.component_class.get()) {
+    row.component_class = base::UTF8ToUTF16(*event.component_class);
+  }
+
+  if (event.attachment.get()) {
+    row.attachment = base::UTF8ToUTF16(*event.attachment);
+  }
+
+  if (event.completed.get()) {
+    row.completed = GetTime(*event.completed.get());
+  }
 
   return row;
 }

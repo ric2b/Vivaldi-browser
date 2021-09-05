@@ -8,13 +8,13 @@
 #include <string>
 
 #include "ash/public/cpp/ash_view_ids.h"
+#include "ash/public/cpp/rounded_image_view.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/default_color_constants.h"
 #include "ash/system/model/enterprise_domain_model.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/tray/tray_constants.h"
@@ -23,7 +23,6 @@
 #include "ash/system/unified/top_shortcut_button.h"
 #include "ash/system/unified/top_shortcuts_view.h"
 #include "ash/system/unified/user_chooser_detailed_view_controller.h"
-#include "ash/system/user/rounded_image_view.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -41,7 +40,6 @@
 namespace ash {
 
 using ContentLayerType = AshColorProvider::ContentLayerType;
-using AshColorMode = AshColorProvider::AshColorMode;
 
 namespace {
 
@@ -90,15 +88,14 @@ AddUserButton::AddUserButton(UserChooserDetailedViewController* controller)
 
   auto* icon = new views::ImageView;
   icon->SetImage(gfx::CreateVectorIcon(
-      kSystemMenuNewUserIcon,
-      AshColorProvider::Get()->GetContentLayerColor(
-          ContentLayerType::kIconColorPrimary, AshColorMode::kDark)));
+      kSystemMenuNewUserIcon, AshColorProvider::Get()->GetContentLayerColor(
+                                  ContentLayerType::kIconColorPrimary)));
   AddChildView(icon);
 
   auto* label = new views::Label(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT));
   label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      ContentLayerType::kTextColorPrimary, AshColorMode::kDark));
+      ContentLayerType::kTextColorPrimary));
   label->SetAutoColorReadabilityEnabled(false);
   label->SetSubpixelRenderingEnabled(false);
   AddChildView(label);
@@ -130,7 +127,7 @@ class Separator : public views::View {
     child->SetBorder(views::CreateSolidSidedBorder(
         0, 0, kUnifiedNotificationSeparatorThickness, 0,
         AshColorProvider::Get()->GetContentLayerColor(
-            ContentLayerType::kSeparatorColor, AshColorMode::kDark)));
+            ContentLayerType::kSeparatorColor)));
   }
 
   DISALLOW_COPY_AND_ASSIGN(Separator);
@@ -139,7 +136,7 @@ class Separator : public views::View {
 views::View* CreateAddUserErrorView(const base::string16& message) {
   auto* label = new views::Label(message);
   label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      ContentLayerType::kTextColorPrimary, AshColorMode::kDark));
+      ContentLayerType::kTextColorPrimary));
   label->SetAutoColorReadabilityEnabled(false);
   label->SetSubpixelRenderingEnabled(false);
   label->SetBorder(
@@ -162,8 +159,8 @@ views::View* CreateUserAvatarView(int user_index) {
     return new TopShortcutButton(kSystemMenuGuestIcon,
                                  IDS_ASH_STATUS_TRAY_GUEST_LABEL);
   } else {
-    auto* image_view = new tray::RoundedImageView(kTrayItemSize / 2);
-    image_view->set_can_process_events_within_subtree(false);
+    auto* image_view = new RoundedImageView(kTrayItemSize / 2);
+    image_view->SetCanProcessEventsWithinSubtree(false);
     image_view->SetImage(user_session->user_info.avatar.image,
                          gfx::Size(kTrayItemSize, kTrayItemSize));
     return image_view;
@@ -217,7 +214,7 @@ UserItemButton::UserItemButton(int user_index,
   AddChildView(CreateUserAvatarView(user_index));
 
   views::View* vertical_labels = new views::View;
-  vertical_labels->set_can_process_events_within_subtree(false);
+  vertical_labels->SetCanProcessEventsWithinSubtree(false);
   auto* vertical_layout =
       vertical_labels->SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kVertical));
@@ -229,14 +226,14 @@ UserItemButton::UserItemButton(int user_index,
 
   name_->SetText(base::UTF8ToUTF16(user_session->user_info.display_name));
   name_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      ContentLayerType::kTextColorPrimary, AshColorMode::kDark));
+      ContentLayerType::kTextColorPrimary));
   name_->SetAutoColorReadabilityEnabled(false);
   name_->SetSubpixelRenderingEnabled(false);
   vertical_labels->AddChildView(name_);
 
   email_->SetText(base::UTF8ToUTF16(user_session->user_info.display_email));
   email_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      ContentLayerType::kTextColorSecondary, AshColorMode::kDark));
+      ContentLayerType::kTextColorSecondary));
   email_->SetAutoColorReadabilityEnabled(false);
   email_->SetSubpixelRenderingEnabled(false);
   vertical_labels->AddChildView(email_);
@@ -245,9 +242,8 @@ UserItemButton::UserItemButton(int user_index,
   layout->SetFlexForView(vertical_labels, 1);
 
   capture_icon_->SetImage(gfx::CreateVectorIcon(
-      kSystemTrayRecordingIcon,
-      AshColorProvider::Get()->GetContentLayerColor(
-          ContentLayerType::kIconColorAlert, AshColorMode::kDark)));
+      kSystemTrayRecordingIcon, AshColorProvider::Get()->GetContentLayerColor(
+                                    ContentLayerType::kIconColorAlert)));
   if (!has_close_button) {
     // Add a padding with the same size as the close button,
     // so as to align all media indicators in a column.
@@ -284,7 +280,7 @@ void UserItemButton::SetCaptureState(MediaCaptureState capture_state) {
       break;
   }
   if (res_id)
-    capture_icon_->set_tooltip_text(l10n_util::GetStringUTF16(res_id));
+    capture_icon_->SetTooltipText(l10n_util::GetStringUTF16(res_id));
 }
 
 base::string16 UserItemButton::GetTooltipText(const gfx::Point& p) const {

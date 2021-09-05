@@ -8,7 +8,6 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/default_color_constants.h"
 #include "ash/system/message_center/ash_message_center_lock_screen_controller.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/unified/rounded_label_button.h"
@@ -38,8 +37,7 @@ void ShowLockScreenNotificationSettings() {
 NotificationHiddenView::NotificationHiddenView() {
   auto* label = new views::Label;
   label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorPrimary,
-      AshColorProvider::AshColorMode::kDark));
+      AshColorProvider::ContentLayerType::kTextColorPrimary));
   label->SetAutoColorReadabilityEnabled(false);
   label->SetText(
       l10n_util::GetStringUTF16(IDS_ASH_MESSAGE_CENTER_LOCKSCREEN_UNIFIED));
@@ -50,10 +48,9 @@ NotificationHiddenView::NotificationHiddenView() {
   auto* container = new views::View;
   container->SetBackground(views::CreateBackgroundFromPainter(
       views::Painter::CreateSolidRoundRectPainter(
-          AshColorProvider::Get()->DeprecatedGetControlsLayerColor(
+          AshColorProvider::Get()->GetControlsLayerColor(
               AshColorProvider::ControlsLayerType::
-                  kControlBackgroundColorInactive,
-              kUnifiedMenuButtonColor),
+                  kControlBackgroundColorInactive),
           kUnifiedTrayCornerRadius)));
 
   auto* layout = container->SetLayoutManager(std::make_unique<views::BoxLayout>(

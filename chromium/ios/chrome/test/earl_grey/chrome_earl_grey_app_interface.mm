@@ -16,6 +16,7 @@
 #include "components/metrics/demographic_metrics_provider.h"
 #include "components/prefs/pref_service.h"
 #import "components/ukm/ios/features.h"
+#include "components/unified_consent/unified_consent_service.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/variations/variations_ids_provider.h"
 #import "ios/chrome/app/main_controller.h"
@@ -27,9 +28,11 @@
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/settings/autofill/features.h"
 #import "ios/chrome/browser/ui/table_view/feature_flags.h"
-#import "ios/chrome/browser/ui/toolbar/public/features.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/ui/util/menu_util.h"
+#import "ios/chrome/browser/ui/util/multi_window_support.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
+#import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #import "ios/chrome/test/app/bookmarks_test_util.h"
 #import "ios/chrome/test/app/browsing_data_test_util.h"
@@ -294,6 +297,68 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
 
 + (NSUInteger)indexOfActiveNormalTab {
   return chrome_test_util::GetIndexOfActiveNormalTab();
+}
+
+#pragma mark - Window utilities (EG2)
+
++ (NSUInteger)windowCount WARN_UNUSED_RESULT {
+  // If the scene API is in use, return the count of open sessions.
+  if (@available(iOS 13, *)) {
+    return UIApplication.sharedApplication.openSessions.count;
+  }
+
+  // Otherwise, there's always exectly one window;
+  return 1;
+}
+
++ (NSUInteger)foregroundWindowCount WARN_UNUSED_RESULT {
+  // If the scene API is in use, look at all the connected scenes and count
+  // those in the foreground.
+  if (@available(iOS 13, *)) {
+    NSUInteger count = 0;
+    for (UIScene* scene in UIApplication.sharedApplication.connectedScenes) {
+      if (scene.activationState == UISceneActivationStateForegroundActive ||
+          scene.activationState == UISceneActivationStateForegroundInactive) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  // Otherwise, there's always exectly one window;
+  return 1;
+}
+
++ (void)closeAllExtraWindows {
+  if (!IsMultipleScenesSupported())
+    return;
+
+  if (@available(iOS 13, *)) {
+    NSSet<UISceneSession*>* sessions =
+        UIApplication.sharedApplication.openSessions;
+    if (sessions.count <= 1)
+      return;
+    BOOL foundForegroundScene = NO;
+    for (UISceneSession* session in sessions) {
+      UIScene* scene = session.scene;
+      if (!foundForegroundScene && scene &&
+          (scene.activationState == UISceneActivationStateForegroundActive ||
+           scene.activationState == UISceneActivationStateForegroundInactive)) {
+        foundForegroundScene = YES;
+        // Leave the first foreground scene connected, so there's one open
+        // window left.
+        continue;
+      }
+      // If this isn't the first foreground scene, destroy it.
+      UIWindowSceneDestructionRequestOptions* options =
+          [[UIWindowSceneDestructionRequestOptions alloc] init];
+      options.windowDismissalAnimation =
+          UIWindowSceneDismissalAnimationStandard;
+      [UIApplication.sharedApplication requestSceneSessionDestruction:session
+                                                              options:options
+                                                         errorHandler:nil];
+    }
+  }
 }
 
 #pragma mark - WebState Utilities (EG2)
@@ -699,16 +764,18 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
 + (BOOL)isVariationEnabled:(int)variationID {
   variations::VariationsIdsProvider* provider =
       variations::VariationsIdsProvider::GetInstance();
-  std::vector<variations::VariationID> ids =
-      provider->GetVariationsVector(variations::GOOGLE_WEB_PROPERTIES);
+  std::vector<variations::VariationID> ids = provider->GetVariationsVector(
+      {variations::GOOGLE_WEB_PROPERTIES_ANY_CONTEXT,
+       variations::GOOGLE_WEB_PROPERTIES_FIRST_PARTY});
   return std::find(ids.begin(), ids.end(), variationID) != ids.end();
 }
 
 + (BOOL)isTriggerVariationEnabled:(int)variationID {
   variations::VariationsIdsProvider* provider =
       variations::VariationsIdsProvider::GetInstance();
-  std::vector<variations::VariationID> ids =
-      provider->GetVariationsVector(variations::GOOGLE_WEB_PROPERTIES_TRIGGER);
+  std::vector<variations::VariationID> ids = provider->GetVariationsVector(
+      {variations::GOOGLE_WEB_PROPERTIES_TRIGGER_ANY_CONTEXT,
+       variations::GOOGLE_WEB_PROPERTIES_TRIGGER_FIRST_PARTY});
   return std::find(ids.begin(), ids.end(), variationID) != ids.end();
 }
 
@@ -726,15 +793,6 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
 
 + (BOOL)isCreditCardScannerEnabled {
   return base::FeatureList::IsEnabled(kCreditCardScanner);
-}
-
-+ (BOOL)isAutofillCompanyNameEnabled {
-  return base::FeatureList::IsEnabled(
-      autofill::features::kAutofillEnableCompanyName);
-}
-
-+ (BOOL)isChangeTabSwitcherPositionEnabled {
-  return base::FeatureList::IsEnabled(kChangeTabSwitcherPosition);
 }
 
 + (BOOL)isDemographicMetricsReportingEnabled {
@@ -764,6 +822,18 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
           chrome_test_util::GetCurrentWebState()->GetView(), GURL());
 
   return webClientUserAgent == web::UserAgentType::MOBILE;
+}
+
++ (BOOL)isIllustratedEmptyStatesEnabled {
+  return base::FeatureList::IsEnabled(kIllustratedEmptyStates);
+}
+
++ (BOOL)isNativeContextMenusEnabled {
+  return IsNativeContextMenuEnabled();
+}
+
++ (BOOL)areMultipleWindowsSupported {
+  return IsMultipleScenesSupported();
 }
 
 #pragma mark - ScopedBlockPopupsPref
@@ -813,6 +883,14 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
   prefs->ClearPref(browsing_data::prefs::kDeleteFormData);
 }
 
+#pragma mark - Unified Consent utilities
+
++ (void)setURLKeyedAnonymizedDataCollectionEnabled:(BOOL)enabled {
+  UnifiedConsentServiceFactory::GetForBrowserState(
+      chrome_test_util::GetOriginalBrowserState())
+      ->SetUrlKeyedAnonymizedDataCollectionEnabled(enabled);
+}
+
 #pragma mark - Keyboard Command Utilities
 
 + (NSInteger)registeredKeyCommandCount {
@@ -825,6 +903,16 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
 + (void)simulatePhysicalKeyboardEvent:(NSString*)input
                                 flags:(UIKeyModifierFlags)flags {
   chrome_test_util::SimulatePhysicalKeyboardEvent(flags, input);
+}
+
+#pragma mark - Pasteboard utilities
+
++ (void)clearPasteboardURLs {
+  [[UIPasteboard generalPasteboard] setURLs:nil];
+}
+
++ (NSString*)pasteboardString {
+  return [UIPasteboard generalPasteboard].string;
 }
 
 @end

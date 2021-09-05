@@ -39,9 +39,8 @@ namespace cc {
 namespace {
 
 // Measured in seconds.
-const double kSmoothnessTakesPriorityExpirationDelay = 0.25;
-
-unsigned int nextBeginFrameId = 0;
+constexpr auto kSmoothnessTakesPriorityExpirationDelay =
+    base::TimeDelta::FromMilliseconds(250);
 
 }  // namespace
 
@@ -70,16 +69,11 @@ ProxyImpl::ProxyImpl(base::WeakPtr<ProxyMain> proxy_main_weak_ptr,
           task_runner_provider->ImplThreadTaskRunner(),
           base::BindRepeating(&ProxyImpl::RenewTreePriority,
                               base::Unretained(this)),
-          base::TimeDelta::FromSecondsD(
-              kSmoothnessTakesPriorityExpirationDelay)),
+          kSmoothnessTakesPriorityExpirationDelay),
       proxy_main_weak_ptr_(proxy_main_weak_ptr) {
   TRACE_EVENT0("cc", "ProxyImpl::ProxyImpl");
   DCHECK(IsImplThread());
   DCHECK(IsMainThreadBlocked());
-
-  // Double checking we set this correctly since double->int truncations are
-  // silent and have been done mistakenly: crbug.com/568120.
-  DCHECK(!smoothness_priority_expiration_notifier_.delay().is_zero());
 
   host_impl_ = layer_tree_host->CreateLayerTreeHostImpl(this);
   const LayerTreeSettings& settings = layer_tree_host->GetSettings();
@@ -273,7 +267,8 @@ void ProxyImpl::NotifyReadyToCommitOnImpl(
   // But, we can avoid a PostTask in here.
   scheduler_->NotifyBeginMainFrameStarted(main_thread_start_time);
 
-  host_impl_->ReadyToCommit(commit_args);
+  auto begin_main_frame_metrics = layer_tree_host->begin_main_frame_metrics();
+  host_impl_->ReadyToCommit(commit_args, begin_main_frame_metrics.get());
 
   commit_completion_event_ =
       std::make_unique<ScopedCompletionEvent>(completion);
@@ -288,7 +283,7 @@ void ProxyImpl::NotifyReadyToCommitOnImpl(
 
   // Extract metrics data from the layer tree host and send them to the
   // scheduler to pass them to the compositor_timing_history object.
-  scheduler_->NotifyReadyToCommit(layer_tree_host->begin_main_frame_metrics());
+  scheduler_->NotifyReadyToCommit(std::move(begin_main_frame_metrics));
 }
 
 void ProxyImpl::DidLoseLayerTreeFrameSinkOnImplThread() {
@@ -391,7 +386,7 @@ bool ProxyImpl::IsBeginMainFrameExpected() {
 void ProxyImpl::RenewTreePriority() {
   DCHECK(IsImplThread());
   const bool user_interaction_in_progress =
-      host_impl_->GetInputHandler().pinch_gesture_active() ||
+      host_impl_->IsPinchGestureActive() ||
       host_impl_->page_scale_animation_active() ||
       host_impl_->IsActivelyPrecisionScrolling();
 
@@ -528,18 +523,6 @@ void ProxyImpl::NotifyThroughputTrackerResults(CustomTrackerResults results) {
                                 proxy_main_weak_ptr_, std::move(results)));
 }
 
-void ProxyImpl::SubmitThroughputData(ukm::SourceId source_id,
-                                     int aggregated_percent,
-                                     int impl_percent,
-                                     base::Optional<int> main_percent) {
-  DCHECK(IsImplThread());
-  MainThreadTaskRunner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&ProxyMain::SubmitThroughputData, proxy_main_weak_ptr_,
-                     source_id, aggregated_percent, impl_percent,
-                     main_percent));
-}
-
 void ProxyImpl::DidObserveFirstScrollDelay(
     base::TimeDelta first_scroll_delay,
     base::TimeTicks first_scroll_timestamp) {
@@ -575,12 +558,11 @@ void ProxyImpl::WillNotReceiveBeginFrame() {
 void ProxyImpl::ScheduledActionSendBeginMainFrame(
     const viz::BeginFrameArgs& args) {
   DCHECK(IsImplThread());
-  unsigned int begin_frame_id = nextBeginFrameId++;
   benchmark_instrumentation::ScopedBeginFrameTask begin_frame_task(
-      benchmark_instrumentation::kSendBeginFrame, begin_frame_id);
+      benchmark_instrumentation::kSendBeginFrame,
+      args.frame_id.sequence_number);
   std::unique_ptr<BeginMainFrameAndCommitState> begin_main_frame_state(
       new BeginMainFrameAndCommitState);
-  begin_main_frame_state->begin_frame_id = begin_frame_id;
   begin_main_frame_state->begin_frame_args = args;
   begin_main_frame_state->commit_data = host_impl_->ProcessCompositorDeltas();
   begin_main_frame_state->completed_image_decode_requests =
@@ -792,6 +774,12 @@ base::SingleThreadTaskRunner* ProxyImpl::MainThreadTaskRunner() {
 void ProxyImpl::SetSourceURL(ukm::SourceId source_id, const GURL& url) {
   DCHECK(IsImplThread());
   host_impl_->SetActiveURL(url, source_id);
+}
+
+void ProxyImpl::SetUkmSmoothnessDestination(
+    base::WritableSharedMemoryMapping ukm_smoothness_data) {
+  DCHECK(IsImplThread());
+  host_impl_->SetUkmSmoothnessDestination(std::move(ukm_smoothness_data));
 }
 
 void ProxyImpl::ClearHistory() {

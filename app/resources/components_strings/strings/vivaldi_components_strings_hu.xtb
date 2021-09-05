@@ -151,6 +151,7 @@
 <translation id="6165508094623778733">További információ</translation>
 <translation id="6177128806592000436">Kapcsolatod a webhellyel nem biztonságos</translation>
 <translation id="6203231073485539293">Ellenőrizze az internetkapcsolatot</translation>
+<translation id="6225522625585012689">A &lt;strong&gt;vivaldi://policy&lt;/strong&gt; oldalon látható a rendszergazda által letiltott URL-ek és a beállított egyéb kötelező irányelvek listája.</translation>
 <translation id="625755898061068298">Úgy döntöttél, hogy letiltod a biztonsági figyelmeztetéseket ezen a webhelyen.</translation>
 <translation id="6264485186158353794">Vissza a biztonsághoz</translation>
 <translation id="6305205051461490394">A(z) <ph name="URL" /> nem érhető el.</translation>
@@ -200,7 +201,6 @@
 <translation id="8041940743680923270">Globális alapértelmezés használata (Megkérdezés)</translation>
 <translation id="808894953321890993">Jelszó módosítása</translation>
 <translation id="8119307142152921512">Követések és reklámok</translation>
-<translation id="8142868475871995937">Látogasson el a &lt;strong&gt;vivaldi://policy&lt;/strong&gt; oldalra a feketelistán lévő URL-ek és egyéb, a rendszergazda által előírt szabályok megtekintéséhez.</translation>
 <translation id="8149426793427495338">Számítógéped alvó üzemmódba váltott.</translation>
 <translation id="8150722005171944719">A fájl (<ph name="URL" />) nem olvasható. Lehet, hogy eltávolították, áthelyezték, vagy a fájlengedélyek megakadályozzák a hozzáférést.</translation>
 <translation id="8184538546369750125">Globális alapértelmezés használata (Engedélyezés)</translation>
@@ -223,7 +223,7 @@
 <translation id="9011424611726486705">Webhelybeállítások megnyitása</translation>
 <translation id="9025348182339809926">(Érvénytelen)</translation>
 <translation id="9039213469156557790">Emellett az oldal más forrásokat is tartalmaz, amelyek nem biztonságosak. Ezeket a forrásokat mások is megtekinthetik átvitel közben, és megváltoztatásukkal a támadók módosíthatják az oldal viselkedését.</translation>
-<translation id="9062620674789239642">Előfordulhat, hogy át lett helyezve, szerkesztve vagy törlésre került</translation>
+<translation id="9062620674789239642">Előfordulhat, hogy át lett helyezve, szerkesztve vagy törlésre került.</translation>
 <translation id="9069693763241529744">Bővítmény által letiltva</translation>
 <translation id="9169664750068251925">Mindig tiltsa ezen az oldalon</translation>
 <translation id="9180553614777056266">Reklámblokkoló</translation>

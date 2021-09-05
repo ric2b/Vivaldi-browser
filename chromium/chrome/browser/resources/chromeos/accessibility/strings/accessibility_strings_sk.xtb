@@ -52,6 +52,7 @@
 <translation id="1291286136605998134">Prepínač</translation>
 <translation id="1299774449519412690">Svetlá nebeská modrá</translation>
 <translation id="1303806948938513162">Klepnutím štyrmi prstami prejdete do ponúk zariadenia ChromeVox</translation>
+<translation id="1313373992684326101">Prejsť na predchádzajúcu sekciu. Príklady zahrnujú stavový panel a spúšťač.</translation>
 <translation id="1325363694295259631"><ph name="NAME" />, výber prepínača položiek ponuky bol zrušený</translation>
 <translation id="1325946044405407859">Okrová</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> z <ph name="TOTAL" /></translation>
@@ -79,6 +80,7 @@
 <translation id="1506187449813838456">Zvýšiť výšku hlasu</translation>
 <translation id="151784044608172266">Ďalšia veta</translation>
 <translation id="1524531499102321782">Braille – ďalší riadok</translation>
+<translation id="1542513807034338907">Posunúť na predchádzajúcu stránku</translation>
 <translation id="1546370775711804143">Panel posúvania</translation>
 <translation id="1555130319947370107">Modrá</translation>
 <translation id="1559739829547075274">Prejsť späť</translation>
@@ -280,6 +282,7 @@
 <translation id="3103579948980282461">Stredne sýta fialovočervená</translation>
 <translation id="3104705064753753826">dialóg s upozornením</translation>
 <translation id="3109724472072898302">Zbalené</translation>
+<translation id="311015743332597320">Potiahnite štyrmi prstami doprava</translation>
 <translation id="3112457281078985179">Ak chcete zapnúť alebo vypnúť čítačku ChromeVox, stlačte kombináciu klávesov Control + Alt + Z.</translation>
 <translation id="3131002934070407451">Čítať čísla ako:</translation>
 <translation id="3134461040845705080">iba na čítanie</translation>
@@ -345,6 +348,7 @@
 <translation id="3549141990712742152">vystrihnúť <ph name="TEXT" />.</translation>
 <translation id="3549680091535286226">Reč dočasne zastavíte klepnutím dvoma prstami</translation>
 <translation id="3564729643041517261">Aktuálny štýl zobrazenia je vedľa seba</translation>
+<translation id="3587482841069643663">Všetko</translation>
 <translation id="3589661172894441357">Glosár</translation>
 <translation id="3591784666823501596">Kráľovská modrá</translation>
 <translation id="3594207934078151302">Stredne sýta morská zelená</translation>
@@ -436,6 +440,7 @@
 <translation id="4278486392851938658">Žiadny predchádzajúci navštívený odkaz</translation>
 <translation id="4281245629646759298">Svetložltá</translation>
 <translation id="4289540628985791613">Prehľad</translation>
+<translation id="4294967782363273192">Zoradené vzostupne</translation>
 <translation id="4300318234632215983">Oznámiť webovú adresu za odkazom</translation>
 <translation id="4322625298640984693">Svetlohnedá</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{bodka}=3{výpustka}few{# bodky}many{# dots}other{# bodiek}}</translation>
@@ -447,6 +452,7 @@
 <translation id="4384583879834880242">Otázky a odpovede</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">Sýtosvetlomodrá</translation>
+<translation id="4406249099130339147">Ozvena interpunkcie:</translation>
 <translation id="4432457053224379116">Indiánska červená</translation>
 <translation id="4437615272777527928">Zadajte výraz a vyhľadajte ho tak v ponukách. Výsledkami prechádzajte šípkami nahor a nadol. Ľavou a pravou šípkou upravte textový kurzor a presúvajte sa medzi ponukami</translation>
 <translation id="4457472090507035117">Vybrať aktuálny hlas:</translation>
@@ -481,6 +487,7 @@
 <translation id="4763480195061959176">video</translation>
 <translation id="4764692524839457597">predvolené</translation>
 <translation id="4772771694153161212">Text nie je podčiarknutý</translation>
+<translation id="4780458943471935919">Posunúť na ďalšiu stránku</translation>
 <translation id="4784215347943747396">Ovládajte zariadenie iba jedným alebo dvoma prepínačmi</translation>
 <translation id="4786285211967466855">Žiadny predchádzajúci nadpis prvej úrovne</translation>
 <translation id="4787577491510559358">Oznamovať formátovanie aktuálnej položky</translation>
@@ -644,6 +651,7 @@
 <translation id="5999630716831179808">Hlasy</translation>
 <translation id="6006050241733874051">Formulár</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{opačná lomka}few{# opačné lomky}many{# backslashes}other{# opačných lomiek}}</translation>
+<translation id="6010616110396250088">Zoradené zostupne</translation>
 <translation id="6017514345406065928">Zelená</translation>
 <translation id="602001110135236999">Posunúť doľava</translation>
 <translation id="6034000775414344507">Svetlosivá</translation>
@@ -814,6 +822,7 @@
 <translation id="744163271241493234">pwded</translation>
 <translation id="7484805699335881122">Zmeňte výšku hlasu pri vyslovovaní typov prvkov a citovaného, odstráneného a tučného textu, ako aj takého, ktorý je v zátvorkách alebo napísaný veľkými písmenami.</translation>
 <translation id="7491962110804786152">karta</translation>
+<translation id="7492497529767769458">Prejsť na ďalšiu sekciu. Príklady zahrnujú stavový panel a spúšťač.</translation>
 <translation id="7505149250476994901">Povedať pred písmenom „veľké“</translation>
 <translation id="7518543783849163354">Ak chcete ChromeVox dočasne zastaviť, stlačte kláves Ctrl.</translation>
 <translation id="7533226154149229506">Svetlá žltá</translation>
@@ -821,6 +830,7 @@
 <translation id="7552432549459840808">Užitočné skratky Chromu</translation>
 <translation id="7569983096843329377">Čierna</translation>
 <translation id="7579911500627256166">bodka <ph name="DOT" /></translation>
+<translation id="7592060599656252486">Niektoré</translation>
 <translation id="7595446402663080101">Žiadna predchádzajúca tabuľka</translation>
 <translation id="7596131838331109045">Svetlolososová</translation>
 <translation id="7604026522577407655">Prejsť na začiatok aktuálneho stĺpca</translation>
@@ -840,6 +850,7 @@
 <translation id="7684431668231950609">Upraviť text, vstup webovej adresy</translation>
 <translation id="7685589220304187312">tlbar</translation>
 <translation id="7693840228159394336">Predchádzajúci prepínač</translation>
+<translation id="7701040980221191251">Žiadne</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7714340021005120797">Žiadne ďalšie kombinované pole</translation>
 <translation id="772146615414628379">Blahoželáme! Úspešne ste sa naučili základy používania čítačky ChromeVox. Ponuku s príkazmi čítačky ChromeVox môžete kedykoľvek otvoriť stlačením kombinácie klávesov Hľadať + Bodka. Ak sa chcete o čítačke ChromeVox a systéme Chrome OS dozvedieť viac, navštívte nasledujúce články.
@@ -898,7 +909,9 @@
 <translation id="812886159861361726">Sťahovanie súboru <ph name="FILE_NAME" /> bolo zastavené</translation>
 <translation id="8129445297241948503">Žiadna bunka vyššie</translation>
 <translation id="8138880386467279117">Klepnúť</translation>
+<translation id="8173092779156526980">Potiahnite štyrmi prstami doľava</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{podčiarkovník}few{# podčiarkovníky}many{# underscores}other{# podčiarkovníkov}}</translation>
+<translation id="8179976553408161302">Enter</translation>
 <translation id="8184828902145951186">riadok</translation>
 <translation id="8186185314313222077">prepnutie na celú obrazovku</translation>
 <translation id="8199231515320852133">Oznámiť hlavičky aktuálnej bunky</translation>
@@ -984,6 +997,7 @@
 <translation id="8946628535652548639">r<ph name="TABLECELLROWINDEX" />s<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">Žiadny predchádzajúci prepínač</translation>
 <translation id="8970172509886453271">Žiadna predchádzajúca sekcia</translation>
+<translation id="89720367119469899">Escape</translation>
 <translation id="8978496506222343566">tltip</translation>
 <translation id="8986362086234534611">Odstrániť</translation>
 <translation id="9040132695316389094">Nadpis 1</translation>

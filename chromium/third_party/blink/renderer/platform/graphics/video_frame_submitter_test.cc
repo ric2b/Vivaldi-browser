@@ -135,7 +135,7 @@ class MockVideoFrameResourceProvider
   MOCK_METHOD2(Initialize,
                void(viz::RasterContextProvider*, viz::SharedBitmapReporter*));
   MOCK_METHOD4(AppendQuads,
-               void(viz::RenderPass*,
+               void(viz::CompositorRenderPass*,
                     scoped_refptr<media::VideoFrame>,
                     media::VideoRotation,
                     bool));
@@ -167,7 +167,8 @@ class VideoFrameSubmitterTest : public testing::Test {
 
   void MakeSubmitter() { MakeSubmitter(base::DoNothing()); }
 
-  void MakeSubmitter(cc::PlaybackRoughnessReportingCallback reporting_cb) {
+  void MakeSubmitter(
+      cc::VideoPlaybackRoughnessReporter::ReportingCallback reporting_cb) {
     resource_provider_ = new StrictMock<MockVideoFrameResourceProvider>(
         context_provider_.get(), nullptr);
     submitter_ = std::make_unique<VideoFrameSubmitter>(
@@ -192,8 +193,7 @@ class VideoFrameSubmitterTest : public testing::Test {
                             base::UnguessableToken::Deserialize(0x111111, 0)));
     submitter_->frame_sink_id_ = surface_id.frame_sink_id();
     submitter_->child_local_surface_id_allocator_.UpdateFromParent(
-        viz::LocalSurfaceIdAllocation(surface_id.local_surface_id(),
-                                      base::TimeTicks::Now()));
+        surface_id.local_surface_id());
   }
 
   bool IsRendering() const { return submitter_->is_rendering_; }
@@ -688,9 +688,7 @@ TEST_F(VideoFrameSubmitterTest, StopUsingProviderDuringContextLost) {
 TEST_F(VideoFrameSubmitterTest, FrameSizeChangeUpdatesLocalSurfaceId) {
   {
     viz::LocalSurfaceId local_surface_id =
-        child_local_surface_id_allocator()
-            .GetCurrentLocalSurfaceIdAllocation()
-            .local_surface_id();
+        child_local_surface_id_allocator().GetCurrentLocalSurfaceId();
     EXPECT_TRUE(local_surface_id.is_valid());
     EXPECT_EQ(11u, local_surface_id.parent_sequence_number());
     EXPECT_EQ(viz::kInitialChildSequenceNumber,
@@ -709,9 +707,7 @@ TEST_F(VideoFrameSubmitterTest, FrameSizeChangeUpdatesLocalSurfaceId) {
 
   {
     viz::LocalSurfaceId local_surface_id =
-        child_local_surface_id_allocator()
-            .GetCurrentLocalSurfaceIdAllocation()
-            .local_surface_id();
+        child_local_surface_id_allocator().GetCurrentLocalSurfaceId();
     EXPECT_TRUE(local_surface_id.is_valid());
     EXPECT_EQ(11u, local_surface_id.parent_sequence_number());
     EXPECT_EQ(viz::kInitialChildSequenceNumber,
@@ -735,9 +731,7 @@ TEST_F(VideoFrameSubmitterTest, FrameSizeChangeUpdatesLocalSurfaceId) {
 
   {
     viz::LocalSurfaceId local_surface_id =
-        child_local_surface_id_allocator()
-            .GetCurrentLocalSurfaceIdAllocation()
-            .local_surface_id();
+        child_local_surface_id_allocator().GetCurrentLocalSurfaceId();
     EXPECT_TRUE(local_surface_id.is_valid());
     EXPECT_EQ(11u, local_surface_id.parent_sequence_number());
     EXPECT_EQ(viz::kInitialChildSequenceNumber + 1,
@@ -963,10 +957,9 @@ TEST_F(VideoFrameSubmitterTest, ProcessTimingDetails) {
   WTF::HashMap<uint32_t, viz::FrameTimingDetails> timing_details;
 
   MakeSubmitter(base::BindLambdaForTesting(
-      [&](int frames, base::TimeDelta duration, double roughness, int hz,
-          gfx::Size frame_size) {
-        ASSERT_EQ(frame_size.width(), 8);
-        ASSERT_EQ(frame_size.height(), 8);
+      [&](const cc::VideoPlaybackRoughnessReporter::Measurement& measurement) {
+        ASSERT_EQ(measurement.frame_size.width(), 8);
+        ASSERT_EQ(measurement.frame_size.height(), 8);
         reports++;
       }));
   EXPECT_CALL(*sink_, SetNeedsBeginFrame(true));

@@ -292,8 +292,7 @@ ComputedStyle::ComputeDifferenceIgnoringInheritedFirstLineStyle(
     return Difference::kDisplayAffectingDescendantStyles;
   if (!old_style.NonIndependentInheritedEqual(new_style))
     return Difference::kInherited;
-  if (!old_style.LoadingCustomFontsEqual(new_style) ||
-      old_style.JustifyItems() != new_style.JustifyItems())
+  if (old_style.JustifyItems() != new_style.JustifyItems())
     return Difference::kInherited;
   bool non_inherited_equal = old_style.NonInheritedEqual(new_style);
   if (!non_inherited_equal && old_style.ChildHasExplicitInheritance()) {
@@ -561,10 +560,6 @@ bool ComputedStyle::NonIndependentInheritedEqual(
     const ComputedStyle& other) const {
   return ComputedStyleBase::NonIndependentInheritedEqual(other) &&
          svg_style_->InheritedEqual(*other.svg_style_);
-}
-
-bool ComputedStyle::LoadingCustomFontsEqual(const ComputedStyle& other) const {
-  return GetFont().LoadingCustomFonts() == other.GetFont().LoadingCustomFonts();
 }
 
 bool ComputedStyle::NonInheritedEqual(const ComputedStyle& other) const {
@@ -964,7 +959,8 @@ void ComputedStyle::UpdatePropertySpecificDifferences(
       BackfaceVisibility() != other.BackfaceVisibility() ||
       UsedTransformStyle3D() != other.UsedTransformStyle3D() ||
       ContainsPaint() != other.ContainsPaint() ||
-      IsOverflowVisible() != other.IsOverflowVisible() ||
+      IsOverflowVisibleAlongBothAxes() !=
+          other.IsOverflowVisibleAlongBothAxes() ||
       WillChangeProperties() != other.WillChangeProperties()) {
     diff.SetCompositingReasonsChanged();
   }
@@ -1657,15 +1653,18 @@ LineLogicalSide ComputedStyle::GetTextEmphasisLineLogicalSide() const {
 }
 
 CSSAnimationData& ComputedStyle::AccessAnimations() {
-  if (!AnimationsInternal())
-    SetAnimationsInternal(std::make_unique<CSSAnimationData>());
-  return *AnimationsInternal();
+  std::unique_ptr<CSSAnimationData>& animations = MutableAnimationsInternal();
+  if (!animations)
+    animations = std::make_unique<CSSAnimationData>();
+  return *animations;
 }
 
 CSSTransitionData& ComputedStyle::AccessTransitions() {
-  if (!TransitionsInternal())
-    SetTransitionsInternal(std::make_unique<CSSTransitionData>());
-  return *TransitionsInternal();
+  std::unique_ptr<CSSTransitionData>& transitions =
+      MutableTransitionsInternal();
+  if (!transitions)
+    transitions = std::make_unique<CSSTransitionData>();
+  return *transitions;
 }
 
 FontBaseline ComputedStyle::GetFontBaseline() const {
@@ -1709,6 +1708,33 @@ void ComputedStyle::UpdateFontOrientation() {
   FontDescription font_description = GetFontDescription();
   font_description.SetOrientation(orientation);
   SetFontDescription(font_description);
+}
+
+bool ComputedStyle::TextDecorationVisualOverflowEqual(
+    const ComputedStyle& o) const {
+  const Vector<AppliedTextDecoration>& applied_with_this =
+      AppliedTextDecorations();
+  const Vector<AppliedTextDecoration>& applied_with_other =
+      o.AppliedTextDecorations();
+  if (applied_with_this.size() != applied_with_other.size())
+    return false;
+  for (auto decoration_index = 0u; decoration_index < applied_with_this.size();
+       ++decoration_index) {
+    const AppliedTextDecoration& decoration_from_this =
+        applied_with_this[decoration_index];
+    const AppliedTextDecoration& decoration_from_other =
+        applied_with_other[decoration_index];
+    if (decoration_from_this.Thickness() != decoration_from_other.Thickness() ||
+        decoration_from_this.UnderlineOffset() !=
+            decoration_from_other.UnderlineOffset() ||
+        decoration_from_this.Style() != decoration_from_other.Style() ||
+        decoration_from_this.Lines() != decoration_from_other.Lines())
+      return false;
+  }
+  if (TextUnderlinePosition() != o.TextUnderlinePosition())
+    return false;
+
+  return true;
 }
 
 TextDecoration ComputedStyle::TextDecorationsInEffect() const {
@@ -2107,8 +2133,9 @@ StyleColor ComputedStyle::DecorationColorIncludingFallback(
     StyleColor text_stroke_style_color =
         visited_link ? InternalVisitedTextStrokeColor() : TextStrokeColor();
     if (!text_stroke_style_color.IsCurrentColor() &&
-        text_stroke_style_color.GetColor().Alpha())
+        text_stroke_style_color.Resolve(Color(), UsedColorScheme()).Alpha()) {
       return text_stroke_style_color;
+    }
   }
 
   return visited_link ? InternalVisitedTextFillColor() : TextFillColor();
@@ -2343,11 +2370,11 @@ bool ComputedStyle::ShadowListHasCurrentColor(const ShadowList* shadow_list) {
                      });
 }
 
-STATIC_ASSERT_ENUM(cc::OverscrollBehavior::kOverscrollBehaviorTypeAuto,
+STATIC_ASSERT_ENUM(cc::OverscrollBehavior::Type::kAuto,
                    EOverscrollBehavior::kAuto);
-STATIC_ASSERT_ENUM(cc::OverscrollBehavior::kOverscrollBehaviorTypeContain,
+STATIC_ASSERT_ENUM(cc::OverscrollBehavior::Type::kContain,
                    EOverscrollBehavior::kContain);
-STATIC_ASSERT_ENUM(cc::OverscrollBehavior::kOverscrollBehaviorTypeNone,
+STATIC_ASSERT_ENUM(cc::OverscrollBehavior::Type::kNone,
                    EOverscrollBehavior::kNone);
 
 }  // namespace blink

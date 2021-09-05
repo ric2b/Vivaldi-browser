@@ -116,27 +116,6 @@ class AppListSearchBrowserTest : public InProcessBrowserTest {
   Profile* GetProfile() { return browser()->profile(); }
 };
 
-// Test fixture for OS settings search. This subclass exists because changing a
-// feature flag has to be done in the constructor. Otherwise, it could use
-// AppListSearchBrowserTest directly.
-class OsSettingsSearchBrowserTest : public AppListSearchBrowserTest {
- public:
-  OsSettingsSearchBrowserTest() : AppListSearchBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {app_list_features::kLauncherSettingsSearch,
-         chromeos::features::kNewOsSettingsSearch},
-        {});
-  }
-  ~OsSettingsSearchBrowserTest() override = default;
-
-  OsSettingsSearchBrowserTest(const OsSettingsSearchBrowserTest&) = delete;
-  OsSettingsSearchBrowserTest& operator=(const OsSettingsSearchBrowserTest&) =
-      delete;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
 // Test fixture for Release notes search. This subclass exists because changing
 // a feature flag has to be done in the constructor. Otherwise, it could use
 // AppListSearchBrowserTest directly.
@@ -168,23 +147,10 @@ IN_PROC_BROWSER_TEST_F(AppListSearchBrowserTest, SearchDoesntCrash) {
                             {ResultType::kInstalledApp, ResultType::kLauncher});
 }
 
-// Test that searching for "wifi" correctly returns a settings result for wifi.
-IN_PROC_BROWSER_TEST_F(OsSettingsSearchBrowserTest, AppListSearchForSettings) {
-  web_app::WebAppProvider::Get(GetProfile())
-      ->system_web_app_manager()
-      .InstallSystemAppsForTesting();
-  SearchAndWaitForProviders("wifi", {ResultType::kOsSettings});
-
-  auto* result = FindResult("os-settings://networks?type=WiFi");
-  ASSERT_TRUE(result);
-  EXPECT_EQ(base::UTF16ToASCII(result->accessible_name()),
-            "Wi-Fi networks, Network, Settings");
-}
-
 // Test that Help App shows up as Release notes if pref shows we have some times
 // left to show it.
 IN_PROC_BROWSER_TEST_F(ReleaseNotesSearchBrowserTest,
-                       AppListSearchHasSuggestionChip) {
+                       DISABLED_AppListSearchHasSuggestionChip) {
   web_app::WebAppProvider::Get(GetProfile())
       ->system_web_app_manager()
       .InstallSystemAppsForTesting();
@@ -196,15 +162,14 @@ IN_PROC_BROWSER_TEST_F(ReleaseNotesSearchBrowserTest,
 
   auto* result = FindResult(chromeos::default_web_apps::kHelpAppId);
   ASSERT_TRUE(result);
-  // Has regular app name as title.
-  // TODO(b/169711884): Should be priority 'What's new" when suggestion chips
-  // are re-enabled.
-  EXPECT_EQ(base::UTF16ToASCII(result->title()), "Explore");
-  // No priority for position.
-  EXPECT_EQ(result->position_priority(), 0);
-  // No override url (will open app at default page).
-  EXPECT_FALSE(result->query_url().has_value());
-  EXPECT_EQ(result->display_type(), DisplayType::kTile);
+  // Has Release notes title.
+  EXPECT_EQ(base::UTF16ToASCII(result->title()),
+            "See what's new on your Chrome device");
+  // Displayed in first position.
+  EXPECT_EQ(result->position_priority(), 1.0f);
+  // Has override url defined for updates tab.
+  EXPECT_EQ(result->query_url(), GURL("chrome://help-app/updates"));
+  EXPECT_EQ(result->display_type(), DisplayType::kChip);
 }
 
 // Test that Help App shows up normally if pref shows we should no longer show

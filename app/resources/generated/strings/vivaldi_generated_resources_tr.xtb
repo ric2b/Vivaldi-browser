@@ -13,11 +13,11 @@
 <translation id="1163931534039071049">&amp;Çerçeve kaynağını görüntüle</translation>
 <translation id="1165039591588034296">Hata</translation>
 <translation id="1175364870820465910">Ya&amp;zdır...</translation>
-<translation id="1177863135347784049">Özel</translation>
 <translation id="1181037720776840403">Kaldır</translation>
 <translation id="119944043368869598">Tümünü temizle</translation>
 <translation id="1221825588892235038">Yalnızca seçilen</translation>
 <translation id="1244303850296295656">Eklenti hatası</translation>
+<translation id="125220115284141797">Varsayılan</translation>
 <translation id="1274977772557788323">Adobe Flash Player Depolama ayarları</translation>
 <translation id="1297175357211070620">Hedef</translation>
 <translation id="1303101771013849280">Yer İmleri HTML Dosyası</translation>
@@ -43,9 +43,11 @@
 <translation id="1723824996674794290">&amp;Yeni pencere</translation>
 <translation id="1725149567830788547">&amp;Denetimleri Göster</translation>
 <translation id="1729533290416704613">Ayrıca, Çok Amaçlı Adres Çubuğu'ndan arama yaptığınızda gösterilecek sayfayı da denetler.</translation>
+<translation id="174123615272205933">Özel</translation>
 <translation id="1744108098763830590">arka plan sayfası</translation>
 <translation id="176587472219019965">&amp;Yeni Pencere</translation>
 <translation id="1769104665586091481">Bağlantıyı Yeni &amp;Pencerede Aç</translation>
+<translation id="1779468444204342338">Minimum</translation>
 <translation id="1815083418640426271">Düz Metin Olarak Yapıştır</translation>
 <translation id="1828901632669367785">Sistem İletişim Kutusunu Kullanarak Yazdır...</translation>
 <translation id="1850508293116537636">&amp;Saat yönünde döndür</translation>
@@ -84,7 +86,6 @@
 <translation id="2381756643783702095">Göndermeden önce sor (önerilen)</translation>
 <translation id="241082044617551207">Bilinmeyen eklenti</translation>
 <translation id="2423578206845792524">Resmi farklı kay&amp;det...</translation>
-<translation id="2436707352762155834">Minimum</translation>
 <translation id="2439110203301358333">Bilgisayarınızdaki başka bir program, Vivaldi'nin çalışma şeklini değiştirebilecek bir eklenti ekledi.</translation>
 <translation id="2445081178310039857">Eklenti kök dizini gerekiyor.</translation>
 <translation id="2470702053775288986">Desteklenmeyen eklentiler devre dışı bırakıldı</translation>
@@ -236,7 +237,6 @@
 <translation id="5039804452771397117">İzin ver</translation>
 <translation id="5057110919553308744">Eklentiye tıkladığınızda</translation>
 <translation id="5063480226653192405">Kullanım</translation>
-<translation id="5068918910148307423">Yeni kapatılan sitelerin veri gönderme ve alma işlemini bitirmesine izin verme</translation>
 <translation id="5116628073786783676">Sesi Farklı Kay&amp;det...</translation>
 <translation id="5143374789336132547">"<ph name="EXTENSION_NAME" />" eklentisi Ana Sayfa düğmesini tıkladığınızda gösterilecek sayfayı değiştirdi.</translation>
 <translation id="5154108062446123722"><ph name="PRINTING_DESTINATION" /> için gelişmiş ayarlar</translation>
@@ -253,6 +253,7 @@
 <translation id="5355926466126177564">"<ph name="EXTENSION_NAME" />" eklentisi, Çok Amaçlı Adres Çubuğundan arama yaptığınızda gösterilen sayfayı değiştirdi.</translation>
 <translation id="5360150013186312835">Araç Çubuğunda Göster</translation>
 <translation id="5362741141255528695">Özel anahtar dosyası seçin.</translation>
+<translation id="536638840841140142">Yok</translation>
 <translation id="5370819323174483825">&amp;Yeniden Yükle</translation>
 <translation id="5398572795982417028">Sınırların dışında sayfa gönderimi. Sınır <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">İndirmeye devam et</translation>
@@ -372,7 +373,6 @@
 <translation id="7663719505383602579">Alıcı: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Yöneticiniz Tarafından Yüklendi</translation>
 <translation id="7685049629764448582">JavaScript belleği</translation>
-<translation id="7701040980221191251">Yok</translation>
 <translation id="7704305437604973648">Görev</translation>
 <translation id="7710568461918838723">Yayınla..</translation>
 <translation id="7750228210027921155">Pencere içinde pencere</translation>

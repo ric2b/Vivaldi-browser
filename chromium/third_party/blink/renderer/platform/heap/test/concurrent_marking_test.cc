@@ -222,37 +222,6 @@ TEST_F(ConcurrentMarkingTest, SwapLinkedHashSet) {
   SwapCollections<HeapLinkedHashSetAdapter<Member<IntegerObject>>>();
 }
 
-// HeapNewLinkedHashSet
-template <typename T>
-class HeapNewLinkedHashSetAdapter : public HeapNewLinkedHashSet<T> {
- public:
-  ALWAYS_INLINE void swap(HeapNewLinkedHashSetAdapter<T>& other) {
-    HeapNewLinkedHashSet<T>::Swap(other);
-  }
-};
-
-TEST_F(ConcurrentMarkingTest, AddToNewLinkedHashSet) {
-  AddToCollection<HeapNewLinkedHashSetAdapter<Member<IntegerObject>>>();
-}
-TEST_F(ConcurrentMarkingTest, RemoveFromBeginningOfNewLinkedHashSet) {
-  RemoveFromBeginningOfCollection<
-      HeapNewLinkedHashSetAdapter<Member<IntegerObject>>>();
-}
-TEST_F(ConcurrentMarkingTest, RemoveFromMiddleOfNewLinkedHashSet) {
-  RemoveFromMiddleOfCollection<
-      HeapNewLinkedHashSetAdapter<Member<IntegerObject>>>();
-}
-TEST_F(ConcurrentMarkingTest, RemoveFromEndOfNewLinkedHashSet) {
-  RemoveFromEndOfCollection<
-      HeapNewLinkedHashSetAdapter<Member<IntegerObject>>>();
-}
-TEST_F(ConcurrentMarkingTest, ClearNewLinkedHashSet) {
-  ClearCollection<HeapNewLinkedHashSetAdapter<Member<IntegerObject>>>();
-}
-TEST_F(ConcurrentMarkingTest, SwapNewLinkedHashSet) {
-  SwapCollections<HeapNewLinkedHashSetAdapter<Member<IntegerObject>>>();
-}
-
 // HeapListHashSet
 
 template <typename T>

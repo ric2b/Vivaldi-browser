@@ -19,7 +19,6 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/system/user/rounded_image_view.h"
 #include "base/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
@@ -415,7 +414,7 @@ LoginUserView::LoginUserView(
   user_label_ = new UserLabel(style, label_width);
   if (show_dropdown) {
     dropdown_ = new LoginButton(this);
-    dropdown_->set_has_ink_drop_action_on_click(false);
+    dropdown_->SetHasInkDropActionOnClick(false);
     dropdown_->SetPreferredSize(
         gfx::Size(kDropdownIconSizeDp, kDropdownIconSizeDp));
     dropdown_->SetImage(

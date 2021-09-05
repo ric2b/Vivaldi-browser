@@ -1958,6 +1958,30 @@ Rect RenderText::ExpandToBeVerticallySymmetric(const Rect& rect,
   return result;
 }
 
+// static
+void RenderText::MergeIntersectingRects(std::vector<Rect>& rects) {
+  if (rects.size() < 2)
+    return;
+
+  std::sort(rects.begin(), rects.end(),
+            [](const Rect& a, const Rect& b) { return a.x() < b.x(); });
+
+  size_t merge_candidate = 0;
+  for (size_t i = 1; i < rects.size(); i++) {
+    if (rects[i].Intersects(rects[merge_candidate])) {
+      DCHECK_EQ(rects[i].y(), rects[merge_candidate].y());
+      DCHECK_EQ(rects[i].height(), rects[merge_candidate].height());
+      rects[merge_candidate].Union(rects[i]);
+    } else {
+      merge_candidate++;
+      if (merge_candidate != i)
+        rects[merge_candidate] = rects[i];
+    }
+  }
+
+  rects.resize(merge_candidate + 1);
+}
+
 void RenderText::OnTextAttributeChanged() {
   layout_text_.clear();
   display_text_.clear();
@@ -2059,8 +2083,10 @@ base::string16 RenderText::Elide(const base::string16& text,
       }
 
       // Append the ellipsis and the optional directional marker characters.
+      // Do not append the BiDi marker if the only codepoint in the text is
+      // an ellipsis.
       new_text.append(ellipsis);
-      if (trailing_text_direction != text_direction) {
+      if (new_text.size() != 1 && trailing_text_direction != text_direction) {
         if (trailing_text_direction == base::i18n::LEFT_TO_RIGHT)
           new_text += base::i18n::kLeftToRightMark;
         else

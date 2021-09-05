@@ -1539,6 +1539,7 @@ InspectorStyleSheet::BuildObjectForStyleSheetInfo() {
           .setTitle(style_sheet->title())
           .setFrameId(frame ? IdentifiersFactory::FrameId(frame) : "")
           .setIsInline(style_sheet->IsInline() && !StartsAtZero())
+          .setIsConstructed(style_sheet->IsConstructed())
           .setIsMutable(style_sheet->Contents()->IsMutable())
           .setStartLine(start.line_.ZeroBasedInt())
           .setStartColumn(start.column_.ZeroBasedInt())
@@ -1899,6 +1900,24 @@ void InspectorStyleSheet::MapSourceDataToCSSOM() {
 
   CSSRuleVector& parsed_rules = parsed_flat_rules_;
 
+  if (page_style_sheet_->IsConstructed()) {
+    // If we are dealing with constructed stylesheets, the order
+    // of the parsed_rules matches the order of cssom_rules
+    // because the source CSS is generated based on CSSOM rules
+    // in the same order.
+    // Therefore, we can skip the expensive diff algorithm below
+    // that causes performance issues if there are subtle differences
+    // in rules due to specific issues with the CSS parser.
+    // See crbug.com/1131113, crbug.com/604023, crbug.com/1132778.
+    DCHECK(parsed_rules.size() == cssom_rules.size());
+    auto min_size = std::min(parsed_rules.size(), cssom_rules.size());
+    for (wtf_size_t i = 0; i < min_size; ++i) {
+      rule_to_source_data_.Set(i, i);
+      source_data_to_rule_.Set(i, i);
+    }
+    return;
+  }
+
   Vector<String> cssom_rules_text = Vector<String>();
   Vector<String> parsed_rules_text = Vector<String>();
   for (wtf_size_t i = 0; i < cssom_rules.size(); ++i)
@@ -1923,14 +1942,22 @@ bool InspectorStyleSheet::ResourceStyleSheetText(String* result) {
   if (!page_style_sheet_->OwnerDocument())
     return false;
 
-  KURL url(page_style_sheet_->href());
-  if (page_style_sheet_->href() &&
-      resource_container_->LoadStyleSheetContent(url, result))
+  // Original URL defined in CSS.
+  String href = page_style_sheet_->href();
+
+  // Not a resource style sheet.
+  if (!href)
+    return false;
+
+  // FinalURL() is a URL after redirects, whereas, href is not.
+  // FinalURL() is used to call resource_container_->StoreStyleSheetContent
+  // so it has to be used for lookups.
+  if (resource_container_->LoadStyleSheetContent(KURL(FinalURL()), result))
     return true;
 
   bool base64_encoded;
   bool success = network_agent_->FetchResourceContent(
-      page_style_sheet_->OwnerDocument(), url, result, &base64_encoded);
+      page_style_sheet_->OwnerDocument(), KURL(href), result, &base64_encoded);
   return success && !base64_encoded;
 }
 

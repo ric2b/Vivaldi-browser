@@ -16,7 +16,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
 #include "chromeos/components/multidevice/logging/logging.h"
-#include "chromeos/components/phonehub/notification_access_manager.h"
 #include "chromeos/components/proximity_auth/proximity_auth_pref_names.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
@@ -43,7 +42,9 @@ const char kPageContentDataPhoneHubNotificationBadgeStateKey[] =
     "phoneHubNotificationBadgeState";
 const char kPageContentDataPhoneHubTaskContinuationStateKey[] =
     "phoneHubTaskContinuationState";
+const char kPageContentDataWifiSyncStateKey[] = "wifiSyncState";
 const char kPageContentDataSmartLockStateKey[] = "smartLockState";
+const char kIsNotificationAccessGranted[] = "isNotificationAccessGranted";
 const char kIsAndroidSmsPairingComplete[] = "isAndroidSmsPairingComplete";
 
 constexpr char kAndroidSmsInfoOriginKey[] = "origin";
@@ -73,7 +74,8 @@ MultideviceHandler::MultideviceHandler(
       android_sms_app_manager_(android_sms_app_manager),
       multidevice_setup_observer_(this),
       android_sms_pairing_state_tracker_observer_(this),
-      android_sms_app_manager_observer_(this) {
+      android_sms_app_manager_observer_(this),
+      notification_access_manager_observer_(this) {
   pref_change_registrar_.Init(prefs_);
 }
 
@@ -134,6 +136,9 @@ void MultideviceHandler::OnJavascriptAllowed() {
   if (multidevice_setup_client_)
     multidevice_setup_observer_.Add(multidevice_setup_client_);
 
+  if (notification_access_manager_)
+    notification_access_manager_observer_.Add(notification_access_manager_);
+
   if (android_sms_pairing_state_tracker_) {
     android_sms_pairing_state_tracker_observer_.Add(
         android_sms_pairing_state_tracker_);
@@ -160,8 +165,10 @@ void MultideviceHandler::OnJavascriptDisallowed() {
   if (multidevice_setup_client_)
     multidevice_setup_observer_.Remove(multidevice_setup_client_);
 
-  if (notification_access_manager_)
+  if (notification_access_manager_) {
+    notification_access_manager_observer_.Remove(notification_access_manager_);
     notification_access_operation_.reset();
+  }
 
   if (android_sms_pairing_state_tracker_) {
     android_sms_pairing_state_tracker_observer_.Remove(
@@ -187,6 +194,10 @@ void MultideviceHandler::OnFeatureStatesChanged(
         feature_states_map) {
   UpdatePageContent();
   NotifyAndroidSmsInfoChange();
+}
+
+void MultideviceHandler::OnNotificationAccessChanged() {
+  UpdatePageContent();
 }
 
 void MultideviceHandler::OnPairingStateChanged() {
@@ -385,7 +396,7 @@ void MultideviceHandler::HandleCancelNotificationSetup(
 
 void MultideviceHandler::OnStatusChange(
     phonehub::NotificationAccessSetupOperation::Status new_status) {
-  FireWebUIListener("notification-access-setup-operation-status-changed",
+  FireWebUIListener("settings.onNotificationAccessSetupStatusChanged",
                     base::Value(static_cast<int32_t>(new_status)));
 
   if (phonehub::NotificationAccessSetupOperation::IsFinalStatus(new_status))
@@ -447,6 +458,10 @@ MultideviceHandler::GeneratePageContentDataDictionary() {
       static_cast<int32_t>(
           feature_states
               [multidevice_setup::mojom::Feature::kPhoneHubTaskContinuation]));
+  page_content_dictionary->SetInteger(
+      kPageContentDataWifiSyncStateKey,
+      static_cast<int32_t>(
+          feature_states[multidevice_setup::mojom::Feature::kWifiSync]));
 
   if (host_status_with_device.second) {
     page_content_dictionary->SetString(kPageContentDataHostDeviceNameKey,
@@ -457,6 +472,12 @@ MultideviceHandler::GeneratePageContentDataDictionary() {
       kIsAndroidSmsPairingComplete,
       android_sms_pairing_state_tracker_
           ? android_sms_pairing_state_tracker_->IsAndroidSmsPairingComplete()
+          : false);
+
+  page_content_dictionary->SetBoolean(
+      kIsNotificationAccessGranted,
+      notification_access_manager_
+          ? notification_access_manager_->HasAccessBeenGranted()
           : false);
 
   return page_content_dictionary;

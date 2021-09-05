@@ -20,25 +20,25 @@ namespace {
 
 class LayerTreeHostFiltersPixelTest
     : public LayerTreePixelTest,
-      public ::testing::WithParamInterface<TestRendererType> {
+      public ::testing::WithParamInterface<viz::RendererType> {
  protected:
   LayerTreeHostFiltersPixelTest() : LayerTreePixelTest(renderer_type()) {}
 
-  TestRendererType renderer_type() const { return GetParam(); }
+  viz::RendererType renderer_type() const { return GetParam(); }
 
-  // Text string for graphics backend of the TestRendererType. Suitable for
+  // Text string for graphics backend of the viz::RendererType. Suitable for
   // generating separate base line file paths.
   const char* GetRendererSuffix() {
     switch (renderer_type_) {
-      case TestRendererType::kGL:
+      case viz::RendererType::kGL:
         return "gl";
-      case TestRendererType::kSkiaGL:
+      case viz::RendererType::kSkiaGL:
         return "skia_gl";
-      case TestRendererType::kSkiaVk:
+      case viz::RendererType::kSkiaVk:
         return "skia_vk";
-      case TestRendererType::kSkiaDawn:
+      case viz::RendererType::kSkiaDawn:
         return "skia_dawn";
-      case TestRendererType::kSoftware:
+      case viz::RendererType::kSoftware:
         return "sw";
     }
   }
@@ -72,37 +72,17 @@ class LayerTreeHostFiltersPixelTest
   }
 };
 
-TestRendererType const kRendererTypes[] = {
-    TestRendererType::kGL,       TestRendererType::kSkiaGL,
-    TestRendererType::kSoftware,
-#if defined(ENABLE_CC_VULKAN_TESTS)
-    TestRendererType::kSkiaVk,
-#endif  // defined(ENABLE_CC_VULKAN_TESTS)
-#if defined(ENABLE_CC_DAWN_TESTS)
-    TestRendererType::kSkiaDawn,
-#endif  // defined(ENABLE_CC_DAWN_TESTS)
-};
-
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostFiltersPixelTest,
-                         ::testing::ValuesIn(kRendererTypes));
+                         ::testing::ValuesIn(viz::GetRendererTypes()),
+                         ::testing::PrintToStringParamName());
 
 using LayerTreeHostFiltersPixelTestGPU = LayerTreeHostFiltersPixelTest;
 
-TestRendererType const kRendererTypesGpu[] = {
-    TestRendererType::kGL,
-    TestRendererType::kSkiaGL,
-#if defined(ENABLE_CC_VULKAN_TESTS)
-    TestRendererType::kSkiaVk,
-#endif  // defined(ENABLE_CC_VULKAN_TESTS)
-#if defined(ENABLE_CC_DAWN_TESTS)
-    TestRendererType::kSkiaDawn,
-#endif  // defined(ENABLE_CC_DAWN_TESTS)
-};
-
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostFiltersPixelTestGPU,
-                         ::testing::ValuesIn(kRendererTypesGpu));
+                         ::testing::ValuesIn(viz::GetGpuRendererTypes()),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostFiltersPixelTest, BackdropFilterBlurRect) {
   scoped_refptr<SolidColorLayer> background = CreateSolidColorLayer(
@@ -380,19 +360,10 @@ class LayerTreeHostBlurFiltersPixelTestGPULayerList
   }
 };
 
-// TODO(sgilhuly): Enable these tests for Skia Dawn, and switch over to using
-// kRendererTypesGpu.
-TestRendererType const kRendererTypesGpuNonDawn[] = {
-    TestRendererType::kGL,
-    TestRendererType::kSkiaGL,
-#if defined(ENABLE_CC_VULKAN_TESTS)
-    TestRendererType::kSkiaVk,
-#endif  // defined(ENABLE_CC_VULKAN_TESTS)
-};
-
 INSTANTIATE_TEST_SUITE_P(PixelResourceTest,
                          LayerTreeHostBlurFiltersPixelTestGPULayerList,
-                         ::testing::ValuesIn(kRendererTypesGpuNonDawn));
+                         ::testing::ValuesIn(viz::GetGpuRendererTypes()),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostBlurFiltersPixelTestGPULayerList,
        BackdropFilterBlurOffAxis) {
@@ -401,6 +372,9 @@ TEST_P(LayerTreeHostBlurFiltersPixelTestGPULayerList,
   // Windows has 116 pixels off by at most 2: crbug.com/225027
   float percentage_pixels_large_error = 0.3f;  // 116px / (200*200), rounded up
   int large_error_allowed = 2;
+  // Windows on SkiaRenderer Dawn has 447 pixels off by at most 2.
+  if (use_d3d12())
+    percentage_pixels_large_error = 1.12f;  // 447px / (200*200), rounded up
 #else
   float percentage_pixels_large_error = 0.25f;  // 96px / (200*200), rounded up
   int large_error_allowed = 1;
@@ -416,7 +390,7 @@ TEST_P(LayerTreeHostBlurFiltersPixelTestGPULayerList,
       large_error_allowed,
       small_error_allowed));
 #else
-  if (use_skia_vulkan())
+  if (use_skia_vulkan() || renderer_type_ == viz::RendererType::kSkiaDawn)
     pixel_comparator_ = std::make_unique<FuzzyPixelOffByOneComparator>(true);
 #endif
 
@@ -492,7 +466,8 @@ class LayerTreeHostFiltersScaledPixelTest
 
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostFiltersScaledPixelTest,
-                         ::testing::ValuesIn(kRendererTypes));
+                         ::testing::ValuesIn(viz::GetRendererTypes()),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostFiltersScaledPixelTest, StandardDpi) {
   RunPixelTestType(100, 1.f);
@@ -751,24 +726,7 @@ TEST_P(LayerTreeHostFiltersPixelTest, ImageRenderSurfaceScaled) {
           .InsertBeforeExtensionASCII(GetRendererSuffix()));
 }
 
-// TODO(sgilhuly): Enable these tests for Skia Dawn, and switch over to using
-// kRendererTypes.
-using LayerTreeHostFiltersPixelTestNonDawn = LayerTreeHostFiltersPixelTest;
-
-TestRendererType const kRendererTypesNonDawn[] = {
-    TestRendererType::kGL,
-    TestRendererType::kSkiaGL,
-    TestRendererType::kSoftware,
-#if defined(ENABLE_CC_VULKAN_TESTS)
-    TestRendererType::kSkiaVk,
-#endif  // defined(ENABLE_CC_VULKAN_TESTS)
-};
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         LayerTreeHostFiltersPixelTestNonDawn,
-                         ::testing::ValuesIn(kRendererTypesNonDawn));
-
-TEST_P(LayerTreeHostFiltersPixelTestNonDawn, ZoomFilter) {
+TEST_P(LayerTreeHostFiltersPixelTest, ZoomFilter) {
   scoped_refptr<SolidColorLayer> root =
       CreateSolidColorLayer(gfx::Rect(300, 300), SK_ColorWHITE);
 
@@ -859,10 +817,10 @@ TEST_P(LayerTreeHostFiltersPixelTest, RotatedFilter) {
 
   background->AddChild(child);
 
-#if defined(OS_WIN) || defined(OS_FUCHSIA)
-#if defined (ARCH_CPU_ARM64)
-  // Windows ARM64 and Fuchsia has some pixels difference
-  // crbug.com/1029728, crbug.com/1048249
+#if defined(OS_WIN) || defined(OS_FUCHSIA) || defined(OS_MAC)
+#if defined(ARCH_CPU_ARM64)
+  // Windows, macOS, and Fuchsia on ARM64 has some pixels difference
+  // crbug.com/1029728, crbug.com/1048249, crbug.com/1128443
   float percentage_pixels_large_error = 0.391112f;
   float average_error_allowed_in_bad_pixels = 1.1f;
   int large_error_allowed = 3;
@@ -921,13 +879,15 @@ TEST_P(LayerTreeHostFiltersPixelTest, RotatedDropShadowFilter) {
   background->AddChild(child);
 
 #if defined(OS_WIN) || defined(ARCH_CPU_ARM64)
-#if (defined(OS_WIN) && defined(ARCH_CPU_ARM64)) || defined(OS_FUCHSIA)
-  // Windows ARM64 has some pixels difference: crbug.com/1029729
+#if defined(ARCH_CPU_ARM64) && \
+    (defined(OS_WIN) || defined(OS_FUCHSIA) || defined(OS_MAC))
+  // Windows, macOS, and Fuchsia on ARM64 has some pixels difference.
+  // crbug.com/1029728, crbug.com/1128443
   float percentage_pixels_large_error = 0.89f;
   float average_error_allowed_in_bad_pixels = 5.f;
   int large_error_allowed = 17;
 #else
-  // Windows and ARM64 have 3 pixels off by 1: crbug.com/259915
+  // Windows and all other ARM64 have 3 pixels off by 1: crbug.com/259915
   float percentage_pixels_large_error = 0.00333334f;  // 3px / (300*300)
   float average_error_allowed_in_bad_pixels = 1.f;
   int large_error_allowed = 1;
@@ -987,7 +947,7 @@ TEST_P(LayerTreeHostFiltersPixelTest, TranslatedFilter) {
   parent->AddChild(child);
   clip->AddChild(parent);
 
-  if (use_software_renderer() || renderer_type_ == TestRendererType::kSkiaDawn)
+  if (use_software_renderer() || renderer_type_ == viz::RendererType::kSkiaDawn)
     pixel_comparator_ = std::make_unique<FuzzyPixelOffByOneComparator>(true);
 
   RunPixelTest(clip, base::FilePath(
@@ -1192,7 +1152,8 @@ class BackdropFilterOffsetTest : public LayerTreeHostFiltersPixelTest {
 
 INSTANTIATE_TEST_SUITE_P(All,
                          BackdropFilterOffsetTest,
-                         ::testing::ValuesIn(kRendererTypes));
+                         ::testing::ValuesIn(viz::GetRendererTypes()),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(BackdropFilterOffsetTest, StandardDpi) {
   RunPixelTestType(1.f);
@@ -1251,7 +1212,8 @@ class BackdropFilterInvertTest : public LayerTreeHostFiltersPixelTest {
 
 INSTANTIATE_TEST_SUITE_P(All,
                          BackdropFilterInvertTest,
-                         ::testing::ValuesIn(kRendererTypes));
+                         ::testing::ValuesIn(viz::GetRendererTypes()),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(BackdropFilterInvertTest, StandardDpi) {
   RunPixelTestType(1.f);

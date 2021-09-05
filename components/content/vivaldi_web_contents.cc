@@ -1,12 +1,12 @@
 // Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
 
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/browser/frame_host/frame_tree_node.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 
 #include "app/vivaldi_apptools.h"
 #include "content/browser/browser_plugin/browser_plugin_embedder.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
-#include "content/browser/frame_host/frame_tree.h"
+#include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/browser/web_contents/web_contents_view_child_frame.h"
 #include "content/public/browser/notification_service.h"
@@ -136,17 +136,8 @@ void WebContentsImpl::WebContentsTreeNode::VivaldiDetachExternallyOwned(
     }
   }
 
-  // Make sure this isn't freed here. It is owned by the TabStrip.
+  // Make sure this isn't freed here. It is owned by the TabStrip or DevTools.
   current_web_contents_->DetachFromOuterWebContents().release();
-
-  if (outer_web_contents_) {
-    // Detach inner so the WebContents is not destroyed, it is destroyed by
-    // the |TabStripModel| or DevTools.
-    outer_web_contents_->node_.DetachInnerWebContents(current_web_contents_)
-      .release();
-  }
-  outer_web_contents_ = nullptr;
-  outer_contents_frame_tree_node_id_ = FrameTreeNode::kFrameTreeNodeInvalidId;
 
   node->RemoveObserver(this);
 

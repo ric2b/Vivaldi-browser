@@ -1,3 +1,4 @@
+import ("//vivaldi/testing/testing.gni")
 
 update_target("//components/bookmarks/browser:browser") {
   sources += [
@@ -73,6 +74,7 @@ update_target("//content/browser:browser") {
     "//vivaldi/components/content/vivaldi_render_frame_host_impl.cc",
     "//vivaldi/components/content/vivaldi_render_view_host_impl.cc",
     "//vivaldi/components/content/vivaldi_renderers.cc",
+    "//vivaldi/components/content/vivaldi_storage_partition_impl.cc",
     "//vivaldi/components/content/vivaldi_web_contents.cc",
   ]
   deps += [
@@ -218,16 +220,26 @@ if (is_mac) {
   }
 }
 
-if (vivaldi_build_tests) {
-  update_target("//components/content_settings/browser:test_support") {
-    sources += [
-      "//vivaldi/components/content/vivaldi_test_tab_specific_content_settings_delegate.cc",
-    ]
-  }
-}
-
 update_target("//third_party/blink/public:blink_headers") {
   sources += [
     "//vivaldi/components/request_filter/adblock_filter/renderer/blink/web_cosmetic_filter_client.h",
+  ]
+}
+
+update_template_instance("//components/search_engines:prepopulated_engines") {
+  source = "$root_gen_dir/components/search_engines/prepopulated_engines.json"
+  deps += [ "//vivaldi/components:vivaldi_prepopulated_search_engines" ]
+}
+
+update_target("//components/search_engines:prepopulated_engines_action") {
+  if (!defined(deps)) {
+    deps = []
+  }
+  deps += [ "//vivaldi/components:vivaldi_prepopulated_search_engines" ]
+  args += ["-b", rebase_path("$root_gen_dir/components/search_engines/")]
+  outputs = []
+  outputs = [
+    "$root_gen_dir/components/search_engines/prepopulated_engines.cc",
+    "$root_gen_dir/components/search_engines/prepopulated_engines.h",
   ]
 }

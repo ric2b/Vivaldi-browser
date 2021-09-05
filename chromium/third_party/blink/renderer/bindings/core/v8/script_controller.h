@@ -51,13 +51,13 @@ namespace blink {
 class DOMWrapperWorld;
 class ExecutionContext;
 class KURL;
-class LocalFrame;
+class LocalDOMWindow;
 class ScriptSourceCode;
 class SecurityOrigin;
 
 // This class exposes methods to run script in a frame (in the main world and
 // in isolated worlds). An instance can be obtained by using
-// LocalFrame::GetScriptController().
+// LocalDOMWindow::GetScriptController().
 class CORE_EXPORT ScriptController final
     : public GarbageCollected<ScriptController> {
  public:
@@ -66,9 +66,9 @@ class CORE_EXPORT ScriptController final
     kDoNotExecuteScriptWhenScriptsDisabled
   };
 
-  ScriptController(LocalFrame& frame,
+  ScriptController(LocalDOMWindow& window,
                    LocalWindowProxyManager& window_proxy_manager)
-      : frame_(&frame), window_proxy_manager_(&window_proxy_manager) {}
+      : window_(&window), window_proxy_manager_(&window_proxy_manager) {}
   void Trace(Visitor*) const;
 
   // This returns an initialized window proxy. (If the window proxy is not
@@ -83,6 +83,14 @@ class CORE_EXPORT ScriptController final
       const KURL& base_url,
       SanitizeScriptErrors,
       const ScriptFetchOptions& = ScriptFetchOptions());
+
+  v8::Local<v8::Value> EvaluateMethodInMainWorld(
+      v8::Local<v8::Function> function,
+      v8::Local<v8::Value> receiver,
+      int argc,
+      v8::Local<v8::Value> argv[],
+      ScriptController::ExecuteScriptPolicy = ScriptController::
+          ExecuteScriptPolicy::kDoNotExecuteScriptWhenScriptsDisabled);
 
   // Evaluate JavaScript in the main world.
   v8::Local<v8::Value> EvaluateScriptInMainWorld(const ScriptSourceCode&,
@@ -125,12 +133,8 @@ class CORE_EXPORT ScriptController final
 
   TextPosition EventHandlerPosition() const;
 
-  void ClearWindowProxy();
   void UpdateDocument();
-
   void UpdateSecurityOrigin(const SecurityOrigin*);
-
-  void ClearForClose();
 
   // Registers a v8 extension to be available on webpages. Will only
   // affect v8 contexts initialized after this call.
@@ -138,7 +142,7 @@ class CORE_EXPORT ScriptController final
   static v8::ExtensionConfiguration ExtensionsFor(const ExecutionContext*);
 
  private:
-  LocalFrame* GetFrame() const { return frame_; }
+  bool CanExecuteScript(ExecuteScriptPolicy policy);
   v8::Isolate* GetIsolate() const {
     return window_proxy_manager_->GetIsolate();
   }
@@ -150,7 +154,7 @@ class CORE_EXPORT ScriptController final
                        bool allow_eval,
                        const String& error_message);
 
-  const Member<LocalFrame> frame_;
+  const Member<LocalDOMWindow> window_;
   const Member<LocalWindowProxyManager> window_proxy_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(ScriptController);

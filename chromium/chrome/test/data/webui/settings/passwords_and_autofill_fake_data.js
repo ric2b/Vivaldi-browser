@@ -244,29 +244,44 @@ export function createCreditCardEntry() {
 }
 
 /**
+ * Creates a new insecure credential.
+ * @param {string} url
+ * @param {string} username
+ * @param {number=} id
+ * @return {chrome.passwordsPrivate.InsecureCredential}
+ * @private
+ */
+export function makeInsecureCredential(url, username, id) {
+  return {
+    id: id || 0,
+    formattedOrigin: url,
+    changePasswordUrl: `http://${url}/`,
+    username: username,
+    detailedOrigin: '',
+    isAndroidCredential: false,
+    signonRealm: '',
+  };
+}
+
+/**
  * Creates a new compromised credential.
  * @param {string} url
  * @param {string} username
  * @param {chrome.passwordsPrivate.CompromiseType} type
  * @param {number=} id
  * @param {number=} elapsedMinSinceCompromise
- * @return {chrome.passwordsPrivate.CompromisedCredential}
+ * @return {chrome.passwordsPrivate.InsecureCredential}
  * @private
  */
 export function makeCompromisedCredential(
     url, username, type, id, elapsedMinSinceCompromise) {
-  return {
-    id: id || 0,
-    formattedOrigin: url,
-    changePasswordUrl: `http://${url}/`,
-    username: username,
-    elapsedTimeSinceCompromise: `${elapsedMinSinceCompromise} minutes ago`,
+  const credential = makeInsecureCredential(url, username, id);
+  credential.compromisedInfo = {
     compromiseTime: Date.now() - (elapsedMinSinceCompromise * 60000),
+    elapsedTimeSinceCompromise: `${elapsedMinSinceCompromise} minutes ago`,
     compromiseType: type,
-    detailedOrigin: '',
-    isAndroidCredential: false,
-    signonRealm: '',
   };
+  return credential;
 }
 
 /**
@@ -364,12 +379,14 @@ export class PasswordSectionElementFactory {
   /**
    * Helper method used to create a password editing dialog.
    * @param {!MultiStorePasswordUiEntry} passwordEntry
+   * @param {!Array<!MultiStorePasswordUiEntry>} passwords
    * @return {!Object}
    */
-  createPasswordEditDialog(passwordEntry) {
+  createPasswordEditDialog(passwordEntry, passwords) {
     const passwordDialog = this.document.createElement('password-edit-dialog');
     passwordDialog.entry = passwordEntry;
     passwordDialog.password = '';
+    passwordDialog.savedPasswords = passwords ? passwords : [];
     this.document.body.appendChild(passwordDialog);
     flush();
     return passwordDialog;

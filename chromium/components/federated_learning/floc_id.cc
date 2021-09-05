@@ -6,6 +6,7 @@
 
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "components/federated_learning/floc_constants.h"
 #include "components/federated_learning/sim_hash.h"
 
 namespace federated_learning {
@@ -14,19 +15,12 @@ namespace {
 
 constexpr char kFlocVersion[] = "1.0.0";
 
-// This is only for experimentation and won't be served to websites.
-constexpr size_t kNumberOfBitsInFloc = 50;
-static_assert(kNumberOfBitsInFloc > 0 &&
-                  kNumberOfBitsInFloc <= std::numeric_limits<uint64_t>::digits,
-              "Number of bits in the floc id must be greater than 0 and no "
-              "greater than 64.");
-
 }  // namespace
 
 // static
 FlocId FlocId::CreateFromHistory(
     const std::unordered_set<std::string>& domains) {
-  return FlocId(SimHashStrings(domains, kNumberOfBitsInFloc));
+  return FlocId(SimHashStrings(domains, kMaxNumberOfBitsInFloc));
 }
 
 FlocId::FlocId() = default;
@@ -61,10 +55,10 @@ uint64_t FlocId::ToUint64() const {
 std::string FlocId::ToDebugHeaderValue() const {
   if (!id_.has_value())
     return "null";
-  return ToHeaderValue();
+  return ToString();
 }
 
-std::string FlocId::ToHeaderValue() const {
+std::string FlocId::ToString() const {
   DCHECK(id_.has_value());
   return base::StrCat({base::NumberToString(id_.value()), ".", kFlocVersion});
 }

@@ -16,6 +16,7 @@ module promo_browser_command.mojom;
 enum Command {
   kUnknownCommand = 0,
   kOpenSafetyCheck = 1,
+  kOpenSafeBrowsingEnhancedProtectionSettings = 2,
 };
 
 // Click information needed to determine user's desired window disposition using
@@ -30,6 +31,9 @@ struct ClickInfo {
 
 // Browser-side handler for requests from JS.
 interface CommandHandler {
+  // Returns whether or not a promo with the given command ID can be shown.
+  CanShowPromoWithCommand(Command command_id) => (bool can_show);
+
   // Executes the command with the given ID and click information. Returns
   // whether or not the command was executed.
   ExecuteCommand(Command command_id, ClickInfo click_info)

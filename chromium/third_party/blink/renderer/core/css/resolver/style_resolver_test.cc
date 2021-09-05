@@ -5,10 +5,11 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/renderer/core/animation/animation_test_helper.h"
+#include "third_party/blink/renderer/core/animation/animation_test_helpers.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/css/css_image_value.h"
+#include "third_party/blink/renderer/core/css/css_test_helpers.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
@@ -25,6 +26,8 @@
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
+
+using animation_test_helpers::CreateSimpleKeyframeEffectForTest;
 
 class StyleResolverTest : public PageTestBase {
  public:
@@ -566,7 +569,7 @@ TEST_F(StyleResolverTest, NoFetchForAtPage) {
     </style>
   )HTML");
 
-  GetDocument().UpdateActiveStyle();
+  GetDocument().GetStyleEngine().UpdateActiveStyle();
   scoped_refptr<const ComputedStyle> page_style =
       GetDocument().GetStyleResolver().StyleForPage(0, "");
   ASSERT_TRUE(page_style);
@@ -777,6 +780,88 @@ TEST_F(StyleResolverTest, CascadedValuesForPseudoElement) {
   CSSPropertyName top(CSSPropertyID::kTop);
   ASSERT_TRUE(map.at(top));
   EXPECT_EQ("1em", map.at(top)->CssText());
+}
+
+TEST_F(StyleResolverTest, EnsureComputedStyleSlotFallback) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <div id="host"><span></span></div>
+  )HTML");
+
+  ShadowRoot& shadow_root =
+      GetDocument().getElementById("host")->AttachShadowRootInternal(
+          ShadowRootType::kOpen);
+  shadow_root.setInnerHTML(R"HTML(
+    <style>
+      slot { color: red }
+    </style>
+    <slot><span id="fallback"></span></slot>
+  )HTML");
+  Element* fallback = shadow_root.getElementById("fallback");
+  ASSERT_TRUE(fallback);
+
+  UpdateAllLifecyclePhasesForTest();
+
+  // Elements outside the flat tree does not get styles computed during the
+  // lifecycle update.
+  EXPECT_FALSE(fallback->GetComputedStyle());
+
+  // We are currently allowed to query the computed style of elements outside
+  // the flat tree, but slot fallback does not inherit from the slot.
+  const ComputedStyle* fallback_style = fallback->EnsureComputedStyle();
+  ASSERT_TRUE(fallback_style);
+  EXPECT_EQ(Color::kBlack,
+            fallback_style->VisitedDependentColor(GetCSSPropertyColor()));
+}
+
+TEST_F(StyleResolverTest, ComputeValueStandardProperty) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #target { --color: green }
+    </style>
+    <div id="target"></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* target = GetDocument().getElementById("target");
+  ASSERT_TRUE(target);
+
+  // Unable to parse a variable reference with css_test_helpers::ParseLonghand.
+  CSSPropertyID property_id = CSSPropertyID::kColor;
+  auto* set =
+      MakeGarbageCollected<MutableCSSPropertyValueSet>(kHTMLStandardMode);
+  MutableCSSPropertyValueSet::SetResult result = set->SetProperty(
+      property_id, "var(--color)", false, SecureContextMode::kInsecureContext,
+      /*style_sheet_contents=*/nullptr);
+  ASSERT_TRUE(result.did_parse);
+  const CSSValue* parsed_value = set->GetPropertyCSSValue(property_id);
+  ASSERT_TRUE(parsed_value);
+  const CSSValue* computed_value = StyleResolver::ComputeValue(
+      target, CSSPropertyName(property_id), *parsed_value);
+  ASSERT_TRUE(computed_value);
+  EXPECT_EQ("rgb(0, 128, 0)", computed_value->CssText());
+}
+
+TEST_F(StyleResolverTest, ComputeValueCustomProperty) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #target { --color: green }
+    </style>
+    <div id="target"></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+
+  Element* target = GetDocument().getElementById("target");
+  ASSERT_TRUE(target);
+
+  AtomicString custom_property_name = "--color";
+  const CSSValue* parsed_value = css_test_helpers::ParseLonghand(
+      GetDocument(), CustomProperty(custom_property_name, GetDocument()),
+      "blue");
+  ASSERT_TRUE(parsed_value);
+  const CSSValue* computed_value = StyleResolver::ComputeValue(
+      target, CSSPropertyName(custom_property_name), *parsed_value);
+  ASSERT_TRUE(computed_value);
+  EXPECT_EQ("blue", computed_value->CssText());
 }
 
 }  // namespace blink

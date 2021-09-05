@@ -58,7 +58,7 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
@@ -78,6 +78,8 @@
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/mojom/app_window.mojom.h"
 #include "extensions/helper/vivaldi_app_helper.h"
+#include "extensions/schema/tabs_private.h"
+#include "extensions/schema/vivaldi_utilities.h"
 #include "extensions/schema/window_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "renderer/vivaldi_render_messages.h"
@@ -259,16 +261,10 @@ void VivaldiBrowserWindow::CreateWebContents(
 
   web_contents_delegate_.Initialize();
 
-  extensions::VivaldiUIEvents::SetupWindowContents(web_contents(),
-                                                   browser_->session_id());
-
   SetViewType(web_contents(), extensions::VIEW_TYPE_APP_WINDOW);
 
   // The following lines are copied from ChromeAppDelegate::InitWebContents().
   favicon::CreateContentFaviconDriverForWebContents(web_contents());
-#if BUILDFLAG(ENABLE_PRINTING)
-  printing::InitializePrinting(web_contents());
-#endif
   extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
       web_contents());
   apps::AudioFocusWebContentsObserver::CreateForWebContents(web_contents());
@@ -353,12 +349,11 @@ void VivaldiBrowserWindow::LoadContents(
 }
 
 void VivaldiBrowserWindow::ContentsDidStartNavigation() {
-  ::vivaldi::BroadcastEvent(
-      extensions::vivaldi::window_private::OnWebContentsDidStartNavigation::
-          kEventName,
-      extensions::vivaldi::window_private::OnWebContentsDidStartNavigation::
-          Create(browser_->session_id().id()),
-      browser_->profile());
+  ::vivaldi::BroadcastEvent(extensions::vivaldi::window_private::
+                                OnWebContentsDidStartNavigation::kEventName,
+                            extensions::vivaldi::window_private::
+                                OnWebContentsDidStartNavigation::Create(id()),
+                            browser_->profile());
 }
 
 void VivaldiBrowserWindow::ForceShow() {
@@ -573,7 +568,6 @@ void VivaldiBrowserWindow::ContinueClose(bool quiting,
 void VivaldiBrowserWindow::ConfirmBrowserCloseWithPendingDownloads(
     int download_count,
     Browser::DownloadCloseType dialog_type,
-    bool app_modal,
     const base::Callback<void(bool)>& callback) {
 #if defined(OS_MAC)
   // We allow closing the window here since the real quit decision on Mac is
@@ -581,7 +575,7 @@ void VivaldiBrowserWindow::ConfirmBrowserCloseWithPendingDownloads(
   callback.Run(true);
 #else
   DownloadInProgressDialogView::Show(GetNativeWindow(), download_count,
-                                     dialog_type, app_modal, callback);
+                                     dialog_type, callback);
 #endif  // OS_MAC
 }
 
@@ -1110,8 +1104,7 @@ void VivaldiBrowserWindow::OnMinimizedChanged(bool minimized) {
   }
   ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnMinimized::kEventName,
-      extensions::vivaldi::window_private::OnMinimized::Create(
-          browser_->session_id().id(), minimized),
+      extensions::vivaldi::window_private::OnMinimized::Create(id(), minimized),
       browser_->profile());
 }
 
@@ -1121,16 +1114,15 @@ void VivaldiBrowserWindow::OnMaximizedChanged(bool maximized) {
   }
   ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnMaximized::kEventName,
-      extensions::vivaldi::window_private::OnMaximized::Create(
-          browser_->session_id().id(), maximized),
+      extensions::vivaldi::window_private::OnMaximized::Create(id(), maximized),
       browser_->profile());
 }
 
 void VivaldiBrowserWindow::OnFullscreenChanged(bool fullscreen) {
   ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnFullscreen::kEventName,
-      extensions::vivaldi::window_private::OnFullscreen::Create(
-          browser_->session_id().id(), fullscreen),
+      extensions::vivaldi::window_private::OnFullscreen::Create(id(),
+                                                                fullscreen),
       browser_->profile());
 }
 
@@ -1141,16 +1133,14 @@ void VivaldiBrowserWindow::OnActivationChanged(bool activated) {
 
   ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnActivated::kEventName,
-      extensions::vivaldi::window_private::OnActivated::Create(
-          browser_->session_id().id(), activated),
+      extensions::vivaldi::window_private::OnActivated::Create(id(), activated),
       browser_->profile());
 }
 
 void VivaldiBrowserWindow::OnPositionChanged() {
   ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnPositionChanged::kEventName,
-      extensions::vivaldi::window_private::OnPositionChanged::Create(
-          browser_->session_id().id()),
+      extensions::vivaldi::window_private::OnPositionChanged::Create(id()),
       browser_->profile());
 }
 
@@ -1207,15 +1197,27 @@ void VivaldiBrowserWindow::NavigationStateChanged(
     content::InvalidateTypes changed_flags) {
   if (changed_flags & content::INVALIDATE_TYPE_LOAD) {
     if (source == GetActiveWebContents()) {
-      int windowId = browser()->session_id().id();
       base::string16 statustext =
           CoreTabHelper::FromWebContents(source)->GetStatusText();
       ::vivaldi::BroadcastEvent(
           extensions::vivaldi::window_private::OnActiveTabStatusText::
               kEventName,
           extensions::vivaldi::window_private::OnActiveTabStatusText::Create(
-              windowId, base::UTF16ToUTF8(statustext)),
+              id(), base::UTF16ToUTF8(statustext)),
           GetProfile());
+    }
+  }
+  if (changed_flags & content::INVALIDATE_TYPE_URL) {
+    int tab_id = sessions::SessionTabHelper::IdForTab(source).id();
+    if (tab_id) {
+      GURL url = source->GetURL();
+      ::vivaldi::BroadcastEvent(
+        extensions::vivaldi::tabs_private::OnNavigationUrlChanged::
+        kEventName,
+        extensions::vivaldi::tabs_private::OnNavigationUrlChanged::Create(
+          tab_id, url.spec()),
+        GetProfile());
+
     }
   }
 }
@@ -1270,6 +1272,17 @@ VivaldiBrowserWindow::ShowQRCodeGeneratorBubble(
     content::WebContents* contents,
     qrcode_generator::QRCodeGeneratorBubbleController* controller,
     const GURL& url) {
+
+  sessions::SessionTabHelper* const session_tab_helper =
+    sessions::SessionTabHelper::FromWebContents(contents);
+
+  // This is called if the user uses the page context menu to generate a QR code.
+  vivaldi::BroadcastEvent(
+      extensions::vivaldi::utilities::OnShowQRCode::kEventName,
+      extensions::vivaldi::utilities::OnShowQRCode::Create(
+        session_tab_helper->session_id().id(), url.spec()),
+      browser_->profile());
+
   return nullptr;
 }
 
@@ -1291,4 +1304,8 @@ std::unique_ptr<content::EyeDropper> VivaldiBrowserWindow::OpenEyeDropper(
     content::RenderFrameHost* frame,
     content::EyeDropperListener* listener) {
   return ShowEyeDropper(frame, listener);
+}
+
+FeaturePromoController* VivaldiBrowserWindow::GetFeaturePromoController() {
+  return nullptr;
 }

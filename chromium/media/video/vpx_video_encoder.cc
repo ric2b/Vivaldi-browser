@@ -65,7 +65,7 @@ Status SetUpVpxConfig(const VideoEncoder::Options& opts,
     config->rc_target_bitrate = opts.bitrate.value() / 1000;
   } else {
     config->rc_end_usage = VPX_VBR;
-    config->rc_target_bitrate = static_cast<double>(opts.width * opts.height) /
+    config->rc_target_bitrate = double{opts.width} * double{opts.height} /
                                 config->g_w / config->g_h *
                                 config->rc_target_bitrate;
   }
@@ -371,7 +371,7 @@ void VpxVideoEncoder::DrainOutputs() {
       result.size = pkt->data.frame.sz;
       result.data.reset(new uint8_t[result.size]);
       memcpy(result.data.get(), pkt->data.frame.buf, result.size);
-      output_cb_.Run(std::move(result));
+      output_cb_.Run(std::move(result), {});
     }
   }
 }

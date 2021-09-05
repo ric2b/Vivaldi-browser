@@ -92,12 +92,27 @@ suite('DiscoveryPageTest', function() {
   }
 
   /**
+   * @param {string} button button selector (i.e. #actionButton)
+   */
+  function getButton(button) {
+    return discoveryPageElement.$$('nearby-page-template').$$(button);
+  }
+
+  /**
+   * Starts discovery and returns the ShareTargetListenerRemote.
+   * @return {!Promise<nearbyShare.mojom.ShareTargetListenerRemote>}
+   */
+  async function startDiscovery() {
+    discoveryPageElement.fire('view-enter-start');
+    return await discoveryManager.whenCalled('startDiscovery');
+  }
+
+  /**
    * Creates a share target and sends it to the WebUI.
    * @return {!Promise<nearbyShare.mojom.ShareTarget>}
    */
   async function setupShareTarget() {
-    /** @type {!nearbyShare.mojom.ShareTargetListenerRemote} */
-    const listener = await discoveryManager.whenCalled('startDiscovery');
+    const listener = await startDiscovery();
     const shareTarget = createShareTarget('Device Name');
     listener.onShareTargetDiscovered(shareTarget);
     await listener.$.flushForTesting();
@@ -110,24 +125,25 @@ suite('DiscoveryPageTest', function() {
     discoveryPageElement = /** @type {!NearbyDiscoveryPageElement} */ (
         document.createElement('nearby-discovery-page'));
     document.body.appendChild(discoveryPageElement);
-
-    // TODO(knollr): Remove this once prototyping is done.
-    /** @suppress {visibility} */
-    discoveryPageElement.shareTargets_ = [];
   });
 
   teardown(function() {
     discoveryPageElement.remove();
   });
 
-  test('renders component', function() {
+  test('renders component', async function() {
     assertEquals('NEARBY-DISCOVERY-PAGE', discoveryPageElement.tagName);
+    discoveryPageElement.fire('view-enter-start');
+    await discoveryManager.whenCalled('getSendPreview');
+    assertEquals(
+        discoveryManager.shareDescription,
+        discoveryPageElement.$$('nearby-preview').title);
   });
 
   test('selects share target with success', async function() {
     const created = await setupShareTarget();
     discoveryPageElement.selectedShareTarget = created;
-    discoveryPageElement.$$('#next-button').click();
+    getButton('#actionButton').click();
     const selectedId = await discoveryManager.whenCalled('selectShareTarget');
     assertTokensEqual(created.id, selectedId);
   });
@@ -137,7 +153,7 @@ suite('DiscoveryPageTest', function() {
     discoveryManager.selectShareTargetResult.result =
         nearbyShare.mojom.SelectShareTargetResult.kError;
 
-    discoveryPageElement.$$('#next-button').click();
+    getButton('#actionButton').click();
     await discoveryManager.whenCalled('selectShareTarget');
   });
 
@@ -152,19 +168,32 @@ suite('DiscoveryPageTest', function() {
       eventDetail = event.detail;
     });
 
-    discoveryPageElement.$$('#next-button').click();
+    getButton('#actionButton').click();
 
     await discoveryManager.whenCalled('selectShareTarget');
     assertEquals('confirmation', eventDetail.page);
   });
 
   test('starts discovery', async function() {
-    await discoveryManager.whenCalled('startDiscovery');
+    await startDiscovery();
+  });
+
+  test('stops discovery', async function() {
+    const listener = await startDiscovery();
+    listener.onShareTargetDiscovered(createShareTarget('Device Name'));
+    await listener.$.flushForTesting();
+    assertEquals(1, getShareTargetElements().length);
+
+    const onConnectionClosedPromise = new Promise(
+        (resolve) => listener.onConnectionError.addListener(resolve));
+    discoveryPageElement.fire('view-exit-finish');
+    await onConnectionClosedPromise;
+
+    assertEquals(0, getShareTargetElements().length);
   });
 
   test('shows newly discovered device', async function() {
-    /** @type {!nearbyShare.mojom.ShareTargetListenerRemote} */
-    const listener = await discoveryManager.whenCalled('startDiscovery');
+    const listener = await startDiscovery();
     const deviceName = 'Device Name';
 
     listener.onShareTargetDiscovered(createShareTarget(deviceName));
@@ -174,8 +203,7 @@ suite('DiscoveryPageTest', function() {
   });
 
   test('shows multiple discovered devices', async function() {
-    /** @type {!nearbyShare.mojom.ShareTargetListenerRemote} */
-    const listener = await discoveryManager.whenCalled('startDiscovery');
+    const listener = await startDiscovery();
     const deviceName1 = 'Device Name 1';
     const deviceName2 = 'Device Name 2';
 
@@ -188,8 +216,7 @@ suite('DiscoveryPageTest', function() {
   });
 
   test('removes lost device', async function() {
-    /** @type {!nearbyShare.mojom.ShareTargetListenerRemote} */
-    const listener = await discoveryManager.whenCalled('startDiscovery');
+    const listener = await startDiscovery();
     const deviceName = 'Device Name';
     const shareTarget = createShareTarget(deviceName);
 
@@ -201,8 +228,7 @@ suite('DiscoveryPageTest', function() {
   });
 
   test('replaces existing device', async function() {
-    /** @type {!nearbyShare.mojom.ShareTargetListenerRemote} */
-    const listener = await discoveryManager.whenCalled('startDiscovery');
+    const listener = await startDiscovery();
     const deviceName = 'Device Name';
     const shareTarget = createShareTarget(deviceName);
 
@@ -218,8 +244,7 @@ suite('DiscoveryPageTest', function() {
   });
 
   test('selects device on click', async function() {
-    /** @type {!nearbyShare.mojom.ShareTargetListenerRemote} */
-    const listener = await discoveryManager.whenCalled('startDiscovery');
+    const listener = await startDiscovery();
 
     // Setup 3 targets to select from.
     const targets = [
@@ -244,8 +269,7 @@ suite('DiscoveryPageTest', function() {
   });
 
   test('loosing selected device disables next button', async function() {
-    /** @type {!nearbyShare.mojom.ShareTargetListenerRemote} */
-    const listener = await discoveryManager.whenCalled('startDiscovery');
+    const listener = await startDiscovery();
 
     // Setup 3 targets and select the second one.
     const targets = [
@@ -257,7 +281,7 @@ suite('DiscoveryPageTest', function() {
     await listener.$.flushForTesting();
 
     assertTrue(clickOnDevice(1));
-    assertFalse(discoveryPageElement.$$('#next-button').disabled);
+    assertFalse(getButton('#actionButton').disabled);
 
     // Loose the second device.
     listener.onShareTargetLost(targets[1]);
@@ -266,7 +290,7 @@ suite('DiscoveryPageTest', function() {
     // Loosing the selected device should clear the selected device and disable
     // the next button.
     assertEquals(null, discoveryPageElement.selectedShareTarget);
-    assertTrue(discoveryPageElement.$$('#next-button').disabled);
+    assertTrue(getButton('#actionButton').disabled);
   });
 
 });

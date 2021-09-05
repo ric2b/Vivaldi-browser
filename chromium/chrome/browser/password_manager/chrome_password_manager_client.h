@@ -28,7 +28,6 @@
 #include "components/password_manager/core/browser/password_manager_client_helper.h"
 #include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/password_manager/core/browser/password_manager_onboarding.h"
 #include "components/password_manager/core/browser/password_reuse_detection_manager.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/password_manager/core/browser/sync_credentials_filter.h"
@@ -88,9 +87,6 @@ class ChromePasswordManagerClient
       bool is_update) override;
   void PromptUserToMovePasswordToAccount(
       std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_move)
-      override;
-  bool ShowOnboarding(
-      std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_save)
       override;
   void ShowManualFallbackForSaving(
       std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_save,
@@ -173,8 +169,7 @@ class ChromePasswordManagerClient
   void AnnotateNavigationEntry(bool has_password_field) override;
   std::string GetPageLanguage() const override;
 
-#if defined(ON_FOCUS_PING_ENABLED) || \
-    defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(ON_FOCUS_PING_ENABLED) || defined(PASSWORD_REUSE_DETECTION_ENABLED)
   safe_browsing::PasswordProtectionService* GetPasswordProtectionService()
       const override;
 #endif
@@ -184,7 +179,7 @@ class ChromePasswordManagerClient
                                    const GURL& frame_url) override;
 #endif
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   void CheckProtectedPasswordEntry(
       password_manager::metrics_util::PasswordType reused_password_type,
       const std::string& username,
@@ -193,7 +188,7 @@ class ChromePasswordManagerClient
       bool password_field_exists) override;
 #endif
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
   void LogPasswordReuseDetectedEvent() override;
 #endif
 
@@ -230,11 +225,6 @@ class ChromePasswordManagerClient
   void GenerationElementLostFocus() override;
 
 #if defined(OS_ANDROID)
-  // This is called when the onboarding experience was shown successfully,
-  // which means that the user should now be prompted to save their password.
-  void OnOnboardingSuccessful(
-      std::unique_ptr<password_manager::PasswordFormManagerForUI> form_to_save);
-
   void OnImeTextCommittedEvent(const base::string16& text_str) override;
   void OnImeSetComposingTextEvent(const base::string16& text_str) override;
   void OnImeFinishComposingTextEvent() override;
@@ -335,7 +325,7 @@ class ChromePasswordManagerClient
   password_manager::PasswordFeatureManagerImpl password_feature_manager_;
   password_manager::HttpAuthManagerImpl httpauth_manager_;
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   password_manager::PasswordReuseDetectionManager
       password_reuse_detection_manager_;
 #endif

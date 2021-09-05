@@ -70,10 +70,12 @@ DirectCompositionChildSurfaceWin::PendingFrame::operator=(
 DirectCompositionChildSurfaceWin::DirectCompositionChildSurfaceWin(
     VSyncCallback vsync_callback,
     bool use_angle_texture_offset,
-    size_t max_pending_frames)
+    size_t max_pending_frames,
+    bool force_full_damage)
     : vsync_callback_(std::move(vsync_callback)),
       use_angle_texture_offset_(use_angle_texture_offset),
       max_pending_frames_(max_pending_frames),
+      force_full_damage_(force_full_damage),
       vsync_thread_(VSyncThreadWin::GetInstance()),
       task_runner_(base::ThreadTaskRunnerHandle::Get()) {}
 
@@ -147,15 +149,12 @@ bool DirectCompositionChildSurfaceWin::ReleaseDrawTexture(bool will_discard) {
       UINT interval =
           first_swap_ || !vsync_enabled_ || use_swap_chain_tearing ? 0 : 1;
       UINT flags = use_swap_chain_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0;
-      flags |= DXGI_PRESENT_USE_DURATION;
 
-      bool force_full_damage =
-          ShouldForceDirectCompositionRootSurfaceFullDamage();
       TRACE_EVENT2("gpu", "DirectCompositionChildSurfaceWin::PresentSwapChain",
                    "interval", interval, "dirty_rect",
-                   force_full_damage ? "full_damage" : swap_rect_.ToString());
+                   force_full_damage_ ? "full_damage" : swap_rect_.ToString());
       HRESULT hr;
-      if (force_full_damage) {
+      if (force_full_damage_) {
         hr = swap_chain_->Present(interval, flags);
       } else {
         DXGI_PRESENT_PARAMETERS params = {};
@@ -261,6 +260,11 @@ gfx::SwapResult DirectCompositionChildSurfaceWin::SwapBuffers(
                                     ? gfx::SwapResult::SWAP_ACK
                                     : gfx::SwapResult::SWAP_FAILED;
   EnqueuePendingFrame(std::move(callback));
+
+  // Reset swap_rect_ since SetDrawRectangle may not be called when the root
+  // damage rect is empty.
+  swap_rect_ = gfx::Rect();
+
   return swap_result;
 }
 
@@ -406,8 +410,6 @@ bool DirectCompositionChildSurfaceWin::SetDrawRectangle(
       DCHECK(SUCCEEDED(hr))
           << "SetColorSpace1 failed with error " << std::hex << hr;
     }
-
-    SetSwapChainPresentDuration();
   }
 
   swap_rect_ = rectangle;
@@ -530,23 +532,6 @@ bool DirectCompositionChildSurfaceWin::SetEnableDCLayers(bool enable) {
   swap_chain_.Reset();
   dcomp_surface_.Reset();
   return true;
-}
-
-void DirectCompositionChildSurfaceWin::SetFrameRate(float frame_rate) {
-  frame_rate_ = frame_rate;
-  SetSwapChainPresentDuration();
-}
-
-void DirectCompositionChildSurfaceWin::SetSwapChainPresentDuration() {
-  if (!swap_chain_)
-    return;
-  Microsoft::WRL::ComPtr<IDXGISwapChainMedia> swap_chain_media;
-  if (SUCCEEDED(swap_chain_.As(&swap_chain_media))) {
-    UINT duration_100ns = FrameRateToPresentDuration(frame_rate_);
-    HRESULT hr = swap_chain_media->SetPresentDuration(duration_100ns);
-    if (FAILED(hr))
-      DLOG(ERROR) << "SetPresentDuration failed with error " << std::hex << hr;
-  }
 }
 
 gfx::VSyncProvider* DirectCompositionChildSurfaceWin::GetVSyncProvider() {

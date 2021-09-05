@@ -84,7 +84,7 @@ class PrintPreviewObserver : PrintPreviewUI::TestDelegate {
 
  private:
   // PrintPreviewUI::TestDelegate:
-  void DidGetPreviewPageCount(int page_count) override {
+  void DidGetPreviewPageCount(uint32_t page_count) override {
     total_page_count_ = page_count;
   }
 
@@ -109,8 +109,8 @@ class PrintPreviewObserver : PrintPreviewUI::TestDelegate {
   }
 
   base::Optional<content::DOMMessageQueue> queue_;
-  int total_page_count_ = 1;
-  int rendered_page_count_ = 0;
+  uint32_t total_page_count_ = 1;
+  uint32_t rendered_page_count_ = 0;
   content::WebContents* preview_dialog_ = nullptr;
   base::RunLoop* run_loop_ = nullptr;
 
@@ -127,16 +127,16 @@ class NupPrintingTestDelegate : public PrintingMessageFilter::TestDelegate {
   }
 
   // PrintingMessageFilter::TestDelegate:
-  mojom::PrintParams GetPrintParams() override {
-    mojom::PrintParams params;
-    params.page_size = gfx::Size(612, 792);
-    params.content_size = gfx::Size(540, 720);
-    params.printable_area = gfx::Rect(612, 792);
-    params.dpi = gfx::Size(72, 72);
-    params.document_cookie = kDefaultDocumentCookie;
-    params.pages_per_sheet = 4;
-    params.printed_doc_type = IsOopifEnabled() ? mojom::SkiaDocumentType::kMSKP
-                                               : mojom::SkiaDocumentType::kPDF;
+  mojom::PrintParamsPtr GetPrintParams() override {
+    auto params = mojom::PrintParams::New();
+    params->page_size = gfx::Size(612, 792);
+    params->content_size = gfx::Size(540, 720);
+    params->printable_area = gfx::Rect(612, 792);
+    params->dpi = gfx::Size(72, 72);
+    params->document_cookie = kDefaultDocumentCookie;
+    params->pages_per_sheet = 4;
+    params->printed_doc_type = IsOopifEnabled() ? mojom::SkiaDocumentType::kMSKP
+                                                : mojom::SkiaDocumentType::kPDF;
     return params;
   }
 
@@ -528,6 +528,69 @@ IN_PROC_BROWSER_TEST_F(PrintBrowserTest, SelectionContainsIframe) {
   ui_test_utils::NavigateToURL(browser(), url);
 
   PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/true);
+}
+
+// https://crbug.com/1125972
+// https://crbug.com/1131598
+IN_PROC_BROWSER_TEST_F(PrintBrowserTest, NoScrolling) {
+  ASSERT_TRUE(embedded_test_server()->Started());
+  GURL url(embedded_test_server()->GetURL("/printing/with-scrollable.html"));
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  auto* contents = browser()->tab_strip_model()->GetActiveWebContents();
+  const char kExpression1[] = "iframe.contentWindow.scrollY";
+  const char kExpression2[] = "scrollable.scrollTop";
+  const char kExpression3[] = "shapeshifter.scrollTop";
+
+  double old_scroll1 = content::EvalJs(contents, kExpression1).ExtractDouble();
+  double old_scroll2 = content::EvalJs(contents, kExpression2).ExtractDouble();
+  double old_scroll3 = content::EvalJs(contents, kExpression3).ExtractDouble();
+
+  PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/false);
+
+  double new_scroll1 = content::EvalJs(contents, kExpression1).ExtractDouble();
+
+  // TODO(crbug.com/1131598): Perform the corresponding EvalJs() calls here and
+  // assign to new_scroll2 and new_scroll3, once the printing code has been
+  // fixed to handle these cases. Right now, the scroll offset jumps.
+  double new_scroll2 = old_scroll2;
+  double new_scroll3 = old_scroll3;
+
+  EXPECT_EQ(old_scroll1, new_scroll1);
+  EXPECT_EQ(old_scroll2, new_scroll2);
+  EXPECT_EQ(old_scroll3, new_scroll3);
+}
+
+// https://crbug.com/1131598
+IN_PROC_BROWSER_TEST_F(PrintBrowserTest, DISABLED_NoScrollingFrameset) {
+  ASSERT_TRUE(embedded_test_server()->Started());
+  GURL url(embedded_test_server()->GetURL("/printing/frameset.html"));
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  auto* contents = browser()->tab_strip_model()->GetActiveWebContents();
+  const char kExpression[] =
+      "document.getElementById('frame').contentWindow.scrollY";
+
+  double old_scroll = content::EvalJs(contents, kExpression).ExtractDouble();
+
+  PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/false);
+
+  double new_scroll = content::EvalJs(contents, kExpression).ExtractDouble();
+
+  EXPECT_EQ(old_scroll, new_scroll);
+}
+
+// https://crbug.com/1125972
+IN_PROC_BROWSER_TEST_F(PrintBrowserTest, NoScrollingVerticalRl) {
+  ASSERT_TRUE(embedded_test_server()->Started());
+  GURL url(embedded_test_server()->GetURL("/printing/vertical-rl.html"));
+  ui_test_utils::NavigateToURL(browser(), url);
+  PrintAndWaitUntilPreviewIsReady(/*print_only_selection=*/false);
+
+  // Test that entering print preview didn't mess up the scroll position.
+  EXPECT_EQ(
+      0, content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                         "window.scrollX"));
 }
 
 // Printing frame content for the main frame of a generic webpage.

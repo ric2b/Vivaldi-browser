@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/no_destructor.h"
 #include "base/synchronization/lock.h"
+#include "components/autofill/core/browser/address_rewriter.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_constants.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -21,6 +22,15 @@
 
 namespace autofill {
 namespace structured_address {
+
+struct AddressToken {
+  // The original value.
+  base::string16 value;
+  // The normalized value.
+  base::string16 normalized_value;
+  // The token position in the original string.
+  int position;
+};
 
 enum class RegEx;
 
@@ -33,6 +43,40 @@ enum MatchQuantifier {
   // The capture group is lazy optional meaning that it is avoided if an overall
   // match is possible.
   MATCH_LAZY_OPTIONAL,
+};
+
+// The result status of comparing two sets of sorted tokens.
+enum SortedTokenComparisonStatus {
+  // The tokens are neither the same nor super/sub sets.
+  DISTINCT,
+  // The token exactly match.
+  MATCH,
+  // The first value is a subset of the second.
+  SUBSET,
+  // The first value is a superset of the other.
+  SUPERSET
+};
+
+// The result from comparing two sets of sorted tokens containing the status and
+// the additional tokens in the super/sub sets.
+struct SortedTokenComparisonResult {
+  explicit SortedTokenComparisonResult(
+      SortedTokenComparisonStatus status,
+      std::vector<AddressToken> additional_tokens = {});
+  ~SortedTokenComparisonResult();
+  SortedTokenComparisonResult(const SortedTokenComparisonResult& other);
+  // The status of the token comparison.
+  SortedTokenComparisonStatus status = DISTINCT;
+  // The additional elements in the super/subsets.
+  std::vector<AddressToken> additional_tokens{};
+  // Returns true if the first is a subset of the second;
+  bool IsSingleTokenSubset() const;
+  // Return true if the first is a superset of the second;
+  bool IsSingleTokenSuperset() const;
+  // Return true if one is a subset of the other.
+  bool OneIsSubset() const;
+  // Returns true if one contains the other.
+  bool ContainEachOther() const;
 };
 
 // Options for capturing a named group using the
@@ -49,6 +93,9 @@ struct CaptureOptions {
 
 // Returns true if the structured names feature is enabled.
 bool StructuredNamesEnabled();
+
+// Returns true if the structured address feature is enabled.
+bool StructuredAddressesEnabled();
 
 // A cache for compiled RE2 regular expressions.
 class Re2RegExCache {
@@ -86,6 +133,38 @@ class Re2RegExCache {
   base::Lock lock_;
 };
 
+// A cache for address rewriter for different countries.
+class RewriterCache {
+ public:
+  RewriterCache& operator=(const RewriterCache&) = delete;
+  RewriterCache(const RewriterCache&) = delete;
+  ~RewriterCache() = delete;
+
+  // Returns a singleton instance.
+  static RewriterCache* GetInstance();
+
+  // Applies the rewriter to |text| for a specific county given by
+  // |country_code|.
+  static base::string16 Rewrite(const base::string16& country_code,
+                                const base::string16& text);
+
+ private:
+  RewriterCache();
+
+  // Returns the Rewriter for |country_code|.
+  const AddressRewriter& GetRewriter(const base::string16& country_code);
+
+  // Since the constructor is private, |base::NoDestructor| must be friend to be
+  // allowed to construct the cache.
+  friend class base::NoDestructor<RewriterCache>;
+
+  // Stores a country-specific Rewriter keyed by its corresponding |pattern|.
+  std::map<base::string16, const AddressRewriter> rewriter_map_;
+
+  // A lock to prevent concurrent access to the map.
+  base::Lock lock_;
+};
+
 // Returns true if |name| has the characteristics of a Chinese, Japanese or
 // Korean name:
 // * It must only contain CJK characters with at most one separator in between.
@@ -107,6 +186,7 @@ bool HasMiddleNameInitialsCharacteristics(const std::string& middle_name);
 // Reduces a name to the initials in upper case.
 // Example: George walker -> GW, Hans-Peter -> HP
 base::string16 ReduceToInitials(const base::string16& value);
+
 // Parses |value| with an regular expression defined by |pattern|.
 // Returns true on success meaning that the expressions is fully matched.
 // The matching results are written into the supplied |result_map|, keyed by the
@@ -161,23 +241,48 @@ std::string CaptureTypeWithPattern(
     std::initializer_list<base::StringPiece> pattern_span_initializer_list);
 
 // Returns a capture group named by the string representation of |type| that
-// matches |pattern|.
-std::string CaptureTypeWithPattern(const ServerFieldType& type,
-                                   const std::string& pattern,
-                                   const CaptureOptions& options);
+// matches |pattern| with an additional uncaptured |prefix_pattern| and
+// |suffix_pattern|.
+std::string CaptureTypeWithAffixedPattern(
+    const ServerFieldType& type,
+    const std::string& prefix_pattern,
+    const std::string& pattern,
+    const std::string& suffix_pattern,
+    const CaptureOptions& options = CaptureOptions());
 
-// Same as |CaptureTypeWithPattern(type, pattern, options)| but uses default
-// options.
-std::string CaptureTypeWithPattern(const ServerFieldType& type,
-                                   const std::string& pattern);
+// Convenience wrapper for |CaptureTypeWithAffixedPattern()| with an empty
+// |suffix_pattern|.
+std::string CaptureTypeWithPrefixedPattern(
+    const ServerFieldType& type,
+    const std::string& prefix_pattern,
+    const std::string& pattern,
+    const CaptureOptions& options = CaptureOptions());
+
+// Convenience wrapper for |CaptureTypeWithAffixedPattern()| with an empty
+// |prefix_pattern|.
+std::string CaptureTypeWithSuffixedPattern(
+    const ServerFieldType& type,
+    const std::string& pattern,
+    const std::string& suffix_pattern,
+    const CaptureOptions& options = CaptureOptions());
+
+// Convenience wrapper for |CaptureTypeWithAffixedPattern()| with an empty
+// |prefix_pattern| and |suffix_pattern|.
+std::string CaptureTypeWithPattern(
+    const ServerFieldType& type,
+    const std::string& pattern,
+    const CaptureOptions options = CaptureOptions());
 
 // Collapses white spaces and line breaks, converts the string to lower case and
 // removes diacritics.
-base::string16 NormalizeValue(const base::string16& value);
+// If |keep_white_spaces| is true, white spaces are collapsed. Otherwise,
+// white spaces are completely removed.
+base::string16 NormalizeValue(const base::StringPiece16 value,
+                              bool keep_white_space = true);
 
 // Returns true of both vectors contain the same tokens in the same order.
-bool AreSortedTokensEqual(const std::vector<base::string16>& first,
-                          const std::vector<base::string16>& second);
+bool AreSortedTokensEqual(const std::vector<AddressToken>& first,
+                          const std::vector<AddressToken>& second);
 
 // Returns true if both strings contain the same tokens after normalization.
 bool AreStringTokenEquivalent(const base::string16& one,
@@ -186,7 +291,17 @@ bool AreStringTokenEquivalent(const base::string16& one,
 // Returns a sorted vector containing the tokens of |value| after |value| was
 // canonicalized. |value| is tokenized by splitting it by white spaces and
 // commas.
-std::vector<base::string16> TokenizeValue(const base::string16 value);
+std::vector<AddressToken> TokenizeValue(const base::string16 value);
+
+// Compares two vectors of sorted AddressTokens and returns the
+// SortedTokenComparisonResult;
+SortedTokenComparisonResult CompareSortedTokens(
+    const std::vector<AddressToken>& first,
+    const std::vector<AddressToken>& second);
+
+// Convenience wrapper to supply untokenized strings.
+SortedTokenComparisonResult CompareSortedTokens(const base::string16& first,
+                                                const base::string16& second);
 
 }  // namespace structured_address
 

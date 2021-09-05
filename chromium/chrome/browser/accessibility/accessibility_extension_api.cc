@@ -14,6 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -342,6 +343,7 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
 
   int changed_button_flags = flags;
 
+  flags |= ui::EF_IS_SYNTHESIZED;
   if (mouse_data->touch_accessibility && *(mouse_data->touch_accessibility))
     flags |= ui::EF_TOUCH_ACCESSIBILITY;
 
@@ -368,11 +370,9 @@ AccessibilityPrivateSendSyntheticMouseEventFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction
-AccessibilityPrivateOnSelectToSpeakStateChangedFunction::Run() {
-  std::unique_ptr<accessibility_private::OnSelectToSpeakStateChanged::Params>
-      params =
-          accessibility_private::OnSelectToSpeakStateChanged::Params::Create(
-              *args_);
+AccessibilityPrivateSetSelectToSpeakStateFunction::Run() {
+  std::unique_ptr<accessibility_private::SetSelectToSpeakState::Params> params =
+      accessibility_private::SetSelectToSpeakState::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
   accessibility_private::SelectToSpeakState params_state = params->state;
   ash::SelectToSpeakState state;
@@ -392,21 +392,38 @@ AccessibilityPrivateOnSelectToSpeakStateChangedFunction::Run() {
   }
 
   auto* accessibility_manager = chromeos::AccessibilityManager::Get();
-  accessibility_manager->OnSelectToSpeakStateChanged(state);
+  accessibility_manager->SetSelectToSpeakState(state);
 
   return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction
-AccessibilityPrivateOnScrollableBoundsForPointFoundFunction::Run() {
+AccessibilityPrivateHandleScrollableBoundsForPointFoundFunction::Run() {
   std::unique_ptr<
-      accessibility_private::OnScrollableBoundsForPointFound::Params>
-      params = accessibility_private::OnScrollableBoundsForPointFound::Params::
-          Create(*args_);
+      accessibility_private::HandleScrollableBoundsForPointFound::Params>
+      params = accessibility_private::HandleScrollableBoundsForPointFound::
+          Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
   accessibility_private::ScreenRect rect = std::move(params->rect);
   gfx::Rect bounds(rect.left, rect.top, rect.width, rect.height);
-  ash::AccessibilityController::Get()->OnAutoclickScrollableBoundsFound(bounds);
+  ash::AccessibilityController::Get()->HandleAutoclickScrollableBoundsFound(
+      bounds);
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+AccessibilityPrivateMoveMagnifierToRectFunction::Run() {
+  std::unique_ptr<accessibility_private::MoveMagnifierToRect::Params> params =
+      accessibility_private::MoveMagnifierToRect::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  accessibility_private::ScreenRect rect = std::move(params->rect);
+  gfx::Rect bounds(rect.left, rect.top, rect.width, rect.height);
+
+  chromeos::MagnificationManager* magnification_manager =
+      chromeos::MagnificationManager::Get();
+  if (magnification_manager)
+    magnification_manager->HandleMoveMagnifierToRectIfEnabled(bounds);
+
   return RespondNow(NoArguments());
 }
 
@@ -506,6 +523,30 @@ AccessibilityPrivateSetVirtualKeyboardVisibleFunction::Run() {
   ash::AccessibilityController::Get()->SetVirtualKeyboardVisible(
       params->is_visible);
 
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+AccessibilityPrivatePerformAcceleratorActionFunction::Run() {
+  std::unique_ptr<accessibility_private::PerformAcceleratorAction::Params>
+      params = accessibility_private::PerformAcceleratorAction::Params::Create(
+          *args_);
+  EXTENSION_FUNCTION_VALIDATE(params);
+  ash::AcceleratorAction accelerator_action;
+  switch (params->accelerator_action) {
+    case accessibility_private::ACCELERATOR_ACTION_FOCUSPREVIOUSPANE:
+      accelerator_action = ash::FOCUS_PREVIOUS_PANE;
+      break;
+    case accessibility_private::ACCELERATOR_ACTION_FOCUSNEXTPANE:
+      accelerator_action = ash::FOCUS_NEXT_PANE;
+      break;
+    case accessibility_private::ACCELERATOR_ACTION_NONE:
+      NOTREACHED();
+      return RespondNow(Error("Invalid accelerator action."));
+  }
+
+  ash::AccessibilityController::Get()->PerformAcceleratorAction(
+      accelerator_action);
   return RespondNow(NoArguments());
 }
 

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import './strings.m.js';
+import './middle_slot_promo.js';
 import './most_visited.js';
 import './customize_dialog.js';
 import './voice_search_overlay.js';
@@ -10,9 +11,10 @@ import './iframe.js';
 import './fakebox.js';
 import './realbox.js';
 import './logo.js';
-import './module_wrapper.js';
+import './modules/module_wrapper.js';
 import './modules/modules.js'; // Registers module descriptors.
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_toast/cr_toast.m.js';
 import 'chrome://resources/cr_elements/shared_style_css.m.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
@@ -106,12 +108,6 @@ class AppElement extends PolymerElement {
             lazyRender_)`,
       },
 
-      /** @private */
-      promoLoaded_: {
-        type: Boolean,
-        value: false,
-      },
-
       /** @private {!newTabPage.mojom.Theme} */
       theme_: {
         observer: 'onThemeChange_',
@@ -196,6 +192,46 @@ class AppElement extends PolymerElement {
         computed: 'computeRealboxShown_(theme_)',
       },
 
+      /** @private */
+      modulesEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('modulesEnabled'),
+        reflectToAttribute: true,
+      },
+
+      /** @private */
+      modulesVisible_: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
+
+      /** @private */
+      middleSlotPromoLoaded_: Boolean,
+
+      /** @private */
+      modulesLoaded_: Boolean,
+
+      /**
+       * In order to avoid flicker, the promo and modules are hidden until both
+       * are loaded. If modules are disabled, the promo is shown as soon as it
+       * is loaded.
+       * @private
+       */
+      promoAndModulesLoaded_: {
+        type: Boolean,
+        computed: `computePromoAndModulesLoaded_(middleSlotPromoLoaded_,
+            modulesLoaded_)`,
+        reflectToAttribute: true,
+      },
+
+      /** @private */
+      modulesLoadedAndVisible_: {
+        type: Boolean,
+        computed: `computeModulesLoadedAndVisible_(promoAndModulesLoaded_,
+            modulesVisible_)`,
+        observer: 'onModulesLoadedAndVisibleChange_',
+      },
+
       /**
        * If true, renders additional elements that were not deemed crucial to
        * to show up immediately on load.
@@ -205,6 +241,23 @@ class AppElement extends PolymerElement {
 
       /** @private {!Array<!ModuleDescriptor>} */
       moduleDescriptors_: Object,
+
+      /**
+       * The <ntp-module-wrapper> element of the last dismissed module.
+       * @type {?Element}
+       * @private
+       */
+      dismissedModuleWrapper_: {
+        type: Object,
+        value: null,
+      },
+
+      /**
+       * The message shown in the toast when a module is dismissed.
+       * @type {string}
+       * @private
+       */
+      dismissModuleToastMessage_: String,
     };
   }
 
@@ -219,6 +272,8 @@ class AppElement extends PolymerElement {
     this.backgroundManager_ = BackgroundManager.getInstance();
     /** @private {?number} */
     this.setThemeListenerId_ = null;
+    /** @private {?number} */
+    this.setModulesVisibleListenerId_ = null;
     /** @private {!EventTracker} */
     this.eventTracker_ = new EventTracker();
     this.loadOneGoogleBar_();
@@ -243,6 +298,11 @@ class AppElement extends PolymerElement {
           performance.measure('theme-set');
           this.theme_ = theme;
         });
+    this.setModulesVisibleListenerId_ =
+        this.callbackRouter_.setModulesVisible.addListener(visible => {
+          this.modulesVisible_ = visible;
+        });
+    this.pageHandler_.updateModulesVisible();
     this.eventTracker_.add(window, 'message', (event) => {
       /** @type {!Object} */
       const data = event.data;
@@ -251,12 +311,8 @@ class AppElement extends PolymerElement {
       if (typeof data !== 'object') {
         return;
       }
-      if ('frameType' in data) {
-        if (data.frameType === 'promo') {
-          this.handlePromoMessage_(event);
-        } else if (data.frameType === 'one-google-bar') {
-          this.handleOneGoogleBarMessage_(event);
-        }
+      if ('frameType' in data && data.frameType === 'one-google-bar') {
+        this.handleOneGoogleBarMessage_(event);
       }
     });
     this.eventTracker_.add(window, 'keydown', e => this.onWindowKeydown_(e));
@@ -325,7 +381,9 @@ class AppElement extends PolymerElement {
   async loadOneGoogleBar_() {
     if (this.iframeOneGoogleBarEnabled_) {
       const oneGoogleBar = document.querySelector('#oneGoogleBar');
-      oneGoogleBar.remove();
+      if (oneGoogleBar) {
+        oneGoogleBar.remove();
+      }
       return;
     }
 
@@ -454,6 +512,23 @@ class AppElement extends PolymerElement {
         !!this.theme_;
   }
 
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computePromoAndModulesLoaded_() {
+    return this.middleSlotPromoLoaded_ &&
+        (!loadTimeData.getBoolean('modulesEnabled') || this.modulesLoaded_);
+  }
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeModulesLoadedAndVisible_() {
+    return this.promoAndModulesLoaded_ && this.modulesVisible_;
+  }
+
   /** @private */
   async onLazyRendered_() {
     if (!loadTimeData.getBoolean('modulesEnabled')) {
@@ -501,6 +576,9 @@ class AppElement extends PolymerElement {
       this.pageHandler_.onVoiceSearchAction(
           newTabPage.mojom.VoiceSearchAction.kActivateKeyboard);
     }
+    if (ctrlKeyPressed && e.key === 'z') {
+      this.onUndoDismissModuleButtonClick_();
+    }
   }
 
   /**
@@ -540,6 +618,13 @@ class AppElement extends PolymerElement {
       this.backgroundManager_.setBackgroundColor(this.theme_.backgroundColor);
     }
     this.updateBackgroundImagePath_();
+  }
+
+  /** @private */
+  onModulesLoadedAndVisibleChange_() {
+    if (this.modulesLoadedAndVisible_) {
+      this.pageHandler_.onModulesRendered(BrowserProxy.getInstance().now());
+    }
   }
 
   /**
@@ -604,8 +689,7 @@ class AppElement extends PolymerElement {
    */
   computeDoodleAllowed_() {
     return loadTimeData.getBoolean('themeModeDoodlesEnabled') ||
-        !this.showBackgroundImage_ && this.theme_ &&
-        this.theme_.type === newTabPage.mojom.ThemeType.kDefault &&
+        !this.showBackgroundImage_ && this.theme_ && this.theme_.isDefault &&
         !this.theme_.isDark;
   }
 
@@ -652,6 +736,34 @@ class AppElement extends PolymerElement {
       default:
         return this.theme_ && (!!this.theme_.logoColor || this.theme_.isDark);
     }
+  }
+
+  /**
+   * Sends the command received from the given source and origin to the browser.
+   * Relays the browser response to whether or not a promo containing the given
+   * command can be shown back to the source promo frame. |commandSource| and
+   * |commandOrigin| are used only to send the response back to the source promo
+   * frame and should not be used for anything else.
+   * @param {Object} messageData Data received from the source promo frame.
+   * @param {Window} commandSource Source promo frame.
+   * @param {string} commandOrigin Origin of the source promo frame.
+   * @private
+   */
+  canShowPromoWithBrowserCommand_(messageData, commandSource, commandOrigin) {
+    // Make sure we don't send unsupported commands to the browser.
+    /** @type {!promoBrowserCommand.mojom.Command} */
+    const commandId = Object.values(promoBrowserCommand.mojom.Command)
+                          .includes(messageData.commandId) ?
+        messageData.commandId :
+        promoBrowserCommand.mojom.Command.kUnknownCommand;
+
+    PromoBrowserCommandProxy.getInstance()
+        .handler.canShowPromoWithCommand(commandId)
+        .then(({canShow}) => {
+          const response = {messageType: messageData.messageType};
+          response[messageData.commandId] = canShow;
+          commandSource.postMessage(response, commandOrigin);
+        });
   }
 
   /**
@@ -726,37 +838,11 @@ class AppElement extends PolymerElement {
     } else if (data.messageType === 'deactivate') {
       this.$.oneGoogleBarOverlayBackdrop.toggleAttribute('show', false);
       $$(this, '#oneGoogleBar').style.zIndex = '0';
+    } else if (data.messageType === 'can-show-promo-with-browser-command') {
+      this.canShowPromoWithBrowserCommand_(data, event.source, event.origin);
     } else if (data.messageType === 'execute-browser-command') {
       this.executePromoBrowserCommand_(
           /** @type {!CommandData} */ (data.data), event.source, event.origin);
-    }
-  }
-
-  /**
-   * Handle messages from promo iframe. This shows the promo on load and sets
-   * up the show/hide logic (in case there is an overlap with most-visited
-   * tiles).
-   * @param {!MessageEvent} event
-   * @private
-   */
-  handlePromoMessage_(event) {
-    /** @type {!Object} */
-    const data = event.data;
-    if (data.messageType === 'loaded') {
-      this.promoLoaded_ = true;
-      const onResize = () => {
-        const hidePromo = this.$.mostVisited.getBoundingClientRect().bottom >=
-            $$(this, '#promo').offsetTop;
-        $$(this, '#promo').style.opacity = hidePromo ? 0 : 1;
-      };
-      this.eventTracker_.add(window, 'resize', onResize);
-      onResize();
-      this.pageHandler_.onPromoRendered(BrowserProxy.getInstance().now());
-    } else if (data.messageType === 'link-clicked') {
-      this.pageHandler_.onPromoLinkClicked();
-    } else if (data.messageType === 'execute-browser-command') {
-      this.executePromoBrowserCommand_(
-          /** @type {!CommandData} */ (data), event.source, event.origin);
     }
   }
 
@@ -766,6 +852,60 @@ class AppElement extends PolymerElement {
         this.oneGoogleBarModalOverlaysEnabled_) {
       this.setupShortcutDragDropOneGoogleBarWorkaround_();
     }
+  }
+
+  /** @private */
+  onMiddleSlotPromoLoaded_() {
+    this.middleSlotPromoLoaded_ = true;
+    // The promo is always shown when modules are enabled since it will not
+    // overlap with other elements.
+    if (this.modulesEnabled_) {
+      return;
+    }
+    const onResize = () => {
+      const promoElement = $$(this, 'ntp-middle-slot-promo');
+      promoElement.hidden =
+          this.$.mostVisited.getBoundingClientRect().bottom >=
+          promoElement.offsetTop;
+    };
+    this.eventTracker_.add(window, 'resize', onResize);
+    onResize();
+  }
+
+  /** @private */
+  onModulesLoaded_() {
+    this.modulesLoaded_ = true;
+  }
+
+  /**
+   * @param {!CustomEvent<string>} e Event notifying a module was dismissed.
+   *     Contains the message to show in the toast.
+   * @private
+   */
+  onDismissModule_(e) {
+    this.dismissedModuleWrapper_ = /** @type {!Element} */ (e.target);
+
+    // Notify the user.
+    this.dismissModuleToastMessage_ = e.detail;
+    $$(this, '#dismissModuleToast').show();
+    // Notify the backend.
+    this.pageHandler_.onDismissModule(
+        this.dismissedModuleWrapper_.descriptor.id);
+  }
+
+  /**
+   * @private
+   */
+  onUndoDismissModuleButtonClick_() {
+    // Restore the module.
+    this.dismissedModuleWrapper_.restore();
+    // Notify the user.
+    $$(this, '#dismissModuleToast').hide();
+    // Notify the backend.
+    this.pageHandler_.onRestoreModule(
+        this.dismissedModuleWrapper_.descriptor.id);
+
+    this.dismissedModuleWrapper_ = null;
   }
 
   /**

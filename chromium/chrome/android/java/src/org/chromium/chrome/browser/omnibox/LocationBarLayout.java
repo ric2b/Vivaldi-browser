@@ -30,15 +30,18 @@ import androidx.core.view.MarginLayoutParamsCompat;
 import androidx.core.view.ViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.Callback;
+import org.chromium.base.CallbackController;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.WindowDelegate;
-import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.locale.LocaleManager;
@@ -62,8 +65,8 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
-import org.chromium.chrome.browser.toolbar.IncognitoStateProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.top.ToolbarActionModeCallback;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
@@ -140,6 +143,9 @@ public class LocationBarLayout extends FrameLayout
     private Runnable mKeyboardResizeModeTask;
     private Runnable mKeyboardHideTask;
     private boolean mKeyboardShouldShow;
+    private ObservableSupplier<Profile> mProfileSupplier;
+    private Callback<Profile> mProfileSupplierObserver;
+    private CallbackController mCallbackController = new CallbackController();
 
     /**
      * Class to handle input from a hardware keyboard when the focus is on the URL bar. In
@@ -250,6 +256,17 @@ public class LocationBarLayout extends FrameLayout
         if (mAssistantVoiceSearchService != null) {
             mAssistantVoiceSearchService.destroy();
             mAssistantVoiceSearchService = null;
+        }
+
+        if (mCallbackController != null) {
+            mCallbackController.destroy();
+            mCallbackController = null;
+        }
+
+        if (mProfileSupplier != null) {
+            mProfileSupplier.removeObserver(mProfileSupplierObserver);
+            mProfileSupplier = null;
+            mProfileSupplierObserver = null;
         }
     }
 
@@ -367,10 +384,11 @@ public class LocationBarLayout extends FrameLayout
         updateMicButtonVisibility();
 
         mAssistantVoiceSearchService =
-                new AssistantVoiceSearchService(getContext(), ExternalAuthUtils.getInstance(),
+                new AssistantVoiceSearchService(getContext(), AppHooks.get().getExternalAuthUtils(),
                         TemplateUrlServiceFactory.get(), GSAState.getInstance(getContext()), this);
         mVoiceRecognitionHandler.setAssistantVoiceSearchService(mAssistantVoiceSearchService);
         onAssistantVoiceSearchServiceChanged();
+        setProfile(mProfileSupplier.get());
     }
 
     /**
@@ -391,22 +409,28 @@ public class LocationBarLayout extends FrameLayout
         mStatusCoordinator.setShouldAnimateIconChanges(shouldAnimate);
     }
 
-    /**
-     * Updates the profile used for generating autocomplete suggestions.
-     * @param profile The profile to be used.
-     */
     @Override
-    public void setAutocompleteProfile(Profile profile) {
-        // This will only be called once at least one tab exists, and the tab model is told to
-        // update its state. During Chrome initialization the tab model update happens after the
-        // call to onNativeLibraryReady, so this assert will not fire.
-        assert mNativeInitialized : "Setting Autocomplete Profile before native side initialized";
-        mAutocompleteCoordinator.setAutocompleteProfile(profile);
-        mOmniboxPrerender.initializeForProfile(profile);
+    public void setProfileSupplier(ObservableSupplier<Profile> profileSupplier) {
+        assert profileSupplier != null;
+        assert mProfileSupplier == null;
+        mProfileSupplier = profileSupplier;
+        mProfileSupplierObserver = mCallbackController.makeCancelable(this::setProfile);
+        mProfileSupplier.addObserver(mProfileSupplierObserver);
     }
 
-    @Override
-    public void setShowIconsWhenUrlFocused(boolean showIcon) {}
+    /**
+     * Updates the profile used by this LocationBar, for, e.g. determining incognito status or
+     * generating autocomplete suggestions..
+     * @param profile The profile to be used.
+     */
+    private void setProfile(Profile profile) {
+        if (profile == null || !mNativeInitialized) return;
+        mAutocompleteCoordinator.setAutocompleteProfile(profile);
+        mOmniboxPrerender.initializeForProfile(profile);
+
+        setShowIconsWhenUrlFocused(
+                SearchEngineLogoUtils.shouldShowSearchEngineLogo(profile.isOffTheRecord()));
+    }
 
     /** Focuses the current page. */
     private void focusCurrentTab() {
@@ -451,6 +475,12 @@ public class LocationBarLayout extends FrameLayout
     }
 
     /**
+     * Specify whether location bar should present icons when focused.
+     * @param showIcon True if we should show the icons when the url is focused.
+     */
+    protected void setShowIconsWhenUrlFocused(boolean showIcon) {}
+
+    /**
      * @param inProgress Whether a URL focus change is taking place.
      */
     protected void setUrlFocusChangeInProgress(boolean inProgress) {
@@ -487,6 +517,9 @@ public class LocationBarLayout extends FrameLayout
      * @param hasFocus Whether the URL field has gained focus.
      */
     protected void onUrlFocusChange(boolean hasFocus) {
+        // Vivaldi - Update the URL focus change value
+        VivaldiUtils.setUrlBarFocus(hasFocus);
+
         mUrlHasFocus = hasFocus;
         updateButtonVisibility();
         updateShouldAnimateIconChanges();
@@ -705,6 +738,12 @@ public class LocationBarLayout extends FrameLayout
         int urlContainerMarginEnd = getUrlContainerMarginEnd();
         LayoutParams urlLayoutParams = (LayoutParams) mUrlBar.getLayoutParams();
         if (MarginLayoutParamsCompat.getMarginEnd(urlLayoutParams) != urlContainerMarginEnd) {
+            // Include the space which the URL bar will be translated post-layout into the
+            // end-margin so the URL bar doesn't overlap with the URL actions container.
+            if (SearchEngineLogoUtils.shouldShowSearchEngineLogo(
+                        mToolbarDataProvider.isIncognito())) {
+                urlContainerMarginEnd += mStatusCoordinator.getEndPaddingPixelSizeOnFocusDelta();
+            }
             MarginLayoutParamsCompat.setMarginEnd(urlLayoutParams, urlContainerMarginEnd);
             mUrlBar.setLayoutParams(urlLayoutParams);
         }
@@ -980,7 +1019,7 @@ public class LocationBarLayout extends FrameLayout
 
         // TODO(crbug.com/1085812): Should be taking a fulll loaded LoadUrlParams.
         if (ReturnToChromeExperimentsUtil.willHandleLoadUrlWithPostDataFromStartSurface(
-                    url, transition, postDataType, postData)) {
+                    url, transition, postDataType, postData, mToolbarDataProvider.isIncognito())) {
             return;
         }
 
@@ -1282,6 +1321,9 @@ public class LocationBarLayout extends FrameLayout
      * @param hasFocus Whether the URL field has gained focus.
      */
     protected void finishUrlFocusChange(boolean hasFocus) {
+        // Vivaldi - Handle the status bar visibility after URL focus has changed.
+        VivaldiUtils.handleStatusBarVisibility(getWindowAndroid().getActivity().get().getWindow());
+
         setKeyboardVisibilityInternal(true);
         setUrlFocusChangeInProgress(false);
         updateShouldAnimateIconChanges();
@@ -1306,13 +1348,8 @@ public class LocationBarLayout extends FrameLayout
         // receive a second request to hide the keyboard instantly.
         if (showKeyboard) {
             // Note (david@vivaldi.com): When the toolbar is at the bottom we don't apply the soft
-            // input mode in oder to have the control container always visible. Also force status
-            // bar to be visible otherwise the control container won't be above the soft input
-            // keyboard.
-            if (!VivaldiUtils.isTopToolbarOn())
-                VivaldiUtils.handleStatusBarVisibility(
-                        getWindowAndroid().getActivity().get().getWindow(), true);
-            else
+            // input mode in oder to have the control container always visible.
+            if (!ChromeApplication.isVivaldi())
             setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN, /* delay */ false);
             getWindowAndroid().getKeyboardDelegate().showKeyboard(mUrlBar);
         } else {
@@ -1328,9 +1365,6 @@ public class LocationBarLayout extends FrameLayout
             // Convert the keyboard back to resize mode (delay the change for an arbitrary amount
             // of time in hopes the keyboard will be completely hidden before making this change).
             setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE, /* delay */ true);
-            // Note (david@vivaldi.com): Update the status bar visibility here.
-            VivaldiUtils.handleStatusBarVisibility(
-                    getWindowAndroid().getActivity().get().getWindow(), false);
         }
     }
 

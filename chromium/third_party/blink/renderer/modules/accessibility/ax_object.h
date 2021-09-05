@@ -8,14 +8,12 @@
  *
  * 1.  Redistributions of source code must retain the above copyright
  *     notice, this list of conditions and the following disclaimer.
- * 2.
- * Redistributiothird_party/blink/renderer/modules/exported/web_ax_object.ccns
- * in binary form must reproduce the above copyright notice, this list of
- * conditions and the following disclaimer in the documentation and/or other
- * materials provided with the distribution. 3.  Neither the name of Apple
- * Computer, Inc. ("Apple") nor the names of its contributors may be used to
- * endorse or promote products derived from this software without specific
- * prior written permission.
+ * 2.  Redistributions in binary form must reproduce the above copyright
+ *     notice, this list of conditions and the following disclaimer in the
+ *     documentation and/or other materials provided with the distribution.
+ * 3.  Neither the name of Apple Computer, Inc. ("Apple") nor the names of
+ *     its contributors may be used to endorse or promote products derived
+ *     from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY APPLE AND ITS CONTRIBUTORS "AS IS" AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,8 +31,10 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_ACCESSIBILITY_AX_OBJECT_H_
 
 #include <ostream>
+#include <utility>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
 #include "third_party/blink/renderer/core/accessibility/axid.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -52,6 +52,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "ui/accessibility/ax_enums.mojom-blink.h"
+#include "ui/accessibility/ax_mode.h"
 
 class SkMatrix44;
 
@@ -82,8 +83,6 @@ enum class AOMRelationListProperty;
 class AXSparseAttributeClient {
  public:
   virtual void AddBoolAttribute(AXBoolAttribute, bool) = 0;
-  virtual void AddIntAttribute(AXIntAttribute, int32_t) = 0;
-  virtual void AddUIntAttribute(AXUIntAttribute, uint32_t) = 0;
   virtual void AddStringAttribute(AXStringAttribute, const String&) = 0;
   virtual void AddObjectAttribute(AXObjectAttribute, AXObject&) = 0;
   virtual void AddObjectVectorAttribute(AXObjectVectorAttribute,
@@ -404,7 +403,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   //
   // TODO(crbug.com/1068668): AX onion soup - finish migrating
   // BlinkAXTreeSource::SerializeNode into AXObject::Serialize.
-  void Serialize(ui::AXNodeData* node_data);
+  void Serialize(ui::AXNodeData* node_data, ui::AXMode accessibility_mode);
 
   // Determine subclass type.
   virtual bool IsImageMapLink() const;
@@ -444,7 +443,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool IsLink() const;
   virtual bool IsInPageLinkTarget() const;
   bool IsMenu() const;
-  bool IsMenuButton() const;
   bool IsMenuRelated() const;
   bool IsMeter() const;
   virtual bool IsNativeImage() const;
@@ -527,7 +525,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
     return true;
   }
   bool AccessibilityIsIgnoredByDefault(IgnoredReasons* = nullptr) const;
-  AXObjectInclusion AccessibilityPlatformIncludesObject() const;
   virtual AXObjectInclusion DefaultObjectInclusion(
       IgnoredReasons* = nullptr) const;
   bool IsInertOrAriaHidden() const;
@@ -538,10 +535,15 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   AXObject* LeafNodeAncestor() const;
   bool IsDescendantOfDisabledNode() const;
   bool ComputeAccessibilityIsIgnoredButIncludedInTree() const;
+  const AXObject* GetNativeTextControlAncestor(
+      int max_levels_to_check = 3) const;
   const AXObject* DatetimeAncestor(int max_levels_to_check = 3) const;
   const AXObject* DisabledAncestor() const;
   bool LastKnownIsIgnoredValue() const;
+  void SetLastKnownIsIgnoredValue(bool);
   bool LastKnownIsIgnoredButIncludedInTreeValue() const;
+  bool LastKnownIsIncludedInTreeValue() const;
+  void SetLastKnownIsIgnoredButIncludedInTreeValue(bool);
   bool HasInheritedPresentationalRole() const;
   bool IsPresentationalChild() const;
   bool CanBeActiveDescendant() const;
@@ -659,10 +661,10 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual ax::mojom::blink::WritingDirection GetTextDirection() const {
     return ax::mojom::blink::WritingDirection::kLtr;
   }
+  virtual float GetTextIndent() const { return 0.0f; }
   virtual ax::mojom::blink::TextPosition GetTextPosition() const {
     return ax::mojom::blink::TextPosition::kNone;
   }
-  virtual int TextLength() const { return 0; }
 
   virtual void GetTextStyleAndTextDecorationStyle(
       int32_t* text_style,
@@ -683,29 +685,77 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   // Load inline text boxes for just this node, even if
   // settings->inlineTextBoxAccessibilityEnabled() is false.
-  virtual void LoadInlineTextBoxes() {}
+  virtual void LoadInlineTextBoxes();
 
-  // Walk the AXObjects on the same line. This is supported on any
-  // object type but primarily intended to be used for inline text boxes.
-  virtual AXObject* NextOnLine() const { return nullptr; }
-  virtual AXObject* PreviousOnLine() const { return nullptr; }
+  // Walk the AXObjects on the same line.
+  virtual AXObject* NextOnLine() const;
+  virtual AXObject* PreviousOnLine() const;
 
-  // For all node objects. The start and end character offset of each
-  // marker, such as spelling or grammar error.
-  virtual void Markers(Vector<DocumentMarker::MarkerType>&,
-                       Vector<AXRange>&) const;
-  // For an inline text box.
-  // The integer horizontal pixel offset of each character in the string;
-  // negative values for RTL.
+  // Searches the object's ancestors for an aria-invalid attribute of type
+  // spelling or grammar, and returns a document marker representing the value
+  // of this attribute. As an optimization, goes up until the deepest line
+  // breaking object which, in most cases, is the paragraph containing this
+  // object.
+  base::Optional<const DocumentMarker::MarkerType>
+  GetAriaSpellingOrGrammarMarker() const;
+
+  // For all node and inline text box objects. The start and end character
+  // offset of each document marker, such as spelling or grammar error expressed
+  // as an AXRange.
+  virtual void GetDocumentMarkers(
+      Vector<DocumentMarker::MarkerType>* marker_types,
+      Vector<AXRange>* marker_ranges) const;
+
+  // For all inline text objects: Returns the horizontal pixel offset of each
+  // character in the object's text, rounded to the nearest integer. Negative
+  // values are returned for RTL text.
   virtual void TextCharacterOffsets(Vector<int>&) const;
-  // The start and end character offset of each word in the object's text.
+
+  // For all inline text boxes: Returns the start and end character offset of
+  // each word in the object's text.
   virtual void GetWordBoundaries(Vector<int>& word_starts,
                                  Vector<int>& word_ends) const;
-  // Returns the text offset (text offset as in AXPosition, not as in
-  // pixel offset) in the container of an inline text box.
-  virtual unsigned TextOffsetInContainer(unsigned offset) const {
-    return offset;
-  }
+
+  virtual int TextLength() const { return 0; }
+
+  // Supported on layout inline, layout text, layout replaced, and layout block
+  // flow, provided that they are at inline-level, i.e. "display=inline" or
+  // "display=inline-block". Also supported on native text fields. For all other
+  // object types, returns |offset|.
+  //
+  // For layout inline, text, replaced, and block flow: Translates the given
+  // character offset to the equivalent offset in the object's formatting
+  // context. The formatting context is the deepest block flow ancestor,
+  // (excluding the current object), e.g. the containing paragraph. If this
+  // object is somehow not a descendant of a block flow in the layout tree,
+  // returns |offset|.
+  //
+  // For example, if this object is a span, and |offset| is 0, this method would
+  // return the number of characters, excluding any collapsed white space found
+  // in the DOM, from the start of the layout inline's deepest block flow
+  // ancestor, e.g. the beginning of the paragraph in which the span is found.
+  //
+  // For native text fields: Simply returns |offset|, because native text fields
+  // have no collapsed white space and so no translation from a DOM to an
+  // accessible text offset is necessary.
+  virtual int TextOffsetInFormattingContext(int offset) const;
+
+  // For all inline text boxes and native text fields. For all other object
+  // types, returns |offset|.
+  //
+  // For inline text boxes: Translates the given character offset to the
+  // equivalent offset in the object's static text or line break parent. If this
+  // object is somehow not a descendant of a block flow in the layout tree,
+  // returns the given offset.
+  //
+  // For example, if the given offset is 0, this would return the number of
+  // characters, excluding any collapsed white space found in the DOM, from the
+  // start of the inline text box's static text parent.
+  //
+  // For native text fields: Simply returns |offset|, because native text fields
+  // have no collapsed white space and so no translation from a DOM to an
+  // accessible text offset is necessary.
+  virtual int TextOffsetInContainer(int offset) const;
 
   // Properties of interactive elements.
   ax::mojom::blink::DefaultActionVerb Action() const;
@@ -856,6 +906,9 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // accessibility tree.
   const AXObjectVector& ChildrenIncludingIgnored() const;
   const AXObjectVector& ChildrenIncludingIgnored();
+  const AXObjectVector& CachedChildrenIncludingIgnored() const {
+    return children_;
+  }
 
   // Returns the node's unignored descendants that are one level deeper than
   // this node, after removing all accessibility ignored nodes from the tree.
@@ -1150,7 +1203,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual void HandleAutofillStateChanged(WebAXAutofillState) {}
   virtual void HandleAriaExpandedChanged() {}
   virtual void SelectionChanged();
-  virtual void TextChanged() {}
 
   // Static helper functions.
   static bool IsARIAControl(ax::mojom::blink::Role);
@@ -1175,6 +1227,8 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // Blink-internal DOM Node ID. Currently used for PDF exporting.
   int GetDOMNodeId() const;
 
+  bool IsHiddenForTextAlternativeCalculation() const;
+
   // Returns a string representation of this object.
   String ToString(bool verbose = false) const;
 
@@ -1184,6 +1238,8 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   mutable bool have_children_;
   ax::mojom::blink::Role role_;
   ax::mojom::blink::Role aria_role_;
+  mutable AXObjectInclusion last_known_is_ignored_value_;
+  mutable AXObjectInclusion last_known_is_ignored_but_included_in_tree_value_;
   LayoutRect explicit_element_rect_;
   AXID explicit_container_id_;
 
@@ -1196,7 +1252,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
                                          bool in_aria_labelled_by_traversal,
                                          AXObjectSet& visited,
                                          ax::mojom::blink::NameFrom& name_from);
-  bool IsHiddenForTextAlternativeCalculation() const;
   String AriaTextAlternative(bool recursive,
                              bool in_aria_labelled_by_traversal,
                              AXObjectSet& visited,
@@ -1271,6 +1326,11 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // functions called here may only search up the tree (ancestors), not down.
   void UpdateCachedAttributeValuesIfNeeded() const;
 
+  // Helpers for serialization.
+  // TODO(meredithl): Serialize all sparse/table attributes and rename.
+  void SerializePartialSparseAttributes(ui::AXNodeData* node_data);
+  void SerializeTableAttributes(ui::AXNodeData* node_data);
+
  private:
   void UpdateDistributionForFlatTreeTraversal() const;
   bool IsARIAControlledByTextboxWithActiveDescendant() const;
@@ -1299,6 +1359,14 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // objects generated. Returns nullptr if a native scroll action to the node is
   // not possible.
   LayoutObject* GetLayoutObjectForNativeScrollAction() const;
+
+  // Max length for attributes such as aria-label.
+  static const uint32_t kMaxStringAttributeLength = 10000;
+  void TruncateAndAddStringAttribute(
+      ui::AXNodeData* dst,
+      ax::mojom::blink::StringAttribute attribute,
+      const std::string& value,
+      uint32_t max_len = kMaxStringAttributeLength) const;
 
   static unsigned number_of_live_ax_objects_;
 

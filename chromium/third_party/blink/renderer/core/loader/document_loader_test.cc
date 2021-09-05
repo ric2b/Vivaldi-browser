@@ -309,25 +309,27 @@ TEST_F(DocumentLoaderSimTest, DocumentPolicyNoEffectWhenFlagNotSet) {
   EXPECT_FALSE(child_window->document()->IsUseCounted(
       mojom::WebFeature::kDocumentPolicyCausedPageUnload));
 
-  // Unoptimized-lossless-images should still be allowed in main document.
+  // lossless-images-max-bpp should be set to inf in main document, i.e. allow
+  // all values.
   EXPECT_TRUE(Window().IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
-      PolicyValue(2.0)));
+      PolicyValue::CreateDecDouble(2.0)));
   EXPECT_TRUE(Window().IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
-      PolicyValue(1.0)));
+      PolicyValue::CreateDecDouble(1.0)));
 
-  // Unoptimized-lossless-images should still be allowed in child document.
+  // lossless-images-max-bpp should be set to inf in child document, i.e. allow
+  // all values.
   EXPECT_TRUE(child_window->IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
-      PolicyValue(2.0)));
+      PolicyValue::CreateDecDouble(2.0)));
   EXPECT_TRUE(child_window->IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
-      PolicyValue(1.0)));
+      PolicyValue::CreateDecDouble(1.0)));
 }
 
 // When runtime feature DocumentPolicyNegotiation is not enabled, specifying
-// Require-Document-Policy HTTP header and  policy attribute on iframe should
+// Require-Document-Policy HTTP header and policy attribute on iframe should
 // have no effect, i.e. document load should not be blocked even if the required
 // policy and incoming policy are incompatible. Document-Policy header should
 // function as normal.
@@ -371,22 +373,22 @@ TEST_F(DocumentLoaderSimTest, DocumentPolicyNegotiationNoEffectWhenFlagNotSet) {
   EXPECT_FALSE(child_window->document()->IsUseCounted(
       mojom::WebFeature::kDocumentPolicyCausedPageUnload));
 
-  // Unoptimized-lossless-images should still be allowed in main document.
+  // lossless-images-max-bpp should be set to inf in main document, i.e. allow
+  // all values.
   EXPECT_TRUE(Window().IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
-      PolicyValue(2.0)));
+      PolicyValue::CreateDecDouble(2.0)));
   EXPECT_TRUE(Window().IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
-      PolicyValue(1.0)));
+      PolicyValue::CreateDecDouble(1.0)));
 
-  // Unoptimized-lossless-images should NOT be allowed in child document,
-  // with the threshold value specified in Document-Policy header.
+  // lossless-images-max-bpp should be set to 1.1 in child document.
   EXPECT_FALSE(child_window->IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
-      PolicyValue(2.0)));
+      PolicyValue::CreateDecDouble(2.0)));
   EXPECT_TRUE(child_window->IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature::kLosslessImagesMaxBpp,
-      PolicyValue(1.0)));
+      PolicyValue::CreateDecDouble(1.0)));
 }
 
 TEST_F(DocumentLoaderSimTest, ReportDocumentPolicyHeaderParsingError) {

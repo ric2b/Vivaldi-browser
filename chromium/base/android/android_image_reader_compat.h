@@ -27,6 +27,11 @@ class BASE_EXPORT AndroidImageReader {
   // the required functions are loaded.
   bool IsSupported();
 
+  // Some devices do not support more than 1 image to be acquired from the
+  // AImageReader.(crbug.com/1051705). This method returns true for those
+  // devices.
+  static bool LimitAImageReaderMaxSizeToOne();
+
   // Naming convention of all the below functions are chosen to exactly match
   // the function names in the NDK.
   void AImage_delete(AImage* image);
@@ -64,7 +69,7 @@ class BASE_EXPORT AndroidImageReader {
   AndroidImageReader();
   bool LoadFunctions();
 
-  bool is_supported_;
+  const bool is_supported_;
   pAImage_delete AImage_delete_;
   pAImage_deleteAsync AImage_deleteAsync_;
   pAImage_getHardwareBuffer AImage_getHardwareBuffer_;

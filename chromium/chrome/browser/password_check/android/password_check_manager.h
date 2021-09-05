@@ -17,12 +17,12 @@
 #include "components/password_manager/core/browser/bulk_leak_check_service_interface.h"
 #include "components/password_manager/core/browser/password_scripts_fetcher.h"
 #include "components/password_manager/core/browser/ui/bulk_leak_check_service_adapter.h"
-#include "components/password_manager/core/browser/ui/compromised_credentials_manager.h"
+#include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 
 class PasswordCheckManager
     : public password_manager::SavedPasswordsPresenter::Observer,
-      public password_manager::CompromisedCredentialsManager::Observer,
+      public password_manager::InsecureCredentialsManager::Observer,
       public password_manager::BulkLeakCheckServiceInterface::Observer {
  public:
   class Observer {
@@ -51,7 +51,8 @@ class PasswordCheckManager
     base::string16 display_origin;
     std::string package_name;
     std::string change_password_url;
-    bool has_script = false;
+    bool has_startable_script = false;
+    bool has_auto_change_button = false;
   };
 
   // `observer` must outlive `this`.
@@ -154,10 +155,10 @@ class PasswordCheckManager
       password_manager::SavedPasswordsPresenter::SavedPasswordsView passwords)
       override;
 
-  // CompromisedCredentialsManager::Observer
+  // InsecureCredentialsManager::Observer
   void OnCompromisedCredentialsChanged(
-      password_manager::CompromisedCredentialsManager::CredentialsView
-          credentials) override;
+      password_manager::InsecureCredentialsManager::CredentialsView credentials)
+      override;
 
   // BulkLeakCheckServiceInterface::Observer
   void OnStateChanged(
@@ -182,10 +183,11 @@ class PasswordCheckManager
   // in the account if the quota limit was reached.
   bool CanUseAccountCheck() const;
 
-  // Returns true if the automatic password change should be offered.
-  // It should be offered only to sync users and who have
-  // kPasswordChangeInSettings enabled.
-  bool ShouldOfferAutomaticPasswordChange() const;
+  // Returns true if the password scripts fetching (kPasswordScriptsFetching) is
+  // enabled. To have precise metrics about user actions on credentials with
+  // scripts, scripts are fetched only for the users who can start a script,
+  // i.e. sync users.
+  bool ShouldFetchPasswordScripts() const;
 
   // Callback when PasswordScriptsFetcher's cache has been warmed up.
   void OnScriptsFetched();
@@ -210,7 +212,7 @@ class PasswordCheckManager
   std::unique_ptr<PasswordCheckProgress> progress_;
 
   // Handle to the password store, powering both `saved_passwords_presenter_`
-  // and `compromised_credentials_manager_`.
+  // and `insecure_credentials_manager_`.
   scoped_refptr<password_manager::PasswordStore> password_store_ =
       PasswordStoreFactory::GetForProfile(profile_,
                                           ServiceAccessType::EXPLICIT_ACCESS);
@@ -221,15 +223,14 @@ class PasswordCheckManager
       PasswordScriptsFetcherFactory::GetInstance()->GetForBrowserContext(
           profile_);
 
-  // Used by `compromised_credentials_manager_` to obtain the list of saved
+  // Used by `insecure_credentials_manager_` to obtain the list of saved
   // passwords.
   password_manager::SavedPasswordsPresenter saved_passwords_presenter_{
       password_store_};
 
-  // Used to obtain the list of compromised credentials.
-  password_manager::CompromisedCredentialsManager
-      compromised_credentials_manager_{password_store_,
-                                       &saved_passwords_presenter_};
+  // Used to obtain the list of insecure credentials.
+  password_manager::InsecureCredentialsManager insecure_credentials_manager_{
+      &saved_passwords_presenter_, password_store_};
 
   // Adapter used to start, monitor and stop a bulk leak check.
   password_manager::BulkLeakCheckServiceAdapter
@@ -257,10 +258,10 @@ class PasswordCheckManager
                  password_manager::SavedPasswordsPresenter::Observer>
       observed_saved_passwords_presenter_{this};
 
-  // A scoped observer for `compromised_credentials_manager_`.
-  ScopedObserver<password_manager::CompromisedCredentialsManager,
-                 password_manager::CompromisedCredentialsManager::Observer>
-      observed_compromised_credentials_manager_{this};
+  // A scoped observer for `insecure_credentials_manager_`.
+  ScopedObserver<password_manager::InsecureCredentialsManager,
+                 password_manager::InsecureCredentialsManager::Observer>
+      observed_insecure_credentials_manager_{this};
 
   // A scoped observer for the BulkLeakCheckService.
   ScopedObserver<password_manager::BulkLeakCheckServiceInterface,

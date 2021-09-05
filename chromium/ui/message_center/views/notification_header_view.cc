@@ -47,7 +47,7 @@ constexpr int kInnerHeaderHeight = kHeaderHeight - kHeaderOuterPadding.height();
 
 // Default paddings of the views of texts. Adjusted on Windows.
 // Top: 9px = 11px (from the mock) - 2px (outer padding).
-// Buttom: 6px from the mock.
+// Bottom: 6px from the mock.
 constexpr gfx::Insets kTextViewPaddingDefault(9, 0, 6, 0);
 
 // Paddings of the app icon (small image).
@@ -72,8 +72,8 @@ constexpr int kHeaderTextFontSize = 12;
 // Minimum spacing before the control buttons.
 constexpr int kControlButtonSpacing = 16;
 
-// ExpandButtton forwards all mouse and key events to NotificationHeaderView,
-// but takes tab focus for accessibility purpose.
+// ExpandButton forwards all mouse and key events to NotificationHeaderView, but
+// takes tab focus for accessibility purpose.
 class ExpandButton : public views::ImageView {
  public:
   ExpandButton();
@@ -347,7 +347,7 @@ void NotificationHeaderView::SetExpandButtonEnabled(bool enabled) {
 void NotificationHeaderView::SetExpanded(bool expanded) {
   is_expanded_ = expanded;
   UpdateColors();
-  expand_button_->set_tooltip_text(l10n_util::GetStringUTF16(
+  expand_button_->SetTooltipText(l10n_util::GetStringUTF16(
       expanded ? IDS_MESSAGE_CENTER_COLLAPSE_NOTIFICATION
                : IDS_MESSAGE_CENTER_EXPAND_NOTIFICATION));
   NotifyAccessibilityEvent(ax::mojom::Event::kStateChanged, true);
@@ -364,6 +364,7 @@ void NotificationHeaderView::SetBackgroundColor(SkColor color) {
   summary_text_view_->SetBackgroundColor(color);
   timestamp_divider_->SetBackgroundColor(color);
   timestamp_view_->SetBackgroundColor(color);
+  UpdateColors();
 }
 
 void NotificationHeaderView::SetSubpixelRenderingEnabled(bool enabled) {
@@ -406,13 +407,16 @@ void NotificationHeaderView::UpdateColors() {
   summary_text_view_->SetEnabledColor(color);
   summary_text_divider_->SetEnabledColor(color);
 
+  // Get actual color based on readablility requirements.
+  SkColor actual_color = app_name_view_->GetEnabledColor();
+
   expand_button_->SetImage(gfx::CreateVectorIcon(
       is_expanded_ ? kNotificationExpandLessIcon : kNotificationExpandMoreIcon,
-      kExpandIconSize, color));
+      kExpandIconSize, actual_color));
 
   if (using_default_app_icon_) {
     app_icon_view_->SetImage(
-        gfx::CreateVectorIcon(kProductIcon, kSmallImageSizeMD, color));
+        gfx::CreateVectorIcon(kProductIcon, kSmallImageSizeMD, actual_color));
   }
 }
 

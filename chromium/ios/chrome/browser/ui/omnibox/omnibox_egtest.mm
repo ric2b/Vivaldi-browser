@@ -27,7 +27,6 @@
 #error "This file requires ARC support."
 #endif
 
-#if defined(CHROME_EARL_GREY_2)
 // TODO(crbug.com/1015113) The EG2 macro is breaking indexing for some reason
 // without the trailing semicolon.  For now, disable the extra semi warning
 // so Xcode indexing works for the egtest.
@@ -35,7 +34,6 @@
 #pragma clang diagnostic ignored "-Wc++98-compat-extra-semi"
 GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(OmniboxAppInterface);
 #pragma clang diagnostic pop
-#endif  // defined(CHROME_EARL_GREY_2)
 
 using base::test::ios::kWaitForUIElementTimeout;
 
@@ -150,23 +148,13 @@ id<GREYMatcher> SearchCopiedTextButton() {
 
 // Tests that the XClientData header is sent when navigating to
 // https://google.com through the omnibox.
-#if defined(CHROME_EARL_GREY_1)
-//  Flaky on EG1.
-#define MAYBE_testXClientData DISABLED_testXClientData
-#else
-#define MAYBE_testXClientData testXClientData
-#endif
-- (void)MAYBE_testXClientData {
+- (void)testXClientData {
 // TODO(crbug.com/1067815): Test doesn't pass on iPad device.
 #if !TARGET_IPHONE_SIMULATOR
   if ([ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"testXClientData doesn't pass on iPad device.");
   }
 #endif
-
-  // TODO(crbug.com/1121305): Test is failing due to clearing the variations on
-  // first run, causing tests to fail flakily on the bots.
-  EARL_GREY_TEST_SKIPPED(@"testXClientData fails on first simulator run.");
 
   // TODO(crbug.com/1120723) This test is flakily because of a DCHECK in
   // ios/web.  Clearing browser history first works around the problem, but
@@ -243,7 +231,7 @@ id<GREYMatcher> SearchCopiedTextButton() {
   [self openPage1];
 
   if ([ChromeEarlGrey isCompactWidth]) {
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::ShareButton()]
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::TabShareButton()]
         assertWithMatcher:grey_sufficientlyVisible()];
   }
 }

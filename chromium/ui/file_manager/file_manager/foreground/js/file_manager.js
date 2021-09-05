@@ -1252,10 +1252,8 @@ class FileManager extends cr.EventTarget {
             nextCurrentDirEntry = inEntry;
           }
 
-          // If this dialog attempts to open file(s) and the selection is a
-          // directory, the selection should be the current directory.
-          if (DialogType.isOpenFileDialog(this.dialogType) &&
-              inEntry.isDirectory) {
+          // If the |selectionURL| is a directory make it the current directory.
+          if (inEntry.isDirectory) {
             nextCurrentDirEntry = inEntry;
           }
 
@@ -1268,6 +1266,22 @@ class FileManager extends cr.EventTarget {
       } catch (error) {
         console.warn(error.stack || error);
       }
+    }
+
+    // If searchQuery param is set, find the first directory that matches the
+    // query, and select it if exists.
+    const searchQuery = this.launchParams_.searchQuery;
+    if (searchQuery) {
+      this.searchController_.setSearchQuery(searchQuery);
+      // Show a spinner, as the crossover search function call could be slow.
+      const hideSpinnerCallback = this.spinnerController_.show();
+      const queryMatchedDirEntry =
+          await crossoverSearchUtils.findQueryMatchedDirectoryEntry(
+              this.directoryTree.dataModel_, this.directoryModel_, searchQuery);
+      if (queryMatchedDirEntry) {
+        nextCurrentDirEntry = queryMatchedDirEntry;
+      }
+      hideSpinnerCallback();
     }
 
     // Resolve the currentDirectoryURL to currentDirectoryEntry (if not done by
@@ -1393,6 +1407,9 @@ class FileManager extends cr.EventTarget {
         });
         if (opt_selectionEntry) {
           this.directoryModel_.selectEntry(opt_selectionEntry);
+        }
+        if (this.launchParams_.searchQuery) {
+          this.searchController_.setSearchQuery(this.launchParams_.searchQuery);
         }
       } else {
         console.warn('No entry for finishSetupCurrentDirectory_');

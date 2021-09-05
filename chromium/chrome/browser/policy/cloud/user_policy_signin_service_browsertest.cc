@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -195,6 +196,7 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
     command_line->AppendSwitchASCII(switches::kGaiaUrl, base_url.spec());
     command_line->AppendSwitchASCII(switches::kLsoUrl, base_url.spec());
     command_line->AppendSwitchASCII(switches::kGoogleApisUrl, base_url.spec());
+    policy::ChromeBrowserPolicyConnector::EnableCommandLineSupportForTesting();
     fake_gaia_.Initialize();
     // Configure Sync server.
     command_line->AppendSwitch(switches::kDisableSync);
@@ -242,8 +244,7 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
     access_token_info.audience =
         GaiaUrls::GetInstance()->oauth2_chrome_client_id();
     access_token_info.email = kTestEmail;
-    fake_gaia_.IssueOAuthToken(base::StringPrintf(kTestRefreshToken),
-                               access_token_info);
+    fake_gaia_.IssueOAuthToken(kTestRefreshToken, access_token_info);
   }
 
   std::unique_ptr<net::test_server::HttpResponse> HandleUserInfoRequest(

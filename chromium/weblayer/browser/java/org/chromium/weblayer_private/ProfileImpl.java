@@ -6,6 +6,7 @@ package org.chromium.weblayer_private;
 
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.os.RemoteException;
 import android.text.TextUtils;
 import android.webkit.ValueCallback;
 
@@ -16,12 +17,18 @@ import org.chromium.base.CollectionUtil;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.base.task.PostTask;
 import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
+import org.chromium.weblayer_private.interfaces.APICallException;
 import org.chromium.weblayer_private.interfaces.BrowsingDataType;
 import org.chromium.weblayer_private.interfaces.ICookieManager;
 import org.chromium.weblayer_private.interfaces.IDownloadCallbackClient;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
+import org.chromium.weblayer_private.interfaces.IPrerenderController;
 import org.chromium.weblayer_private.interfaces.IProfile;
+import org.chromium.weblayer_private.interfaces.IProfileClient;
+import org.chromium.weblayer_private.interfaces.IUserIdentityCallbackClient;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
 import org.chromium.weblayer_private.interfaces.SettingType;
 import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
@@ -36,31 +43,47 @@ import java.util.Set;
  * Implementation of IProfile.
  */
 @JNINamespace("weblayer")
-public final class ProfileImpl extends IProfile.Stub implements BrowserContextHandle {
+public final class ProfileImpl
+        extends IProfile.Stub implements BrowserContextHandle, BrowserListObserver {
     private final String mName;
+    private final boolean mIsIncognito;
     private long mNativeProfile;
     private CookieManagerImpl mCookieManager;
+    private PrerenderControllerImpl mPrerenderController;
     private Runnable mOnDestroyCallback;
     private boolean mBeingDeleted;
     private boolean mDownloadsInitialized;
     private DownloadCallbackProxy mDownloadCallbackProxy;
+    private IUserIdentityCallbackClient mUserIdentityCallbackClient;
     private List<Intent> mDownloadNotificationIntents = new ArrayList<>();
+
+    // This was added in 87, and is null in any version before that.
+    private IProfileClient mClient;
+
+    // If non-null, indicates when no browsers reference this Profile the Profile is destroyed. The
+    // contents are the list of runnables supplied to destroyAndDeleteDataFromDiskSoon().
+    private List<Runnable> mDelayedDestroyCallbacks;
 
     public static void enumerateAllProfileNames(ValueCallback<String[]> callback) {
         final Callback<String[]> baseCallback = (String[] names) -> callback.onReceiveValue(names);
         ProfileImplJni.get().enumerateAllProfileNames(baseCallback);
     }
 
-    ProfileImpl(String name, Runnable onDestroyCallback) {
-        if (!name.matches("^\\w*$")) {
-            throw new IllegalArgumentException("Name can only contain words: " + name);
+    ProfileImpl(String name, boolean isIncognito, Runnable onDestroyCallback) {
+        // Normal profiles have restrictions on the name.
+        if (!isIncognito && !name.matches("^\\w+$")) {
+            throw new IllegalArgumentException(
+                    "Non-incongito profiles names can only contain words: " + name);
         }
+        mIsIncognito = isIncognito;
         mName = name;
-        mNativeProfile = ProfileImplJni.get().createProfile(name, ProfileImpl.this);
+        mNativeProfile = ProfileImplJni.get().createProfile(name, ProfileImpl.this, mIsIncognito);
         mCookieManager =
                 new CookieManagerImpl(ProfileImplJni.get().getCookieManager(mNativeProfile));
+        mPrerenderController = new PrerenderControllerImpl(
+                ProfileImplJni.get().getPrerenderController(mNativeProfile));
         mOnDestroyCallback = onDestroyCallback;
-        mDownloadCallbackProxy = new DownloadCallbackProxy(mName, mNativeProfile);
+        mDownloadCallbackProxy = new DownloadCallbackProxy(this);
     }
 
     private void destroyDependentJavaObjects() {
@@ -72,6 +95,11 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
         if (mCookieManager != null) {
             mCookieManager.destroy();
             mCookieManager = null;
+        }
+
+        if (mPrerenderController != null) {
+            mPrerenderController.destroy();
+            mPrerenderController = null;
         }
     }
 
@@ -101,19 +129,63 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
         StrictModeWorkaround.apply();
         checkNotDestroyed();
         assert mNativeProfile != 0;
-        if (ProfileImplJni.get().getNumBrowserImpl(mNativeProfile) > 0) {
+        if (!canDestroyNow()) {
             throw new IllegalStateException("Profile still in use: " + mName);
         }
 
         final Runnable callback = ObjectWrapper.unwrap(completionCallback, Runnable.class);
+        destroyAndDeleteDataFromDiskImpl(callback);
+    }
 
+    private void destroyAndDeleteDataFromDiskImpl(Runnable callback) {
+        assert canDestroyNow();
         mBeingDeleted = true;
+        BrowserList.getInstance().removeObserver(this);
         destroyDependentJavaObjects();
+        if (mClient != null) {
+            try {
+                mClient.onProfileDestroyed();
+            } catch (RemoteException e) {
+                throw new APICallException(e);
+            }
+        }
         ProfileImplJni.get().destroyAndDeleteDataFromDisk(mNativeProfile, () -> {
             if (callback != null) callback.run();
+            if (mDelayedDestroyCallbacks != null) {
+                for (Runnable r : mDelayedDestroyCallbacks) r.run();
+                mDelayedDestroyCallbacks = null;
+            }
         });
         mNativeProfile = 0;
         maybeRunDestroyCallback();
+    }
+
+    private boolean canDestroyNow() {
+        return ProfileImplJni.get().getNumBrowserImpl(mNativeProfile) == 0;
+    }
+
+    @Override
+    public void destroyAndDeleteDataFromDiskSoon(IObjectWrapper completionCallback) {
+        StrictModeWorkaround.apply();
+        checkNotDestroyed();
+        assert mNativeProfile != 0;
+        if (canDestroyNow()) {
+            destroyAndDeleteDataFromDisk(completionCallback);
+            return;
+        }
+        // The profile is still in use. Wait for all browsers to be destroyed before cleaning up.
+        if (mDelayedDestroyCallbacks == null) {
+            BrowserList.getInstance().addObserver(this);
+            mDelayedDestroyCallbacks = new ArrayList<>();
+            ProfileImplJni.get().markAsDeleted(mNativeProfile);
+        }
+        final Runnable callback = ObjectWrapper.unwrap(completionCallback, Runnable.class);
+        if (callback != null) mDelayedDestroyCallbacks.add(callback);
+    }
+
+    @Override
+    public void setClient(IProfileClient client) {
+        mClient = client;
     }
 
     @Override
@@ -131,8 +203,19 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
         return ProfileImplJni.get().getBrowserContext(mNativeProfile);
     }
 
+    @Override
+    public void setUserIdentityCallbackClient(IUserIdentityCallbackClient client) {
+        StrictModeWorkaround.apply();
+        mUserIdentityCallbackClient = client;
+    }
+
+    public IUserIdentityCallbackClient getUserIdentityCallbackClient() {
+        return mUserIdentityCallbackClient;
+    }
+
+    @Override
     public boolean isIncognito() {
-        return mName.isEmpty();
+        return mIsIncognito;
     }
 
     public boolean areDownloadsInitialized() {
@@ -142,6 +225,22 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
     public void addDownloadNotificationIntent(Intent intent) {
         mDownloadNotificationIntents.add(intent);
         ProfileImplJni.get().ensureBrowserContextInitialized(mNativeProfile);
+    }
+
+    @Override
+    public void onBrowserCreated(BrowserImpl browser) {}
+
+    @Override
+    public void onBrowserDestroyed(BrowserImpl browser) {
+        if (!canDestroyNow()) return;
+
+        // onBrowserDestroyed() is called from the destructor of Browser. This is a rather fragile
+        // time to destroy the profile. Delay.
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+            if (!mBeingDeleted && canDestroyNow()) {
+                destroyAndDeleteDataFromDiskImpl(null);
+            }
+        });
     }
 
     @Override
@@ -171,6 +270,13 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
         StrictModeWorkaround.apply();
         checkNotDestroyed();
         return mCookieManager;
+    }
+
+    @Override
+    public IPrerenderController getPrerenderController() {
+        StrictModeWorkaround.apply();
+        checkNotDestroyed();
+        return mPrerenderController;
     }
 
     @Override
@@ -272,7 +378,7 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
     @NativeMethods
     interface Natives {
         void enumerateAllProfileNames(Callback<String[]> callback);
-        long createProfile(String name, ProfileImpl caller);
+        long createProfile(String name, ProfileImpl caller, boolean isIncognito);
         void deleteProfile(long profile);
         long getBrowserContext(long nativeProfileImpl);
         int getNumBrowserImpl(long nativeProfileImpl);
@@ -281,6 +387,7 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
                 long fromMillis, long toMillis, Runnable callback);
         void setDownloadDirectory(long nativeProfileImpl, String directory);
         long getCookieManager(long nativeProfileImpl);
+        long getPrerenderController(long nativeProfileImpl);
         void ensureBrowserContextInitialized(long nativeProfileImpl);
         void setBooleanSetting(long nativeProfileImpl, int type, boolean value);
         boolean getBooleanSetting(long nativeProfileImpl, int type);
@@ -290,5 +397,6 @@ public final class ProfileImpl extends IProfile.Stub implements BrowserContextHa
         void prepareForPossibleCrossOriginNavigation(long nativeProfileImpl);
         void getCachedFaviconForPageUrl(
                 long nativeProfileImpl, String url, Callback<Bitmap> callback);
+        void markAsDeleted(long nativeProfileImpl);
     }
 }

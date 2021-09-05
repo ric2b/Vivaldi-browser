@@ -243,6 +243,7 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
   SetButtonLabel(ui::DIALOG_BUTTON_OK, prompt_->GetAcceptButtonLabel());
   SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, prompt_->GetAbortButtonLabel());
   set_close_on_deactivate(false);
+  SetShowCloseButton(false);
   CreateContents();
 
   UMA_HISTOGRAM_ENUMERATION("Extensions.InstallPrompt.Type2", prompt_->type(),
@@ -345,14 +346,14 @@ void ExtensionInstallDialogView::AddedToWidget() {
                                                 prompt_->rating_count());
     prompt_->AppendRatingStars(AddResourceIcon, rating.get());
     rating_container->AddChildView(std::move(rating));
-    auto rating_count = std::make_unique<RatingLabel>(prompt_->GetRatingCount(),
-                                                      CONTEXT_BODY_TEXT_LARGE);
+    auto rating_count = std::make_unique<RatingLabel>(
+        prompt_->GetRatingCount(), views::style::CONTEXT_DIALOG_BODY_TEXT);
     rating_count->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     rating_container->AddChildView(std::move(rating_count));
     webstore_data_container->AddChildView(std::move(rating_container));
 
     auto user_count = std::make_unique<views::Label>(
-        prompt_->GetUserCount(), CONTEXT_BODY_TEXT_SMALL,
+        prompt_->GetUserCount(), CONTEXT_DIALOG_BODY_TEXT_SMALL,
         views::style::STYLE_SECONDARY);
     user_count->SetAutoColorReadabilityEnabled(false);
     user_count->SetEnabledColor(SK_ColorGRAY);
@@ -394,10 +395,6 @@ bool ExtensionInstallDialogView::IsDialogButtonEnabled(
     ui::DialogButton button) const {
   if (button == ui::DIALOG_BUTTON_OK)
     return install_button_enabled_;
-  return true;
-}
-
-bool ExtensionInstallDialogView::ShouldShowCloseButton() const {
   return true;
 }
 
@@ -511,8 +508,8 @@ void ExtensionInstallDialogView::CreateContents() {
   set_margins(gfx::Insets(content_insets.top(), 0, content_insets.bottom(), 0));
 
   for (ExtensionInfoSection& section : sections) {
-    views::Label* header_label =
-        new views::Label(section.header, CONTEXT_BODY_TEXT_LARGE);
+    views::Label* header_label = new views::Label(
+        section.header, views::style::CONTEXT_DIALOG_BODY_TEXT);
     header_label->SetMultiLine(true);
     header_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     header_label->SizeToFit(content_width);

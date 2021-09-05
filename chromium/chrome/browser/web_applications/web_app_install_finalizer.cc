@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/web_applications/web_app_install_finalizer.h"
+
 #include <utility>
 #include <map>
 #include <vector>
-
-#include "chrome/browser/web_applications/web_app_install_finalizer.h"
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -20,20 +20,19 @@
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
+#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/components/web_app_prefs_utils.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/components/web_app_shortcuts_menu.h"
-#include "chrome/browser/web_applications/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
+#include "chrome/browser/web_applications/web_app_installation_utils.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
-#include "components/services/app_service/public/cpp/file_handler.h"
-#include "components/services/app_service/public/cpp/protocol_handler_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/skia/include/core/SkColor.h"
 
@@ -58,6 +57,7 @@ Source::Type InferSourceFromMetricsInstallSource(
     case WebappInstallSource::AMBIENT_BADGE_CUSTOM_TAB:
     case WebappInstallSource::OMNIBOX_INSTALL_ICON:
     case WebappInstallSource::SYNC:
+    case WebappInstallSource::MENU_CREATE_SHORTCUT:
       return Source::kSync;
 
     case WebappInstallSource::INTERNAL_DEFAULT:
@@ -97,64 +97,6 @@ Source::Type InferSourceFromExternalInstallSource(
   }
 }
 
-std::vector<SquareSizePx> GetSquareSizePxs(
-    const std::map<SquareSizePx, SkBitmap>& icon_bitmaps) {
-  std::vector<SquareSizePx> sizes;
-  sizes.reserve(icon_bitmaps.size());
-  for (const std::pair<const SquareSizePx, SkBitmap>& item : icon_bitmaps)
-    sizes.push_back(item.first);
-  return sizes;
-}
-
-std::vector<std::vector<SquareSizePx>> GetDownloadedShortcutsMenuIconsSizes(
-    const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps) {
-  std::vector<std::vector<SquareSizePx>> shortcuts_menu_icons_sizes;
-  shortcuts_menu_icons_sizes.reserve(shortcuts_menu_icons_bitmaps.size());
-  for (const auto& shortcut_icon_bitmaps : shortcuts_menu_icons_bitmaps) {
-    shortcuts_menu_icons_sizes.emplace_back(
-        GetSquareSizePxs(shortcut_icon_bitmaps));
-  }
-  return shortcuts_menu_icons_sizes;
-}
-
-void SetWebAppFileHandlers(
-    const std::vector<blink::Manifest::FileHandler>& manifest_file_handlers,
-    WebApp* web_app) {
-  apps::FileHandlers web_app_file_handlers;
-
-  for (const auto& manifest_file_handler : manifest_file_handlers) {
-    apps::FileHandler web_app_file_handler;
-    web_app_file_handler.action = manifest_file_handler.action;
-
-    for (const auto& it : manifest_file_handler.accept) {
-      apps::FileHandler::AcceptEntry web_app_accept_entry;
-      web_app_accept_entry.mime_type = base::UTF16ToUTF8(it.first);
-      for (const auto& manifest_file_extension : it.second)
-        web_app_accept_entry.file_extensions.insert(
-            base::UTF16ToUTF8(manifest_file_extension));
-      web_app_file_handler.accept.push_back(std::move(web_app_accept_entry));
-    }
-
-    web_app_file_handlers.push_back(std::move(web_app_file_handler));
-  }
-
-  web_app->SetFileHandlers(std::move(web_app_file_handlers));
-}
-
-void SetWebAppProtocolHandlers(
-    const std::vector<blink::Manifest::ProtocolHandler>& protocol_handlers,
-    WebApp* web_app) {
-  std::vector<apps::ProtocolHandlerInfo> web_app_protocol_handlers;
-  for (const auto& handler : protocol_handlers) {
-    apps::ProtocolHandlerInfo protocol_handler_info;
-    protocol_handler_info.protocol = base::UTF16ToUTF8(handler.protocol);
-    protocol_handler_info.url = handler.url;
-    web_app_protocol_handlers.push_back(std::move(protocol_handler_info));
-  }
-
-  web_app->SetProtocolHandlers(web_app_protocol_handlers);
-}
-
 }  // namespace
 
 WebAppInstallFinalizer::WebAppInstallFinalizer(
@@ -185,7 +127,7 @@ void WebAppInstallFinalizer::FinalizeInstall(
   const auto source =
       InferSourceFromMetricsInstallSource(options.install_source);
 
-  const AppId app_id = GenerateAppIdFromURL(web_app_info.app_url);
+  const AppId app_id = GenerateAppIdFromURL(web_app_info.start_url);
   const WebApp* existing_web_app = GetWebAppRegistrar().GetAppById(app_id);
 
   std::unique_ptr<WebApp> web_app;
@@ -194,7 +136,7 @@ void WebAppInstallFinalizer::FinalizeInstall(
     // There is an existing app from other source(s). Preserve
     // |user_display_mode| and any user-controllable fields here, do not modify
     // them. Prepare copy-on-write:
-    DCHECK_EQ(web_app_info.app_url, existing_web_app->launch_url());
+    DCHECK_EQ(web_app_info.start_url, existing_web_app->start_url());
     web_app = std::make_unique<WebApp>(*existing_web_app);
 
     // The UI may initiate a full install to overwrite the existing
@@ -205,7 +147,7 @@ void WebAppInstallFinalizer::FinalizeInstall(
   } else {
     // New app.
     web_app = std::make_unique<WebApp>(app_id);
-    web_app->SetLaunchUrl(web_app_info.app_url);
+    web_app->SetStartUrl(web_app_info.start_url);
     web_app->SetIsLocallyInstalled(options.locally_installed);
     web_app->SetUserDisplayMode(web_app_info.open_as_window
                                     ? DisplayMode::kStandalone
@@ -230,7 +172,8 @@ void WebAppInstallFinalizer::FinalizeInstall(
   // TODO(crbug.com/897314): Store this as a display mode on WebApp to
   // participate in the DB transactional model.
   registry_controller().SetExperimentalTabbedWindowMode(
-      app_id, web_app_info.enable_experimental_tabbed_window);
+      app_id, web_app_info.enable_experimental_tabbed_window,
+      /*is_user_action=*/false);
 
   CommitCallback commit_callback = base::BindOnce(
       &WebAppInstallFinalizer::OnDatabaseCommitCompletedForInstall,
@@ -340,11 +283,11 @@ void WebAppInstallFinalizer::FinalizeUpdate(
     InstallFinalizedCallback callback) {
   CHECK(started_);
 
-  const AppId app_id = GenerateAppIdFromURL(web_app_info.app_url);
+  const AppId app_id = GenerateAppIdFromURL(web_app_info.start_url);
   const WebApp* existing_web_app = GetWebAppRegistrar().GetAppById(app_id);
 
   if (!existing_web_app || existing_web_app->is_in_sync_install() ||
-      web_app_info.app_url != existing_web_app->launch_url()) {
+      web_app_info.start_url != existing_web_app->start_url()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), AppId(),
                                   InstallResultCode::kWebAppDisabled));
@@ -389,7 +332,7 @@ void WebAppInstallFinalizer::UninstallWebApp(const AppId& app_id,
   registrar().NotifyWebAppUninstalled(app_id);
   WebAppProviderBase::GetProviderBase(profile_)
       ->os_integration_manager()
-      .UninstallOsHooks(app_id, base::DoNothing());
+      .UninstallAllOsHooks(app_id, base::DoNothing());
 
   ScopedRegistryUpdate update(registry_controller().AsWebAppSyncBridge());
   update->DeleteApp(app_id);
@@ -429,52 +372,7 @@ void WebAppInstallFinalizer::SetWebAppManifestFieldsAndWriteData(
     const WebApplicationInfo& web_app_info,
     std::unique_ptr<WebApp> web_app,
     CommitCallback commit_callback) {
-  DCHECK(!web_app_info.title.empty());
-  web_app->SetName(base::UTF16ToUTF8(web_app_info.title));
-
-  web_app->SetDisplayMode(web_app_info.display_mode);
-  web_app->SetDisplayModeOverride(web_app_info.display_override);
-
-  web_app->SetDescription(base::UTF16ToUTF8(web_app_info.description));
-  web_app->SetScope(web_app_info.scope);
-  if (web_app_info.theme_color) {
-    DCHECK_EQ(SkColorGetA(*web_app_info.theme_color), SK_AlphaOPAQUE);
-    web_app->SetThemeColor(web_app_info.theme_color);
-  }
-  if (web_app_info.background_color) {
-    DCHECK_EQ(SkColorGetA(*web_app_info.background_color), SK_AlphaOPAQUE);
-    web_app->SetBackgroundColor(*web_app_info.background_color);
-  }
-
-  WebApp::SyncFallbackData sync_fallback_data;
-  sync_fallback_data.name = base::UTF16ToUTF8(web_app_info.title);
-  sync_fallback_data.theme_color = web_app_info.theme_color;
-  sync_fallback_data.scope = web_app_info.scope;
-  sync_fallback_data.icon_infos = web_app_info.icon_infos;
-  web_app->SetSyncFallbackData(std::move(sync_fallback_data));
-
-  web_app->SetIconInfos(web_app_info.icon_infos);
-  web_app->SetDownloadedIconSizes(
-      IconPurpose::ANY, GetSquareSizePxs(web_app_info.icon_bitmaps_any));
-  web_app->SetDownloadedIconSizes(
-      IconPurpose::MASKABLE,
-      GetSquareSizePxs(web_app_info.icon_bitmaps_maskable));
-  web_app->SetIsGeneratedIcon(web_app_info.is_generated_icon);
-
-  web_app->SetShortcutsMenuItemInfos(web_app_info.shortcuts_menu_item_infos);
-  web_app->SetDownloadedShortcutsMenuIconsSizes(
-      GetDownloadedShortcutsMenuIconsSizes(
-          web_app_info.shortcuts_menu_icons_bitmaps));
-
-  SetWebAppFileHandlers(web_app_info.file_handlers, web_app.get());
-  SetWebAppProtocolHandlers(web_app_info.protocol_handlers, web_app.get());
-
-  if (base::FeatureList::IsEnabled(features::kDesktopPWAsRunOnOsLogin) &&
-      web_app_info.run_on_os_login) {
-    // TODO(crbug.com/1091964): Obtain actual mode, currently set to the default
-    // (windowed).
-    web_app->SetRunOnOsLoginMode(RunOnOsLoginMode::kWindowed);
-  }
+  SetWebAppManifestFields(web_app_info, *web_app);
 
   AppId app_id = web_app->app_id();
   IconBitmaps icon_bitmaps;

@@ -4,7 +4,6 @@
 
 #include "ui/gtk/x/gtk_ui_delegate_x11.h"
 
-#include <gdk/gdkx.h>
 #include <gtk/gtk.h>
 
 #include "base/check.h"
@@ -15,6 +14,16 @@
 #include "ui/gtk/x/gtk_event_loop_x11.h"
 #include "ui/platform_window/x11/x11_window.h"
 #include "ui/platform_window/x11/x11_window_manager.h"
+
+extern "C" {
+GdkWindow* gdk_x11_window_foreign_new_for_display(GdkDisplay* display,
+                                                  Window window);
+
+GdkWindow* gdk_x11_window_lookup_for_display(GdkDisplay* display,
+                                             Window window);
+
+Window gdk_x11_window_get_xid(GdkWindow* window);
+}
 
 namespace ui {
 
@@ -49,13 +58,13 @@ GdkWindow* GtkUiDelegateX11::GetGdkWindow(gfx::AcceleratedWidget window_id) {
 
 bool GtkUiDelegateX11::SetGdkWindowTransientFor(GdkWindow* window,
                                                 gfx::AcceleratedWidget parent) {
-  SetProperty(static_cast<x11::Window>(GDK_WINDOW_XID(window)),
-              x11::Atom::WM_TRANSIENT_FOR, x11::Atom::WINDOW, parent);
+  auto x11_window = static_cast<x11::Window>(gdk_x11_window_get_xid(window));
+  SetProperty(x11_window, x11::Atom::WM_TRANSIENT_FOR, x11::Atom::WINDOW,
+              parent);
 
   ui::X11Window* parent_window =
       ui::X11WindowManager::GetInstance()->GetWindow(parent);
-  parent_window->SetTransientWindow(
-      static_cast<x11::Window>(gdk_x11_window_get_xid(window)));
+  parent_window->SetTransientWindow(x11_window);
 
   return true;
 }

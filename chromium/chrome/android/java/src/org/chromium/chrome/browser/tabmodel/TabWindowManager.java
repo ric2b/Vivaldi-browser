@@ -15,6 +15,7 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.VerifiesOnN;
+import org.chromium.chrome.browser.app.tabmodel.AsyncTabParamsManagerSingleton;
 import org.chromium.chrome.browser.app.tabmodel.ChromeTabModelFilterFactory;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
@@ -73,7 +74,7 @@ public class TabWindowManager implements ActivityStateListener {
     public static TabWindowManager getInstance() {
         ThreadUtils.assertOnUiThread();
         if (sInstance == null) {
-            sInstance = new TabWindowManager(AsyncTabParamsManager.getInstance());
+            sInstance = new TabWindowManager(AsyncTabParamsManagerSingleton.getInstance());
         }
         return sInstance;
     }
@@ -171,6 +172,24 @@ public class TabWindowManager implements ActivityStateListener {
     }
 
     /**
+     * @param tab The tab to look for in each model.
+     * @return The TabModel containing the given Tab or null if one doesn't exist.
+     **/
+    public TabModel getTabModelForTab(Tab tab) {
+        if (tab == null) return null;
+
+        for (int i = 0; i < mSelectors.size(); i++) {
+            TabModelSelector selector = mSelectors.get(i);
+            if (selector != null) {
+                TabModel tabModel = selector.getModelForTabId(tab.getId());
+                if (tabModel != null) return tabModel;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @param tabId The ID of the tab in question.
      * @return Specified {@link Tab} or {@code null} if the {@link Tab} is not found.
      */
@@ -243,9 +262,10 @@ public class TabWindowManager implements ActivityStateListener {
             TabPersistencePolicy persistencePolicy = new TabbedModeTabPersistencePolicy(
                     selectorIndex, mergeTabs);
             TabModelFilterFactory tabModelFilterFactory = new ChromeTabModelFilterFactory();
-            return new TabModelSelectorImpl(activity, tabCreatorManager, persistencePolicy,
-                    tabModelFilterFactory, nextTabPolicySupplier,
-                    AsyncTabParamsManager.getInstance(), true, true, false);
+            return new TabModelSelectorImpl(activity, /*windowAndroidSupplier=*/null,
+                    tabCreatorManager, persistencePolicy, tabModelFilterFactory,
+                    nextTabPolicySupplier, AsyncTabParamsManagerSingleton.getInstance(), true, true,
+                    false);
         }
     }
 }

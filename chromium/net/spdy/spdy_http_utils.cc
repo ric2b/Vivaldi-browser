@@ -47,11 +47,18 @@ bool SpdyHeadersToHttpResponse(const spdy::SpdyHeaderBlock& headers,
       headers.find(spdy::kHttp2StatusHeader);
   if (it == headers.end())
     return false;
-  std::string status = it->second.as_string();
+  auto status = std::string(it->second);
   std::string raw_headers("HTTP/1.1 ");
   raw_headers.append(status);
   raw_headers.push_back('\0');
   for (it = headers.begin(); it != headers.end(); ++it) {
+    auto name = std::string(it->first);
+    DCHECK_GT(name.size(), 0u);
+    if (name[0] == ':') {
+      // https://tools.ietf.org/html/rfc7540#section-8.1.2.4
+      // Skip pseudo headers.
+      continue;
+    }
     // For each value, if the server sends a NUL-separated
     // list of values, we separate that back out into
     // individual headers for each value in the list.
@@ -60,21 +67,19 @@ bool SpdyHeadersToHttpResponse(const spdy::SpdyHeaderBlock& headers,
     // becomes
     //    Set-Cookie: foo\0
     //    Set-Cookie: bar\0
-    std::string value = it->second.as_string();
+    auto value = std::string(it->second);
     size_t start = 0;
     size_t end = 0;
     do {
+      raw_headers.append(name);
+      raw_headers.push_back(':');
+
       end = value.find('\0', start);
       std::string tval;
       if (end != value.npos)
         tval = value.substr(start, (end - start));
       else
         tval = value.substr(start);
-      if (it->first[0] == ':')
-        raw_headers.append(it->first.as_string().substr(1));
-      else
-        raw_headers.append(it->first.as_string());
-      raw_headers.push_back(':');
       raw_headers.append(tval);
       raw_headers.push_back('\0');
       start = end + 1;
@@ -157,12 +162,13 @@ NET_EXPORT_PRIVATE void ConvertHeaderBlockToHttpRequestHeaders(
     const spdy::SpdyHeaderBlock& spdy_headers,
     HttpRequestHeaders* http_headers) {
   for (const auto& it : spdy_headers) {
-    base::StringPiece key = it.first;
+    base::StringPiece key = base::StringViewToStringPiece(it.first);
     if (key[0] == ':') {
       key.remove_prefix(1);
     }
-    std::vector<base::StringPiece> values = base::SplitStringPiece(
-        it.second, "\0", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    std::vector<base::StringPiece> values =
+        base::SplitStringPiece(base::StringViewToStringPiece(it.second), "\0",
+                               base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
     for (const auto& value : values) {
       http_headers->SetHeader(key, value);
     }

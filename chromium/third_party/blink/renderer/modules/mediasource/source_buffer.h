@@ -49,7 +49,7 @@ class DOMArrayBuffer;
 class DOMArrayBufferView;
 class EventQueue;
 class ExceptionState;
-class MediaSourceImpl;
+class MediaSource;
 class TimeRanges;
 class VideoTrackList;
 class WebSourceBuffer;
@@ -62,10 +62,10 @@ class SourceBuffer final : public EventTargetWithInlineData,
   USING_PRE_FINALIZER(SourceBuffer, Dispose);
 
  public:
-  static const AtomicString& SegmentsKeyword();
-  static const AtomicString& SequenceKeyword();
+  static AtomicString SegmentsKeyword();
+  static AtomicString SequenceKeyword();
 
-  SourceBuffer(std::unique_ptr<WebSourceBuffer>, MediaSourceImpl*, EventQueue*);
+  SourceBuffer(std::unique_ptr<WebSourceBuffer>, MediaSource*, EventQueue*);
   ~SourceBuffer() override;
 
   // SourceBuffer.idl methods
@@ -160,7 +160,7 @@ class SourceBuffer final : public EventTargetWithInlineData,
   // need to remain alive at least to successfully dispatch any events enqueued
   // by the behavior of the HTMLME+MSE API. It makes those wrappers remain alive
   // as long as this SourceBuffer's wrapper is alive.
-  Member<MediaSourceImpl> source_;
+  Member<MediaSource> source_;
   Member<TrackDefaultList> track_defaults_;
   Member<EventQueue> async_event_queue_;
 

@@ -99,6 +99,28 @@ void MagnificationManager::OnProfileWillBeDestroyed(Profile* profile) {
   SetProfile(nullptr);
 }
 
+void MagnificationManager::HandleFocusedRectChangedIfEnabled(
+    const gfx::Rect& bounds_in_screen,
+    bool is_editable) {
+  if (!fullscreen_magnifier_enabled_ && !IsDockedMagnifierEnabled())
+    return;
+
+  HandleFocusChanged(bounds_in_screen, is_editable);
+}
+
+void MagnificationManager::HandleMoveMagnifierToRectIfEnabled(
+    const gfx::Rect& rect) {
+  // Fullscreen magnifier and docked magnifier are mutually exclusive.
+  if (fullscreen_magnifier_enabled_) {
+    ash::Shell::Get()->magnification_controller()->HandleMoveMagnifierToRect(
+        rect);
+    return;
+  }
+  if (IsDockedMagnifierEnabled()) {
+    ash::DockedMagnifierController::Get()->CenterOnPoint(rect.CenterPoint());
+  }
+}
+
 void MagnificationManager::OnViewEvent(views::View* view,
                                        ax::mojom::Event event_type) {
   if (!fullscreen_magnifier_enabled_ && !IsDockedMagnifierEnabled())

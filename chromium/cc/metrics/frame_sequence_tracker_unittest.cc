@@ -4,7 +4,12 @@
 
 #include "cc/metrics/frame_sequence_tracker.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "base/macros.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "cc/metrics/compositor_frame_reporting_controller.h"
 #include "cc/metrics/frame_sequence_tracker_collection.h"
@@ -40,7 +45,8 @@ class FrameSequenceTrackerTest : public testing::Test {
   FrameSequenceTrackerTest()
       : compositor_frame_reporting_controller_(
             std::make_unique<CompositorFrameReportingController>(
-                /*should_report_metrics=*/true)),
+                /*should_report_metrics=*/true,
+                /*layer_tree_host_id=*/1)),
         collection_(/*is_single_threaded=*/false,
                     compositor_frame_reporting_controller_.get()) {
     tracker_ = collection_.StartScrollSequence(
@@ -283,15 +289,6 @@ class FrameSequenceTrackerTest : public testing::Test {
     return tracker_->main_throughput();
   }
 
-  FrameSequenceMetrics::ThroughputData& AggregatedThroughput(
-      FrameSequenceTracker* tracker) const {
-    return tracker->aggregated_throughput();
-  }
-
-  FrameSequenceMetrics::ThroughputData& AggregatedThroughput() const {
-    return tracker_->aggregated_throughput();
-  }
-
   FrameSequenceTracker::TerminationStatus GetTerminationStatus(
       FrameSequenceTracker* tracker) {
     return tracker->termination_status_;
@@ -342,35 +339,13 @@ TEST_F(FrameSequenceTrackerTest, SourceIdChangeDuringSequence) {
                                 viz::BeginFrameAck(args_2, true), args_1);
 }
 
-TEST_F(FrameSequenceTrackerTest, UniversalTrackerCreation) {
-  // The universal tracker should be explicitly created by the object that
-  // manages the |collection_|
-  EXPECT_FALSE(TrackerExists(FrameSequenceTrackerType::kUniversal));
-}
-
-TEST_F(FrameSequenceTrackerTest, UniversalTrackerRestartableAfterClearAll) {
-  collection_.StartSequence(FrameSequenceTrackerType::kUniversal);
-  EXPECT_TRUE(TrackerExists(FrameSequenceTrackerType::kUniversal));
-
-  collection_.ClearAll();
-  EXPECT_FALSE(TrackerExists(FrameSequenceTrackerType::kUniversal));
-
-  collection_.StartSequence(FrameSequenceTrackerType::kUniversal);
-  EXPECT_TRUE(TrackerExists(FrameSequenceTrackerType::kUniversal));
-}
-
 TEST_F(FrameSequenceTrackerTest, TestNotifyFramePresented) {
   collection_.StartSequence(FrameSequenceTrackerType::kCompositorAnimation);
   collection_.StartSequence(FrameSequenceTrackerType::kMainThreadAnimation);
-  // The kTouchScroll tracker is created in the test constructor, and the
-  // kUniversal tracker is created in the FrameSequenceTrackerCollection
-  // constructor.
   EXPECT_EQ(NumberOfTrackers(), 3u);
-  collection_.StartSequence(FrameSequenceTrackerType::kUniversal);
-  EXPECT_EQ(NumberOfTrackers(), 4u);
 
   collection_.StopSequence(FrameSequenceTrackerType::kCompositorAnimation);
-  EXPECT_EQ(NumberOfTrackers(), 3u);
+  EXPECT_EQ(NumberOfTrackers(), 2u);
   EXPECT_TRUE(TrackerExists(FrameSequenceTrackerType::kMainThreadAnimation));
   EXPECT_TRUE(TrackerExists(FrameSequenceTrackerType::kTouchScroll));
   // StopSequence should have destroyed all trackers because there is no frame
@@ -797,269 +772,6 @@ TEST_F(FrameSequenceTrackerTest, BeginImplFrameBeforeTerminate) {
   collection_.StopSequence(FrameSequenceTrackerType::kTouchScroll);
   EXPECT_EQ(ImplThroughput().frames_expected, 4u);
   EXPECT_EQ(ImplThroughput().frames_produced, 1u);
-}
-
-// The following tests is for aggregating the compositor and main thread
-// throughput. There are a few categories and each category have some tests.
-// First category: no main frame involved.
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput1) {
-  const char sequence[] = "b(1)s(1)e(1,0)P(1)";
-  GenerateSequence(sequence);
-  // The test doesn't call TakeMetrics, so using the frames_expected in the
-  // ImplThroughput() to test the aggregated throughput.
-  EXPECT_EQ(ImplThroughput().frames_expected, 1u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 1u);
-}
-
-// Second category: one main frame and it responds in time.
-// Main frame is submitted.
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput2) {
-  const char sequence[] = "b(1)B(0,1)E(1)s(1)S(1)e(1,1)P(1)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 1u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 1u);
-}
-
-// Main frame has no damage.
-// variation: N(2,2) could be before s(1) or after.
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput3) {
-  const char sequence[] = "b(2)B(0,2)N(2,2)s(1)S(1)e(2,0)P(1)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 1u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 1u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput4) {
-  const char sequence[] = "b(2)B(0,2)s(1)S(1)N(2,2)e(2,0)P(1)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 1u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 1u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput5) {
-  const char sequence[] = "b(2)B(0,2)s(1)S(1)e(2,0)P(1)N(2,2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 1u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 1u);
-}
-
-// Third category: one main frame and responds slowly.
-// variation: the main frame could either report no-damage or submitted. The
-// presentation of the first frame could arrive at different time.
-// Main frame is submitted, P(1) could arrive at different time.
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput6) {
-  // At ReportSubmitFrame, |main_changes_after_sequence_start| is false at
-  // s(1)S(1).
-  const char sequence[] =
-      "b(2)B(0,2)s(1)S(1)e(2,0)b(3)E(1)s(2)S(2)e(3,1)P(1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 1u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput7) {
-  const char sequence[] =
-      "b(2)B(0,2)s(1)S(1)e(2,0)P(1)b(3)E(1)s(2)S(2)e(3,1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 1u);
-}
-
-// The main frame eventually reports no-damage.
-// variation: P(1) arrives at different time, N(1,1) arrives before or after
-// s(2).
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput8) {
-  const char sequence[] =
-      "b(2)B(0,2)s(1)S(1)e(2,0)b(3)s(2)S(1)N(2,2)e(3,0)P(1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput9) {
-  const char sequence[] =
-      "b(2)B(0,2)s(1)S(1)e(2,0)b(3)N(2,2)s(2)S(1)e(3,0)P(1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput10) {
-  const char sequence[] =
-      "b(2)B(0,2)s(1)S(1)e(2,0)P(1)b(3)N(2,2)s(2)S(1)e(3,0)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput11) {
-  const char sequence[] =
-      "b(2)B(0,2)s(1)S(1)e(2,0)b(3)N(2,2)P(1)s(2)S(1)e(3,0)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput12) {
-  const char sequence[] =
-      "b(2)B(0,2)s(1)S(1)e(2,0)P(1)b(3)s(2)S(1)N(2,2)e(3,0)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput13) {
-  const char sequence[] =
-      "b(2)B(0,2)s(1)S(1)e(2,0)b(3)s(2)S(1)P(1)N(2,2)e(3,0)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-// Fourth category: one main frame responds in time, but presentation comes
-// late.
-// variation: the main frame could be submitted or no damage.
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput14) {
-  const char sequence[] =
-      "b(1)B(0,1)E(1)s(1)S(1)e(1,1)b(2)s(2)S(1)e(2,1)P(1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput15) {
-  const char sequence[] =
-      "b(2)B(0,2)N(2,2)s(1)S(1)e(2,0)b(3)s(2)S(1)e(3,0)P(1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput16) {
-  const char sequence[] =
-      "b(2)B(0,2)s(1)S(1)N(2,2)e(2,0)b(3)s(2)S(1)e(3,0)P(1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-// Fifth category: two main frames, both responds in time.
-// variation: it is enough that one main frame is submitted, or both are. The
-// presentation of the first frame could arrive at different time.
-// Both main frames are submitted, P(1) could arrive at different time.
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput17) {
-  const char sequence[] =
-      "b(1)B(0,1)E(1)s(1)S(1)e(1,1)P(1)b(2)B(1,2)E(2)s(2)S(2)e(2,2)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput18) {
-  const char sequence[] =
-      "b(1)B(0,1)E(1)s(1)S(1)e(1,1)b(2)B(1,2)E(2)s(2)S(2)e(2,2)P(1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-// The second main frame has no damage.
-// variation: N could come before or after s(2), and P(1) could arrive at
-// different time.
-// N after s(2).
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput19) {
-  const char sequence[] =
-      "b(2)B(0,2)E(2)s(1)S(2)e(2,2)b(3)B(2,3)s(2)S(1)N(3,3)e(3,2)P(1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput20) {
-  const char sequence[] =
-      "b(2)B(0,2)E(2)s(1)S(2)e(2,2)P(1)b(3)B(2,3)s(2)S(1)N(3,3)e(3,2)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-// N before s(2).
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput21) {
-  const char sequence[] =
-      "b(2)B(0,2)E(2)s(1)S(2)e(2,2)b(3)B(2,3)N(3,3)s(2)S(1)e(3,2)P(1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput22) {
-  const char sequence[] =
-      "b(2)B(0,2)E(2)s(1)S(2)e(2,2)P(1)b(3)B(2,3)N(3,3)s(2)S(1)e(3,2)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-// First main frame no damage.
-// N before s(1).
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput23) {
-  const char sequence[] =
-      "b(2)B(0,2)N(2,2)s(1)S(1)e(2,0)P(1)b(3)B(0,3)E(3)s(2)S(3)e(3,3)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput24) {
-  const char sequence[] =
-      "b(2)B(0,2)N(2,2)s(1)S(1)e(2,0)b(3)B(0,3)E(3)s(2)S(3)e(3,3)P(1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-// N after s(1).
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput25) {
-  const char sequence[] =
-      "b(2)B(0,2)s(1)S(1)N(2,2)e(2,0)P(1)b(3)B(0,3)E(3)s(2)S(3)e(3,3)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput26) {
-  const char sequence[] =
-      "b(2)B(0,2)s(1)S(1)N(2,2)e(2,0)b(3)B(0,3)E(3)s(2)S(3)e(3,3)P(1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 2u);
-}
-
-// Following tests comes from test cases on the bots.
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput27) {
-  const char sequence[] = "b(2)B(0,2)s(1)S(1)e(2,0)E(2)P(1)b(3)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 0u);
-}
-
-// At ReportSubmitFrame, |main_changes_include_new_changes| is false at
-// s(2)S(1).
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput28) {
-  const char sequence[] =
-      "b(1)B(0,1)E(1)s(1)S(1)e(1,1)P(1)b(2)B(1,2)s(2)S(1)e(2,1)P(2)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 2u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 1u);
-}
-
-// At ReportSubmitFrame, |main_change_had_no_damage| is true at s(1)S(1).
-TEST_F(FrameSequenceTrackerTest, AggregatedThroughput29) {
-  const char sequence[] =
-      "b(1)B(0,1)n(1)N(1,1)e(1,0)b(2)B(0,2)s(1)S(1)e(2,0)P(1)";
-  GenerateSequence(sequence);
-  EXPECT_EQ(ImplThroughput().frames_expected, 1u);
-  EXPECT_EQ(AggregatedThroughput().frames_produced, 0u);
 }
 
 // b(2417)B(0,2417)E(2417)n(2417)N(2417,2417)
@@ -1899,57 +1611,14 @@ TEST_F(FrameSequenceTrackerTest, TrackerTypeEncoding) {
   EXPECT_EQ(active_encoded, 16);  // 1 << 4
 }
 
-TEST_F(FrameSequenceTrackerTest, UniversalTrackerSubmitThroughput) {
-  auto recorder = std::make_unique<ukm::TestUkmRecorder>();
-  auto ukm_manager = std::make_unique<UkmManager>(std::move(recorder));
-
-  collection_.ClearAll();
-  collection_.SetUkmManager(ukm_manager.get());
-  auto* tracker =
-      collection_.StartSequence(FrameSequenceTrackerType::kUniversal);
-  ImplThroughput(tracker).frames_expected = 200u;
-  ImplThroughput(tracker).frames_produced = 190u;
-  MainThroughput(tracker).frames_expected = 100u;
-  MainThroughput(tracker).frames_produced = 50u;
-  AggregatedThroughput(tracker).frames_expected = 200u;
-  AggregatedThroughput(tracker).frames_produced = 150u;
-
-  collection_.ComputeUniversalThroughputForTesting();
-  DCHECK(collection_.HasThroughputData());
-  EXPECT_EQ(collection_.TakeLastAggregatedPercent(), 25);
-  EXPECT_EQ(collection_.TakeLastImplPercent(), 5);
-  EXPECT_EQ(collection_.TakeLastMainPercent().value(), 50);
-  EXPECT_FALSE(collection_.HasThroughputData());
-}
-
-// Test that when an impl frame caused no damage is due to waiting on main, the
-// computation of aggregated throughput is correct.
-TEST_F(FrameSequenceTrackerTest, ImplFrameNoDamageWaitingOnMain1) {
-  GenerateSequence("b(1)B(0,1)n(1)N(1,1)e(1,0)");
-  EXPECT_EQ(AggregatedThroughput().frames_expected, 0u);
-}
-
-TEST_F(FrameSequenceTrackerTest, ImplFrameNoDamageWaitingOnMain2) {
-  GenerateSequence("b(1)B(0,1)n(1)e(1,0)N(1,1)");
-  EXPECT_EQ(AggregatedThroughput().frames_expected, 0u);
-}
-
-TEST_F(FrameSequenceTrackerTest, ImplFrameNoDamageWaitingOnMain3) {
-  GenerateSequence("b(1)n(1)B(0,1)Re(1,0)N(0,1)");
-  EXPECT_EQ(AggregatedThroughput().frames_expected, 0u);
-}
-
-TEST_F(FrameSequenceTrackerTest, ImplFrameNoDamageWaitingOnMain4) {
-  GenerateSequence("b(1)B(0,1)n(1)e(1,0)b(2)n(2)e(2,0)N(1,1)");
-  EXPECT_EQ(AggregatedThroughput().frames_expected, 0u);
-}
-
-TEST_F(FrameSequenceTrackerTest, ImplFrameNoDamageWaitingOnMain5) {
-  GenerateSequence("b(2)B(0,2)n(2)e(2,0)b(3)s(1)S(1)e(3,0)N(2,2)");
-  EXPECT_EQ(AggregatedThroughput().frames_expected, 1u);
-}
-
 TEST_F(FrameSequenceTrackerTest, CustomTrackers) {
+  CustomTrackerResults results;
+  collection_.set_custom_tracker_results_added_callback(
+      base::BindLambdaForTesting([&](CustomTrackerResults reported) {
+        for (const auto& pair : reported)
+          results[pair.first] = pair.second;
+      }));
+
   // Start custom tracker 1.
   collection_.StartCustomSequence(1);
   EXPECT_EQ(1u, NumberOfCustomTrackers());
@@ -1957,7 +1626,6 @@ TEST_F(FrameSequenceTrackerTest, CustomTrackers) {
   // No reports.
   uint32_t frame_token = 1u;
   collection_.NotifyFramePresented(frame_token, {});
-  auto results = collection_.TakeCustomTrackerResults();
   EXPECT_EQ(0u, results.size());
 
   // Start custom tracker 2 and 3 in addition to 1.
@@ -1967,7 +1635,6 @@ TEST_F(FrameSequenceTrackerTest, CustomTrackers) {
 
   // All custom trackers are running. No reports.
   collection_.NotifyFramePresented(frame_token, {});
-  results = collection_.TakeCustomTrackerResults();
   EXPECT_EQ(0u, results.size());
 
   // Tracker 2 is stopped and scheduled to terminate.
@@ -1976,7 +1643,6 @@ TEST_F(FrameSequenceTrackerTest, CustomTrackers) {
 
   // Tracker 2 has no data to report.
   collection_.NotifyFramePresented(frame_token, {});
-  results = collection_.TakeCustomTrackerResults();
   EXPECT_EQ(0u, results.size());
 
   // Simple sequence of one frame.
@@ -1990,7 +1656,6 @@ TEST_F(FrameSequenceTrackerTest, CustomTrackers) {
 
   // Tracker 1 and 3 and should report.
   collection_.NotifyFramePresented(frame_token, {});
-  results = collection_.TakeCustomTrackerResults();
   EXPECT_EQ(2u, results.size());
   EXPECT_EQ(1u, results[1].frames_produced);
   EXPECT_EQ(1u, results[1].frames_expected);

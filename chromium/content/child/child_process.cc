@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "base/bind.h"
+#include "base/clang_profiling_buildflags.h"
 #include "base/lazy_instance.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/process/process_handle.h"
@@ -22,6 +23,14 @@
 #include "sandbox/policy/sandbox_type.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "third_party/blink/public/common/features.h"
+
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+#include "base/test/clang_profiling.h"
+#endif
+
+#if defined(OS_ANDROID)
+#include "content/common/android/cpu_affinity.h"
+#endif
 
 namespace content {
 
@@ -78,6 +87,10 @@ ChildProcess::ChildProcess(base::ThreadPriority io_thread_priority,
 
 #if defined(OS_ANDROID)
   SetupCpuTimeMetrics();
+  // For child processes, this requires allowing of the sched_setaffinity()
+  // syscall in the sandbox (baseline_policy_android.cc). When this call is
+  // removed, the sandbox allowlist should be updated too.
+  SetupCpuAffinityPollingOnce();
 #endif
 
   // We can't recover from failing to start the IO thread.
@@ -121,6 +134,13 @@ ChildProcess::~ChildProcess() {
     DCHECK(base::ThreadPoolInstance::Get());
     base::ThreadPoolInstance::Get()->Shutdown();
   }
+
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+  // Flush the profiling data to disk. Doing this manually (vs relying on this
+  // being done automatically when the process exits) will ensure that this data
+  // doesn't get lost if the process is fast killed.
+  base::WriteClangProfilingProfile();
+#endif
 }
 
 ChildThreadImpl* ChildProcess::main_thread() {

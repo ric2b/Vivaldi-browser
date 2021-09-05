@@ -18,6 +18,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/chromeos/extensions/file_manager/file_stream_string_converter.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_base.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "components/drive/file_errors.h"
@@ -228,6 +229,21 @@ class FileManagerPrivateFormatVolumeFunction : public LoggedExtensionFunction {
   ResponseAction Run() override;
 };
 
+// Implements the chrome.fileManagerPrivate.singlePartitionFormat method.
+// Deletes removable device partitions, create a single partition and format.
+class FileManagerPrivateSinglePartitionFormatFunction
+    : public LoggedExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.singlePartitionFormat",
+                             FILEMANAGERPRIVATE_SINGLEPARTITIONFORMAT)
+
+ protected:
+  ~FileManagerPrivateSinglePartitionFormatFunction() override = default;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+};
+
 // Implements the chrome.fileManagerPrivate.renameVolume method.
 // Renames Volume given its mount path and new Volume name.
 class FileManagerPrivateRenameVolumeFunction : public LoggedExtensionFunction {
@@ -240,6 +256,28 @@ class FileManagerPrivateRenameVolumeFunction : public LoggedExtensionFunction {
 
   // ExtensionFunction overrides.
   ResponseAction Run() override;
+};
+
+// Implements the chrome.fileManagerPrivateInternal.copyImageToClipboard method.
+class FileManagerPrivateInternalCopyImageToClipboardFunction
+    : public LoggedExtensionFunction {
+ public:
+  FileManagerPrivateInternalCopyImageToClipboardFunction();
+
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivateInternal.copyImageToClipboard",
+                             FILEMANAGERPRIVATEINTERNAL_COPYIMAGETOCLIPBOARD)
+
+ protected:
+  ~FileManagerPrivateInternalCopyImageToClipboardFunction() override;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+
+ private:
+  void RespondWith(scoped_refptr<base::RefCountedString> bytes);
+
+  const ChromeExtensionFunctionDetails chrome_details_;
+  std::unique_ptr<storage::FileStreamStringConverter> converter_;
 };
 
 // Implements the chrome.fileManagerPrivate.startCopy method.

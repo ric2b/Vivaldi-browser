@@ -106,6 +106,14 @@ const base::string16& ImageView::GetAccessibleName() const {
   return accessible_name_.empty() ? tooltip_text_ : accessible_name_;
 }
 
+void ImageView::SetTooltipText(const base::string16& tooltip) {
+  tooltip_text_ = tooltip;
+}
+
+const base::string16& ImageView::GetTooltipText() const {
+  return tooltip_text_;
+}
+
 bool ImageView::IsImageEqual(const gfx::ImageSkia& img) const {
   // Even though we copy ImageSkia in SetImage() the backing store
   // (ImageSkiaStorage) is not copied and may have changed since the last call
@@ -267,11 +275,11 @@ DEFINE_ENUM_CONVERTERS(
     {ImageView::Alignment::kCenter, base::ASCIIToUTF16("kCenter")},
     {ImageView::Alignment::kTrailing, base::ASCIIToUTF16("kTrailing")})
 
-BEGIN_METADATA(ImageView)
-METADATA_PARENT_CLASS(View)
-ADD_PROPERTY_METADATA(ImageView, Alignment, HorizontalAlignment)
-ADD_PROPERTY_METADATA(ImageView, Alignment, VerticalAlignment)
-ADD_PROPERTY_METADATA(ImageView, base::string16, AccessibleName)
-END_METADATA()
+BEGIN_METADATA(ImageView, View)
+ADD_PROPERTY_METADATA(Alignment, HorizontalAlignment)
+ADD_PROPERTY_METADATA(Alignment, VerticalAlignment)
+ADD_PROPERTY_METADATA(base::string16, AccessibleName)
+ADD_PROPERTY_METADATA(base::string16, TooltipText)
+END_METADATA
 
 }  // namespace views

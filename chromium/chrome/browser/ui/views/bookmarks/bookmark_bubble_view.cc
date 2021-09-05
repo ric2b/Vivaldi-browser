@@ -55,7 +55,7 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
 
   void RemoveBookmark() {
     base::RecordAction(UserMetricsAction("BookmarkBubble_Unstar"));
-    can_apply_edits_ = false;
+    should_apply_edits_ = false;
     bookmarks::BookmarkModel* model =
         BookmarkModelFactory::GetForBrowserContext(profile_);
     const bookmarks::BookmarkNode* node =
@@ -65,6 +65,8 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
   }
 
   void OnWindowClosing() {
+    if (should_apply_edits_)
+      ApplyEdits();
     bookmark_bubble_ = nullptr;
     if (observer_)
       observer_->OnBookmarkBubbleHidden();
@@ -86,7 +88,8 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
     DCHECK(native_parent);
 
     Profile* const profile = profile_;
-    ApplyEdits();
+    // Note that closing the dialog with |should_apply_edits_| still true will
+    // synchronously save any pending changes.
     dialog_model()->host()->Close();
 
     if (node && native_parent) {
@@ -108,9 +111,9 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
   }
 
   void ApplyEdits() {
-    DCHECK(can_apply_edits_);
+    DCHECK(should_apply_edits_);
     // Set this to make sure we don't attempt to apply edits again.
-    can_apply_edits_ = false;
+    should_apply_edits_ = false;
 
     bookmarks::BookmarkModel* const model =
         BookmarkModelFactory::GetForBrowserContext(profile_);
@@ -148,7 +151,7 @@ class BookmarkBubbleView::BookmarkBubbleDelegate
   Profile* const profile_;
   const GURL url_;
 
-  bool can_apply_edits_ = true;
+  bool should_apply_edits_ = true;
 };
 
 // static
@@ -220,12 +223,10 @@ void BookmarkBubbleView::ShowBubble(
 
   // views:: land below, there's no agnostic reference to arrow / anchors /
   // bubbles.
-  auto bubble =
-      std::make_unique<views::BubbleDialogModelHost>(std::move(dialog_model));
+  auto bubble = std::make_unique<views::BubbleDialogModelHost>(
+      std::move(dialog_model), anchor_view, views::BubbleBorder::TOP_RIGHT);
   bubble->SelectAllText(kBookmarkName);
   bookmark_bubble_ = bubble.get();
-  bubble->SetAnchorView(anchor_view);
-  bubble->SetArrow(views::BubbleBorder::TOP_RIGHT);
   if (highlighted_button)
     bubble->SetHighlightedButton(highlighted_button);
 
@@ -244,7 +245,7 @@ void BookmarkBubbleView::ShowBubble(
 #endif
 
   views::Widget* const widget =
-      views::BubbleDialogDelegateView::CreateBubble(bubble.release());
+      views::BubbleDialogDelegateView::CreateBubble(std::move(bubble));
   widget->Show();
 
   chrome::RecordDialogCreation(chrome::DialogIdentifier::BOOKMARK);

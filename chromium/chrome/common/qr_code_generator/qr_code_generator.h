@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <vector>
+
 #include "base/containers/span.h"
 #include "base/optional.h"
 
@@ -55,13 +57,14 @@ class QRCodeGenerator {
   // Generates a QR code containing the given data.
   // The generator will attempt to choose a version that fits the data. The
   // returned span's length is input-dependent and not known at compile-time in
-  // this case.
-  base::Optional<GeneratedCode> Generate(base::span<const uint8_t> in);
+  // this case. The optional |mask| argument specifies the QR mask value to use
+  // (from 0 to 7). If not specified, the optimal mask is calculated per the
+  // algorithm specified in the QR standard.
+  base::Optional<GeneratedCode> Generate(
+      base::span<const uint8_t> in,
+      base::Optional<uint8_t> mask = base::nullopt);
 
  private:
-  // MaskFunction3 implements one of the data-masking functions. See figure 21.
-  static uint8_t MaskFunction3(int x, int y);
-
   // PutFinder paints a finder symbol at the given coordinates.
   void PutFinder(int x, int y);
 
@@ -112,10 +115,14 @@ class QRCodeGenerator {
   // |in| should have length block_data_bytes for the code's version.
   // |block_bytes| and |block_ec_bytes| must be provided for the current
   // version/level/group.
-  void AddErrorCorrection(uint8_t out[],
-                          const uint8_t in[],
+  void AddErrorCorrection(base::span<uint8_t> out,
+                          base::span<const uint8_t> in,
                           size_t block_bytes,
                           size_t block_ec_bytes);
+
+  // CountPenaltyPoints sums the penalty points for the current, fully drawn,
+  // code. See table 11.
+  unsigned CountPenaltyPoints() const;
 
   // Parameters for the currently-selected version of the QR code.
   // Generate() will pick a version that can contain enough data.
@@ -127,7 +134,7 @@ class QRCodeGenerator {
   // is part of the structure of the QR code, i.e. finder or alignment symbols,
   // timing patterns, or format data.
   // Initialized and possibly reinitialized in Generate().
-  std::unique_ptr<uint8_t[]> d_;
+  std::vector<uint8_t> d_;
 
   // clip_dump_ is the target of paints that would otherwise fall outside of the
   // QR code.

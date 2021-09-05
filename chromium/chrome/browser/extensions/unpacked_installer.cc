@@ -283,7 +283,7 @@ bool UnpackedInstaller::IndexAndPersistRulesIfNeeded(std::string* error) {
     return false;
   }
 
-  ruleset_checksums_ = std::move(result.ruleset_checksums);
+  ruleset_install_prefs_ = std::move(result.ruleset_install_prefs);
   if (!result.warnings.empty())
     extension_->AddInstallWarnings(std::move(result.warnings));
 
@@ -294,7 +294,7 @@ bool UnpackedInstaller::IsLoadingUnpackedAllowed() const {
   if (!service_weak_.get())
     return true;
   // If there is a "*" in the extension blocklist, then no extensions should be
-  // allowed at all (except explicitly whitelisted extensions).
+  // allowed at all (except explicitly allowlisted extensions).
   return !ExtensionManagementFactory::GetForBrowserContext(
               service_weak_->profile())
               ->BlocklistedByDefault();
@@ -368,7 +368,7 @@ void UnpackedInstaller::InstallExtension() {
 
   service_weak_->OnExtensionInstalled(extension(), syncer::StringOrdinal(),
                                       kInstallFlagInstallImmediately,
-                                      ruleset_checksums_);
+                                      ruleset_install_prefs_);
 
   if (!callback_.is_null())
     std::move(callback_).Run(extension(), extension_path_, std::string());

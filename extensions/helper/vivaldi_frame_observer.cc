@@ -6,6 +6,7 @@
 
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/render_view_host.h"
 #include "renderer/vivaldi_render_messages.h"
@@ -23,6 +24,17 @@ VivaldiFrameObserver::~VivaldiFrameObserver() {}
 
 bool VivaldiFrameObserver::OnMessageReceived(const IPC::Message& message,
                                              content::RenderFrameHost* render_frame_host) {
+  // If both the old and the new RenderFrameHosts have focus, then we are
+  // getting messages in the wrong order, which causes us to lose track of the
+  // actual focused element. See VB-72174.
+  if (web_contents()->GetFocusedFrame() != render_frame_host) {
+    content::RenderFrameHostImpl* rfhi =
+        static_cast<content::RenderFrameHostImpl*>(render_frame_host);
+    if (rfhi->IsFocused()) {
+      return false;
+    }
+  }
+
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(VivaldiFrameObserver, message, render_frame_host)
   IPC_MESSAGE_HANDLER(VivaldiMsg_DidUpdateFocusedElementInfo,

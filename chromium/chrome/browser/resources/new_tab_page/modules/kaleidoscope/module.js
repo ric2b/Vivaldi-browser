@@ -27,8 +27,6 @@ const KALEIDOSCOPE_RESOURCES = [
         'chrome://kaleidoscope/chrome/browser/media/feeds/media_feeds_store.mojom-lite.js'
   },
   {url: 'chrome://kaleidoscope/kaleidoscope.mojom-lite.js'},
-  {url: 'chrome://kaleidoscope/messages.js'},
-  {url: 'chrome://kaleidoscope/kaleidoscope.js'},
   {url: 'chrome://kaleidoscope/content.js'},
   {url: 'chrome://kaleidoscope/resources/_locales/strings.js'},
   {url: 'chrome://kaleidoscope/module.js', module: true},
@@ -56,17 +54,13 @@ function loadResource(resource) {
 
 /** @type {!ModuleDescriptor} */
 export const kaleidoscopeDescriptor = new ModuleDescriptor(
-    'kaleidoscope',
-    loadTimeData.getString('modulesKaleidoscopeName'),
-    () => {
+    /*id=*/ 'kaleidoscope',
+    /*heightPx=*/ 330,
+    async () => {
       // Load all the Kaleidoscope resources into the NTP and return the module
       // once the loading is complete.
-      return Promise.all(KALEIDOSCOPE_RESOURCES.map((r) => loadResource(r)))
-          .then(() => {
-            return {
-              element: document.createElement('ntp-kaleidoscope-module'),
-              title: loadTimeData.getString('modulesKaleidoscopeTitle'),
-            };
-          });
+      await Promise.all(KALEIDOSCOPE_RESOURCES.map((r) => loadResource(r)));
+
+      return window.loadKaleidoscopeModule();
     },
 );

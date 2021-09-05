@@ -213,8 +213,8 @@ void PluginPrefs::UpdateWidevinePolicy(const std::string& pref_name) {
       prefs_->GetBoolean(vivaldiprefs::kPluginsWidevineEnabled);
 
   content::PluginService::GetInstance()->PurgePluginListCache(profile_, false);
-  if (profile_->HasOffTheRecordProfile()) {
+  if (profile_->HasOffTheRecordProfile(Profile::OTRProfileID::PrimaryID())) {
     content::PluginService::GetInstance()->PurgePluginListCache(
-        profile_->GetOffTheRecordProfile(), false);
-  }
+        profile_->GetOffTheRecordProfile(Profile::OTRProfileID::PrimaryID()), false);
+    }
 }

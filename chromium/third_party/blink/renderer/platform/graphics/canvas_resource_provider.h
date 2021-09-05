@@ -66,13 +66,13 @@ class PLATFORM_EXPORT CanvasResourceProvider
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
   enum ResourceProviderType {
-    kTexture = 0,
+    kTexture [[deprecated]] = 0,
     kBitmap = 1,
     kSharedBitmap = 2,
-    kTextureGpuMemoryBuffer = 3,
-    kBitmapGpuMemoryBuffer = 4,
+    kTextureGpuMemoryBuffer [[deprecated]] = 3,
+    kBitmapGpuMemoryBuffer [[deprecated]] = 4,
     kSharedImage = 5,
-    kDirectGpuMemoryBuffer = 6,
+    kDirectGpuMemoryBuffer [[deprecated]] = 6,
     kPassThrough = 7,
     kSwapChain = 8,
     kSkiaDawnSharedImage = 9,
@@ -85,41 +85,49 @@ class PLATFORM_EXPORT CanvasResourceProvider
   // TODO(juanmihd@ bug/1078518) Check whether SkFilterQuality is needed in all
   // these Create methods below, or just call setFilterQuality explicitly.
 
+  // Used to determine if the provider is going to be initialized or not,
+  // ignored by PassThrough
+  enum class ShouldInitialize { kNo, kCallClear };
+
   static std::unique_ptr<CanvasResourceProvider> CreateBitmapProvider(
-      const IntSize&,
-      SkFilterQuality,
-      const CanvasColorParams&);
+      const IntSize& size,
+      SkFilterQuality filter_quality,
+      const CanvasColorParams& color_params,
+      ShouldInitialize initialize_provider);
 
   static std::unique_ptr<CanvasResourceProvider> CreateSharedBitmapProvider(
-      const IntSize&,
-      SkFilterQuality,
-      const CanvasColorParams&,
+      const IntSize& size,
+      SkFilterQuality filter_quality,
+      const CanvasColorParams& color_params,
+      ShouldInitialize initialize_provider,
       base::WeakPtr<CanvasResourceDispatcher>);
 
   static std::unique_ptr<CanvasResourceProvider> CreateSharedImageProvider(
-      const IntSize&,
+      const IntSize& size,
+      SkFilterQuality filter_quality,
+      const CanvasColorParams& color_params,
+      ShouldInitialize initialize_provider,
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>,
-      SkFilterQuality,
-      const CanvasColorParams&,
-      bool is_origin_top_left,
       RasterMode raster_mode,
+      bool is_origin_top_left,
       uint32_t shared_image_usage_flags);
 
   static std::unique_ptr<CanvasResourceProvider> CreatePassThroughProvider(
-      const IntSize&,
+      const IntSize& size,
+      SkFilterQuality filter_quality,
+      const CanvasColorParams& color_params,
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>,
-      SkFilterQuality,
-      const CanvasColorParams&,
-      bool is_origin_top_left,
-      base::WeakPtr<CanvasResourceDispatcher>);
+      base::WeakPtr<CanvasResourceDispatcher>,
+      bool is_origin_top_left);
 
   static std::unique_ptr<CanvasResourceProvider> CreateSwapChainProvider(
-      const IntSize&,
+      const IntSize& size,
+      SkFilterQuality filter_quality,
+      const CanvasColorParams& color_params,
+      ShouldInitialize initialize_provider,
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>,
-      SkFilterQuality,
-      const CanvasColorParams&,
-      bool is_origin_top_left,
-      base::WeakPtr<CanvasResourceDispatcher>);
+      base::WeakPtr<CanvasResourceDispatcher>,
+      bool is_origin_top_left);
 
   // Use Snapshot() for capturing a frame that is intended to be displayed via
   // the compositor. Cases that are destined to be transferred via a
@@ -190,7 +198,7 @@ class PLATFORM_EXPORT CanvasResourceProvider
     NOTREACHED();
     return nullptr;
   }
-  void Clear();
+
   ~CanvasResourceProvider() override;
 
   base::WeakPtr<CanvasResourceProvider> CreateWeakPtr() {
@@ -257,6 +265,7 @@ class PLATFORM_EXPORT CanvasResourceProvider
   cc::PaintImage MakeImageSnapshot();
   virtual void RasterRecord(sk_sp<cc::PaintRecord>);
   CanvasImageProvider* GetOrCreateCanvasImageProvider();
+  void TearDownSkSurface();
 
   ResourceProviderType type_;
   mutable sk_sp<SkSurface> surface_;  // mutable for lazy init
@@ -283,6 +292,8 @@ class PLATFORM_EXPORT CanvasResourceProvider
   cc::ImageDecodeCache* ImageDecodeCacheF16();
   void EnsureSkiaCanvas();
   void SetNeedsFlush() { needs_flush_ = true; }
+
+  void Clear();
 
   base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper_;
   base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher_;

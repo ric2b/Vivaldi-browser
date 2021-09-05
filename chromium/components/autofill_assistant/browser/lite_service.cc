@@ -19,10 +19,13 @@ LiteService::LiteService(
     std::unique_ptr<Service> service_impl,
     const std::string& trigger_script_path,
     base::OnceCallback<void(Metrics::LiteScriptFinishedState)>
-        notify_finished_callback)
+        notify_finished_callback,
+    base::RepeatingCallback<void(bool)> notify_script_running_callback)
     : service_impl_(std::move(service_impl)),
       trigger_script_path_(trigger_script_path),
-      notify_finished_callback_(std::move(notify_finished_callback)) {}
+      notify_finished_callback_(std::move(notify_finished_callback)),
+      notify_script_running_callback_(
+          std::move(notify_script_running_callback)) {}
 
 LiteService::~LiteService() {
   if (notify_finished_callback_) {
@@ -38,12 +41,6 @@ bool LiteService::IsLiteService() const {
 void LiteService::GetScriptsForUrl(const GURL& url,
                                    const TriggerContext& trigger_context,
                                    ResponseCallback callback) {
-  if (!notify_finished_callback_) {
-    NOTREACHED();
-    std::move(callback).Run(true, std::string());
-    return;
-  }
-
   SupportsScriptResponseProto response;
   auto* lite_script = response.add_scripts();
   lite_script->set_path(trigger_script_path_);
@@ -62,11 +59,6 @@ void LiteService::GetActions(const std::string& script_path,
                              const std::string& do_not_use_global_payload,
                              const std::string& do_not_use_script_payload,
                              ResponseCallback callback) {
-  if (!notify_finished_callback_) {
-    NOTREACHED();
-    std::move(callback).Run(true, std::string());
-    return;
-  }
   // Should never happen, but let's guard for this just in case.
   if (script_path != trigger_script_path_) {
     StopWithoutErrorMessage(
@@ -88,11 +80,6 @@ void LiteService::GetActions(const std::string& script_path,
 void LiteService::OnGetActions(ResponseCallback callback,
                                bool result,
                                const std::string& response) {
-  if (!notify_finished_callback_) {
-    NOTREACHED();
-    std::move(callback).Run(true, std::string());
-    return;
-  }
   if (!result) {
     StopWithoutErrorMessage(
         std::move(callback),
@@ -145,6 +132,7 @@ void LiteService::OnGetActions(ResponseCallback callback,
   std::string serialized_first_part;
   split_actions->first.SerializeToString(&serialized_first_part);
   std::move(callback).Run(result, serialized_first_part);
+  notify_script_running_callback_.Run(/*ui_shown = */ false);
 }
 
 void LiteService::GetNextActions(
@@ -191,6 +179,7 @@ void LiteService::GetNextActions(
         trigger_script_second_part_->SerializeToString(&serialized_second_part);
         trigger_script_second_part_.reset();
         std::move(callback).Run(true, serialized_second_part);
+        notify_script_running_callback_.Run(/*ui_shown = */ true);
         return;
     }
   } else {
@@ -233,9 +222,11 @@ void LiteService::GetNextActions(
 void LiteService::StopWithoutErrorMessage(
     ResponseCallback callback,
     Metrics::LiteScriptFinishedState state) {
-  // Run callback BEFORE terminating the controller. See comment in header
-  // for |notify_finished_callback_|.
-  std::move(notify_finished_callback_).Run(state);
+  // Notify delegate BEFORE terminating the controller. See comment in header
+  // for |OnFinished|.
+  if (notify_finished_callback_) {
+    std::move(notify_finished_callback_).Run(state);
+  }
 
   // Stop script.
   ActionsResponseProto response;

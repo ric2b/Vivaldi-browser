@@ -128,6 +128,8 @@ void MidiHost::ReceiveMidiData(uint32_t port,
     // SendData() does.
     if (message[0] == kSysExByte) {
       if (!has_sys_ex_permission_) {
+        // TODO(987505): This should check permission with the Frame and not the
+        // Process.
         has_sys_ex_permission_ =
             ChildProcessSecurityPolicyImpl::GetInstance()
                 ->CanSendMidiSysExMessage(renderer_process_id_);
@@ -205,15 +207,13 @@ void MidiHost::SendData(uint32_t port,
   // Check |has_sys_ex_permission_| first to avoid searching kSysExByte in large
   // bulk data transfers for correct uses.
   if (!has_sys_ex_permission_ && base::Contains(data, kSysExByte)) {
+    has_sys_ex_permission_ =
+        ChildProcessSecurityPolicyImpl::GetInstance()->CanSendMidiSysExMessage(
+            renderer_process_id_);
     if (!has_sys_ex_permission_) {
-      has_sys_ex_permission_ =
-          ChildProcessSecurityPolicyImpl::GetInstance()
-              ->CanSendMidiSysExMessage(renderer_process_id_);
-      if (!has_sys_ex_permission_) {
-        bad_message::ReceivedBadMessage(renderer_process_id_,
-                                        bad_message::MH_SYS_EX_PERMISSION);
-        return;
-      }
+      bad_message::ReceivedBadMessage(renderer_process_id_,
+                                      bad_message::MH_SYS_EX_PERMISSION);
+      return;
     }
   }
 

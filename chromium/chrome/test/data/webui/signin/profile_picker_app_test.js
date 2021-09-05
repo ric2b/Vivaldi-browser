@@ -2,11 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://profile-picker/profile_picker_app.js';
-
-import {ManageProfilesBrowserProxyImpl} from 'chrome://profile-picker/manage_profiles_browser_proxy.js';
-import {navigateTo, Routes} from 'chrome://profile-picker/navigation_behavior.js';
-import {ensureLazyLoaded} from 'chrome://profile-picker/profile_creation_flow/ensure_lazy_loaded.js';
+import {ensureLazyLoaded, ManageProfilesBrowserProxyImpl, navigateTo, Routes} from 'chrome://profile-picker/profile_picker.js';
 
 import {assertTrue} from '../chai_assert.js';
 import {waitBeforeNextRender} from '../test_util.m.js';
@@ -24,7 +20,9 @@ suite('ProfilePickerAppTest', function() {
     browserProxy = new TestManageProfilesBrowserProxy();
     ManageProfilesBrowserProxyImpl.instance_ = browserProxy;
 
+    // Reset state of the test element.
     document.body.innerHTML = '';
+    navigateTo(Routes.MAIN);
     app = /** @type {!ProfilePickerAppElement} */ (
         document.createElement('profile-picker-app'));
     document.body.appendChild(app);
@@ -52,6 +50,8 @@ suite('ProfilePickerAppTest', function() {
               app.$$('profile-type-choice'));
           assertTrue(!!choice);
           choice.$$('#signInButton').click();
+          assertTrue(choice.$$('#signInButton').disabled);
+          assertTrue(choice.$$('#notNowButton').disabled);
           return browserProxy.whenCalled('loadSignInProfileCreationFlow');
         });
   });

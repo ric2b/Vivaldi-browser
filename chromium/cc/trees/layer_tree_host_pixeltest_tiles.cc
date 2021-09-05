@@ -13,6 +13,7 @@
 #include "cc/test/layer_tree_pixel_test.h"
 #include "cc/test/test_layer_tree_frame_sink.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/test/buildflags.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 
 #if !defined(OS_ANDROID)
@@ -20,20 +21,15 @@
 namespace cc {
 namespace {
 
-struct TilesTestConfig {
-  TestRendererType renderer_type;
-  TestRasterType raster_type;
-};
-
 class LayerTreeHostTilesPixelTest
     : public LayerTreePixelTest,
-      public ::testing::WithParamInterface<TilesTestConfig> {
+      public ::testing::WithParamInterface<RasterTestConfig> {
  protected:
   LayerTreeHostTilesPixelTest() : LayerTreePixelTest(renderer_type()) {
     set_raster_type(GetParam().raster_type);
   }
 
-  TestRendererType renderer_type() const { return GetParam().renderer_type; }
+  viz::RendererType renderer_type() const { return GetParam().renderer_type; }
 
   void InitializeSettings(LayerTreeSettings* settings) override {
     LayerTreePixelTest::InitializeSettings(settings);
@@ -152,26 +148,30 @@ class LayerTreeHostTilesTestPartialInvalidation
   scoped_refptr<PictureLayer> picture_layer_;
 };
 
-std::vector<TilesTestConfig> const kTestCases = {
-    {TestRendererType::kSoftware, TestRasterType::kBitmap},
-    {TestRendererType::kGL, TestRasterType::kOneCopy},
-    {TestRendererType::kGL, TestRasterType::kGpu},
-    {TestRendererType::kSkiaGL, TestRasterType::kOneCopy},
-    {TestRendererType::kSkiaGL, TestRasterType::kGpu},
-#if defined(ENABLE_CC_VULKAN_TESTS)
-    {TestRendererType::kSkiaVk, TestRasterType::kOop},
-#endif  // defined(ENABLE_CC_VULKAN_TESTS)
-#if defined(ENABLE_CC_DAWN_TESTS)
-    {TestRendererType::kSkiaDawn, TestRasterType::kOop},
-#endif  // defined(ENABLE_CC_DAWN_TESTS)
+std::vector<RasterTestConfig> const kTestCases = {
+    {viz::RendererType::kSoftware, TestRasterType::kBitmap},
+#if BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
+    {viz::RendererType::kGL, TestRasterType::kOneCopy},
+    {viz::RendererType::kGL, TestRasterType::kGpu},
+    {viz::RendererType::kSkiaGL, TestRasterType::kOneCopy},
+    {viz::RendererType::kSkiaGL, TestRasterType::kGpu},
+#endif  // BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
+#if BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
+    {viz::RendererType::kSkiaVk, TestRasterType::kOop},
+#endif  // BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
+#if BUILDFLAG(ENABLE_DAWN_BACKEND_TESTS)
+    {viz::RendererType::kSkiaDawn, TestRasterType::kOop},
+#endif  // BUILDFLAG(ENABLE_DAWN_BACKEND_TESTS)
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostTilesTestPartialInvalidation,
-                         ::testing::ValuesIn(kTestCases));
+                         ::testing::ValuesIn(kTestCases),
+                         ::testing::PrintToStringParamName());
 
-#if defined(OS_WIN) && defined(ADDRESS_SANITIZER)
-// Flaky on Windows ASAN https://crbug.com/1045521
+#if defined(OS_CHROMEOS) || defined(MEMORY_SANITIZER) || \
+    defined(ADDRESS_SANITIZER) || defined(OS_FUCHSIA)
+// TODO(crbug.com/1045521): Flakes on all slower bots.
 #define MAYBE_PartialRaster DISABLED_PartialRaster
 #else
 #define MAYBE_PartialRaster PartialRaster
@@ -190,17 +190,19 @@ TEST_P(LayerTreeHostTilesTestPartialInvalidation, FullRaster) {
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_flipped.png")));
 }
 
-std::vector<TilesTestConfig> const kTestCasesMultiThread = {
-    {TestRendererType::kGL, TestRasterType::kOneCopy},
-    {TestRendererType::kSkiaGL, TestRasterType::kOneCopy},
-#if defined(ENABLE_CC_VULKAN_TESTS)
+std::vector<RasterTestConfig> const kTestCasesMultiThread = {
+#if BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
+    {viz::RendererType::kGL, TestRasterType::kOneCopy},
+    {viz::RendererType::kSkiaGL, TestRasterType::kOneCopy},
+#endif  // BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
+#if BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
     // TODO(sgilhuly): Switch this to one copy raster once is is supported for
     // Vulkan in these tests.
-    {TestRendererType::kSkiaVk, TestRasterType::kOop},
-#endif  // defined(ENABLE_CC_VULKAN_TESTS)
-#if defined(ENABLE_CC_DAWN_TESTS)
-    {TestRendererType::kSkiaDawn, TestRasterType::kOop},
-#endif  // defined(ENABLE_CC_DAWN_TESTS)
+    {viz::RendererType::kSkiaVk, TestRasterType::kOop},
+#endif  // BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
+#if BUILDFLAG(ENABLE_DAWN_BACKEND_TESTS)
+    {viz::RendererType::kSkiaDawn, TestRasterType::kOop},
+#endif  // BUILDFLAG(ENABLE_DAWN_BACKEND_TESTS)
 };
 
 using LayerTreeHostTilesTestPartialInvalidationMultiThread =
@@ -208,13 +210,15 @@ using LayerTreeHostTilesTestPartialInvalidationMultiThread =
 
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostTilesTestPartialInvalidationMultiThread,
-                         ::testing::ValuesIn(kTestCasesMultiThread));
+                         ::testing::ValuesIn(kTestCasesMultiThread),
+                         ::testing::PrintToStringParamName());
 
-#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(THREAD_SANITIZER)
 // Flaky on Linux TSAN. https://crbug.com/707711
 #define MAYBE_PartialRaster DISABLED_PartialRaster
-#elif defined(OS_WIN) && defined(ADDRESS_SANITIZER)
-// Flaky on Windows ASAN https://crbug.com/1045521
+#elif defined(OS_CHROMEOS) || defined(MEMORY_SANITIZER) || \
+    defined(ADDRESS_SANITIZER) || defined(OS_FUCHSIA)
+// TODO(crbug.com/1045521): Flakes on all slower bots.
 #define MAYBE_PartialRaster DISABLED_PartialRaster
 #else
 #define MAYBE_PartialRaster PartialRaster
@@ -233,6 +237,10 @@ TEST_P(LayerTreeHostTilesTestPartialInvalidationMultiThread, FullRaster) {
                base::FilePath(FILE_PATH_LITERAL("blue_yellow_flipped.png")));
 }
 
+// This test doesn't work on Vulkan because on our hardware we can't render to
+// RGBA4444 format using either SwiftShader or native Vulkan. See
+// crbug.com/987278 for details
+#if BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
 class LayerTreeHostTilesTestPartialInvalidationLowBitDepth
     : public LayerTreeHostTilesTestPartialInvalidation {
  protected:
@@ -243,15 +251,13 @@ class LayerTreeHostTilesTestPartialInvalidationLowBitDepth
   }
 };
 
-// This test doesn't work on Vulkan because on our hardware we can't render to
-// RGBA4444 format using either SwiftShader or native Vulkan. See
-// crbug.com/987278 for details
 INSTANTIATE_TEST_SUITE_P(
     All,
     LayerTreeHostTilesTestPartialInvalidationLowBitDepth,
     ::testing::Values(
-        TilesTestConfig{TestRendererType::kSkiaGL, TestRasterType::kGpu},
-        TilesTestConfig{TestRendererType::kGL, TestRasterType::kGpu}));
+        RasterTestConfig{viz::RendererType::kSkiaGL, TestRasterType::kGpu},
+        RasterTestConfig{viz::RendererType::kGL, TestRasterType::kGpu}),
+    ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostTilesTestPartialInvalidationLowBitDepth, PartialRaster) {
   use_partial_raster_ = true;
@@ -265,6 +271,7 @@ TEST_P(LayerTreeHostTilesTestPartialInvalidationLowBitDepth, FullRaster) {
       picture_layer_,
       base::FilePath(FILE_PATH_LITERAL("blue_yellow_flipped_dither.png")));
 }
+#endif  // BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
 
 }  // namespace
 }  // namespace cc

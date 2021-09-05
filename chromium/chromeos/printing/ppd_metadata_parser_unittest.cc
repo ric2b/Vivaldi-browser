@@ -239,19 +239,17 @@ TEST(PpdMetadataParserTest, CanParsePrintersWithRestrictions) {
   const auto parsed = ParsePrinters(kPrintersJson);
   ASSERT_TRUE(parsed.has_value());
 
-  EXPECT_THAT(
-      *parsed,
-      UnorderedElementsAre(
-          AllOf(ParsedPrinterLike("Schäfers Klagelied", "d 121"),
-                Field(&ParsedPrinter::restrictions,
-                      Optional(RestrictionsWithMinMilestone(121)))),
-          AllOf(ParsedPrinterLike("Meeres Stille", "d 216"),
-                Field(&ParsedPrinter::restrictions,
-                      Optional(RestrictionsWithMaxMilestone(216)))),
-          AllOf(
-              ParsedPrinterLike("Heidenröslein", "d 257"),
-              Field(&ParsedPrinter::restrictions,
-                    Optional(RestrictionsWithMinAndMaxMilestones(216, 257))))));
+  EXPECT_THAT(*parsed,
+              UnorderedElementsAre(
+                  AllOf(ParsedPrinterLike("Schäfers Klagelied", "d 121"),
+                        Field(&ParsedPrinter::restrictions,
+                              RestrictionsWithMinMilestone(121))),
+                  AllOf(ParsedPrinterLike("Meeres Stille", "d 216"),
+                        Field(&ParsedPrinter::restrictions,
+                              RestrictionsWithMaxMilestone(216))),
+                  AllOf(ParsedPrinterLike("Heidenröslein", "d 257"),
+                        Field(&ParsedPrinter::restrictions,
+                              RestrictionsWithMinAndMaxMilestones(216, 257)))));
 }
 
 // Verifies that ParsePrinters() can parse printers and ignore
@@ -273,10 +271,11 @@ TEST(PpdMetadataParserTest, CanParsePrintersWithMalformedRestrictions) {
   const auto parsed = ParsePrinters(kPrintersJson);
   ASSERT_TRUE(parsed.has_value());
 
-  EXPECT_THAT(*parsed,
-              UnorderedElementsAre(AllOf(
-                  ParsedPrinterLike("Jägers Abendlied", "d 368"),
-                  Field(&ParsedPrinter::restrictions, Eq(base::nullopt)))));
+  EXPECT_THAT(
+      *parsed,
+      UnorderedElementsAre(
+          AllOf(ParsedPrinterLike("Jägers Abendlied", "d 368"),
+                Field(&ParsedPrinter::restrictions, UnboundedRestrictions()))));
 }
 
 // Verifies that ParsePrinters() returns base::nullopt rather than an
@@ -445,27 +444,26 @@ TEST(PpdMetadataParserTest, CanParseForwardIndexWithRestrictions) {
 
   const auto parsed = ParseForwardIndex(kJsonForwardIndex);
   ASSERT_TRUE(parsed.has_value());
-  EXPECT_THAT(parsed.value(),
+  EXPECT_THAT(
+      parsed.value(),
+      UnorderedElementsAre(
+          ParsedIndexEntryLike(
+              "nähe des geliebten",
               UnorderedElementsAre(
-                  ParsedIndexEntryLike(
-                      "nähe des geliebten",
-                      UnorderedElementsAre(AllOf(
-                          ParsedIndexLeafWithPpdBasename("d-162.ppd.gz"),
-                          Field(&ParsedIndexLeaf::restrictions,
-                                Optional(RestrictionsWithMinMilestone(25)))))),
-                  ParsedIndexEntryLike(
-                      "der fischer",
-                      UnorderedElementsAre(AllOf(
-                          ParsedIndexLeafWithPpdBasename("d-225.ppd.gz"),
-                          Field(&ParsedIndexLeaf::restrictions,
-                                Optional(RestrictionsWithMaxMilestone(35)))))),
-                  ParsedIndexEntryLike(
-                      "erster verlust",
-                      UnorderedElementsAre(AllOf(
-                          ParsedIndexLeafWithPpdBasename("d-226.ppd.gz"),
-                          Field(&ParsedIndexLeaf::restrictions,
-                                Optional(RestrictionsWithMinAndMaxMilestones(
-                                    45, 46))))))));
+                  AllOf(ParsedIndexLeafWithPpdBasename("d-162.ppd.gz"),
+                        Field(&ParsedIndexLeaf::restrictions,
+                              RestrictionsWithMinMilestone(25))))),
+          ParsedIndexEntryLike(
+              "der fischer", UnorderedElementsAre(AllOf(
+                                 ParsedIndexLeafWithPpdBasename("d-225.ppd.gz"),
+                                 Field(&ParsedIndexLeaf::restrictions,
+                                       RestrictionsWithMaxMilestone(35))))),
+          ParsedIndexEntryLike(
+              "erster verlust",
+              UnorderedElementsAre(
+                  AllOf(ParsedIndexLeafWithPpdBasename("d-226.ppd.gz"),
+                        Field(&ParsedIndexLeaf::restrictions,
+                              RestrictionsWithMinAndMaxMilestones(45, 46)))))));
 }
 
 // Verifies that ParseForwardIndex() can parse forward index metadata
@@ -519,18 +517,56 @@ TEST(PpdMetadataParserTest, CanParseForwardIndexWithMalformedRestrictions) {
               UnorderedElementsAre(
                   AllOf(ParsedIndexLeafWithPpdBasename("d-162.ppd.gz"),
                         Field(&ParsedIndexLeaf::restrictions,
-                              Optional(RestrictionsWithMaxMilestone(25)))))),
+                              RestrictionsWithMaxMilestone(25))))),
           ParsedIndexEntryLike(
-              "der fischer",
-              UnorderedElementsAre(
-                  AllOf(ParsedIndexLeafWithPpdBasename("d-225.ppd.gz"),
-                        Field(&ParsedIndexLeaf::restrictions,
-                              Optional(RestrictionsWithMinMilestone(35)))))),
+              "der fischer", UnorderedElementsAre(AllOf(
+                                 ParsedIndexLeafWithPpdBasename("d-225.ppd.gz"),
+                                 Field(&ParsedIndexLeaf::restrictions,
+                                       RestrictionsWithMinMilestone(35))))),
           ParsedIndexEntryLike(
               "erster verlust",
-              UnorderedElementsAre(AllOf(
-                  ParsedIndexLeafWithPpdBasename("d-226.ppd.gz"),
-                  Field(&ParsedIndexLeaf::restrictions, Eq(base::nullopt)))))));
+              UnorderedElementsAre(
+                  AllOf(ParsedIndexLeafWithPpdBasename("d-226.ppd.gz"),
+                        Field(&ParsedIndexLeaf::restrictions,
+                              UnboundedRestrictions()))))));
+}
+
+// Verifies that ParseForwardIndex() can parse forward index metadata
+// specifying PPD licenses.
+TEST(PpdMetadataParserTest, CanParseForwardIndexWithLicenses) {
+  // Specifies two PPDs, each with a license associated.
+  constexpr base::StringPiece kJsonForwardIndex = R"({
+  "ppdIndex": {
+    "der fischer": {
+      "ppdMetadata": [ {
+        "name": "d-225.ppd.gz",
+        "license": "two two five license"
+      } ]
+    },
+    "erster verlust": {
+      "ppdMetadata": [ {
+        "name": "d-226.ppd.gz",
+        "license": "two two six license"
+      } ]
+    }
+  }
+})";
+  const auto parsed = ParseForwardIndex(kJsonForwardIndex);
+  ASSERT_TRUE(parsed.has_value());
+  EXPECT_THAT(
+      parsed.value(),
+      UnorderedElementsAre(
+          ParsedIndexEntryLike(
+              "der fischer", UnorderedElementsAre(AllOf(
+                                 ParsedIndexLeafWithPpdBasename("d-225.ppd.gz"),
+                                 Field(&ParsedIndexLeaf::license,
+                                       StrEq("two two five license"))))),
+          ParsedIndexEntryLike(
+              "erster verlust",
+              UnorderedElementsAre(
+                  AllOf(ParsedIndexLeafWithPpdBasename("d-226.ppd.gz"),
+                        Field(&ParsedIndexLeaf::license,
+                              StrEq("two two six license")))))));
 }
 
 // Verifies that ParseForwardIndex() returns base::nullopt rather than
@@ -643,6 +679,73 @@ TEST(PpdMetadataParserTest, ParseUsbIndexDoesNotReturnEmptyContainer) {
 // parse error.
 TEST(PpdMetadataParserTest, ParseUsbIndexFailsGracefully) {
   EXPECT_THAT(ParseUsbIndex(kInvalidJson), Eq(base::nullopt));
+}
+
+// Verifies that ParseUsbvendorIdMap() can parse USB vendor ID maps.
+TEST(PpdMetadataParserTest, CanParseUsbVendorIdMap) {
+  constexpr base::StringPiece kJsonUsbVendorIdMap = R"({
+  "entries": [ {
+    "vendorId": 1111,
+    "vendorName": "One One One One"
+  }, {
+    "vendorId": 2222,
+    "vendorName": "Two Two Two Two"
+  }, {
+    "vendorId": 3333,
+    "vendorName": "Three Three Three Three"
+  } ]
+})";
+
+  EXPECT_THAT(ParseUsbVendorIdMap(kJsonUsbVendorIdMap),
+              Optional(UnorderedElementsAre(
+                  Pair(1111, StrEq("One One One One")),
+                  Pair(2222, StrEq("Two Two Two Two")),
+                  Pair(3333, StrEq("Three Three Three Three")))));
+}
+
+// Verifies that ParseUsbvendorIdMap() can parse USB vendor ID maps and
+// return partial results even when it encounters garbage values.
+TEST(PpdMetadataParserTest, CanPartiallyParseUsbVendorIdMap) {
+  // This USB vendor ID map has garbage values in it.
+  // ParseUsbVendorIdMap() shall ignore these.
+  constexpr base::StringPiece kJsonUsbVendorIdMap = R"({
+  "garbage key": "garbage value",
+  "entries": [
+    "garbage value",
+  {
+    "vendorId": 1111,
+    "garbage key": "garbage value",
+    "vendorName": "One One One One"
+  }, {
+    "vendorId": 2222,
+    "vendorName": "Two Two Two Two"
+  }, {
+    "vendorId": 3333,
+    "vendorName": "Three Three Three Three"
+  } ]
+})";
+
+  EXPECT_THAT(ParseUsbVendorIdMap(kJsonUsbVendorIdMap),
+              Optional(UnorderedElementsAre(
+                  Pair(1111, StrEq("One One One One")),
+                  Pair(2222, StrEq("Two Two Two Two")),
+                  Pair(3333, StrEq("Three Three Three Three")))));
+}
+
+// Verifies that ParseUsbvendorIdMap() returns base::nullopt rather
+// than an empty container.
+TEST(PpdMetadataParserTest, ParseUsbVendorIdMapDoesNotReturnEmptyContainer) {
+  // Defines a USB vendor ID map that is empty; it's valid JSON, but
+  // has no values worth returning.
+  constexpr base::StringPiece kJsonUsbVendorIdMap = "{}";
+
+  EXPECT_THAT(ParseUsbVendorIdMap(kJsonUsbVendorIdMap), Eq(base::nullopt));
+}
+
+// Verifies that ParseUsbvendorIdMap() returns base::nullopt on
+// irrecoverable parse error.
+TEST(PpdMetadataParserTest, ParseUsbVendorIdMapFailsGracefully) {
+  EXPECT_THAT(ParseUsbVendorIdMap(kInvalidJson), Eq(base::nullopt));
 }
 
 // Verifies that ParseReverseIndex() can parse reverse index metadata.

@@ -14,9 +14,9 @@
 #include "base/no_destructor.h"
 #include "base/optional.h"
 #include "base/rand_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/time/default_tick_clock.h"
-#include "base/util/ranges/algorithm.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/session_manager/core/session_manager.h"
@@ -274,6 +274,7 @@ void HttpFirewallRoutine::AttemptSocketConnections() {
       static_cast<double>(num_hostnames_to_query_);
   if (dns_resolution_success_rate < kDnsResolutionSuccessRateThreshold) {
     AnalyzeResultsAndExecuteCallback();
+    return;
   }
 
   // Create a socket for each address and port combination.
@@ -283,8 +284,12 @@ void HttpFirewallRoutine::AttemptSocketConnections() {
     resolved_address =
         net::AddressList::CopyWithPort(resolved_address, kHttpPort);
 
+    // TODO(crbug.com/1123197): Pass non-null NetworkQualityEstimator.
+    net::NetworkQualityEstimator* network_quality_estimator = nullptr;
+
     sockets_.emplace_back(client_socket_factory_->CreateTransportClientSocket(
-        resolved_address, nullptr, net_log_.net_log(), net_log_.source()));
+        resolved_address, nullptr, network_quality_estimator,
+        net_log_.net_log(), net_log_.source()));
   }
 
   // Connect the sockets.
@@ -306,7 +311,7 @@ void HttpFirewallRoutine::Connect(int socket_index) {
 void HttpFirewallRoutine::OnSocketConnected(int socket_index, int result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  const auto* iter = util::ranges::find(kRetryResponseCodes, result);
+  const auto* iter = base::ranges::find(kRetryResponseCodes, result);
   if (iter != std::end(kRetryResponseCodes) && num_retries_ > 0) {
     num_retries_--;
     // Disconnect the socket in case there is any data in the incoming buffer.

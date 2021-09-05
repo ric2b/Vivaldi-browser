@@ -5,8 +5,12 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_radio_button/cr_card_radio_button.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_toggle/cr_toggle.html">
+<link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
+<link rel="import" href="nearby_contact_manager.html">
+<link rel="import" href="nearby_page_template.html">
 <link rel="import" href="nearby_share_settings_behavior.html">
 <link rel="import" href="nearby_shared_icons.html">
 
@@ -61,6 +65,7 @@
         color: var(--google-blue-600);
       }
       .card-icon {
+        fill: var(--google-blue-600);
         margin-block-end: 8px;
       }
 
@@ -75,6 +80,11 @@
         margin-inline-end: 24px;
         margin-inline-start: auto;
         text-align: end;
+      }
+
+      #zeroStateImage {
+        height: 200px;
+        width: 200px;
       }
 
       #zeroStateTextContainer {
@@ -104,6 +114,12 @@
         margin-block-end: 8px;
       }
 
+      .explanation-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
       .explanation-section {
         display: flex;
         margin-block-end: 8px;
@@ -127,8 +143,8 @@
         font-size: 1.2rem;
       }
 
-      #contactList {
-        height: 150px;
+      .contacts-section {
+        height: 100px;
         margin-block-end: 8px;
         margin-block-start: 8px;
       }
@@ -169,7 +185,7 @@
             <iron-icon icon="nearby20:contact-all" class="card-icon">
             </iron-icon>
             <div class="card-label">
-              All Contacts
+              $i18n{nearbyShareContactVisibilityAll}
             </div>
           </div>
         </cr-card-radio-button>
@@ -178,7 +194,7 @@
             <iron-icon icon="nearby20:contact-group" class="card-icon">
             </iron-icon>
             <div class="card-label">
-              Some Contacts
+              $i18n{nearbyShareContactVisibilitySome}
             </div>
           </div>
         </cr-card-radio-button>
@@ -187,7 +203,7 @@
             <iron-icon icon="nearby20:visibility-off" class="card-icon">
             </iron-icon>
             <div class="card-label">
-              Hidden
+              $i18n{nearbyShareContactVisibilityNone}
             </div>
           </div>
         </cr-card-radio-button>
@@ -197,18 +213,18 @@
       <template is="dom-if" if="[[!isVisibilitySelected_(selectedVisibility)]]">
         <div id="zeroStateContainer">
           <div id="zeroStateImageContainer">
-            <img id="zeroStateImage" width="200" height="200"
-                src="/shared/nearby_device_visibility.svg">
+            <iron-icon id="zeroStateImage"
+                icon="nearby-images:nearby-device-visibility">
+            </iron-icon>
           </div>
           <div id="zeroStateTextContainer">
             <div id="zeroStateText" class="cr-title-text">
-              Your device visibility controls who can share with you while your
-              screen is unlocked.
+              $i18n{nearbyShareContactVisibilityZeroStateText}
             </div>
             <div id="zeroStateInfoContainer">
               <iron-icon id="zeroStateIcon" icon="cr:info"></iron-icon>
               <div class="cr-secondary-text">
-                Learn more about device visibility
+                $i18n{nearbyShareContactVisibilityZeroStateInfo}
               </div>
             </div>
           </div>
@@ -222,10 +238,16 @@
             <iron-icon icon="nearby20:radar" class="padded-icon grey-icon">
             </iron-icon>
             <div class="viz-description-section">
-              <div class="cr-title-text">Who you see</div>
+              <div class="cr-title-text">
+                $i18n{nearbyShareContactVisibilityOthersTitle}
+              </div>
               <div class="cr-secondary-text">
-                Nearby sharing users who are temporarily visible to everyone or
-                have chosen to always be visible to you
+                <ul class="explanation-list">
+                  <li>$i18n{nearbyShareContactVisibilityOthers}</li>
+                  <li>
+                    $i18n{nearbyShareContactVisibilityNearbyShareOpenOthers}
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
@@ -234,22 +256,38 @@
             <iron-icon icon="nearby20:visibility" class="padded-icon grey-icon">
             </iron-icon>
             <div class="viz-description-section">
-              <div class="cr-title-text">Who sees you</div>
+              <div class="cr-title-text">
+                $i18n{nearbyShareContactVisibilityOwnTitle}
+              </div>
               <template is="dom-if"
                   if="[[isVisibility_(selectedVisibility,'all')]]">
                 <div class="cr-secondary-text">
-                  Current and future contacts who have Nearby Share turned on
+                  <ul class="explanation-list">
+                    <li>$i18n{nearbyShareContactVisibilityOwnAll}</li>
+                    <li>
+                      $i18n{nearbyShareContactVisibilityNearbyShareOpenOwn}
+                    </li>
+                  </ul>
                 </div>
               </template>
               <template is="dom-if"
                   if="[[isVisibility_(selectedVisibility,'some')]]">
                 <div class="cr-secondary-text">
-                  Selected contacts who have Nearby Share turned on
+                  <ul class="explanation-list">
+                    <li>$i18n{nearbyShareContactVisibilityOwnSome}</li>
+                    <li>
+                      $i18n{nearbyShareContactVisibilityNearbyShareOpenOwn}
+                    </li>
+                  </ul>
                 </div>
               </template>
               <template is="dom-if"
                   if="[[isVisibility_(selectedVisibility,'none')]]">
-                <div class="cr-secondary-text">Nobody!</div>
+                <div class="cr-secondary-text">
+                  <ul class="explanation-list">
+                    <li>$i18n{nearbyShareContactVisibilityOwnNone}</li>
+                  </ul>
+                </div>
               </template>
             </div>
           </div>
@@ -257,11 +295,15 @@
         </div>
 
         <div id="contactsWrapper">
-          <div id="contactsHeading">Contacts</div>
+          <div id="contactsHeading">
+            $i18n{nearbyShareContactVisibilityContactsTitle}
+          </div>
 
-          <!-- Show when the user has one or more contacts-->
-          <template is="dom-if" if="[[showContactsList_(contacts)]]">
-            <iron-list id="contactList" items="[[contacts]]">
+          <!-- Show when the user has one or more contacts downloaded. -->
+          <template is="dom-if" if="[[inContactsState_(contactsState,
+                                      ContactsState.HAS_CONTACTS)]]">
+            <iron-list id="contactList" items="[[contacts]]"
+                class="contacts-section">
               <template>
                 <div class="contact-item"
                     disabled$="[[isVisibility_(selectedVisibility,'none')]]">
@@ -270,13 +312,13 @@
                   </iron-icon>
                   <div>
                     <div class="cr-title-text">[[item.name]]</div>
-                    <div class="cr-secondary-text">[[item.email]]</div>
+                    <div class="cr-secondary-text">[[item.description]]</div>
                   </div>
                   <template is="dom-if"
                       if="[[showContactCheckBoxes_(selectedVisibility)]]">
                     <cr-toggle class="contact-toggle" checked="{{item.checked}}"
                         disabled="[[!isVisibility_(selectedVisibility,'some')]]"
-                        >
+                        on-click="syncContactToggleState_">
                     </cr-toggle>
                   </template>
                 </div>
@@ -284,11 +326,38 @@
             </iron-list>
           </template>
 
-          <!-- Show when the user has no contacts available -->
-          <template is="dom-if" if="[[!showContactsList_(contacts)]]">
-            <div id="noContactsContainer">
-              <div class="cr-title-text">No Reachable Contacts</div>
-              <div class="cr-secondary-text">No Reachable Contacts Subtext</div>
+          <!-- Show when the user has downloaded contacts but there are none.-->
+          <template is="dom-if" if="[[inContactsState_(contactsState,
+                                      ContactsState.ZERO_CONTACTS)]]">
+            <div id="noContactsContainer" class="contacts-section">
+              <div class="cr-title-text">
+                $i18n{nearbyShareContactVisibilityNoContactsTitle}
+              </div>
+              <div class="cr-secondary-text">
+                $i18n{nearbyShareContactVisibilityNoContactsSubtitle}
+              </div>
+            </div>
+          </template>
+
+          <!-- Shown when contacts are currently being downloaded. -->
+          <template is="dom-if" if="[[inContactsState_(contactsState,
+                                      ContactsState.PENDING)]]">
+            <div id="contactsPending" class="contacts-section">
+              TBD: Contacts are downloading please wait...
+            </div>
+          </template>
+
+          <!-- Shown when contacts download has failed. -->
+          <template is="dom-if" if="[[inContactsState_(contactsState,
+                                      ContactsState.FAILED)]]">
+            <div id="contactsFailed" class="contacts-section">
+              <div>
+                TBD: Contact download failed.
+                Please check your internet connection.
+              </div>
+              <cr-button id="contactRetryButton" on-click="downloadContacts_">
+                Retry
+              </cr-button>
             </div>
           </template>
         </div>

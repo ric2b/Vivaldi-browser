@@ -17,6 +17,7 @@ constexpr SkColor kHUDDefaultColor =
     SkColorSetARGB(kHUDAlpha, 0xFF, 0xB2, 0x66);
 
 constexpr SkColor kHUDBackground = SkColorSetARGB(kHUDAlpha, 17, 17, 17);
+constexpr SkColor kHUDLegendBackground = kHUDBackground;
 
 // Radius of rounded corners for tabs.
 // Must be be divisible by 3 to make kTabOverlayWidth integer.
@@ -36,6 +37,9 @@ constexpr int kHUDInset = 5;
 // Defines both the pixel width of the graphs and the amount of data stored
 // in each graph ring buffer.
 static constexpr size_t kDefaultGraphWidth = 190;
+
+// Grid takes 1 pixel around, inset graph.
+constexpr int kGridLineWidth = 1;
 
 // HUD display modes.
 enum class DisplayMode {

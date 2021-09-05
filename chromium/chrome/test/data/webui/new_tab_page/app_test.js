@@ -42,15 +42,13 @@ suite('NewTabPageAppTest', () => {
     testProxy.handler.setResultFor('getBackgroundCollections', Promise.resolve({
       collections: [],
     }));
-    testProxy.handler.setResultFor('getChromeThemes', Promise.resolve({
-      chromeThemes: [],
-    }));
     testProxy.handler.setResultFor('getDoodle', Promise.resolve({
       doodle: null,
     }));
     testProxy.handler.setResultFor('getOneGoogleBarParts', Promise.resolve({
       parts: null,
     }));
+    testProxy.handler.setResultFor('getPromo', Promise.resolve({promo: null}));
     testProxy.setResultMapperFor('matchMedia', () => ({
                                                  addListener() {},
                                                  removeListener() {},
@@ -243,7 +241,7 @@ suite('NewTabPageAppTest', () => {
     test(`setting non-default theme ${allows} doodle`, async function() {
       // Arrange.
       const theme = createTheme();
-      theme.type = newTabPage.mojom.ThemeType.kChrome;
+      theme.isDefault = false;
 
       // Act.
       testProxy.callbackRouterRemote.setTheme(theme);
@@ -398,6 +396,38 @@ suite('NewTabPageAppTest', () => {
     assertTrue(app.$.mostVisited.hasAttribute('use-title-pill'));
   });
 
+  test('can show promo with browser command', async () => {
+    const testProxy = PromoBrowserCommandProxy.getInstance();
+    testProxy.handler = TestBrowserProxy.fromClass(
+        promoBrowserCommand.mojom.CommandHandlerRemote);
+    testProxy.handler.setResultFor(
+        'canShowPromoWithCommand', Promise.resolve({canShow: true}));
+
+    const commandId = 123;  // Unsupported command.
+    window.dispatchEvent(new MessageEvent('message', {
+      data: {
+        frameType: 'one-google-bar',
+        messageType: 'can-show-promo-with-browser-command',
+        commandId,
+      },
+      source: window,
+      origin: window.origin,
+    }));
+
+    // Make sure the command is sent to the browser.
+    const expectedCommandId =
+        await testProxy.handler.whenCalled('canShowPromoWithCommand');
+    // Unsupported commands get resolved to the default command before being
+    // sent to the browser.
+    assertEquals(
+        promoBrowserCommand.mojom.Command.kUnknownCommand, expectedCommandId);
+
+    // Make sure the promo frame gets notified whether the promo can be shown.
+    const {data} = await eventToPromise('message', window);
+    assertEquals('can-show-promo-with-browser-command', data.messageType);
+    assertTrue(data[commandId]);
+  });
+
   test('executes promo browser command', async () => {
     const testProxy = PromoBrowserCommandProxy.getInstance();
     testProxy.handler = TestBrowserProxy.fromClass(
@@ -441,28 +471,89 @@ suite('NewTabPageAppTest', () => {
       });
     });
 
-    test('modules appended to page', async () => {
+    [true, false].forEach(visible => {
+      test(`modules appended to page if visibility ${visible}`, async () => {
+        // Act.
+        moduleResolver.resolve([
+          {
+            id: 'foo',
+            element: document.createElement('div'),
+            title: 'Foo Title',
+          },
+          {
+            id: 'bar',
+            element: document.createElement('div'),
+            title: 'Bar Title',
+          }
+        ]);
+        $$(app, 'ntp-middle-slot-promo')
+            .dispatchEvent(new Event(
+                'ntp-middle-slot-promo-loaded',
+                {bubbles: true, composed: true}));
+        testProxy.callbackRouterRemote.setModulesVisible(visible);
+        await flushTasks();  // Wait for module descriptor resolution.
+
+        // Assert.
+        const modules = app.shadowRoot.querySelectorAll('ntp-module-wrapper');
+        assertEquals(2, modules.length);
+        assertEquals(
+            visible ? 1 : 0,
+            testProxy.handler.getCallCount('onModulesRendered'));
+        assertEquals(1, testProxy.handler.getCallCount('updateModulesVisible'));
+      });
+    });
+
+    test('modules can be dismissed and restored', async () => {
+      // Arrange.
+      let dismissCalled = false;
+      let restoreCalled = false;
+
       // Act.
-      moduleResolver.resolve([
-        {
-          id: 'foo',
-          name: 'Foo',
-          element: document.createElement('div'),
-          title: 'Foo Title',
-        },
-        {
-          id: 'bar',
-          name: 'Bar',
-          element: document.createElement('div'),
-          title: 'Bar Title',
+      moduleResolver.resolve([{
+        id: 'foo',
+        element: document.createElement('div'),
+        title: 'Foo Title',
+        actions: {
+          dismiss: () => {
+            dismissCalled = true;
+            return 'Foo was removed';
+          },
+          restore: () => {
+            restoreCalled = true;
+          },
         }
-      ]);
+      }]);
       await flushTasks();  // Wait for module descriptor resolution.
-      $$(app, '#modules').render();
 
       // Assert.
       const modules = app.shadowRoot.querySelectorAll('ntp-module-wrapper');
-      assertEquals(2, modules.length);
+      assertEquals(1, modules.length);
+      assertNotStyle($$(modules[0], '#dismissButton'), 'display', 'none');
+      assertFalse($$(app, '#dismissModuleToast').open);
+
+      // Act.
+      $$(modules[0], '#dismissButton').click();
+      await flushTasks();
+
+      // Assert.
+      assertTrue($$(app, '#dismissModuleToast').open);
+      assertEquals(
+          'Foo was removed',
+          $$(app, '#dismissModuleToastMessage').textContent.trim());
+      assertNotStyle($$(app, '#undoDismissModuleButton'), 'display', 'none');
+      assertTrue(dismissCalled);
+      assertEquals(
+          'foo', await testProxy.handler.whenCalled('onDismissModule'));
+
+      // Act.
+      $$(app, '#undoDismissModuleButton').click();
+      await flushTasks();
+
+      // Assert.
+      assertFalse($$(app, '#dismissModuleToast').open);
+      assertTrue(restoreCalled);
+      assertEquals(
+          'foo', await testProxy.handler.whenCalled('onRestoreModule'));
     });
   });
 });

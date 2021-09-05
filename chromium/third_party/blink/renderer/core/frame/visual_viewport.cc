@@ -178,7 +178,7 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
     if (scale_ != 1.f)
       state.transform_and_origin = {TransformationMatrix().Scale(scale_)};
     state.flags.in_subtree_of_page_scale = false;
-    state.direct_compositing_reasons = CompositingReason::kWillChangeTransform;
+    state.direct_compositing_reasons = CompositingReason::kViewport;
     state.compositor_element_id = page_scale_element_id_;
 
     if (!page_scale_node_) {
@@ -259,7 +259,7 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
     TransformPaintPropertyNode::State state{
         FloatSize(-scroll_position.Width(), -scroll_position.Height())};
     state.scroll = scroll_node_;
-    state.direct_compositing_reasons = CompositingReason::kWillChangeTransform;
+    state.direct_compositing_reasons = CompositingReason::kViewport;
     if (!scroll_translation_node_) {
       scroll_translation_node_ = TransformPaintPropertyNode::Create(
           *page_scale_node_, std::move(state));
@@ -325,7 +325,7 @@ PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
   parent_property_tree_state_ =
       PropertyTreeStateOrAlias(*transform_parent, *clip_parent, *effect_parent);
 
-  if (change == PaintPropertyChangeType::kNodeAddedOrRemoved)
+  if (change == PaintPropertyChangeType::kNodeAddedOrRemoved && MainFrame())
     MainFrame()->View()->SetVisualViewportNeedsRepaint();
 
   return change;
@@ -571,9 +571,8 @@ void VisualViewport::CreateLayers() {
   if (!GetPage().GetSettings().GetAcceleratedCompositingEnabled())
     return;
 
-  DCHECK(!scrollbar_layer_horizontal_ && !scrollbar_layer_vertical_);
-  DCHECK(MainFrame());
-  DCHECK(MainFrame()->GetDocument());
+  DCHECK(!scrollbar_layer_horizontal_);
+  DCHECK(!scrollbar_layer_vertical_);
 
   needs_paint_property_update_ = true;
 
@@ -588,7 +587,9 @@ void VisualViewport::CreateLayers() {
   LayerForScrollingDidChange(coordinator->GetCompositorAnimationTimeline());
 
   InitializeScrollbars();
-  coordinator->UpdateCompositorScrollOffset(*MainFrame(), *this);
+
+  if (MainFrame())
+    coordinator->UpdateCompositorScrollOffset(*MainFrame(), *this);
 }
 
 void VisualViewport::InitializeScrollbars() {
@@ -632,7 +633,9 @@ void VisualViewport::UpdateScrollbarLayer(ScrollbarOrientation orientation) {
     int thumb_thickness = theme.ThumbThickness(scale);
     int scrollbar_margin = theme.ScrollbarMargin(scale);
     cc::ScrollbarOrientation cc_orientation =
-        orientation == kHorizontalScrollbar ? cc::HORIZONTAL : cc::VERTICAL;
+        orientation == kHorizontalScrollbar
+            ? cc::ScrollbarOrientation::HORIZONTAL
+            : cc::ScrollbarOrientation::VERTICAL;
     scrollbar_layer = cc::SolidColorScrollbarLayer::Create(
         cc_orientation, thumb_thickness, scrollbar_margin,
         /*is_left_side_vertical_scrollbar*/ false);
@@ -833,7 +836,7 @@ scoped_refptr<base::SingleThreadTaskRunner> VisualViewport::GetTimerTaskRunner()
   return MainFrame()->GetTaskRunner(TaskType::kInternalDefault);
 }
 
-WebColorScheme VisualViewport::UsedColorScheme() const {
+ColorScheme VisualViewport::UsedColorScheme() const {
   if (LocalFrame* main_frame = MainFrame()) {
     if (Document* main_document = main_frame->GetDocument())
       return main_document->GetLayoutView()->StyleRef().UsedColorScheme();

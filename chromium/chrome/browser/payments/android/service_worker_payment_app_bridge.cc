@@ -26,6 +26,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/installed_payment_apps_finder.h"
 #include "content/public/browser/payment_app_provider.h"
+#include "content/public/browser/payment_app_provider_util.h"
 #include "content/public/browser/web_contents.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/blink/public/mojom/payments/payment_app.mojom.h"
@@ -120,14 +121,33 @@ static void JNI_ServiceWorkerPaymentAppBridge_GetServiceWorkerPaymentAppsInfo(
 
 static void JNI_ServiceWorkerPaymentAppBridge_OnClosingPaymentAppWindow(
     JNIEnv* env,
-    const JavaParamRef<jobject>& jweb_contents,
+    const JavaParamRef<jobject>& payment_request_jweb_contents,
     jint reason) {
-  content::WebContents* web_contents =
-      content::WebContents::FromJavaWebContents(jweb_contents);
-  DCHECK(web_contents);  // Verified in Java before invoking this function.
-  content::PaymentAppProvider::GetInstance()->OnClosingOpenedWindow(
-      web_contents,
-      static_cast<payments::mojom::PaymentEventResponseType>(reason));
+  content::WebContents* payment_request_web_contents =
+      content::WebContents::FromJavaWebContents(payment_request_jweb_contents);
+  DCHECK(payment_request_web_contents);  // Verified in Java before invoking
+                                         // this function.
+  content::PaymentAppProvider::GetOrCreateForWebContents(
+      payment_request_web_contents)
+      ->OnClosingOpenedWindow(
+          static_cast<payments::mojom::PaymentEventResponseType>(reason));
+}
+
+static void JNI_ServiceWorkerPaymentAppBridge_OnOpeningPaymentAppWindow(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& payment_request_jweb_contents,
+    const JavaParamRef<jobject>& payment_handler_jweb_contents) {
+  content::WebContents* payment_request_web_contents =
+      content::WebContents::FromJavaWebContents(payment_request_jweb_contents);
+  content::WebContents* payment_handler_web_contents =
+      content::WebContents::FromJavaWebContents(payment_handler_jweb_contents);
+  DCHECK(payment_request_web_contents);  // Verified in Java before invoking
+                                         // this function.
+  DCHECK(payment_handler_web_contents);  // Verified in Java before invoking
+                                         // this function.
+  content::PaymentAppProvider::GetOrCreateForWebContents(
+      payment_request_web_contents)
+      ->SetOpenedWindow(payment_handler_web_contents);
 }
 
 static jlong
@@ -138,7 +158,6 @@ JNI_ServiceWorkerPaymentAppBridge_GetSourceIdForPaymentAppFromScope(
   // payment app associated with this scope. Since this getter is called inside
   // PaymentApp::getUkmSourceId() function which in turn gets called for the
   // invoked app inside PaymentRequestImpl::openPaymentHandlerWindowInternal.
-  return content::PaymentAppProvider::GetInstance()
-      ->GetSourceIdForPaymentAppFromScope(
-          url::GURLAndroid::ToNativeGURL(env, jscope).get()->GetOrigin());
+  return content::PaymentAppProviderUtil::GetSourceIdForPaymentAppFromScope(
+      url::GURLAndroid::ToNativeGURL(env, jscope).get()->GetOrigin());
 }

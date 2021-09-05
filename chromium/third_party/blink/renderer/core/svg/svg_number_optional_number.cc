@@ -89,8 +89,8 @@ void SVGNumberOptionalNumber::SetInitial(unsigned value) {
   second_number_->SetInitial(value);
 }
 
-void SVGNumberOptionalNumber::Add(SVGPropertyBase* other,
-                                  SVGElement* context_element) {
+void SVGNumberOptionalNumber::Add(const SVGPropertyBase* other,
+                                  const SVGElement* context_element) {
   auto* other_number_optional_number = To<SVGNumberOptionalNumber>(other);
   first_number_->Add(other_number_optional_number->FirstNumber(),
                      context_element);
@@ -99,30 +99,30 @@ void SVGNumberOptionalNumber::Add(SVGPropertyBase* other,
 }
 
 void SVGNumberOptionalNumber::CalculateAnimatedValue(
-    const SVGAnimateElement& animation_element,
+    const SMILAnimationEffectParameters& parameters,
     float percentage,
     unsigned repeat_count,
-    SVGPropertyBase* from,
-    SVGPropertyBase* to,
-    SVGPropertyBase* to_at_end_of_duration,
-    SVGElement* context_element) {
+    const SVGPropertyBase* from,
+    const SVGPropertyBase* to,
+    const SVGPropertyBase* to_at_end_of_duration,
+    const SVGElement* context_element) {
   auto* from_number = To<SVGNumberOptionalNumber>(from);
   auto* to_number = To<SVGNumberOptionalNumber>(to);
   auto* to_at_end_of_duration_number =
       To<SVGNumberOptionalNumber>(to_at_end_of_duration);
 
   first_number_->CalculateAnimatedValue(
-      animation_element, percentage, repeat_count, from_number->FirstNumber(),
+      parameters, percentage, repeat_count, from_number->FirstNumber(),
       to_number->FirstNumber(), to_at_end_of_duration_number->FirstNumber(),
       context_element);
   second_number_->CalculateAnimatedValue(
-      animation_element, percentage, repeat_count, from_number->SecondNumber(),
+      parameters, percentage, repeat_count, from_number->SecondNumber(),
       to_number->SecondNumber(), to_at_end_of_duration_number->SecondNumber(),
       context_element);
 }
 
-float SVGNumberOptionalNumber::CalculateDistance(SVGPropertyBase* other,
-                                                 SVGElement*) {
+float SVGNumberOptionalNumber::CalculateDistance(const SVGPropertyBase* other,
+                                                 const SVGElement*) const {
   // FIXME: Distance calculation is not possible for SVGNumberOptionalNumber
   // right now. We need the distance for every single value.
   return -1;

@@ -448,6 +448,10 @@ bool WebViewInternalExecuteCodeFunction::ShouldInsertCSS() const {
   return false;
 }
 
+bool WebViewInternalExecuteCodeFunction::ShouldRemoveCSS() const {
+  return false;
+}
+
 bool WebViewInternalExecuteCodeFunction::CanExecuteScriptOnPage(
     std::string* error) {
   return true;

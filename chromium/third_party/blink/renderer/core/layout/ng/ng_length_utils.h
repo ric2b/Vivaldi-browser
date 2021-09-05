@@ -318,8 +318,17 @@ MinMaxSizes ComputeMinMaxBlockSize(
     const LayoutUnit* opt_percentage_resolution_block_size_for_min_max =
         nullptr);
 
+MinMaxSizes ComputeTransferredMinMaxInlineSizes(
+    const LogicalSize& ratio,
+    const MinMaxSizes& block_min_max,
+    const NGBoxStrut& border_padding,
+    const EBoxSizing sizing);
+
 // Computes the transferred min/max inline sizes from the min/max block
 // sizes and the aspect ratio.
+// This will compute the min/max block sizes for you, but it only works with
+// styles that have a LogicalAspectRatio. It doesn't work if the aspect ratio is
+// coming from a replaced element.
 MinMaxSizes ComputeMinMaxInlineSizesFromAspectRatio(
     const NGConstraintSpace&,
     const ComputedStyle&,
@@ -329,6 +338,7 @@ MinMaxSizes ComputeMinMaxInlineSizesFromAspectRatio(
 // Tries to compute the inline size of a node from its block size and
 // aspect ratio. If there is no aspect ratio or the block size is indefinite,
 // returns kIndefiniteSize.
+// This function will not do the right thing when used on a replaced element.
 // block_size can be specified to base the calculation off of that size
 // instead of calculating it.
 LayoutUnit ComputeInlineSizeFromAspectRatio(
@@ -377,6 +387,7 @@ CORE_EXPORT void ComputeReplacedSize(
 
 // Based on available inline size, CSS computed column-width, CSS computed
 // column-count and CSS used column-gap, return CSS used column-count.
+// If computed column-count is auto, pass 0 as |computed_count|.
 CORE_EXPORT int ResolveUsedColumnCount(int computed_count,
                                        LayoutUnit computed_size,
                                        LayoutUnit used_gap,
@@ -494,6 +505,7 @@ inline NGLineBoxStrut ComputeLinePadding(
                         style.IsFlippedLinesWritingMode());
 }
 
+// Compute the scrollbars and scrollbar gutters.
 CORE_EXPORT NGBoxStrut ComputeScrollbarsForNonAnonymous(const NGBlockNode&);
 
 inline NGBoxStrut ComputeScrollbars(const NGConstraintSpace& space,

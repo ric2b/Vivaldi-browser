@@ -1,0 +1,34 @@
+<style include="diagnostics-shared">
+</style>
+
+<diagnostics-card>
+  <div slot="title">
+    <div id="cardTitle">[[i18n('batteryTitle')]]</div>
+  </div>
+  <data-point slot="body" id="currentNow"
+    value="[[batteryChargeStatus_.current_now_milliamps]]">
+  </data-point>
+  <data-point slot="body" id="chargeFullDesign"
+    value="[[batteryHealth_.charge_full_design_milliamp_hours]]">
+  </data-point>
+  <data-point slot="body" id="chargeFullNow"
+    value="[[batteryChargeStatus_.charge_full_now_milliamp_hours]]">
+  </data-point>
+  <data-point slot="body" id="chargeNow"
+    value="[[batteryChargeStatus_.charge_now_milliamp_hours]]">
+  </data-point>
+  <data-point slot="body" id="powerTime"
+    value="[[batteryChargeStatus_.power_time]]">
+  </data-point>
+  <data-point slot="body" id="adapterStatus"
+    value="[[batteryChargeStatus_.power_adapter_status]]">
+  </data-point>
+  <data-point slot="body" id="cycleCount"
+    value="[[batteryHealth_.cycle_count]]">
+  </data-point>
+  <!-- TODO(joonbug): Localize once strings are confirmed -->
+  <percent-bar-chart slot="body" title="Remaining charge"
+    value="[[batteryChargeStatus_.charge_now_milliamp_hours]]"
+    max="[[batteryChargeStatus_.charge_full_now_milliamp_hours]]">
+  </percent-bar-chart>
+</diagnostics-card>

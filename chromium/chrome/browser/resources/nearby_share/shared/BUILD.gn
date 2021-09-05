@@ -5,11 +5,14 @@
 import("//third_party/closure_compiler/compile_js.gni")
 import("//tools/polymer/polymer.gni")
 import("//ui/webui/resources/tools/js_modulizer.gni")
+import("./nearby_shared.gni")
 
 js_type_check("closure_compile") {
   deps = [
+    ":nearby_contact_manager",
     ":nearby_contact_visibility",
     ":nearby_onboarding_page",
+    ":nearby_page_template",
     ":nearby_share_settings",
     ":nearby_share_settings_behavior",
     ":nearby_visibility_page",
@@ -21,20 +24,36 @@ js_type_check("closure_compile") {
       ]
 }
 
+js_library("nearby_contact_manager") {
+  deps = [
+    "//chrome/browser/ui/webui/nearby_share/public/mojom:mojom_js_library_for_compile",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
 js_library("nearby_contact_visibility") {
   deps = [
+    ":nearby_contact_manager",
     ":nearby_share_settings_behavior",
+    "//third_party/polymer/v1_0/components-chromium/iron-icon:iron-icon-extracted",
     "//third_party/polymer/v1_0/components-chromium/iron-list:iron-list-extracted",
     "//ui/webui/resources/cr_elements/cr_radio_button:cr_card_radio_button",
     "//ui/webui/resources/cr_elements/cr_radio_group:cr_radio_group",
+    "//ui/webui/resources/js:assert",
     "//ui/webui/resources/js:i18n_behavior",
   ]
 }
 
+js_library("nearby_page_template") {
+}
+
 js_library("nearby_onboarding_page") {
   deps = [
+    ":nearby_page_template",
     ":nearby_share_settings_behavior",
-    "//ui/webui/resources/cr_elements/cr_link_row",
+    "//third_party/polymer/v1_0/components-chromium/iron-icon:iron-icon-extracted",
+    "//ui/webui/resources/cr_elements/cr_input:cr_input",
+    "//ui/webui/resources/js:i18n_behavior",
   ]
 }
 
@@ -42,6 +61,7 @@ js_library("nearby_share_settings") {
   deps = [
     "//chrome/browser/ui/webui/nearby_share/public/mojom:mojom_js_library_for_compile",
     "//ui/webui/resources/js:cr",
+    "//url/mojom:url_mojom_gurl_js_library_for_compile",
   ]
 }
 
@@ -55,7 +75,9 @@ js_library("nearby_share_settings_behavior") {
 js_library("nearby_visibility_page") {
   deps = [
     ":nearby_contact_visibility",
+    ":nearby_page_template",
     ":nearby_share_settings_behavior",
+    "//ui/webui/resources/js:i18n_behavior",
   ]
 }
 
@@ -68,8 +90,10 @@ js_type_check("closure_compile_module") {
       ]
 
   deps = [
+    ":nearby_contact_manager.m",
     ":nearby_contact_visibility.m",
     ":nearby_onboarding_page.m",
+    ":nearby_page_template.m",
     ":nearby_share_settings.m",
     ":nearby_share_settings_behavior.m",
     ":nearby_visibility_page.m",
@@ -81,20 +105,32 @@ group("polymer3_elements") {
     ":modulize",
     ":nearby_contact_visibility_module",
     ":nearby_onboarding_page_module",
+    ":nearby_page_template_module",
     ":nearby_shared_icons_module",
     ":nearby_visibility_page_module",
     "//chrome/browser/ui/webui/nearby_share/public/mojom:mojom_js",
   ]
 }
 
+js_library("nearby_contact_manager.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/nearby_share/shared/nearby_contact_manager.m.js" ]
+  deps = [
+    "//chrome/browser/ui/webui/nearby_share/public/mojom:mojom_js_library_for_compile",
+    "//ui/webui/resources/js:cr.m",
+  ]
+  extra_deps = [ ":modulize" ]
+}
+
 js_library("nearby_contact_visibility.m") {
   sources = [ "$root_gen_dir/chrome/browser/resources/nearby_share/shared/nearby_contact_visibility.m.js" ]
   deps = [
+    ":nearby_contact_manager.m",
     ":nearby_share_settings_behavior.m",
     "//third_party/polymer/v3_0/components-chromium/iron-list:iron-list",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
     "//ui/webui/resources/cr_elements/cr_radio_button:cr_card_radio_button.m",
     "//ui/webui/resources/cr_elements/cr_radio_group:cr_radio_group.m",
+    "//ui/webui/resources/js:assert.m",
     "//ui/webui/resources/js:i18n_behavior.m",
   ]
   extra_deps = [ ":nearby_contact_visibility_module" ]
@@ -103,11 +139,18 @@ js_library("nearby_contact_visibility.m") {
 js_library("nearby_onboarding_page.m") {
   sources = [ "$root_gen_dir/chrome/browser/resources/nearby_share/shared/nearby_onboarding_page.m.js" ]
   deps = [
+    ":nearby_page_template.m",
     ":nearby_share_settings_behavior.m",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
     "//ui/webui/resources/cr_elements/cr_link_row:cr_link_row.m",
+    "//ui/webui/resources/js:i18n_behavior.m",
   ]
   extra_deps = [ ":nearby_onboarding_page_module" ]
+}
+
+js_library("nearby_page_template.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/nearby_share/shared/nearby_page_template.m.js" ]
+  extra_deps = [ ":nearby_page_template_module" ]
 }
 
 js_library("nearby_share_settings_behavior.m") {
@@ -124,6 +167,7 @@ js_library("nearby_share_settings.m") {
   deps = [
     "//chrome/browser/ui/webui/nearby_share/public/mojom:mojom_js_library_for_compile",
     "//ui/webui/resources/js:cr.m",
+    "//url/mojom:url_mojom_gurl_js_library_for_compile",
   ]
   extra_deps = [ ":modulize" ]
 }
@@ -132,20 +176,13 @@ js_library("nearby_visibility_page.m") {
   sources = [ "$root_gen_dir/chrome/browser/resources/nearby_share/shared/nearby_visibility_page.m.js" ]
   deps = [
     ":nearby_contact_visibility.m",
+    ":nearby_page_template.m",
     ":nearby_share_settings_behavior.m",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:i18n_behavior.m",
   ]
   extra_deps = [ ":nearby_visibility_page_module" ]
 }
-
-nearby_shared_auto_imports = [ "chrome/browser/resources/nearby_share/shared/nearby_share_settings_behavior.html|NearbyShareSettingsBehavior,NearbySettings" ]
-nearby_shared_namespace_rewrites = [
-  "nearby_share.NearbySettings|NearbySettings",
-  "nearby_share.NearbyShareSettingsBehavior|NearbyShareSettingsBehavior",
-  "nearby_share.getNearbyShareSettings|getNearbyShareSettings",
-  "nearby_share.observeNearbyShareSettings|observeNearbyShareSettings",
-  "nearby_share.setNearbyShareSettingsForTesting|setNearbyShareSettingsForTesting",
-]
 
 polymer_modulizer("nearby_contact_visibility") {
   js_file = "nearby_contact_visibility.js"
@@ -158,6 +195,14 @@ polymer_modulizer("nearby_contact_visibility") {
 polymer_modulizer("nearby_onboarding_page") {
   js_file = "nearby_onboarding_page.js"
   html_file = "nearby_onboarding_page.html"
+  html_type = "dom-module"
+  auto_imports = nearby_shared_auto_imports
+  namespace_rewrites = nearby_shared_namespace_rewrites
+}
+
+polymer_modulizer("nearby_page_template") {
+  js_file = "nearby_page_template.js"
+  html_file = "nearby_page_template.html"
   html_type = "dom-module"
   auto_imports = nearby_shared_auto_imports
   namespace_rewrites = nearby_shared_namespace_rewrites
@@ -179,6 +224,7 @@ polymer_modulizer("nearby_visibility_page") {
 
 js_modulizer("modulize") {
   input_files = [
+    "nearby_contact_manager.js",
     "nearby_share_settings.js",
     "nearby_share_settings_behavior.js",
   ]

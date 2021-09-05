@@ -46,12 +46,19 @@ import org.chromium.ui.resources.ResourceManager;
 
 import java.util.List;
 
+//Vivaldi
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
+import org.chromium.chrome.browser.toolbar.top.TabSwitcherActionMenuCoordinator;
+import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 import org.vivaldi.browser.common.VivaldiUtils;
+
+import android.view.Gravity;
+import android.view.View;
+import android.widget.FrameLayout;
 
 /**
  * This class handles managing which {@link StripLayoutHelper} is currently active and dispatches
@@ -109,27 +116,22 @@ public class StripLayoutHelperManager implements SceneOverlay {
     private final ChromeTabbedActivity mActivity;
     private float mViewportHeightOffset;
     private boolean mShouldHideOverlay;
+    private final Context mContext;
 
     private class TabStripEventHandler implements GestureHandler {
         @Override
         public void onDown(float x, float y, boolean fromMouse, int buttons) {
             // Note(david@vivaldi.com): We need to manipulate the y value of the event when the
             // toolbar is at the bottom in order to handle the input events.
-            if (ChromeApplication.isVivaldi()) {
-                if (mModelSelectorButton.onDown(x, mViewportHeightOffset - y)) return;
-                getActiveStripLayoutHelper().onDown(
-                        time(), x, mViewportHeightOffset - y, fromMouse, buttons);
-            } else {
+            if (ChromeApplication.isVivaldi()) y = getValueOfY(y);
             if (mModelSelectorButton.onDown(x, y)) return;
             getActiveStripLayoutHelper().onDown(time(), x, y, fromMouse, buttons);
-            }
         }
 
         @Override
         public void onUpOrCancel() {
-            // Note(david@vivaldi.com): We are abusing the |mModelSelectorButton| to create a new tab.
             if (ChromeApplication.isVivaldi())
-                if (mModelSelectorButton.onUpOrCancel()) createNewTab();
+                if (mModelSelectorButton.onUpOrCancel()) return;
             else
             if (mModelSelectorButton.onUpOrCancel() && mTabModelSelector != null) {
                 getActiveStripLayoutHelper().finishAnimation();
@@ -148,17 +150,13 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
         @Override
         public void click(float x, float y, boolean fromMouse, int buttons) {
+            // Vivaldi - consider the offset of y when the toolbar is at the bottom
+            if (ChromeApplication.isVivaldi()) y = getValueOfY(y);
             long time = time();
             if (mModelSelectorButton.click(x, y)) {
                 mModelSelectorButton.handleClick(time);
                 return;
             }
-            // Note(david@vivaldi.com): Take the viewport offset into account when toolbar is at the
-            // bottom.
-            if(!VivaldiUtils.isTopToolbarOn()) {
-                getActiveStripLayoutHelper().click(
-                        time(), x, mViewportHeightOffset - y, fromMouse, buttons);
-            } else
             getActiveStripLayoutHelper().click(time(), x, y, fromMouse, buttons);
         }
 
@@ -169,6 +167,13 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
         @Override
         public void onLongPress(float x, float y) {
+            /** Vivaldi - Handling long click event on + button in tab strip **/
+            if (ChromeApplication.isVivaldi()) {
+                if (isNewTabButtonClicked(x, y)) {
+                    showTabSwitcherPopupMenu();
+                    return;
+                }
+            }
             getActiveStripLayoutHelper().onLongPress(time(), x, y);
         }
 
@@ -202,6 +207,8 @@ public class StripLayoutHelperManager implements SceneOverlay {
         mNormalHelper = new StripLayoutHelper(context, updateHost, renderHost, false);
         mIncognitoHelper = new StripLayoutHelper(context, updateHost, renderHost, true);
 
+        // Vivaldi - Note: We are abusing the |mModelSelectorButton| to handle new tab + button
+        // click events in tab strip.
         CompositorOnClickHandler selectorClickHandler = new CompositorOnClickHandler() {
             @Override
             public void onClick(long time) {
@@ -244,6 +251,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
         // Vivaldi
         mActivity = (ChromeTabbedActivity)context;
         mShouldHideOverlay = false;
+        mContext = context;
     }
 
     /**
@@ -674,5 +682,38 @@ public class StripLayoutHelperManager implements SceneOverlay {
     public boolean isSceneOffScreen() {
         return mActivity.getBrowserControlsManager().areBrowserControlsAtMinHeight()
                 || !VivaldiUtils.isTabStripOn();
+    }
+
+    /** Vivaldi **/
+    private boolean isNewTabButtonClicked(float x, float y) {
+        if (!VivaldiUtils.isTopToolbarOn())
+            y = mViewportHeightOffset - y; // consider the offset in case of bottom address bar
+
+        return mModelSelectorButton.checkClicked(x, y);
+    }
+
+    /** Vivaldi - Handling long click event on + button in tab strip **/
+    private void showTabSwitcherPopupMenu() {
+        TabSwitcherActionMenuCoordinator menu = new TabSwitcherActionMenuCoordinator();
+        View anchorView = mActivity.findViewById(R.id.tab_switcher_menu_helper_button);
+        // Note(nagamani@vivaldi.com): We are using dummy button with 0dp width and 0dp height as
+        // anchorView
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(0, 0);
+        params.gravity = Gravity.TOP | Gravity.END;
+
+        // Note(nagamani@vivaldi.com): change layout gravity according to address bar location
+        if (!VivaldiUtils.isTopToolbarOn()) {
+            params.gravity = Gravity.BOTTOM | Gravity.END;
+        }
+        anchorView.setLayoutParams(params);
+
+        menu.displayMenu(mContext, (ListMenuButton) anchorView, menu.buildMenuItems(),
+                (id) -> { mActivity.onOptionsItemSelected(id, null); });
+    }
+
+    /** Vivaldi - Function to return value of y with correct offset value **/
+    private float getValueOfY(float y) {
+        if (!VivaldiUtils.isTopToolbarOn()) y = mViewportHeightOffset - y;
+        return y;
     }
 }

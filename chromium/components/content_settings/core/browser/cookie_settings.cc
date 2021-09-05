@@ -40,10 +40,6 @@ CookieSettings::CookieSettings(
   content_settings_observer_.Add(host_content_settings_map_.get());
   pref_change_registrar_.Init(prefs);
   pref_change_registrar_.Add(
-      prefs::kBlockThirdPartyCookies,
-      base::BindRepeating(&CookieSettings::OnCookiePreferencesChanged,
-                          base::Unretained(this)));
-  pref_change_registrar_.Add(
       prefs::kCookieControlsMode,
       base::BindRepeating(&CookieSettings::OnCookiePreferencesChanged,
                           base::Unretained(this)));
@@ -64,9 +60,6 @@ void CookieSettings::GetCookieSettings(
 
 void CookieSettings::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterBooleanPref(
-      prefs::kBlockThirdPartyCookies, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterIntegerPref(
       prefs::kCookieControlsMode,
       static_cast<int>(CookieControlsMode::kIncognitoOnly),
@@ -244,13 +237,9 @@ void CookieSettings::GetCookieSettingInternal(
 
 CookieSettings::~CookieSettings() = default;
 
-bool CookieSettings::IsCookieControlsEnabled() {
-#if !defined(OS_IOS)
-  if (pref_change_registrar_.prefs()->GetBoolean(
-          prefs::kBlockThirdPartyCookies)) {
-    return true;
-  }
-#endif
+bool CookieSettings::ShouldBlockThirdPartyCookiesInternal() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
 #if defined(OS_IOS)
   if (!base::FeatureList::IsEnabled(kImprovedCookieControls))
     return false;
@@ -284,10 +273,7 @@ void CookieSettings::OnContentSettingChanged(
 void CookieSettings::OnCookiePreferencesChanged() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  bool new_block_third_party_cookies =
-      pref_change_registrar_.prefs()->GetBoolean(
-          prefs::kBlockThirdPartyCookies) ||
-      IsCookieControlsEnabled();
+  bool new_block_third_party_cookies = ShouldBlockThirdPartyCookiesInternal();
 
   // Safe to read |block_third_party_cookies_| without locking here because the
   // only place that writes to it is this method and it will always be run on

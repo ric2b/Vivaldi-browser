@@ -4,13 +4,26 @@
 
 #include "chrome/browser/sharesheet/sharesheet_action_cache.h"
 
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/sharesheet/share_action.h"
 #include "chrome/browser/sharesheet/sharesheet_types.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/nearby_sharing/sharesheet/nearby_share_action.h"
+#include "chrome/browser/sharesheet/drive_share_action.h"
+#endif
+
 namespace sharesheet {
 
-SharesheetActionCache::SharesheetActionCache() = default;
-// ShareActions will be initialised here by calling AddShareAction.
+SharesheetActionCache::SharesheetActionCache() {
+  // ShareActions will be initialised here by calling AddShareAction.
+#if defined(OS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(features::kNearbySharing)) {
+    AddShareAction(std::make_unique<NearbyShareAction>());
+  }
+  AddShareAction(std::make_unique<DriveShareAction>());
+#endif
+}
 
 SharesheetActionCache::~SharesheetActionCache() = default;
 
@@ -30,6 +43,17 @@ ShareAction* SharesheetActionCache::GetActionFromName(
     }
   }
   return nullptr;
+}
+
+bool SharesheetActionCache::HasVisibleActions(
+    const apps::mojom::IntentPtr& intent,
+    bool contains_google_document) {
+  for (auto& action : share_actions_) {
+    if (action->ShouldShowAction(intent, contains_google_document)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void SharesheetActionCache::AddShareAction(

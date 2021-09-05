@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Прикажи извор оквира</translation>
 <translation id="1165039591588034296">Грешка</translation>
 <translation id="1175364870820465910">&amp;Одштампај...</translation>
-<translation id="1177863135347784049">Прилагођено</translation>
 <translation id="1181037720776840403">Уклони</translation>
 <translation id="1187722533808055681">Активирања из стања мировања</translation>
 <translation id="119944043368869598">Обриши све</translation>
 <translation id="1221825588892235038">Само изабрани садржај</translation>
 <translation id="1244303850296295656">Грешка проширења</translation>
+<translation id="125220115284141797">Подразумевано</translation>
 <translation id="1274977772557788323">Подешавања складишта Adobe Flash Player-а</translation>
 <translation id="1297175357211070620">Одредиште</translation>
 <translation id="1303101771013849280">HTML датотека са обележивачима</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Нови прозор</translation>
 <translation id="1725149567830788547">Прикажи &amp;контроле</translation>
 <translation id="1729533290416704613">Контролише и која страница ће се приказати када претражујете из траке адресе.</translation>
+<translation id="174123615272205933">Прилагођено</translation>
 <translation id="1744108098763830590">страница у позадини</translation>
 <translation id="176587472219019965">&amp;Нови прозор</translation>
 <translation id="1769104665586091481">Отвори везу у новом &amp;прозору</translation>
+<translation id="1779468444204342338">Минимално</translation>
 <translation id="1815083418640426271">Налепи као чист текст</translation>
 <translation id="1828901632669367785">Штампај помоћу системског дијалога...</translation>
 <translation id="1850508293116537636">Окрени у &amp;смеру кретања казаљке на сату</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Питај пре слања (препоручено)</translation>
 <translation id="241082044617551207">Непозната додатна компонента</translation>
 <translation id="2423578206845792524">&amp;Сачувај слику као...</translation>
-<translation id="2436707352762155834">Минимално</translation>
 <translation id="2439110203301358333">Други програм на рачунару је додао проширење које може да промени начин на који Vivaldi функционише.</translation>
 <translation id="2445081178310039857">Основни директоријум проширења је обавезан.</translation>
 <translation id="2470702053775288986">Неподржана проширења су онемогућена</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Претприказивање: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Микрофон</translation>
 <translation id="3241680850019875542">Изаберите основни директоријум проширења који ћете упаковати. Да бисте ажурирали проширење, изаберите и датотеку приватног кључа за поновно коришћење.</translation>
+<translation id="3266179261140759675">Блокирај слање и примање података са затворених сајтова</translation>
 <translation id="3280237271814976245">&amp;Сачувај као...</translation>
 <translation id="3285322247471302225">Нова &amp;картица</translation>
 <translation id="3288047731229977326">Проширења покренута у режиму програмера могу да нашкоде рачунару. Ако нисте програмер, требало би да онемогућите ова проширења покренута у режиму програмера да бисте се заштитили.</translation>
@@ -245,12 +247,11 @@
 <translation id="5039804452771397117">Дозволи</translation>
 <translation id="5057110919553308744">Када кликнете на проширење</translation>
 <translation id="5063480226653192405">Искоришћеност</translation>
-<translation id="5068918910148307423">Не дозволи недавно затвореним сајтовима да заврше слање и примање података</translation>
 <translation id="5116628073786783676">Са&amp;чувај звучни запис као...</translation>
 <translation id="5143374789336132547">Проширење „<ph name="EXTENSION_NAME" />“ је променило страницу која се приказује када кликнете на дугме почетне странице.</translation>
 <translation id="5154108062446123722">Напредна подешавања за <ph name="PRINTING_DESTINATION" /></translation>
 <translation id="5171343362375269016">Замењена меморија</translation>
-<translation id="5233019165164992427">NaCl порт за отклањање грешака</translation>
+<translation id="5233019165164992427">Порт за отклањање грешака NaCl</translation>
 <translation id="5233231016133573565">ID процеса</translation>
 <translation id="5233736638227740678">&amp;Налепи</translation>
 <translation id="5256861893479663409">На свим сајтовима</translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Проширење „<ph name="EXTENSION_NAME" />“ је променило страницу која се приказује када претражујете из траке адресе.</translation>
 <translation id="5360150013186312835">Прикажи на траци алата</translation>
 <translation id="5362741141255528695">Изаберите датотеку приватног кључа.</translation>
+<translation id="536638840841140142">Ниједна</translation>
 <translation id="5370819323174483825">Поново &amp;учитај</translation>
 <translation id="5398572795982417028">Превелика референца за странице, ограничење је <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Настави преузимање</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Пријемник: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Инсталирао администратор</translation>
 <translation id="7685049629764448582">JavaScript меморија</translation>
-<translation id="7701040980221191251">Ниједна</translation>
 <translation id="7701869757853594372">USER регулатори</translation>
 <translation id="7704305437604973648">Задатак</translation>
 <translation id="7710568461918838723">Пре&amp;баци...</translation>

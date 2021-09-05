@@ -30,7 +30,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/web_preferences.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -45,6 +44,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/network/public/cpp/cross_origin_read_blocking.h"
@@ -53,6 +53,7 @@
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 
 namespace content {
@@ -1656,10 +1657,9 @@ class CrossSiteDocumentBlockingServiceWorkerTest : public ContentBrowserTest {
     // Sanity check of test setup - the 2 https servers should be cross-site
     // (the second server should have a different hostname because of the call
     // to SetSSLConfig with CERT_COMMON_NAME_IS_DOMAIN argument).
-    ASSERT_FALSE(SiteInstanceImpl::IsSameSite(
-        IsolationContext(shell()->web_contents()->GetBrowserContext()),
+    ASSERT_FALSE(net::registry_controlled_domains::SameDomainOrHost(
         GetURLOnServiceWorkerServer("/"), GetURLOnCrossOriginServer("/"),
-        true /* should_use_effective_urls */));
+        net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES));
   }
 
   GURL GetURLOnServiceWorkerServer(const std::string& path) {

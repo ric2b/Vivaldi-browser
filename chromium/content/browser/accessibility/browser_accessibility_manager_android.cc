@@ -33,15 +33,11 @@ BrowserAccessibilityManagerAndroid::BrowserAccessibilityManagerAndroid(
   // The Java layer handles the root scroll offset.
   use_root_scroll_offsets_when_computing_bounds_ = false;
 
-  if (web_contents_accessibility_)
-    web_contents_accessibility_->set_root_manager(this);
   Initialize(initial_tree);
 }
 
-BrowserAccessibilityManagerAndroid::~BrowserAccessibilityManagerAndroid() {
-  if (web_contents_accessibility_)
-    web_contents_accessibility_->set_root_manager(nullptr);
-}
+BrowserAccessibilityManagerAndroid::~BrowserAccessibilityManagerAndroid() =
+    default;
 
 // static
 ui::AXTreeUpdate BrowserAccessibilityManagerAndroid::GetEmptyDocument() {
@@ -202,9 +198,17 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::SCROLL_VERTICAL_POSITION_CHANGED:
       wcax->HandleScrollPositionChanged(android_node->unique_id());
       break;
-    case ui::AXEventGenerator::Event::ALERT:
-    // An alert is a special case of live region. Fall through to the
-    // next case to handle it.
+    case ui::AXEventGenerator::Event::ALERT: {
+      // When an alertdialog is shown, we will announce the hint, which
+      // (should) contain the description set by the author. If it is
+      // empty, then we will try GetInnerText() as a fallback.
+      base::string16 text = android_node->GetHint();
+      if (text.empty())
+        text = android_node->GetInnerText();
+
+      wcax->AnnounceLiveRegionText(text);
+      break;
+    }
     case ui::AXEventGenerator::Event::LIVE_REGION_NODE_CHANGED: {
       // This event is fired when an object appears in a live region.
       // Speak its text.
@@ -231,6 +235,7 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
       break;
     case ui::AXEventGenerator::Event::ACCESS_KEY_CHANGED:
     case ui::AXEventGenerator::Event::ACTIVE_DESCENDANT_CHANGED:
+    case ui::AXEventGenerator::Event::ATK_TEXT_OBJECT_ATTRIBUTE_CHANGED:
     case ui::AXEventGenerator::Event::ATOMIC_CHANGED:
     case ui::AXEventGenerator::Event::BUSY_CHANGED:
     case ui::AXEventGenerator::Event::AUTO_COMPLETE_CHANGED:

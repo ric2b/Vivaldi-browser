@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ash/public/cpp/ash_features.h"
+#include "ash/public/cpp/media_notification_provider.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
@@ -35,9 +36,11 @@
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/login_screen_client.h"
 #include "chrome/browser/ui/ash/media_client_impl.h"
+#include "chrome/browser/ui/ash/media_notification_provider_impl.h"
 #include "chrome/browser/ui/ash/network/mobile_data_notifications.h"
 #include "chrome/browser/ui/ash/network/network_connect_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/network/network_portal_notification_controller.h"
+#include "chrome/browser/ui/ash/quick_answers/quick_answers_browser_client_impl.h"
 #include "chrome/browser/ui/ash/screen_orientation_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/session_controller_client_impl.h"
 #include "chrome/browser/ui/ash/system_tray_client.h"
@@ -122,6 +125,15 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   // Needed by AmbientController in ash.
   if (chromeos::features::IsAmbientModeEnabled())
     ambient_client_ = std::make_unique<AmbientClientImpl>();
+
+  if (chromeos::features::IsQuickAnswersEnabled()) {
+    quick_answers_browser_client_ =
+        std::make_unique<QuickAnswersBrowserClientImpl>();
+  }
+
+  media_notification_provider_ =
+      std::make_unique<MediaNotificationProviderImpl>();
+  ash::MediaNotificationProvider::Set(media_notification_provider_.get());
 
   ash_shell_init_ = std::make_unique<AshShellInit>();
 
@@ -247,6 +259,8 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   ambient_client_.reset();
 
   cast_config_controller_media_router_.reset();
+  media_notification_provider_.reset();
+  ash::MediaNotificationProvider::Set(nullptr);
   if (chromeos::NetworkConnect::IsInitialized())
     chromeos::NetworkConnect::Shutdown();
   network_connect_delegate_.reset();

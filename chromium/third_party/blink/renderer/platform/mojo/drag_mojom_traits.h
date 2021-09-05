@@ -10,18 +10,23 @@
 #include <string>
 
 #include "mojo/public/cpp/base/file_path_mojom_traits.h"
-#include "mojo/public/cpp/base/string16_mojom_traits.h"
 #include "mojo/public/cpp/bindings/array_traits_web_vector.h"
 #include "mojo/public/cpp/bindings/string_traits_wtf.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 #include "mojo/public/cpp/bindings/union_traits.h"
 #include "services/network/public/mojom/referrer_policy.mojom-forward.h"
-#include "third_party/blink/public/mojom/native_file_system/native_file_system_drag_drop_token.mojom-blink.h"
+#include "third_party/blink/public/mojom/file_system_access/native_file_system_drag_drop_token.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/drag.mojom-shared.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
 #include "third_party/blink/renderer/platform/mojo/kurl_mojom_traits.h"
+#include "third_party/blink/renderer/platform/mojo/string16_mojom_traits.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
+
+namespace base {
+template <typename T>
+class Optional;
+}
 
 namespace blink {
 template <typename T>
@@ -36,7 +41,8 @@ struct StructTraits<blink::mojom::DragItemStringDataView,
   static WTF::String string_type(blink::WebDragData::Item item);
   static WTF::String string_data(const blink::WebDragData::Item& item);
   static WTF::String title(const blink::WebDragData::Item& item);
-  static blink::KURL base_url(const blink::WebDragData::Item& item);
+  static base::Optional<blink::KURL> base_url(
+      const blink::WebDragData::Item& item);
   static bool Read(blink::mojom::DragItemStringDataView data,
                    blink::WebDragData::Item* out);
 };

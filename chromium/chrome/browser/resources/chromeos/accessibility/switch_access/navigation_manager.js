@@ -33,6 +33,14 @@ class NavigationManager {
   // =============== Static Methods ==============
 
   /**
+   * @param {!SAChildNode} node
+   * @return {boolean}
+   */
+  static currentGroupHasChild(node) {
+    return NavigationManager.instance.group_.children.includes(node);
+  }
+
+  /**
    * Enters |this.node_|.
    */
   static enterGroup() {
@@ -50,8 +58,6 @@ class NavigationManager {
 
   /**
    * Puts focus on the virtual keyboard, if the current node is a text input.
-   * TODO(crbug/946190): Handle the case where the user has not enabled the
-   *     onscreen keyboard.
    */
   static enterKeyboard() {
     const navigator = NavigationManager.instance;
@@ -140,7 +146,7 @@ class NavigationManager {
     if (!menuNode) {
       return;
     }
-    const menu = RootNodeWrapper.buildTree(menuNode);
+    const menu = BasicRootNode.buildTree(menuNode);
     NavigationManager.instance.jumpTo_(menu, false /* shouldExitMenu */);
   }
 
@@ -190,12 +196,11 @@ class NavigationManager {
       return;
     }
     const navigator = NavigationManager.instance;
-    const baseNode = node.automationNode;
-    if (!(node instanceof NodeWrapper) || !baseNode) {
+    if (!(node instanceof BasicNode)) {
       navigator.setNode_(node);
       return;
     }
-    if (!SwitchAccessPredicate.isWindow(baseNode)) {
+    if (!SwitchAccessPredicate.isWindow(node.automationNode)) {
       navigator.setNode_(node);
       return;
     }
@@ -203,18 +208,16 @@ class NavigationManager {
     if (!location) {
       // Closure compiler doesn't realize we already checked isValidAndVisible
       // before calling tryMoving, so we need to explicitly check location here
-      // so that RectHelper.center does not cause a closure error.
+      // so that RectUtil.center does not cause a closure error.
       NavigationManager.moveToValidNode();
       return;
     }
-    const center = RectHelper.center(location);
+    const center = RectUtil.center(location);
     // Check if the top center is visible as a proxy for occlusion. It's
     // possible that other parts of the window are occluded, but in Chrome we
     // can't drag windows off the top of the screen.
     navigator.desktop_.hitTestWithReply(center.x, location.top, (hitNode) => {
-      if (AutomationUtil.isDescendantOf(
-              hitNode,
-              /** @type {!AutomationNode} */ (baseNode))) {
+      if (AutomationUtil.isDescendantOf(hitNode, node.automationNode)) {
         navigator.setNode_(node);
       } else if (node.isValidAndVisible()) {
         NavigationManager.tryMoving(getNext(node), getNext, startingNode);
@@ -241,11 +244,8 @@ class NavigationManager {
     if (nodeIsValid && !(navigator.node_ instanceof BackButtonNode)) {
       // Our group has been invalidated. Move to navigator node to repair the
       // group stack.
-      const node = navigator.node_.automationNode;
-      if (node) {
-        navigator.moveTo_(node);
-        return;
-      }
+      navigator.moveTo_(navigator.node_.automationNode);
+      return;
     }
 
     // Make sure the menu isn't open.
@@ -360,8 +360,20 @@ class NavigationManager {
         this.desktop_, chrome.automation.EventType.FOCUS,
         this.onFocusChange_.bind(this));
 
+    // ARC++ fires SCROLL_POSITION_CHANGED.
     new RepeatedEventHandler(
         this.desktop_, chrome.automation.EventType.SCROLL_POSITION_CHANGED,
+        this.onScrollChange_.bind(this));
+
+    // Web and Views use AXEventGenerator, which fires
+    // separate horizontal and vertical events.
+    new RepeatedEventHandler(
+        this.desktop_,
+        chrome.automation.EventType.SCROLL_HORIZONTAL_POSITION_CHANGED,
+        this.onScrollChange_.bind(this));
+    new RepeatedEventHandler(
+        this.desktop_,
+        chrome.automation.EventType.SCROLL_VERTICAL_POSITION_CHANGED,
         this.onScrollChange_.bind(this));
 
     new RepeatedTreeChangeHandler(

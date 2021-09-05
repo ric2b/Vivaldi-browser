@@ -15,12 +15,12 @@
 #include "base/util/type_safety/strong_alias.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/credentials_filter.h"
 #include "components/password_manager/core/browser/hsts_query.h"
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
+#include "components/password_manager/core/browser/password_form_forward.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
@@ -90,8 +90,7 @@ enum SyncState {
 // environment.
 class PasswordManagerClient {
  public:
-  using CredentialsCallback =
-      base::OnceCallback<void(const autofill::PasswordForm*)>;
+  using CredentialsCallback = base::OnceCallback<void(const PasswordForm*)>;
   using ReauthSucceeded = util::StrongAlias<class ReauthSucceededTag, bool>;
 
   PasswordManagerClient() {}
@@ -141,12 +140,6 @@ class PasswordManagerClient {
   virtual void PromptUserToMovePasswordToAccount(
       std::unique_ptr<PasswordFormManagerForUI> form_to_move) = 0;
 
-  // Informs the embedder that the onboarding experience should be shown.
-  // This will also offer the ability to actually save the password.
-  // Returns true if both the onboarding and the saving prompt were displayed.
-  virtual bool ShowOnboarding(
-      std::unique_ptr<PasswordFormManagerForUI> form_to_save) = 0;
-
   // Informs the embedder that the user started typing a password and a password
   // prompt should be available on click on the omnibox icon.
   virtual void ShowManualFallbackForSaving(
@@ -169,7 +162,7 @@ class PasswordManagerClient {
   // displayed, returns false and does not call |callback|.
   // |callback| should be invoked with the chosen form.
   virtual bool PromptUserToChooseCredentials(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
+      std::vector<std::unique_ptr<PasswordForm>> local_forms,
       const url::Origin& origin,
       CredentialsCallback callback) = 0;
 
@@ -193,14 +186,14 @@ class PasswordManagerClient {
   // local credentials for the site. |origin| is a URL of the site the user was
   // auto signed in to.
   virtual void NotifyUserAutoSignin(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
+      std::vector<std::unique_ptr<PasswordForm>> local_forms,
       const url::Origin& origin) = 0;
 
   // Inform the embedder that automatic signin would have happened if the user
   // had been through the first-run experience to ensure their opt-in. |form|
   // contains the PasswordForm that would have been delivered.
   virtual void NotifyUserCouldBeAutoSignedIn(
-      std::unique_ptr<autofill::PasswordForm> form) = 0;
+      std::unique_ptr<PasswordForm> form) = 0;
 
   // Inform the embedder that the user signed in with a saved credential.
   // |submitted_manager| contains the form used and allows to move credentials.
@@ -215,7 +208,7 @@ class PasswordManagerClient {
   // Currently only implemented on Android.
   virtual void UpdateCredentialCache(
       const url::Origin& origin,
-      const std::vector<const autofill::PasswordForm*>& best_matches,
+      const std::vector<const PasswordForm*>& best_matches,
       bool is_blacklisted);
 
   // Called when a password is saved in an automated fashion. Embedder may
@@ -231,13 +224,13 @@ class PasswordManagerClient {
   // They are never filled, but might be needed in the UI, for example. Default
   // implementation is a noop.
   virtual void PasswordWasAutofilled(
-      const std::vector<const autofill::PasswordForm*>& best_matches,
+      const std::vector<const PasswordForm*>& best_matches,
       const url::Origin& origin,
-      const std::vector<const autofill::PasswordForm*>* federated_matches);
+      const std::vector<const PasswordForm*>* federated_matches);
 
   // Sends username/password from |preferred_match| for filling in the http auth
   // prompt.
-  virtual void AutofillHttpAuth(const autofill::PasswordForm& preferred_match,
+  virtual void AutofillHttpAuth(const PasswordForm& preferred_match,
                                 const PasswordFormManagerForUI* form_manager);
 
   // Informs the embedder that user credentials were leaked.
@@ -328,8 +321,7 @@ class PasswordManagerClient {
   // Returns the current best guess as to the page's display language.
   virtual std::string GetPageLanguage() const;
 
-#if defined(ON_FOCUS_PING_ENABLED) || \
-    defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(ON_FOCUS_PING_ENABLED) || defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // Return the PasswordProtectionService associated with this instance.
   virtual safe_browsing::PasswordProtectionService*
   GetPasswordProtectionService() const = 0;
@@ -343,7 +335,7 @@ class PasswordManagerClient {
                                            const GURL& frame_url) = 0;
 #endif
 
-#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // Checks the safe browsing reputation of the webpage where password reuse
   // happens. This is called by the PasswordReuseDetectionManager when a
   // protected password is typed on the wrong domain. This may trigger a
@@ -358,7 +350,7 @@ class PasswordManagerClient {
       bool password_field_exists) = 0;
 #endif
 
-#if defined(SYNC_PASSWORD_REUSE_WARNING_ENABLED)
+#if defined(PASSWORD_REUSE_WARNING_ENABLED)
   // Records a Chrome Sync event that GAIA password reuse was detected.
   virtual void LogPasswordReuseDetectedEvent() = 0;
 #endif

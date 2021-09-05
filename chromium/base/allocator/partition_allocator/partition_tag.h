@@ -25,9 +25,11 @@ namespace internal {
 // TODO(tasak): add a description about the partition tag.
 using PartitionTag = uint8_t;
 
-// Allocate extra 16 bytes for the partition tag. 14 bytes are unused
-// (reserved).
-static constexpr size_t kInSlotTagBufferSize = 16;
+// Allocate extra space for the partition tag to satisfy the alignment
+// requirement.
+static constexpr size_t kInSlotTagBufferSize = base::kAlignment;
+static_assert(sizeof(PartitionTag) <= kInSlotTagBufferSize,
+              "PartitionTag should fit into the in-slot buffer.");
 
 #if DCHECK_IS_ON()
 // The layout inside the slot is |tag|cookie|object|(empty)|cookie|.
@@ -100,9 +102,9 @@ ALWAYS_INLINE PartitionTag* PartitionTagPointer(void* ptr) {
   // See the comment explaining the layout in partition_tag_bitmap.h.
   uintptr_t pointer_as_uintptr = reinterpret_cast<uintptr_t>(ptr);
   uintptr_t bitmap_base =
-      (pointer_as_uintptr & kSuperPageBaseMask) + kPartitionPageSize;
+      (pointer_as_uintptr & kSuperPageBaseMask) + PartitionPageSize();
   uintptr_t offset =
-      (pointer_as_uintptr & kSuperPageOffsetMask) - kPartitionPageSize;
+      (pointer_as_uintptr & kSuperPageOffsetMask) - PartitionPageSize();
   // Not to depend on partition_address_space.h and PartitionAllocGigaCage
   // feature, use "offset" to see whether the given ptr is_direct_mapped or not.
   // DirectMap object should cause this PA_DCHECK's failure, as tags aren't

@@ -62,6 +62,7 @@
 #include "third_party/blink/renderer/modules/launch/file_handling_expiry_impl.h"
 #include "third_party/blink/renderer/modules/launch/web_launch_service_impl.h"
 #include "third_party/blink/renderer/modules/manifest/manifest_manager.h"
+#include "third_party/blink/renderer/modules/media/audio/audio_renderer_sink_cache.h"
 #include "third_party/blink/renderer/modules/media_controls/media_controls_impl.h"
 #include "third_party/blink/renderer/modules/mediasource/media_source_registry_impl.h"
 #include "third_party/blink/renderer/modules/mediastream/user_media_client.h"
@@ -187,6 +188,7 @@ void ModulesInitializer::InstallSupplements(LocalFrame& frame) const {
   DCHECK(WebLocalFrameImpl::FromFrame(&frame)->Client());
   InspectorAccessibilityAgent::ProvideTo(&frame);
   ImageDownloaderImpl::ProvideTo(frame);
+  AudioRendererSinkCache::InstallFrameObserver(frame);
 }
 
 MediaControls* ModulesInitializer::CreateMediaControls(
@@ -233,8 +235,7 @@ void ModulesInitializer::OnClearWindowObjectInMainWorld(
 
   // TODO(nhiroki): Figure out why ServiceWorkerContainer needs to be eagerly
   // initialized.
-  auto& frame_loader = document.GetFrame()->Loader();
-  if (!frame_loader.StateMachine()->IsDisplayingInitialEmptyDocument())
+  if (!document.IsInitialEmptyDocument())
     NavigatorServiceWorker::From(window);
 
   DOMWindowStorageController::From(document);

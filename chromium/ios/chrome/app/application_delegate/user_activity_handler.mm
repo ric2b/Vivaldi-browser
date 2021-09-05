@@ -170,10 +170,15 @@ std::vector<GURL> createGURLVectorFromIntentURLs(NSArray<NSURL*>* intentURLs) {
         base::mac::ObjCCastStrict<SearchInChromeIntent>(
             userActivity.interaction.intent);
 
-    if (intent &&
-        [intent respondsToSelector:NSSelectorFromString(@"searchPhrase")] &&
-        intent.searchPhrase && [intent.searchPhrase length]) {
-      startupParams.textQuery = intent.searchPhrase;
+    if (!intent) {
+      return NO;
+    }
+
+    id searchPhrase = [intent valueForKey:@"searchPhrase"];
+
+    if ([searchPhrase isKindOfClass:[NSString class]] &&
+        [searchPhrase length]) {
+      startupParams.textQuery = searchPhrase;
     } else {
       startupParams.postOpeningAction = FOCUS_OMNIBOX;
     }
@@ -188,27 +193,11 @@ std::vector<GURL> createGURLVectorFromIntentURLs(NSArray<NSURL*>* intentURLs) {
     OpenInChromeIntent* intent = base::mac::ObjCCastStrict<OpenInChromeIntent>(
         userActivity.interaction.intent);
 
-    if (!intent.url) {
+    if (!intent.url || intent.url.count == 0) {
       return NO;
     }
 
-    std::vector<GURL> URLs;
-
-    if ([intent.url isKindOfClass:[NSURL class]]) {
-      // Old intent version where |url| is of type NSURL rather than an array.
-      GURL webpageGURL(
-          net::GURLWithNSURL(base::mac::ObjCCastStrict<NSURL>(intent.url)));
-      if (!webpageGURL.is_valid())
-        return NO;
-      URLs.push_back(webpageGURL);
-    } else if ([intent.url isKindOfClass:[NSArray class]] &&
-               intent.url.count > 0) {
-      URLs = createGURLVectorFromIntentURLs(intent.url);
-    } else {
-      // Unknown or invalid intent object.
-      return NO;
-    }
-
+    std::vector<GURL> URLs = createGURLVectorFromIntentURLs(intent.url);
     AppStartupParameters* startupParams =
         [[AppStartupParameters alloc] initWithURLs:URLs];
 

@@ -17,6 +17,7 @@ class MockSyncInvalidationsService : public SyncInvalidationsService {
   MockSyncInvalidationsService();
   ~MockSyncInvalidationsService() override;
 
+  MOCK_METHOD(void, SetActive, (bool active));
   MOCK_METHOD(void, AddListener, (InvalidationsListener * listener));
   MOCK_METHOD(void, RemoveListener, (InvalidationsListener * listener));
   MOCK_METHOD(void,
@@ -26,6 +27,14 @@ class MockSyncInvalidationsService : public SyncInvalidationsService {
               RemoveTokenObserver,
               (FCMRegistrationTokenObserver * observer));
   MOCK_METHOD(const std::string&, GetFCMRegistrationToken, (), (const));
+  MOCK_METHOD(void,
+              SetInterestedDataTypesHandler,
+              (InterestedDataTypesHandler * handler));
+  MOCK_METHOD(const ModelTypeSet&, GetInterestedDataTypes, (), (const));
+  MOCK_METHOD(void,
+              SetInterestedDataTypes,
+              (const ModelTypeSet& data_types,
+               InterestedDataTypesAppliedCallback callback));
 };
 
 }  // namespace syncer

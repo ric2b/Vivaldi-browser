@@ -12,25 +12,18 @@ import android.graphics.Color;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewStub;
-
 import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
-
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
+import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
-import org.chromium.chrome.browser.toolbar.IncognitoStateProvider;
 import org.chromium.chrome.browser.toolbar.IncognitoToggleTabLayout;
 import org.chromium.chrome.browser.toolbar.NewTabButton;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
-import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarConfiguration;
-import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarVariationManager;
-import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
-import org.chromium.chrome.browser.ui.appmenu.AppMenuButtonHelper;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
@@ -55,7 +48,6 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
 
     // The following three buttons are not used when Duet is enabled.
     private @Nullable NewTabButton mNewTabImageButton;
-    private @Nullable MenuButton mMenuButton;
     private @Nullable ToggleTabStackButton mToggleTabStackButton;
 
     private int mPrimaryColor;
@@ -64,7 +56,6 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
     private ColorStateList mDarkIconTint;
 
     private boolean mIsIncognito;
-    private boolean mShouldShowNewTabButton;
     private boolean mShouldShowNewTabVariation;
 
     private ObjectAnimator mVisiblityAnimator;
@@ -79,7 +70,6 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
 
         mNewTabImageButton = findViewById(R.id.new_tab_button);
         mNewTabViewButton = findViewById(R.id.new_tab_view);
-        mMenuButton = findViewById(R.id.menu_button_wrapper);
         mToggleTabStackButton = findViewById(R.id.tab_switcher_mode_tab_switcher_button);
 
         // TODO(twellington): Try to make NewTabButton responsible for handling its own clicks.
@@ -91,6 +81,7 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
         mNewTabViewButton.setOnClickListener(this);
 
         updateTabSwitchingElements(shouldShowIncognitoToggle());
+        updateNewTabButtonVisibility();
     }
 
     @Override
@@ -120,10 +111,6 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
         if (mIncognitoToggleTabLayout != null) {
             mIncognitoToggleTabLayout.destroy();
             mIncognitoToggleTabLayout = null;
-        }
-        if (mMenuButton != null) {
-            mMenuButton.destroy();
-            mMenuButton = null;
         }
     }
 
@@ -181,17 +168,6 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
         mVisiblityAnimator.start();
 
         if (DeviceClassManager.enableAccessibilityLayout()) mVisiblityAnimator.end();
-    }
-
-    /**
-     * @param appMenuButtonHelper The helper for managing menu button interactions.
-     */
-    void setAppMenuButtonHelper(AppMenuButtonHelper appMenuButtonHelper) {
-        if (mMenuButton == null) return;
-
-        mMenuButton.getImageButton().setOnTouchListener(appMenuButtonHelper);
-        mMenuButton.getImageButton().setAccessibilityDelegate(
-                appMenuButtonHelper.getAccessibilityDelegate());
     }
 
     /**
@@ -278,37 +254,15 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
         // Show new tab variation when there are no incognito tabs.
         assert mIncognitoToggleTabLayout != null;
         mIncognitoToggleTabLayout.setVisibility(mShouldShowNewTabVariation ? GONE : VISIBLE);
-        setNewTabButtonVisibility(mShouldShowNewTabButton);
+        updateNewTabButtonVisibility();
     }
 
-    /**
-     * @param isVisible Whether the bottom toolbar is visible.
-     */
-    void onBottomToolbarVisibilityChanged(boolean isVisible) {
-        mShouldShowNewTabButton = !isVisible
-                || (BottomToolbarConfiguration.isBottomToolbarEnabled()
-                        && !BottomToolbarVariationManager.isNewTabButtonOnBottom());
-        setNewTabButtonVisibility(mShouldShowNewTabButton);
-        // show tab switcher button on the top in landscape mode.
-        if (BottomToolbarVariationManager.isTabSwitcherOnBottom() && !shouldShowIncognitoToggle()) {
-            mToggleTabStackButton.setVisibility(isVisible ? GONE : VISIBLE);
-        }
-    }
-
-    private void setNewTabButtonVisibility(boolean isButtonVisible) {
+    private void updateNewTabButtonVisibility() {
         if (mNewTabViewButton != null) {
-            mNewTabViewButton.setVisibility(
-                    mShouldShowNewTabVariation && isButtonVisible ? VISIBLE : GONE);
+            mNewTabViewButton.setVisibility(mShouldShowNewTabVariation ? VISIBLE : GONE);
         }
         if (mNewTabImageButton != null) {
-            mNewTabImageButton.setVisibility(
-                    !mShouldShowNewTabVariation && isButtonVisible ? VISIBLE : GONE);
-        }
-    }
-
-    private void setMenuButtonVisibility(boolean isButtonVisible) {
-        if (mMenuButton != null) {
-            mMenuButton.setVisibility(isButtonVisible ? VISIBLE : GONE);
+            mNewTabImageButton.setVisibility(!mShouldShowNewTabVariation ? VISIBLE : GONE);
         }
     }
 
@@ -344,11 +298,6 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
                     getContext(), R.color.default_icon_color_light_tint_list);
             mDarkIconTint = AppCompatResources.getColorStateList(
                     getContext(), R.color.default_icon_color_tint_list);
-        }
-
-        ColorStateList tintList = useLightIcons ? mLightIconTint : mDarkIconTint;
-        if (mMenuButton != null) {
-            ApiCompatibilityUtils.setImageTintList(mMenuButton.getImageButton(), tintList);
         }
 
         if (mToggleTabStackButton != null) {

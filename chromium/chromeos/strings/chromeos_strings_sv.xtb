@@ -5,6 +5,7 @@
 <translation id="1195447618553298278">Okänt fel.</translation>
 <translation id="1413240736185167732">Misslyckades – filterfel</translation>
 <translation id="1468664791493211953">Erbjudanden</translation>
+<translation id="1478594628797167447">Skanner</translation>
 <translation id="1482734542997480527">Den här enheten hanteras av <ph name="ENROLLMENT_DOMAIN" />, som kan ha möjlighet att övervaka din aktivitet.</translation>
 <translation id="150962533380566081">Ogiltig PUK-kod.</translation>
 <translation id="1510238584712386396">Startprogram</translation>
@@ -19,10 +20,12 @@
 <translation id="2161394479394250669">Avbryt utskriftsjobb</translation>
 <translation id="2338501278241028356">Aktivera Bluetooth så att det går att upptäcka enheter i närheten</translation>
 <translation id="2375079107209812402"><ph name="ATTEMPTS_LEFT" /> försök kvar</translation>
+<translation id="2517472476991765520">Sök</translation>
 <translation id="2805756323405976993">Appar</translation>
 <translation id="2872961005593481000">Stäng av</translation>
 <translation id="3008341117444806826">UPPDATERA</translation>
 <translation id="3091839911843451378">Misslyckades – skrivaren har stannat</translation>
+<translation id="3246869037381808805">Utskriftsjobb som är äldre än 1 dagar tas bort</translation>
 <translation id="3268178239013324452">Misslyckades – luckan är öppen</translation>
 <translation id="3369013195428705271">Vill du rensa all utskriftshistorik? De pågående utskriftsjobben rensas inte.</translation>
 <translation id="3456078764689556234">Sida <ph name="PRINTED_PAGES" /> av <ph name="TOTAL_PAGES" /> har skrivits ut.</translation>
@@ -33,13 +36,13 @@
 <translation id="38114475217616659">Rensa all historik</translation>
 <translation id="3820172043799983114">Ogiltig pinkod</translation>
 <translation id="3838338534323494292">Nytt lösenord</translation>
+<translation id="39823212440917567">Utskriftsjobb som är äldre än <ph name="NUMBER_OF_DAYS" /> dagar tas bort</translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> hanterar den här enheten och har tillgång till all användaraktivitet, inklusive besökta webbsidor, lösenord och e-post.</translation>
 <translation id="4003384961948020559">Misslyckades – utmatningsfacket är fullt</translation>
 <translation id="4027485274696301677">Denna <ph name="DEVICE_TYPE" /> hanteras av <ph name="ENROLLMENT_DOMAIN" />. Administratörer kan fjärrkonfigurera enheten.</translation>
 <translation id="4034824040120875894">Skrivare</translation>
 <translation id="4227825898293920515">Lösenordet upphör att gälla om <ph name="TIME" /></translation>
 <translation id="4238516577297848345">Inga utskriftsjobb pågår</translation>
-<translation id="428217921675623177">Utskriftsjobb som är äldre än 90 dagar tas bort</translation>
 <translation id="4297501883039923494">Har stoppats – okänt fel</translation>
 <translation id="4429881212383817840">Kerberos-biljetten upphör snart att gälla</translation>
 <translation id="445059817448385655">Gammalt lösenord</translation>
@@ -52,6 +55,7 @@
 <translation id="4890353053343094602">Välj ett nytt omedelbart</translation>
 <translation id="4917889632206600977">Har stoppats – slut på papper</translation>
 <translation id="4932733599132424254">Datum</translation>
+<translation id="520299634122159966">Det finns inga tillgängliga skannrar</translation>
 <translation id="5212543919916444558">Det finns inget på skärmen som jag kan hjälpa till med.
 Tryck på mikrofonen och fråga om något.</translation>
 <translation id="5222676887888702881">Logga ut</translation>
@@ -71,6 +75,7 @@ Tryck på mikrofonen och fråga om något.</translation>
 <translation id="649050271426829538">Har stoppats – papperstrassel</translation>
 <translation id="6517239166834772319">Utforska</translation>
 <translation id="6564646048574748301">Misslyckades – skrivaren kan inte nås</translation>
+<translation id="6620487321149975369">Utskriftsjobb visas i historiken såvida de inte tas bort manuellt</translation>
 <translation id="6643016212128521049">Rensa</translation>
 <translation id="6747215703636344499">Har stoppats – utmatningsfacket är fullt</translation>
 <translation id="7162487448488904999">Gallery</translation>
@@ -81,7 +86,9 @@ Tryck på mikrofonen och fråga om något.</translation>
 <translation id="7805768142964895445">Status</translation>
 <translation id="808894953321890993">Ändra lösenord</translation>
 <translation id="8208861521865154048">Förmåner</translation>
+<translation id="8294431847097064396">Källa</translation>
 <translation id="8347227221149377169">Utskriftsjobb</translation>
+<translation id="8352772353338965963">Lägg till ett konto för multiinloggning. Alla inloggade konton kan öppnas utan lösenord, så använd bara den här funktionen med konton du litar på.</translation>
 <translation id="8701136875688985581"><ph name="ENROLLMENT_DOMAIN" /> hanterar denna användare och kan fjärrhantera inställningar och övervaka användaraktivitet.</translation>
 <translation id="871560550817059752">Misslyckades – slut på bläck</translation>
 <translation id="8726019395068607495">Har stoppats – luckan är öppen</translation>

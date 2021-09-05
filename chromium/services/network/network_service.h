@@ -27,9 +27,11 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "net/dns/dns_config.h"
+#include "net/dns/public/secure_dns_mode.h"
 #include "net/log/net_log.h"
 #include "net/log/trace_net_log_observer.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/first_party_sets/preloaded_first_party_sets.h"
 #include "services/network/keepalive_statistics_recorder.h"
 #include "services/network/network_change_manager.h"
 #include "services/network/network_quality_estimator_manager.h"
@@ -40,6 +42,7 @@
 #include "services/network/public/mojom/network_quality_estimator_manager.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/trust_tokens.mojom.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/trust_tokens/trust_token_key_commitments.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 
@@ -163,7 +166,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
       mojom::NetworkContextParamsPtr params) override;
   void ConfigureStubHostResolver(
       bool insecure_dns_client_enabled,
-      net::DnsConfig::SecureDnsMode secure_dns_mode,
+      net::SecureDnsMode secure_dns_mode,
       base::Optional<std::vector<mojom::DnsOverHttpsServerPtr>>
           dns_over_https_servers) override;
   void DisableQuic() override;
@@ -216,6 +219,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
                                    base::OnceClosure done) override;
 #if BUILDFLAG(IS_CT_SUPPORTED)
   void ClearSCTAuditingCache() override;
+  void ConfigureSCTAuditing(
+      bool enabled,
+      double sampling_rate,
+      const GURL& reporting_uri,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
+      mojo::PendingRemote<mojom::URLLoaderFactory> factory) override;
 #endif
 
 #if defined(OS_ANDROID)
@@ -223,6 +232,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 #endif
   void BindTestInterface(
       mojo::PendingReceiver<mojom::NetworkServiceTest> receiver) override;
+  void SetPreloadedFirstPartySets(const std::string& raw_sets) override;
 
   // Returns an HttpAuthHandlerFactory for the given NetworkContext.
   std::unique_ptr<net::HttpAuthHandlerFactory> CreateHttpAuthHandlerFactory(
@@ -361,6 +371,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   // HttpAuthPreferences.
   mojom::HttpAuthDynamicParamsPtr http_auth_dynamic_network_service_params_;
   mojom::HttpAuthStaticParamsPtr http_auth_static_network_service_params_;
+
+  // Globally-scoped state for First-Party Sets that were preloaded (and
+  // updated) via the component updater.
+  std::unique_ptr<PreloadedFirstPartySets> preloaded_first_party_sets_;
 
   // NetworkContexts created by CreateNetworkContext(). They call into the
   // NetworkService when their connection is closed so that it can delete

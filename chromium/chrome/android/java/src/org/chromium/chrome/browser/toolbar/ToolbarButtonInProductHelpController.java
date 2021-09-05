@@ -17,6 +17,8 @@ import org.chromium.chrome.browser.feature_engagement.ScreenshotMonitor;
 import org.chromium.chrome.browser.feature_engagement.ScreenshotMonitorDelegate;
 import org.chromium.chrome.browser.feature_engagement.ScreenshotTabObserver;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.flags.CachedFeatureFlags;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
@@ -24,7 +26,6 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.previews.Previews;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.toolbar.bottom.BottomToolbarConfiguration;
 import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.chrome.browser.translate.TranslateUtils;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
@@ -55,7 +56,8 @@ public class ToolbarButtonInProductHelpController
             AppMenuCoordinator appMenuCoordinator, ActivityLifecycleDispatcher lifecycleDispatcher,
             ActivityTabProvider tabProvider) {
         mActivity = activity;
-        mUserEducationHelper = new UserEducationHelper(mActivity, mHandler);
+        mUserEducationHelper =
+                new UserEducationHelper(mActivity, mHandler, TrackerFactory::getTrackerForProfile);
         mScreenshotMonitor = new ScreenshotMonitor(this);
         lifecycleDispatcher.register(this);
         mPageLoadObserver = new ActivityTabTabObserver(tabProvider) {
@@ -191,8 +193,7 @@ public class ToolbarButtonInProductHelpController
 
     // Private methods.
     private static int getDataReductionMenuItemHighlight() {
-        return BottomToolbarConfiguration.isBottomToolbarEnabled() ? R.id.data_reduction_menu_item
-                                                                   : R.id.app_menu_footer;
+        return R.id.app_menu_footer;
     }
 
     // Attempts to show an IPH text bubble for data saver detail.
@@ -271,12 +272,17 @@ public class ToolbarButtonInProductHelpController
             return;
         }
 
+        final Integer offlinePageId =
+                CachedFeatureFlags.isEnabled(
+                        ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR)
+                ? R.id.offline_page_chip_id
+                : R.id.offline_page_id;
+
         mUserEducationHelper.requestShowIPH(
                 new IPHCommandBuilder(mActivity.getResources(), featureName,
                         R.string.iph_download_page_for_offline_usage_text,
                         R.string.iph_download_page_for_offline_usage_accessibility_text)
-                        .setOnShowCallback(
-                                () -> turnOnHighlightForMenuItem(R.id.offline_page_id, true))
+                        .setOnShowCallback(() -> turnOnHighlightForMenuItem(offlinePageId, true))
                         .setOnDismissCallback(this::turnOffHighlightForMenuItem)
                         .setAnchorView(mActivity.getToolbarManager().getMenuButtonView())
                         .build());

@@ -17,7 +17,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/compiler_specific.h"
 #include "base/files/file_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
@@ -173,6 +172,8 @@ class NotificationsObserver : public content::NotificationObserver {
                      content::NotificationService::AllSources());
     }
   }
+  NotificationsObserver(const NotificationsObserver&) = delete;
+  NotificationsObserver& operator=(const NotificationsObserver&) = delete;
 
   ~NotificationsObserver() override {
     for (size_t i = 0; i < base::size(kNotificationsObserved); ++i) {
@@ -219,8 +220,6 @@ class NotificationsObserver : public content::NotificationObserver {
   size_t count_[base::size(kNotificationsObserved)];
   std::set<std::string> updated_;
   base::OnceClosure quit_closure_;
-
-  DISALLOW_COPY_AND_ASSIGN(NotificationsObserver);
 };
 
 // Extracts the integer value of the |authuser| query parameter. Returns 0 if
@@ -658,6 +657,13 @@ class ExtensionUpdaterTest : public testing::Test {
   size_t ManifestFetchersCount(ExtensionDownloader* downloader) {
     return downloader->manifests_queue_.size() +
            (downloader->manifest_loader_.get() ? 1 : 0);
+  }
+
+  std::set<std::string> GetRunningInstallIds(const ExtensionUpdater& updater) {
+    std::set<std::string> ret;
+    for (const auto& pair : updater.running_crx_installs_)
+      ret.insert(pair.second.info.extension_id);
+    return ret;
   }
 
   void TestExtensionUpdateCheckRequests(bool pending) {
@@ -1455,6 +1461,80 @@ class ExtensionUpdaterTest : public testing::Test {
     RunUntilIdle();
   }
 
+  // Checks that the manifest is fetched with a priority of |net::MEDIUM| (which
+  // maps to |TaskPriority::USER_BLOCKING| for the task runner) when the active
+  // request's |fetch_priority| is in the FOREGROUND.
+  void TestManifestFetchPriority(
+      ManifestFetchData::FetchPriority fetch_priority) {
+    ExtensionDownloaderTestHelper helper;
+    helper.downloader().manifests_queue_.set_backoff_policy(&kNoBackoffPolicy);
+    GURL test_url("http://localhost/manifest1");
+    std::unique_ptr<ManifestFetchData> fetch(
+        CreateManifestFetchData(test_url));
+    ManifestFetchData::PingData zero_days(0, 0, true, 0);
+
+    fetch->AddExtension("1111", "1.0", &zero_days, kEmptyUpdateUrlData,
+                        std::string(), Manifest::Location::INTERNAL,
+                        fetch_priority);
+
+    helper.downloader().StartUpdateCheck(std::move(fetch));
+    RunUntilIdle();
+
+    auto* request = helper.GetPendingRequest(0);
+    helper.test_url_loader_factory().SimulateResponseForPendingRequest(
+        request->request.url, network::URLLoaderCompletionStatus(net::OK),
+        network::CreateURLResponseHead(net::HTTP_INTERNAL_SERVER_ERROR), "");
+    RunUntilIdle();
+
+    if (fetch_priority == ManifestFetchData::FetchPriority::FOREGROUND) {
+      EXPECT_EQ(net::MEDIUM, request->request.priority);
+    } else {
+      EXPECT_EQ(net::IDLE, request->request.priority);
+    }
+  }
+
+  // Checks that the crx of a given extension is downloaded with a priority of
+  // |net::MEDIUM| (maps to |TaskPriority::USER_BLOCKING| for the task runner)
+  // when the active request's |fetch_priority| is in the FOREGROUND.
+  void TestSingleExtensionDownloadingPriority(
+      ManifestFetchData::FetchPriority fetch_priority) {
+    ExtensionUpdater::ScopedSkipScheduledCheckForTest skip_scheduled_checks;
+    ExtensionDownloaderTestHelper helper;
+    std::unique_ptr<ServiceForDownloadTests> service =
+        std::make_unique<ServiceForDownloadTests>(prefs_.get(),
+                                                  helper.url_loader_factory());
+    ExtensionUpdater updater(service.get(), service->extension_prefs(),
+                             service->pref_service(), service->profile(),
+                             kUpdateFrequencySecs, nullptr,
+                             service->GetDownloaderFactory());
+    MockExtensionDownloaderDelegate delegate;
+    delegate.DelegateTo(&updater);
+    service->OverrideDownloaderDelegate(&delegate);
+    updater.Start();
+    updater.EnsureDownloaderCreated();
+    updater.downloader_->extensions_queue_.set_backoff_policy(
+        &kNoBackoffPolicy);
+
+    GURL test_url("http://localhost/extension.crx");
+    const std::string id(32, 'a');
+    std::string hash;
+    CRXFileInfo crx_file_info;
+    base::Version version("0.0.1");
+    std::set<int> requests({0});
+    std::unique_ptr<ExtensionDownloader::ExtensionFetch> fetch =
+        std::make_unique<ExtensionDownloader::ExtensionFetch>(
+            id, test_url, hash, version.GetString(), requests, fetch_priority);
+
+    updater.downloader_->FetchUpdatedExtension(std::move(fetch), base::nullopt);
+
+    auto* request = helper.GetPendingRequest(0);
+    if (fetch_priority == ManifestFetchData::FetchPriority::FOREGROUND) {
+      EXPECT_EQ(net::MEDIUM, request->request.priority);
+    } else {
+      EXPECT_EQ(net::IDLE, request->request.priority);
+    }
+  }
+
   void TestSingleExtensionDownloading(bool pending, bool retry, bool fail) {
     ExtensionUpdater::ScopedSkipScheduledCheckForTest skip_scheduled_checks;
     ExtensionDownloaderTestHelper helper;
@@ -1486,7 +1566,8 @@ class ExtensionUpdaterTest : public testing::Test {
     requests.insert(0);
     std::unique_ptr<ExtensionDownloader::ExtensionFetch> fetch =
         std::make_unique<ExtensionDownloader::ExtensionFetch>(
-            id, test_url, hash, version.GetString(), requests);
+            id, test_url, hash, version.GetString(), requests,
+            ManifestFetchData::FetchPriority::BACKGROUND);
     updater.downloader_->FetchUpdatedExtension(std::move(fetch), base::nullopt);
 
     if (pending) {
@@ -1767,7 +1848,8 @@ class ExtensionUpdaterTest : public testing::Test {
     requests.insert(0);
     std::unique_ptr<ExtensionDownloader::ExtensionFetch> fetch =
         std::make_unique<ExtensionDownloader::ExtensionFetch>(
-            id, test_url, hash, version.GetString(), requests);
+            id, test_url, hash, version.GetString(), requests,
+            ManifestFetchData::FetchPriority::BACKGROUND);
     updater.downloader_->FetchUpdatedExtension(std::move(fetch), base::nullopt);
 
     EXPECT_EQ(
@@ -1968,7 +2050,7 @@ class ExtensionUpdaterTest : public testing::Test {
     updater.downloader_->extensions_queue_.set_backoff_policy(
         &kNoBackoffPolicy);
 
-    EXPECT_FALSE(updater.crx_install_is_running_);
+    EXPECT_THAT(GetRunningInstallIds(updater), testing::IsEmpty());
 
     GURL url1("http://localhost/extension1.crx");
     GURL url2("http://localhost/extension2.crx");
@@ -1981,15 +2063,18 @@ class ExtensionUpdaterTest : public testing::Test {
 
     std::string version1 = "0.1";
     std::string version2 = "0.1";
+
     std::set<int> requests;
     requests.insert(0);
     // Start two fetches
     std::unique_ptr<ExtensionDownloader::ExtensionFetch> fetch1 =
         std::make_unique<ExtensionDownloader::ExtensionFetch>(
-            id1, url1, hash1, version1, requests);
+            id1, url1, hash1, version1, requests,
+            ManifestFetchData::FetchPriority::BACKGROUND);
     std::unique_ptr<ExtensionDownloader::ExtensionFetch> fetch2 =
         std::make_unique<ExtensionDownloader::ExtensionFetch>(
-            id2, url2, hash2, version2, requests);
+            id2, url2, hash2, version2, requests,
+            ManifestFetchData::FetchPriority::BACKGROUND);
     updater.downloader_->FetchUpdatedExtension(std::move(fetch1),
                                                base::Optional<std::string>());
     updater.downloader_->FetchUpdatedExtension(std::move(fetch2),
@@ -2049,29 +2134,20 @@ class ExtensionUpdaterTest : public testing::Test {
     content::RunAllTasksUntilIdle();
 
     if (updates_start_running) {
-      EXPECT_TRUE(updater.crx_install_is_running_);
+      // Both installations should have launched in parallel.
+      EXPECT_THAT(GetRunningInstallIds(updater),
+                  testing::UnorderedElementsAre(id1, id2));
 
-      // The second install should not have run, because the first has not
-      // sent a notification that it finished.
-      EXPECT_EQ(id1, service.extension_id());
-
-      // Fake install notice.  This should start the second installation,
-      // which will be checked below.
+      // Fake install notice.  This should end the first installation.
       fake_crx1->NotifyCrxInstallComplete(CrxInstallError(
           CrxInstallErrorType::OTHER, CrxInstallErrorDetail::NONE));
+      EXPECT_THAT(GetRunningInstallIds(updater),
+                  testing::UnorderedElementsAre(id2));
 
-      EXPECT_TRUE(updater.crx_install_is_running_);
-    }
-
-    EXPECT_EQ(id2, service.extension_id());
-    EXPECT_FALSE(service.install_path().empty());
-
-    if (updates_start_running) {
-      EXPECT_TRUE(updater.crx_install_is_running_);
       fake_crx2->NotifyCrxInstallComplete(CrxInstallError(
           CrxInstallErrorType::OTHER, CrxInstallErrorDetail::NONE));
     }
-    EXPECT_FALSE(updater.crx_install_is_running_);
+    EXPECT_THAT(GetRunningInstallIds(updater), testing::IsEmpty());
   }
 
   void TestGalleryRequestsWithBrand(bool use_organic_brand_code) {
@@ -2845,6 +2921,18 @@ TEST_F(ExtensionUpdaterTest, TestManifestFetchDataMerge) {
 TEST_F(ExtensionUpdaterTest, TestManifestFetchCredentials) {
   TestManifestCredentialsWebstore();
   TestManifestCredentialsNonWebstore();
+}
+
+TEST_F(ExtensionUpdaterTest, TestManifestFetchPriority) {
+  TestManifestFetchPriority(ManifestFetchData::FetchPriority::BACKGROUND);
+  TestManifestFetchPriority(ManifestFetchData::FetchPriority::FOREGROUND);
+}
+
+TEST_F(ExtensionUpdaterTest, TestExtensionPriority) {
+  TestSingleExtensionDownloadingPriority(
+      ManifestFetchData::FetchPriority::BACKGROUND);
+  TestSingleExtensionDownloadingPriority(
+      ManifestFetchData::FetchPriority::FOREGROUND);
 }
 
 // TODO(asargent) - (http://crbug.com/12780) add tests for:

@@ -40,6 +40,7 @@
 #include "ui/gfx/x/xfixes.h"
 #include "ui/gfx/x/xinput.h"
 #include "ui/gfx/x/xproto.h"
+#include "ui/gfx/x/xproto_util.h"
 #include "ui/platform_window/common/platform_window_defaults.h"
 
 namespace ui {
@@ -217,18 +218,9 @@ void XWindow::Init(const Configuration& config) {
   if (!activatable_ || config.override_redirect)
     req.override_redirect = x11::Bool32(true);
 
-  // It seems like there is a difference how tests are instantiated in case of
-  // non-Ozone X11 and Ozone. See more details in
-  // EnableTestConfigForPlatformWindows. The reason why this must be here is
-  // that we removed X11WindowBase in favor of the XWindow. The X11WindowBase
-  // was only used with PlatformWindow, which meant non-Ozone X11 did not use it
-  // and set override_redirect based only on |activatable_| variable or
-  // WindowType. But now as XWindow is subclassed by X11Window, which is also a
-  // PlatformWindow, and non-Ozone X11 uses it, we have to add this workaround
-  // here. Otherwise, tests for non-Ozone X11 fail.
-  // TODO(msisov): figure out usage of this for non-Ozone X11.
-  if (features::IsUsingOzonePlatform() && UseTestConfigForPlatformWindows())
-    req.override_redirect = x11::Bool32(true);
+#if defined(OS_CHROMEOS)
+  req.override_redirect = x11::Bool32(UseTestConfigForPlatformWindows());
+#endif
 
   override_redirect_ = req.override_redirect.has_value();
 
@@ -298,11 +290,13 @@ void XWindow::Init(const Configuration& config) {
 
   // TODO(erg): Maybe need to set a ViewProp here like in RWHL::RWHL().
 
-  long event_mask = ButtonPressMask | ButtonReleaseMask | FocusChangeMask |
-                    KeyPressMask | KeyReleaseMask | EnterWindowMask |
-                    LeaveWindowMask | ExposureMask | VisibilityChangeMask |
-                    StructureNotifyMask | PropertyChangeMask |
-                    PointerMotionMask;
+  auto event_mask =
+      x11::EventMask::ButtonPress | x11::EventMask::ButtonRelease |
+      x11::EventMask::FocusChange | x11::EventMask::KeyPress |
+      x11::EventMask::KeyRelease | x11::EventMask::EnterWindow |
+      x11::EventMask::LeaveWindow | x11::EventMask::Exposure |
+      x11::EventMask::VisibilityChange | x11::EventMask::StructureNotify |
+      x11::EventMask::PropertyChange | x11::EventMask::PointerMotion;
   xwindow_events_ =
       std::make_unique<XScopedEventSelector>(xwindow_, event_mask);
   connection_->Flush();
@@ -1169,9 +1163,9 @@ void XWindow::ProcessEvent(x11::Event* xev) {
       } else if (protocol == gfx::GetAtom("_NET_WM_PING")) {
         x11::ClientMessageEvent reply_event = *client;
         reply_event.window = x_root_window_;
-        SendEvent(reply_event, x_root_window_,
-                  x11::EventMask::SubstructureNotify |
-                      x11::EventMask::SubstructureRedirect);
+        x11::SendEvent(reply_event, x_root_window_,
+                       x11::EventMask::SubstructureNotify |
+                           x11::EventMask::SubstructureRedirect);
       } else if (protocol == gfx::GetAtom("_NET_WM_SYNC_REQUEST")) {
         pending_counter_value_ =
             client->data.data32[2] +

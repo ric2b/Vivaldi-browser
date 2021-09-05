@@ -739,6 +739,61 @@ Status ExecuteIsElementEnabled(Session* session,
   }
 }
 
+Status ExecuteGetComputedLabel(Session* session,
+                               WebView* web_view,
+                               const std::string& element_id,
+                               const base::DictionaryValue& params,
+                               std::unique_ptr<base::Value>* value) {
+  std::unique_ptr<base::Value> axNode;
+  Status status = GetAXNodeByElementId(session, web_view, element_id, &axNode);
+  if (status.IsError())
+    return status;
+
+  // Computed label stores as `name` in the AXTree.
+  base::Optional<base::Value> nameNode = axNode->ExtractKey("name");
+  if (!nameNode) {
+    // No computed label found. Return empty string.
+    *value = std::make_unique<base::Value>("");
+    return Status(kOk);
+  }
+
+  base::Optional<base::Value> nameVal = nameNode->ExtractKey("value");
+  if (!nameVal)
+    return Status(kUnknownError,
+                  "No name value found in the node in CDP response");
+
+  *value = std::make_unique<base::Value>(std::move(*nameVal));
+
+  return Status(kOk);
+}
+
+Status ExecuteGetComputedRole(Session* session,
+                              WebView* web_view,
+                              const std::string& element_id,
+                              const base::DictionaryValue& params,
+                              std::unique_ptr<base::Value>* value) {
+  std::unique_ptr<base::Value> axNode;
+  Status status = GetAXNodeByElementId(session, web_view, element_id, &axNode);
+  if (status.IsError())
+    return status;
+
+  base::Optional<base::Value> roleNode = axNode->ExtractKey("role");
+  if (!roleNode) {
+    // No computed role found. Return empty string.
+    *value = std::make_unique<base::Value>("");
+    return Status(kOk);
+  }
+
+  base::Optional<base::Value> roleVal = roleNode->ExtractKey("value");
+  if (!roleVal)
+    return Status(kUnknownError,
+                  "No role value found in the node in CDP response");
+
+  *value = std::make_unique<base::Value>(std::move(*roleVal));
+
+  return Status(kOk);
+}
+
 Status ExecuteIsElementDisplayed(Session* session,
                                  WebView* web_view,
                                  const std::string& element_id,

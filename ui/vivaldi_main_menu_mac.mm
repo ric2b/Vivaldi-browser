@@ -175,7 +175,7 @@ unichar NSFunctionKeyFromString(std::string& string) {
   // NSXXXFunctionKeys are defined in NSEvent.h
   unichar keyValue = 0;
   size_t length = string.length();
-  if (length >= 2 && string[0] == 'f') {
+  if (length >= 2 && string[0] == 'F') {
     if (length == 2) {
       char value = string[1];
       if (value == '1')
@@ -257,23 +257,23 @@ unichar NSFunctionKeyFromString(std::string& string) {
     }
   }
   // Not all NSXXXFunctionKey can be used. Every new entry must be verfied.
-  else if (string == "home")
+  else if (string == "Home")
     keyValue = NSHomeFunctionKey;
-  else if (string == "begin")
+  else if (string == "Begin")
     keyValue = NSBeginFunctionKey;
-  else if (string == "end")
+  else if (string == "End")
     keyValue = NSEndFunctionKey;
-  else if (string == "pageup")
+  else if (string == "Pageup")
     keyValue = NSPageUpFunctionKey;
-  else if (string == "pagedown")
+  else if (string == "Pagedown")
     keyValue = NSPageDownFunctionKey;
-  else if (string == "up")
+  else if (string == "Up")
     keyValue = NSUpArrowFunctionKey;
-  else if (string == "own")
+  else if (string == "Down")
     keyValue = NSDownArrowFunctionKey;
-  else if (string == "left")
+  else if (string == "Left")
     keyValue = NSLeftArrowFunctionKey;
-  else if (string == "right")
+  else if (string == "Right")
     keyValue = NSRightArrowFunctionKey;
 
   return keyValue;
@@ -292,17 +292,17 @@ NSString* acceleratorFromString(std::string& string) {
   else {
     // Some constants in Menus.h Maybe use that.
     char menuGlyph = 0;
-    if (candidate == "backspace")
+    if (candidate == "Backspace")
       menuGlyph = 0x08;
-    else if (candidate == "tab")
+    else if (candidate == "Tab")
       menuGlyph = 0x09;
-    else if (candidate == "enter")
+    else if (candidate == "Enter")
       menuGlyph = 0x0D;
-    else if (candidate == "escape" || candidate == "esc")
+    else if (candidate == "Escape" || candidate == "Esc")
       menuGlyph = 0x1B;
     else if (candidate == "Space")
       menuGlyph = 0x20;
-    else if (candidate == "delete" || candidate == "del")
+    else if (candidate == "Delete" || candidate == "Del")
       menuGlyph = NSDeleteCharacter;  // Defined in NSText.h
 
     if (menuGlyph)
@@ -322,14 +322,14 @@ NSUInteger modifierMaskFromString(std::string& string) {
 
   NSUInteger modifierMask = 0;
   if (candidate.length() >= 3) {
-    if (candidate.find("cmd") != std::string::npos ||
-        candidate.find("meta") != std::string::npos)
+    if (candidate.find("Cmd") != std::string::npos ||
+        candidate.find("Meta") != std::string::npos)
       modifierMask |= NSCommandKeyMask;
-    if (candidate.find("shift") != std::string::npos)
+    if (candidate.find("Shift") != std::string::npos)
       modifierMask |= NSShiftKeyMask;
-    if (candidate.find("alt") != std::string::npos)
+    if (candidate.find("Alt") != std::string::npos)
       modifierMask |= NSAlternateKeyMask;
-    if (candidate.find("ctrl") != std::string::npos)
+    if (candidate.find("Ctrl") != std::string::npos)
       modifierMask |= NSControlKeyMask;
   }
   return modifierMask;
@@ -407,6 +407,10 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
         // tab to activate is stored here).
         [menuItem setRepresentedObject:
             base::SysUTF8ToNSString(*item.parameter.get())];
+      } else if (item.url) {
+        // Some commands reply on a url when executed.
+        [menuItem setRepresentedObject:
+            base::SysUTF8ToNSString(*item.url.get())];
       }
       if (item.emphasized && *item.emphasized.get()) {
         setMenuItemBold(menuItem, true);
@@ -563,23 +567,27 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
       int num_installed_bookmarks = subMenu.numberOfItems;
       // Due to existing bookmark items in the menu.
       int extra_index = 0;
+      int pos = 0;
       // In the first pass we add all UI items to the menu.
       for (const menubar::MenuItem& child: *item.items) {
         GetBookmarkMenuIds().push_back(child.id);
-        index = *child.index + extra_index;
+        index = pos + extra_index;
         PopulateMenu(child, subMenu, false, index, faviconLoader, 0, 0);
         if (child.id == IDC_VIV_BOOKMARK_CONTAINER) {
           extra_index = num_installed_bookmarks;
         }
+        pos ++;
       }
       // The second pass hands over information to chrome now that the items
       // are in place.
+      pos = 0;
       for (const menubar::MenuItem& child: *item.items) {
         if (child.id == IDC_VIV_BOOKMARK_CONTAINER) {
           SetContainerState(extensions::vivaldi::menubar::ToString(child.edge),
-              *child.index);
+              pos);
           break;
         }
+        pos ++;
       }
     } else {
       for (const menubar::MenuItem& child: *item.items) {

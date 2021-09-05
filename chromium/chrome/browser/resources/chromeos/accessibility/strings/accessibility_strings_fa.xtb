@@ -52,6 +52,7 @@
 <translation id="1291286136605998134">دکمه تغییر وضعیت</translation>
 <translation id="1299774449519412690">آبی آسمانی روشن</translation>
 <translation id="1303806948938513162">‏برای ورود به منوهای ChromeVox، با ۴ انگشت ضربه بزنید</translation>
+<translation id="1313373992684326101">به بخش قبلی بروید. نمونه‌ها شامل «سینی وضعیت» و «راه‌انداز» می‌شود.</translation>
 <translation id="1325363694295259631"><ph name="NAME" />، دکمه رادیویی گزینه منو لغو انتخاب شد</translation>
 <translation id="1325946044405407859">برنزه کدر</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> از <ph name="TOTAL" /></translation>
@@ -79,6 +80,7 @@
 <translation id="1506187449813838456">افزایش گام</translation>
 <translation id="151784044608172266">جمله بعدی</translation>
 <translation id="1524531499102321782">خط بعدی بریل</translation>
+<translation id="1542513807034338907">پیمایش به صفحه قبل</translation>
 <translation id="1546370775711804143">نوار پیمایش</translation>
 <translation id="1555130319947370107">آبی</translation>
 <translation id="1559739829547075274">پیمایش به عقب</translation>
@@ -265,7 +267,7 @@
 <translation id="3040901448410802366">نشانگر پیشرفت</translation>
 <translation id="3046838483509668188">‏گزینه‌های ChromeVox</translation>
 <translation id="3060756054951570867">منوی <ph name="TITLE" /> باز شد</translation>
-<translation id="3060880924447482063">برای جابه‌جایی بین موارد، تند به راست یا چپ بکشید</translation>
+<translation id="3060880924447482063">برای جابه‌جایی بین موارد، تند به‌راست یا چپ بکشید</translation>
 <translation id="3070245424257836917">تند کشیدن سه انگشت به بالا</translation>
 <translation id="3078345202707391975">عنوان بعدی سطح ۲</translation>
 <translation id="3078740164268491126">جدول</translation>
@@ -280,6 +282,7 @@
 <translation id="3103579948980282461">ارغوانی</translation>
 <translation id="3104705064753753826">alrt dlg</translation>
 <translation id="3109724472072898302">جمع شده</translation>
+<translation id="311015743332597320">با چهار انگشت تند به‌راست بکشید</translation>
 <translation id="3112457281078985179">‏برای روشن یا خاموش کردن ChromeVox، از Control+Alt+Z استفاده کنید.</translation>
 <translation id="3131002934070407451">خواندن شماره‌ها به‌صورت:</translation>
 <translation id="3134461040845705080">rdonly</translation>
@@ -345,6 +348,7 @@
 <translation id="3549141990712742152"><ph name="TEXT" /> را ببرید.</translation>
 <translation id="3549680091535286226">برای توقف موقتی گفتار، با دو انگشت ضربه بزنید</translation>
 <translation id="3564729643041517261">سبک نمایش کنونی، پهلوبه‌پهلو است</translation>
+<translation id="3587482841069643663">همه</translation>
 <translation id="3589661172894441357">واژه‌نامه</translation>
 <translation id="3591784666823501596">آبی سلطنتی</translation>
 <translation id="3594207934078151302">خزه‌ای</translation>
@@ -412,7 +416,7 @@
 <translation id="4161104397932142764">{COUNT,plural, =1{ثانیه}one{ثانیه}other{ثانیه}}</translation>
 <translation id="4161663686871496107">‏بازخورد گفتاری ChromeVox آماده است</translation>
 <translation id="4176463684765177261">غیرفعال شد</translation>
-<translation id="4187322598335821254">برای جابه‌جایی بین خطوط، تند به بالا یا پایین بکشید</translation>
+<translation id="4187322598335821254">برای جابه‌جایی بین خطوط، تند به‌بالا یا پایین بکشید</translation>
 <translation id="4188530942454211480">جمله قبلی</translation>
 <translation id="4191918948604314587">دکمه</translation>
 <translation id="419265409837491189">رفتن به ستون قبلی</translation>
@@ -436,6 +440,7 @@
 <translation id="4278486392851938658">پیوند بازدیدشده قبلی وجود ندارد</translation>
 <translation id="4281245629646759298">زرد روشن</translation>
 <translation id="4289540628985791613">مرور کلی</translation>
+<translation id="4294967782363273192">مرتب‌شده به‌صورت صعودی</translation>
 <translation id="4300318234632215983">اعلان نشانی وب پشت یک پیوند</translation>
 <translation id="4322625298640984693">قهوه‌ای مایل به زرد</translation>
 <translation id="4342180618051828363">{COUNT,plural, =1{نقطه}=3{سه نقطه}one{# نقطه}other{# نقطه}}</translation>
@@ -447,6 +452,7 @@
 <translation id="4384583879834880242">پرسش و پاسخ</translation>
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">آبی آسمانی پررنگ</translation>
+<translation id="4406249099130339147">بازگویی علائم سجاوندی</translation>
 <translation id="4432457053224379116">جگری</translation>
 <translation id="4437615272777527928">برای جستجو در منوها، تایپ کنید. برای جابه‌جایی بین نتایج از پیکان‌های بالا و پایین استفاده کنید. برای تنظیم کردن هشتک نوشتار و حرکت کردن بین منوها از پیکان‌های چپ و راست استفاده کنید.</translation>
 <translation id="4457472090507035117">انتخاب صدای فعلی:</translation>
@@ -481,6 +487,7 @@
 <translation id="4763480195061959176">ویدئو</translation>
 <translation id="4764692524839457597">پیش‌فرض</translation>
 <translation id="4772771694153161212">زیرخط نیست</translation>
+<translation id="4780458943471935919">پیمایش به صفحه بعد</translation>
 <translation id="4784215347943747396">کنترل دستگاه تنها با ۱ یا ۲ کلید</translation>
 <translation id="4786285211967466855">عنوان سطح ۱ قبلی وجود ندارد</translation>
 <translation id="4787577491510559358">اعلام قالب‌بندی برای مورد کنونی</translation>
@@ -644,6 +651,7 @@
 <translation id="5999630716831179808">صداها</translation>
 <translation id="6006050241733874051">فرم</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{اریب وارو}one{# اریب وارو}other{# اریب وارو}}</translation>
+<translation id="6010616110396250088">مرتب‌شده به‌صورت نزولی</translation>
 <translation id="6017514345406065928">سبز</translation>
 <translation id="602001110135236999">پیمایش به چپ</translation>
 <translation id="6034000775414344507">خاکستری کم‌رنگ</translation>
@@ -815,6 +823,7 @@
 <translation id="744163271241493234">pwded</translation>
 <translation id="7484805699335881122">هنگام خواندن انواع عناصر و متن نقل‌شده، حذف‌شده، پررنگ‌شده، داخل پرانتز، یا با حروف بزرگ، زیروبمی صدا تغییر داده شود.</translation>
 <translation id="7491962110804786152">برگه</translation>
+<translation id="7492497529767769458">به بخش بعدی بروید. نمونه‌ها شامل «سینی وضعیت» و «راه‌انداز» می‌شود.</translation>
 <translation id="7505149250476994901">‏گفتن «cap» (حرف بزرگ) قبل از حرف</translation>
 <translation id="7518543783849163354">‏برای توقف موقت صدای ChromeVox، کلید Control را فشار دهید.</translation>
 <translation id="7533226154149229506">لیمویی روشن</translation>
@@ -822,6 +831,7 @@
 <translation id="7552432549459840808">‏میان‌برهای مفید Chrome</translation>
 <translation id="7569983096843329377">سیاه</translation>
 <translation id="7579911500627256166">نقطه <ph name="DOT" /></translation>
+<translation id="7592060599656252486">برخی</translation>
 <translation id="7595446402663080101">جدول قبلی وجود ندارد</translation>
 <translation id="7596131838331109045">کرم‌نارنجی</translation>
 <translation id="7604026522577407655">رفتن به ابتدای ستون کنونی</translation>
@@ -841,6 +851,7 @@
 <translation id="7684431668231950609">ویرایش نوشتار، ورودی نشانی وب</translation>
 <translation id="7685589220304187312">tlbar</translation>
 <translation id="7693840228159394336">دکمه رادیویی قبلی</translation>
+<translation id="7701040980221191251">هیچ‌کدام</translation>
 <translation id="7701196182766842984">autolst</translation>
 <translation id="7714340021005120797">کادر ترکیبی بعدی وجود ندارد</translation>
 <translation id="772146615414628379">‏تبریک! اصول اولیه استفاده از ChromeVox را باموفقیت یاد گرفتید. به‌یاد داشته باشید هرزمان که بخواهید می‌توانید منوی فرمان ChromeVox را با فشار دادن Search+Period باز کنید. برای اینکه درباره ChromeVox و سیستم‌عامل Chrome از این هم بیشتر بدانید، مقاله‌های زیر را ببینید.
@@ -899,7 +910,9 @@
 <translation id="812886159861361726">بارگیری <ph name="FILE_NAME" /> متوقف شد</translation>
 <translation id="8129445297241948503">سلولی در بالا وجود ندارد</translation>
 <translation id="8138880386467279117">لمس</translation>
+<translation id="8173092779156526980">با چهار انگشت تند به‌چپ بکشید</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{زیرخط}one{# زیرخط}other{# زیرخط}}</translation>
+<translation id="8179976553408161302">ورود</translation>
 <translation id="8184828902145951186">ردیف</translation>
 <translation id="8186185314313222077">جابه‌جایی به حالت تمام صفحه</translation>
 <translation id="8199231515320852133">اعلان عناوین سلول کنونی</translation>
@@ -985,6 +998,7 @@
 <translation id="8946628535652548639">ر<ph name="TABLECELLROWINDEX" />س<ph name="TABLECELLCOLUMNINDEX" /></translation>
 <translation id="8952400011684167587">دکمه رادیویی قبلی وجود ندارد</translation>
 <translation id="8970172509886453271">بخش قبلی وجود ندارد</translation>
+<translation id="89720367119469899">فرار</translation>
 <translation id="8978496506222343566">tltip</translation>
 <translation id="8986362086234534611">فراموش شود</translation>
 <translation id="9040132695316389094">عنوان ۱</translation>

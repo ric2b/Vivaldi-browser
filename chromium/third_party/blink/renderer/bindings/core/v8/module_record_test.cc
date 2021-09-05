@@ -7,6 +7,9 @@
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/bindings/core/v8/boxed_v8_module.h"
+#include "third_party/blink/renderer/bindings/core/v8/module_request.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_function.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_source_code.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
@@ -14,6 +17,7 @@
 #include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/core/script/module_record_resolver.h"
 #include "third_party/blink/renderer/core/testing/dummy_modulator.h"
+#include "third_party/blink/renderer/core/testing/module_test_base.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_context_data.h"
 #include "v8/include/v8.h"
@@ -92,7 +96,13 @@ void ModuleRecordTestModulator::Trace(Visitor* visitor) const {
   DummyModulator::Trace(visitor);
 }
 
-TEST(ModuleRecordTest, compileSuccess) {
+class ModuleRecordTest : public ::testing::Test, public ParametrizedModuleTest {
+ public:
+  void SetUp() override { ParametrizedModuleTest::SetUp(); }
+  void TearDown() override { ParametrizedModuleTest::TearDown(); }
+};
+
+TEST_P(ModuleRecordTest, compileSuccess) {
   V8TestingScope scope;
   const KURL js_url("https://example.com/foo.js");
   v8::Local<v8::Module> module = ModuleRecord::Compile(
@@ -102,7 +112,7 @@ TEST(ModuleRecordTest, compileSuccess) {
   ASSERT_FALSE(module.IsEmpty());
 }
 
-TEST(ModuleRecordTest, compileFail) {
+TEST_P(ModuleRecordTest, compileFail) {
   V8TestingScope scope;
   const KURL js_url("https://example.com/foo.js");
   v8::Local<v8::Module> module = ModuleRecord::Compile(
@@ -112,7 +122,7 @@ TEST(ModuleRecordTest, compileFail) {
   EXPECT_TRUE(scope.GetExceptionState().HadException());
 }
 
-TEST(ModuleRecordTest, moduleRequests) {
+TEST_P(ModuleRecordTest, moduleRequests) {
   V8TestingScope scope;
   const KURL js_url("https://example.com/foo.js");
   v8::Local<v8::Module> module = ModuleRecord::Compile(
@@ -122,10 +132,12 @@ TEST(ModuleRecordTest, moduleRequests) {
   ASSERT_FALSE(module.IsEmpty());
 
   auto requests = ModuleRecord::ModuleRequests(scope.GetScriptState(), module);
-  EXPECT_THAT(requests, testing::ContainerEq<Vector<String>>({"a", "b"}));
+  EXPECT_EQ(2u, requests.size());
+  EXPECT_EQ("a", requests[0].specifier);
+  EXPECT_EQ("b", requests[1].specifier);
 }
 
-TEST(ModuleRecordTest, instantiateNoDeps) {
+TEST_P(ModuleRecordTest, instantiateNoDeps) {
   V8TestingScope scope;
 
   auto* modulator =
@@ -147,7 +159,7 @@ TEST(ModuleRecordTest, instantiateNoDeps) {
   EXPECT_EQ(0u, resolver->ResolveCount());
 }
 
-TEST(ModuleRecordTest, instantiateWithDeps) {
+TEST_P(ModuleRecordTest, instantiateWithDeps) {
   V8TestingScope scope;
 
   auto* modulator =
@@ -187,7 +199,28 @@ TEST(ModuleRecordTest, instantiateWithDeps) {
   EXPECT_EQ("b", resolver->Specifiers()[1]);
 }
 
-TEST(ModuleRecordTest, EvaluationErrorIsRemembered) {
+class SaveResultFunction final : public ScriptFunction {
+ public:
+  static v8::Local<v8::Function> CreateFunction(ScriptState* script_state,
+                                                ScriptValue* output) {
+    SaveResultFunction* self =
+        MakeGarbageCollected<SaveResultFunction>(script_state, output);
+    return self->BindToV8Function();
+  }
+
+  SaveResultFunction(ScriptState* script_state, ScriptValue* output)
+      : ScriptFunction(script_state), output_(output) {}
+
+ private:
+  ScriptValue Call(ScriptValue value) override {
+    *output_ = value;
+    return value;
+  }
+
+  ScriptValue* output_;
+};
+
+TEST_P(ModuleRecordTest, EvaluationErrorIsRemembered) {
   V8TestingScope scope;
 
   auto* modulator =
@@ -205,9 +238,8 @@ TEST(ModuleRecordTest, EvaluationErrorIsRemembered) {
   ASSERT_TRUE(ModuleRecord::Instantiate(scope.GetScriptState(), module_failure,
                                         js_url_f)
                   .IsEmpty());
-  ModuleEvaluationResult evaluation_result1 =
+  ScriptEvaluationResult evaluation_result1 =
       ModuleRecord::Evaluate(scope.GetScriptState(), module_failure, js_url_f);
-  EXPECT_TRUE(evaluation_result1.IsException());
 
   resolver->PrepareMockResolveResult(module_failure);
 
@@ -220,18 +252,42 @@ TEST(ModuleRecordTest, EvaluationErrorIsRemembered) {
   ASSERT_TRUE(
       ModuleRecord::Instantiate(scope.GetScriptState(), module, js_url_c)
           .IsEmpty());
-  ModuleEvaluationResult evaluation_result2 =
+  ScriptEvaluationResult evaluation_result2 =
       ModuleRecord::Evaluate(scope.GetScriptState(), module, js_url_f);
-  EXPECT_TRUE(evaluation_result2.IsException());
 
-  EXPECT_EQ(evaluation_result1.GetException(),
-            evaluation_result2.GetException());
+  if (base::FeatureList::IsEnabled(features::kTopLevelAwait)) {
+    EXPECT_EQ(evaluation_result1.GetResultType(),
+              ScriptEvaluationResult::ResultType::kSuccess);
+    EXPECT_EQ(evaluation_result2.GetResultType(),
+              ScriptEvaluationResult::ResultType::kSuccess);
+
+    ScriptValue value1;
+    ScriptValue value2;
+    evaluation_result1.GetPromise(scope.GetScriptState())
+        .Then(v8::Local<v8::Function>(), SaveResultFunction::CreateFunction(
+                                             scope.GetScriptState(), &value1));
+    evaluation_result2.GetPromise(scope.GetScriptState())
+        .Then(v8::Local<v8::Function>(), SaveResultFunction::CreateFunction(
+                                             scope.GetScriptState(), &value2));
+    v8::MicrotasksScope::PerformCheckpoint(
+        scope.GetScriptState()->GetIsolate());
+    EXPECT_FALSE(value1.IsEmpty());
+    EXPECT_FALSE(value2.IsEmpty());
+    EXPECT_EQ(value1, value2);
+  } else {
+    EXPECT_EQ(evaluation_result1.GetResultType(),
+              ScriptEvaluationResult::ResultType::kException);
+    EXPECT_EQ(evaluation_result2.GetResultType(),
+              ScriptEvaluationResult::ResultType::kException);
+    EXPECT_EQ(evaluation_result1.GetExceptionForModule(),
+              evaluation_result2.GetExceptionForModule());
+  }
 
   ASSERT_EQ(1u, resolver->ResolveCount());
   EXPECT_EQ("failure", resolver->Specifiers()[0]);
 }
 
-TEST(ModuleRecordTest, Evaluate) {
+TEST_P(ModuleRecordTest, Evaluate) {
   V8TestingScope scope;
 
   auto* modulator =
@@ -248,8 +304,9 @@ TEST(ModuleRecordTest, Evaluate) {
       ModuleRecord::Instantiate(scope.GetScriptState(), module, js_url);
   ASSERT_TRUE(exception.IsEmpty());
 
-  EXPECT_TRUE(ModuleRecord::Evaluate(scope.GetScriptState(), module, js_url)
-                  .IsSuccess());
+  EXPECT_EQ(ModuleRecord::Evaluate(scope.GetScriptState(), module, js_url)
+                .GetResultType(),
+            ScriptEvaluationResult::ResultType::kSuccess);
   v8::Local<v8::Value> value =
       ClassicScript::CreateUnspecifiedScript(ScriptSourceCode("window.foo"))
           ->RunScriptAndReturnValue(&scope.GetFrame());
@@ -266,7 +323,7 @@ TEST(ModuleRecordTest, Evaluate) {
   EXPECT_EQ(42.0, exported_value->NumberValue(scope.GetContext()).ToChecked());
 }
 
-TEST(ModuleRecordTest, EvaluateCaptureError) {
+TEST_P(ModuleRecordTest, EvaluateCaptureError) {
   V8TestingScope scope;
 
   auto* modulator =
@@ -282,13 +339,36 @@ TEST(ModuleRecordTest, EvaluateCaptureError) {
       ModuleRecord::Instantiate(scope.GetScriptState(), module, js_url);
   ASSERT_TRUE(exception.IsEmpty());
 
-  ModuleEvaluationResult result =
+  ScriptEvaluationResult result =
       ModuleRecord::Evaluate(scope.GetScriptState(), module, js_url);
-  ASSERT_TRUE(result.IsException());
-  v8::Local<v8::Value> value = result.GetException();
+
+  v8::Local<v8::Value> value;
+  if (base::FeatureList::IsEnabled(features::kTopLevelAwait)) {
+    ASSERT_EQ(result.GetResultType(),
+              ScriptEvaluationResult::ResultType::kSuccess);
+    ScriptValue script_value;
+    result.GetPromise(scope.GetScriptState())
+        .Then(v8::Local<v8::Function>(),
+              SaveResultFunction::CreateFunction(scope.GetScriptState(),
+                                                 &script_value));
+    v8::MicrotasksScope::PerformCheckpoint(
+        scope.GetScriptState()->GetIsolate());
+    EXPECT_FALSE(script_value.IsEmpty());
+    value = script_value.V8Value();
+  } else {
+    ASSERT_EQ(result.GetResultType(),
+              ScriptEvaluationResult::ResultType::kException);
+    value = result.GetExceptionForModule();
+  }
   ASSERT_TRUE(value->IsString());
   EXPECT_EQ("bar", ToCoreString(v8::Local<v8::String>::Cast(value)));
 }
+
+// Instantiate tests once with TLA and once without:
+INSTANTIATE_TEST_SUITE_P(ModuleRecordTestGroup,
+                         ModuleRecordTest,
+                         testing::Bool(),
+                         ParametrizedModuleTestParamName());
 
 }  // namespace
 

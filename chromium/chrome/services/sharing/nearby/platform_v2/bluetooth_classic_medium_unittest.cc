@@ -52,7 +52,7 @@ class BluetoothClassicMediumTest : public testing::Test {
                          /*bind_task_runner=*/nullptr);
 
     bluetooth_classic_medium_ =
-        std::make_unique<BluetoothClassicMedium>(remote_adapter_.get());
+        std::make_unique<BluetoothClassicMedium>(remote_adapter_);
 
     discovery_callback_ = {
         .device_discovered_cb =
@@ -124,7 +124,6 @@ class BluetoothClassicMediumTest : public testing::Test {
   base::OnceClosure on_device_name_changed_callback_;
   base::OnceClosure on_device_lost_callback_;
 
- private:
   bluetooth::mojom::DeviceInfoPtr CreateDeviceInfo(const std::string& address,
                                                    const std::string& name) {
     auto device_info = bluetooth::mojom::DeviceInfo::New();
@@ -134,6 +133,7 @@ class BluetoothClassicMediumTest : public testing::Test {
     return device_info;
   }
 
+ private:
   base::test::TaskEnvironment task_environment_;
 };
 
@@ -155,17 +155,53 @@ TEST_F(BluetoothClassicMediumTest, TestDiscovery_StartDiscoveryError) {
   EXPECT_FALSE(fake_adapter_->IsDiscoverySessionActive());
 }
 
-TEST_F(BluetoothClassicMediumTest, TestDiscovery_DeviceDiscovered) {
+TEST_F(BluetoothClassicMediumTest,
+       TestDiscovery_GetRemoteDevice_GetUndiscovered) {
+  StartDiscovery();
+
+  EXPECT_TRUE(bluetooth_classic_medium_->GetRemoteDevice(kDeviceAddress1));
+
+  StopDiscovery();
+}
+
+TEST_F(BluetoothClassicMediumTest,
+       TestDiscovery_DeviceDiscovered_BluetoothClassicDevice) {
   StartDiscovery();
 
   NotifyDeviceAdded(kDeviceAddress1, kDeviceName1);
+  EXPECT_TRUE(bluetooth_classic_medium_->GetRemoteDevice(kDeviceAddress1));
+  EXPECT_EQ(last_device_discovered_,
+            bluetooth_classic_medium_->GetRemoteDevice(kDeviceAddress1));
   EXPECT_EQ(kDeviceName1, last_device_discovered_->GetName());
+
   auto* first_device_discovered = last_device_discovered_;
 
   NotifyDeviceAdded(kDeviceAddress2, kDeviceName2);
+  EXPECT_TRUE(bluetooth_classic_medium_->GetRemoteDevice(kDeviceAddress2));
+  EXPECT_EQ(last_device_discovered_,
+            bluetooth_classic_medium_->GetRemoteDevice(kDeviceAddress2));
   EXPECT_EQ(kDeviceName2, last_device_discovered_->GetName());
 
   EXPECT_NE(first_device_discovered, last_device_discovered_);
+
+  StopDiscovery();
+}
+
+TEST_F(BluetoothClassicMediumTest,
+       TestDiscovery_DeviceDiscovered_BleAdvertisement) {
+  StartDiscovery();
+
+  on_device_discovered_callback_ = base::BindOnce([]() { FAIL(); });
+
+  // Do not set |name|. This reflects Chrome's usual representation of a BLE
+  // advertisement.
+  auto device_info = bluetooth::mojom::DeviceInfo::New();
+  device_info->address = kDeviceAddress1;
+  device_info->name_for_display = kDeviceAddress1;
+
+  fake_adapter_->NotifyDeviceAdded(std::move(device_info));
+
+  EXPECT_FALSE(last_device_discovered_);
 
   StopDiscovery();
 }
@@ -180,6 +216,18 @@ TEST_F(BluetoothClassicMediumTest, TestDiscovery_DeviceNameChanged) {
   EXPECT_EQ(kDeviceName2, last_device_name_changed_->GetName());
 
   EXPECT_EQ(last_device_name_changed_, last_device_discovered_);
+
+  // It is possible for DeviceChanged to trigger without a name change. This
+  // previously caused a name change event. Here we verify if the name
+  // does not change then we do not see the name change event.
+  last_device_name_changed_ = nullptr;
+  // We have to call NotifyDeviceChanged directly since we don't expect the
+  // callback to be invoked.
+  base::RunLoop run_loop;
+  fake_adapter_->NotifyDeviceChanged(
+      CreateDeviceInfo(kDeviceAddress1, kDeviceName2));
+  run_loop.RunUntilIdle();
+  EXPECT_EQ(nullptr, last_device_name_changed_);
 
   StopDiscovery();
 }

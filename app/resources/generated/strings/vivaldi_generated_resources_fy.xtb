@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">Ramt boarne &amp;besjen</translation>
 <translation id="1165039591588034296">Flater</translation>
 <translation id="1175364870820465910">&amp;Printsje...</translation>
-<translation id="1177863135347784049">Oanpast</translation>
 <translation id="1181037720776840403">Wiskje</translation>
 <translation id="1187722533808055681">Aktivearing fanút ynaktyf</translation>
 <translation id="119944043368869598">Alles wiskje</translation>
 <translation id="1221825588892235038">Seleksje allinne</translation>
 <translation id="1244303850296295656">Tafoeging flater</translation>
+<translation id="125220115284141797">Standert</translation>
 <translation id="1274977772557788323">Adobe Flash Player ynstellingen fan bewarjen</translation>
 <translation id="1297175357211070620">Bestimming</translation>
 <translation id="1303101771013849280">Makket blêdwizer fan HTML triem</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nij finster</translation>
 <translation id="1725149567830788547">Bestjoeringseleminten sjen litte</translation>
 <translation id="1729533290416704613">It bestjoerd ek hokker side te sjen is as jo sykje fanút it adresfjild.</translation>
+<translation id="174123615272205933">Oanpast</translation>
 <translation id="1744108098763830590">eftergrûn side</translation>
 <translation id="176587472219019965">&amp;Nij finster</translation>
 <translation id="1769104665586091481">Keppeling iepenje yn nij &amp;finster</translation>
+<translation id="1779468444204342338">Minimum</translation>
 <translation id="1815083418640426271">Plakke as platte tekst</translation>
 <translation id="1828901632669367785">Printsje mei help fan systeemdialoochskerm...</translation>
 <translation id="1850508293116537636">Rjochtsom &amp;draaie</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Freegje foarôf it stjoeren (rekommandearre)</translation>
 <translation id="241082044617551207">Unbekende ynstekker</translation>
 <translation id="2423578206845792524">O&amp;fbylding bewarje as...</translation>
-<translation id="2436707352762155834">Minimum</translation>
 <translation id="2439110203301358333">In oar programma op jo kompjûter hat in tafoeging taheakke dy de manier hoe't Vivaldi wurket feroarje kin.</translation>
 <translation id="2445081178310039857">Haad triemtafel fan tafoeging is fereaske.</translation>
 <translation id="2470702053775288986">Net stipe tafoegings útskeakele</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Foar rendearje <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofoan</translation>
 <translation id="3241680850019875542">Selektearje de haad triemtafel fan de tafoeging om yn te pakken. Foar it fernijen fan in tafoeging, selektearje jo de privee kaai triem om dit op 'e nij te brûken.</translation>
+<translation id="3266179261140759675">It stjoeren en ûntfangen fan gegevens by sluten siden tsjinkeare</translation>
 <translation id="3280237271814976245">Bewarje &amp;as...</translation>
 <translation id="3285322247471302225">Nije &amp;ljepper</translation>
 <translation id="3288047731229977326">Tafoegings útfierd yn ûntwikkelders modus kinne jo kompjûter kwea dwaan. As jo gjin ûntwikkelder binne, dan soenen jo it útfieren fan tafoegings yn ûntwikkelders modus útskeakelje moatte om feilich te bliuwen.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Tastean</translation>
 <translation id="5057110919553308744">Wannear jo op de tafoeging klikke</translation>
 <translation id="5063480226653192405">Brûkme</translation>
-<translation id="5068918910148307423">Lit koartlyn sluten websteeën net it stjoeren en ûntfangen fan gegevens ôfmeitsje</translation>
 <translation id="5116628073786783676">Be&amp;warje audio as...</translation>
 <translation id="5143374789336132547">De tafoeging "<ph name="EXTENSION_NAME" />" hat feroare hokker side te sjen is as jo klikke op de Thús knop.</translation>
 <translation id="5154108062446123722">Avansearre ynstellingen foar <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">De tafoeging "<ph name="EXTENSION_NAME" />" hat feroare hokker side te sjen is as jo sykje fanút it adresfjild.</translation>
 <translation id="5360150013186312835">Yn arkbalke sjen litte</translation>
 <translation id="5362741141255528695">Selektearje in privee kaai triem.</translation>
+<translation id="536638840841140142">Gjint</translation>
 <translation id="5370819323174483825">&amp;Ferfarskje</translation>
 <translation id="5398572795982417028">Side ferwizing falt bûten berik, limyt is<ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Trochgean mei ynladen</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Untfanger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Ynstallearre troch jo systeembehearder</translation>
 <translation id="7685049629764448582">JavaSkript ûnthâld</translation>
-<translation id="7701040980221191251">Gjint</translation>
 <translation id="7701869757853594372">USER handles</translation>
 <translation id="7704305437604973648">Taak</translation>
 <translation id="7710568461918838723">&amp;Cast...</translation>

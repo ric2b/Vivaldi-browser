@@ -140,8 +140,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     return static_cast<HTMLCanvasElement*>(Host());
   }
 
-  base::Optional<UkmParameters> ukm_parameters() const {
-    return Host()->ukm_parameters();
+  const UkmParameters GetUkmParameters() const {
+    return Host()->GetUkmParameters();
   }
 
   virtual String ContextName() const = 0;
@@ -799,7 +799,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void MakeXrCompatibleAsync();
   void OnMakeXrCompatibleFinished(
       device::mojom::blink::XrCompatibleResult xr_compatible_result);
-  void CompleteXrCompatiblePromiseIfPending();
+  void CompleteXrCompatiblePromiseIfPending(DOMExceptionCode exception_code);
   bool xr_compatible_;
   Member<ScriptPromiseResolver> make_xr_compatible_resolver_;
 
@@ -1018,6 +1018,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   bool is_web_gl_depth_texture_formats_types_added_ = false;
   bool is_ext_srgb_formats_types_added_ = false;
   bool is_ext_color_buffer_float_formats_added_ = false;
+  bool is_ext_color_buffer_half_float_formats_added_ = false;
   bool is_ext_texture_norm16_added_ = false;
 
   GLenumHashSet supported_internal_formats_;
@@ -1786,6 +1787,13 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   static void InitializeWebGLContextLimits(
       WebGraphicsContext3DProvider* context_provider);
   static unsigned CurrentMaxGLContexts();
+
+  void RecordIdentifiableGLParameterDigest(GLenum pname,
+                                           IdentifiableToken value);
+
+  void RecordShaderPrecisionFormatForStudy(GLenum shader_type,
+                                           GLenum precision_type,
+                                           WebGLShaderPrecisionFormat* format);
 
   static bool webgl_context_limits_initialized_;
   static unsigned max_active_webgl_contexts_;

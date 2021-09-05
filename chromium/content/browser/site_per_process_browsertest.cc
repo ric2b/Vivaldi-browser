@@ -51,22 +51,23 @@
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/viz/common/features.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/frame_host/cross_process_frame_connector.h"
-#include "content/browser/frame_host/frame_navigation_entry.h"
-#include "content/browser/frame_host/frame_tree.h"
-#include "content/browser/frame_host/navigation_controller_impl.h"
-#include "content/browser/frame_host/navigation_entry_impl.h"
-#include "content/browser/frame_host/navigation_request.h"
-#include "content/browser/frame_host/navigator.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/gpu/compositor_util.h"
+#include "content/browser/renderer_host/agent_scheduling_group_host.h"
+#include "content/browser/renderer_host/cross_process_frame_connector.h"
+#include "content/browser/renderer_host/frame_navigation_entry.h"
+#include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/input/input_router.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target.h"
 #include "content/browser/renderer_host/input/synthetic_smooth_scroll_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_tap_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_touchscreen_pinch_gesture.h"
+#include "content/browser/renderer_host/navigation_controller_impl.h"
+#include "content/browser/renderer_host/navigation_entry_impl.h"
+#include "content/browser/renderer_host/navigation_request.h"
+#include "content/browser/renderer_host/navigator.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
@@ -542,12 +543,13 @@ void OpenURLBlockUntilNavigationComplete(Shell* shell, const GURL& url) {
 // (Equivalent to the declared policy "feature *")
 blink::ParsedFeaturePolicyDeclaration CreateParsedFeaturePolicyDeclaration(
     blink::mojom::FeaturePolicyFeature feature,
-    const std::vector<GURL>& origins) {
+    const std::vector<GURL>& origins,
+    bool match_all_origins = false) {
   blink::ParsedFeaturePolicyDeclaration declaration;
 
   declaration.feature = feature;
-  declaration.matches_all_origins = origins.empty();
-  declaration.matches_opaque_src = declaration.matches_all_origins;
+  declaration.matches_all_origins = match_all_origins;
+  declaration.matches_opaque_src = match_all_origins;
 
   for (const auto& origin : origins)
     declaration.allowed_origins.push_back(url::Origin::Create(origin));
@@ -560,15 +562,22 @@ blink::ParsedFeaturePolicyDeclaration CreateParsedFeaturePolicyDeclaration(
 
 blink::ParsedFeaturePolicy CreateParsedFeaturePolicy(
     const std::vector<blink::mojom::FeaturePolicyFeature>& features,
-    const std::vector<GURL>& origins) {
+    const std::vector<GURL>& origins,
+    bool match_all_origins = false) {
   blink::ParsedFeaturePolicy result;
   result.reserve(features.size());
   for (const auto& feature : features)
-    result.push_back(CreateParsedFeaturePolicyDeclaration(feature, origins));
+    result.push_back(CreateParsedFeaturePolicyDeclaration(feature, origins,
+                                                          match_all_origins));
   return result;
 }
 
 blink::ParsedFeaturePolicy CreateParsedFeaturePolicyMatchesAll(
+    const std::vector<blink::mojom::FeaturePolicyFeature>& features) {
+  return CreateParsedFeaturePolicy(features, {}, true);
+}
+
+blink::ParsedFeaturePolicy CreateParsedFeaturePolicyMatchesNone(
     const std::vector<blink::mojom::FeaturePolicyFeature>& features) {
   return CreateParsedFeaturePolicy(features, {});
 }
@@ -1159,7 +1168,8 @@ class UpdateTextAutosizerInfoProxyObserver {
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, TextAutosizerPageInfo) {
   UpdateTextAutosizerInfoProxyObserver update_text_autosizer_info_observer;
 
-  WebPreferences prefs = web_contents()->GetOrCreateWebPreferences();
+  blink::web_pref::WebPreferences prefs =
+      web_contents()->GetOrCreateWebPreferences();
   prefs.text_autosizing_enabled = true;
 
   GURL main_url(embedded_test_server()->GetURL(
@@ -3989,7 +3999,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, ProxyCreationSkipsSubtree) {
 // TODO(bokan): Pretty soon most/all platforms will use overlay scrollbars. This
 // test should find a better way to check for scrollability. crbug.com/662196.
 // Flaky on Linux. crbug.com/790929.
-#if defined(OS_ANDROID) || defined(OS_LINUX)
+#if defined(OS_ANDROID) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 #define MAYBE_FrameOwnerPropertiesPropagationScrolling \
   DISABLED_FrameOwnerPropertiesPropagationScrolling
 #else
@@ -4163,7 +4173,11 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessEmbedderCSPEnforcementBrowserTest,
                            csp_values[i].c_str())));
 
     NavigateFrameToURL(child, urls[i]);
-    EXPECT_EQ(csp_values[i], child->frame_owner_properties().required_csp);
+    if (!base::FeatureList::IsEnabled(network::features::kOutOfBlinkCSPEE)) {
+      EXPECT_EQ(csp_values[i], child->frame_owner_properties().required_csp);
+    } else {
+      EXPECT_EQ(csp_values[i], child->csp_attribute()->header->header_value);
+    }
     // TODO(amalika): add checks that the CSP replication takes effect
 
     const url::Origin child_origin =
@@ -6180,6 +6194,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   SiteInstance* site_instance_a = root->current_frame_host()->GetSiteInstance();
   RenderProcessHost* process_a =
       root->render_manager()->current_frame_host()->GetProcess();
+  AgentSchedulingGroupHost* agent_scheduling_group_a =
+      AgentSchedulingGroupHost::Get(*site_instance_a, *process_a);
   int new_routing_id = process_a->GetNextRoutingID();
   int view_routing_id =
       root->frame_tree()->GetRenderViewHost(site_instance_a)->GetRoutingID();
@@ -6194,7 +6210,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // Send the message to create a proxy for B's new child frame in A.  This
   // used to crash, as parent_routing_id refers to a proxy that doesn't exist
   // anymore.
-  process_a->GetRendererInterface()->CreateFrameProxy(
+  agent_scheduling_group_a->CreateFrameProxy(
       new_routing_id, view_routing_id, base::nullopt, parent_routing_id,
       FrameReplicationState(), base::UnguessableToken::Create(),
       base::UnguessableToken::Create());
@@ -6239,6 +6255,10 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // attempted.
   RenderProcessHost* process =
       node->render_manager()->speculative_frame_host()->GetProcess();
+  AgentSchedulingGroupHost* agent_scheduling_group =
+      AgentSchedulingGroupHost::Get(
+          *node->render_manager()->speculative_frame_host()->GetSiteInstance(),
+          *process);
   RenderProcessHostWatcher watcher(
       process, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
   int frame_routing_id =
@@ -6269,7 +6289,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
     params->frame_owner_properties = blink::mojom::FrameOwnerProperties::New();
     params->frame_token = frame_token;
     params->devtools_frame_token = base::UnguessableToken::Create();
-    process->GetRendererInterface()->CreateFrame(std::move(params));
+    agent_scheduling_group->CreateFrame(std::move(params));
   }
 
   // Disable the BackForwardCache to ensure the old process is going to be
@@ -6309,6 +6329,9 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, ParentDetachRemoteChild) {
   // observer to ensure there is no crash when a new RenderFrame creation is
   // attempted.
   RenderProcessHost* process = node->current_frame_host()->GetProcess();
+  AgentSchedulingGroupHost* agent_scheduling_group =
+      AgentSchedulingGroupHost::Get(
+          *node->current_frame_host()->GetSiteInstance(), *process);
   RenderProcessHostWatcher watcher(
       process, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
   int frame_routing_id = node->current_frame_host()->GetRoutingID();
@@ -6359,7 +6382,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, ParentDetachRemoteChild) {
     params->replication_state.unique_name = "name";
     params->frame_token = frame_token;
     params->devtools_frame_token = base::UnguessableToken::Create();
-    process->GetRendererInterface()->CreateFrame(std::move(params));
+    agent_scheduling_group->CreateFrame(std::move(params));
   }
 
   // The test must wait for the process to exit, but if there is no leak, the
@@ -8189,8 +8212,16 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // a FrameHostMsg_ShowPopup to ask the browser to build and display the actual
 // popup using native controls.
 #if !defined(OS_MAC) && !defined(OS_ANDROID)
+// Disable the test due to flaky: https://crbug.com/1126165
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#define MAYBE_TwoSubframesCreatePopupMenuWidgetsSimultaneously \
+  DISABLED_TwoSubframesCreatePopupMenuWidgetsSimultaneously
+#else
+#define MAYBE_TwoSubframesCreatePopupMenuWidgetsSimultaneously \
+  TwoSubframesCreatePopupMenuWidgetsSimultaneously
+#endif
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
-                       TwoSubframesCreatePopupMenuWidgetsSimultaneously) {
+                       MAYBE_TwoSubframesCreatePopupMenuWidgetsSimultaneously) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b,c)"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -8752,9 +8783,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // same site as the canceled RFH doesn't lead to a renderer crash.  The steps
 // here are similar to ReuseNonLiveRenderViewHostAfterCancelPending, but don't
 // involve crashing the renderer. See https://crbug.com/651980.
-// Flaky on all platforms, see https://crbug.com/1104826.
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
-                       DISABLED_RecreateMainFrameAfterCancelPending) {
+                       RecreateMainFrameAfterCancelPending) {
   GURL a_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   GURL b_url(embedded_test_server()->GetURL("b.com", "/title2.html"));
   GURL c_url(embedded_test_server()->GetURL("c.com", "/title3.html"));
@@ -8982,7 +9012,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyBrowserTest,
   // exists.)
   NavigateFrameToURL(root->child_at(1), first_nav_url);
   EXPECT_EQ(
-      CreateParsedFeaturePolicyMatchesAll(
+      CreateParsedFeaturePolicyMatchesNone(
           {blink::mojom::FeaturePolicyFeature::kGeolocation,
            blink::mojom::FeaturePolicyFeature::kPayment}),
       root->child_at(1)->current_replication_state().feature_policy_header);
@@ -8991,15 +9021,16 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyBrowserTest,
 
   // Ask the deepest iframe to report the enabled state of the geolocation
   // feature. If its parent frame's policy was replicated correctly to the
-  // proxy, then this will be enabled. Otherwise, it will be disabled, as
-  // geolocation is disabled by default in cross-origin frames.
-  EXPECT_EQ(true,
+  // proxy, then this will be disabled. Otherwise, it will be enabled by the
+  // "allow" attribute on the parent frame.
+  EXPECT_EQ(false,
             EvalJs(root->child_at(1)->child_at(0),
                    "document.featurePolicy.allowsFeature('geolocation')"));
-  // TODO(loonybear): Add JS test for parameterized features.
 
-  // Now navigate the iframe to a page with no policy, and the same nested
-  // cross-site iframe. The policy should be cleared in the proxy.
+  // Now navigate the iframe to a page with no header policy, and the same
+  // nested cross-site iframe. The header policy should be cleared in the proxy.
+  // In this case, the frame policy from the parent will allow geolocation to be
+  // delegated.
   NavigateFrameToURL(root->child_at(1), second_nav_url);
   EXPECT_TRUE(root->child_at(1)
                   ->current_replication_state()
@@ -9008,8 +9039,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessFeaturePolicyBrowserTest,
 
   // Ask the deepest iframe to report the enabled state of the geolocation
   // feature. If its parent frame's policy was replicated correctly to the
-  // proxy, then this will now be disabled.
-  EXPECT_EQ(false,
+  // proxy, then this will now be allowed.
+  EXPECT_EQ(true,
             EvalJs(root->child_at(1)->child_at(0),
                    "document.featurePolicy.allowsFeature('geolocation')"));
 }
@@ -10424,6 +10455,36 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   EXPECT_EQ("opener-ping-reply", response);
 }
 
+IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
+                       DetachSpeculativeRenderFrameHost) {
+  // Commit a page with one iframe.
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(a)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  // Start a cross-site navigation.
+  GURL cross_site_url(embedded_test_server()->GetURL("b.com", "/title2.html"));
+  TestNavigationManager nav_manager(shell()->web_contents(), cross_site_url);
+  BeginNavigateIframeToURL(web_contents(), "child-0", cross_site_url);
+
+  // Wait for the request, but don't commit it yet. This should create a
+  // speculative RenderFrameHost.
+  ASSERT_TRUE(nav_manager.WaitForRequestStart());
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  RenderFrameHostImpl* speculative_rfh = root->current_frame_host()
+                                             ->child_at(0)
+                                             ->render_manager()
+                                             ->speculative_frame_host();
+  EXPECT_TRUE(speculative_rfh);
+
+  // Currently, the browser process never handles an explicit Detach() for a
+  // speculative RFH, since the speculative RFH or the entire FTN is always
+  // destroyed before the renderer sends this IPC.
+  speculative_rfh->Detach();
+
+  // Passes if there is no crash.
+}
+
 #if defined(OS_ANDROID)
 
 namespace {
@@ -10550,34 +10611,6 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest, TestChildProcessImportance) {
   EXPECT_EQ(ChildProcessImportance::IMPORTANT,
             root->current_frame_host()->GetProcess()->GetEffectiveImportance());
 }
-
-// Tests for Android TouchSelectionEditing.
-class FrameStableObserver {
- public:
-  FrameStableObserver(RenderWidgetHostViewBase* view, base::TimeDelta delta)
-      : view_(view), delta_(delta) {}
-  virtual ~FrameStableObserver() {}
-
-  void WaitUntilStable() {
-    uint32_t current_frame_number = view_->RendererFrameNumber();
-    uint32_t previous_frame_number;
-
-    do {
-      base::RunLoop run_loop;
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, run_loop.QuitClosure(), delta_);
-      run_loop.Run();
-      previous_frame_number = current_frame_number;
-      current_frame_number = view_->RendererFrameNumber();
-    } while (current_frame_number != previous_frame_number);
-  }
-
- private:
-  RenderWidgetHostViewBase* view_;
-  base::TimeDelta delta_;
-
-  DISALLOW_COPY_AND_ASSIGN(FrameStableObserver);
-};
 
 class TouchSelectionControllerClientTestWrapper
     : public ui::TouchSelectionControllerClient {
@@ -10738,9 +10771,6 @@ class TouchSelectionControllerClientAndroidSiteIsolationTest
 
     EXPECT_EQ(child_url, observer.last_navigation_url());
     EXPECT_TRUE(observer.last_navigation_succeeded());
-    FrameStableObserver child_frame_stable_observer(
-        child_rwhv_, TestTimeouts::tiny_timeout());
-    child_frame_stable_observer.WaitUntilStable();
   }
 
   // This must be called before the main-frame's RenderWidgetHostView is freed,
@@ -13112,7 +13142,7 @@ class EnableForceZoomContentClient : public TestContentBrowserClient {
   EnableForceZoomContentClient() = default;
 
   void OverrideWebkitPrefs(RenderViewHost* render_view_host,
-                           WebPreferences* prefs) override {
+                           blink::web_pref::WebPreferences* prefs) override {
     DCHECK(old_client_);
     old_client_->OverrideWebkitPrefs(render_view_host, prefs);
     prefs->force_enable_zoom = true;
@@ -13730,8 +13760,9 @@ class SitePerProcessBrowserTestWithSadFrameTabReload
 // reload. This avoids showing crashed subframes if a hidden tab is eventually
 // shown. See https://crbug.com/841572.
 // crbug.com/1010119, fails on Win. crbug.com/1015971, fails on Linux.
-// crbug.com/1049885, fails on Android.
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_ANDROID)
+// crbug.com/1049885, fails on Android and Mac.
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(OS_ANDROID) || defined(OS_MACOSX)
 #define MAYBE_ReloadHiddenTabWithCrashedSubframe \
   DISABLED_ReloadHiddenTabWithCrashedSubframe
 #else
@@ -14425,8 +14456,9 @@ class DoubleTapZoomContentBrowserClient : public TestContentBrowserClient {
  public:
   DoubleTapZoomContentBrowserClient() = default;
 
-  void OverrideWebkitPrefs(content::RenderViewHost* rvh,
-                           content::WebPreferences* web_prefs) override {
+  void OverrideWebkitPrefs(
+      content::RenderViewHost* rvh,
+      blink::web_pref::WebPreferences* web_prefs) override {
     web_prefs->double_tap_to_zoom_enabled = true;
   }
 
@@ -14775,10 +14807,14 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
   int process_id = root->current_frame_host()->GetProcess()->GetID();
   IsolationContext isolation_context(controller.GetBrowserContext());
-  auto start_url_lock =
-      SiteInstanceImpl::DetermineProcessLock(isolation_context, start_url);
-  auto another_url_lock =
-      SiteInstanceImpl::DetermineProcessLock(isolation_context, another_url);
+  auto start_url_lock = SiteInstanceImpl::DetermineProcessLock(
+      isolation_context, UrlInfo::CreateForTesting(start_url),
+      false /* is_coop_coep_cross_origin_isolated */,
+      base::nullopt /* coop_coep_cross_origin_isolated_origin */);
+  auto another_url_lock = SiteInstanceImpl::DetermineProcessLock(
+      isolation_context, UrlInfo::CreateForTesting(another_url),
+      false /* is_coop_coep_cross_origin_isolated */,
+      base::nullopt /* coop_coep_cross_origin_isolated_origin */);
   EXPECT_EQ(start_url_lock, policy->GetProcessLock(process_id));
   EXPECT_NE(another_url_lock, policy->GetProcessLock(process_id));
 

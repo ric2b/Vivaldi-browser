@@ -198,9 +198,9 @@ class CanvasResourceProviderSharedBitmap : public CanvasResourceProviderBitmap {
     auto paint_image = MakeImageSnapshot();
     if (!paint_image)
       return nullptr;
-    DCHECK(!paint_image.GetSkImage()->isTextureBacked());
+    DCHECK(!paint_image.IsTextureBacked());
 
-    output_resource->TakeSkImage(paint_image.GetSkImage());
+    output_resource->TakeSkImage(paint_image.GetSwSkImage());
 
     return output_resource;
   }
@@ -349,7 +349,7 @@ class CanvasResourceProviderSharedImage : public CanvasResourceProvider {
     DCHECK(sk_image);
     SkPixmap map;
     // We know this SkImage is software backed because it's guaranteed by
-    // PaintImage::GetRasterSkImage above
+    // PaintImage::GetSwSkImage above
     sk_image->peekPixels(&map);
     WritePixels(map.info(), map.addr(), map.rowBytes(), /*x=*/0, /*y=*/0);
   }
@@ -444,17 +444,27 @@ class CanvasResourceProviderSharedImage : public CanvasResourceProvider {
       resource_ = NewOrRecycledResource();
       DCHECK(resource_);
 
-      if (use_oop_rasterization_) {
+      auto* raster_interface = RasterInterface();
+      if (raster_interface) {
+        if (!use_oop_rasterization_)
+          TearDownSkSurface();
+
         if (mode_ == SkSurface::kRetain_ContentChangeMode) {
           auto old_mailbox = old_resource_shared_image->GetOrCreateGpuMailbox(
               kOrderingBarrier);
           auto mailbox = resource()->GetOrCreateGpuMailbox(kOrderingBarrier);
 
-          RasterInterface()->CopySubTexture(
+          raster_interface->CopySubTexture(
               old_mailbox, mailbox, GetBackingTextureTarget(), 0, 0, 0, 0,
               Size().Width(), Size().Height(), false /* unpack_flip_y */,
               false /* unpack_premultiply_alpha */);
         }
+
+        // In non-OOPR mode we need to update the client side SkSurface with the
+        // copied texture. Recreating SkSurface here matches the GPU process
+        // behaviour that will happen in OOPR mode.
+        if (!use_oop_rasterization_)
+          GetSkSurface();
       } else {
         EnsureWriteAccess();
         if (surface_) {
@@ -842,11 +852,16 @@ std::unique_ptr<CanvasResourceProvider>
 CanvasResourceProvider::CreateBitmapProvider(
     const IntSize& size,
     SkFilterQuality filter_quality,
-    const CanvasColorParams& color_params) {
+    const CanvasColorParams& color_params,
+    ShouldInitialize should_initialize) {
   auto provider = std::make_unique<CanvasResourceProviderBitmap>(
       size, filter_quality, color_params, nullptr /*resource_dispatcher*/);
-  if (provider->IsValid())
+  if (provider->IsValid()) {
+    if (should_initialize ==
+        CanvasResourceProvider::ShouldInitialize::kCallClear)
+      provider->Clear();
     return provider;
+  }
 
   return nullptr;
 }
@@ -856,6 +871,7 @@ CanvasResourceProvider::CreateSharedBitmapProvider(
     const IntSize& size,
     SkFilterQuality filter_quality,
     const CanvasColorParams& color_params,
+    ShouldInitialize should_initialize,
     base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher) {
   // SharedBitmapProvider has to have a valid resource_dispatecher to be able to
   // be created.
@@ -864,8 +880,12 @@ CanvasResourceProvider::CreateSharedBitmapProvider(
 
   auto provider = std::make_unique<CanvasResourceProviderSharedBitmap>(
       size, filter_quality, color_params, std::move(resource_dispatcher));
-  if (provider->IsValid())
+  if (provider->IsValid()) {
+    if (should_initialize ==
+        CanvasResourceProvider::ShouldInitialize::kCallClear)
+      provider->Clear();
     return provider;
+  }
 
   return nullptr;
 }
@@ -873,16 +893,23 @@ CanvasResourceProvider::CreateSharedBitmapProvider(
 std::unique_ptr<CanvasResourceProvider>
 CanvasResourceProvider::CreateSharedImageProvider(
     const IntSize& size,
-    base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper,
     SkFilterQuality filter_quality,
     const CanvasColorParams& color_params,
-    bool is_origin_top_left,
+    ShouldInitialize should_initialize,
+    base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper,
     RasterMode raster_mode,
+    bool is_origin_top_left,
     uint32_t shared_image_usage_flags) {
-  if (!context_provider_wrapper)
-    return nullptr;
+  // IsGpuCompositingEnabled can re-create the context if it has been lost, do
+  // this up front so that we can fail early and not expose ourselves to
+  // use after free bugs (crbug.com/1126424)
+  const bool is_gpu_compositing_enabled =
+      SharedGpuContext::IsGpuCompositingEnabled();
 
-  if (size.Width() <= 0 || size.Height() <= 0)
+  // If the context is lost we don't want to re-create it here, the resulting
+  // resource provider would be invalid anyway
+  if (!context_provider_wrapper ||
+      context_provider_wrapper->ContextProvider()->IsContextLost())
     return nullptr;
 
   const auto& capabilities =
@@ -898,7 +925,7 @@ CanvasResourceProvider::CreateSharedImageProvider(
   }
 
   const bool is_gpu_memory_buffer_image_allowed =
-      SharedGpuContext::IsGpuCompositingEnabled() &&
+      is_gpu_compositing_enabled &&
       IsGMBAllowed(size, color_params, capabilities) &&
       Platform::Current()->GetGpuMemoryBufferManager();
 
@@ -917,8 +944,12 @@ CanvasResourceProvider::CreateSharedImageProvider(
       size, filter_quality, color_params, context_provider_wrapper,
       is_origin_top_left, raster_mode == RasterMode::kGPU, skia_use_dawn,
       shared_image_usage_flags);
-  if (provider->IsValid())
+  if (provider->IsValid()) {
+    if (should_initialize ==
+        CanvasResourceProvider::ShouldInitialize::kCallClear)
+      provider->Clear();
     return provider;
+  }
 
   return nullptr;
 }
@@ -926,11 +957,14 @@ CanvasResourceProvider::CreateSharedImageProvider(
 std::unique_ptr<CanvasResourceProvider>
 CanvasResourceProvider::CreatePassThroughProvider(
     const IntSize& size,
-    base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper,
     SkFilterQuality filter_quality,
     const CanvasColorParams& color_params,
-    bool is_origin_top_left,
-    base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher) {
+    base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper,
+    base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher,
+    bool is_origin_top_left) {
+  // SharedGpuContext::IsGpuCompositingEnabled can potentially replace the
+  // context_provider_wrapper, so it's important to call that first as it can
+  // invalidate the weak pointer.
   if (!SharedGpuContext::IsGpuCompositingEnabled() || !context_provider_wrapper)
     return nullptr;
 
@@ -950,8 +984,13 @@ CanvasResourceProvider::CreatePassThroughProvider(
   auto provider = std::make_unique<CanvasResourceProviderPassThrough>(
       size, filter_quality, color_params, context_provider_wrapper,
       resource_dispatcher, is_origin_top_left);
-  if (provider->IsValid())
+  if (provider->IsValid()) {
+    // All the other type of resources are doing a clear here. As a
+    // CanvasResourceProvider of type PassThrough is used to delegate the
+    // internal parts of the resource and provider to other classes, we should
+    // not attempt to do a clear here. clear is not needed here.
     return provider;
+  }
 
   return nullptr;
 }
@@ -959,12 +998,16 @@ CanvasResourceProvider::CreatePassThroughProvider(
 std::unique_ptr<CanvasResourceProvider>
 CanvasResourceProvider::CreateSwapChainProvider(
     const IntSize& size,
-    base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper,
     SkFilterQuality filter_quality,
     const CanvasColorParams& color_params,
-    bool is_origin_top_left,
-    base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher) {
+    ShouldInitialize should_initialize,
+    base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper,
+    base::WeakPtr<CanvasResourceDispatcher> resource_dispatcher,
+    bool is_origin_top_left) {
   DCHECK(is_origin_top_left);
+  // SharedGpuContext::IsGpuCompositingEnabled can potentially replace the
+  // context_provider_wrapper, so it's important to call that first as it can
+  // invalidate the weak pointer.
   if (!SharedGpuContext::IsGpuCompositingEnabled() || !context_provider_wrapper)
     return nullptr;
 
@@ -979,8 +1022,12 @@ CanvasResourceProvider::CreateSwapChainProvider(
   auto provider = std::make_unique<CanvasResourceProviderSwapChain>(
       size, filter_quality, color_params, context_provider_wrapper,
       resource_dispatcher);
-  if (provider->IsValid())
+  if (provider->IsValid()) {
+    if (should_initialize ==
+        CanvasResourceProvider::ShouldInitialize::kCallClear)
+      provider->Clear();
     return provider;
+  }
 
   return nullptr;
 }
@@ -1173,11 +1220,9 @@ cc::PaintCanvas* CanvasResourceProvider::Canvas() {
 }
 
 void CanvasResourceProvider::OnContextDestroyed() {
-  if (canvas_image_provider_) {
-    DCHECK(skia_canvas_);
+  if (skia_canvas_)
     skia_canvas_->reset_image_provider();
-    canvas_image_provider_.reset();
-  }
+  canvas_image_provider_.reset();
 }
 
 void CanvasResourceProvider::OnFlushForImage(PaintImage::ContentId content_id) {
@@ -1200,7 +1245,7 @@ scoped_refptr<StaticBitmapImage> CanvasResourceProvider::SnapshotInternal(
     return nullptr;
 
   auto paint_image = MakeImageSnapshot();
-  DCHECK(!paint_image.GetSkImage()->isTextureBacked());
+  DCHECK(!paint_image.IsTextureBacked());
   return UnacceleratedStaticBitmapImage::Create(std::move(paint_image),
                                                 orientation);
 }
@@ -1301,12 +1346,6 @@ bool CanvasResourceProvider::WritePixels(const SkImageInfo& orig_info,
 }
 
 void CanvasResourceProvider::Clear() {
-  // We don't have an SkCanvas in OOPR mode so we can't do the clear below, plus
-  // OOPR already clears the canvas in BeginRaster.
-  if (UseOopRasterization()) {
-    return;
-  }
-
   // Clear the background transparent or opaque, as required. This should only
   // be called when a new resource provider is created to ensure that we're
   // not leaking data or displaying bad pixels (in the case of kOpaque
@@ -1315,9 +1354,11 @@ void CanvasResourceProvider::Clear() {
   // printing operations. See crbug.com/1003114
   DCHECK(IsValid());
   if (color_params_.GetOpacityMode() == kOpaque)
-    GetSkSurface()->getCanvas()->clear(SK_ColorBLACK);
+    Canvas()->clear(SK_ColorBLACK);
   else
-    GetSkSurface()->getCanvas()->clear(SK_ColorTRANSPARENT);
+    Canvas()->clear(SK_ColorTRANSPARENT);
+
+  FlushCanvas();
 }
 
 uint32_t CanvasResourceProvider::ContentUniqueID() const {
@@ -1457,6 +1498,11 @@ void CanvasResourceProvider::RestoreBackBuffer(const cc::PaintImage& image) {
 
 bool CanvasResourceProvider::HasRecordedDrawOps() const {
   return recorder_ && recorder_->ListHasDrawOps();
+}
+
+void CanvasResourceProvider::TearDownSkSurface() {
+  skia_canvas_ = nullptr;
+  surface_ = nullptr;
 }
 
 size_t CanvasResourceProvider::ComputeSurfaceSize() const {

@@ -52,9 +52,9 @@ namespace blink {
 
 struct BlinkTransferableMessage;
 class ConsoleMessage;
-class ExceptionState;
 class FetchClientSettingsObjectSnapshot;
 class FontFaceSet;
+class FontMatchingMetrics;
 class InstalledScriptsManager;
 class OffscreenFontSelector;
 class WorkerResourceTimingNotifier;
@@ -105,8 +105,9 @@ class CORE_EXPORT WorkerGlobalScope
   DEFINE_ATTRIBUTE_EVENT_LISTENER(timezonechange, kTimezonechange)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(unhandledrejection, kUnhandledrejection)
 
-  // WorkerUtils
-  virtual void importScripts(const Vector<String>& urls, ExceptionState&);
+  // This doesn't take an ExceptionState argument, but actually can throw
+  // exceptions directly to V8 (crbug/1114610).
+  virtual void importScripts(const Vector<String>& urls);
 
   // ExecutionContext
   const KURL& Url() const final;
@@ -119,6 +120,7 @@ class CORE_EXPORT WorkerGlobalScope
   HttpsState GetHttpsState() const override { return https_state_; }
   scheduler::WorkerScheduler* GetScheduler() final;
   ukm::UkmRecorder* UkmRecorder() final;
+  ScriptWrappable* ToScriptWrappable() final { return this; }
 
   void AddConsoleMessageImpl(ConsoleMessage*, bool discard_duplicates) final;
   BrowserInterfaceBrokerProxy& GetBrowserInterfaceBroker() final;
@@ -217,6 +219,10 @@ class CORE_EXPORT WorkerGlobalScope
   // match the actual worker type.
   virtual WorkerToken GetWorkerToken() const = 0;
 
+  // Tracks and reports metrics of attempted font match attempts (both
+  // successful and not successful) by the worker.
+  FontMatchingMetrics* GetFontMatchingMetrics();
+
  protected:
   WorkerGlobalScope(std::unique_ptr<GlobalScopeCreationParams>,
                     WorkerThread*,
@@ -240,7 +246,7 @@ class CORE_EXPORT WorkerGlobalScope
 
   void InitializeURL(const KURL& url);
 
-  mojom::ScriptType GetScriptType() const { return script_type_; }
+  mojom::blink::ScriptType GetScriptType() const { return script_type_; }
 
   // Sets the parameters for the worker main module script loaded by the browser
   // process.
@@ -255,13 +261,13 @@ class CORE_EXPORT WorkerGlobalScope
   void RunWorkerScript();
 
   // Used for importScripts().
-  void ImportScriptsInternal(const Vector<String>& urls, ExceptionState&);
+  void ImportScriptsInternal(const Vector<String>& urls);
   // ExecutionContext
   void AddInspectorIssue(mojom::blink::InspectorIssueInfoPtr) final;
   EventTarget* ErrorEventTarget() final { return this; }
 
   KURL url_;
-  const mojom::ScriptType script_type_;
+  const mojom::blink::ScriptType script_type_;
   const String user_agent_;
   const UserAgentMetadata ua_metadata_;
   std::unique_ptr<WorkerSettings> worker_settings_;
@@ -280,6 +286,10 @@ class CORE_EXPORT WorkerGlobalScope
   int last_pending_error_event_id_ = 0;
 
   Member<OffscreenFontSelector> font_selector_;
+
+  // Tracks and reports UKM metrics of the number of attempted font family match
+  // attempts (both successful and not successful) by the worker.
+  std::unique_ptr<FontMatchingMetrics> font_matching_metrics_;
 
   blink::BrowserInterfaceBrokerProxy browser_interface_broker_proxy_;
 

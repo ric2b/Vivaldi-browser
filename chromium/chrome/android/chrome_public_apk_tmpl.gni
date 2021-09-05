@@ -12,6 +12,7 @@ import("//build/config/locales.gni")
 import("//build/util/version.gni")
 import("//chrome/android/chrome_common_shared_library.gni")
 import("//chrome/android/features/dev_ui/dev_ui_module.gni")
+import("//chrome/android/modules/chrome_bundle_tmpl.gni")
 import("//chrome/common/features.gni")
 import("//device/vr/buildflags/buildflags.gni")
 import("//weblayer/variables.gni")
@@ -136,10 +137,6 @@ template("chrome_public_common_apk_or_module_tmpl") {
 
   target(_target_type, target_name) {
     forward_variables_from(invoker, "*")
-    if (defined(shared_resources_whitelist_target)) {
-      shared_resources_allowlist_target = shared_resources_whitelist_target
-      shared_resources_allowlist_locales = shared_resources_whitelist_locales
-    }
 
     if (_is_trichrome) {
       min_sdk_version = 29
@@ -156,7 +153,6 @@ template("chrome_public_common_apk_or_module_tmpl") {
     resource_exclusion_exceptions += [
       "*ic_file_download_white*",  # Bottom edge seems misaligned.
       "*ic_lock.*",  # Bottom edge seems misaligned.
-      "*ic_group_*",  # Appear only in xxxhdpi.
     ]
 
     if (min_sdk_version >= 21) {
@@ -168,7 +164,7 @@ template("chrome_public_common_apk_or_module_tmpl") {
     # are currently duplicated in system_webview_apk_tmpl.gni.
 
     # Used only by alert dialog on tiny screens.
-    _material_package = "com_google_android_material_material.*"
+    _material_package = "com_google_android_material.*"
     resource_exclusion_regex += "|${_material_package}values-small"
 
     # Used only by date picker (which chrome doesn't use).
@@ -182,7 +178,7 @@ template("chrome_public_common_apk_or_module_tmpl") {
     resource_exclusion_regex +=
         "|${_material_package}/drawable.*design_snackbar"
     resource_exclusion_regex += "|${_material_package}/xml.*badge_"
-    _material_package = "*com_google_android_material_material*"
+    _material_package = "*com_google_android_material*"
     resource_exclusion_exceptions += [
       # AppBarLayout
       "${_material_package}design_appbar_*",
@@ -371,7 +367,23 @@ template("chrome_public_common_apk_or_module_tmpl") {
       deps += [ ":$_unwind_asset_target" ]
     }
 
-    deps += [ "//chrome/android:chrome_all_java" ]
+    _is_bundle = invoker.target_type == "android_app_bundle_module"
+    if (!_is_bundle || !enable_chrome_module ||
+        (!_is_monochrome && !_is_trichrome)) {
+      deps += [ "//chrome/android:chrome_all_java" ]
+    }
+
+    # Use a consistent baseline so that it is easy to regenerate by deleting the
+    # file and re-building the "android_lint" target.
+    if (defined(enable_lint) && enable_lint) {
+      if (!defined(lint_baseline_file)) {
+        lint_baseline_file = "//chrome/android/expectations/lint-baseline.xml"
+      }
+      if (!defined(lint_suppressions_file)) {
+        lint_suppressions_file =
+            "//chrome/android/expectations/lint-suppressions.xml"
+      }
+    }
 
     # Prefer to add this data_dep on the final target instead of java targets
     # like chrome_all_java so that all other targets can build in parallel with
@@ -408,10 +420,42 @@ template("chrome_public_common_apk_or_module_tmpl") {
 #     static library target to provide certain shared library deps, and that
 #     this target should not package webview deps.
 template("monochrome_public_common_apk_or_module_tmpl") {
+  _is_bundle_module = defined(invoker.target_type) &&
+                      invoker.target_type == "android_app_bundle_module"
+  _enable_chrome_module =
+      _is_bundle_module && invoker.is_base_module && enable_chrome_module
+
+  # If the chrome module is enabled, collect shared libraries from all other
+  # DFMs and add them as loadable modules to the base module.
+  if (_enable_chrome_module) {
+    _module_descs = []
+    if (defined(invoker.module_descs)) {
+      _module_descs = invoker.module_descs
+    }
+    _chrome_module_shared_lib_deps = []
+    _chrome_module_loadable_modules = []
+    _arch = ""
+    _toolchain = ""
+    if (android_64bit_target_cpu) {
+      if (invoker.is_64_bit_browser) {
+        _arch = "_64"
+      } else {
+        _toolchain = "($android_secondary_abi_toolchain)"
+      }
+    }
+    _base_target_name = "libmonochrome${_arch}"
+    foreach(_module_desc, _module_descs) {
+      if (defined(_module_desc.native_deps) && _module_desc.native_deps != []) {
+        _lib_target = "//chrome/android:${_base_target_name}_${_module_desc.name}${_toolchain}"
+        _chrome_module_shared_lib_deps += [ _lib_target ]
+        _lib_out_dir = get_label_info(_lib_target, "root_out_dir")
+        _chrome_module_loadable_modules += [ "${_lib_out_dir}/${_base_target_name}_${_module_desc.name}_partition.so" ]
+      }
+    }
+  }
+
   chrome_public_common_apk_or_module_tmpl(target_name) {
     _overrides = {
-      _is_bundle_module = defined(invoker.target_type) &&
-                          invoker.target_type == "android_app_bundle_module"
       if (_is_bundle_module) {
         assert(
             defined(invoker.is_base_module),
@@ -467,10 +511,12 @@ template("monochrome_public_common_apk_or_module_tmpl") {
         # would be brought in by the module.
         # This needs to happen for monochrome & trichrome builds of base module if ARCore is enabled.
 
-        deps += [
-          "//chrome/browser/android/vr:ar_java",
-          "//third_party/arcore-android-sdk-client:com_google_ar_core_java",
-        ]
+        if (!enable_chrome_module) {
+          deps += [
+            "//chrome/browser/android/vr:ar_java",
+            "//third_party/arcore-android-sdk-client:com_google_ar_core_java",
+          ]
+        }
 
         _libarcore_dir = get_label_info(
                              "//third_party/arcore-android-sdk-client:com_google_ar_core_java($default_toolchain)",
@@ -487,6 +533,39 @@ template("monochrome_public_common_apk_or_module_tmpl") {
         } else {
           loadable_modules +=
               [ "$_libarcore_dir/armeabi-v7a/libarcore_sdk_c.so" ]
+        }
+      }
+
+      # Add all loadable modules and shared libraries from DFMs.
+      if (_enable_chrome_module) {
+        if (is_monochrome) {
+          deps += [ "//chrome/android:base_monochrome_module_java" ]
+        } else {
+          deps += [ "//chrome/android:base_module_java" ]
+        }
+        deps += _chrome_module_shared_lib_deps
+        _loadable_modules_32_bit = []
+        _loadable_modules_64_bit = []
+        foreach(_module_desc, _module_descs) {
+          if (defined(_module_desc.loadable_modules_32_bit)) {
+            _loadable_modules_32_bit += _module_desc.loadable_modules_32_bit
+          }
+          if (defined(_module_desc.loadable_modules_64_bit)) {
+            _loadable_modules_64_bit += _module_desc.loadable_modules_64_bit
+          }
+        }
+
+        if (android_64bit_target_cpu) {
+          if (invoker.is_64_bit_browser) {
+            loadable_modules +=
+                _loadable_modules_64_bit + _chrome_module_loadable_modules
+          } else {
+            secondary_abi_loadable_modules +=
+                _loadable_modules_32_bit + _chrome_module_loadable_modules
+          }
+        } else {
+          loadable_modules +=
+              _loadable_modules_32_bit + _chrome_module_loadable_modules
         }
       }
 
@@ -532,8 +611,10 @@ template("monochrome_public_common_apk_or_module_tmpl") {
         deps += [
           "//android_webview/glue:glue_java",
           "//android_webview/nonembedded:nonembedded_java",
-          "//chrome/android:monochrome_java",
         ]
+        if (!enable_chrome_module || !_is_bundle_module) {
+          deps += [ "//chrome/android:monochrome_java" ]
+        }
 
         if (_include_primary_support) {
           deps += [
@@ -721,5 +802,58 @@ template("monochrome_public_common_apk_or_module_tmpl") {
     ]
     forward_variables_from(invoker, "*", _override_args)
     forward_variables_from(_overrides, _override_args)
+  }
+}
+
+# Generates an AndroidManifest.xml along with an optional second manifest
+# dependent on the original.
+#
+# Variables:
+#   input: The base manifest template with the main application definition.
+#   output: Output path for |input|.
+#   split_input: Path to an alternate manifest that will be built if
+#     definitions_in_split is true.
+#   split_output: Output path for |split_input|.
+#   variables: Variables to pass to the jinja templates.
+#   definitions_in_split: If true will pass definitions_in_split=true in the
+#     variables passed to |input| and generate |split_output|.
+template("split_manifest_template") {
+  _definitions_in_split =
+      defined(invoker.definitions_in_split) && invoker.definitions_in_split
+  jinja_template(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "includes",
+                             "input",
+                             "output",
+                             "variables",
+                           ])
+    if (_definitions_in_split) {
+      variables += [ "definitions_in_split=true" ]
+    }
+  }
+
+  if (_definitions_in_split) {
+    jinja_template("${target_name}__split") {
+      forward_variables_from(invoker,
+                             [
+                               "includes",
+                               "variables",
+                             ])
+      if (!defined(includes)) {
+        includes = []
+      }
+      includes += [ invoker.input ]
+      input = invoker.split_input
+      output = invoker.split_output
+      _rebased_input = rebase_path(invoker.input, "//")
+      variables += [ "base_manifest=${_rebased_input}" ]
+    }
+  } else {
+    not_needed(invoker,
+               [
+                 "split_input",
+                 "split_output",
+               ])
   }
 }

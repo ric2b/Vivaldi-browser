@@ -12,7 +12,7 @@
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
-#include "components/viz/common/surfaces/local_surface_id_allocation.h"
+#include "components/viz/common/surfaces/local_surface_id.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/input_messages.h"
@@ -24,6 +24,7 @@
 #include "content/public/common/impression.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
+#include "content/renderer/agent_scheduling_group.h"
 #include "content/renderer/child_frame_compositing_helper.h"
 #include "content/renderer/impression_conversions.h"
 #include "content/renderer/loader/web_url_request_util.h"
@@ -67,13 +68,15 @@ base::LazyInstance<FrameProxyMap>::DestructorAtExit g_frame_proxy_map =
 
 // static
 RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
+    AgentSchedulingGroup& agent_scheduling_group,
     RenderFrameImpl* frame_to_replace,
     int routing_id,
     blink::mojom::TreeScopeType scope,
     const base::UnguessableToken& proxy_frame_token) {
   CHECK_NE(routing_id, MSG_ROUTING_NONE);
 
-  std::unique_ptr<RenderFrameProxy> proxy(new RenderFrameProxy(routing_id));
+  std::unique_ptr<RenderFrameProxy> proxy(
+      new RenderFrameProxy(agent_scheduling_group, routing_id));
   proxy->devtools_frame_token_ = frame_to_replace->GetDevToolsFrameToken();
 
   // When a RenderFrame is replaced by a RenderProxy, the WebRemoteFrame should
@@ -111,9 +114,10 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
 
 // static
 RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
+    AgentSchedulingGroup& agent_scheduling_group,
     int routing_id,
     int render_view_routing_id,
-    const base::UnguessableToken& opener_frame_token,
+    const base::Optional<base::UnguessableToken>& opener_frame_token,
     int parent_routing_id,
     const FrameReplicationState& replicated_state,
     const base::UnguessableToken& frame_token,
@@ -128,13 +132,16 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
       return nullptr;
   }
 
-  std::unique_ptr<RenderFrameProxy> proxy(new RenderFrameProxy(routing_id));
+  std::unique_ptr<RenderFrameProxy> proxy(
+      new RenderFrameProxy(agent_scheduling_group, routing_id));
   proxy->devtools_frame_token_ = devtools_frame_token;
   RenderViewImpl* render_view = nullptr;
   RenderWidget* ancestor_widget = nullptr;
   blink::WebRemoteFrame* web_frame = nullptr;
 
-  auto* opener = blink::WebFrame::FromFrameToken(opener_frame_token);
+  blink::WebFrame* opener = nullptr;
+  if (opener_frame_token)
+    opener = blink::WebFrame::FromFrameToken(*opener_frame_token);
   if (!parent) {
     // Create a top level WebRemoteFrame.
     render_view = RenderViewImpl::FromRoutingID(render_view_routing_id);
@@ -177,12 +184,14 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
 }
 
 RenderFrameProxy* RenderFrameProxy::CreateProxyForPortal(
+    AgentSchedulingGroup& agent_scheduling_group,
     RenderFrameImpl* parent,
     int proxy_routing_id,
     const base::UnguessableToken& frame_token,
     const base::UnguessableToken& devtools_frame_token,
     const blink::WebElement& portal_element) {
-  auto proxy = base::WrapUnique(new RenderFrameProxy(proxy_routing_id));
+  auto proxy = base::WrapUnique(
+      new RenderFrameProxy(agent_scheduling_group, proxy_routing_id));
   proxy->devtools_frame_token_ = devtools_frame_token;
   blink::WebRemoteFrame* web_frame = blink::WebRemoteFrame::CreateForPortal(
       blink::mojom::TreeScopeType::kDocument, proxy.get(),
@@ -219,8 +228,10 @@ RenderFrameProxy* RenderFrameProxy::FromWebFrame(
   return nullptr;
 }
 
-RenderFrameProxy::RenderFrameProxy(int routing_id)
-    : routing_id_(routing_id),
+RenderFrameProxy::RenderFrameProxy(AgentSchedulingGroup& agent_scheduling_group,
+                                   int routing_id)
+    : agent_scheduling_group_(agent_scheduling_group),
+      routing_id_(routing_id),
       provisional_frame_routing_id_(MSG_ROUTING_NONE),
       // TODO(samans): Investigate if it is safe to delay creation of this
       // object until a FrameSinkId is provided.
@@ -229,17 +240,14 @@ RenderFrameProxy::RenderFrameProxy(int routing_id)
   std::pair<RoutingIDProxyMap::iterator, bool> result =
       g_routing_id_proxy_map.Get().insert(std::make_pair(routing_id_, this));
   CHECK(result.second) << "Inserting a duplicate item.";
-  RenderThread::Get()->AddRoute(routing_id_, this);
-  blink_interface_registry_.reset(new BlinkInterfaceRegistryImpl(
-      binder_registry_.GetWeakPtr(), associated_interfaces_.GetWeakPtr()));
+  agent_scheduling_group_.AddRoute(routing_id_, this);
+  blink_interface_registry_ = std::make_unique<BlinkInterfaceRegistryImpl>(
+      binder_registry_.GetWeakPtr(), associated_interfaces_.GetWeakPtr());
 }
 
 RenderFrameProxy::~RenderFrameProxy() {
-  if (ancestor_render_widget_)
-    ancestor_render_widget_->UnregisterRenderFrameProxy(this);
-
   CHECK(!web_frame_);
-  RenderThread::Get()->RemoveRoute(routing_id_);
+  agent_scheduling_group_.RemoveRoute(routing_id_);
   g_routing_id_proxy_map.Get().erase(routing_id_);
 }
 
@@ -269,8 +277,16 @@ void RenderFrameProxy::Init(blink::WebRemoteFrame* web_frame,
     pending_visual_properties_.is_pinch_gesture_active =
         ancestor_frame_widget->PinchGestureActiveInMainFrame();
     pending_visual_properties_.screen_info =
-        ancestor_render_widget_->GetOriginalScreenInfo();
-    ancestor_render_widget_->RegisterRenderFrameProxy(this);
+        ancestor_render_widget_->GetWebWidget()->GetOriginalScreenInfo();
+    pending_visual_properties_.visible_viewport_size =
+        ancestor_render_widget_->GetWebWidget()->VisibleViewportSizeInDIPs();
+    const blink::WebVector<gfx::Rect>& window_segments =
+        static_cast<blink::WebFrameWidget*>(
+            ancestor_render_widget_->GetWebWidget())
+            ->WindowSegments();
+    pending_visual_properties_.root_widget_window_segments.assign(
+        window_segments.begin(), window_segments.end());
+    SynchronizeVisualProperties();
   }
 
   std::pair<FrameProxyMap::iterator, bool> result =
@@ -309,8 +325,8 @@ void RenderFrameProxy::ZoomLevelChanged(double zoom_level) {
   SynchronizeVisualProperties();
 }
 
-void RenderFrameProxy::OnRootWindowSegmentsChanged(
-    std::vector<gfx::Rect> root_widget_window_segments) {
+void RenderFrameProxy::DidChangeRootWindowSegments(
+    const std::vector<gfx::Rect>& root_widget_window_segments) {
   pending_visual_properties_.root_widget_window_segments =
       std::move(root_widget_window_segments);
   SynchronizeVisualProperties();
@@ -325,7 +341,11 @@ void RenderFrameProxy::PageScaleFactorChanged(float page_scale_factor,
   SynchronizeVisualProperties();
 }
 
-void RenderFrameProxy::OnVisibleViewportSizeChanged(
+viz::FrameSinkId RenderFrameProxy::GetFrameSinkId() {
+  return frame_sink_id_;
+}
+
+void RenderFrameProxy::DidChangeVisibleViewportSize(
     const gfx::Size& visible_viewport_size) {
   DCHECK(ancestor_render_widget_);
 
@@ -439,7 +459,7 @@ void RenderFrameProxy::OnAssociatedInterfaceRequest(
 }
 
 bool RenderFrameProxy::Send(IPC::Message* message) {
-  return RenderThread::Get()->Send(message);
+  return agent_scheduling_group_.Send(message);
 }
 
 void RenderFrameProxy::OnDeleteProxy() {
@@ -460,8 +480,7 @@ void RenderFrameProxy::DidStartLoading() {
 void RenderFrameProxy::DidUpdateVisualProperties(
     const cc::RenderFrameMetadata& metadata) {
   if (!parent_local_surface_id_allocator_->UpdateFromChild(
-          metadata.local_surface_id_allocation.value_or(
-              viz::LocalSurfaceIdAllocation()))) {
+          metadata.local_surface_id.value_or(viz::LocalSurfaceId()))) {
     return;
   }
 
@@ -541,9 +560,8 @@ void RenderFrameProxy::SynchronizeVisualProperties() {
 
   if (synchronized_props_changed) {
     parent_local_surface_id_allocator_->GenerateId();
-    pending_visual_properties_.local_surface_id_allocation =
-        parent_local_surface_id_allocator_
-            ->GetCurrentLocalSurfaceIdAllocation();
+    pending_visual_properties_.local_surface_id =
+        parent_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
   }
 
   // If we're synchronizing surfaces, then use an infinite deadline to ensure
@@ -566,19 +584,17 @@ void RenderFrameProxy::SynchronizeVisualProperties() {
 
   // Let the browser know about the updated view rect.
   Send(new FrameHostMsg_SynchronizeVisualProperties(
-      routing_id_, frame_sink_id_, pending_visual_properties_));
+      routing_id_, pending_visual_properties_));
   sent_visual_properties_ = pending_visual_properties_;
 
   TRACE_EVENT_WITH_FLOW2(
       TRACE_DISABLED_BY_DEFAULT("viz.surface_id_flow"),
       "RenderFrameProxy::SynchronizeVisualProperties Send Message",
-      TRACE_ID_GLOBAL(pending_visual_properties_.local_surface_id_allocation
-                          .local_surface_id()
-                          .submission_trace_id()),
+      TRACE_ID_GLOBAL(
+          pending_visual_properties_.local_surface_id.submission_trace_id()),
       TRACE_EVENT_FLAG_FLOW_OUT, "message",
       "FrameHostMsg_SynchronizeVisualProperties", "local_surface_id",
-      pending_visual_properties_.local_surface_id_allocation.local_surface_id()
-          .ToString());
+      pending_visual_properties_.local_surface_id.ToString());
 }
 
 void RenderFrameProxy::FrameDetached(DetachType type) {
@@ -672,7 +688,7 @@ void RenderFrameProxy::FrameRectsChanged(
   pending_visual_properties_.local_frame_size =
       gfx::Size(local_frame_rect.width, local_frame_rect.height);
   pending_visual_properties_.screen_info =
-      ancestor_render_widget_->GetOriginalScreenInfo();
+      ancestor_render_widget_->GetWebWidget()->GetOriginalScreenInfo();
   if (crashed_) {
     // Update the sad page to match the current size.
     compositing_helper_->ChildFrameGone(local_frame_size(),
@@ -728,9 +744,7 @@ SkBitmap* RenderFrameProxy::GetSadPageBitmap() {
 }
 
 const viz::LocalSurfaceId& RenderFrameProxy::GetLocalSurfaceId() const {
-  return parent_local_surface_id_allocator_
-      ->GetCurrentLocalSurfaceIdAllocation()
-      .local_surface_id();
+  return parent_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
 }
 
 mojom::RenderFrameProxyHost* RenderFrameProxy::GetFrameProxyHost() {
@@ -742,21 +756,13 @@ mojom::RenderFrameProxyHost* RenderFrameProxy::GetFrameProxyHost() {
 blink::AssociatedInterfaceProvider*
 RenderFrameProxy::GetRemoteAssociatedInterfaces() {
   if (!remote_associated_interfaces_) {
-    ChildThreadImpl* thread = ChildThreadImpl::current();
-    if (thread) {
-      mojo::PendingAssociatedRemote<blink::mojom::AssociatedInterfaceProvider>
-          remote_interfaces;
-      thread->GetRemoteRouteProvider()->GetRoute(
-          routing_id_, remote_interfaces.InitWithNewEndpointAndPassReceiver());
-      remote_associated_interfaces_ =
-          std::make_unique<blink::AssociatedInterfaceProvider>(
-              std::move(remote_interfaces));
-    } else {
-      // In some tests the thread may be null,
-      // so set up a self-contained interface provider instead.
-      remote_associated_interfaces_ =
-          std::make_unique<blink::AssociatedInterfaceProvider>(nullptr);
-    }
+    mojo::PendingAssociatedRemote<blink::mojom::AssociatedInterfaceProvider>
+        remote_interfaces;
+    agent_scheduling_group_.GetRemoteRouteProvider()->GetRoute(
+        routing_id_, remote_interfaces.InitWithNewEndpointAndPassReceiver());
+    remote_associated_interfaces_ =
+        std::make_unique<blink::AssociatedInterfaceProvider>(
+            std::move(remote_interfaces));
   }
   return remote_associated_interfaces_.get();
 }

@@ -12,6 +12,7 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
+#include "base/timer/elapsed_timer.h"
 #include "third_party/blink/public/common/features.h"
 #include "ui/gfx/win/direct_write.h"
 
@@ -179,35 +180,9 @@ FontEnumerationCacheWin::FamilyDataResult::~FamilyDataResult() = default;
 FontEnumerationCacheWin::FamilyDataResult::FamilyDataResult() = default;
 
 // static
-FontEnumerationCacheWin* FontEnumerationCacheWin::GetInstance() {
+FontEnumerationCache* FontEnumerationCache::GetInstance() {
   static base::NoDestructor<FontEnumerationCacheWin> instance;
   return instance.get();
-}
-
-void FontEnumerationCacheWin::QueueShareMemoryRegionWhenReady(
-    scoped_refptr<base::TaskRunner> task_runner,
-    blink::mojom::FontAccessManager::EnumerateLocalFontsCallback callback) {
-  DCHECK(base::FeatureList::IsEnabled(blink::features::kFontAccess));
-
-  callbacks_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &FontEnumerationCacheWin::RunPendingCallback,
-          // Safe because this is an initialized singleton.
-          base::Unretained(this),
-          CallbackOnTaskRunner(std::move(task_runner), std::move(callback))));
-
-  if (!enumeration_cache_build_started_.IsSet()) {
-    enumeration_cache_build_started_.Set();
-
-    SchedulePrepareFontEnumerationCache();
-  }
-}
-
-bool FontEnumerationCacheWin::IsFontEnumerationCacheReady() {
-  DCHECK(base::FeatureList::IsEnabled(blink::features::kFontAccess));
-
-  return enumeration_cache_built_.IsSet() && IsFontEnumerationCacheValid();
 }
 
 void FontEnumerationCacheWin::InitializeDirectWrite() {
@@ -261,6 +236,9 @@ void FontEnumerationCacheWin::SchedulePrepareFontEnumerationCache() {
 
 void FontEnumerationCacheWin::PrepareFontEnumerationCache() {
   DCHECK(!enumeration_cache_built_.IsSet());
+  DCHECK(!enumeration_timer_);
+
+  enumeration_timer_ = std::make_unique<base::ElapsedTimer>();
 
   font_enumeration_table_ = std::make_unique<blink::FontEnumerationTable>();
 
@@ -270,7 +248,7 @@ void FontEnumerationCacheWin::PrepareFontEnumerationCache() {
 
     outstanding_family_results_ = collection_->GetFontFamilyCount();
 
-    UMA_HISTOGRAM_CUSTOM_COUNTS(
+    base::UmaHistogramCustomCounts(
         "Fonts.AccessAPI.EnumerationCache.Dwrite.FamilyCount",
         outstanding_family_results_, 1, 5000, 50);
   }
@@ -304,7 +282,20 @@ void FontEnumerationCacheWin::AppendFontDataAndFinalizeIfNeeded(
   if (FAILED(family_data_result->exit_hresult))
     enumeration_errors_[family_data_result->exit_hresult]++;
 
+  // Used to filter duplicates.
+  std::set<std::string> fonts_seen;
+  int duplicate_count = 0;
+
   for (const auto& font_meta : family_data_result->fonts) {
+    const std::string& postscript_name = font_meta.postscript_name();
+
+    if (fonts_seen.count(postscript_name) != 0) {
+      ++duplicate_count;
+      // Skip duplicates.
+      continue;
+    }
+    fonts_seen.insert(postscript_name);
+
     blink::FontEnumerationTable_FontMetadata* added_font_meta =
         font_enumeration_table_->add_fonts();
     *added_font_meta = font_meta;
@@ -313,10 +304,14 @@ void FontEnumerationCacheWin::AppendFontDataAndFinalizeIfNeeded(
   if (!outstanding_family_results_) {
     FinalizeEnumerationCache();
   }
+
+  base::UmaHistogramCounts100(
+      "Fonts.AccessAPI.EnumerationCache.DuplicateFontCount", duplicate_count);
 }
 
 void FontEnumerationCacheWin::FinalizeEnumerationCache() {
   DCHECK(!enumeration_cache_built_.IsSet());
+  DCHECK(enumeration_timer_);
 
   if (enumeration_errors_.size() > 0) {
     auto most_frequent_hresult = std::max_element(
@@ -335,17 +330,11 @@ void FontEnumerationCacheWin::FinalizeEnumerationCache() {
   // out of scope.
   std::unique_ptr<blink::FontEnumerationTable> enumeration_table(
       std::move(font_enumeration_table_));
-  enumeration_cache_memory_ = base::ReadOnlySharedMemoryRegion::Create(
-      enumeration_table->ByteSizeLong());
+  BuildEnumerationCache(std::move(enumeration_table));
 
-  if (!IsFontEnumerationCacheValid() ||
-      !enumeration_table->SerializeToArray(
-          enumeration_cache_memory_.mapping.memory(),
-          enumeration_cache_memory_.mapping.size())) {
-    enumeration_cache_memory_ = base::MappedReadOnlyRegion();
-  }
-
-  enumeration_cache_built_.Set();
+  base::UmaHistogramMediumTimes("Fonts.AccessAPI.EnumerationTime",
+                                enumeration_timer_->Elapsed());
+  enumeration_timer_.reset();
 
   // Respond to pending and future requests.
   StartCallbacksTaskQueue();

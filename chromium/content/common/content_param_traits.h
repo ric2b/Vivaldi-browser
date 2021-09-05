@@ -28,14 +28,9 @@ class MessagePortChannel;
 class MessagePortDescriptor;
 }
 
-namespace content {
-struct RecordContentToVisibleTimeRequest;
-}
-
 namespace viz {
 class FrameSinkId;
 class LocalSurfaceId;
-class LocalSurfaceIdAllocation;
 class SurfaceId;
 class SurfaceInfo;
 }  // namespace viz
@@ -113,16 +108,6 @@ struct CONTENT_EXPORT ParamTraits<viz::LocalSurfaceId> {
 };
 
 template <>
-struct CONTENT_EXPORT ParamTraits<viz::LocalSurfaceIdAllocation> {
-  typedef viz::LocalSurfaceIdAllocation param_type;
-  static void Write(base::Pickle* m, const param_type& p);
-  static bool Read(const base::Pickle* m,
-                   base::PickleIterator* iter,
-                   param_type* r);
-  static void Log(const param_type& p, std::string* l);
-};
-
-template <>
 struct CONTENT_EXPORT ParamTraits<viz::SurfaceId> {
   typedef viz::SurfaceId param_type;
   static void Write(base::Pickle* m, const param_type& p);
@@ -145,16 +130,6 @@ struct CONTENT_EXPORT ParamTraits<viz::SurfaceInfo> {
 template <>
 struct CONTENT_EXPORT ParamTraits<net::SHA256HashValue> {
   typedef net::SHA256HashValue param_type;
-  static void Write(base::Pickle* m, const param_type& p);
-  static bool Read(const base::Pickle* m,
-                   base::PickleIterator* iter,
-                   param_type* r);
-  static void Log(const param_type& p, std::string* l);
-};
-
-template <>
-struct CONTENT_EXPORT ParamTraits<content::RecordContentToVisibleTimeRequest> {
-  using param_type = content::RecordContentToVisibleTimeRequest;
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
                    base::PickleIterator* iter,

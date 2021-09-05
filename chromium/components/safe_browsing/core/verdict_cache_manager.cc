@@ -5,6 +5,7 @@
 #include "components/safe_browsing/core/verdict_cache_manager.h"
 
 #include "base/base64.h"
+#include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
@@ -27,6 +28,9 @@ const char kVerdictProto[] = "verdict_proto";
 const char kRealTimeThreatInfoProto[] = "rt_threat_info_proto";
 const char kPasswordOnFocusCacheKey[] = "password_on_focus_cache_key";
 const char kRealTimeUrlCacheKey[] = "real_time_url_cache_key";
+
+// Command-line flag for caching an artificial unsafe verdict.
+const char kUnsafeUrlFlag[] = "mark_as_real_time_phishing";
 
 // The maximum number of entries to be removed in a single cleanup. Removing too
 // many entries all at once could cause jank.
@@ -194,15 +198,6 @@ size_t RemoveExpiredEntries(base::Value* verdict_dictionary,
     verdict_dictionary->RemoveKey(key);
 
   return expired_keys.size();
-}
-
-// Helper function to determine if the given origin matches content settings
-// map's patterns.
-bool OriginMatchPrimaryPattern(
-    const GURL& origin,
-    const ContentSettingsPattern& primary_pattern,
-    const ContentSettingsPattern& secondary_pattern_unused) {
-  return ContentSettingsPattern::FromURLNoWildcard(origin) == primary_pattern;
 }
 
 std::string GetKeyOfTypeFromTriggerType(
@@ -382,6 +377,7 @@ VerdictCacheManager::VerdictCacheManager(
     ScheduleNextCleanUpAfterInterval(
         base::TimeDelta::FromSeconds(kCleanUpIntervalInitSecond));
   }
+  CacheArtificialVerdict();
 }
 
 void VerdictCacheManager::Shutdown() {
@@ -794,14 +790,12 @@ void VerdictCacheManager::RemoveContentSettingsOnURLsDeleted(
     stored_verdict_count_real_time_url_check_ =
         GetStoredRealTimeUrlCheckVerdictCount() -
         GetRealTimeUrlCheckVerdictCountForURL(url_key);
-    content_settings_->ClearSettingsForOneTypeWithPredicate(
-        ContentSettingsType::PASSWORD_PROTECTION, base::Time(),
-        base::Time::Max(),
-        base::BindRepeating(&OriginMatchPrimaryPattern, url_key));
-    content_settings_->ClearSettingsForOneTypeWithPredicate(
-        ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA, base::Time(),
-        base::Time::Max(),
-        base::BindRepeating(&OriginMatchPrimaryPattern, url_key));
+    content_settings_->SetWebsiteSettingDefaultScope(
+        url_key, GURL(), ContentSettingsType::PASSWORD_PROTECTION,
+        std::string(), nullptr);
+    content_settings_->SetWebsiteSettingDefaultScope(
+        url_key, GURL(), ContentSettingsType::SAFE_BROWSING_URL_CHECK_DATA,
+        std::string(), nullptr);
   }
 }
 
@@ -847,10 +841,47 @@ size_t VerdictCacheManager::GetRealTimeUrlCheckVerdictCountForURL(
   return verdict_dictionary ? verdict_dictionary->DictSize() : 0;
 }
 
+void VerdictCacheManager::CacheArtificialVerdict() {
+  std::string phishing_url_string =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          kUnsafeUrlFlag);
+  if (phishing_url_string.empty())
+    return;
+
+  GURL artificial_unsafe_url(phishing_url_string);
+  if (!artificial_unsafe_url.is_valid())
+    return;
+
+  has_artificial_unsafe_url_ = true;
+
+  RTLookupResponse response;
+  RTLookupResponse::ThreatInfo* threat_info = response.add_threat_info();
+  threat_info->set_verdict_type(RTLookupResponse::ThreatInfo::DANGEROUS);
+  threat_info->set_threat_type(
+      RTLookupResponse::ThreatInfo::SOCIAL_ENGINEERING);
+  threat_info->set_cache_duration_sec(3000);
+  threat_info->set_cache_expression_using_match_type(
+      artificial_unsafe_url.GetContent());
+  threat_info->set_cache_expression_match_type(
+      RTLookupResponse::ThreatInfo::EXACT_MATCH);
+  RemoveContentSettingsOnURLsDeleted(/*all_history=*/false,
+                                     {history::URLRow(artificial_unsafe_url)});
+  CacheRealTimeUrlVerdict(artificial_unsafe_url, response, base::Time::Now(),
+                          /*store_old_cache=*/false);
+}
+
 void VerdictCacheManager::StopCleanUpTimerForTesting() {
   if (cleanup_timer_.IsRunning()) {
     cleanup_timer_.AbandonAndStop();
   }
+}
+
+// static
+bool VerdictCacheManager::has_artificial_unsafe_url_ = false;
+
+// static
+bool VerdictCacheManager::has_artificial_unsafe_url() {
+  return has_artificial_unsafe_url_;
 }
 
 }  // namespace safe_browsing

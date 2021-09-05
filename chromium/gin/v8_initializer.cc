@@ -76,7 +76,9 @@ const char kSnapshotFileName32[] = "snapshot_blob_32.bin";
 #endif
 
 #else  // defined(OS_ANDROID)
-const char kV8ContextSnapshotFileName[] = "v8_context_snapshot.bin";
+#if defined(USE_V8_CONTEXT_SNAPSHOT)
+const char kV8ContextSnapshotFileName[] = V8_CONTEXT_SNAPSHOT_FILENAME;
+#endif
 const char kSnapshotFileName[] = "snapshot_blob.bin";
 #endif  // defined(OS_ANDROID)
 
@@ -86,7 +88,12 @@ const char* GetSnapshotFileName(
     case V8Initializer::V8SnapshotFileType::kDefault:
       return kSnapshotFileName;
     case V8Initializer::V8SnapshotFileType::kWithAdditionalContext:
+#if defined(USE_V8_CONTEXT_SNAPSHOT)
       return kV8ContextSnapshotFileName;
+#else
+      NOTREACHED();
+      return nullptr;
+#endif
   }
   NOTREACHED();
   return nullptr;
@@ -261,6 +268,24 @@ void V8Initializer::Initialize(IsolateHolder::ScriptMode mode) {
         "--no-reclaim-unmodified-wrappers";
     v8::V8::SetFlagsFromString(no_reclaim_unmodified_wrappers,
                                sizeof(no_reclaim_unmodified_wrappers) - 1);
+  }
+
+  if (!base::FeatureList::IsEnabled(features::kV8LocalHeaps)) {
+    // The --local-heaps flag is enabled by default, so we need to explicitly
+    // disable it if kV8LocalHeaps is disabled.
+    static constexpr char no_local_heaps[] = "--no-local-heaps";
+    v8::V8::SetFlagsFromString(no_local_heaps, sizeof(no_local_heaps) - 1);
+
+    // Also disable TurboFan's direct access if local heaps are not enabled.
+    static constexpr char no_direct_access[] = "--no-turbo-direct-heap-access";
+    v8::V8::SetFlagsFromString(no_direct_access, sizeof(no_direct_access) - 1);
+  }
+
+  if (!base::FeatureList::IsEnabled(features::kV8TurboDirectHeapAccess)) {
+    // The --turbo-direct-heap-access flag is enabled by default, so we need to
+    // explicitly disable it if kV8TurboDirectHeapAccess is disabled.
+    static constexpr char no_direct_access[] = "--no-turbo-direct-heap-access";
+    v8::V8::SetFlagsFromString(no_direct_access, sizeof(no_direct_access) - 1);
   }
 
   if (IsolateHolder::kStrictMode == mode) {

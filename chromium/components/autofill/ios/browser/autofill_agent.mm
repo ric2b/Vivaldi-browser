@@ -16,6 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -62,12 +63,15 @@
 #error "This file requires ARC support."
 #endif
 
+using base::NumberToString;
 using base::SysNSStringToUTF8;
 using base::SysNSStringToUTF16;
+using base::SysUTF16ToNSString;
 using autofill::FormRendererId;
 using autofill::FieldDataManager;
 using autofill::FieldRendererId;
 using autofill::FieldPropertiesFlags::kAutofilledOnUserTrigger;
+using autofill::kNotSetRendererID;
 
 namespace {
 
@@ -145,10 +149,11 @@ void UpdateFieldManagerForClearedIDs(
   // Manager for Autofill JavaScripts.
   JsAutofillManager* _jsAutofillManager;
 
-  // The name of the most recent autocomplete field; tracks the currently-
-  // focused form element in order to force filling of the currently selected
-  // form element, even if it's non-empty.
+  // The name and the unique renderer ID of the most recent autocomplete field;
+  // tracks the currently-focused form element in order to force filling of
+  // the currently selected form element, even if it's non-empty.
   base::string16 _pendingAutocompleteField;
+  FieldRendererId _pendingAutocompleteFieldID;
 
   // Suggestions state:
   // The most recent form suggestions.
@@ -195,6 +200,9 @@ void UpdateFieldManagerForClearedIDs(
       _last_submitted_autofill_driver;
 
   scoped_refptr<FieldDataManager> _fieldDataManager;
+
+  // ID of the last Autofill query made. Used to discard outdated suggestions.
+  int _lastQueryID;
 }
 
 @end
@@ -226,6 +234,7 @@ void UpdateFieldManagerForClearedIDs(
     UniqueIDDataTabHelper* uniqueIDDataTabHelper =
         UniqueIDDataTabHelper::FromWebState(_webState);
     _fieldDataManager = uniqueIDDataTabHelper->GetFieldDataManager();
+    _lastQueryID = 0;
   }
   return self;
 }
@@ -336,9 +345,6 @@ autofillManagerFromWebState:(web::WebState*)webState
   if (!autofillManager)
     return;
 
-  // Passed to delegates; we don't use it so it's set to zero.
-  int queryId = 0;
-
   // Find the right field.
   autofill::FormFieldData field;
   GetFormField(&field, form, SysNSStringToUTF16(fieldIdentifier));
@@ -350,7 +356,7 @@ autofillManagerFromWebState:(web::WebState*)webState
   // Query the AutofillManager for suggestions. Results will arrive in
   // -showAutofillPopup:popupDelegate:.
   autofillManager->OnQueryFormFieldAutofill(
-      queryId, form, field, gfx::RectF(),
+      ++_lastQueryID, form, field, gfx::RectF(),
       /*autoselect_first_suggestion=*/false);
 }
 
@@ -428,6 +434,7 @@ autofillManagerFromWebState:(web::WebState*)webState
 
   if (suggestion.identifier > 0) {
     _pendingAutocompleteField = SysNSStringToUTF16(fieldIdentifier);
+    _pendingAutocompleteFieldID = uniqueFieldID;
     if (_popupDelegate) {
       // TODO(966411): Replace 0 with the index of the selected suggestion.
       _popupDelegate->DidAcceptSuggestion(SysNSStringToUTF16(suggestion.value),
@@ -452,7 +459,9 @@ autofillManagerFromWebState:(web::WebState*)webState
     _suggestionHandledCompletion = nil;
     [_jsAutofillManager
         clearAutofilledFieldsForFormName:formName
+                            formUniqueID:uniqueFormID
                          fieldIdentifier:fieldIdentifier
+                           fieldUniqueID:uniqueFieldID
                                  inFrame:frame
                        completionHandler:^(NSString* jsonString) {
                          AutofillAgent* strongSelf = weakSelf;
@@ -484,7 +493,14 @@ autofillManagerFromWebState:(web::WebState*)webState
   auto autofillData =
       std::make_unique<base::Value>(base::Value::Type::DICTIONARY);
   autofillData->SetKey("formName", base::Value(base::UTF16ToUTF8(form.name)));
+  uint32_t formRendererID = form.unique_renderer_id
+                                ? form.unique_renderer_id.value()
+                                : autofill::kNotSetRendererID;
+  autofillData->SetKey("formRendererID",
+                       base::Value(static_cast<int>(formRendererID)));
 
+  bool useRendererIDs = base::FeatureList::IsEnabled(
+      autofill::features::kAutofillUseUniqueRendererIDsOnIOS);
   base::Value fieldsData(base::Value::Type::DICTIONARY);
   for (const auto& field : form.fields) {
     // Skip empty fields and those that are not autofilled.
@@ -494,7 +510,15 @@ autofillManagerFromWebState:(web::WebState*)webState
     base::Value fieldData(base::Value::Type::DICTIONARY);
     fieldData.SetKey("value", base::Value(field.value));
     fieldData.SetKey("section", base::Value(field.section));
-    fieldsData.SetKey(base::UTF16ToUTF8(field.unique_id), std::move(fieldData));
+    uint32_t fieldRendererID = field.unique_renderer_id
+                                   ? field.unique_renderer_id.value()
+                                   : autofill::kNotSetRendererID;
+    if (useRendererIDs) {
+      fieldsData.SetKey(NumberToString(fieldRendererID), std::move(fieldData));
+    } else {
+      fieldsData.SetKey(base::UTF16ToUTF8(field.unique_id),
+                        std::move(fieldData));
+    }
   }
   autofillData->SetKey("fields", std::move(fieldsData));
 
@@ -572,16 +596,16 @@ autofillManagerFromWebState:(web::WebState*)webState
       // Value will contain the text to be filled in the selected element while
       // displayDescription will contain a summary of the data to be filled in
       // the other elements.
-      value = base::SysUTF16ToNSString(popup_suggestion.value);
-      displayDescription = base::SysUTF16ToNSString(popup_suggestion.label);
+      value = SysUTF16ToNSString(popup_suggestion.value);
+      displayDescription = SysUTF16ToNSString(popup_suggestion.label);
     } else if (popup_suggestion.frontend_id ==
                autofill::POPUP_ITEM_ID_CLEAR_FORM) {
       // Show the "clear form" button.
-      value = base::SysUTF16ToNSString(popup_suggestion.value);
+      value = SysUTF16ToNSString(popup_suggestion.value);
     } else if (popup_suggestion.frontend_id ==
                autofill::POPUP_ITEM_ID_SHOW_ACCOUNT_CARDS) {
       // Show opt-in for showing cards from account.
-      value = base::SysUTF16ToNSString(popup_suggestion.value);
+      value = SysUTF16ToNSString(popup_suggestion.value);
     }
 
     if (!value)
@@ -611,6 +635,10 @@ autofillManagerFromWebState:(web::WebState*)webState
 - (void)hideAutofillPopup {
   [self onSuggestionsReady:@[]
              popupDelegate:base::WeakPtr<autofill::AutofillPopupDelegate>()];
+}
+
+- (bool)isQueryIDRelevant:(int)queryID {
+  return queryID == _lastQueryID;
 }
 
 #pragma mark - CRWWebStateObserver
@@ -882,6 +910,8 @@ autofillManagerFromWebState:(web::WebState*)webState
             value:(const base::string16)value
           inFrame:(web::WebFrame*)frame {
   auto data = std::make_unique<base::DictionaryValue>();
+  data->SetInteger("unique_renderer_id",
+                   uniqueFieldID ? uniqueFieldID.value() : kNotSetRendererID);
   data->SetString("identifier", fieldIdentifier);
   data->SetString("form", formName);
   data->SetString("value", value);
@@ -915,8 +945,8 @@ autofillManagerFromWebState:(web::WebState*)webState
       [_suggestionHandledCompletion copy];
   _suggestionHandledCompletion = nil;
   [_jsAutofillManager fillForm:std::move(data)
-      forceFillFieldIdentifier:base::SysUTF16ToNSString(
-                                   _pendingAutocompleteField)
+      forceFillFieldIdentifier:SysUTF16ToNSString(_pendingAutocompleteField)
+        forceFillFieldUniqueID:_pendingAutocompleteFieldID
                        inFrame:frame
              completionHandler:^(NSString* jsonString) {
                AutofillAgent* strongSelf = weakSelf;

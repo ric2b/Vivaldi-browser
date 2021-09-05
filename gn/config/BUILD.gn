@@ -14,6 +14,9 @@ config("features") {
   if (system_proprietary_codecs) {
     defines += [ "USE_SYSTEM_PROPRIETARY_CODECS" ]
   }
+  if (is_mac && vivaldi_disable_sparkle) {
+    defines += [ "VIVALDI_SPARKLE_DISABLED" ]
+  }
   include_dirs = [ "//vivaldi/", "//vivaldi/platform_media/" ]
   if (is_official_build) {
     defines += [ "VIVALDI_PRODUCT_VERSION=\"$official_product_kind_string\"" ]

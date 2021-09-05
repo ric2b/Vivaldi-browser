@@ -1453,8 +1453,7 @@ int TreeView::InternalNode::GetMaxWidth(TreeView* tree, int indent, int depth) {
   return max_width;
 }
 
-BEGIN_METADATA(TreeView)
-METADATA_PARENT_CLASS(View)
-END_METADATA()
+BEGIN_METADATA(TreeView, View)
+END_METADATA
 
 }  // namespace views

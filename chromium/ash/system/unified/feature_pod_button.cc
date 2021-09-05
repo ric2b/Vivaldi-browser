@@ -7,7 +7,6 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/default_color_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/unified/feature_pod_controller_base.h"
 #include "ash/system/unified/unified_system_tray_view.h"
@@ -30,7 +29,6 @@
 namespace ash {
 
 using ContentLayerType = AshColorProvider::ContentLayerType;
-using AshColorMode = AshColorProvider::AshColorMode;
 
 namespace {
 
@@ -39,7 +37,7 @@ void ConfigureFeaturePodLabel(views::Label* label,
                               int font_size) {
   label->SetAutoColorReadabilityEnabled(false);
   label->SetSubpixelRenderingEnabled(false);
-  label->set_can_process_events_within_subtree(false);
+  label->SetCanProcessEventsWithinSubtree(false);
   label->SetLineHeight(line_height);
 
   gfx::Font default_font;
@@ -54,7 +52,7 @@ void ConfigureFeaturePodLabel(views::Label* label,
 
 FeaturePodIconButton::FeaturePodIconButton(views::ButtonListener* listener,
                                            bool is_togglable)
-    : views::ToggleImageButton(listener), is_togglable_(is_togglable) {
+    : views::ImageButton(listener), is_togglable_(is_togglable) {
   SetPreferredSize(kUnifiedFeaturePodIconSize);
   SetBorder(views::CreateEmptyBorder(kUnifiedFeaturePodIconPadding));
   SetImageHorizontalAlignment(ALIGN_CENTER);
@@ -78,43 +76,12 @@ void FeaturePodIconButton::SetToggled(bool toggled) {
     return;
 
   toggled_ = toggled;
-  views::ToggleImageButton::SetToggled(toggled);
+  UpdateVectorIcon();
 }
 
 void FeaturePodIconButton::SetVectorIcon(const gfx::VectorIcon& icon) {
-  const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
-      ContentLayerType::kSystemMenuIconColor, AshColorMode::kDark);
-  const SkColor toggled_color = AshColorProvider::Get()->GetContentLayerColor(
-      ContentLayerType::kSystemMenuIconColorToggled, AshColorMode::kDark);
-
-  // Skip repainting if the incoming icon is the same as the current icon. If
-  // the icon has been painted before, |gfx::CreateVectorIcon()| will simply
-  // grab the ImageSkia from a cache, so it will be cheap. Note that this
-  // assumes that toggled/disabled images changes at the same time as the normal
-  // image, which it currently does.
-  const gfx::ImageSkia new_normal_image =
-      gfx::CreateVectorIcon(icon, kUnifiedFeaturePodVectorIconSize, icon_color);
-  const gfx::ImageSkia& old_normal_image =
-      GetImage(views::Button::STATE_NORMAL);
-  if (!new_normal_image.isNull() && !old_normal_image.isNull() &&
-      new_normal_image.BackedBySameObjectAs(old_normal_image)) {
-    return;
-  }
-
-  SetImage(views::Button::STATE_NORMAL, new_normal_image);
-
-  SetToggledImage(views::Button::STATE_NORMAL,
-                  new gfx::ImageSkia(gfx::CreateVectorIcon(
-                      icon, kUnifiedFeaturePodVectorIconSize, toggled_color)));
-
-  SetImage(
-      views::Button::STATE_DISABLED,
-      gfx::CreateVectorIcon(icon, kUnifiedFeaturePodVectorIconSize,
-                            AshColorProvider::GetDisabledColor(icon_color)));
-  SetToggledImage(views::Button::STATE_DISABLED,
-                  new gfx::ImageSkia(gfx::CreateVectorIcon(
-                      icon, kUnifiedFeaturePodVectorIconSize,
-                      AshColorProvider::GetDisabledColor(icon_color))));
+  icon_ = &icon;
+  UpdateVectorIcon();
 }
 
 void FeaturePodIconButton::PaintButtonContents(gfx::Canvas* canvas) {
@@ -124,13 +91,11 @@ void FeaturePodIconButton::PaintButtonContents(gfx::Canvas* canvas) {
 
   const AshColorProvider* color_provider = AshColorProvider::Get();
   SkColor color = color_provider->GetControlsLayerColor(
-      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive,
-      AshColorMode::kDark);
+      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive);
   if (GetEnabled()) {
     if (toggled_) {
       color = color_provider->GetControlsLayerColor(
-          AshColorProvider::ControlsLayerType::kControlBackgroundColorActive,
-          AshColorMode::kDark);
+          AshColorProvider::ControlsLayerType::kControlBackgroundColorActive);
     }
   } else {
     color = AshColorProvider::GetDisabledColor(color);
@@ -151,15 +116,12 @@ std::unique_ptr<views::InkDropRipple>
 FeaturePodIconButton::CreateInkDropRipple() const {
   return TrayPopupUtils::CreateInkDropRipple(
       TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      GetInkDropCenterBasedOnLastEvent(),
-      UnifiedSystemTrayView::GetBackgroundColor());
+      GetInkDropCenterBasedOnLastEvent());
 }
 
 std::unique_ptr<views::InkDropHighlight>
 FeaturePodIconButton::CreateInkDropHighlight() const {
-  return TrayPopupUtils::CreateInkDropHighlight(
-      TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      UnifiedSystemTrayView::GetBackgroundColor());
+  return TrayPopupUtils::CreateInkDropHighlight(this);
 }
 
 void FeaturePodIconButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
@@ -178,6 +140,38 @@ const char* FeaturePodIconButton::GetClassName() const {
   return "FeaturePodIconButton";
 }
 
+void FeaturePodIconButton::UpdateVectorIcon() {
+  if (!icon_)
+    return;
+
+  const auto* color_provider = AshColorProvider::Get();
+  const SkColor normal_color =
+      color_provider->GetContentLayerColor(ContentLayerType::kButtonIconColor);
+  const SkColor toggled_icon_color = color_provider->GetContentLayerColor(
+      ContentLayerType::kButtonIconColorPrimary);
+  const SkColor icon_color = toggled_ ? toggled_icon_color : normal_color;
+
+  // Skip repainting if the incoming icon is the same as the current icon. If
+  // the icon has been painted before, |gfx::CreateVectorIcon()| will simply
+  // grab the ImageSkia from a cache, so it will be cheap. Note that this
+  // assumes that toggled/disabled images changes at the same time as the normal
+  // image, which it currently does.
+  const gfx::ImageSkia new_normal_image = gfx::CreateVectorIcon(
+      *icon_, kUnifiedFeaturePodVectorIconSize, icon_color);
+  const gfx::ImageSkia& old_normal_image =
+      GetImage(views::Button::STATE_NORMAL);
+  if (!new_normal_image.isNull() && !old_normal_image.isNull() &&
+      new_normal_image.BackedBySameObjectAs(old_normal_image)) {
+    return;
+  }
+
+  SetImage(views::Button::STATE_NORMAL, new_normal_image);
+  SetImage(
+      views::Button::STATE_DISABLED,
+      gfx::CreateVectorIcon(*icon_, kUnifiedFeaturePodVectorIconSize,
+                            AshColorProvider::GetDisabledColor(normal_color)));
+}
+
 FeaturePodLabelButton::FeaturePodLabelButton(views::ButtonListener* listener)
     : Button(listener),
       label_(new views::Label),
@@ -193,7 +187,7 @@ FeaturePodLabelButton::FeaturePodLabelButton(views::ButtonListener* listener)
                            kUnifiedFeaturePodSubLabelFontSize);
   sub_label_->SetVisible(false);
 
-  detailed_view_arrow_->set_can_process_events_within_subtree(false);
+  detailed_view_arrow_->SetCanProcessEventsWithinSubtree(false);
   detailed_view_arrow_->SetVisible(false);
 
   OnEnabledChanged();
@@ -272,15 +266,12 @@ std::unique_ptr<views::InkDropRipple>
 FeaturePodLabelButton::CreateInkDropRipple() const {
   return TrayPopupUtils::CreateInkDropRipple(
       TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      GetInkDropCenterBasedOnLastEvent(),
-      UnifiedSystemTrayView::GetBackgroundColor());
+      GetInkDropCenterBasedOnLastEvent());
 }
 
 std::unique_ptr<views::InkDropHighlight>
 FeaturePodLabelButton::CreateInkDropHighlight() const {
-  return TrayPopupUtils::CreateInkDropHighlight(
-      TrayPopupInkDropStyle::FILL_BOUNDS, this,
-      UnifiedSystemTrayView::GetBackgroundColor());
+  return TrayPopupUtils::CreateInkDropHighlight(this);
 }
 
 const char* FeaturePodLabelButton::GetClassName() const {
@@ -313,10 +304,10 @@ void FeaturePodLabelButton::ShowDetailedViewArrow() {
 
 void FeaturePodLabelButton::OnEnabledChanged() {
   const AshColorProvider* color_provider = AshColorProvider::Get();
-  const SkColor primary_text_color = color_provider->GetContentLayerColor(
-      ContentLayerType::kTextColorPrimary, AshColorMode::kDark);
+  const SkColor primary_text_color =
+      color_provider->GetContentLayerColor(ContentLayerType::kTextColorPrimary);
   const SkColor secondary_text_color = color_provider->GetContentLayerColor(
-      ContentLayerType::kTextColorSecondary, AshColorMode::kDark);
+      ContentLayerType::kTextColorSecondary);
   label_->SetEnabledColor(
       GetEnabled() ? primary_text_color
                    : AshColorProvider::GetDisabledColor(primary_text_color));
@@ -324,8 +315,8 @@ void FeaturePodLabelButton::OnEnabledChanged() {
       GetEnabled() ? secondary_text_color
                    : AshColorProvider::GetDisabledColor(secondary_text_color));
 
-  const SkColor icon_color = color_provider->GetContentLayerColor(
-      ContentLayerType::kIconColorPrimary, AshColorMode::kDark);
+  const SkColor icon_color =
+      color_provider->GetContentLayerColor(ContentLayerType::kIconColorPrimary);
   detailed_view_arrow_->SetImage(gfx::CreateVectorIcon(
       kUnifiedMenuMoreIcon,
       GetEnabled() ? icon_color

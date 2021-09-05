@@ -16,7 +16,6 @@
 
 #include "base/check_op.h"
 #include "base/component_export.h"
-#include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/time/time.h"
@@ -52,11 +51,9 @@ class COMPONENT_EXPORT(NETWORK_CPP_BASE) DataElement {
 
   mojom::DataElementType type() const { return type_; }
   const char* bytes() const {
-    return bytes_ ? reinterpret_cast<const char*>(bytes_)
-                  : reinterpret_cast<const char*>(buf_.data());
+    return reinterpret_cast<const char*>(buf_.data());
   }
   const base::FilePath& path() const { return path_; }
-  const base::File& file() const { return file_; }
   const std::string& blob_uuid() const { return blob_uuid_; }
   uint64_t offset() const { return offset_; }
   uint64_t length() const { return length_; }
@@ -64,14 +61,9 @@ class COMPONENT_EXPORT(NETWORK_CPP_BASE) DataElement {
     return expected_modification_time_;
   }
 
-  // For use with SetToAllocatedBytes. Should only be used after calling
-  // SetToAllocatedBytes.
-  char* mutable_bytes() { return reinterpret_cast<char*>(&buf_[0]); }
-
   // Sets TYPE_BYTES data. This copies the given data into the element.
   void SetToBytes(const char* bytes, int bytes_len) {
     type_ = mojom::DataElementType::kBytes;
-    bytes_ = nullptr;
     buf_.assign(reinterpret_cast<const uint8_t*>(bytes),
                 reinterpret_cast<const uint8_t*>(bytes + bytes_len));
     length_ = buf_.size();
@@ -80,7 +72,6 @@ class COMPONENT_EXPORT(NETWORK_CPP_BASE) DataElement {
   // Sets TYPE_BYTES data. This moves the given data vector into the element.
   void SetToBytes(std::vector<uint8_t> bytes) {
     type_ = mojom::DataElementType::kBytes;
-    bytes_ = nullptr;
     buf_ = std::move(bytes);
     length_ = buf_.size();
   }
@@ -91,7 +82,6 @@ class COMPONENT_EXPORT(NETWORK_CPP_BASE) DataElement {
     type_ = mojom::DataElementType::kBytes;
     buf_.clear();
     length_ = 0;
-    bytes_ = nullptr;
   }
 
   // Copies and appends the given data into the element. SetToEmptyBytes or
@@ -99,35 +89,9 @@ class COMPONENT_EXPORT(NETWORK_CPP_BASE) DataElement {
   void AppendBytes(const char* bytes, int bytes_len) {
     DCHECK_EQ(type_, mojom::DataElementType::kBytes);
     DCHECK_NE(length_, std::numeric_limits<uint64_t>::max());
-    DCHECK(!bytes_);
     buf_.insert(buf_.end(), reinterpret_cast<const uint8_t*>(bytes),
                 reinterpret_cast<const uint8_t*>(bytes + bytes_len));
     length_ = buf_.size();
-  }
-
-  // Sets TYPE_BYTES data. This does NOT copy the given data and the caller
-  // should make sure the data is alive when this element is accessed.
-  // You cannot use AppendBytes with this method.
-  void SetToSharedBytes(const char* bytes, int bytes_len) {
-    type_ = mojom::DataElementType::kBytes;
-    bytes_ = reinterpret_cast<const uint8_t*>(bytes);
-    length_ = bytes_len;
-  }
-
-  // Sets TYPE_BYTES data. This allocates the space for the bytes in the
-  // internal vector but does not populate it with anything.  The caller can
-  // then use the bytes() method to access this buffer and populate it.
-  void SetToAllocatedBytes(size_t bytes_len) {
-    type_ = mojom::DataElementType::kBytes;
-    bytes_ = nullptr;
-    buf_.resize(bytes_len);
-    length_ = bytes_len;
-  }
-
-  // Sets TYPE_FILE data.
-  void SetToFilePath(const base::FilePath& path) {
-    SetToFilePathRange(path, 0, std::numeric_limits<uint64_t>::max(),
-                       base::Time());
   }
 
   // Sets TYPE_BLOB data.
@@ -140,16 +104,6 @@ class COMPONENT_EXPORT(NETWORK_CPP_BASE) DataElement {
                           uint64_t offset,
                           uint64_t length,
                           const base::Time& expected_modification_time);
-
-  // Sets TYPE_RAW_FILE data with range. |file| must be open for asynchronous
-  // reading on Windows. It's recommended it also be opened with
-  // File::FLAG_DELETE_ON_CLOSE, since there's often no way to wait on the
-  // consumer to close the file.
-  void SetToFileRange(base::File file,
-                      const base::FilePath& path,
-                      uint64_t offset,
-                      uint64_t length,
-                      const base::Time& expected_modification_time);
 
   // Sets TYPE_BLOB data with range.
   void SetToBlobRange(const std::string& blob_uuid,
@@ -174,10 +128,6 @@ class COMPONENT_EXPORT(NETWORK_CPP_BASE) DataElement {
   void SetToReadOnceStream(mojo::PendingRemote<mojom::ChunkedDataPipeGetter>
                                chunked_data_pipe_getter);
 
-  // Takes ownership of the File, if this is of TYPE_RAW_FILE. The file is open
-  // for reading (asynchronous reading on Windows).
-  base::File ReleaseFile();
-
   // Takes ownership of the DataPipeGetter, if this is of TYPE_DATA_PIPE.
   mojo::PendingRemote<mojom::DataPipeGetter> ReleaseDataPipeGetter();
   mojo::PendingRemote<mojom::DataPipeGetter> CloneDataPipeGetter() const;
@@ -197,12 +147,8 @@ class COMPONENT_EXPORT(NETWORK_CPP_BASE) DataElement {
   mojom::DataElementType type_;
   // For TYPE_BYTES.
   std::vector<uint8_t> buf_;
-  // For TYPE_BYTES.
-  const uint8_t* bytes_;
-  // For TYPE_FILE and TYPE_RAW_FILE.
+  // For TYPE_FILE.
   base::FilePath path_;
-  // For TYPE_RAW_FILE.
-  base::File file_;
   // For TYPE_BLOB.
   std::string blob_uuid_;
   // For TYPE_DATA_PIPE.

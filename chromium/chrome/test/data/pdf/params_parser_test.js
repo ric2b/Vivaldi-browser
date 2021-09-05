@@ -14,13 +14,35 @@ const tests = [
   function testParamsParser() {
     const paramsParser = new OpenPdfParamsParser(function(destination) {
       if (destination === 'RU') {
-        paramsParser.onNamedDestinationReceived(26);
+        return Promise.resolve(
+            {messageId: 'getNamedDestination_1', pageNumber: 26});
       } else if (destination === 'US') {
-        paramsParser.onNamedDestinationReceived(0);
+        return Promise.resolve(
+            {messageId: 'getNamedDestination_2', pageNumber: 0});
       } else if (destination === 'UY') {
-        paramsParser.onNamedDestinationReceived(22);
+        return Promise.resolve(
+            {messageId: 'getNamedDestination_3', pageNumber: 22});
+      } else if (destination === 'DestWithXYZ') {
+        return Promise.resolve({
+          messageId: 'getNamedDestination_4',
+          namedDestinationView: 'XYZ,111,222,1.7',
+          pageNumber: 10
+        });
+      } else if (destination === 'DestWithXYZAtZoom0') {
+        return Promise.resolve({
+          messageId: 'getNamedDestination_5',
+          namedDestinationView: 'XYZ,111,222,0',
+          pageNumber: 10
+        });
+      } else if (destination === 'DestWithXYZWithNullParameter') {
+        return Promise.resolve({
+          messageId: 'getNamedDestination_6',
+          namedDestinationView: 'XYZ,111,null,1.7',
+          pageNumber: 13
+        });
       } else {
-        paramsParser.onNamedDestinationReceived(-1);
+        return Promise.resolve(
+            {messageId: 'getNamedDestination_7', pageNumber: -1});
       }
     });
 
@@ -88,6 +110,38 @@ const tests = [
           chrome.test.assertEq(200, params.position.y);
         });
 
+    // Checking #nameddest=name with a nameddest that specifies the view fit
+    // type is "XYZ" with multiple valid parameters.
+    paramsParser.getViewportFromUrlParams(
+        `${url}#nameddest=DestWithXYZ`, function(params) {
+          chrome.test.assertEq(10, params.page);
+          chrome.test.assertEq(1.7, params.zoom);
+          chrome.test.assertEq(111, params.position.x);
+          chrome.test.assertEq(222, params.position.y);
+          chrome.test.assertEq(undefined, params.viewPosition);
+        });
+
+    // Checking #nameddest=name with a nameddest that specifies the view fit
+    // type is "XYZ" with a zoom parameter of 0.
+    paramsParser.getViewportFromUrlParams(
+        `${url}#nameddest=DestWithXYZAtZoom0`, function(params) {
+          chrome.test.assertEq(10, params.page);
+          chrome.test.assertEq(undefined, params.zoom);
+          chrome.test.assertEq(111, params.position.x);
+          chrome.test.assertEq(222, params.position.y);
+          chrome.test.assertEq(undefined, params.viewPosition);
+        });
+
+    // Checking #nameddest=name with a nameddest that specifies the view fit
+    // type is "XYZ" and one of its parameters is null.
+    paramsParser.getViewportFromUrlParams(
+        `${url}#nameddest=DestWithXYZWithNullParameter`, function(params) {
+          chrome.test.assertEq(13, params.page);
+          chrome.test.assertEq(undefined, params.zoom);
+          chrome.test.assertEq(undefined, params.position);
+          chrome.test.assertEq(undefined, params.viewPosition);
+        });
+
     // Checking #view=Fit.
     paramsParser.getViewportFromUrlParams(`${url}#view=Fit`, function(params) {
       chrome.test.assertEq(FittingType.FIT_TO_PAGE, params.view);
@@ -135,6 +189,19 @@ const tests = [
     // Checking #view=[wrong parameter],[position].
     paramsParser.getViewportFromUrlParams(
         `${url}#view=FitW,555`, function(params) {
+          chrome.test.assertEq(undefined, params.view);
+          chrome.test.assertEq(undefined, params.viewPosition);
+        });
+    // Checking #view=[wrong parameter].
+    paramsParser.getViewportFromUrlParams(`${url}#view=XYZ`, function(params) {
+      chrome.test.assertEq(undefined, params.view);
+      chrome.test.assertEq(undefined, params.viewPosition);
+    });
+    // Checking #view=[wrong parameter],[position].
+    paramsParser.getViewportFromUrlParams(
+        `${url}#view=XYZ,111,222,1.7`, function(params) {
+          chrome.test.assertEq(undefined, params.zoom);
+          chrome.test.assertEq(undefined, params.position);
           chrome.test.assertEq(undefined, params.view);
           chrome.test.assertEq(undefined, params.viewPosition);
         });

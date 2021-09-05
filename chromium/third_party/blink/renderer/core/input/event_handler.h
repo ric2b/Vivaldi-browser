@@ -26,11 +26,11 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_INPUT_EVENT_HANDLER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_INPUT_EVENT_HANDLER_H_
 
-#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
+#include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -81,6 +81,8 @@ class WebMouseWheelEvent;
 class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
  public:
   explicit EventHandler(LocalFrame&);
+  EventHandler(const EventHandler&) = delete;
+  EventHandler& operator=(const EventHandler&) = delete;
   void Trace(Visitor*) const;
 
   void Clear();
@@ -274,6 +276,8 @@ class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
 
   void UpdateCursor();
 
+  Element* GetElementUnderMouse();
+
  private:
   WebInputEventResult HandleMouseMoveOrLeaveEvent(
       const WebMouseEvent&,
@@ -364,6 +368,9 @@ class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
   MouseEventWithHitTestResults GetMouseEventTarget(
       const HitTestRequest& request,
       const WebMouseEvent& mev);
+
+  IntRect GetFocusedElementRectForNonLocatedContextMenu(
+      Element* focused_element);
 
   // NOTE: If adding a new field to this class please ensure that it is
   // cleared in |EventHandler::clear()|.
@@ -459,8 +466,6 @@ class CORE_EXPORT EventHandler final : public GarbageCollected<EventHandler> {
   FRIEND_TEST_ALL_PREFIXES(EventHandlerTest,
                            CursorForInlineVerticalWritingMode);
   FRIEND_TEST_ALL_PREFIXES(EventHandlerTest, CursorForBlockVerticalWritingMode);
-
-  DISALLOW_COPY_AND_ASSIGN(EventHandler);
 };
 
 }  // namespace blink

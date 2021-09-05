@@ -11,6 +11,7 @@
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/media/kaleidoscope/constants.h"
 #include "chrome/browser/media/kaleidoscope/kaleidoscope_data_provider_impl.h"
+#include "chrome/browser/media/kaleidoscope/kaleidoscope_metrics_recorder.h"
 #include "chrome/browser/media/kaleidoscope/kaleidoscope_switches.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/webui_url_constants.h"
@@ -31,6 +32,7 @@ namespace {
 // Wraps the strings in JS so they can be accessed by the code. The strings are
 // placed on the window object so they can always be accessed.
 const char kStringWrapper[] =
+    "window.KALEIDOSCOPE_STRINGS_FALLBACK = new Map(Object.entries(%s));"
     "window.KALEIDOSCOPE_STRINGS = new Map(Object.entries(%s));";
 
 bool OnShouldHandleRequest(const std::string& path) {
@@ -181,22 +183,26 @@ int GetResourceForLocale(const std::string& locale) {
 
 #endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
 
+std::string GetStringsForLocale(const std::string& locale) {
+  std::string str;
+#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
+  str = ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
+      GetResourceForLocale(locale));
+#endif
+  return str;
+}
+
 void OnStringsRequest(const std::string& path,
                       content::WebUIDataSource::GotDataCallback callback) {
   DCHECK(OnShouldHandleRequest(path));
 
-  std::string str;
-#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
-  auto locale = base::ToLowerASCII(base::i18n::GetConfiguredLocale());
-
-  str = ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
-      GetResourceForLocale(locale));
-#else
-
-#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
+  auto str_lang = GetStringsForLocale(
+      base::ToLowerASCII(base::i18n::GetConfiguredLocale()));
+  auto str_lang_en = GetStringsForLocale("en");
 
   base::RefCountedString* ref_contents = new base::RefCountedString();
-  ref_contents->data() = base::StringPrintf(kStringWrapper, str.c_str());
+  ref_contents->data() =
+      base::StringPrintf(kStringWrapper, str_lang_en.c_str(), str_lang.c_str());
   std::move(callback).Run(ref_contents);
 }
 
@@ -213,7 +219,14 @@ KaleidoscopeUI::KaleidoscopeUI(content::WebUI* web_ui)
                                 CreateUntrustedWebUIDataSource());
 }
 
-KaleidoscopeUI::~KaleidoscopeUI() = default;
+KaleidoscopeUI::~KaleidoscopeUI() {
+  metrics_recorder_->OnExitPage();
+
+  // Ensure that the provider is deleted before the metrics recorder, since the
+  // provider has a pointer to the metrics recorder.
+  provider_.reset();
+  metrics_recorder_.reset();
+}
 
 // static
 content::WebUIDataSource* KaleidoscopeUI::CreateWebUIDataSource() {
@@ -292,11 +305,16 @@ content::WebUIDataSource* KaleidoscopeUI::CreateUntrustedWebUIDataSource() {
   untrusted_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ImgSrc, "img-src * data:;");
   untrusted_source->OverrideContentSecurityPolicy(
-      network::mojom::CSPDirectiveName::MediaSrc, "media-src * data:;");
+      network::mojom::CSPDirectiveName::MediaSrc, "media-src * data: blob:;");
 
   // Allow access to anywhere using fetch.
   untrusted_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ConnectSrc, "connect-src *;");
+
+  // Allow YouTube videos to be embedded.
+  untrusted_source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ChildSrc,
+      "child-src https://www.youtube.com;");
 
   // Add the URL to the backend.
   untrusted_source->AddString("googleApiUrl", backend_url.spec());
@@ -313,6 +331,8 @@ content::WebUIDataSource* KaleidoscopeUI::CreateUntrustedWebUIDataSource() {
   untrusted_source->AddResourcePath("toolbar.js", IDR_KALEIDOSCOPE_TOOLBAR_JS);
   untrusted_source->AddResourcePath("side_nav_container.js",
                                     IDR_KALEIDOSCOPE_SIDE_NAV_CONTAINER_JS);
+  untrusted_source->AddResourcePath("shaka-player.ui.js",
+                                    IDR_KALEIDOSCOPE_SHAKA_PLAYER_JS);
 
   untrusted_source->AddResourcePath("geometry.mojom-lite.js",
                                     IDR_GEOMETRY_MOJOM_LITE_JS);
@@ -331,6 +351,9 @@ content::WebUIDataSource* KaleidoscopeUI::CreateUntrustedWebUIDataSource() {
                                     IDR_GOOGLE_SANS_MEDIUM);
   untrusted_source->AddResourcePath("resources/fonts/GoogleSans-Regular.woff2",
                                     IDR_GOOGLE_SANS_REGULAR);
+  untrusted_source->AddResourcePath(
+      "resources/fonts/GoogleSansDisplay-Regular.woff2",
+      IDR_GOOGLE_SANS_DISPLAY_REGULAR);
 
   untrusted_source->AddResourcePath("content.html",
                                     IDR_KALEIDOSCOPE_CONTENT_HTML);
@@ -341,8 +364,10 @@ content::WebUIDataSource* KaleidoscopeUI::CreateUntrustedWebUIDataSource() {
 
 void KaleidoscopeUI::BindInterface(
     mojo::PendingReceiver<media::mojom::KaleidoscopeDataProvider> provider) {
+  metrics_recorder_ = std::make_unique<KaleidoscopeMetricsRecorder>();
   provider_ = std::make_unique<KaleidoscopeDataProviderImpl>(
-      std::move(provider), Profile::FromWebUI(web_ui()));
+      std::move(provider), Profile::FromWebUI(web_ui()),
+      metrics_recorder_.get());
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(KaleidoscopeUI)

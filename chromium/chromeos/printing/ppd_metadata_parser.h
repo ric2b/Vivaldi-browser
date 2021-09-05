@@ -21,13 +21,24 @@
 #include "base/containers/flat_map.h"
 #include "base/optional.h"
 #include "base/strings/string_piece_forward.h"
+#include "base/version.h"
 #include "chromeos/chromeos_export.h"
-#include "chromeos/printing/ppd_provider.h"
 
 #ifndef CHROMEOS_PRINTING_PPD_METADATA_PARSER_H_
 #define CHROMEOS_PRINTING_PPD_METADATA_PARSER_H_
 
 namespace chromeos {
+
+// Defines the limitations on when we show a particular PPD.
+struct Restrictions {
+  Restrictions();
+  ~Restrictions();
+  Restrictions(const Restrictions&);
+  Restrictions& operator=(const Restrictions&);
+
+  base::Optional<base::Version> min_milestone;
+  base::Optional<base::Version> max_milestone;
+};
 
 struct CHROMEOS_EXPORT ReverseIndexLeaf {
   std::string manufacturer;
@@ -43,7 +54,7 @@ struct CHROMEOS_EXPORT ParsedPrinter {
 
   std::string user_visible_printer_name;
   std::string effective_make_and_model;
-  base::Optional<PpdProvider::Restrictions> restrictions;
+  Restrictions restrictions;
 };
 
 // A single leaf value parsed from a forward index.
@@ -54,7 +65,8 @@ struct CHROMEOS_EXPORT ParsedIndexLeaf {
   ParsedIndexLeaf& operator=(const ParsedIndexLeaf&);
 
   std::string ppd_basename;
-  base::Optional<PpdProvider::Restrictions> restrictions;
+  Restrictions restrictions;
+  std::string license;
 };
 
 // A collection of values parsed from a forward index.
@@ -83,6 +95,9 @@ using ParsedIndex = base::flat_map<std::string, ParsedIndexValues>;
 // Maps USB product IDs to effective-make-and-model strings.
 using ParsedUsbIndex = base::flat_map<int, std::string>;
 
+// Maps USB vendor IDs to manufacturer names.
+using ParsedUsbVendorIdMap = base::flat_map<int, std::string>;
+
 // Keyed on effective-make-and-model strings.
 using ParsedReverseIndex = base::flat_map<std::string, ReverseIndexLeaf>;
 
@@ -106,6 +121,11 @@ CHROMEOS_EXPORT base::Optional<ParsedIndex> ParseForwardIndex(
 // effective-make-and-model strings.
 CHROMEOS_EXPORT base::Optional<ParsedUsbIndex> ParseUsbIndex(
     base::StringPiece usb_index_json);
+
+// Parses |usb_vendor_id_map_json| and returns a map of USB vendor IDs
+// to manufacturer names.
+CHROMEOS_EXPORT base::Optional<ParsedUsbVendorIdMap> ParseUsbVendorIdMap(
+    base::StringPiece usb_vendor_id_map_json);
 
 // Parses |reverse_index_json| and returns the parsed map type.
 CHROMEOS_EXPORT base::Optional<ParsedReverseIndex> ParseReverseIndex(

@@ -1217,7 +1217,7 @@ Element* FocusController::NextFocusableElementInForm(
       return next_element;
     }
     LayoutObject* layout = next_element->GetLayoutObject();
-    if (layout && layout->IsTextControl()) {
+    if (layout && layout->IsTextControlIncludingNG()) {
       // TODO(ajith.v) Extend it for select elements, radio buttons and check
       // boxes
       return next_element;

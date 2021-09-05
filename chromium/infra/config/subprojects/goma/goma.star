@@ -32,7 +32,7 @@ defaults.execution_timeout.set(3 * time.hour)
 defaults.os.set(os.LINUX_DEFAULT)
 defaults.pool.set("luci.chromium.ci")
 defaults.service_account.set(
-    "chromium-ci-builder@chops-service-accounts.iam.gserviceaccount.com",
+    "goma-release-testing@chops-service-accounts.iam.gserviceaccount.com",
 )
 defaults.swarming_tags.set(["vpython:native-python-wrapper"])
 defaults.triggered_by.set(["master-gitiles-trigger"])
@@ -110,11 +110,11 @@ fyi_goma_canary_builder(
 
 fyi_goma_canary_builder(
     name = "ios-device-goma-canary-clobber",
-    caches = [xcode_cache.x11e146],
+    caches = [xcode_cache.x12a7209],
     cores = None,
-    os = os.MAC_ANY,
+    os = os.MAC_10_15,
     properties = {
-        "xcode_build_version": "11e146",
+        "xcode_build_version": "12a7209",
     },
 )
 
@@ -155,7 +155,6 @@ def fyi_goma_rbe_canary_builder(
         execution_timeout = 10 * time.hour,
         goma_backend = goma_backend,
         os = os,
-        goma_use_luci_auth = True,
         **kwargs
     )
 
@@ -186,11 +185,11 @@ fyi_goma_rbe_canary_builder(
 
 fyi_goma_rbe_canary_builder(
     name = "ios-device-goma-rbe-canary-clobber",
-    caches = [xcode_cache.x11e146],
+    caches = [xcode_cache.x12a7209],
     cores = None,
-    os = os.MAC_ANY,
+    os = os.MAC_10_15,
     properties = {
-        "xcode_build_version": "11e146",
+        "xcode_build_version": "12a7209",
     },
 )
 
@@ -271,11 +270,11 @@ fyi_goma_latest_client_builder(
 
 fyi_goma_latest_client_builder(
     name = "ios-device-goma-latest-clobber",
-    caches = [xcode_cache.x11e146],
+    caches = [xcode_cache.x12a7209],
     cores = None,
-    os = os.MAC_ANY,
+    os = os.MAC_10_15,
     properties = {
-        "xcode_build_version": "11e146",
+        "xcode_build_version": "12a7209",
     },
 )
 
@@ -316,7 +315,6 @@ def fyi_goma_rbe_latest_client_builder(
         execution_timeout = 10 * time.hour,
         goma_backend = goma_backend,
         os = os,
-        goma_use_luci_auth = True,
         **kwargs
     )
 
@@ -361,11 +359,11 @@ fyi_goma_rbe_latest_client_builder(
 
 fyi_goma_rbe_latest_client_builder(
     name = "ios-device-goma-rbe-latest-clobber",
-    caches = [xcode_cache.x11e146],
+    caches = [xcode_cache.x12a7209],
     cores = None,
-    os = os.MAC_ANY,
+    os = os.MAC_10_15,
     properties = {
-        "xcode_build_version": "11e146",
+        "xcode_build_version": "12a7209",
     },
 )
 
@@ -390,14 +388,12 @@ def goma_builder(
         name,
         builderless = False,
         os = os.LINUX_DEFAULT,
-        goma_use_luci_auth = True,
         **kwargs):
     return builder(
         name = name,
         builder_group = "chromium.goma",
         builderless = builderless,
         os = os,
-        goma_use_luci_auth = goma_use_luci_auth,
         **kwargs
     )
 
@@ -439,8 +435,13 @@ goma_builder(
 )
 
 goma_builder(
+    name = "chromeos-amd64-generic-rel-goma-rbe-staging",
+    goma_backend = goma.backend.RBE_STAGING,
+    goma_enable_ats = True,
+)
+
+goma_builder(
     name = "Chromium Linux Goma Staging",
-    goma_use_luci_auth = False,
 )
 
 goma_builder(
@@ -455,28 +456,32 @@ goma_builder(
     goma_enable_ats = True,
 )
 
+goma_builder(
+    name = "chromeos-amd64-generic-rel-goma-rbe-tot",
+    goma_backend = goma.backend.RBE_TOT,
+    goma_enable_ats = True,
+)
+
 def goma_mac_builder(
         *,
         name,
         os = os.MAC_DEFAULT,
-        goma_use_luci_auth = True,
         **kwargs):
     return goma_builder(
         name = name,
         cores = 4,
         goma_jobs = goma.jobs.J80,
         os = os,
-        goma_use_luci_auth = goma_use_luci_auth,
         **kwargs
     )
 
 goma_mac_builder(
     name = "Chromium iOS Goma RBE ToT",
-    caches = [xcode_cache.x11e146],
+    caches = [xcode_cache.x12a7209],
     goma_backend = goma.backend.RBE_TOT,
-    os = os.MAC_10_14,
+    os = os.MAC_10_15,
     properties = {
-        "xcode_build_version": "11e146",
+        "xcode_build_version": "12a7209",
     },
 )
 
@@ -502,21 +507,18 @@ goma_mac_builder(
 
 goma_mac_builder(
     name = "Chromium Mac Goma Staging",
-    goma_use_luci_auth = False,
 )
 
 def goma_windows_builder(
         *,
         name,
         goma_enable_ats = True,
-        goma_use_luci_auth = True,
         cores = 32,
         **kwargs):
     return goma_builder(
         name = name,
         cores = cores,
         goma_enable_ats = goma_enable_ats,
-        goma_use_luci_auth = goma_use_luci_auth,
         os = os.WINDOWS_DEFAULT,
         **kwargs
     )
@@ -540,5 +542,4 @@ goma_windows_builder(
     name = "CrWinGomaStaging",
     cores = 8,
     goma_enable_ats = False,
-    goma_use_luci_auth = False,
 )

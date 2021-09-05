@@ -88,12 +88,7 @@ bool VivaldiRuntimeFeatures::IsEnabled(content::BrowserContext* context,
   DCHECK(features);
   FeatureEntry* feature = features->FindNamedFeature(feature_name);
   DCHECK(feature);
-  // Check different flags for official builds and sopranos/internal builds.
-#if defined(OFFICIAL_BUILD)
   return (feature && feature->enabled);
-#else
-  return (feature && feature->internal_enabled);
-#endif  // defined(OFFICIAL_BUILD)
 }
 
 void VivaldiRuntimeFeatures::LoadRuntimeFeatures() {
@@ -157,17 +152,21 @@ bool VivaldiRuntimeFeatures::GetFlags(FeatureEntryMap* flags) {
           } else if (values_it.key() == "friendly_name") {
             sub_value->GetAsString(&entry->friendly_name);
           } else if (values_it.key() == "value") {
-            std::string value;
-            if (sub_value->GetAsString(&value)) {
-              entry->enabled = (value == "true");
-              entry->default_enabled = entry->enabled;
-            }
+            entry->default_enabled = sub_value->GetBool();
+#if defined(OFFICIAL_BUILD)
+            entry->enabled = entry->default_enabled;
+#endif
           } else if (values_it.key() == "internal_value") {
-            std::string value;
-            if (sub_value->GetAsString(&value)) {
-              entry->internal_enabled = (value == "true");
-              entry->internal_default_enabled = entry->internal_enabled;
+            entry->internal_default_enabled = sub_value->GetBool();
+#if !defined(OFFICIAL_BUILD)
+            entry->enabled = entry->internal_default_enabled;
+            if (entry->internal_default_enabled) {
+              // Features enabled by default in internal builds can't be turned
+              // off, they pop up again as enabled after restart. Disable the
+              // ability to turn them off in the UI to avoid confusion.
+              entry->force_value = true;
             }
+#endif
           }
         }
       }
@@ -177,14 +176,14 @@ bool VivaldiRuntimeFeatures::GetFlags(FeatureEntryMap* flags) {
 
       if (cl->HasSwitch(cmd_switch)) {
         // always enable this feature and force it always on
-        entry->internal_enabled = entry->enabled = true;
+        entry->enabled = true;
         entry->force_value = true;
       }
       cmd_switch = "disable-feature:";
       cmd_switch.append(it.key());
       if (cl->HasSwitch(cmd_switch)) {
         // always disable this feature and force it always off
-        entry->internal_enabled = entry->enabled = false;
+        entry->enabled = false;
         entry->force_value = true;
       }
       flags->insert(std::make_pair(it.key(), entry));
@@ -355,8 +354,7 @@ RuntimePrivateGetAllFeatureFlagsFunction::Run() {
     flag->name = entry.first;
     flag->friendly_name = entry.second->friendly_name;
     flag->description = entry.second->description;
-    flag->value = entry.second->enabled ? "true" : "false";
-    flag->internal_value = entry.second->internal_enabled ? "true" : "false";
+    flag->value = entry.second->enabled;
     flag->locked = entry.second->force_value;
 
     results.push_back(std::move(*flag));
@@ -382,7 +380,7 @@ RuntimePrivateSetFeatureEnabledFunction::Run() {
   DCHECK(entry);
   if (entry && !entry->force_value) {
     // Update the entry in-memory only so the list is always up-to-date.
-    entry->internal_enabled = entry->enabled = enable_entry;
+    entry->enabled = enable_entry;
     found = true;
     ListPrefUpdate update(
         Profile::FromBrowserContext(browser_context())->GetPrefs(),
@@ -394,7 +392,11 @@ RuntimePrivateSetFeatureEnabledFunction::Run() {
     for (auto& flag : flags) {
       // Enable it if it's different than the default
       if (flag.second->enabled &&
-          flag.second->default_enabled != flag.second->enabled) {
+#if defined(OFFICIAL_BUILD)
+          !flag.second->default_enabled) {
+#else
+          !flag.second->internal_default_enabled) {
+#endif
         experiments_list->AppendString(flag.first);
       }
     }

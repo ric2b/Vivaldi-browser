@@ -17,6 +17,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/strings/abseil_string_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -132,7 +133,7 @@ enum PushedStreamVaryResponseHeaderValues ParseVaryInPushedResponse(
   spdy::SpdyHeaderBlock::iterator it = headers.find(kVary);
   if (it == headers.end())
     return kNoVaryHeader;
-  base::StringPiece value(it->second);
+  base::StringPiece value = base::StringViewToStringPiece(it->second);
   if (value.empty())
     return kVaryIsEmpty;
   if (value == kStar)
@@ -2621,6 +2622,9 @@ void SpdySession::SendInitialData() {
 
 void SpdySession::HandleSetting(uint32_t id, uint32_t value) {
   switch (id) {
+    case spdy::SETTINGS_HEADER_TABLE_SIZE:
+      buffered_spdy_framer_->UpdateHeaderEncoderTableSize(value);
+      break;
     case spdy::SETTINGS_MAX_CONCURRENT_STREAMS:
       max_concurrent_streams_ =
           std::min(static_cast<size_t>(value), kMaxConcurrentStreamLimit);

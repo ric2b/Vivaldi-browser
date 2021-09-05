@@ -783,12 +783,12 @@ void PageLoadTracker::UpdateFeaturesUsage(
   }
 }
 
-void PageLoadTracker::UpdateThroughput(
-    mojom::ThroughputUkmDataPtr throughput_data) {
-  if (!throughput_data)
-    return;
-  for (const auto& observer : observers_)
-    observer->OnThroughputUpdate(throughput_data);
+void PageLoadTracker::SetUpSharedMemoryForSmoothness(
+    base::ReadOnlySharedMemoryRegion shared_memory) {
+  DCHECK(shared_memory.IsValid());
+  for (auto& observer : observers_) {
+    observer->SetUpSharedMemoryForSmoothness(shared_memory);
+  }
 }
 
 void PageLoadTracker::UpdateResourceDataUse(

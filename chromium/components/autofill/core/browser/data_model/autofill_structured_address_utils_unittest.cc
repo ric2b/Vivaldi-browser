@@ -9,13 +9,21 @@
 #include <string>
 #include <vector>
 
+#include "base/i18n/char_iterator.h"
+#include "base/i18n/unicodestring.h"
 #include "base/strings/utf_string_conversions.h"
-
 #include "base/test/gtest_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace autofill {
 namespace structured_address {
+
+// Element-wise comparison operator.
+bool operator==(const AddressToken& lhs, const AddressToken& rhs) {
+  return lhs.value == rhs.value &&
+         lhs.normalized_value == rhs.normalized_value &&
+         lhs.position == rhs.position;
+}
 
 // Regular expression with named capture groups for parsing US-style names.
 char kFirstMiddleLastRe[] =
@@ -210,16 +218,19 @@ TEST(AutofillStructuredAddressUtils, CaptureTypeWithPattern) {
 }
 
 TEST(AutofillStructuredAddressUtils, TokenizeValue) {
-  std::vector<base::string16> expected_tokens = {
-      base::ASCIIToUTF16("and"), base::ASCIIToUTF16("anotherone"),
-      base::ASCIIToUTF16("value")};
+  std::vector<AddressToken> expected_tokens = {
+      {base::ASCIIToUTF16("AnD"), base::ASCIIToUTF16("and"), 1},
+      {base::ASCIIToUTF16("anotherOne"), base::ASCIIToUTF16("anotherone"), 2},
+      {base::ASCIIToUTF16("valUe"), base::ASCIIToUTF16("value"), 0}};
 
   EXPECT_EQ(TokenizeValue(base::ASCIIToUTF16("  valUe AnD    anotherOne")),
             expected_tokens);
 
-  std::vector<base::string16> expected_cjk_tokens = {base::UTF8ToUTF16("영"),
-                                                     base::UTF8ToUTF16("이"),
-                                                     base::UTF8ToUTF16("호")};
+  std::vector<AddressToken> expected_cjk_tokens = {
+      {base::UTF8ToUTF16("영"), base::UTF8ToUTF16("영"), 1},
+      {base::UTF8ToUTF16("이"), base::UTF8ToUTF16("이"), 0},
+      {base::UTF8ToUTF16("호"), base::UTF8ToUTF16("호"), 2}};
+
   EXPECT_EQ(TokenizeValue(base::UTF8ToUTF16("이영 호")), expected_cjk_tokens);
   EXPECT_EQ(TokenizeValue(base::UTF8ToUTF16("이・영호")), expected_cjk_tokens);
   EXPECT_EQ(TokenizeValue(base::UTF8ToUTF16("이영 호")), expected_cjk_tokens);
@@ -230,25 +241,14 @@ TEST(AutofillStructuredAddressUtils, NormalizeValue) {
             base::UTF8ToUTF16("muller orber"));
 }
 
-TEST(AutofillStructuredAddressUtils, AreSortedTokensEqual) {
-  EXPECT_FALSE(AreSortedTokensEqual(
-      {base::ASCIIToUTF16("aaaa"), base::ASCIIToUTF16("bbb")},
-      {base::ASCIIToUTF16("aaa"), base::ASCIIToUTF16("bbb")}));
-
-  EXPECT_TRUE(AreSortedTokensEqual(
-      {base::ASCIIToUTF16("aaa"), base::ASCIIToUTF16("bbb")},
-      {base::ASCIIToUTF16("aaa"), base::ASCIIToUTF16("bbb")}));
-
-  EXPECT_FALSE(AreSortedTokensEqual(
-      {base::ASCIIToUTF16("aaa")},
-      {base::ASCIIToUTF16("aaa"), base::ASCIIToUTF16("bbb")}));
+TEST(AutofillStructuredAddressUtils, TestGetRewriter) {
+  EXPECT_EQ(RewriterCache::Rewrite(base::UTF8ToUTF16("us"),
+                                   base::UTF8ToUTF16("unit #3")),
+            base::UTF8ToUTF16("unit 3"));
+  EXPECT_EQ(RewriterCache::Rewrite(base::UTF8ToUTF16("us"),
+                                   base::UTF8ToUTF16("california")),
+            base::UTF8ToUTF16("ca"));
 }
 
-TEST(AutofillStructuredAddressUtils, AreStringTokenEquivalent) {
-  EXPECT_TRUE(AreStringTokenEquivalent(base::ASCIIToUTF16("A B C"),
-                                       base::ASCIIToUTF16("A C B")));
-  EXPECT_FALSE(AreStringTokenEquivalent(base::ASCIIToUTF16("A Bb C"),
-                                        base::ASCIIToUTF16("A C B")));
-}
 }  // namespace structured_address
 }  // namespace autofill

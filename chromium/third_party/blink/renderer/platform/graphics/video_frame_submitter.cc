@@ -29,7 +29,8 @@ namespace blink {
 
 VideoFrameSubmitter::VideoFrameSubmitter(
     WebContextProviderCallback context_provider_callback,
-    cc::PlaybackRoughnessReportingCallback roughness_reporting_callback,
+    cc::VideoPlaybackRoughnessReporter::ReportingCallback
+        roughness_reporting_callback,
     std::unique_ptr<VideoFrameResourceProvider> resource_provider)
     : context_provider_callback_(context_provider_callback),
       resource_provider_(std::move(resource_provider)),
@@ -77,7 +78,6 @@ void VideoFrameSubmitter::StopRendering() {
   is_rendering_ = false;
 
   frame_trackers_.StopSequence(cc::FrameSequenceTrackerType::kVideo);
-  roughness_reporter_->Reset();
 
   UpdateSubmissionState();
 }
@@ -116,17 +116,14 @@ void VideoFrameSubmitter::SetRotation(media::VideoRotation rotation) {
   rotation_ = rotation;
 }
 
-void VideoFrameSubmitter::EnableSubmission(
-    viz::SurfaceId surface_id,
-    base::TimeTicks local_surface_id_allocation_time) {
+void VideoFrameSubmitter::EnableSubmission(viz::SurfaceId surface_id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   // TODO(lethalantidote): Set these fields earlier in the constructor. Will
   // need to construct VideoFrameSubmitter later in order to do this.
   frame_sink_id_ = surface_id.frame_sink_id();
   child_local_surface_id_allocator_.UpdateFromParent(
-      viz::LocalSurfaceIdAllocation(surface_id.local_surface_id(),
-                                    local_surface_id_allocation_time));
+      surface_id.local_surface_id());
   if (resource_provider_->IsInitialized())
     StartSubmitting();
 }
@@ -375,7 +372,13 @@ void VideoFrameSubmitter::UpdateSubmissionState() {
   if (!compositor_frame_sink_)
     return;
 
-  compositor_frame_sink_->SetNeedsBeginFrame(IsDrivingFrameUpdates());
+  const auto is_driving_frame_updates = IsDrivingFrameUpdates();
+  compositor_frame_sink_->SetNeedsBeginFrame(is_driving_frame_updates);
+  // If we're not driving frame updates, then we're paused / off-screen / etc.
+  // Roughness reporting should stop until we resume.  Since the current frame
+  // might be on-screen for a long time, we also discard the current window.
+  if (!is_driving_frame_updates)
+    roughness_reporter_->Reset();
 
   // These two calls are very important; they are responsible for significant
   // memory savings when content is off-screen.
@@ -495,8 +498,7 @@ bool VideoFrameSubmitter::SubmitFrame(
   // We can pass nullptr for the HitTestData as the CompositorFram will not
   // contain any SurfaceDrawQuads.
   compositor_frame_sink_->SubmitCompositorFrame(
-      child_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id(),
+      child_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
       std::move(compositor_frame), base::nullopt, 0);
   frame_trackers_.NotifySubmitFrame(frame_token, false, begin_frame_ack,
                                     last_begin_frame_args_);
@@ -524,8 +526,7 @@ void VideoFrameSubmitter::SubmitEmptyFrame() {
       CreateCompositorFrame(frame_token, begin_frame_ack, nullptr);
 
   compositor_frame_sink_->SubmitCompositorFrame(
-      child_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id(),
+      child_local_surface_id_allocator_.GetCurrentLocalSurfaceId(),
       std::move(compositor_frame), base::nullopt, 0);
   frame_trackers_.NotifySubmitFrame(frame_token, false, begin_frame_ack,
                                     last_begin_frame_args_);
@@ -600,15 +601,13 @@ viz::CompositorFrame VideoFrameSubmitter::CreateCompositorFrame(
   compositor_frame.metadata.begin_frame_ack.has_damage = true;
   compositor_frame.metadata.device_scale_factor = 1;
   compositor_frame.metadata.may_contain_video = true;
-  compositor_frame.metadata.local_surface_id_allocation_time =
-      child_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .allocation_time();
 
   // Specify size of shared quad state and quad lists so that RenderPass doesn't
   // allocate using the defaults of 32 and 128 since we only append one quad.
-  auto render_pass = viz::RenderPass::Create(/*shared_quad_state_list_size=*/1u,
-                                             /*quad_list_size*/ 1u);
-  render_pass->SetNew(viz::RenderPassId{1}, gfx::Rect(frame_size_),
+  auto render_pass =
+      viz::CompositorRenderPass::Create(/*shared_quad_state_list_size=*/1u,
+                                        /*quad_list_size*/ 1u);
+  render_pass->SetNew(viz::CompositorRenderPassId{1}, gfx::Rect(frame_size_),
                       gfx::Rect(frame_size_), gfx::Transform());
 
   if (video_frame) {
@@ -630,8 +629,7 @@ void VideoFrameSubmitter::GenerateNewSurfaceId() {
   child_local_surface_id_allocator_.GenerateId();
 
   surface_embedder_->SetLocalSurfaceId(
-      child_local_surface_id_allocator_.GetCurrentLocalSurfaceIdAllocation()
-          .local_surface_id());
+      child_local_surface_id_allocator_.GetCurrentLocalSurfaceId());
 }
 
 }  // namespace blink

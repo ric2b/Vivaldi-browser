@@ -151,6 +151,8 @@ class MetaBuildWrapper(object):
                              'the commands that will run)')
       subp.add_argument('-v', '--verbose', action='store_true',
                         help='verbose logging')
+      subp.add_argument('--root', help='Path to GN source root')
+      subp.add_argument('--dotfile', help='Path to GN dotfile')
 
       # TODO(crbug.com/1060857): Remove this once swarming task templates
       # support command prefixes.
@@ -297,6 +299,8 @@ class MetaBuildWrapper(object):
     subp.add_argument('-d', '--dimension', default=[], action='append', nargs=2,
                       dest='dimensions', metavar='FOO bar',
                       help='dimension to filter on')
+    subp.add_argument('--tags', default=[], action='append', metavar='FOO:BAR',
+                      help='Tags to assign to the swarming task')
     subp.add_argument('--no-default-dimensions', action='store_false',
                       dest='default_dimensions', default=True,
                       help='Do not automatically add dimensions to the task')
@@ -368,32 +372,8 @@ class MetaBuildWrapper(object):
     return self.RunGNAnalyze(vals)
 
   def CmdExport(self):
-    self.ReadConfigFile(self.args.config_file)
-    obj = {}
-    for master, builders in self.masters.items():
-      obj[master] = {}
-      for builder in builders:
-        config = self.masters[master][builder]
-        if not config:
-          continue
-
-        if isinstance(config, dict):
-          args = {
-              k: FlattenConfig(self.configs, self.mixins, v)['gn_args']
-              for k, v in config.items()
-          }
-        elif config.startswith('//'):
-          args = config
-        else:
-          args = FlattenConfig(self.configs, self.mixins, config)['gn_args']
-          if 'error' in args:
-            continue
-
-        obj[master][builder] = args
-
-    # Dump object and trim trailing whitespace.
-    s = '\n'.join(l.rstrip() for l in
-                  json.dumps(obj, sort_keys=True, indent=2).splitlines())
+    obj = self._ToJsonish()
+    s = json.dumps(obj, sort_keys=True, indent=2, separators=(',', ': '))
     self.Print(s)
     return 0
 
@@ -518,7 +498,8 @@ class MetaBuildWrapper(object):
 
     self.Print('')
     if self.args.swarmed:
-      return self._RunUnderSwarming(self.args.path, self.args.target)
+      cmd, _ = self.GetIsolateCommand(self.args.target, vals)
+      return self._RunUnderSwarming(self.args.path, self.args.target, cmd)
     else:
       return self._RunLocallyIsolated(self.args.path, self.args.target)
 
@@ -549,7 +530,7 @@ class MetaBuildWrapper(object):
       if zip_dir:
         self.RemoveDirectory(zip_dir)
 
-  def _RunUnderSwarming(self, build_dir, target):
+  def _RunUnderSwarming(self, build_dir, target, isolate_cmd):
     isolate_server = 'isolateserver.appspot.com'
     namespace = 'default-gzip'
     swarming_server = 'chromium-swarm.appspot.com'
@@ -615,18 +596,26 @@ class MetaBuildWrapper(object):
           file=sys.stderr)
       return 1
 
+    tags = ['--tags=%s' % tag for tag in self.args.tags]
+
     cmd = [
         self.executable,
         self.PathJoin('tools', 'swarming_client', 'swarming.py'),
-          'run',
-          '-s', isolated_hash,
-          '-I', isolate_server,
-          '--namespace', namespace,
-          '-S', swarming_server,
-          '--tags=purpose:user-debug-mb',
-      ] + dimensions
+        'run',
+        '-s',
+        isolated_hash,
+        '-I',
+        isolate_server,
+        '--namespace',
+        namespace,
+        '-S',
+        swarming_server,
+        '--tags=purpose:user-debug-mb',
+        '--relative-cwd',
+        self.ToSrcRelPath(build_dir),
+    ] + tags + dimensions + ['--raw-cmd', '--'] + list(isolate_cmd)
     if self.args.extra_args:
-      cmd += ['--'] + self.args.extra_args
+      cmd += self.args.extra_args
     self.Print('')
     ret, _, _ = self.Run(cmd, force_verbose=True, buffer_output=False)
     return ret
@@ -661,6 +650,39 @@ class MetaBuildWrapper(object):
     return [('pool', 'chromium.tests'),
             ('cpu', 'x86-64'),
             os_dim]
+
+  def _ToJsonish(self):
+    """Dumps the config file into a json-friendly expanded dict.
+
+    Returns:
+      A dict with master -> builder -> all GN args mapping.
+    """
+    self.ReadConfigFile(
+        self.args.config_file if self.args.config_file else self.default_config)
+    obj = {}
+    for master, builders in self.masters.items():
+      obj[master] = {}
+      for builder in builders:
+        config = self.masters[master][builder]
+        if not config:
+          continue
+        if isinstance(config, dict):
+          args = {
+              k: FlattenConfig(self.configs, self.mixins, v)['gn_args']
+              for k, v in config.items()
+          }
+        elif config.startswith('//'):
+          args = config
+        else:
+          flattened_config = FlattenConfig(self.configs, self.mixins, config)
+          if 'error' in flattened_config['gn_args']:
+            continue
+          args = {'gn_args': gn_helpers.FromGNArgs(flattened_config['gn_args'])}
+          if flattened_config.get('args_file'):
+            args['args_file'] = flattened_config['args_file']
+        obj[master][builder] = args
+
+    return obj
 
   def CmdValidate(self, print_ok=True):
     errs = []
@@ -1322,7 +1344,12 @@ class MetaBuildWrapper(object):
       subdir, exe = 'win', 'gn.exe'
 
     gn_path = self.PathJoin(self.chromium_src_dir, 'buildtools', subdir, exe)
-    return [gn_path, subcommand, path] + list(args)
+    cmd = [gn_path, subcommand]
+    if self.args.root:
+      cmd += ['--root=' + self.args.root]
+    if self.args.dotfile:
+      cmd += ['--dotfile=' + self.args.dotfile]
+    return cmd + [path] + list(args)
 
 
   def GNArgs(self, vals, expand_imports=False):
@@ -1379,10 +1406,18 @@ class MetaBuildWrapper(object):
       cmdline = []
 
     if test_type == 'generated_script' or is_ios or is_lacros:
-      script = isolate_map[target].get('script', 'bin/run_{}'.format(target))
+      assert 'script' not in isolate_map[target], (
+          'generated_scripts can no longer customize the script path')
       if is_win:
-        script += '.bat'
-      cmdline += [script]
+        default_script = 'bin\\run_{}.bat'.format(target)
+      else:
+        default_script = 'bin/run_{}'.format(target)
+      script = isolate_map[target].get('script', default_script)
+
+      # TODO(crbug.com/816629): remove any use of 'args' from
+      # generated_scripts.
+      cmdline += [script] + isolate_map[target].get('args', [])
+
       return cmdline, []
 
 
@@ -1438,7 +1473,7 @@ class MetaBuildWrapper(object):
       cmdline += [
           '../../testing/test_env.py',
           os.path.join('bin', 'run_%s' % target),
-          '--flash',
+          '--logs-dir=${ISOLATED_OUTDIR}',
       ]
     elif use_xvfb and test_type == 'windowed_test_launcher':
       extra_files.append('../../testing/xvfb.py')
@@ -1478,14 +1513,13 @@ class MetaBuildWrapper(object):
         cmdline += [
             os.path.join('bin', 'cros_test_wrapper'),
             '--logs-dir=${ISOLATED_OUTDIR}',
-            '--flash',
             '--',
         ]
       cmdline += [
           '../../testing/test_env.py',
           '../../' + self.ToSrcRelPath(isolate_map[target]['script'])
       ]
-    elif test_type in ('raw', 'additional_compile_target'):
+    elif test_type == 'additional_compile_target':
       cmdline = [
           './' + str(target) + executable_suffix,
       ]

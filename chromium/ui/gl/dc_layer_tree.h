@@ -12,8 +12,10 @@
 
 #include <memory>
 
+#include "ui/gfx/color_space_win.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gl/dc_renderer_layer_params.h"
+#include "ui/gl/hdr_metadata_helper_win.h"
 
 namespace gl {
 
@@ -28,7 +30,8 @@ class DCLayerTree {
  public:
   DCLayerTree(bool disable_nv12_dynamic_textures,
               bool disable_larger_than_screen_overlays,
-              bool disable_vp_scaling);
+              bool disable_vp_scaling,
+              bool reset_vp_when_colorspace_changes);
   ~DCLayerTree();
 
   // Returns true on success.
@@ -49,7 +52,15 @@ class DCLayerTree {
   // layers so the same one can be reused if it's large enough.  Returns true on
   // success.
   bool InitializeVideoProcessor(const gfx::Size& input_size,
-                                const gfx::Size& output_size);
+                                const gfx::Size& output_size,
+                                const gfx::ColorSpace& input_color_space,
+                                const gfx::ColorSpace& output_color_space);
+
+  void SetColorspaceForVideoProcessor(
+      const gfx::ColorSpace& input_color_space,
+      const gfx::ColorSpace& output_color_space,
+      Microsoft::WRL::ComPtr<IDXGISwapChain1> swapchain,
+      bool is_yuv_swapchain);
 
   void SetNeedsRebuildVisualTree() { needs_rebuild_visual_tree_ = true; }
 
@@ -85,10 +96,15 @@ class DCLayerTree {
 
   void SetFrameRate(float frame_rate);
 
+  const std::unique_ptr<HDRMetadataHelperWin>& GetHDRMetadataHelper() {
+    return hdr_metadata_helper_;
+  }
+
  private:
   const bool disable_nv12_dynamic_textures_;
   const bool disable_larger_than_screen_overlays_;
   const bool disable_vp_scaling_;
+  const bool reset_vp_when_colorspace_changes_;
 
   Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device_;
   Microsoft::WRL::ComPtr<IDCompositionDevice2> dcomp_device_;
@@ -105,6 +121,13 @@ class DCLayerTree {
   // Current video processor input and output size.
   gfx::Size video_input_size_;
   gfx::Size video_output_size_;
+
+  // Current video processor input and output colorspace.
+  gfx::ColorSpace video_input_color_space_;
+  gfx::ColorSpace video_output_color_space_;
+
+  // Cache the last swapchain that has been set output colorspace.
+  Microsoft::WRL::ComPtr<IDXGISwapChain1> last_swapchain_setting_colorspace_;
 
   // Set to true if a direct composition visual tree needs rebuild.
   bool needs_rebuild_visual_tree_ = false;
@@ -130,6 +153,9 @@ class DCLayerTree {
 
   // Number of frames per second.
   float frame_rate_ = 0.f;
+
+  // dealing with hdr metadata
+  std::unique_ptr<HDRMetadataHelperWin> hdr_metadata_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(DCLayerTree);
 };

@@ -55,7 +55,7 @@ class UserImageManagerImpl : public UserImageManager,
   void SaveUserImageFromFile(const base::FilePath& path) override;
   void SaveUserImageFromProfileImage() override;
   void DeleteUserImage() override;
-  void DownloadProfileImage(const std::string& reason) override;
+  void DownloadProfileImage() override;
   const gfx::ImageSkia& DownloadedProfileImage() const override;
   UserImageSyncObserver* GetSyncObserver() const override;
   void Shutdown() override;
@@ -125,9 +125,8 @@ class UserImageManagerImpl : public UserImageManager,
 
   // Downloads the profile data for the currently logged-in user. The user's
   // full name and, if NeedProfileImage() is true, the profile image are
-  // downloaded. |reason| is an arbitrary string (used to report UMA histograms
-  // with download times).
-  void DownloadProfileData(const std::string& reason);
+  // downloaded.
+  void DownloadProfileData();
 
   // Removes ther user from the dictionary |prefs_dict_root| in
   // local state and deletes the image file that the dictionary
@@ -203,6 +202,10 @@ class UserImageManagerImpl : public UserImageManager,
   std::unique_ptr<Job> job_;
 
   bool has_managed_image_;
+
+  // If true user image manager trying to download and set profile image instead
+  // of the random one.
+  bool is_random_image_set_ = false;
 
   base::WeakPtrFactory<UserImageManagerImpl> weak_factory_{this};
 

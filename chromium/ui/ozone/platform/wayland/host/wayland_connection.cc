@@ -38,6 +38,13 @@
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/ozone/platform/wayland/host/wayland_window_drag_controller.h"
 #include "ui/ozone/platform/wayland/host/wayland_zwp_linux_dmabuf.h"
+#include "ui/ozone/platform/wayland/host/xdg_foreign_wrapper.h"
+
+#if defined(USE_LIBWAYLAND_STUBS)
+#include <dlfcn.h>
+
+#include "third_party/wayland/libwayland_stubs.h"  // nogncheck
+#endif
 
 namespace ui {
 
@@ -46,15 +53,18 @@ constexpr uint32_t kMaxCompositorVersion = 4;
 constexpr uint32_t kMaxGtkPrimarySelectionDeviceManagerVersion = 1;
 constexpr uint32_t kMaxKeyboardExtensionVersion = 1;
 constexpr uint32_t kMaxLinuxDmabufVersion = 3;
-constexpr uint32_t kMaxSeatVersion = 4;
+constexpr uint32_t kMaxSeatVersion = 5;
 constexpr uint32_t kMaxShmVersion = 1;
 constexpr uint32_t kMaxXdgShellVersion = 1;
 constexpr uint32_t kMaxDeviceManagerVersion = 3;
 constexpr uint32_t kMaxWpPresentationVersion = 1;
+constexpr uint32_t kMaxWpViewporterVersion = 1;
 constexpr uint32_t kMaxTextInputManagerVersion = 1;
+constexpr uint32_t kMaxExplicitSyncVersion = 2;
 constexpr uint32_t kMinAuraShellVersion = 10;
 constexpr uint32_t kMinWlDrmVersion = 2;
 constexpr uint32_t kMinWlOutputVersion = 2;
+constexpr uint32_t kMaxXdgDecorationVersion = 1;
 }  // namespace
 
 WaylandConnection::WaylandConnection() = default;
@@ -62,6 +72,21 @@ WaylandConnection::WaylandConnection() = default;
 WaylandConnection::~WaylandConnection() = default;
 
 bool WaylandConnection::Initialize() {
+#if defined(USE_LIBWAYLAND_STUBS)
+  // Use RTLD_NOW to load all symbols, since the stubs will try to load all of
+  // them anyway.  Use RTLD_GLOBAL to add the symbols to the global namespace.
+  auto dlopen_flags = RTLD_NOW | RTLD_GLOBAL;
+  if (void* libwayland_client =
+          dlopen("libwayland-client.so.0", dlopen_flags)) {
+    third_party_wayland::InitializeLibwaylandclient(libwayland_client);
+  } else {
+    LOG(ERROR) << "Failed to load wayland client libraries.";
+    return false;
+  }
+  if (void* libwayland_egl = dlopen("libwayland-egl.so.1", dlopen_flags))
+    third_party_wayland::InitializeLibwaylandegl(libwayland_egl);
+#endif
+
   static const wl_registry_listener registry_listener = {
       &WaylandConnection::Global,
       &WaylandConnection::GlobalRemove,
@@ -128,11 +153,15 @@ void WaylandConnection::ScheduleFlush() {
   }
 }
 
+void WaylandConnection::SetShutdownCb(base::OnceCallback<void()> shutdown_cb) {
+  event_source()->SetShutdownCb(std::move(shutdown_cb));
+}
+
 void WaylandConnection::SetCursorBitmap(const std::vector<SkBitmap>& bitmaps,
                                         const gfx::Point& location) {
   if (!cursor_)
     return;
-  cursor_->UpdateBitmap(bitmaps, location, serial_);
+  cursor_->UpdateBitmap(bitmaps, location, serial());
 }
 
 bool WaylandConnection::IsDragInProgress() const {
@@ -279,8 +308,7 @@ void WaylandConnection::Global(void* data,
     }
     zxdg_shell_v6_add_listener(connection->shell_v6_.get(), &shell_v6_listener,
                                connection);
-  } else if (!connection->shell_v6_ && !connection->shell_ &&
-             strcmp(interface, "xdg_wm_base") == 0) {
+  } else if (!connection->shell_ && strcmp(interface, "xdg_wm_base") == 0) {
     connection->shell_ = wl::Bind<xdg_wm_base>(
         registry, name, std::min(version, kMaxXdgShellVersion));
     if (!connection->shell_) {
@@ -331,6 +359,12 @@ void WaylandConnection::Global(void* data,
     connection->primary_selection_device_manager_ =
         std::make_unique<GtkPrimarySelectionDeviceManager>(manager.release(),
                                                            connection);
+  } else if (!connection->linux_explicit_synchronization_ &&
+             (strcmp(interface, "zwp_linux_explicit_synchronization_v1") ==
+              0)) {
+    connection->linux_explicit_synchronization_ =
+        wl::Bind<zwp_linux_explicit_synchronization_v1>(
+            registry, name, std::min(version, kMaxExplicitSyncVersion));
   } else if (!connection->zwp_dmabuf_ &&
              (strcmp(interface, "zwp_linux_dmabuf_v1") == 0)) {
     wl::Object<zwp_linux_dmabuf_v1> zwp_linux_dmabuf =
@@ -342,6 +376,10 @@ void WaylandConnection::Global(void* data,
              (strcmp(interface, "wp_presentation") == 0)) {
     connection->presentation_ =
         wl::Bind<wp_presentation>(registry, name, kMaxWpPresentationVersion);
+  } else if (!connection->viewporter_ &&
+             (strcmp(interface, "wp_viewporter") == 0)) {
+    connection->viewporter_ =
+        wl::Bind<wp_viewporter>(registry, name, kMaxWpViewporterVersion);
   } else if (!connection->keyboard_extension_v1_ &&
              strcmp(interface, "zcr_keyboard_extension_v1") == 0) {
     connection->keyboard_extension_v1_ = wl::Bind<zcr_keyboard_extension_v1>(
@@ -361,6 +399,10 @@ void WaylandConnection::Global(void* data,
       LOG(ERROR) << "Failed to bind to zwp_text_input_manager_v1 global";
       return;
     }
+  } else if (!connection->xdg_foreign_ &&
+             strcmp(interface, "zxdg_exporter_v1") == 0) {
+    connection->xdg_foreign_ = std::make_unique<XdgForeignWrapper>(
+        connection, wl::Bind<zxdg_exporter_v1>(registry, name, version));
   } else if (!connection->drm_ && (strcmp(interface, "wl_drm") == 0) &&
              version >= kMinWlDrmVersion) {
     auto wayland_drm = wl::Bind<struct wl_drm>(registry, name, version);
@@ -375,6 +417,11 @@ void WaylandConnection::Global(void* data,
       LOG(ERROR) << "Failed to bind zaura_shell";
       return;
     }
+  } else if (!connection->xdg_decoration_manager_ &&
+             strcmp(interface, "zxdg_decoration_manager_v1") == 0) {
+    connection->xdg_decoration_manager_ =
+        wl::Bind<struct zxdg_decoration_manager_v1>(registry, name,
+                                                    kMaxXdgDecorationVersion);
   }
 
   connection->ScheduleFlush();

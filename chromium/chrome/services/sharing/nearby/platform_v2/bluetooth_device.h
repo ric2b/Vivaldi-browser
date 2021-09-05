@@ -25,8 +25,8 @@ class BluetoothDevice : public api::BluetoothDevice {
 
   // api::BluetoothDevice:
   std::string GetName() const override;
+  std::string GetMacAddress() const override;
 
-  std::string GetAddress() const;
   void UpdateDeviceInfo(bluetooth::mojom::DeviceInfoPtr device_info);
 
  private:

@@ -16,7 +16,6 @@
 #include "chrome/browser/ui/views/hover_button_controller.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/layout/box_layout.h"
 #include "ui/views/style/typography.h"
 
 const char ExtensionsMenuButton::kClassName[] = "ExtensionsMenuButton";
@@ -26,14 +25,18 @@ ExtensionsMenuButton::ExtensionsMenuButton(
     ExtensionsMenuItemView* parent,
     ToolbarActionViewController* controller,
     bool allow_pinning)
-    : views::LabelButton(this),
+    : views::LabelButton(
+          base::BindRepeating(&ExtensionsMenuButton::ButtonPressed,
+                              base::Unretained(this))),
       browser_(browser),
       parent_(parent),
       controller_(controller),
       allow_pinning_(allow_pinning) {
   ConfigureBubbleMenuItem(this, 0);
   SetButtonController(std::make_unique<HoverButtonController>(
-      this, this,
+      this,
+      base::BindRepeating(&ExtensionsMenuButton::ButtonPressed,
+                          base::Unretained(this)),
       std::make_unique<views::Button::DefaultButtonControllerDelegate>(this)));
   controller_->SetDelegate(this);
   UpdateState();
@@ -51,14 +54,6 @@ SkColor ExtensionsMenuButton::GetInkDropBaseColor() const {
 
 bool ExtensionsMenuButton::CanShowIconInToolbar() const {
   return allow_pinning_;
-}
-
-void ExtensionsMenuButton::ButtonPressed(Button* sender,
-                                         const ui::Event& event) {
-  base::RecordAction(
-      base::UserMetricsAction("Extensions.Toolbar.ExtensionActivatedFromMenu"));
-  controller_->ExecuteAction(
-      true, ToolbarActionViewController::InvocationSource::kMenuEntry);
 }
 
 // ToolbarActionViewDelegateViews:
@@ -81,21 +76,32 @@ content::WebContents* ExtensionsMenuButton::GetCurrentWebContents() const {
 }
 
 void ExtensionsMenuButton::UpdateState() {
-  constexpr gfx::Size kIconSize = gfx::Size(28, 28);
   SetImage(
       Button::STATE_NORMAL,
-      controller_->GetIcon(GetCurrentWebContents(), kIconSize).AsImageSkia());
+      controller_
+          ->GetIcon(GetCurrentWebContents(), ExtensionsMenuItemView::kIconSize)
+          .AsImageSkia());
   SetText(controller_->GetActionName());
   SetTooltipText(controller_->GetTooltip(GetCurrentWebContents()));
   SetEnabled(controller_->IsEnabled(GetCurrentWebContents()));
   // The horizontal insets reasonably align the extension icons with text inside
   // the dialog. Note that |kIconSize| also contains space for badging, so we
   // can't trivially use dialog-text insets (empty space inside the icon).
-  constexpr gfx::Insets kBorderInsets = gfx::Insets(
-      (ExtensionsMenuItemView::kMenuItemHeightDp - kIconSize.height()) / 2, 12);
+  constexpr gfx::Insets kBorderInsets =
+      gfx::Insets((ExtensionsMenuItemView::kMenuItemHeightDp -
+                   ExtensionsMenuItemView::kIconSize.height()) /
+                      2,
+                  12);
   SetBorder(views::CreateEmptyBorder(kBorderInsets));
 }
 
 bool ExtensionsMenuButton::IsMenuRunning() const {
   return parent_->IsContextMenuRunning();
+}
+
+void ExtensionsMenuButton::ButtonPressed() {
+  base::RecordAction(
+      base::UserMetricsAction("Extensions.Toolbar.ExtensionActivatedFromMenu"));
+  controller_->ExecuteAction(
+      true, ToolbarActionViewController::InvocationSource::kMenuEntry);
 }

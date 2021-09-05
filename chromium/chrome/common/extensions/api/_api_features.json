@@ -325,6 +325,10 @@
     "dependencies": ["permission:documentScan"],
     "contexts": ["blessed_extension"]
   },
+  "dom": {
+    "channel": "dev",
+    "contexts": ["blessed_extension", "content_script"]
+  },
   "downloads": {
     "dependencies": ["permission:downloads"],
     "contexts": ["blessed_extension"]
@@ -437,7 +441,7 @@
   "extensionsManifestTypes": {
     "internal": true,
     "channel": "stable",
-    "contexts": ["blessed_extension"]
+    "contexts": []
   },
   "fileBrowserHandler": {
     "dependencies": ["permission:fileBrowserHandler"],
@@ -577,7 +581,7 @@
   "manifestTypes": {
     "internal": true,
     "channel": "stable",
-    "contexts": ["blessed_extension"]
+    "contexts": []
   },
   "mediaPlayerPrivate": {
     "dependencies": ["permission:mediaPlayerPrivate"],
@@ -613,8 +617,7 @@
   },
   "pageCapture": {
     "dependencies": ["permission:pageCapture"],
-    "contexts": ["blessed_extension"],
-    "disallow_for_service_workers": true
+    "contexts": ["blessed_extension"]
   },
   "passwordsPrivate": [{
     "dependencies": ["permission:passwordsPrivate"],

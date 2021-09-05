@@ -195,6 +195,7 @@ void SetupFragmentBuilderForFragmentation(
     const NGBlockBreakToken* previous_break_token,
     NGBoxFragmentBuilder* builder) {
   builder->SetHasBlockFragmentation();
+  builder->SetPreviousBreakToken(previous_break_token);
 
   // The whereabouts of our container's so far best breakpoint is none of our
   // business, but we store its appeal, so that we don't look for breakpoints
@@ -231,21 +232,40 @@ bool IsNodeFullyGrown(NGBlockNode node,
 bool FinishFragmentation(NGBlockNode node,
                          const NGConstraintSpace& space,
                          const NGBlockBreakToken* previous_break_token,
-                         const NGBoxStrut& border_padding,
+                         LayoutUnit trailing_border_padding,
                          LayoutUnit space_left,
                          NGBoxFragmentBuilder* builder) {
   LayoutUnit previously_consumed_block_size;
   if (previous_break_token && !previous_break_token->IsBreakBefore())
     previously_consumed_block_size = previous_break_token->ConsumedBlockSize();
+  bool is_past_end =
+      previous_break_token && previous_break_token->IsAtBlockEnd();
 
   LayoutUnit fragments_total_block_size = builder->FragmentsTotalBlockSize();
   LayoutUnit desired_block_size =
       fragments_total_block_size - previously_consumed_block_size;
-  DCHECK_GE(desired_block_size, LayoutUnit());
+
+  // Consumed block-size stored in the break tokens is always stretched to the
+  // fragmentainers. If this wasn't also the case for all previous fragments
+  // (because we reached the end of the node and were overflowing), we may end
+  // up with negative values here.
+  desired_block_size = desired_block_size.ClampNegativeToZero();
+
   LayoutUnit intrinsic_block_size = builder->IntrinsicBlockSize();
 
   LayoutUnit final_block_size = desired_block_size;
+
   if (builder->FoundColumnSpanner()) {
+    builder->SetDidBreakSelf();
+
+    // A break before a spanner is a forced break, and is thus "perfect". It
+    // need not be weighed against other possible break points.
+    builder->SetBreakAppeal(kBreakAppealPerfect);
+  }
+
+  if (is_past_end) {
+    final_block_size = intrinsic_block_size = LayoutUnit();
+  } else if (builder->FoundColumnSpanner()) {
     // There's a column spanner (or more) inside. This means that layout got
     // interrupted and thus hasn't reached the end of this block yet. We're
     // going to resume inside this block when done with the spanner(s). This is
@@ -264,8 +284,8 @@ bool FinishFragmentation(NGBlockNode node,
     // more content, but the specified height is 100px, so distribute what we
     // haven't already consumed (100px - 20px = 80px) over two columns. We get
     // two fragments for #container after the spanner, each 40px tall.
-    final_block_size = std::min(final_block_size, intrinsic_block_size);
-    builder->SetDidBreakSelf();
+    final_block_size = std::min(final_block_size, intrinsic_block_size) -
+                       trailing_border_padding;
   } else if (space_left != kIndefiniteSize && desired_block_size > space_left) {
     // We're taller than what we have room for. We don't want to use more than
     // |space_left|, but if the intrinsic block-size is larger than that, it
@@ -279,12 +299,12 @@ bool FinishFragmentation(NGBlockNode node,
     //
     // There is a last-resort breakpoint before trailing border and padding, so
     // first check if we can break there and still make progress.
-    DCHECK_GE(intrinsic_block_size, border_padding.block_end);
-    DCHECK_GE(desired_block_size, border_padding.block_end);
+    DCHECK_GE(intrinsic_block_size, trailing_border_padding);
+    DCHECK_GE(desired_block_size, trailing_border_padding);
 
     LayoutUnit subtractable_border_padding;
-    if (desired_block_size > border_padding.block_end)
-      subtractable_border_padding = border_padding.block_end;
+    if (desired_block_size > trailing_border_padding)
+      subtractable_border_padding = trailing_border_padding;
 
     final_block_size =
         std::min(desired_block_size - subtractable_border_padding,
@@ -298,14 +318,29 @@ bool FinishFragmentation(NGBlockNode node,
   }
 
   LogicalBoxSides sides;
+  // If this isn't the first fragment, omit the block-start border.
   if (previously_consumed_block_size)
     sides.block_start = false;
-  if (builder->DidBreakSelf())
+  // If this isn't the last fragment with same-flow content, omit the block-end
+  // border. If something overflows the node, we'll keep on creating empty
+  // fragments to contain the overflow (which establishes a parallel flow), but
+  // those fragments should make no room (nor paint) block-end border/paddding.
+  if (builder->DidBreakSelf() || is_past_end)
     sides.block_end = false;
   builder->SetSidesToInclude(sides);
 
-  builder->SetConsumedBlockSize(previously_consumed_block_size +
-                                final_block_size);
+  LayoutUnit consumed_here = final_block_size;
+  if (builder->DidBreakSelf() || builder->HasChildBreakInside()) {
+    // If this node is to be resumed in the next fragmentainer, consumed
+    // block-size always includes the entire remainder of the fragmentainer. The
+    // frament itself will only do that unless we've reached the end of the node
+    // (and we are breaking because of overflow). We include the entire
+    // fragmentainer in consumed block-size in order to write offsets correctly
+    // back to legacy layout, which would otherwise become incorrect for
+    // overflowing content.
+    consumed_here = std::max(consumed_here, space_left);
+  }
+  builder->SetConsumedBlockSize(previously_consumed_block_size + consumed_here);
   builder->SetFragmentBlockSize(final_block_size);
 
   if (builder->FoundColumnSpanner())
@@ -335,7 +370,7 @@ bool FinishFragmentation(NGBlockNode node,
     // TODO(mstensho): The spec actually says that we enter a parallel flow once
     // we're past the block-end *content edge*, but here we're checking against
     // the *border edge* instead. Does it matter?
-    if (previous_break_token && previous_break_token->IsAtBlockEnd()) {
+    if (is_past_end) {
       builder->SetIsAtBlockEnd();
       // We entered layout already at the end of the block (but with overflowing
       // children). So we should take up no more space on our own.
@@ -349,9 +384,14 @@ bool FinishFragmentation(NGBlockNode node,
       // IsNodeFullyGrown() will return true now), we know that we're at the
       // end. If block-size is unconstrained (or at least allowed to grow a bit
       // more), we're only at the end if no in-flow content inside broke.
-      if (!builder->HasInflowChildBreakInside() ||
+
+      bool was_broken_by_child = builder->HasInflowChildBreakInside();
+      if (!was_broken_by_child && space.IsNewFormattingContext())
+        was_broken_by_child = builder->HasFloatBreakInside();
+
+      if (!was_broken_by_child ||
           IsNodeFullyGrown(node, space, fragments_total_block_size,
-                           border_padding,
+                           builder->BorderPadding(),
                            builder->InitialBorderBoxSize().inline_size))
         builder->SetIsAtBlockEnd();
 
@@ -679,14 +719,14 @@ bool AttemptSoftBreak(const NGConstraintSpace& space,
 
 NGConstraintSpace CreateConstraintSpaceForColumns(
     const NGConstraintSpace& parent_space,
-    WritingMode writing_mode,
-    const LogicalSize& column_size,
+    LogicalSize column_size,
+    LogicalSize percentage_resolution_size,
     bool is_first_fragmentainer,
     bool balance_columns) {
-  NGConstraintSpaceBuilder space_builder(parent_space, writing_mode,
-                                         /* is_new_fc */ true);
+  NGConstraintSpaceBuilder space_builder(
+      parent_space, parent_space.GetWritingMode(), /* is_new_fc */ true);
   space_builder.SetAvailableSize(column_size);
-  space_builder.SetPercentageResolutionSize(column_size);
+  space_builder.SetPercentageResolutionSize(percentage_resolution_size);
 
   // To ensure progression, we need something larger than 0 here. The spec
   // actually says that fragmentainers have to accept at least 1px of content.
@@ -707,6 +747,9 @@ NGConstraintSpace CreateConstraintSpaceForColumns(
     // leading adjacent margins.
     space_builder.SetDiscardingMarginStrut();
   }
+
+  space_builder.SetNeedsBaseline(parent_space.NeedsBaseline());
+  space_builder.SetBaselineAlgorithmType(parent_space.BaselineAlgorithmType());
 
   return space_builder.ToConstraintSpace();
 }

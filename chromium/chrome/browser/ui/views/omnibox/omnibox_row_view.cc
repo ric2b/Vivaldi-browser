@@ -4,11 +4,13 @@
 
 #include "chrome/browser/ui/views/omnibox/omnibox_row_view.h"
 
+#include "base/bind.h"
 #include "base/i18n/case_conversion.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_match_cell_view.h"
+#include "chrome/browser/ui/views/omnibox/omnibox_mouse_enter_exit_handler.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
@@ -31,16 +33,18 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/style/typography.h"
 
-class OmniboxRowView::HeaderView : public views::View,
-                                   public views::ButtonListener {
+class OmniboxRowView::HeaderView : public views::View {
  public:
-  explicit HeaderView(OmniboxRowView* row_view) : row_view_(row_view) {
+  explicit HeaderView(OmniboxRowView* row_view)
+      : row_view_(row_view),
+        // Using base::Unretained is correct here. 'this' outlives the callback.
+        mouse_enter_exit_handler_(base::BindRepeating(&HeaderView::UpdateUI,
+                                                      base::Unretained(this))) {
     views::BoxLayout* layout =
         SetLayoutManager(std::make_unique<views::BoxLayout>(
             views::BoxLayout::Orientation::kHorizontal));
-    // The icons in the header view match their sizing to the location bar.
-    layout->set_between_child_spacing(
-        GetLayoutConstant(LOCATION_BAR_CHILD_INTERIOR_PADDING));
+    // This is the designer-provided spacing that matches the NTP Realbox.
+    layout->set_between_child_spacing(8);
 
     header_label_ = AddChildView(std::make_unique<views::Label>());
     header_label_->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
@@ -52,7 +56,9 @@ class OmniboxRowView::HeaderView : public views::View,
     header_label_->SetFontList(font);
 
     header_toggle_button_ =
-        AddChildView(views::CreateVectorToggleImageButton(this));
+        AddChildView(views::CreateVectorToggleImageButton(base::BindRepeating(
+            &HeaderView::HeaderToggleButtonPressed, base::Unretained(this))));
+    mouse_enter_exit_handler_.ObserveMouseEnterExitOn(header_toggle_button_);
     views::InstallCircleHighlightPathGenerator(header_toggle_button_);
 
     header_toggle_button_focus_ring_ =
@@ -132,13 +138,6 @@ class OmniboxRowView::HeaderView : public views::View,
                                                  : ax::mojom::State::kExpanded);
   }
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override {
-    DCHECK_EQ(sender, header_toggle_button_);
-    row_view_->popup_model_->TriggerSelectionAction(HeaderSelection());
-    // The PrefChangeRegistrar will update the actual button toggle state.
-  }
-
   // Updates the UI state for the new hover or selection state.
   void UpdateUI() {
     OmniboxPartState part_state = OmniboxPartState::NORMAL;
@@ -154,7 +153,7 @@ class OmniboxRowView::HeaderView : public views::View,
 
     SkColor icon_color = GetOmniboxColor(GetThemeProvider(),
                                          OmniboxPart::RESULTS_ICON, part_state);
-    header_toggle_button_->set_ink_drop_base_color(icon_color);
+    header_toggle_button_->SetInkDropBaseColor(icon_color);
 
     int dip_size = GetLayoutConstant(LOCATION_BAR_ICON_SIZE);
     const gfx::ImageSkia arrow_down =
@@ -191,6 +190,11 @@ class OmniboxRowView::HeaderView : public views::View,
   views::Button* header_toggle_button() const { return header_toggle_button_; }
 
  private:
+  void HeaderToggleButtonPressed() {
+    row_view_->popup_model_->TriggerSelectionAction(HeaderSelection());
+    // The PrefChangeRegistrar will update the actual button toggle state.
+  }
+
   // Updates the hide button's toggle state.
   void OnPrefChanged() {
     DCHECK(row_view_->pref_service_);
@@ -243,6 +247,9 @@ class OmniboxRowView::HeaderView : public views::View,
   // A pref change registrar for toggling the toggle button's state. This is
   // needed because the preference state can change through multiple UIs.
   PrefChangeRegistrar pref_change_registrar_;
+
+  // Keeps track of mouse-enter and mouse-exit events of child Views.
+  OmniboxMouseEnterExitHandler mouse_enter_exit_handler_;
 };
 
 OmniboxRowView::OmniboxRowView(size_t line,

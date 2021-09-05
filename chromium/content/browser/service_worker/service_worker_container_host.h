@@ -14,7 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/time/time.h"
-#include "content/browser/frame_host/back_forward_cache_metrics.h"
+#include "content/browser/renderer_host/back_forward_cache_metrics.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/service_worker_client_info.h"
@@ -361,7 +361,7 @@ class CONTENT_EXPORT ServiceWorkerContainerHost final
 
   // The URL representing the first-party site for this context.
   // For service worker execution contexts, top_frame_origin() always
-  // returns the origin of the service worker script URL.
+  // returns the origin of the service worker scope's URL.
   // For shared worker it is the origin of the document that created the worker.
   // For dedicated worker it is the top-frame origin of the document that owns
   // the worker.

@@ -35,14 +35,15 @@ WebExternalWidgetImpl::WebExternalWidgetImpl(
       debug_url_(debug_url),
       widget_base_(std::make_unique<WidgetBase>(this,
                                                 std::move(widget_host),
-                                                std::move(widget))) {
+                                                std::move(widget),
+                                                /*hidden=*/false,
+                                                /*never_composited=*/false)) {
   DCHECK(client_);
 }
 
 WebExternalWidgetImpl::~WebExternalWidgetImpl() = default;
 
 cc::LayerTreeHost* WebExternalWidgetImpl::InitializeCompositing(
-    bool never_composited,
     scheduler::WebThreadScheduler* main_thread_scheduler,
     cc::TaskGraphRunner* task_graph_runner,
     bool for_child_local_root_frame,
@@ -50,9 +51,8 @@ cc::LayerTreeHost* WebExternalWidgetImpl::InitializeCompositing(
     std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory,
     const cc::LayerTreeSettings* settings) {
   widget_base_->InitializeCompositing(
-      never_composited, main_thread_scheduler, task_graph_runner,
-      for_child_local_root_frame, screen_info, std::move(ukm_recorder_factory),
-      settings);
+      main_thread_scheduler, task_graph_runner, for_child_local_root_frame,
+      screen_info, std::move(ukm_recorder_factory), settings);
   return widget_base_->LayerTreeHost();
 }
 
@@ -112,7 +112,7 @@ void WebExternalWidgetImpl::SetHandlingInputEvent(bool handling) {
   widget_base_->input_handler().set_handling_input_event(handling);
 }
 
-void WebExternalWidgetImpl::ProcessInputEventSynchronously(
+void WebExternalWidgetImpl::ProcessInputEventSynchronouslyForTesting(
     const WebCoalescedInputEvent& event,
     HandledEventCallback callback) {
   widget_base_->input_handler().HandleInputEvent(event, std::move(callback));
@@ -172,34 +172,48 @@ void WebExternalWidgetImpl::ApplyVisualProperties(
   widget_base_->UpdateVisualProperties(visual_properties);
 }
 
-void WebExternalWidgetImpl::UpdateSurfaceAndScreenInfo(
-    const viz::LocalSurfaceIdAllocation& new_local_surface_id_allocation,
-    const gfx::Rect& compositor_viewport_pixel_rect,
-    const ScreenInfo& new_screen_info) {
-  widget_base_->UpdateSurfaceAndScreenInfo(new_local_surface_id_allocation,
-                                           compositor_viewport_pixel_rect,
-                                           new_screen_info);
-}
-
-void WebExternalWidgetImpl::UpdateScreenInfo(
-    const ScreenInfo& new_screen_info) {
-  widget_base_->UpdateScreenInfo(new_screen_info);
-}
-
-void WebExternalWidgetImpl::UpdateCompositorViewportAndScreenInfo(
-    const gfx::Rect& compositor_viewport_pixel_rect,
-    const ScreenInfo& new_screen_info) {
-  widget_base_->UpdateCompositorViewportAndScreenInfo(
-      compositor_viewport_pixel_rect, new_screen_info);
-}
-
-void WebExternalWidgetImpl::UpdateCompositorViewportRect(
-    const gfx::Rect& compositor_viewport_pixel_rect) {
-  widget_base_->UpdateCompositorViewportRect(compositor_viewport_pixel_rect);
+void WebExternalWidgetImpl::UpdateVisualProperties(
+    const VisualProperties& visual_properties) {
+  widget_base_->UpdateSurfaceAndScreenInfo(
+      visual_properties.local_surface_id.value_or(viz::LocalSurfaceId()),
+      visual_properties.compositor_viewport_pixel_rect,
+      visual_properties.screen_info);
+  widget_base_->SetVisibleViewportSizeInDIPs(
+      visual_properties.visible_viewport_size);
+  Resize(WebSize(
+      widget_base_->DIPsToCeiledBlinkSpace(visual_properties.new_size)));
+  client_->DidUpdateVisualProperties();
 }
 
 const ScreenInfo& WebExternalWidgetImpl::GetScreenInfo() {
   return widget_base_->GetScreenInfo();
+}
+
+gfx::Rect WebExternalWidgetImpl::WindowRect() {
+  return widget_base_->WindowRect();
+}
+
+gfx::Rect WebExternalWidgetImpl::ViewRect() {
+  return widget_base_->ViewRect();
+}
+
+void WebExternalWidgetImpl::SetScreenRects(
+    const gfx::Rect& widget_screen_rect,
+    const gfx::Rect& window_screen_rect) {
+  widget_base_->SetScreenRects(widget_screen_rect, window_screen_rect);
+}
+
+gfx::Size WebExternalWidgetImpl::VisibleViewportSizeInDIPs() {
+  return widget_base_->VisibleViewportSizeInDIPs();
+}
+
+void WebExternalWidgetImpl::SetPendingWindowRect(
+    const gfx::Rect* window_screen_rect) {
+  widget_base_->SetPendingWindowRect(window_screen_rect);
+}
+
+bool WebExternalWidgetImpl::IsHidden() const {
+  return widget_base_->is_hidden();
 }
 
 void WebExternalWidgetImpl::DidOverscrollForTesting(
@@ -254,22 +268,7 @@ bool WebExternalWidgetImpl::SupportsBufferedTouchEvents() {
   return client_->SupportsBufferedTouchEvents();
 }
 
-void WebExternalWidgetImpl::FocusChanged(bool enabled) {
-  client_->FocusChanged(enabled);
-}
-
-void WebExternalWidgetImpl::UpdateVisualProperties(
-    const VisualProperties& visual_properties) {
-  client_->UpdateVisualProperties(visual_properties);
-}
-
-void WebExternalWidgetImpl::UpdateScreenRects(
-    const gfx::Rect& widget_screen_rect,
-    const gfx::Rect& window_screen_rect) {
-  client_->UpdateScreenRects(widget_screen_rect, window_screen_rect);
-}
-
-ScreenInfo WebExternalWidgetImpl::GetOriginalScreenInfo() {
+const ScreenInfo& WebExternalWidgetImpl::GetOriginalScreenInfo() {
   return widget_base_->GetScreenInfo();
 }
 

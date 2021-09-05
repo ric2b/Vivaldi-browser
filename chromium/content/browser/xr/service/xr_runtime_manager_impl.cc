@@ -127,6 +127,19 @@ XRRuntimeManagerImpl::GetOrCreateInstance() {
   return CreateInstance(std::move(providers));
 }
 
+// static
+content::WebContents* XRRuntimeManagerImpl::GetImmersiveSessionWebContents() {
+  if (!g_xr_runtime_manager)
+    return nullptr;
+  BrowserXRRuntimeImpl* browser_xr_runtime =
+      g_xr_runtime_manager->GetCurrentlyPresentingImmersiveRuntime();
+  if (!browser_xr_runtime)
+    return nullptr;
+  VRServiceImpl* vr_service =
+      browser_xr_runtime->GetServiceWithActiveImmersiveSession();
+  return vr_service ? vr_service->GetWebContents() : nullptr;
+}
+
 void XRRuntimeManagerImpl::AddService(VRServiceImpl* service) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DVLOG(2) << __func__;
@@ -196,12 +209,6 @@ BrowserXRRuntimeImpl* XRRuntimeManagerImpl::GetImmersiveVrRuntime() {
   auto* openxr = GetRuntime(device::mojom::XRDeviceId::OPENXR_DEVICE_ID);
   if (openxr)
     return openxr;
-#endif
-
-#if BUILDFLAG(ENABLE_OPENVR)
-  auto* openvr = GetRuntime(device::mojom::XRDeviceId::OPENVR_DEVICE_ID);
-  if (openvr)
-    return openvr;
 #endif
 
 #if BUILDFLAG(ENABLE_OCULUS_VR)
@@ -317,11 +324,13 @@ void XRRuntimeManagerImpl::SupportsSession(
 
 void XRRuntimeManagerImpl::MakeXrCompatible() {
   auto* runtime = GetImmersiveVrRuntime();
+  if (!runtime)
+    runtime = GetImmersiveArRuntime();
+
   if (!runtime) {
-    // WebXR spec: if there's no device, xr compatible is false.
     for (VRServiceImpl* service : services_)
       service->OnMakeXrCompatibleComplete(
-          device::mojom::XrCompatibleResult::kNotCompatible);
+          device::mojom::XrCompatibleResult::kNoDeviceAvailable);
     return;
   }
 

@@ -2,106 +2,72 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// This header file replaces includes of X11 system includes while
-// preventing them from redefining and making a mess of commonly used
-// keywords like "None" and "Status". Instead those are placed inside
-// an X11 namespace where they will not clash with other code.
+// This header file replaces <X11/Xlib.h>.  https://crbug.com/1066670 is
+// tracking removing usage of Xlib altogether.  Do not add more Xlib
+// declarations here.  The intention is to incrementally remove declarations
+// until there is nothing left, at which point this file will be removed.
 
-#ifndef UI_GFX_X_X11
-#define UI_GFX_X_X11
-
-extern "C" {
-// Xlib.h defines base types so it must be included before the less
-// central X11 headers can be included.
-#include <X11/Xlib.h>
-
-// And the rest so that nobody needs to include them manually...
-#include <X11/X.h>
-#include <X11/XKBlib.h>
-#include <X11/Xatom.h>
-#include <X11/Xlib-xcb.h>
-#include <X11/Xregion.h>
-#include <X11/Xutil.h>
-#include <X11/cursorfont.h>
-#include <X11/extensions/XShm.h>
-#include <X11/extensions/Xfixes.h>
-#include <X11/extensions/Xrender.h>
-#include <X11/extensions/sync.h>
-
-// Define XK_xxx before the #include of <X11/keysym.h> so that <X11/keysym.h>
-// defines all KeySyms we need.
-#define XK_3270  // For XK_3270_BackTab in particular.
-#define XK_MISCELLANY
-#define XK_LATIN1
-#define XK_LATIN2
-#define XK_LATIN3
-#define XK_LATIN4
-#define XK_LATIN8
-#define XK_LATIN9
-#define XK_KATAKANA
-#define XK_ARABIC
-#define XK_CYRILLIC
-#define XK_GREEK
-#define XK_TECHNICAL
-#define XK_SPECIAL
-#define XK_PUBLISHING
-#define XK_APL
-#define XK_HEBREW
-#define XK_THAI
-#define XK_KOREAN
-#define XK_ARMENIAN
-#define XK_GEORGIAN
-#define XK_CAUCASUS
-#define XK_VIETNAMESE
-#define XK_CURRENCY
-#define XK_MATHEMATICAL
-#define XK_BRAILLE
-#define XK_SINHALA
-#define XK_XKB_KEYS
-
-#ifndef XK_dead_greek
-#define XK_dead_greek 0xfe8c
-#endif
-
-#include <X11/Sunkeysym.h>
-#include <X11/XF86keysym.h>
-#include <X11/keysym.h>
-}
+#ifndef UI_GFX_X_X11_H_
+#define UI_GFX_X_X11_H_
 
 #include "ui/gfx/x/connection.h"
 
-// These commonly used names are undefined and if necessary recreated
-// in the x11 namespace below. This is the main purpose of this header
-// file.
+// Temporarily declare Xlib symbols we require.  Do not add more Xlib
+// declarations here and do not include anything from <X11/*>.
 
-// Not using common words is extra important for jumbo builds
-// where cc files are merged. Those merged filed get to see many more
-// headers than initially expected, including system headers like
-// those from X11.
+extern "C" {
 
-#undef Status         // Defined by X11/Xlib.h to int
-#undef Bool           // Defined by X11/Xlib.h to int
-#undef RootWindow     // Defined by X11/Xlib.h
-#undef DestroyAll     // Defined by X11/X.h to 0
-#undef Always         // Defined by X11/X.h to 2
-#undef FocusIn        // Defined by X.h to 9
-#undef FocusOut       // Defined by X.h to 10
-#undef None           // Defined by X11/X.h to 0L
-#undef True           // Defined by X11/Xlib.h to 1
-#undef False          // Defined by X11/Xlib.h to 0
-#undef CurrentTime    // Defined by X11/X.h to 0L
-#undef Success        // Defined by X11/X.h to 0
+using Status = int;
+using Bool = int;
+using XID = unsigned long;
+using KeySym = XID;
+using KeyCode = unsigned char;
+using Window = XID;
+using Pixmap = XID;
+using Font = XID;
+using VisualID = unsigned long;
+using XPointer = char*;
+using Colormap = XID;
+using Cursor = XID;
+using Atom = unsigned long;
+using Time = unsigned long;
+using GC = struct _XGC*;
+using Display = struct _XDisplay;
+using xcb_connection_t = struct xcb_connection_t;
 
-// The x11 namespace allows to scope X11 constants and types that
-// would be problematic at the default preprocessor level.
-namespace x11 {
-static constexpr unsigned long None = 0L;
-static constexpr long CurrentTime = 0L;
-static constexpr int False = 0;
-static constexpr int True = 1;
-static constexpr int Success = 0;
-typedef int Bool;
-typedef int Status;
-}  // namespace x11
+enum XEventQueueOwner { XlibOwnsEventQueue = 0, XCBOwnsEventQueue };
 
-#endif  // UI_GFX_X_X11
+using XErrorEvent = struct _XErrorEvent {
+  int type;
+  Display* display;
+  XID resourceid;
+  unsigned long serial;
+  unsigned char error_code;
+  unsigned char request_code;
+  unsigned char minor_code;
+};
+
+using XErrorHandler = int (*)(Display*, XErrorEvent*);
+using XIOErrorHandler = int (*)(Display*);
+
+Status XInitThreads(void);
+Display* XOpenDisplay(const char*);
+int XCloseDisplay(Display*);
+int XFlush(Display*);
+xcb_connection_t* XGetXCBConnection(Display* dpy);
+void XSetEventQueueOwner(Display* dpy, enum XEventQueueOwner owner);
+unsigned long XLastKnownRequestProcessed(Display*);
+int (*XSynchronize(Display*, Bool))(Display*);
+int XGetErrorDatabaseText(Display*,
+                          const char*,
+                          const char*,
+                          const char*,
+                          char*,
+                          int);
+int XGetErrorText(Display*, int, char*, int);
+XErrorHandler XSetErrorHandler(XErrorHandler);
+XIOErrorHandler XSetIOErrorHandler(XIOErrorHandler);
+int XStoreName(Display*, Window, const char*);
+}
+
+#endif  // UI_GFX_X_X11_H_

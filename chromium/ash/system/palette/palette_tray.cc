@@ -184,8 +184,7 @@ PaletteTray::PaletteTray(Shelf* shelf)
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
   icon_ = new views::ImageView();
-  icon_->set_tooltip_text(
-      l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_TITLE));
+  icon_->SetTooltipText(l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_TITLE));
   UpdateTrayIcon();
 
   tray_container()->SetMargin(kTrayIconMainAxisInset, kTrayIconCrossAxisInset);
@@ -299,8 +298,7 @@ base::string16 PaletteTray::GetAccessibleNameForTray() {
 }
 
 void PaletteTray::HandleLocaleChange() {
-  icon_->set_tooltip_text(
-      l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_TITLE));
+  icon_->SetTooltipText(l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_TITLE));
 }
 
 void PaletteTray::HideBubbleWithView(const TrayBubbleView* bubble_view) {
@@ -361,7 +359,7 @@ base::string16 PaletteTray::GetAccessibleNameForBubble() {
 }
 
 bool PaletteTray::ShouldEnableExtraKeyboardAccessibility() {
-  return Shell::Get()->accessibility_controller()->spoken_feedback_enabled();
+  return Shell::Get()->accessibility_controller()->spoken_feedback().enabled();
 }
 
 void PaletteTray::HideBubble(const TrayBubbleView* bubble_view) {
@@ -511,8 +509,7 @@ void PaletteTray::ShowBubble(bool show_by_click) {
       bubble_view->AddChildView(std::make_unique<views::Separator>());
   setup_layered_view(separator);
   separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kSeparatorColor,
-      AshColorProvider::AshColorMode::kDark));
+      AshColorProvider::ContentLayerType::kSeparatorColor));
   separator->SetBorder(views::CreateEmptyBorder(gfx::Insets(
       kPaddingBetweenTitleAndSeparator, 0, kMenuSeparatorVerticalPadding, 0)));
 

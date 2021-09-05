@@ -14,7 +14,6 @@
 #include <vector>
 
 #include "ash/public/cpp/notification_utils.h"
-#include "ash/public/cpp/vector_icons/vector_icons.h"
 #include "base/base_paths.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -99,6 +98,7 @@
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/webui/chromeos/login/discover/discover_manager.h"
 #include "chrome/browser/ui/webui/chromeos/login/discover/modules/discover_module_pin_setup.h"
@@ -127,6 +127,7 @@
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "chromeos/network/portal_detector/network_portal_detector_strategy.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/account_id/account_id.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/flags_ui/flags_ui_metrics.h"
@@ -1231,7 +1232,7 @@ void ShowSupervisedUserDeprecationNotification(Profile* profile,
               message_center::NotifierType::SYSTEM_COMPONENT,
               kUserSessionManagerNotifier),
           rich_notification_data, std::move(delegate),
-          ash::kNotificationWarningIcon,
+          chromeos::kNotificationWarningIcon,
           message_center::SystemNotificationWarningLevel::NORMAL);
   notification->set_priority(message_center::SYSTEM_PRIORITY);
 
@@ -1614,8 +1615,20 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
     }
     PasswordSyncTokenVerifier* password_sync_token_verifier =
         PasswordSyncTokenVerifierFactory::GetForProfile(profile);
-    if (password_sync_token_verifier)
-      password_sync_token_verifier->CheckForPasswordNotInSync();
+    if (password_sync_token_verifier) {
+      if (user_context_.GetAuthFlow() ==
+          UserContext::AUTH_FLOW_GAIA_WITH_SAML) {
+        // Update local sync token after online SAML login.
+        password_sync_token_verifier->FetchSyncTokenOnReauth();
+      } else if (user_context_.GetAuthFlow() ==
+                 UserContext::AUTH_FLOW_OFFLINE) {
+        // Verify local sync token to check whether the local password is out
+        // of sync.
+        password_sync_token_verifier->CheckForPasswordNotInSync();
+      } else {
+        NOTREACHED();
+      }
+    }
 
     SAMLOfflineSigninLimiter* saml_offline_signin_limiter =
         SAMLOfflineSigninLimiterFactory::GetForProfile(profile);
@@ -2160,7 +2173,8 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
 
     browser_creator.LaunchBrowser(
         *base::CommandLine::ForCurrentProcess(), profile, base::FilePath(),
-        chrome::startup::IS_PROCESS_STARTUP, first_run);
+        chrome::startup::IS_PROCESS_STARTUP, first_run,
+        std::make_unique<LaunchModeRecorder>());
   }
 
   if (HatsNotificationController::ShouldShowSurveyToProfile(profile))
@@ -2302,17 +2316,12 @@ void UserSessionManager::MaybeShowU2FNotification() {
 }
 
 void UserSessionManager::MaybeShowReleaseNotesNotification(Profile* profile) {
-  if (!base::FeatureList::IsEnabled(features::kReleaseNotes))
-    return;
   if (!ProfileHelper::IsPrimaryProfile(profile))
     return;
   if (!release_notes_notification_) {
     release_notes_notification_ =
         std::make_unique<ReleaseNotesNotification>(profile);
-    if (chrome::GetChannel() == version_info::Channel::STABLE ||
-        chrome::GetChannel() == version_info::Channel::BETA) {
-      release_notes_notification_->MaybeShowReleaseNotes();
-    }
+    release_notes_notification_->MaybeShowReleaseNotes();
   }
 }
 

@@ -38,6 +38,8 @@ bool g_overlay_caps_valid = false;
 bool g_supports_overlays = false;
 // Whether the DecodeSwapChain is disabled or not.
 bool g_decode_swap_chain_disabled = false;
+// Whether to force the nv12 overlay support.
+bool g_force_nv12_overlay_support = false;
 
 // The lock to guard g_overlay_caps_valid and g_supports_overlays.
 base::Lock& GetOverlayLock() {
@@ -254,6 +256,9 @@ void GetGpuDriverOverlayInfo(bool* supports_overlays,
       break;
   }
 
+  base::UmaHistogramBoolean("GPU.DirectComposition.HardwareOverlaysSupported",
+                            *supports_overlays);
+
   if (*supports_overlays || !base::FeatureList::IsEnabled(
                                 features::kDirectCompositionSoftwareOverlays)) {
     return;
@@ -295,6 +300,12 @@ void UpdateOverlaySupport() {
       &bgra8_overlay_support_flags, &rgb10a2_overlay_support_flags,
       &overlay_monitor_size);
 
+  if (g_force_nv12_overlay_support) {
+    supports_overlays = true;
+    nv12_overlay_support_flags = DXGI_OVERLAY_SUPPORT_FLAG_SCALING;
+    overlay_format_used = DXGI_FORMAT_NV12;
+  }
+
   if (supports_overlays != SupportsOverlays() ||
       overlay_format_used != g_overlay_format_used) {
     // Record the new histograms
@@ -331,11 +342,13 @@ DirectCompositionSurfaceWin::DirectCompositionSurfaceWin(
       root_surface_(new DirectCompositionChildSurfaceWin(
           std::move(vsync_callback),
           settings.use_angle_texture_offset,
-          settings.max_pending_frames)),
+          settings.max_pending_frames,
+          settings.force_root_surface_full_damage)),
       layer_tree_(std::make_unique<DCLayerTree>(
           settings.disable_nv12_dynamic_textures,
           settings.disable_larger_than_screen_overlays,
-          settings.disable_vp_scaling)) {
+          settings.disable_vp_scaling,
+          settings.reset_vp_when_colorspace_changes)) {
   ui::GpuSwitchingManager::GetInstance()->AddObserver(this);
 }
 
@@ -638,6 +651,13 @@ void DirectCompositionSurfaceWin::EnableBGRA8OverlaysWithYUVOverlaySupport() {
   g_enable_bgra8_overlays_with_yuv_overlay_support = true;
 }
 
+// static
+void DirectCompositionSurfaceWin::ForceNV12OverlaySupport() {
+  // This has to be set before initializing overlay caps.
+  DCHECK(!OverlayCapsValid());
+  g_force_nv12_overlay_support = true;
+}
+
 bool DirectCompositionSurfaceWin::Initialize(GLSurfaceFormat format) {
   d3d11_device_ = QueryD3D11DeviceObjectFromANGLE();
   if (!d3d11_device_) {
@@ -742,8 +762,12 @@ bool DirectCompositionSurfaceWin::ScheduleDCLayer(
 }
 
 void DirectCompositionSurfaceWin::SetFrameRate(float frame_rate) {
+  // Only try to reduce vsync frequency through the video swap chain.
+  // This allows us to experiment UseSetPresentDuration optimization to
+  // fullscreen video overlays only and avoid compromising
+  // UsePreferredIntervalForVideo optimization where we skip compositing
+  // every other frame when fps <= half the vsync frame rate.
   layer_tree_->SetFrameRate(frame_rate);
-  root_surface_->SetFrameRate(frame_rate);
 }
 
 bool DirectCompositionSurfaceWin::SetEnableDCLayers(bool enable) {

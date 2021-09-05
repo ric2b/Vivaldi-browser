@@ -14,6 +14,7 @@
 #include "base/message_loop/work_id_provider.h"
 #include "base/no_destructor.h"
 #include "base/process/process.h"
+#include "base/profiler/profiler_buildflags.h"
 #include "base/profiler/sample_metadata.h"
 #include "base/profiler/sampling_profiler_thread_token.h"
 #include "base/rand_util.h"
@@ -21,15 +22,18 @@
 #include "base/threading/sequence_local_storage_slot.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "chrome/common/profiler/stack_sampling_configuration.h"
+#include "chrome/common/profiler/process_type.h"
+#include "chrome/common/profiler/thread_profiler_configuration.h"
 #include "components/metrics/call_stack_profile_builder.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_names.mojom.h"
 #include "sandbox/policy/sandbox.h"
-#include "services/service_manager/embedder/switches.h"
 
 #if defined(OS_ANDROID) && BUILDFLAG(ENABLE_ARM_CFI_TABLE)
+#include <sys/types.h>
+#include <unistd.h>
+
 #include "base/android/apk_assets.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/profiler/arm_cfi_table.h"
@@ -57,33 +61,6 @@ ThreadProfiler* g_main_thread_instance = nullptr;
 // Run continuous profiling 2% of the time.
 constexpr const double kFractionOfExecutionTimeToSample = 0.02;
 
-CallStackProfileParams::Process GetProcess() {
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-  std::string process_type =
-      command_line->GetSwitchValueASCII(switches::kProcessType);
-  if (process_type.empty())
-    return CallStackProfileParams::BROWSER_PROCESS;
-  if (process_type == switches::kRendererProcess)
-    return CallStackProfileParams::RENDERER_PROCESS;
-  if (process_type == switches::kGpuProcess)
-    return CallStackProfileParams::GPU_PROCESS;
-  if (process_type == switches::kUtilityProcess) {
-    auto sandbox_type =
-        sandbox::policy::SandboxTypeFromCommandLine(*command_line);
-    if (sandbox_type == sandbox::policy::SandboxType::kNetwork)
-      return CallStackProfileParams::NETWORK_SERVICE_PROCESS;
-    return CallStackProfileParams::UTILITY_PROCESS;
-  }
-  if (process_type == service_manager::switches::kZygoteProcess)
-    return CallStackProfileParams::ZYGOTE_PROCESS;
-  if (process_type == switches::kPpapiPluginProcess)
-    return CallStackProfileParams::PPAPI_PLUGIN_PROCESS;
-  if (process_type == switches::kPpapiBrokerProcess)
-    return CallStackProfileParams::PPAPI_BROKER_PROCESS;
-  return CallStackProfileParams::UNKNOWN_PROCESS;
-}
-
 bool IsCurrentProcessBackgrounded() {
 #if defined(OS_MAC)
   // Port provider that returns the calling process's task port, ignoring its
@@ -100,67 +77,92 @@ bool IsCurrentProcessBackgrounded() {
 #endif  // defined(OS_MAC)
 }
 
-const base::RepeatingCallback<std::vector<std::unique_ptr<base::Unwinder>>()>&
-GetCoreUnwindersFactory() {
-  const auto create_unwinders_factory = []() {
 #if defined(OS_ANDROID) && BUILDFLAG(ENABLE_ARM_CFI_TABLE)
-    static constexpr char kCfiFileName[] = "assets/unwind_cfi_32";
+// Encapsulates the setup required to create the Chrome unwinder on Android.
+class ChromeUnwinderCreator {
+ public:
+  ChromeUnwinderCreator() {
+    constexpr char kCfiFileName[] = "assets/unwind_cfi_32";
 
-    // The module is loadable if the profiler is enabled for the current
-    // process.
-    CHECK(StackSamplingConfiguration::Get()
-              ->IsProfilerEnabledForCurrentProcess());
+    base::MemoryMappedFile::Region cfi_region;
+    int fd = base::android::OpenApkAsset(kCfiFileName, &cfi_region);
+    DCHECK_GE(fd, 0);
+    bool mapped_file_ok =
+        chrome_cfi_file_.Initialize(base::File(fd), cfi_region);
+    DCHECK(mapped_file_ok);
+    chrome_cfi_table_ = base::ArmCFITable::Parse(
+        {chrome_cfi_file_.data(), chrome_cfi_file_.length()});
+    DCHECK(chrome_cfi_table_);
+  }
 
-    class UnwindersFactory {
-     public:
-      UnwindersFactory()
-          : module_(stack_unwinder::Module::Load()),
-            memory_regions_map_(module_->CreateMemoryRegionsMap()) {
-        base::MemoryMappedFile::Region cfi_region;
-        int fd = base::android::OpenApkAsset(kCfiFileName, &cfi_region);
-        DCHECK(fd >= 0);
-        bool mapped_file_ok =
-            chrome_cfi_file_.Initialize(base::File(fd), cfi_region);
-        DCHECK(mapped_file_ok);
-        chrome_cfi_table_ = base::ArmCFITable::Parse(
-            {chrome_cfi_file_.data(), chrome_cfi_file_.length()});
-        DCHECK(chrome_cfi_table_);
-      }
-      UnwindersFactory(const UnwindersFactory&) = delete;
-      UnwindersFactory& operator=(const UnwindersFactory&) = delete;
+  ChromeUnwinderCreator(const ChromeUnwinderCreator&) = delete;
+  ChromeUnwinderCreator& operator=(const ChromeUnwinderCreator&) = delete;
 
-      std::vector<std::unique_ptr<base::Unwinder>> Run() {
-        std::vector<std::unique_ptr<base::Unwinder>> unwinders;
-        unwinders.push_back(module_->CreateNativeUnwinder(
-            memory_regions_map_.get(),
-            reinterpret_cast<uintptr_t>(&__executable_start)));
-        unwinders.push_back(std::make_unique<base::ChromeUnwinderAndroid>(
-            chrome_cfi_table_.get(),
-            reinterpret_cast<uintptr_t>(&__executable_start)));
-        return unwinders;
-      }
+  std::unique_ptr<base::Unwinder> Create() {
+    return std::make_unique<base::ChromeUnwinderAndroid>(
+        chrome_cfi_table_.get(),
+        reinterpret_cast<uintptr_t>(&__executable_start));
+  }
 
-     private:
-      const std::unique_ptr<stack_unwinder::Module> module_;
-      const std::unique_ptr<stack_unwinder::MemoryRegionsMap>
-          memory_regions_map_;
-      base::MemoryMappedFile chrome_cfi_file_;
-      std::unique_ptr<base::ArmCFITable> chrome_cfi_table_;
-    };
+ private:
+  base::MemoryMappedFile chrome_cfi_file_;
+  std::unique_ptr<base::ArmCFITable> chrome_cfi_table_;
+};
 
-    return base::BindRepeating(&UnwindersFactory::Run,
-                               std::make_unique<UnwindersFactory>());
+// Encapsulates the setup required to create the Android native unwinder.
+class NativeUnwinderCreator {
+ public:
+  NativeUnwinderCreator()
+      : module_(stack_unwinder::Module::Load()),
+        memory_regions_map_(module_->CreateMemoryRegionsMap()) {}
+  NativeUnwinderCreator(const NativeUnwinderCreator&) = delete;
+  NativeUnwinderCreator& operator=(const NativeUnwinderCreator&) = delete;
+
+  std::unique_ptr<base::Unwinder> Create() {
+    return module_->CreateNativeUnwinder(
+        memory_regions_map_.get(),
+        reinterpret_cast<uintptr_t>(&__executable_start));
+  }
+
+ private:
+  const std::unique_ptr<stack_unwinder::Module> module_;
+  const std::unique_ptr<stack_unwinder::MemoryRegionsMap> memory_regions_map_;
+};
+
+// This function must only be called via the closure created in
+// CreateCoreUnwindersFactory(), which is passed into StackSamplingProfiler.
+// This ensures the expensive work involved in constructing the unwinder
+// creators is done on the profiler thread rather than the profiled thread.
+// These take 50+ ms to execute due to the creation of the memory regions map
+// and lookup of the modules in the process.
+std::vector<std::unique_ptr<base::Unwinder>> CreateCoreUnwinders() {
+  // This function is expected to be run on the profiler thread which is never
+  // the main thread in the process.
+  DCHECK_NE(getpid(), gettid());
+
+  static base::NoDestructor<NativeUnwinderCreator> native_unwinder_creator;
+  static base::NoDestructor<ChromeUnwinderCreator> chrome_unwinder_creator;
+
+  // Note order matters: the more general unwinder must appear first in the
+  // vector.
+  std::vector<std::unique_ptr<base::Unwinder>> unwinders;
+  unwinders.push_back(native_unwinder_creator->Create());
+  unwinders.push_back(chrome_unwinder_creator->Create());
+  return unwinders;
+}
+#endif  // defined(OS_ANDROID) && BUILDFLAG(ENABLE_ARM_CFI_TABLE)
+
+base::StackSamplingProfiler::UnwindersFactory CreateCoreUnwindersFactory() {
+#if defined(OS_ANDROID) && BUILDFLAG(ENABLE_ARM_CFI_TABLE)
+  // The module is loadable if the profiler is enabled for the current
+  // process.
+  CHECK(
+      ThreadProfilerConfiguration::Get()->IsProfilerEnabledForCurrentProcess());
+
+  return base::BindOnce(&CreateCoreUnwinders);
 #else
-    return base::BindRepeating(
-        []() -> std::vector<std::unique_ptr<base::Unwinder>> { return {}; });
+  return base::StackSamplingProfiler::UnwindersFactory();
 #endif
-  };
-
-  static base::NoDestructor<
-      base::RepeatingCallback<std::vector<std::unique_ptr<base::Unwinder>>()>>
-      native_unwinder_factory(create_unwinders_factory());
-
-  return *native_unwinder_factory;
 }
 
 const base::RepeatingClosure GetApplyPerSampleMetadataCallback(
@@ -273,8 +275,10 @@ void ThreadProfiler::SetMainThreadTaskRunner(
 
 void ThreadProfiler::SetAuxUnwinderFactory(
     const base::RepeatingCallback<std::unique_ptr<base::Unwinder>()>& factory) {
-  if (!StackSamplingConfiguration::Get()->IsProfilerEnabledForCurrentProcess())
+  if (!ThreadProfilerConfiguration::Get()
+           ->IsProfilerEnabledForCurrentProcessAndThread(thread_)) {
     return;
+  }
 
   aux_unwinder_factory_ = factory;
   startup_profiler_->AddAuxUnwinder(aux_unwinder_factory_.Run());
@@ -290,8 +294,10 @@ void ThreadProfiler::StartOnChildThread(CallStackProfileParams::Thread thread) {
       base::SequenceLocalStorageSlot<std::unique_ptr<ThreadProfiler>>>
       child_thread_profiler_sequence_local_storage;
 
-  if (!StackSamplingConfiguration::Get()->IsProfilerEnabledForCurrentProcess())
+  if (!ThreadProfilerConfiguration::Get()
+           ->IsProfilerEnabledForCurrentProcessAndThread(thread)) {
     return;
+  }
 
   child_thread_profiler_sequence_local_storage->emplace(
       new ThreadProfiler(thread, base::ThreadTaskRunnerHandle::Get()));
@@ -307,10 +313,11 @@ void ThreadProfiler::SetBrowserProcessReceiverCallback(
 // static
 void ThreadProfiler::SetCollectorForChildProcess(
     mojo::PendingRemote<metrics::mojom::CallStackProfileCollector> collector) {
-  if (!StackSamplingConfiguration::Get()->IsProfilerEnabledForCurrentProcess())
+  if (!ThreadProfilerConfiguration::Get()->IsProfilerEnabledForCurrentProcess())
     return;
 
-  DCHECK_NE(CallStackProfileParams::BROWSER_PROCESS, GetProcess());
+  DCHECK_NE(CallStackProfileParams::BROWSER_PROCESS,
+            GetProfileParamsProcess(*base::CommandLine::ForCurrentProcess()));
   CallStackProfileBuilder::SetParentProfileCollectorForChildProcess(
       std::move(collector));
 }
@@ -336,16 +343,19 @@ void ThreadProfiler::SetCollectorForChildProcess(
 ThreadProfiler::ThreadProfiler(
     CallStackProfileParams::Thread thread,
     scoped_refptr<base::SingleThreadTaskRunner> owning_thread_task_runner)
-    : process_(GetProcess()),
+    : process_(
+          GetProfileParamsProcess(*base::CommandLine::ForCurrentProcess())),
       thread_(thread),
       owning_thread_task_runner_(owning_thread_task_runner),
       work_id_recorder_(std::make_unique<WorkIdRecorder>(
           base::WorkIdProvider::GetForCurrentThread())) {
-  if (!StackSamplingConfiguration::Get()->IsProfilerEnabledForCurrentProcess())
+  if (!ThreadProfilerConfiguration::Get()
+           ->IsProfilerEnabledForCurrentProcessAndThread(thread_)) {
     return;
+  }
 
   const base::StackSamplingProfiler::SamplingParams sampling_params =
-      StackSamplingConfiguration::Get()->GetSamplingParams();
+      ThreadProfilerConfiguration::Get()->GetSamplingParams();
 
   startup_profiler_ = std::make_unique<StackSamplingProfiler>(
       base::GetSamplingProfilerCurrentThreadToken(), sampling_params,
@@ -353,7 +363,7 @@ ThreadProfiler::ThreadProfiler(
           CallStackProfileParams(process_, thread,
                                  CallStackProfileParams::PROCESS_STARTUP),
           work_id_recorder_.get()),
-      GetCoreUnwindersFactory().Run(),
+      CreateCoreUnwindersFactory(),
       GetApplyPerSampleMetadataCallback(process_));
 
   startup_profiler_->Start();
@@ -385,8 +395,10 @@ void ThreadProfiler::OnPeriodicCollectionCompleted(
 
 void ThreadProfiler::SetMainThreadTaskRunnerImpl(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  if (!StackSamplingConfiguration::Get()->IsProfilerEnabledForCurrentProcess())
+  if (!ThreadProfilerConfiguration::Get()
+           ->IsProfilerEnabledForCurrentProcessAndThread(thread_)) {
     return;
+  }
 
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
@@ -411,7 +423,7 @@ void ThreadProfiler::StartPeriodicSamplingCollection() {
   // NB: Destroys the previous profiler as side effect.
   periodic_profiler_ = std::make_unique<StackSamplingProfiler>(
       base::GetSamplingProfilerCurrentThreadToken(),
-      StackSamplingConfiguration::Get()->GetSamplingParams(),
+      ThreadProfilerConfiguration::Get()->GetSamplingParams(),
       std::make_unique<CallStackProfileBuilder>(
           CallStackProfileParams(process_, thread_,
                                  CallStackProfileParams::PERIODIC_COLLECTION),
@@ -419,7 +431,7 @@ void ThreadProfiler::StartPeriodicSamplingCollection() {
           base::BindOnce(&ThreadProfiler::OnPeriodicCollectionCompleted,
                          owning_thread_task_runner_,
                          weak_factory_.GetWeakPtr())),
-      GetCoreUnwindersFactory().Run(),
+      CreateCoreUnwindersFactory(),
       GetApplyPerSampleMetadataCallback(process_));
   if (aux_unwinder_factory_)
     periodic_profiler_->AddAuxUnwinder(aux_unwinder_factory_.Run());

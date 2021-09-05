@@ -228,10 +228,11 @@ void PaintLayerCompositor::UpdateAssignmentsIfNeededRecursiveInternal(
     // TODO(bbudge) Remove this check when trusted Pepper plugins are gone.
     if (local_frame->GetDocument()->IsActive() &&
         local_frame->ContentLayoutObject()) {
-      local_frame->ContentLayoutObject()
-          ->Compositor()
-          ->UpdateAssignmentsIfNeededRecursiveInternal(
-              target_state, compositing_reasons_stats);
+      auto* child_compositor = local_frame->ContentLayoutObject()->Compositor();
+      child_compositor->UpdateAssignmentsIfNeededRecursiveInternal(
+          target_state, compositing_reasons_stats);
+      if (child_compositor->root_layer_attachment_dirty_)
+        SetNeedsCompositingUpdate(kCompositingUpdateRebuildTree);
     }
   }
 
@@ -565,8 +566,12 @@ bool PaintLayerCompositor::CanBeComposited(const PaintLayer* layer) const {
          (has_compositor_animation || frame_is_visible) &&
          layer->IsSelfPaintingLayer() &&
          !layer->GetLayoutObject().IsLayoutFlowThread() &&
-         // Don't composite <foreignObject> for the moment, to reduce
-         // instances of the "fundamental compositing bug" breaking content.
+         // Don't composite <foreignObject> for the moment, to reduce instances
+         // of the "fundamental compositing bug" breaking painting order.
+         // With CompositeSVG, foreignObjects will be correctly composited after
+         // paint in PaintArtifactCompositor without a GraphicsLayer.
+         // Composited descendants of foreignObject will still break painting
+         // order which will be fixed in CompositeAfterPaint.
          !layer->GetLayoutObject().IsSVGForeignObject();
 }
 

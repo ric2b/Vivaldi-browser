@@ -112,17 +112,15 @@ class MockAutofillClient : public TestAutofillClient {
     ON_CALL(*this, GetChannel())
         .WillByDefault(Return(version_info::Channel::UNKNOWN));
   }
-
-  ~MockAutofillClient() override {}
+  MockAutofillClient(const MockAutofillClient&) = delete;
+  MockAutofillClient& operator=(const MockAutofillClient&) = delete;
+  ~MockAutofillClient() override = default;
 
   MOCK_METHOD0(ShouldShowSigninPromo, bool());
   MOCK_CONST_METHOD0(GetChannel, version_info::Channel());
   MOCK_METHOD2(ConfirmSaveUpiIdLocally,
                void(const std::string& upi_id,
                     base::OnceCallback<void(bool user_decision)> callback));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockAutofillClient);
 };
 
 class MockAutofillDownloadManager : public TestAutofillDownloadManager {
@@ -130,6 +128,9 @@ class MockAutofillDownloadManager : public TestAutofillDownloadManager {
   MockAutofillDownloadManager(AutofillDriver* driver,
                               AutofillDownloadManager::Observer* observer)
       : TestAutofillDownloadManager(driver, observer) {}
+  MockAutofillDownloadManager(const MockAutofillDownloadManager&) = delete;
+  MockAutofillDownloadManager& operator=(const MockAutofillDownloadManager&) =
+      delete;
 
   MOCK_METHOD6(StartUploadRequest,
                bool(const FormStructure&,
@@ -138,9 +139,6 @@ class MockAutofillDownloadManager : public TestAutofillDownloadManager {
                     const std::string&,
                     bool,
                     PrefService*));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockAutofillDownloadManager);
 };
 
 void ExpectFilledField(const char* expected_label,
@@ -305,7 +303,9 @@ void CheckThatNoFieldHasThisPossibleType(const FormStructure& form_structure,
 
 class MockAutofillDriver : public TestAutofillDriver {
  public:
-  MockAutofillDriver() {}
+  MockAutofillDriver() = default;
+  MockAutofillDriver(const MockAutofillDriver&) = delete;
+  MockAutofillDriver& operator=(const MockAutofillDriver&) = delete;
 
   // Mock methods to enable testability.
   MOCK_METHOD3(SendFormDataToRenderer,
@@ -315,16 +315,13 @@ class MockAutofillDriver : public TestAutofillDriver {
 
   MOCK_METHOD1(SendAutofillTypePredictionsToRenderer,
                void(const std::vector<FormStructure*>& forms));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockAutofillDriver);
 };
 
 }  // namespace
 
 class AutofillManagerTest : public testing::Test {
  public:
-  AutofillManagerTest() {}
+  AutofillManagerTest() = default;
 
   void SetUp() override {
     autofill_client_.SetPrefs(test::PrefServiceForTesting());
@@ -807,34 +804,21 @@ std::string SuggestionMatchingTest::MakeMobileLabel(
       parts, l10n_util::GetStringUTF8(IDS_AUTOFILL_ADDRESS_SUMMARY_SEPARATOR));
 }
 
-// Credit card suggestion tests related with keyboard accessary and nickname.
-class CreditCardSuggestionTest
-    : public AutofillManagerTest,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
+// Credit card suggestion tests related with keyboard accessory.
+class CreditCardSuggestionTest : public AutofillManagerTest,
+                                 public testing::WithParamInterface<bool> {
  protected:
-  CreditCardSuggestionTest()
-      : is_keyboard_accessory_enabled_(std::get<0>(GetParam())),
-        is_surfacing_server_card_nickname_enabled_(std::get<1>(GetParam())) {}
+  CreditCardSuggestionTest() : is_keyboard_accessory_enabled_(GetParam()) {}
 
   void SetUp() override {
     AutofillManagerTest::SetUp();
-    std::vector<base::Feature> enabled;
-    std::vector<base::Feature> disabled;
-    (is_keyboard_accessory_enabled_ ? enabled : disabled)
-        .push_back(features::kAutofillKeyboardAccessory);
-    (is_surfacing_server_card_nickname_enabled_ ? enabled : disabled)
-        .push_back(features::kAutofillEnableSurfacingServerCardNickname);
-    features_.InitWithFeatures(enabled, disabled);
-  }
-
-  bool IsSurfacingServerCardNicknameEnabled() {
-    return is_surfacing_server_card_nickname_enabled_;
+    features_.InitWithFeatureState(features::kAutofillKeyboardAccessory,
+                                   is_keyboard_accessory_enabled_);
   }
 
  private:
   base::test::ScopedFeatureList features_;
   const bool is_keyboard_accessory_enabled_;
-  const bool is_surfacing_server_card_nickname_enabled_;
 };
 
 // Test that calling OnFormsSeen with an empty set of forms (such as when
@@ -1649,11 +1633,9 @@ TEST_P(CreditCardSuggestionTest, GetCreditCardSuggestions_CCNumber) {
   const std::string visa_value =
       std::string("Visa  ") + test::ObfuscatedCardDigitsAsUTF8("3456");
   // Mastercard has a valid nickname. Display nickname + last four in the
-  // suggestion title when feature enabled.
+  // suggestion title.
   const std::string master_card_value =
-      (IsSurfacingServerCardNicknameEnabled() ? kArbitraryNickname + "  "
-                                              : std::string("Mastercard  ")) +
-      test::ObfuscatedCardDigitsAsUTF8("8765");
+      kArbitraryNickname + "  " + test::ObfuscatedCardDigitsAsUTF8("8765");
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
   const std::string visa_label = std::string("04/99");
@@ -1703,11 +1685,9 @@ TEST_P(CreditCardSuggestionTest, GetCreditCardSuggestions_NonCCNumber) {
           : std::string("Visa  ") + obfuscated_last_four_digits1;
   // Mastercard has a valid nickname.
   const std::string master_card_label =
-      IsKeyboardAccessoryEnabled() ? obfuscated_last_four_digits2
-                                   : (IsSurfacingServerCardNicknameEnabled()
-                                          ? kArbitraryNickname + "  "
-                                          : std::string("Mastercard  ")) +
-                                         obfuscated_last_four_digits2;
+      IsKeyboardAccessoryEnabled()
+          ? obfuscated_last_four_digits2
+          : kArbitraryNickname + "  " + obfuscated_last_four_digits2;
 
 #elif defined(OS_IOS)
   const std::string visa_label = obfuscated_last_four_digits1;
@@ -1717,13 +1697,11 @@ TEST_P(CreditCardSuggestionTest, GetCreditCardSuggestions_NonCCNumber) {
   // If no nickname available, we will show network.
   const std::string visa_label = base::JoinString(
       {"Visa  ", obfuscated_last_four_digits1, ", expires on 04/99"}, "");
-  // When nickname is available, if nickname experiment is enabled, show
-  // nickname. Otherwise, show network.
-  const std::string master_card_label = base::JoinString(
-      {IsSurfacingServerCardNicknameEnabled() ? kArbitraryNickname + "  "
-                                              : "Mastercard  ",
-       obfuscated_last_four_digits2, ", expires on 10/98"},
-      "");
+  // When nickname is available, show nickname. Otherwise, show network.
+  const std::string master_card_label =
+      base::JoinString({kArbitraryNickname + "  ", obfuscated_last_four_digits2,
+                        ", expires on 10/98"},
+                       "");
 #endif
 
   // Test that we sent the right values to the external delegate.
@@ -3205,10 +3183,6 @@ TEST_P(AutofillManagerStructuredProfileTest,
 // Test that if a company is of a format of a birthyear and the relevant feature
 // is enabled, we would not fill it.
 TEST_P(AutofillManagerStructuredProfileTest, FillAddressForm_CompanyBirthyear) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillRejectCompanyBirthyear);
-
   // Set up our form data.
   FormData address_form;
   address_form.name = ASCIIToUTF16("MyForm");
@@ -5081,91 +5055,17 @@ TEST_P(AutofillManagerStructuredProfileTest,
   autofill_manager_.reset();
 }
 
-// Test that OnLoadedServerPredictions can obtain the FormStructure with the
-// signature of the queried form and apply type predictions.
-TEST_P(AutofillManagerStructuredProfileTest,
-       OnLoadedServerPredictionsFromLegacyServer) {
-  // Set features.
-  // This entire test can be deleted because we have
-  // OnLoadedServerPredictionsAPI.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      // Enabled
-      {},
-      // Disabled
-      // We want to query the legacy server rather than the API server.
-      {features::kAutofillUseApi});
-
-  // Set up our form data.
-  FormData form;
-  test::CreateTestAddressFormData(&form);
-
-  // Simulate having seen this form on page load.
-  // |form_structure| will be owned by |autofill_manager_|.
-  TestFormStructure* form_structure = new TestFormStructure(form);
-  form_structure->DetermineHeuristicTypes();
-  autofill_manager_->AddSeenFormStructure(
-      std::unique_ptr<TestFormStructure>(form_structure));
-
-  // Similarly, a second form.
-  FormData form2;
-  form2.unique_renderer_id.value() = 2;
-  form2.name = ASCIIToUTF16("MyForm");
-  form2.url = GURL("http://myform.com/form.html");
-  form2.action = GURL("http://myform.com/submit.html");
-
-  FormFieldData field;
-  test::CreateTestFormField("Last Name", "lastname", "", "text", &field);
-  form2.fields.push_back(field);
-
-  test::CreateTestFormField("Middle Name", "middlename", "", "text", &field);
-  form2.fields.push_back(field);
-
-  test::CreateTestFormField("Postal Code", "zipcode", "", "text", &field);
-  form2.fields.push_back(field);
-
-  TestFormStructure* form_structure2 = new TestFormStructure(form2);
-  form_structure2->DetermineHeuristicTypes();
-  autofill_manager_->AddSeenFormStructure(
-      std::unique_ptr<TestFormStructure>(form_structure2));
-
-  AutofillQueryResponseContents response;
-  response.add_field()->set_overall_type_prediction(3);
-  for (int i = 0; i < 7; ++i) {
-    response.add_field()->set_overall_type_prediction(0);
-  }
-  response.add_field()->set_overall_type_prediction(3);
-  response.add_field()->set_overall_type_prediction(2);
-  response.add_field()->set_overall_type_prediction(61);
-  response.add_field()->set_overall_type_prediction(5);
-  response.add_field()->set_overall_type_prediction(4);
-  response.add_field()->set_overall_type_prediction(35);
-
-  std::string response_string;
-  ASSERT_TRUE(response.SerializeToString(&response_string));
-
-  FormAndFieldSignatures signatures =
-      test::GetEncodedSignatures({form_structure, form_structure2});
-
-  base::HistogramTester histogram_tester;
-  autofill_manager_->OnLoadedServerPredictionsForTest(response_string,
-                                                      signatures);
-  // Verify that FormStructure::ParseQueryResponse was called (here and below).
-  histogram_tester.ExpectBucketCount("Autofill.ServerQueryResponse",
-                                     AutofillMetrics::QUERY_RESPONSE_RECEIVED,
-                                     1);
-  histogram_tester.ExpectBucketCount("Autofill.ServerQueryResponse",
-                                     AutofillMetrics::QUERY_RESPONSE_PARSED, 1);
-  // We expect the server type to have been applied to the first field of the
-  // first form.
-  EXPECT_EQ(NAME_FIRST, form_structure->field(0)->Type().GetStorableType());
-
-  // We expect the server types to have been applied to the second form.
-  EXPECT_EQ(NAME_LAST, form_structure2->field(0)->Type().GetStorableType());
-  EXPECT_EQ(NAME_MIDDLE, form_structure2->field(1)->Type().GetStorableType());
-  EXPECT_EQ(ADDRESS_HOME_ZIP,
-            form_structure2->field(2)->Type().GetStorableType());
+namespace {
+void AddFieldSuggestionToForm(
+    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion,
+    autofill::FormFieldData field_data,
+    ServerFieldType field_type) {
+  auto* field_suggestion = form_suggestion->add_field_suggestions();
+  field_suggestion->set_field_signature(
+      CalculateFieldSignatureForField(field_data).value());
+  field_suggestion->set_primary_type_prediction(field_type);
 }
+}  // namespace
 
 // Test that OnLoadedServerPredictions can obtain the FormStructure with the
 // signature of the queried form from the API and apply type predictions.
@@ -5173,15 +5073,6 @@ TEST_P(AutofillManagerStructuredProfileTest,
 //  * The API response parser is used.
 //  * The query can be processed with a response from the API.
 TEST_P(AutofillManagerStructuredProfileTest, OnLoadedServerPredictionsFromApi) {
-  // Set features.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      // Enabled
-      // We want to query the API rather than the legacy server.
-      {features::kAutofillUseApi},
-      // Disabled
-      {});
-
   // First form on the page.
   FormData form;
   form.unique_renderer_id.value() = 1;
@@ -5229,26 +5120,21 @@ TEST_P(AutofillManagerStructuredProfileTest, OnLoadedServerPredictionsFromApi) {
   AutofillQueryResponse::FormSuggestion* form_suggestion;
   // Set suggestions for form 1.
   form_suggestion = response.add_form_suggestions();
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      ADDRESS_HOME_CITY);
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      ADDRESS_HOME_STATE);
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      ADDRESS_HOME_ZIP);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[0], ADDRESS_HOME_CITY);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[1], ADDRESS_HOME_STATE);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[2], ADDRESS_HOME_ZIP);
   // Set suggestions for form 2.
   form_suggestion = response.add_form_suggestions();
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      NAME_LAST);
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      NAME_MIDDLE);
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      ADDRESS_HOME_ZIP);
+  AddFieldSuggestionToForm(form_suggestion, form2.fields[0], NAME_LAST);
+  AddFieldSuggestionToForm(form_suggestion, form2.fields[1], NAME_MIDDLE);
+  AddFieldSuggestionToForm(form_suggestion, form2.fields[2], ADDRESS_HOME_ZIP);
+
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
   std::string encoded_response_string;
   base::Base64Encode(response_string, &encoded_response_string);
 
-  FormAndFieldSignatures signatures =
+  std::vector<FormSignature> signatures =
       test::GetEncodedSignatures({form_structure, form_structure2});
 
   // Run method under test.
@@ -5292,7 +5178,7 @@ TEST_P(AutofillManagerStructuredProfileTest,
   // |form_structure| will be owned by |autofill_manager_|.
   TestFormStructure* form_structure = new TestFormStructure(form);
   form_structure->DetermineHeuristicTypes();
-  FormAndFieldSignatures signatures =
+  std::vector<FormSignature> signatures =
       test::GetEncodedSignatures(*form_structure);
   autofill_manager_->AddSeenFormStructure(
       std::unique_ptr<TestFormStructure>(form_structure));
@@ -5357,16 +5243,15 @@ TEST_P(AutofillManagerStructuredProfileTest,
 
   AutofillQueryResponse response;
   auto* form_suggestion = response.add_form_suggestions();
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      CREDIT_CARD_NAME_FIRST);
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      CREDIT_CARD_NAME_LAST);
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      CREDIT_CARD_NUMBER);
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      CREDIT_CARD_EXP_MONTH);
-  form_suggestion->add_field_suggestions()->set_primary_type_prediction(
-      CREDIT_CARD_EXP_4_DIGIT_YEAR);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[0],
+                           CREDIT_CARD_NAME_FIRST);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[1],
+                           CREDIT_CARD_NAME_LAST);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[2], CREDIT_CARD_NUMBER);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[3],
+                           CREDIT_CARD_EXP_MONTH);
+  AddFieldSuggestionToForm(form_suggestion, form.fields[4],
+                           CREDIT_CARD_EXP_4_DIGIT_YEAR);
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
@@ -5579,10 +5464,9 @@ class ProfileMatchingTypesTest
     : public AutofillManagerTest,
       public ::testing::WithParamInterface<
           std::tuple<ProfileMatchingTypesTestCase,
-                     int,    // AutofillDataModel::ValidityState
-                     bool,   // AutofillDataModel::ValidationSource
-                     bool>>  // kAutofillEnableSupportForMoreStructureInNames
-{
+                     int,      // AutofillDataModel::ValidityState
+                     bool,     // AutofillDataModel::ValidationSource
+                     bool>> {  // kAutofillEnableSupportForMoreStructureInNames
  protected:
   void SetUp() override {
     AutofillManagerTest::SetUp();
@@ -5767,7 +5651,7 @@ TEST_P(ProfileMatchingTypesTest, DeterminePossibleFieldTypesForUpload) {
   for (auto type : expected_possible_types) {
     if (GroupTypeOfServerFieldType(type) != CREDIT_CARD) {
       for (auto& profile : profiles) {
-        ASSERT_TRUE(test_case.field_types.size() > 0);
+        ASSERT_GT(test_case.field_types.size(), 0U);
         if (type == UNKNOWN_TYPE) {
           // An UNKNOWN type is always UNVALIDATED
           validity_state = AutofillDataModel::UNVALIDATED;
@@ -6158,9 +6042,8 @@ TEST_P(AutofillManagerStructuredProfileTest, DisambiguateUploadTypes) {
                       (possible_types.count(NAME_LAST_SECOND) ||
                        possible_types.count(NAME_LAST_FIRST) ||
                        possible_types.count(NAME_FULL)));
-        }
-        // Or even all three.
-        else if (StructuredNames() && possible_types.size() == 3) {
+        } else if (StructuredNames() && possible_types.size() == 3) {
+          // Or even all three.
           EXPECT_TRUE(possible_types.count(NAME_FULL) &&
                       possible_types.count(NAME_LAST) &&
                       (possible_types.count(NAME_LAST_SECOND) ||
@@ -7103,14 +6986,12 @@ TEST_P(CreditCardSuggestionTest,
 
 #if defined(OS_ANDROID)
   // When keyboard accessary is enabled, always show "7777".
-  // When keyboard accessary is disabled, if nickname feature is enabled and
-  // nickname is valid, show "Nickname  ****7777", otherwise, show "Visa
-  // ****7777".
+  // When keyboard accessary is disabled, if nickname is valid, show "Nickname
+  // ****7777", otherwise, show "Visa  ****7777".
   const std::string visa_label =
       IsKeyboardAccessoryEnabled()
           ? test::ObfuscatedCardDigitsAsUTF8("7777")
-          : (IsSurfacingServerCardNicknameEnabled() ? kArbitraryNickname + "  "
-                                                    : std::string("Visa  ")) +
+          : kArbitraryNickname + "  " +
                 test::ObfuscatedCardDigitsAsUTF8("7777");
 
 #elif defined(OS_IOS)
@@ -7118,9 +6999,8 @@ TEST_P(CreditCardSuggestionTest,
 
 #else
   const std::string visa_label = base::JoinString(
-      {IsSurfacingServerCardNicknameEnabled() ? kArbitraryNickname + "  "
-                                              : "Visa  ",
-       test::ObfuscatedCardDigitsAsUTF8("7777"), ", expires on 01/30"},
+      {kArbitraryNickname + "  ", test::ObfuscatedCardDigitsAsUTF8("7777"),
+       ", expires on 01/30"},
       "");
 #endif
 
@@ -8688,6 +8568,19 @@ TEST_F(AutofillManagerTest, PossibleFieldTypesForEnhancementVotes) {
             ServerFieldTypeSet({UNKNOWN_TYPE}));
 }
 
+TEST_F(AutofillManagerTest, PageLanguageGetsCorrectlySet) {
+  FormData form;
+  test::CreateTestAddressFormData(&form);
+
+  // Set up language state mock.
+  autofill_client_.GetLanguageState()->SetOriginalLanguage("test_lang");
+
+  FormStructure* parsed_form = autofill_manager_->ParseFormForTest(form);
+
+  ASSERT_TRUE(parsed_form);
+  ASSERT_EQ("test_lang", parsed_form->page_language());
+}
+
 // AutofillManagerTest with kAutofillDisabledMixedForms feature enabled.
 class AutofillManagerTestWithMixedForms : public AutofillManagerTest {
  protected:
@@ -8769,6 +8662,39 @@ TEST_F(AutofillManagerTestWithMixedForms, GetSuggestions_MixedFormUserTyped) {
   form.fields[0].properties_mask |= kUserTyped;
   GetAutofillSuggestions(form, form.fields[0]);
   external_delegate_->CheckNoSuggestions(kDefaultPageID);
+}
+
+// Test that we don't treat javascript scheme target URLs as mixed forms.
+// Regression test for crbug.com/1135173
+TEST_F(AutofillManagerTestWithMixedForms, GetSuggestions_JavascriptUrlTarget) {
+  // Set up our form data, using a javascript scheme target URL.
+  FormData form;
+  form.name = ASCIIToUTF16("MyForm");
+  form.url = GURL("https://myform.com/form.html");
+  form.action = GURL("javascript:alert('hello');");
+  FormFieldData field;
+  test::CreateTestFormField("Name on Card", "nameoncard", "", "text", &field);
+  form.fields.push_back(field);
+  GetAutofillSuggestions(form, form.fields[0]);
+
+  // Check there is no warning.
+  EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
+}
+
+// Test that we don't treat about:blank target URLs as mixed forms.
+TEST_F(AutofillManagerTestWithMixedForms, GetSuggestions_AboutBlankTarget) {
+  // Set up our form data, using a javascript scheme target URL.
+  FormData form;
+  form.name = ASCIIToUTF16("MyForm");
+  form.url = GURL("https://myform.com/form.html");
+  form.action = GURL("about:blank");
+  FormFieldData field;
+  test::CreateTestFormField("Name on Card", "nameoncard", "", "text", &field);
+  form.fields.push_back(field);
+  GetAutofillSuggestions(form, form.fields[0]);
+
+  // Check there is no warning.
+  EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
 }
 
 // Desktop only tests.
@@ -9254,11 +9180,8 @@ INSTANTIATE_TEST_SUITE_P(All,
                                          std::make_tuple(1, "")));
 #endif  // defined(OS_IOS) || defined(OS_ANDROID)
 
-// First bool is to indicate whether AutofillKeyboardAccessory is enabled.
-// Second bool is to indicate whether AutofillEnableSurfacingServerCardNickname
-// is enabled.
-INSTANTIATE_TEST_SUITE_P(All,
-                         CreditCardSuggestionTest,
-                         testing::Combine(testing::Bool(), testing::Bool()));
+// The parameter indicates whether the AutofillKeyboardAccessory feature is
+// enabled or disabled.
+INSTANTIATE_TEST_SUITE_P(All, CreditCardSuggestionTest, testing::Bool());
 
 }  // namespace autofill

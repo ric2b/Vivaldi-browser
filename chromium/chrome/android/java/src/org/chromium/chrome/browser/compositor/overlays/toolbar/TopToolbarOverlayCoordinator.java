@@ -7,9 +7,12 @@ package org.chromium.chrome.browser.compositor.overlays.toolbar;
 import android.content.Context;
 import android.graphics.RectF;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.CompositorModelChangeProcessor;
@@ -18,7 +21,6 @@ import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
 import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.resources.ResourceManager;
@@ -41,10 +43,9 @@ public class TopToolbarOverlayCoordinator implements SceneOverlay {
 
     public TopToolbarOverlayCoordinator(Context context,
             CompositorModelChangeProcessor.FrameRequestSupplier frameRequestSupplier,
-            LayoutManager layoutManager, ControlContainer controlContainer,
-            ObservableSupplier<Tab> tabSupplier,
+            LayoutManager layoutManager, @Nullable ControlContainer controlContainer,
+            ActivityTabProvider tabSupplier,
             BrowserControlsStateProvider browserControlsStateProvider,
-            Supplier<Integer> viewportModeSupplier,
             ObservableSupplier<Boolean> androidViewShownSupplier,
             Supplier<ResourceManager> resourceManagerSupplier) {
         mModel = new PropertyModel.Builder(TopToolbarOverlayProperties.ALL_KEYS)
@@ -60,8 +61,7 @@ public class TopToolbarOverlayCoordinator implements SceneOverlay {
                 mModel, mSceneLayer, TopToolbarSceneLayer::bind, frameRequestSupplier, true);
 
         mMediator = new TopToolbarOverlayMediator(mModel, context, layoutManager, controlContainer,
-                tabSupplier, browserControlsStateProvider, viewportModeSupplier,
-                androidViewShownSupplier);
+                tabSupplier, browserControlsStateProvider, androidViewShownSupplier);
     }
 
     /** Clean up this component. */

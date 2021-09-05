@@ -6,24 +6,24 @@
 
 #include <memory>
 
-#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/web_applications/system_web_app_install_utils.h"
 #include "chrome/common/web_application_info.h"
 #include "chromeos/components/scanning/url_constants.h"
 #include "chromeos/grit/chromeos_scanning_app_resources.h"
+#include "chromeos/strings/grit/chromeos_strings.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
 std::unique_ptr<WebApplicationInfo> CreateWebAppInfoForScanningSystemWebApp() {
   std::unique_ptr<WebApplicationInfo> info =
       std::make_unique<WebApplicationInfo>();
-  info->app_url = GURL(chromeos::kChromeUIScanningAppUrl);
+  info->start_url = GURL(chromeos::kChromeUIScanningAppUrl);
   info->scope = GURL(chromeos::kChromeUIScanningAppUrl);
-  // TODO(jschettler): |title| should come from a resource string once the
-  // string is finalized.
-  info->title = base::UTF8ToUTF16("Scan");
-  web_app::CreateIconInfoForSystemWebApp(info->app_url, "app_icon_192.png", 192,
-                                         IDR_SCANNING_APP_ICON, *info);
+  info->title = l10n_util::GetStringUTF16(IDS_SCANNING_APP_TITLE);
+  web_app::CreateIconInfoForSystemWebApp(
+      info->start_url, {{"app_icon_192.png", 192, IDR_SCANNING_APP_ICON}},
+      *info);
   info->theme_color = 0xFFFFFFFF;
   info->background_color = 0xFFFFFFFF;
   info->display_mode = blink::mojom::DisplayMode::kStandalone;

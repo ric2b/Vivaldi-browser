@@ -17,6 +17,7 @@
 #include "base/system/sys_info.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_image_builder.h"
@@ -32,7 +33,7 @@
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "media/base/data_buffer.h"
 #include "media/base/video_frame.h"
-#include "media/renderers/yuv_util.h"
+#include "media/base/wait_and_replace_sync_token_client.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkImageGenerator.h"
@@ -135,23 +136,6 @@ namespace {
 // This class keeps the last image drawn.
 // We delete the temporary resource if it is not used for 3 seconds.
 const int kTemporaryResourceDeletionDelay = 3;  // Seconds;
-
-class SyncTokenClientImpl : public VideoFrame::SyncTokenClient {
- public:
-  explicit SyncTokenClientImpl(gpu::InterfaceBase* ib) : ib_(ib) {}
-  ~SyncTokenClientImpl() override = default;
-  void GenerateSyncToken(gpu::SyncToken* sync_token) override {
-    ib_->GenSyncTokenCHROMIUM(sync_token->GetData());
-  }
-  void WaitSyncToken(const gpu::SyncToken& sync_token) override {
-    ib_->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
-  }
-
- private:
-  gpu::InterfaceBase* ib_;
-
-  DISALLOW_IMPLICIT_CONSTRUCTORS(SyncTokenClientImpl);
-};
 
 // Helper class that begins/ends access to a mailbox within a scope. The mailbox
 // must have been imported into |texture|.
@@ -327,7 +311,7 @@ void SynchronizeVideoFrameRead(scoped_refptr<VideoFrame> video_frame,
                                gpu::raster::RasterInterface* ri,
                                gpu::ContextSupport* context_support) {
   DCHECK(ri);
-  SyncTokenClientImpl client(ri);
+  WaitAndReplaceSyncTokenClient client(ri);
   video_frame->UpdateReleaseSyncToken(&client);
 
   if (video_frame->metadata()->read_lock_fences_enabled) {
@@ -591,6 +575,54 @@ void ConvertVideoFrameToRGBPixelsTask(const VideoFrame* video_frame,
   done->Run();
 }
 
+// Valid gl texture internal format that can try to use direct uploading path.
+bool ValidFormatForDirectUploading(GrGLenum format, unsigned int type) {
+  switch (format) {
+    case GL_RGBA:
+      return type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_SHORT_4_4_4_4;
+    case GL_RGB:
+      return type == GL_UNSIGNED_BYTE || type == GL_UNSIGNED_SHORT_5_6_5;
+    // WebGL2 supported sized formats
+    case GL_RGBA8:
+    case GL_RGB565:
+    case GL_RGBA16F:
+    case GL_RGB8:
+    case GL_RGB10_A2:
+    case GL_RGBA4:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool VideoPixelFormatAsSkYUVAInfoPlanarConfig(
+    VideoPixelFormat format,
+    SkYUVAInfo::PlanarConfig* config) {
+  // TODO(skbug.com/10632): Add more formats, e.g. I420A, NV12, NV21 when Skia
+  // equivalents are added.
+  // The 9, 10, and 12 bit formats could be added here if GetYUVAPlanes() were
+  // updated to convert data to unorm16/float16.
+  switch (format) {
+    case PIXEL_FORMAT_I420:
+      if (config) {
+        *config = SkYUVAInfo::PlanarConfig::kY_U_V_420;
+      }
+      return true;
+    case PIXEL_FORMAT_I422:
+      if (config) {
+        *config = SkYUVAInfo::PlanarConfig::kY_U_V_422;
+      }
+      return true;
+    case PIXEL_FORMAT_I444:
+      if (config) {
+        *config = SkYUVAInfo::PlanarConfig::kY_U_V_444;
+      }
+      return true;
+    default:
+      return false;
+  }
+}
+
 }  // anonymous namespace
 
 // Generates an RGB image from a VideoFrame. Convert YUV to RGB plain on GPU.
@@ -621,75 +653,51 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
     return true;
   }
 
-  bool QueryYUVA(SkYUVASizeInfo* sizeInfo,
-                 SkYUVAIndex indices[SkYUVAIndex::kIndexCount],
-                 SkYUVColorSpace* color_space,
-                 uint8_t* bit_depth) const override {
+  bool QueryYUVA(const SkYUVAPixmapInfo::SupportedDataTypes&,
+                 SkYUVAPixmapInfo* info) const override {
     // Temporarily disabling this path to avoid creating YUV ImageData in
     // GpuImageDecodeCache.
     // TODO(crbug.com/921636): Restore the code below once YUV rendering support
     // is added for VideoImageGenerator.
     return false;
 #if 0
-    if (!media::IsYuvPlanar(frame_->format()) ||
-        // TODO(rileya): Skia currently doesn't support YUVA conversion. Remove
-        // this case once it does. As-is we will fall back on the pure-software
-        // path in this case.
-        frame_->format() == PIXEL_FORMAT_I420A) {
+    SkYUVAInfo::PlanarConfig planar_config;
+    if (!VideoPixelFormatAsSkYUVAInfoPlanarConfig(frame_->format(),
+                                                  &planar_config)) {
       return false;
     }
-
-    if (color_space) {
-      if (!frame_->ColorSpace().ToSkYUVColorSpace(color_space)) {
+    if (info) {
+      SkYUVColorSpace yuv_color_space;
+      if (!frame_->ColorSpace().ToSkYUVColorSpace(&yuv_color_space)) {
         // TODO(hubbe): This really should default to rec709
         // https://crbug.com/828599
-        *color_space = kRec601_SkYUVColorSpace;
+        yuv_color_space = kRec601_SkYUVColorSpace;
       }
-    }
-
-    for (int plane = VideoFrame::kYPlane; plane <= VideoFrame::kVPlane;
-         ++plane) {
-      const gfx::Size size =
-          VideoFrame::PlaneSize(frame_->format(), plane,
+      // We use the Y plane size because it may get rounded up to an even size.
+      // Our implementation of GetYUVAPlanes expects this.
+      gfx::Size y_size =
+          VideoFrame::PlaneSize(frame_->format(), VideoFrame::kYPlane,
                                 gfx::Size(frame_->visible_rect().width(),
                                           frame_->visible_rect().height()));
-      sizeInfo->fSizes[plane].set(size.width(), size.height());
-      sizeInfo->fWidthBytes[plane] = size.width();
+      SkYUVAInfo yuva_info = SkYUVAInfo({y_size.width(), y_size.height()},
+                                        planar_config, yuv_color_space);
+      *info = SkYUVAPixmapInfo(yuva_info, SkYUVAPixmapInfo::DataType::kUnorm8,
+                               /* row bytes */ nullptr);
     }
-    sizeInfo->fSizes[VideoFrame::kAPlane] = SkISize::MakeEmpty();
-    sizeInfo->fWidthBytes[VideoFrame::kAPlane] = 0;
-
-    indices[SkYUVAIndex::kY_Index] = {VideoFrame::kYPlane, SkColorChannel::kR};
-    indices[SkYUVAIndex::kU_Index] = {VideoFrame::kUPlane, SkColorChannel::kR};
-    indices[SkYUVAIndex::kV_Index] = {VideoFrame::kVPlane, SkColorChannel::kR};
-    indices[SkYUVAIndex::kA_Index] = {-1, SkColorChannel::kR};
-
     return true;
 #endif
   }
 
-  bool GetYUVAPlanes(const SkYUVASizeInfo& sizeInfo,
-                     SkColorType color_type,
-                     const SkYUVAIndex indices[SkYUVAIndex::kIndexCount],
-                     void* planes[4],
+  bool GetYUVAPlanes(const SkYUVAPixmaps& pixmaps,
                      size_t frame_index,
                      uint32_t lazy_pixel_ref) override {
     DCHECK_EQ(frame_index, 0u);
 
-    media::VideoPixelFormat format = frame_->format();
-    DCHECK(media::IsYuvPlanar(format) && format != PIXEL_FORMAT_I420A);
-
-    for (int i = 0; i <= VideoFrame::kVPlane; ++i) {
-      if (sizeInfo.fSizes[i].isEmpty() || !sizeInfo.fWidthBytes[i]) {
-        return false;
-      }
-    }
-    if (!sizeInfo.fSizes[VideoFrame::kAPlane].isEmpty() ||
-        sizeInfo.fWidthBytes[VideoFrame::kAPlane]) {
+    if (!VideoPixelFormatAsSkYUVAInfoPlanarConfig(frame_->format(), nullptr)) {
       return false;
     }
-    int numPlanes;
-    if (!SkYUVAIndex::AreValidIndices(indices, &numPlanes) || numPlanes != 3) {
+
+    if (!pixmaps.plane(3).dimensions().isEmpty()) {
       return false;
     }
 
@@ -699,8 +707,8 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
           VideoFrame::PlaneSize(frame_->format(), plane,
                                 gfx::Size(frame_->visible_rect().width(),
                                           frame_->visible_rect().height()));
-      if (size.width() != sizeInfo.fSizes[plane].width() ||
-          size.height() != sizeInfo.fSizes[plane].height()) {
+      if (size.width() != pixmaps.plane(plane).width() ||
+          size.height() != pixmaps.plane(plane).height()) {
         return false;
       }
 
@@ -719,11 +727,12 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
 
       // Copy the frame to the supplied memory.
       // TODO: Find a way (API change?) to avoid this copy.
-      uint8_t* out_line = static_cast<uint8_t*>(planes[plane]);
-      int out_line_stride = sizeInfo.fWidthBytes[plane];
+      uint8_t* out_line =
+          static_cast<uint8_t*>(pixmaps.plane(plane).writable_addr());
+      int out_line_stride = static_cast<int>(pixmaps.plane(plane).rowBytes());
       uint8_t* in_line = frame_->data(plane) + offset;
       int in_line_stride = frame_->stride(plane);
-      int plane_height = sizeInfo.fSizes[plane].height();
+      int plane_height = pixmaps.plane(plane).height();
       int bytes_to_copy_per_line = std::min(out_line_stride, in_line_stride);
       libyuv::CopyPlane(in_line, in_line_stride, out_line, out_line_stride,
                         bytes_to_copy_per_line, plane_height);
@@ -741,8 +750,12 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
 // GetSkImageViaReadback())
 class VideoTextureBacking : public cc::TextureBacking {
  public:
-  explicit VideoTextureBacking(sk_sp<SkImage> sk_image)
-      : sk_image_(std::move(sk_image)) {}
+  explicit VideoTextureBacking(
+      sk_sp<SkImage> sk_image,
+      scoped_refptr<viz::RasterContextProvider> raster_context_provider)
+      : sk_image_(std::move(sk_image)) {
+    raster_context_provider_ = std::move(raster_context_provider);
+  }
 
   const SkImageInfo& GetSkImageInfo() override {
     return sk_image_->imageInfo();
@@ -766,10 +779,16 @@ class VideoTextureBacking : public cc::TextureBacking {
     }
     return false;
   }
+  void FlushPendingSkiaOps() override {
+    if (!raster_context_provider_ || !sk_image_)
+      return;
+    sk_image_->flushAndSubmit(raster_context_provider_->GrContext());
+  }
 
  private:
   const sk_sp<SkImage> sk_image_;
   const gpu::Mailbox mailbox_;
+  scoped_refptr<viz::RasterContextProvider> raster_context_provider_;
 };
 
 PaintCanvasVideoRenderer::PaintCanvasVideoRenderer()
@@ -1240,6 +1259,19 @@ bool PaintCanvasVideoRenderer::CopyVideoFrameTexturesToGLTexture(
     GrContext* gr_context = raster_context_provider->GrContext();
     if (!gr_context)
       return false;
+// TODO(crbug.com/1108154): Expand this uploading path to macOS, linux
+// chromeOS after collecting perf data and resolve failure cases.
+#if defined(OS_WIN)
+    // Try direct uploading path
+    if (premultiply_alpha && level == 0) {
+      if (UploadVideoFrameToGLTexture(raster_context_provider, destination_gl,
+                                      video_frame, target, texture,
+                                      internal_format, format, type, flip_y)) {
+        return true;
+      }
+    }
+#endif  //  defined(OS_WIN)
+
     if (!UpdateLastImage(video_frame, raster_context_provider,
                          true /* allow_wrap_texture */)) {
       return false;
@@ -1289,10 +1321,79 @@ bool PaintCanvasVideoRenderer::CopyVideoFrameTexturesToGLTexture(
     CopyVideoFrameSingleTextureToGLTexture(
         destination_gl, video_frame.get(), target, texture, internal_format,
         format, type, level, premultiply_alpha, flip_y);
-    SyncTokenClientImpl client(destination_gl);
+    WaitAndReplaceSyncTokenClient client(destination_gl);
     video_frame->UpdateReleaseSyncToken(&client);
   }
   DCHECK(!cache_ || !cache_->wraps_video_frame_texture);
+
+  return true;
+}
+
+bool PaintCanvasVideoRenderer::UploadVideoFrameToGLTexture(
+    viz::RasterContextProvider* raster_context_provider,
+    gpu::gles2::GLES2Interface* destination_gl,
+    scoped_refptr<VideoFrame> video_frame,
+    unsigned int target,
+    unsigned int texture,
+    unsigned int internal_format,
+    unsigned int format,
+    unsigned int type,
+    bool flip_y) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(video_frame);
+  DCHECK(video_frame->HasTextures());
+  // Support uploading for NV12 and I420 video frame only.
+  if (video_frame->format() != PIXEL_FORMAT_I420 &&
+      video_frame->format() != PIXEL_FORMAT_NV12) {
+    return false;
+  }
+
+  // TODO(crbug.com/1108154): Support more texture target, e.g.
+  // 2d array, 3d etc.
+  if (target != GL_TEXTURE_2D) {
+    return false;
+  }
+
+  if (!ValidFormatForDirectUploading(static_cast<GLenum>(internal_format),
+                                     type)) {
+    return false;
+  }
+
+  if (!raster_context_provider || !raster_context_provider->GrContext())
+    return false;
+
+  // Trigger resource allocation for dst texture to back SkSurface.
+  // Dst texture size should equal to video frame visible rect.
+  destination_gl->BindTexture(target, texture);
+  destination_gl->TexImage2D(
+      target, 0, internal_format, video_frame->visible_rect().width(),
+      video_frame->visible_rect().height(), 0, format, type, nullptr);
+
+  gpu::MailboxHolder mailbox_holder;
+  mailbox_holder.texture_target = target;
+  destination_gl->ProduceTextureDirectCHROMIUM(texture,
+                                               mailbox_holder.mailbox.name);
+
+  destination_gl->GenUnverifiedSyncTokenCHROMIUM(
+      mailbox_holder.sync_token.GetData());
+
+  if (!VideoFrameYUVConverter::ConvertYUVVideoFrameWithSkSurfaceNoCaching(
+          video_frame.get(), raster_context_provider, mailbox_holder,
+          internal_format, type, flip_y, true /* use visible_rect */)) {
+    return false;
+  }
+
+  gpu::raster::RasterInterface* source_ri =
+      raster_context_provider->RasterInterface();
+  // Wait for mailbox creation on canvas context before consuming it.
+  source_ri->GenUnverifiedSyncTokenCHROMIUM(
+      mailbox_holder.sync_token.GetData());
+
+  destination_gl->WaitSyncTokenCHROMIUM(
+      mailbox_holder.sync_token.GetConstData());
+
+  WaitAndReplaceSyncTokenClient client(source_ri);
+  video_frame->UpdateReleaseSyncToken(&client);
 
   return true;
 }
@@ -1351,7 +1452,7 @@ bool PaintCanvasVideoRenderer::PrepareVideoFrameForWebGL(
   destination_gl->WaitSyncTokenCHROMIUM(
       mailbox_holder.sync_token.GetConstData());
 
-  SyncTokenClientImpl client(source_ri);
+  WaitAndReplaceSyncTokenClient client(source_ri);
   video_frame->UpdateReleaseSyncToken(&client);
 
   DCHECK(!cache_ || !cache_->wraps_video_frame_texture);
@@ -1414,7 +1515,8 @@ bool PaintCanvasVideoRenderer::CopyVideoFrameYUVDataToGLTexture(
   dest_holder.mailbox = yuv_cache_.mailbox;
   dest_holder.texture_target = GL_TEXTURE_2D;
   dest_holder.sync_token = token;
-  ConvertFromVideoFrameYUV(&video_frame, raster_context_provider, dest_holder);
+  yuv_cache_.yuv_converter.ConvertYUVVideoFrame(
+      &video_frame, raster_context_provider, dest_holder);
 
   gpu::SyncToken post_conversion_sync_token;
   source_ri->GenUnverifiedSyncTokenCHROMIUM(
@@ -1548,14 +1650,13 @@ bool PaintCanvasVideoRenderer::Cache::Recycle() {
   if (!texture_ownership_in_skia)
     return true;
 
-  auto sk_image = paint_image.GetSkImage();
-  paint_image = cc::PaintImage();
-  if (!sk_image->unique())
+  if (!paint_image.HasExclusiveTextureAccess())
     return false;
 
   // Flush any pending GPU work using this texture.
-  sk_image->flushAndSubmit(raster_context_provider->GrContext());
+  paint_image.FlushPendingSkiaOps();
 
+  paint_image = cc::PaintImage();
   // We need a new texture ID because skia will destroy the previous one with
   // the SkImage.
   texture_ownership_in_skia = false;
@@ -1632,8 +1733,8 @@ bool PaintCanvasVideoRenderer::UpdateLastImage(
         } else {
           gpu::MailboxHolder dest_holder{cache_->source_mailbox,
                                          gpu::SyncToken(), GL_TEXTURE_2D};
-          ConvertFromVideoFrameYUV(video_frame.get(), raster_context_provider,
-                                   dest_holder);
+          VideoFrameYUVConverter::ConvertYUVVideoFrameNoCaching(
+              video_frame.get(), raster_context_provider, dest_holder);
         }
         raster_context_provider->GrContext()->flushAndSubmit();
       }
@@ -1689,8 +1790,8 @@ bool PaintCanvasVideoRenderer::UpdateLastImage(
         }
       }
       paint_image_builder.set_texture_backing(
-          sk_sp<VideoTextureBacking>(
-              new VideoTextureBacking(std::move(source_subset))),
+          sk_sp<VideoTextureBacking>(new VideoTextureBacking(
+              std::move(source_subset), raster_context_provider)),
           cc::PaintImage::GetNextContentId());
     } else {
       cache_.emplace(video_frame->unique_id());
@@ -1721,8 +1822,8 @@ bool PaintCanvasVideoRenderer::PrepareVideoFrame(
   // could cause problems since the pool of VideoFrames has a fixed size.
   if (video_frame->HasTextures()) {
     if (video_frame->NumTextures() > 1) {
-      ConvertFromVideoFrameYUV(video_frame.get(), raster_context_provider,
-                               dest_holder);
+      VideoFrameYUVConverter::ConvertYUVVideoFrameNoCaching(
+          video_frame.get(), raster_context_provider, dest_holder);
     } else {
       // We don't support Android now.
       return false;
@@ -1746,6 +1847,8 @@ void PaintCanvasVideoRenderer::YUVTextureCache::Reset() {
   auto* sii = raster_context_provider->SharedImageInterface();
   sii->DestroySharedImage(sync_token, mailbox);
   mailbox.SetZero();
+
+  yuv_converter.ReleaseCachedData();
 
   // Kick off the GL work up to the OrderingBarrierCHROMIUM above as well as the
   // SharedImageInterface work, to ensure the shared image memory is released in

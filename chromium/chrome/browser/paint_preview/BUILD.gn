@@ -4,10 +4,6 @@
 
 source_set("services") {
   sources = [
-    "services/paint_preview_demo_service.cc",
-    "services/paint_preview_demo_service.h",
-    "services/paint_preview_demo_service_factory.cc",
-    "services/paint_preview_demo_service_factory.h",
     "services/paint_preview_tab_service.cc",
     "services/paint_preview_tab_service.h",
     "services/paint_preview_tab_service_factory.cc",
@@ -22,6 +18,8 @@ source_set("services") {
   ]
 
   if (is_android) {
+    sources += [ "paint_preview_compositor_utils.cc" ]
+
     deps += [ "//chrome/browser/paint_preview/android:jni_headers" ]
   }
 }

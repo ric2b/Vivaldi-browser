@@ -3,22 +3,25 @@
 # found in the LICENSE file.
 
 settings = struct(
-    project = "chromium-m86",
+    project = "chromium-m87",
+    # Switch this to False for branches
     is_master = False,
+    # Switch this to True for LTC/LTS branches
     is_lts_branch = False,
-    ref = "refs/branch-heads/4240",
+    ref = "refs/branch-heads/4280",
     ci_bucket = "ci",
     ci_poller = "chromium-gitiles-trigger",
     main_console_name = "main",
-    main_console_title = "Chromium M86 Main Console",
+    main_console_title = "Chromium M87 Main Console",
     cq_mirrors_console_name = "mirrors",
-    cq_mirrors_console_title = "Chromium M86 CQ Mirrors Console",
+    cq_mirrors_console_title = "Chromium M87 CQ Mirrors Console",
     try_bucket = "try",
     try_triggering_projects = [],
     cq_group = "cq",
-    cq_ref_regexp = "refs/branch-heads/4240",
+    cq_ref_regexp = "refs/branch-heads/4280",
     main_list_view_name = "try",
-    main_list_view_title = "Chromium M86 CQ console",
+    main_list_view_title = "Chromium M87 CQ console",
+    # Switch this to None for branches
     tree_status_host = None,
 )
 

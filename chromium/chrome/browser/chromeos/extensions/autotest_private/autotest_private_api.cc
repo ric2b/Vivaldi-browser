@@ -105,11 +105,14 @@
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/views/crostini/crostini_uninstaller_view.h"
 #include "chrome/browser/ui/views/plugin_vm/plugin_vm_installer_view.h"
+#include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/webui/chromeos/crostini_installer/crostini_installer_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/crostini_installer/crostini_installer_ui.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/app_registrar_observer.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
+#include "chrome/browser/web_applications/system_web_app_manager.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/autotest_private.h"
 #include "chrome/common/pref_names.h"
@@ -319,9 +322,35 @@ api::autotest_private::AppType GetAppType(apps::mojom::AppType type) {
       return api::autotest_private::AppType::APP_TYPE_LACROS;
     case apps::mojom::AppType::kRemote:
       return api::autotest_private::AppType::APP_TYPE_REMOTE;
+    case apps::mojom::AppType::kBorealis:
+      return api::autotest_private::AppType::APP_TYPE_BOREALIS;
   }
   NOTREACHED();
   return api::autotest_private::AppType::APP_TYPE_NONE;
+}
+
+api::autotest_private::AppInstallSource GetAppInstallSource(
+    apps::mojom::InstallSource source) {
+  switch (source) {
+    case apps::mojom::InstallSource::kUnknown:
+      return api::autotest_private::AppInstallSource::
+          APP_INSTALL_SOURCE_UNKNOWN;
+    case apps::mojom::InstallSource::kSystem:
+      return api::autotest_private::AppInstallSource::APP_INSTALL_SOURCE_SYSTEM;
+    case apps::mojom::InstallSource::kPolicy:
+      return api::autotest_private::AppInstallSource::APP_INSTALL_SOURCE_POLICY;
+    case apps::mojom::InstallSource::kOem:
+      return api::autotest_private::AppInstallSource::APP_INSTALL_SOURCE_OEM;
+    case apps::mojom::InstallSource::kDefault:
+      return api::autotest_private::AppInstallSource::
+          APP_INSTALL_SOURCE_DEFAULT;
+    case apps::mojom::InstallSource::kSync:
+      return api::autotest_private::AppInstallSource::APP_INSTALL_SOURCE_SYNC;
+    case apps::mojom::InstallSource::kUser:
+      return api::autotest_private::AppInstallSource::APP_INSTALL_SOURCE_USER;
+  }
+  NOTREACHED();
+  return api::autotest_private::AppInstallSource::APP_INSTALL_SOURCE_NONE;
 }
 
 api::autotest_private::AppWindowType GetAppWindowType(ash::AppType type) {
@@ -423,6 +452,12 @@ std::string SetWhitelistedPref(Profile* profile,
     if (allowed_state != chromeos::assistant::AssistantAllowedState::ALLOWED) {
       return base::StringPrintf("Assistant not allowed - state: %d",
                                 allowed_state);
+    }
+  } else if (pref_name == chromeos::assistant::prefs::kAssistantConsentStatus) {
+    DCHECK(value.is_int());
+    if (!profile->GetPrefs()->GetBoolean(
+            chromeos::assistant::prefs::kAssistantEnabled)) {
+      return "Unable to set the pref because Assistant has not been enabled.";
     }
   } else if (pref_name ==
                  chromeos::assistant::prefs::kAssistantContextEnabled ||
@@ -1677,6 +1712,68 @@ ExtensionFunction::ResponseAction AutotestPrivateGetArcPackageFunction::Run() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateWaitForSystemWebAppsInstallFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateWaitForSystemWebAppsInstallFunction::
+    AutotestPrivateWaitForSystemWebAppsInstallFunction() = default;
+
+AutotestPrivateWaitForSystemWebAppsInstallFunction::
+    ~AutotestPrivateWaitForSystemWebAppsInstallFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateWaitForSystemWebAppsInstallFunction::Run() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  web_app::WebAppProviderBase* provider =
+      web_app::WebAppProviderBase::GetProviderBase(profile);
+
+  if (!provider)
+    return RespondNow(Error("Web Apps are not available for profile."));
+
+  provider->system_web_app_manager().on_apps_synchronized().Post(
+      FROM_HERE,
+      base::BindOnce(
+          &AutotestPrivateWaitForSystemWebAppsInstallFunction::Respond, this,
+          NoArguments()));
+  return RespondLater();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateGetRegisteredSystemWebAppsFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateGetRegisteredSystemWebAppsFunction::
+    AutotestPrivateGetRegisteredSystemWebAppsFunction() = default;
+
+AutotestPrivateGetRegisteredSystemWebAppsFunction::
+    ~AutotestPrivateGetRegisteredSystemWebAppsFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateGetRegisteredSystemWebAppsFunction::Run() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  web_app::WebAppProviderBase* provider =
+      web_app::WebAppProviderBase::GetProviderBase(profile);
+
+  if (!provider)
+    return RespondNow(Error("Web Apps are not available for profile."));
+
+  std::vector<api::autotest_private::SystemApp> result;
+
+  for (const auto& type_and_info :
+       provider->system_web_app_manager().GetRegisteredSystemAppsForTesting()) {
+    api::autotest_private::SystemApp system_app;
+    web_app::SystemAppInfo info = type_and_info.second;
+    system_app.internal_name = info.internal_name;
+    system_app.url = info.install_url.GetOrigin().spec();
+    result.push_back(std::move(system_app));
+  }
+
+  return RespondNow(ArgumentList(
+      api::autotest_private::GetRegisteredSystemWebApps::Results::Create(
+          result)));
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // AutotestPrivateLaunchArcIntentFunction
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1721,6 +1818,44 @@ ExtensionFunction::ResponseAction AutotestPrivateLaunchAppFunction::Run() {
                         ash::ShelfLaunchSource::LAUNCH_FROM_UNKNOWN,
                         0, /* event_flags */
                         display::Screen::GetScreen()->GetPrimaryDisplay().id());
+  return RespondNow(NoArguments());
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateLaunchSystemWebAppFunction
+///////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateLaunchSystemWebAppFunction::
+    ~AutotestPrivateLaunchSystemWebAppFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateLaunchSystemWebAppFunction::Run() {
+  std::unique_ptr<api::autotest_private::LaunchSystemWebApp::Params> params(
+      api::autotest_private::LaunchSystemWebApp::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+  DVLOG(1) << "AutotestPrivateLaunchSystemWebAppFunction name: "
+           << params->app_name << " url: " << params->url;
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  auto* provider = web_app::WebAppProvider::Get(profile);
+  if (!provider)
+    return RespondNow(Error("Web Apps not enabled for profile."));
+
+  base::Optional<web_app::SystemAppType> app_type;
+  for (const auto& type_and_info :
+       provider->system_web_app_manager().GetRegisteredSystemAppsForTesting()) {
+    if (type_and_info.second.internal_name == params->app_name) {
+      app_type = type_and_info.first;
+      break;
+    }
+  }
+  if (!app_type.has_value())
+    return RespondNow(Error("No mapped system web app found"));
+
+  auto* browser =
+      web_app::LaunchSystemWebApp(profile, *app_type, GURL(params->url));
+  if (!browser)
+    return RespondNow(Error("Failed to launch system web app"));
   return RespondNow(NoArguments());
 }
 
@@ -2856,6 +2991,7 @@ AutotestPrivateGetAllInstalledAppsFunction::Run() {
     app.short_name = update.ShortName();
     app.additional_search_terms = update.AdditionalSearchTerms();
     app.type = GetAppType(update.AppType());
+    app.install_source = GetAppInstallSource(update.InstallSource());
     app.readiness = GetAppReadiness(update.Readiness());
     app.show_in_launcher = ConvertMojomOptionalBool(update.ShowInLauncher());
     app.show_in_search = ConvertMojomOptionalBool(update.ShowInSearch());

@@ -20,9 +20,25 @@
 
 namespace paint_preview {
 
-// Maps a content ID to an embedding token.
-using PictureSerializationContext =
-    base::flat_map<uint32_t, base::UnguessableToken>;
+struct PictureSerializationContext {
+  PictureSerializationContext();
+  ~PictureSerializationContext();
+
+  PictureSerializationContext(const PictureSerializationContext&) = delete;
+  PictureSerializationContext& operator=(const PictureSerializationContext&) =
+      delete;
+
+  PictureSerializationContext(PictureSerializationContext&&) noexcept;
+  PictureSerializationContext& operator=(
+      PictureSerializationContext&&) noexcept;
+
+  // Maps a content ID to a transformed clip rect.
+  base::flat_map<uint32_t, SkRect> content_id_to_transformed_clip;
+
+  // Maps a content ID to an embedding token.
+  base::flat_map<uint32_t, base::UnguessableToken>
+      content_id_to_embedding_token;
+};
 
 // Maps a typeface ID to a glyph usage tracker.
 using TypefaceUsageMap = base::flat_map<SkFontID, std::unique_ptr<GlyphUsage>>;
@@ -53,20 +69,11 @@ struct FrameAndScrollOffsets {
   gfx::Size scroll_offsets;
 };
 
-// Deserialization context for |MakeDeserialProcs| that contains the information
-// needed to embed a subframe within its parent frame.
-struct LoadedFramesDeserialContext {
-  LoadedFramesDeserialContext();
-  ~LoadedFramesDeserialContext();
-
-  // The scroll offsets for the current frame.
-  gfx::Size scroll_offsets;
-
-  // Maps a content ID to a frame's picture. A frame's subframes should be
-  // loaded into this context before |MakeDeserialProcs| is called to ensure
-  // that the resulting |SkPicture| contains all subframes.
-  base::flat_map<uint32_t, FrameAndScrollOffsets> subframes;
-};
+// Maps a content ID to a frame's picture. A frame's subframes should be
+// loaded into this context before |MakeDeserialProcs| is called to ensure
+// that the resulting |SkPicture| contains all subframes.
+using LoadedFramesDeserialContext =
+    base::flat_map<uint32_t, FrameAndScrollOffsets>;
 
 // Creates a no-op SkPicture.
 sk_sp<SkPicture> MakeEmptyPicture();

@@ -745,7 +745,13 @@ IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest,
       scrollable_page_contents));
 }
 
-IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest, TestClosingATab) {
+#if defined(OS_CHROMEOS)
+// http://crbug.com/1127805: Flaky on Chrome OS builders
+#define MAYBE_TestClosingATab DISABLED_TestClosingATab
+#else
+#define MAYBE_TestClosingATab TestClosingATab
+#endif
+IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest, MAYBE_TestClosingATab) {
   ToggleTabletMode();
   ASSERT_TRUE(GetTabletModeEnabled());
   EXPECT_TRUE(top_controls_slide_controller()->IsEnabled());
@@ -1356,7 +1362,7 @@ IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest,
   // request bubble resulting in top chrome unhiding.
   auto decided = [](ContentSetting) {};
   permissions::PermissionRequestImpl permission_request(
-      url, url, ContentSettingsType::GEOLOCATION, true /* user_gesture */,
+      url, ContentSettingsType::GEOLOCATION, true /* user_gesture */,
       base::BindOnce(decided), base::DoNothing() /* delete_callback */);
   auto* permission_manager =
       permissions::PermissionRequestManager::FromWebContents(active_contents);

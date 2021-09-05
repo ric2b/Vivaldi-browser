@@ -51,7 +51,10 @@
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_container.h"
 #include "third_party/blink/renderer/core/layout/svg/transform_helper.h"
+#include "third_party/blink/renderer/core/svg/animation/element_smil_animations.h"
+#include "third_party/blink/renderer/core/svg/properties/svg_animated_property.h"
 #include "third_party/blink/renderer/core/svg/properties/svg_property.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_string.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
 #include "third_party/blink/renderer/core/svg/svg_element_rare_data.h"
 #include "third_party/blink/renderer/core/svg/svg_graphics_element.h"
@@ -227,7 +230,7 @@ void SVGElement::ClearWebAnimatedAttributes() {
   animated_attributes.clear();
 }
 
-ElementSMILAnimations* SVGElement::GetSMILAnimations() {
+ElementSMILAnimations* SVGElement::GetSMILAnimations() const {
   if (!HasSVGRareData())
     return nullptr;
   return SvgRareData()->GetSMILAnimations();
@@ -264,6 +267,55 @@ void SVGElement::ClearAnimatedAttribute(const QualifiedName& attribute) {
   });
 }
 
+// TODO(crbug.com/1134652): For now composited animation doesn't work for SVG
+// if the animation also has properties other than the supported ones. We should
+// remove this when we make SVG CSS animations work in the same way as other
+// elements.
+static PropertyHandleSet SupportedCompositedAnimationProperties() {
+  DEFINE_STATIC_LOCAL(PropertyHandleSet, supported_properties,
+                      ({PropertyHandle(GetCSSPropertyOpacity()),
+                        PropertyHandle(GetCSSPropertyTransform()),
+                        PropertyHandle(GetCSSPropertyRotate()),
+                        PropertyHandle(GetCSSPropertyScale()),
+                        PropertyHandle(GetCSSPropertyTranslate()),
+                        PropertyHandle(GetCSSPropertyFilter()),
+                        PropertyHandle(GetCSSPropertyBackdropFilter())}));
+  return supported_properties;
+}
+
+static bool HasMainThreadAnimationProperty(const AnimationEffect* effect) {
+  const KeyframeEffectModelBase* model = nullptr;
+  if (auto* keyframe_effect = DynamicTo<KeyframeEffect>(effect))
+    model = DynamicTo<KeyframeEffectModelBase>(keyframe_effect->Model());
+  else if (auto* inert_effect = DynamicTo<InertEffect>(effect))
+    model = DynamicTo<KeyframeEffectModelBase>(inert_effect->Model());
+  if (!model)
+    return false;
+  for (auto& property : model->Properties()) {
+    if (!SupportedCompositedAnimationProperties().Contains(property))
+      return true;
+  }
+  return false;
+}
+
+bool SVGElement::HasMainThreadAnimations() const {
+  if (HasSVGRareData() && !SvgRareData()->WebAnimatedAttributes().IsEmpty())
+    return true;
+  if (GetSMILAnimations() && GetSMILAnimations()->HasAnimations())
+    return true;
+  if (auto* element_animations = GetElementAnimations()) {
+    for (auto& entry : element_animations->Animations()) {
+      if (HasMainThreadAnimationProperty(entry.key->effect()))
+        return true;
+    }
+    for (auto& entry : element_animations->GetWorkletAnimations()) {
+      if (HasMainThreadAnimationProperty(entry->GetEffect()))
+        return true;
+    }
+  }
+  return false;
+}
+
 AffineTransform SVGElement::LocalCoordinateSpaceTransform(CTMScope) const {
   // To be overriden by SVGGraphicsElement (or as special case SVGTextElement
   // and SVGPatternElement)
@@ -282,8 +334,10 @@ AffineTransform SVGElement::CalculateTransform(
   const LayoutObject* layout_object = GetLayoutObject();
 
   AffineTransform matrix;
-  if (layout_object && layout_object->StyleRef().HasTransform())
-    matrix = TransformHelper::ComputeTransform(*layout_object);
+  if (layout_object && layout_object->StyleRef().HasTransform()) {
+    matrix = TransformHelper::ComputeTransform(
+        *layout_object, ComputedStyle::kIncludeTransformOrigin);
+  }
 
   // Apply any "motion transform" contribution if requested (and existing.)
   if (apply_motion_transform == kIncludeMotionTransform && HasSVGRareData())

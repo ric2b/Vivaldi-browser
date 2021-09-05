@@ -51,13 +51,10 @@ public class CachedFeatureFlags {
             put(ChromeFeatureList.ANDROID_PARTNER_CUSTOMIZATION_PHENOTYPE, true);
             put(ChromeFeatureList.CONDITIONAL_TAB_STRIP_ANDROID, false);
             put(ChromeFeatureList.HOMEPAGE_LOCATION_POLICY, false);
+            put(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID, false);
             put(ChromeFeatureList.SERVICE_MANAGER_FOR_DOWNLOAD, false);
-            put(ChromeFeatureList.SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH, false);
-            put(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS, true);
-            put(ChromeFeatureList.CHROME_DUET, false);
+            put(ChromeFeatureList.SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH, true);
             put(ChromeFeatureList.COMMAND_LINE_ON_NON_ROOTED, false);
-            put(ChromeFeatureList.CHROME_DUET_ADAPTIVE, true);
-            put(ChromeFeatureList.CHROME_DUET_LABELED, false);
             put(ChromeFeatureList.DOWNLOADS_AUTO_RESUMPTION_NATIVE, true);
             put(ChromeFeatureList.PRIORITIZE_BOOTSTRAP_TASKS, true);
             put(ChromeFeatureList.IMMERSIVE_UI_MODE, false);
@@ -69,7 +66,6 @@ public class CachedFeatureFlags {
             put(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, true); // Vivaldi default value override.
             put(ChromeFeatureList.TAB_GROUPS_ANDROID, false);
             put(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID, false);
-            put(ChromeFeatureList.DUET_TABSTRIP_INTEGRATION_ANDROID, false);
             put(ChromeFeatureList.CLOSE_TAB_SUGGESTIONS, false);
             put(ChromeFeatureList.CRITICAL_PERSISTED_TAB_DATA, false);
             put(ChromeFeatureList.INSTANT_START, false);
@@ -82,6 +78,8 @@ public class CachedFeatureFlags {
             put(ChromeFeatureList.INTEREST_FEED_V2, false);
             put(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_ICONS, false);
             put(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP, false);
+            put(ChromeFeatureList.MESSAGES_FOR_ANDROID_INFRASTRUCTURE, false);
+            put(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR, false);
         }
     };
 
@@ -97,16 +95,8 @@ public class CachedFeatureFlags {
                     ChromePreferenceKeys.FLAGS_CACHED_SERVICE_MANAGER_FOR_DOWNLOAD_RESUMPTION);
             put(ChromeFeatureList.SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH,
                     ChromePreferenceKeys.FLAGS_CACHED_SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH);
-            put(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS,
-                    ChromePreferenceKeys.FLAGS_CACHED_INTEREST_FEED_CONTENT_SUGGESTIONS);
-            put(ChromeFeatureList.CHROME_DUET,
-                    ChromePreferenceKeys.FLAGS_CACHED_BOTTOM_TOOLBAR_ENABLED);
             put(ChromeFeatureList.COMMAND_LINE_ON_NON_ROOTED,
                     ChromePreferenceKeys.FLAGS_CACHED_COMMAND_LINE_ON_NON_ROOTED_ENABLED);
-            put(ChromeFeatureList.CHROME_DUET_ADAPTIVE,
-                    ChromePreferenceKeys.FLAGS_CACHED_ADAPTIVE_TOOLBAR_ENABLED);
-            put(ChromeFeatureList.CHROME_DUET_LABELED,
-                    ChromePreferenceKeys.FLAGS_CACHED_LABELED_BOTTOM_TOOLBAR_ENABLED);
             put(ChromeFeatureList.DOWNLOADS_AUTO_RESUMPTION_NATIVE,
                     ChromePreferenceKeys.FLAGS_CACHED_DOWNLOAD_AUTO_RESUMPTION_IN_NATIVE);
             put(ChromeFeatureList.PRIORITIZE_BOOTSTRAP_TASKS,
@@ -122,8 +112,6 @@ public class CachedFeatureFlags {
                     ChromePreferenceKeys.FLAGS_CACHED_GRID_TAB_SWITCHER_ENABLED);
             put(ChromeFeatureList.TAB_GROUPS_ANDROID,
                     ChromePreferenceKeys.FLAGS_CACHED_TAB_GROUPS_ANDROID_ENABLED);
-            put(ChromeFeatureList.DUET_TABSTRIP_INTEGRATION_ANDROID,
-                    ChromePreferenceKeys.FLAGS_CACHED_DUET_TABSTRIP_INTEGRATION_ANDROID_ENABLED);
         }
     };
 

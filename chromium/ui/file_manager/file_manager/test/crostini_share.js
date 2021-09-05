@@ -146,10 +146,6 @@ shareBase.testSharePaths = async (
   // Share should persist when right-click > Share with <VM>.
   assertTrue(sharePathsPersist);
   // Validate UMAs.
-  assertEquals(1, chrome.metricsPrivate.smallCounts_.length);
-  assertArrayEquals(
-      ['FileBrowser.CrostiniSharedPaths.Depth.Downloads', 1],
-      chrome.metricsPrivate.smallCounts_[0]);
   const lastEnumUma = chrome.metricsPrivate.values_.pop();
   assertEquals('FileBrowser.MenuItemSelected', lastEnumUma[0].metricName);
   assertEquals(enumUma, lastEnumUma[1]);
@@ -267,6 +263,9 @@ shareBase.testSharePaths = async (
 const createMockFilesAppToast = () => {
   const toast = document.querySelector('#toast');
 
+  if (!toast.shadowRoot) {
+    toast.attachShadow({mode: 'open'});
+  }
   toast.shadowRoot.innerHTML = `
     <div class="container" id="container" hidden>
       <div class="text" id="text" hidden></div>

@@ -16,18 +16,16 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.WPRArchiveDirectory;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.content_public.browser.test.ContentJUnit4ClassRunner;
 
 import java.io.IOException;
 
@@ -35,17 +33,18 @@ import java.io.IOException;
  * Tests for {@link FeedNewTabPage} using WPR record/replay infra to mock the backend.
  * Other tests could be found in {@link FeedNewTabPageCardRenderTest}.
  */
-@RunWith(ContentJUnit4ClassRunner.class)
+@RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
 @Features.EnableFeatures(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)
+@Features.DisableFeatures(ChromeFeatureList.INTEREST_FEED_V2)
 public final class FeedNewTabPageCardInstrumentationTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Rule
-    public ChromeRenderTestRule mRenderTestRule =
-            ChromeRenderTestRule.Builder.withPublicCorpus().build();
+    public ChromeRenderTestRule mRenderTestRule = ChromeRenderTestRule.Builder.withPublicCorpus()
+                                                          .setFailOnUnsupportedConfigs(true)
+                                                          .build();
 
     @Before
     public void setUp() {
@@ -57,7 +56,6 @@ public final class FeedNewTabPageCardInstrumentationTest {
     @Feature({"FeedNewTabPage", "WPRRecordReplayTest", "RenderTest"})
     @WPRArchiveDirectory("chrome/android/feed/core/javatests/src/org/chromium/chrome/"
             + "browser/feed/wpr_tests")
-    @FlakyTest(message = "https://crbug.com/1096656")
     public void
     launchNTP_withMultipleFeedCardsRendered() throws IOException, InterruptedException {
         mActivityTestRule.loadUrlInNewTab(UrlConstants.NTP_URL);

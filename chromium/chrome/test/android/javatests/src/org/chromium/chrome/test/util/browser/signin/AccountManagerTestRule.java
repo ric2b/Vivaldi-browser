@@ -6,10 +6,13 @@ package org.chromium.chrome.test.util.browser.signin;
 
 import android.accounts.Account;
 
+import androidx.annotation.Nullable;
+
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
+import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.ProfileDataSource;
@@ -17,6 +20,7 @@ import org.chromium.components.signin.base.CoreAccountId;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
 import org.chromium.components.signin.test.util.FakeProfileDataSource;
+import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /**
  * This test rule mocks AccountManagerFacade and manages sign-in/sign-out.
@@ -141,12 +145,41 @@ public class AccountManagerTestRule implements TestRule {
     /**
      * Add and sign in an account with the default name.
      *
-     * This method invokes native code. It shouldn't be called in a Robolectric test.
+     * This method does not enable sync.
      */
-    public Account addAndSignInTestAccount() {
+    public CoreAccountInfo addTestAccountThenSignin() {
         assert !mIsSignedIn : "An account is already signed in!";
         Account account = addAccountAndWaitForSeeding(TEST_ACCOUNT_EMAIL);
-        SigninTestUtil.signIn(account);
+        CoreAccountInfo coreAccountInfo = toCoreAccountInfo(account.name);
+        SigninTestUtil.signin(coreAccountInfo);
+        mIsSignedIn = true;
+        return coreAccountInfo;
+    }
+
+    /**
+     * Add and sign in an account with the default name.
+     *
+     * This method invokes native code. It shouldn't be called in a Robolectric test.
+     */
+    public Account addTestAccountThenSigninAndEnableSync() {
+        return addTestAccountThenSigninAndEnableSync(
+                TestThreadUtils.runOnUiThreadBlockingNoException(ProfileSyncService::get));
+    }
+
+    /**
+     * Add and sign in an account with the default name.
+     *
+     * This method invokes native code. It shouldn't be called in a Robolectric test.
+     *
+     * @param profileSyncService ProfileSyncService object to set up sync, if null, sync won't
+     *         start.
+     */
+    public Account addTestAccountThenSigninAndEnableSync(
+            @Nullable ProfileSyncService profileSyncService) {
+        assert !mIsSignedIn : "An account is already signed in!";
+        Account account = addAccountAndWaitForSeeding(TEST_ACCOUNT_EMAIL);
+        CoreAccountInfo coreAccountInfo = toCoreAccountInfo(account.name);
+        SigninTestUtil.signinAndEnableSync(coreAccountInfo, profileSyncService);
         mIsSignedIn = true;
         return account;
     }

@@ -7,6 +7,8 @@
 
 #include <memory>
 
+#include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
+#include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
@@ -66,6 +68,10 @@ class CORE_EXPORT OffscreenCanvas final
 
   // API Methods
   ImageBitmap* transferToImageBitmap(ScriptState*, ExceptionState&);
+
+  ScriptPromise convertToBlob(ScriptState* script_state,
+                              const ImageEncodeOptions* options,
+                              ExceptionState& exception_state);
 
   const IntSize& Size() const override { return size_; }
   void SetSize(const IntSize&);
@@ -231,6 +237,9 @@ class CORE_EXPORT OffscreenCanvas final
       Vector<std::unique_ptr<CanvasRenderingContextFactory>>;
   static ContextFactoryVector& RenderingContextFactories();
   static CanvasRenderingContextFactory* GetRenderingContextFactory(int);
+
+  void RecordIdentifiabilityMetric(const blink::IdentifiableSurface& surface,
+                                   const IdentifiableToken& token) const;
 
   Member<CanvasRenderingContext> context_;
   WeakMember<ExecutionContext> execution_context_;

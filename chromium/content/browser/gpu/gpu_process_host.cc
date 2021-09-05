@@ -30,7 +30,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/viz/common/features.h"
@@ -1013,8 +1013,10 @@ void GpuProcessHost::DidInitialize(
 #if defined(OS_ANDROID)
   // Android may kill the GPU process to free memory, especially when the app
   // is the background, so Android cannot have a hard limit on GPU starts.
-  // Reset crash count on Android when context creation succeeds.
-  recent_crash_count_ = 0;
+  // Reset crash count on Android when context creation succeeds, but only if no
+  // fallback option is available.
+  if (!GpuDataManagerImpl::GetInstance()->CanFallback())
+    recent_crash_count_ = 0;
 #endif
 }
 
@@ -1028,8 +1030,10 @@ void GpuProcessHost::DidCreateContextSuccessfully() {
 #if defined(OS_ANDROID)
   // Android may kill the GPU process to free memory, especially when the app
   // is the background, so Android cannot have a hard limit on GPU starts.
-  // Reset crash count on Android when context creation succeeds.
-  recent_crash_count_ = 0;
+  // Reset crash count on Android when context creation succeeds, but only if no
+  // fallback option is available.
+  if (!GpuDataManagerImpl::GetInstance()->CanFallback())
+    recent_crash_count_ = 0;
 #endif
 }
 

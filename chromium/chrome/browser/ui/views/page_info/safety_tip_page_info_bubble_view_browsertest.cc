@@ -308,8 +308,7 @@ class SafetyTipPageInfoBubbleViewBrowserTest
     // This class is a friend to SafetyTipPageInfoBubbleView.
     auto* bubble = static_cast<SafetyTipPageInfoBubbleView*>(
         PageInfoBubbleViewBase::GetPageInfoBubbleForTesting());
-    bubble->StyledLabelLinkClicked(bubble->GetLearnMoreLinkForTesting(),
-                                   gfx::Range(), 0);
+    bubble->OpenHelpCenter();
   }
 
   void CloseWarningLeaveSite(Browser* browser) {
@@ -533,6 +532,26 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
       GURL()));
 }
 
+// Ensure same-document navigations don't close the Safety Tip.
+// Regression test for crbug.com/1137661
+IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
+                       StillShowAfterSameDocNav) {
+  auto kNavigatedUrl = GetURL("site1.com");
+  SetSafetyTipBadRepPatterns({"site1.com/"});
+
+  // Generate a Safety Tip.
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
+
+  // Now generate a same-document navigation and verify the tip is still there.
+  NavigateToURL(browser(), GURL(kNavigatedUrl.spec() + "#fragment"),
+                WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
+
+  ASSERT_NO_FATAL_FAILURE(CheckPageInfoShowsSafetyTipInfo(
+      browser(), security_state::SafetyTipStatus::kBadReputation, GURL()));
+}
+
 // Ensure explicitly-allowed sites don't get blocked when the site is otherwise
 // blocked server-side.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
@@ -728,6 +747,8 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   SwitchToTabAndWait(browser(),
                      browser()->tab_strip_model()->active_index() + 1);
   EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
+  ASSERT_NO_FATAL_FAILURE(CheckPageInfoShowsSafetyTipInfo(
+      browser(), security_state::SafetyTipStatus::kBadReputation, GURL()));
 }
 
 // Background tabs that are errors shouldn't open a tip initially, and shouldn't
@@ -744,6 +765,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   SwitchToTabAndWait(browser(),
                      browser()->tab_strip_model()->active_index() + 1);
   EXPECT_FALSE(IsUIShowing());
+  ASSERT_NO_FATAL_FAILURE(CheckPageInfoDoesNotShowSafetyTipInfo(browser()));
 }
 
 // Tests that Safety Tips do NOT trigger on lookalike domains that trigger an
@@ -933,6 +955,60 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
         kHistogramPrefix + "SafetyTip_BadReputation",
         SafetyTipInteraction::kDismissWithEsc, 1);
   }
+
+  // Test that tab close is recorded properly.
+  {
+    base::HistogramTester histogram_tester;
+    auto kNavigatedUrl = GetURL("site2.com");
+
+    // Prep the web contents for later observing.
+    NavigateToURL(browser(), GURL("about:blank"),
+                  WindowOpenDisposition::NEW_FOREGROUND_TAB);
+    ReputationWebContentsObserver* rep_observer =
+        ReputationWebContentsObserver::FromWebContents(
+            browser()->tab_strip_model()->GetActiveWebContents());
+
+    // Trigger the warning in the prepped web contents.
+    TriggerWarningFromBlocklist(browser(), kNavigatedUrl,
+                                WindowOpenDisposition::CURRENT_TAB);
+
+    // Close all tabs and wait for that to happen.
+    base::RunLoop loop;
+    rep_observer->RegisterSafetyTipCloseCallbackForTesting(loop.QuitClosure());
+    browser()->tab_strip_model()->CloseAllTabs();
+    loop.Run();
+
+    // Verify histograms.
+    histogram_tester.ExpectBucketCount(
+        kHistogramPrefix + "SafetyTip_BadReputation",
+        SafetyTipInteraction::kCloseTab, 1);
+  }
+
+  // Test that tab switch is recorded properly.
+  {
+    base::HistogramTester histogram_tester;
+    auto kNavigatedUrl = GetURL("site2.com");
+    TriggerWarningFromBlocklist(browser(), kNavigatedUrl,
+                                WindowOpenDisposition::CURRENT_TAB);
+    NavigateToURL(browser(), GURL("about:blank"),
+                  WindowOpenDisposition::NEW_FOREGROUND_TAB);
+    histogram_tester.ExpectBucketCount(
+        kHistogramPrefix + "SafetyTip_BadReputation",
+        SafetyTipInteraction::kSwitchTab, 1);
+  }
+
+  // Test that navigating away is recorded properly.
+  {
+    base::HistogramTester histogram_tester;
+    auto kNavigatedUrl = GetURL("site2.com");
+    TriggerWarningFromBlocklist(browser(), kNavigatedUrl,
+                                WindowOpenDisposition::CURRENT_TAB);
+    NavigateToURL(browser(), GURL("about:blank"),
+                  WindowOpenDisposition::CURRENT_TAB);
+    histogram_tester.ExpectBucketCount(
+        kHistogramPrefix + "SafetyTip_BadReputation",
+        SafetyTipInteraction::kStartNewNavigation, 1);
+  }
 }
 
 // Tests that the histograms recording how long the Safety Tip is open are
@@ -956,7 +1032,8 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
     NavigateToURL(browser(), GURL("about:blank"),
                   WindowOpenDisposition::CURRENT_TAB);
     auto samples = histograms.GetAllSamples(
-        "Security.SafetyTips.OpenTime.NoAction.SafetyTip_BadReputation");
+        "Security.SafetyTips.OpenTime.StartNewNavigation.SafetyTip_"
+        "BadReputation");
     ASSERT_EQ(1u, samples.size());
     EXPECT_LE(kMinWarningTime.InMilliseconds(), samples.front().min);
   }

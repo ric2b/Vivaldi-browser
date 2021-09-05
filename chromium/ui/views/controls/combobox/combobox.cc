@@ -30,7 +30,6 @@
 #include "ui/views/background.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/button_controller.h"
-#include "ui/views/controls/combobox/combobox_listener.h"
 #include "ui/views/controls/combobox/combobox_util.h"
 #include "ui/views/controls/combobox/empty_combobox_model.h"
 #include "ui/views/controls/focus_ring.h"
@@ -75,7 +74,7 @@ class TransparentButton : public Button {
         ButtonController::NotifyAction::kOnPress);
 
     SetInkDropMode(InkDropMode::ON);
-    set_has_ink_drop_action_on_click(true);
+    SetHasInkDropActionOnClick(true);
   }
   ~TransparentButton() override = default;
 
@@ -105,7 +104,7 @@ class TransparentButton : public Button {
             size(), GetInkDropCenterBasedOnLastEvent(),
             GetNativeTheme()->GetSystemColor(
                 ui::NativeTheme::kColorId_LabelEnabledColor),
-            ink_drop_visible_opacity()));
+            GetInkDropVisibleOpacity()));
   }
 
  private:
@@ -277,9 +276,7 @@ const gfx::FontList& Combobox::GetFontList() const {
 }
 
 void Combobox::SetSelectedIndex(int index) {
-  if (selected_index_ == index)
-    return;
-
+  // TODO(http://crbug.com/1132465): No-op when selected_index_ == index.
   selected_index_ = index;
   if (size_to_largest_label_) {
     OnPropertyChanged(&selected_index_, kPropertyEffectsPaint);
@@ -346,6 +343,15 @@ void Combobox::SetInvalid(bool invalid) {
 
   UpdateBorder();
   OnPropertyChanged(&selected_index_, kPropertyEffectsPaint);
+}
+
+void Combobox::SetSizeToLargestLabel(bool size_to_largest_label) {
+  if (size_to_largest_label_ == size_to_largest_label)
+    return;
+
+  size_to_largest_label_ = size_to_largest_label;
+  content_size_ = GetContentSize();
+  OnPropertyChanged(&selected_index_, kPropertyEffectsPreferredSizeChanged);
 }
 
 void Combobox::OnThemeChanged() {
@@ -668,10 +674,10 @@ void Combobox::OnPerformAction() {
   NotifyAccessibilityEvent(ax::mojom::Event::kValueChanged, true);
   SchedulePaint();
 
-  if (listener_)
-    listener_->OnPerformAction(this);
+  if (callback_)
+    callback_.Run();
 
-  // Note |this| may be deleted by |listener_|.
+  // Note |this| may be deleted by |callback_|.
 }
 
 gfx::Size Combobox::GetContentSize() const {
@@ -705,11 +711,11 @@ PrefixSelector* Combobox::GetPrefixSelector() {
   return selector_.get();
 }
 
-BEGIN_METADATA(Combobox)
-METADATA_PARENT_CLASS(View)
-ADD_PROPERTY_METADATA(Combobox, int, SelectedIndex)
-ADD_PROPERTY_METADATA(Combobox, bool, Invalid)
-ADD_PROPERTY_METADATA(Combobox, base::string16, AccessibleName)
-END_METADATA()
+BEGIN_METADATA(Combobox, View)
+ADD_PROPERTY_METADATA(int, SelectedIndex)
+ADD_PROPERTY_METADATA(bool, Invalid)
+ADD_PROPERTY_METADATA(bool, SizeToLargestLabel)
+ADD_PROPERTY_METADATA(base::string16, AccessibleName)
+END_METADATA
 
 }  // namespace views

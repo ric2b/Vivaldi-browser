@@ -57,8 +57,8 @@ enum class OptInCancelReason {
   DEPRECATED_BAD_AUTHENTICATION = 4,
   DEPRECATED_GMS_CORE_NOT_AVAILABLE = 5,
 
-  // Cloud provision flow failed.
-  CLOUD_PROVISION_FLOW_FAIL = 6,
+  // Provision failed.
+  PROVISIONING_FAILED = 6,
 
   // Android management is required for user.
   ANDROID_MANAGEMENT_REQUIRED = 7,
@@ -119,9 +119,6 @@ enum class ProvisioningResult : int {
   // Check in error. More errors defined below.
   DEVICE_CHECK_IN_FAILED = 5,
 
-  // Cloud provision error. More errors defined below.
-  DEPRECATED_CLOUD_PROVISION_FLOW_FAILED = 6,
-
   // Mojo errors.
   MOJO_VERSION_MISMATCH = 7,
 
@@ -136,10 +133,6 @@ enum class ProvisioningResult : int {
   GMS_SIGN_IN_FAILED = 11,
   GMS_SIGN_IN_TIMEOUT = 12,
   GMS_SIGN_IN_INTERNAL_ERROR = 13,
-
-  // Cloud provision error:
-  DEPRECATED_CLOUD_PROVISION_FLOW_TIMEOUT = 14,
-  DEPRECATED_CLOUD_PROVISION_FLOW_INTERNAL_ERROR = 15,
 
   // ARC instance is stopped during the sign in procedure.
   ARC_STOPPED = 16,
@@ -258,9 +251,12 @@ void UpdateSupervisionTransitionResultUMA(
     mojom::SupervisionChangeStatus result);
 void UpdateReauthorizationSilentAuthCodeUMA(OptInSilentAuthCode state);
 void UpdateSecondaryAccountSilentAuthCodeUMA(OptInSilentAuthCode state);
-void UpdateAuthTiming(const char* histogram_name, base::TimeDelta elapsed_time);
-void UpdateAuthCheckinAttempts(int32_t num_attempts);
-void UpdateAuthAccountCheckStatus(mojom::AccountCheckStatus status);
+void UpdateAuthTiming(const char* histogram_name,
+                      base::TimeDelta elapsed_time,
+                      const Profile* profile);
+void UpdateAuthCheckinAttempts(int32_t num_attempts, const Profile* profile);
+void UpdateAuthAccountCheckStatus(mojom::AccountCheckStatus status,
+                                  const Profile* profile);
 void UpdateMainAccountResolutionStatus(
     const Profile* profile,
     mojom::MainAccountResolutionStatus status);

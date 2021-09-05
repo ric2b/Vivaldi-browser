@@ -38,6 +38,13 @@ extern const char kNullVersion[];
 //   (say, read-only) functionality for that same set of interfaces.
 extern const char kServerSwitch[];
 
+// This switch specifies the XPC service the server registers to listen to.
+extern const char kServerServiceSwitch[];
+
+// Valid values for the kServerServiceSwitch.
+extern const char kServerControlServiceSwitchValue[];
+extern const char kServerUpdateServiceSwitchValue[];
+
 // This switch starts the COM service. This switch is invoked by the Service
 // Manager when CoCreate is called on one of several CLSIDs that the server
 // supports.
@@ -94,13 +101,11 @@ extern const char kEnableLoggingSwitch[];
 // Specifies the logging module filter.
 extern const char kLoggingModuleSwitch[];
 
-// Specifies that the program uses a single process execution mode, meaning
-// out of process RPC is not being used. This mode is for debugging purposes
-// only and it may be removed at any time.
-extern const char kSingleProcessSwitch[];
-
 // Specifies the application that the Updater needs to install.
 extern const char kAppIdSwitch[];
+
+// Specifies the version of the application that the updater needs to register.
+extern const char kAppVersionSwitch[];
 
 // URLs.
 //
@@ -167,8 +172,15 @@ constexpr int kErrorApplicationInstallerFailed = kCustomInstallErrorBase + 3;
 //
 // The server process may exit with any of these exit codes.
 constexpr int kErrorOk = 0;
+
+// The server could not acquire the lock needed to run.
 constexpr int kErrorFailedToLockPrefsMutex = 1;
+
+// The server candidate failed to promote itself to active.
 constexpr int kErrorFailedToSwap = 2;
+
+// The server has finished qualification and will not do further operations.
+constexpr int kErrorQualificationExit = 3;
 
 // Policy Management constants.
 extern const char kProxyModeDirect[];

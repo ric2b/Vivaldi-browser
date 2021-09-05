@@ -1,7 +1,14 @@
 include_rules = [
   "+apps",
+  "+cc/metrics",
   "+cc/paint",
   "+cc/test",
+
+  # Restricting uses of ChromeActivity in favor of direct dependency aquisition. Code that lives
+  # under java/src/.../chrome/browser has a seperate exception under that same directory.
+  # Exceptions can be found under "specific_include_rules" below.
+  "-chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
+
   "+chrome/android/native_j_unittests_jni_headers",
   "+chrome/android/chrome_jni_headers",
   "+chrome/android/features/autofill_assistant/jni_headers",
@@ -13,6 +20,7 @@ include_rules = [
   "+chrome/browser/preferences/android",
   "+chrome/browser/profiles/android/jni_headers",
   "+chrome/browser/util/android",
+  "+chrome/browser/version",
   "+chrome/browser/video_tutorials",
   "+chrome/credential_provider/common",
   "+chrome/grit",
@@ -27,7 +35,6 @@ include_rules = [
   "+chrome/services/printing/public",
   "+chrome/services/sharing/public",
   "+chrome/services/removable_storage_writer/public",
-  "+chrome/services/speech/buildflags.h",
   "+chrome/services/util_win/public",
   "+chromeos",
   "+components/about_ui",
@@ -41,6 +48,7 @@ include_rules = [
   "+components/autofill/core/browser",
   "+components/autofill/core/common",
   "+components/background_task_scheduler",
+  "+components/background_sync",
   "+components/base32",
   "+components/blocked_content",
   "+components/blocklist/opt_out_blocklist",
@@ -156,6 +164,8 @@ include_rules = [
   "+components/lookalikes/core",
   "+components/login",
   "+components/media_message_center",
+  "+components/media_router/browser",
+  "+components/messages/android",
   "+components/metal_util",
   "+components/metrics",
   "+components/metrics_services_manager",
@@ -175,7 +185,6 @@ include_rules = [
   "+components/network_session_configurator/browser",
   "+components/network_session_configurator/common",
   "+components/network_time",
-  "+components/ntp_snippets",
   "+components/ntp_tiles",
   "+components/offline_items_collection/core",
   "+components/offline_pages/buildflags",
@@ -207,6 +216,7 @@ include_rules = [
   "+components/permissions",
   "+components/pdf/browser",
   "+components/policy",
+  "+components/power_metrics",
   "+components/pref_registry",
   "+components/prefs",
   "+components/prerender",
@@ -229,6 +239,7 @@ include_rules = [
   "+components/safe_browsing",
   "+components/safe_search_api",
   "+components/schema_org",
+  "+components/shared_highlighting/core/common",
   "+components/search",
   "+components/search_engines",
   "+components/search_provider_logos",
@@ -255,6 +266,7 @@ include_rules = [
   "+components/signin/core/browser",
   "+components/signin/public",
   "+components/site_isolation",
+  "+components/soda",
   "+components/spellcheck",
   "+components/sqlite_proto",
   "+components/ssl_errors",
@@ -340,7 +352,8 @@ include_rules = [
   "+ppapi/proxy",
   "+ppapi/shared_impl",
   "+rlz",
-  "+sandbox/win/src",  # The path doesn't say it, but this is the Windows sandbox.
+  "+sandbox/mac",
+  "+sandbox/win/src",
   "+services/audio/public",
   "+services/cert_verifier",
   "+services/data_decoder/public",
@@ -410,7 +423,7 @@ include_rules = [
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.h",
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux_x11.h",
   "+chrome/browser/ui/views/extensions/request_file_system_dialog_view.h",
-  "+chrome/browser/ui/views/sharesheet_bubble_view.h",
+  "+chrome/browser/ui/views/sharesheet/sharesheet_bubble_view.h",
   "+chrome/browser/ui/views/try_chrome_dialog_win/try_chrome_dialog.h",
 
   # Ensure that only the public interface of performance_manager gets used.
@@ -457,6 +470,7 @@ specific_include_rules = {
   '.*Test\.java': [
     # Android instrumentation tests depend on the whole app.
     "+chrome/android",
+    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "platform_util_linux.cc": [
     # The following is used to call the org.freedesktop.FileManager1
@@ -489,5 +503,8 @@ specific_include_rules = {
   ],
   "chrome_find_request_manager_browsertest\.cc": [
     "+pdf/document_loader_impl.h",
-  ]
+  ],
+  "chrome_content_browser_client_receiver_bindings\.cc" : [
+    "+chrome/browser/performance_manager/mechanisms/userspace_swap_chromeos.h",
+  ],
 }

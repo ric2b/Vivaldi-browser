@@ -36,7 +36,6 @@
 #include "cc/layers/picture_layer.h"
 #include "cc/paint/display_item_list.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/renderer/platform/geometry/float_rect.h"
 #include "third_party/blink/renderer/platform/geometry/geometry_as_json.h"
@@ -45,6 +44,7 @@
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_chunks_to_cc_layer.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_filter_operations.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
+#include "third_party/blink/renderer/platform/graphics/graphics_layer_tree_as_text.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/graphics/logging_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
@@ -164,11 +164,15 @@ void GraphicsLayer::AppendAdditionalInfoAsJSON(LayerTreeFlags flags,
     }
   }
 
+  if (ShouldCreateLayersAfterPaint()) {
+    json.SetBoolean("shouldCreateLayersAfterPaint", true);
+  } else {
 #if DCHECK_IS_ON()
-  if (HasLayerState() && DrawsContent() &&
-      (flags & kLayerTreeIncludesPaintRecords))
-    json.SetValue("paintRecord", RecordAsJSON(*CapturePaintRecord()));
+    if (HasLayerState() && DrawsContent() &&
+        (flags & kLayerTreeIncludesPaintRecords))
+      json.SetValue("paintRecord", RecordAsJSON(*CapturePaintRecord()));
 #endif
+  }
 }
 
 void GraphicsLayer::SetParent(GraphicsLayer* layer) {
@@ -267,6 +271,15 @@ void GraphicsLayer::PaintRecursively(
                                  if (layer.Paint())
                                    repainted_layers.insert(&layer);
                                });
+
+#if DCHECK_IS_ON()
+  if (!repainted_layers.IsEmpty()) {
+    VLOG(2) << "GraphicsLayer tree:\n"
+            << GraphicsLayerTreeAsTextForTesting(
+                   this, VLOG_IS_ON(3) ? 0xffffffff : kOutputAsLayerTree)
+                   .Utf8();
+  }
+#endif
 }
 
 bool GraphicsLayer::Paint() {
@@ -283,17 +296,12 @@ bool GraphicsLayer::Paint() {
 
   if (PaintWithoutCommit()) {
     GetPaintController().CommitNewDisplayItems();
-    UpdateShouldCreateLayersAfterPaint();
   } else if (!needs_check_raster_invalidation_) {
     return false;
   }
 
-#if DCHECK_IS_ON()
-  if (VLOG_IS_ON(2)) {
-    LOG(ERROR) << "Painted GraphicsLayer: " << DebugName()
-               << " interest_rect=" << InterestRect().ToString();
-  }
-#endif
+  DVLOG(2) << "Painted GraphicsLayer: " << DebugName()
+           << " interest_rect=" << InterestRect().ToString();
 
   DCHECK(layer_state_) << "No layer state for GraphicsLayer: " << DebugName();
   // Generate raster invalidations for SPv1.
@@ -303,48 +311,25 @@ bool GraphicsLayer::Paint() {
         raster_invalidation_function_,
         GetPaintController().GetPaintArtifactShared(), layer_bounds,
         layer_state_->state.Unalias(), this);
-
-    if (RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled() &&
-        PaintsContentOrHitTest()) {
-      auto& tracking = EnsureRasterInvalidator().EnsureTracking();
-      tracking.CheckUnderInvalidations(DebugName(), CapturePaintRecord(),
-                                       InterestRect());
-      if (auto record = tracking.UnderInvalidationRecord()) {
-        // Add the under-invalidation overlay onto the painted result.
-        GetPaintController().AppendDebugDrawingAfterCommit(std::move(record),
-                                                           layer_state_->state);
-        // Ensure the compositor will raster the under-invalidation overlay.
-        CcLayer().SetNeedsDisplay();
-      }
-    }
   }
 
   needs_check_raster_invalidation_ = false;
   return true;
 }
 
-void GraphicsLayer::UpdateShouldCreateLayersAfterPaint() {
-  should_create_layers_after_paint_ = false;
-  if (!RuntimeEnabledFeatures::CompositeSVGEnabled())
-    return;
-  if (!PaintsContentOrHitTest())
-    return;
-  // Only layerize content under SVG for now. This requires that the SVG root
-  // has a GraphicsLayer.
-  if (!client_.IsSVGRoot())
-    return;
-  const PaintChunkSubset paint_chunks =
-      PaintChunkSubset(GetPaintController().PaintChunks());
-  for (const auto& paint_chunk : paint_chunks) {
-    const auto& chunk_state = paint_chunk.properties;
-    if (chunk_state.GetPropertyTreeState() == GetPropertyTreeState())
-      continue;
-    // TODO(pdr): Check for direct compositing reasons along the chain from
-    // this state to the layer state.
-    if (chunk_state.HasDirectCompositingReasons()) {
-      should_create_layers_after_paint_ = true;
-      return;
-    }
+void GraphicsLayer::SetShouldCreateLayersAfterPaint(
+    bool should_create_layers_after_paint) {
+  DCHECK(RuntimeEnabledFeatures::CompositeSVGEnabled());
+  if (should_create_layers_after_paint != should_create_layers_after_paint_) {
+    should_create_layers_after_paint_ = should_create_layers_after_paint;
+    // Depending on |should_create_layers_after_paint_|, raster invalidation
+    // will happen in via two different code paths. When it changes we need to
+    // fully invalidate because the incremental raster invalidations of these
+    // code paths will not work. Nor calling this->SetNeedsDisplay() because it
+    // will also clear PaintController which contains what we have just painted.
+    CcLayer().SetNeedsDisplay();
+    if (raster_invalidator_)
+      raster_invalidator_->ClearOldStates();
   }
 }
 
@@ -385,7 +370,6 @@ bool GraphicsLayer::PaintWithoutCommit(const IntRect* interest_rect) {
 }
 
 void GraphicsLayer::NotifyChildListChange() {
-  // cc::Layers are created in PaintArtifactCompositor.
   client_.GraphicsLayersDidChange();
 }
 
@@ -519,6 +503,11 @@ void GraphicsLayer::SetDrawsContent(bool draws_content) {
   if (draws_content == draws_content_)
     return;
 
+  // This may affect which layers the client collects.
+  client_.GraphicsLayersDidChange();
+  // This flag will be updated when the layer is repainted.
+  should_create_layers_after_paint_ = false;
+
   draws_content_ = draws_content;
   UpdateLayerIsDrawable();
 
@@ -558,9 +547,21 @@ void GraphicsLayer::SetContentsOpaqueForText(bool opaque) {
   CcLayer().SetContentsOpaqueForText(opaque);
 }
 
+void GraphicsLayer::SetPaintsHitTest(bool paints_hit_test) {
+  if (paints_hit_test_ == paints_hit_test)
+    return;
+  // This may affect which layers the client collects.
+  client_.GraphicsLayersDidChange();
+  // This flag will be updated when the layer is repainted.
+  should_create_layers_after_paint_ = false;
+  paints_hit_test_ = paints_hit_test;
+}
+
 void GraphicsLayer::SetHitTestable(bool should_hit_test) {
   if (hit_testable_ == should_hit_test)
     return;
+  // This may affect which layers the client collects.
+  client_.GraphicsLayersDidChange();
   hit_testable_ = should_hit_test;
   CcLayer().SetHitTestable(should_hit_test);
 }
@@ -625,6 +626,7 @@ void GraphicsLayer::SetElementId(const CompositorElementId& id) {
 
 sk_sp<PaintRecord> GraphicsLayer::CapturePaintRecord() const {
   DCHECK(PaintsContentOrHitTest());
+  DCHECK(!ShouldCreateLayersAfterPaint());
 
   if (client_.ShouldThrottleRendering())
     return sk_sp<PaintRecord>(new PaintRecord);
@@ -632,10 +634,8 @@ sk_sp<PaintRecord> GraphicsLayer::CapturePaintRecord() const {
   if (client_.IsUnderSVGHiddenContainer())
     return sk_sp<PaintRecord>(new PaintRecord);
 
-  if (client_.PaintBlockedByDisplayLockIncludingAncestors(
-          DisplayLockContextLifecycleTarget::kSelf)) {
+  if (client_.PaintBlockedByDisplayLockIncludingAncestors())
     return sk_sp<PaintRecord>(new PaintRecord);
-  }
 
   FloatRect bounds((IntRect(IntPoint(), IntSize(Size()))));
   GraphicsContext graphics_context(GetPaintController());
@@ -685,6 +685,7 @@ void GraphicsLayer::SetContentsLayerState(
 
 scoped_refptr<cc::DisplayItemList> GraphicsLayer::PaintContentsToDisplayList(
     PaintingControlSetting painting_control) {
+  DCHECK(!ShouldCreateLayersAfterPaint());
   TRACE_EVENT0("blink,benchmark", "GraphicsLayer::PaintContents");
 
   if (painting_control == SUBSEQUENCE_CACHING_DISABLED)
@@ -706,18 +707,24 @@ scoped_refptr<cc::DisplayItemList> GraphicsLayer::PaintContentsToDisplayList(
   if (painting_control != PAINTING_BEHAVIOR_NORMAL)
     Paint();
 
-  auto display_list = base::MakeRefCounted<cc::DisplayItemList>();
-
-  DCHECK(layer_state_) << "No layer state for GraphicsLayer: " << DebugName();
-  PaintChunksToCcLayer::ConvertInto(
-      GetPaintController().PaintChunks(), layer_state_->state.Unalias(),
-      gfx::Vector2dF(layer_state_->offset.X(), layer_state_->offset.Y()),
-      paint_controller.GetPaintArtifact().GetDisplayItemList(), *display_list);
+  base::Optional<RasterUnderInvalidationCheckingParams>
+      raster_under_invalidation_params;
+  if (RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled() &&
+      PaintsContentOrHitTest()) {
+    raster_under_invalidation_params.emplace(
+        EnsureRasterInvalidator().EnsureTracking(), InterestRect(),
+        DebugName());
+  }
 
   PaintController::ClearFlagsForBenchmark();
 
-  display_list->Finalize();
-  return display_list;
+  DCHECK(layer_state_) << "No layer state for GraphicsLayer: " << DebugName();
+  return PaintChunksToCcLayer::Convert(
+      GetPaintController().PaintChunks(), layer_state_->state.Unalias(),
+      gfx::Vector2dF(layer_state_->offset.X(), layer_state_->offset.Y()),
+      paint_controller.GetPaintArtifact().GetDisplayItemList(),
+      cc::DisplayItemList::kTopLevelDisplayItemList,
+      base::OptionalOrNullptr(raster_under_invalidation_params));
 }
 
 size_t GraphicsLayer::GetApproximateUnsharedMemoryUsage() const {
@@ -729,3 +736,15 @@ size_t GraphicsLayer::GetApproximateUnsharedMemoryUsage() const {
 }
 
 }  // namespace blink
+
+#if DCHECK_IS_ON()
+void showGraphicsLayerTree(const blink::GraphicsLayer* layer) {
+  if (!layer) {
+    LOG(ERROR) << "Cannot showGraphicsLayerTree for (nil).";
+    return;
+  }
+
+  String output = blink::GraphicsLayerTreeAsTextForTesting(layer, 0xffffffff);
+  LOG(INFO) << output.Utf8();
+}
+#endif

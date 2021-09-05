@@ -12,6 +12,8 @@
 #include "chrome/browser/chromeos/file_manager/file_manager_browsertest_base.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/web_applications/system_web_app_manager.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/prefs/pref_service.h"
@@ -202,6 +204,26 @@ IN_PROC_BROWSER_TEST_P(FilesAppBrowserTest, Test) {
   StartTest();
 }
 
+// Files app tests that require SWA (System Web Apps).
+class SWAsFilesAppBrowserTest : public FilesAppBrowserTest {
+ public:
+  SWAsFilesAppBrowserTest() = default;
+  SWAsFilesAppBrowserTest(const SWAsFilesAppBrowserTest&) = delete;
+  SWAsFilesAppBrowserTest& operator=(const SWAsFilesAppBrowserTest&) = delete;
+
+  void SetUpOnMainThread() override {
+    web_app::WebAppProvider::Get(profile())
+        ->system_web_app_manager()
+        .InstallSystemAppsForTesting();
+
+    FilesAppBrowserTest::SetUpOnMainThread();
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(SWAsFilesAppBrowserTest, Test) {
+  StartTest();
+}
+
 // A version of the FilesAppBrowserTest that supports spanning browser restart
 // to allow testing prefs and other things.
 class ExtendedFilesAppBrowserTest : public FilesAppBrowserTest {
@@ -298,6 +320,12 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
                       TestCase("audioRepeatAllModeMultipleFileDrive"),
                       TestCase("audioNoRepeatModeMultipleFileDrive"),
                       TestCase("audioRepeatOneModeMultipleFileDrive")));
+
+WRAPPED_INSTANTIATE_TEST_SUITE_P(
+    OpenImageBacklight, /* open_image_backlight.js */
+    SWAsFilesAppBrowserTest,
+    ::testing::Values(TestCase("imageOpenBacklight").InGuestMode(),
+                      TestCase("imageOpenBacklight")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     OpenImageFiles, /* open_image_files.js */
@@ -466,6 +494,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("openQuickViewAudioWithImageMetadata"),
         TestCase("openQuickViewImageJpg"),
         TestCase("openQuickViewImageJpeg"),
+        TestCase("openQuickViewImageJpeg").InGuestMode(),
         TestCase("openQuickViewImageExif"),
         TestCase("openQuickViewImageRaw"),
         TestCase("openQuickViewImageRawWithOrientation"),
@@ -479,6 +508,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("openQuickViewKeyboardLeftRightChangesView"),
         TestCase("openQuickViewSniffedText"),
         TestCase("openQuickViewTextFileWithUnknownMimeType"),
+        TestCase("openQuickViewUtf8Text"),
         TestCase("openQuickViewScrollText"),
         TestCase("openQuickViewScrollHtml"),
         TestCase("openQuickViewMhtml"),
@@ -493,6 +523,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("openQuickViewMtp"),
         TestCase("openQuickViewTabIndexImage"),
         TestCase("openQuickViewTabIndexText"),
+        TestCase("openQuickViewTabIndexHtml"),
         TestCase("openQuickViewTabIndexAudio"),
         TestCase("openQuickViewTabIndexVideo"),
         TestCase("openQuickViewTabIndexDeleteDialog"),
@@ -526,10 +557,13 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("directoryTreeRecentsSubtypeScroll").EnableUnifiedMediaView(),
         TestCase("directoryTreeHorizontalScroll"),
         TestCase("directoryTreeExpandHorizontalScroll"),
-        // Disabled. Fails on internal ChromeOS bot. https://crbug.com/1061821.
-        // TestCase("directoryTreeExpandHorizontalScrollRTL"),
+        TestCase("directoryTreeExpandHorizontalScrollRTL"),
         TestCase("directoryTreeVerticalScroll"),
-        TestCase("directoryTreeExpandFolder")));
+        TestCase("directoryTreeExpandFolder"),
+        TestCase(
+            "directoryTreeExpandFolderWithHiddenFileAndShowHiddenFilesOff"),
+        TestCase(
+            "directoryTreeExpandFolderWithHiddenFileAndShowHiddenFilesOn")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     DirectoryTreeContextMenu, /* directory_tree_context_menu.js */
@@ -599,6 +633,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
                       TestCase("driveOpenSidebarSharedWithMe"),
                       TestCase("driveAutoCompleteQuery"),
                       TestCase("drivePinMultiple"),
+                      TestCase("drivePinHosted"),
                       TestCase("drivePinFileMobileNetwork"),
                       TestCase("driveClickFirstSearchResult"),
                       TestCase("drivePressEnterToSearch"),
@@ -607,6 +642,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
                       TestCase("driveBackupPhotos"),
                       TestCase("driveAvailableOfflineGearMenu"),
                       TestCase("driveAvailableOfflineDirectoryGearMenu"),
+                      TestCase("driveAvailableOfflineActionBar"),
                       TestCase("driveLinkToDirectory"),
                       TestCase("driveLinkOpenFileThroughLinkedDirectory"),
                       TestCase("driveLinkOpenFileThroughTransitiveLink"),
@@ -858,7 +894,10 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("hideCurrentDirectoryByTogglingHiddenAndroidFolders"),
         TestCase("newFolderInDownloads"),
         TestCase("showSendFeedbackAction"),
-        TestCase("enableDisableStorageSettingsLink")));
+        TestCase("enableDisableStorageSettingsLink"),
+        TestCase("showAvailableStorageMyFiles"),
+        TestCase("showAvailableStorageDrive"),
+        TestCase("showAvailableStorageSmbfs").EnableSmbfs()));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FilesTooltip, /* files_tooltip.js */
@@ -961,7 +1000,8 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
                       TestCase("searchDownloadsClearSearch"),
                       TestCase("searchHidingViaTab"),
                       TestCase("searchHidingTextEntryField"),
-                      TestCase("searchButtonToggles")));
+                      TestCase("searchButtonToggles"),
+                      TestCase("searchQueryLaunchParam")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     Metrics, /* metrics.js */

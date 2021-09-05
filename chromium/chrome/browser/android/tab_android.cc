@@ -26,6 +26,7 @@
 #include "chrome/browser/android/tab_web_contents_delegate_android.h"
 #include "chrome/browser/browser_about_handler.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/history/history_tab_helper.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
@@ -243,7 +244,7 @@ void TabAndroid::InitWebContents(
     const JavaParamRef<jobject>& jweb_contents,
     jint jparent_tab_id,
     const JavaParamRef<jobject>& jweb_contents_delegate,
-    const JavaParamRef<jobject>& jcontext_menu_populator) {
+    const JavaParamRef<jobject>& jcontext_menu_populator_factory) {
   web_contents_.reset(content::WebContents::FromJavaWebContents(jweb_contents));
   DCHECK(web_contents_.get());
 
@@ -255,10 +256,12 @@ void TabAndroid::InitWebContents(
 
   AttachTabHelpers(web_contents_.get());
 
+  PropagateHideFutureNavigationsToHistoryTabHelper();
+
   SetWindowSessionID(session_window_id_);
 
-  ContextMenuHelper::FromWebContents(web_contents())->SetPopulator(
-      jcontext_menu_populator);
+  ContextMenuHelper::FromWebContents(web_contents())
+      ->SetPopulatorFactory(jcontext_menu_populator_factory);
 
   synced_tab_delegate_->SetWebContents(web_contents(), jparent_tab_id);
 
@@ -280,9 +283,9 @@ void TabAndroid::UpdateDelegates(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& jweb_contents_delegate,
-    const JavaParamRef<jobject>& jcontext_menu_populator) {
-  ContextMenuHelper::FromWebContents(web_contents())->SetPopulator(
-      jcontext_menu_populator);
+    const JavaParamRef<jobject>& jcontext_menu_populator_factory) {
+  ContextMenuHelper::FromWebContents(web_contents())
+      ->SetPopulatorFactory(jcontext_menu_populator_factory);
   web_contents_delegate_ =
       std::make_unique<android::TabWebContentsDelegateAndroid>(
           env, jweb_contents_delegate);
@@ -455,8 +458,20 @@ void TabAndroid::LoadOriginalImage(JNIEnv* env,
   renderer->RequestReloadImageForContextNode();
 }
 
+void TabAndroid::SetAddApi2TransitionToFutureNavigations(JNIEnv* env,
+                                                         jboolean should_add) {
+  should_add_api2_transition_to_future_navigations_ = should_add;
+}
+
 scoped_refptr<content::DevToolsAgentHost> TabAndroid::GetDevToolsAgentHost() {
   return devtools_host_;
+}
+
+void TabAndroid::SetHideFutureNavigations(JNIEnv* env, jboolean hide) {
+  if (hide_future_navigations_ == hide)
+    return;
+  hide_future_navigations_ = hide;
+  PropagateHideFutureNavigationsToHistoryTabHelper();
 }
 
 void TabAndroid::SetDevToolsAgentHost(
@@ -464,8 +479,42 @@ void TabAndroid::SetDevToolsAgentHost(
   devtools_host_ = std::move(host);
 }
 
+void TabAndroid::PropagateHideFutureNavigationsToHistoryTabHelper() {
+  if (!web_contents())
+    return;
+  auto* history_tab_helper = HistoryTabHelper::FromWebContents(web_contents());
+  if (history_tab_helper)
+    history_tab_helper->set_hide_all_navigations(hide_future_navigations_);
+}
+
+base::android::ScopedJavaLocalRef<jobject> JNI_TabImpl_FromWebContents(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jweb_contents) {
+  base::android::ScopedJavaLocalRef<jobject> jtab;
+
+  content::WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(jweb_contents);
+  TabAndroid* tab =
+      web_contents ? TabAndroid::FromWebContents(web_contents) : nullptr;
+  if (tab)
+    jtab = tab->GetJavaObject();
+  return jtab;
+}
+
 static void JNI_TabImpl_Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   TRACE_EVENT0("native", "TabAndroid::Init");
   // This will automatically bind to the Java object and pass ownership there.
   new TabAndroid(env, obj);
+}
+
+// Vivaldi: This will exchange the webcontents.
+void TabAndroid::ChangeWebContents(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& j_new_web_contents,
+    jboolean did_start_load,
+    jboolean did_finish_load) {
+  content::WebContents* new_web_contents =
+      content::WebContents::FromJavaWebContents(j_new_web_contents);
+  // Clone web contentes and exchange it with the old one.
+  SwapWebContents(new_web_contents->Clone(), did_start_load, did_finish_load);
 }

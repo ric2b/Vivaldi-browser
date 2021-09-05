@@ -26,10 +26,10 @@ using ::testing::Return;
 namespace password_manager {
 namespace {
 
-autofill::PasswordForm CreateForm(const std::string& signon_realm,
-                                  const std::string& username,
-                                  const std::string& password) {
-  autofill::PasswordForm form;
+PasswordForm CreateForm(const std::string& signon_realm,
+                        const std::string& username,
+                        const std::string& password) {
+  PasswordForm form;
   form.signon_realm = signon_realm;
   form.username_value = base::ASCIIToUTF16(username);
   form.password_value = base::ASCIIToUTF16(password);
@@ -122,9 +122,9 @@ TEST_P(StoreMetricsReporterTestWithParams, StoreDependentMetrics) {
 // StoreMetricsReporter directly.
 TEST_F(StoreMetricsReporterTest, MultiStoreMetrics) {
   auto profile_store =
-      base::MakeRefCounted<TestPasswordStore>(/*is_account_store=*/false);
+      base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
   auto account_store =
-      base::MakeRefCounted<TestPasswordStore>(/*is_account_store=*/true);
+      base::MakeRefCounted<TestPasswordStore>(IsAccountStore(true));
   profile_store->Init(&prefs_);
   account_store->Init(&prefs_);
 

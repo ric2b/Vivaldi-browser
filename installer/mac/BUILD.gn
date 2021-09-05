@@ -1,6 +1,8 @@
 import("//vivaldi/gn/config/version.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/command_action.gni")
+import("//build/config/compiler/pgo/pgo.gni")
+import("//vivaldi/installer/widevine.gni")
 
 assert(is_mac)
 
@@ -13,8 +15,13 @@ mac_product_filename = vivaldi_name
 vivaldi_app_name = vivaldi_name
 input_app_folder_for_dmg = "$root_build_dir/$mac_product_filename.app"
 
+pgo_suffix = ""
+if (chrome_pgo_phase > 0) {
+  pgo_suffix = ".pgo"
+}
+
 # NOTE(tomas@vivaldi.com): Don't change the names of these files based on channel
-dmg_name = "$vivaldi_name.$vivaldi_version_full.dmg"
+dmg_name = "$vivaldi_name.${vivaldi_version_full}${pgo_suffix}.dmg"
 
 perform_signing = vivaldi_signing_key != "" && vivaldi_signing_id != ""
 
@@ -45,7 +52,7 @@ group("mac") {
 command_bash("build_dmg") {
   command = build_app_dmg_script_path
   deps = []
-  if (!perform_signing || !is_full_mac_signer) {
+  if (!perform_signing || !is_full_signer) {
     deps += [
               "//chrome/installer/mac",
               "//vivaldi:vivaldi",
@@ -92,7 +99,7 @@ command_bash("build_dmg") {
 }
 
 if (perform_signing) {
-  tar_name = "$vivaldi_name.$vivaldi_version_full.tar.xz"
+  tar_name = "$vivaldi_name.$vivaldi_version_full${pgo_suffix}.tar.xz"
   group("sign_mac") {
     deps = [
       ":sign_package",
@@ -101,12 +108,16 @@ if (perform_signing) {
   }
 
   action("sign_package") {
-    if (!perform_signing || !is_full_mac_signer) {
-      deps = [
+    deps = []
+    if (!perform_signing || !is_full_signer) {
+      deps += [
         "//chrome:chrome_app",
         "//chrome/installer/mac",
         "//vivaldi:vivaldi",
       ]
+    }
+    if (is_full_signer && enable_widevine_signing) {
+      deps += [":vivaldi_framework_widevine_signature"]
     }
     script = "$mac_packaging_dir/sign_chrome.py"
     inputs = []
@@ -120,7 +131,7 @@ if (perform_signing) {
     ]
 
     # hardening and notarization and disabled due to VB-58183
-    if (is_full_mac_signer) {
+    if (is_full_signer) {
       assert(vivaldi_notarize_account != "")
       assert(vivaldi_notarize_password != "")
       args += [
@@ -148,7 +159,7 @@ if (perform_signing) {
       "--identity", vivaldi_signing_id,
     ]
 
-    if (is_full_mac_signer) {
+    if (is_full_signer) {
       assert(vivaldi_notarize_account != "")
       assert(vivaldi_notarize_password != "")
       args += [
@@ -165,7 +176,7 @@ if (perform_signing) {
     deps = [
       ":sign_package",
     ]
-    if (!perform_signing || !is_full_mac_signer) {
+    if (!perform_signing || !is_full_signer) {
       deps += [
         "//chrome:chrome_app",
         "//chrome/installer/mac",
@@ -203,5 +214,21 @@ if (perform_signing) {
       rebase_path(tar_path, root_build_dir),
       "$vivaldi_app_name.app",
     ]
+  }
+}
+
+if (is_full_signer && enable_widevine_signing) {
+  widevine_sign("sign_vivaldi_framework_for_widevine") {
+    file = "${root_out_dir}/${vivaldi_name}.app/Contents/Frameworks/${vivaldi_name} Framework.framework/Versions/$vivaldi_version_full/${vivaldi_name} Framework"
+    flags = 1
+    signature_file = "$root_out_dir/${vivaldi_name} Framework.sig"
+  }
+
+  copy("vivaldi_framework_widevine_signature") {
+    deps = [ ":sign_vivaldi_framework_for_widevine" ]
+
+    sources = [ "$root_out_dir/${vivaldi_name} Framework.sig" ]
+
+    outputs = [ "${root_out_dir}/${vivaldi_name}.app/Contents/Frameworks/${vivaldi_name} Framework.framework/Versions/$vivaldi_version_full/Resources/{{source_file_part}}" ]
   }
 }

@@ -52,7 +52,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
     Config& operator=(const Config&);
     ~Config();
 
-    base::flat_set<Ctap2Version> ctap2_versions = {Ctap2Version::kCtap2_0};
+    base::flat_set<Ctap2Version> ctap2_versions = {
+        std::begin(kCtap2Versions2_0), std::end(kCtap2Versions2_0)};
     // u2f_support, if true, makes this device a dual-protocol (i.e. CTAP2 and
     // U2F) device.
     bool u2f_support = false;
@@ -68,6 +69,12 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
     uint8_t bio_enrollment_samples_required = 4;
     bool cred_protect_support = false;
     bool hmac_secret_support = false;
+    bool large_blob_support = false;
+    // The space available to store a large blob. In real authenticators this
+    // may change depending on the number of resident credentials. We treat this
+    // as a fixed size area for the large blob.
+    size_t available_large_blob_storage = 1024;
+
     IncludeCredential include_credential_in_assertion_response =
         IncludeCredential::ONLY_IF_NEEDED;
 
@@ -179,6 +186,9 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
   VirtualCtap2Device(scoped_refptr<State> state, const Config& config);
   ~VirtualCtap2Device() override;
 
+  // Configures and sets a PIN on the authenticator.
+  void SetPin(std::string pin);
+
   // FidoDevice:
   void Cancel(CancelToken) override;
   CancelToken DeviceTransact(std::vector<uint8_t> command,
@@ -217,12 +227,15 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
       std::vector<uint8_t>* response);
   CtapDeviceResponseCode OnBioEnrollment(base::span<const uint8_t> request,
                                          std::vector<uint8_t>* response);
+  CtapDeviceResponseCode OnLargeBlobs(base::span<const uint8_t> request,
+                                      std::vector<uint8_t>* response);
   CtapDeviceResponseCode OnAuthenticatorGetInfo(
       std::vector<uint8_t>* response) const;
 
   void InitPendingRPs();
   void GetNextRP(cbor::Value::MapValue* response_map);
   void InitPendingRegistrations(base::span<const uint8_t> rp_id_hash);
+  void RegenerateKeyAgreementKey();
 
   AttestedCredentialData ConstructAttestedCredentialData(
       base::span<const uint8_t> key_handle,

@@ -33,6 +33,7 @@
 
 #include <memory>
 
+#include "base/containers/span.h"
 #include "base/macros.h"
 #include "cc/layers/texture_layer_client.h"
 #include "cc/resources/cross_thread_shared_bitmap.h"
@@ -361,6 +362,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
   struct ColorBuffer : public base::RefCountedThreadSafe<ColorBuffer> {
     ColorBuffer(base::WeakPtr<DrawingBuffer> drawing_buffer,
                 const IntSize&,
+                viz::ResourceFormat,
                 GLuint texture_id,
                 std::unique_ptr<gfx::GpuMemoryBuffer>,
                 gpu::Mailbox mailbox);
@@ -375,6 +377,7 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
     // ColorBuffers.
     base::WeakPtr<DrawingBuffer> drawing_buffer;
     const IntSize size;
+    const viz::ResourceFormat format;
     const GLuint texture_id = 0;
     std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer;
 
@@ -464,19 +467,11 @@ class PLATFORM_EXPORT DrawingBuffer : public cc::TextureLayerClient,
   // s_currentResourceUsePixels is updated.
   void SetSize(const IntSize&);
 
-  // This is the order of bytes to use when doing a readback.
-  enum ReadbackOrder { kReadbackRGBA, kReadbackSkia };
-
   // Helper function which does a readback from the currently-bound
   // framebuffer into a buffer of a certain size with 4-byte pixels.
-  void ReadBackFramebuffer(unsigned char* pixels,
-                           int width,
-                           int height,
-                           ReadbackOrder,
+  void ReadBackFramebuffer(base::span<uint8_t> pixels,
+                           SkColorType,
                            WebGLImageConversion::AlphaOp);
-
-  // Helper function to flip a bitmap vertically.
-  void FlipVertically(uint8_t* data, int width, int height);
 
   // If RGB emulation is required, then the CHROMIUM image's alpha channel
   // must be immediately cleared after it is bound to a texture. Nothing

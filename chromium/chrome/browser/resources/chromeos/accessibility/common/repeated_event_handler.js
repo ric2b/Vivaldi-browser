@@ -58,11 +58,14 @@ class RepeatedEventHandler {
     /** @private {!function(!chrome.automation.AutomationEvent)} */
     this.handler_ = this.onEvent_.bind(this);
 
-    this.startListening();
+    this.start();
   }
 
   /** Starts listening or handling events. */
-  startListening() {
+  start() {
+    if (this.listening_) {
+      return;
+    }
     this.listening_ = true;
     for (const node of this.nodes_) {
       node.addEventListener(this.type_, this.handler_, this.capture_);
@@ -70,7 +73,10 @@ class RepeatedEventHandler {
   }
 
   /** Stops listening or handling future events. */
-  stopListening() {
+  stop() {
+    if (!this.listening_) {
+      return;
+    }
     this.listening_ = false;
     for (const node of this.nodes_) {
       node.removeEventListener(this.type_, this.handler_, this.capture_);

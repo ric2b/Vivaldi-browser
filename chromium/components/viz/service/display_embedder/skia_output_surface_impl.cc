@@ -77,8 +77,12 @@ SkiaOutputSurfaceImpl::ScopedPaint::ScopedPaint(
     : recorder_(root_recorder), render_pass_id_(0) {}
 
 SkiaOutputSurfaceImpl::ScopedPaint::ScopedPaint(
+    SkSurfaceCharacterization characterization)
+    : ScopedPaint(characterization, AggregatedRenderPassId(0)) {}
+
+SkiaOutputSurfaceImpl::ScopedPaint::ScopedPaint(
     SkSurfaceCharacterization characterization,
-    RenderPassId render_pass_id)
+    AggregatedRenderPassId render_pass_id)
     : render_pass_id_(render_pass_id) {
   recorder_storage_.emplace(characterization);
   recorder_ = &recorder_storage_.value();
@@ -117,7 +121,7 @@ SkiaOutputSurfaceImpl::~SkiaOutputSurfaceImpl() {
   root_recorder_.reset();
 
   if (!render_pass_image_cache_.empty()) {
-    std::vector<RenderPassId> render_pass_ids;
+    std::vector<AggregatedRenderPassId> render_pass_ids;
     render_pass_ids.reserve(render_pass_ids.size());
     for (auto& entry : render_pass_image_cache_)
       render_pass_ids.push_back(entry.first);
@@ -236,9 +240,10 @@ void SkiaOutputSurfaceImpl::Reshape(const gfx::Size& size,
   color_space_ = color_space;
   is_hdr_ = color_space_.IsHDR();
   size_ = size;
+  format_ = format;
   characterization_ = CreateSkSurfaceCharacterization(
-      size, GetResourceFormat(format), false /* mipmap */,
-      color_space_.ToSkColorSpace(), true /* is_root_render_pass */);
+      size, format, false /* mipmap */, color_space_.ToSkColorSpace(),
+      true /* is_root_render_pass */);
   RecreateRootRecorder();
 }
 
@@ -289,8 +294,8 @@ SkCanvas* SkiaOutputSurfaceImpl::BeginPaintCurrentFrame() {
   nway_canvas_->addCanvas(current_paint_->recorder()->getCanvas());
 
   SkSurfaceCharacterization characterization = CreateSkSurfaceCharacterization(
-      gfx::Size(characterization_.width(), characterization_.height()),
-      BGRA_8888, false /* mipmap */, characterization_.refColorSpace(),
+      gfx::Size(characterization_.width(), characterization_.height()), format_,
+      false /* mipmap */, characterization_.refColorSpace(),
       false /* is_root_render_pass */);
   if (characterization.isValid()) {
     overdraw_surface_recorder_.emplace(characterization);
@@ -482,7 +487,7 @@ void SkiaOutputSurfaceImpl::ScheduleOutputSurfaceAsOverlay(
 }
 
 SkCanvas* SkiaOutputSurfaceImpl::BeginPaintRenderPass(
-    const RenderPassId& id,
+    const AggregatedRenderPassId& id,
     const gfx::Size& surface_size,
     ResourceFormat format,
     bool mipmap,
@@ -493,7 +498,7 @@ SkCanvas* SkiaOutputSurfaceImpl::BeginPaintRenderPass(
   DCHECK(resource_sync_tokens_.empty());
 
   SkSurfaceCharacterization characterization = CreateSkSurfaceCharacterization(
-      surface_size, format, mipmap, std::move(color_space),
+      surface_size, BufferFormat(format), mipmap, std::move(color_space),
       false /* is_root_render_pass */);
   if (!characterization.isValid())
     return nullptr;
@@ -501,6 +506,38 @@ SkCanvas* SkiaOutputSurfaceImpl::BeginPaintRenderPass(
   current_paint_.emplace(characterization, id);
   return current_paint_->recorder()->getCanvas();
 }
+
+#if defined(OS_APPLE)
+SkCanvas* SkiaOutputSurfaceImpl::BeginPaintRenderPassOverlay(
+    const gfx::Size& size,
+    ResourceFormat format,
+    bool mipmap,
+    sk_sp<SkColorSpace> color_space) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // Make sure there is no unsubmitted PaintFrame or PaintRenderPass.
+  DCHECK(!current_paint_);
+  DCHECK(resource_sync_tokens_.empty());
+
+  SkSurfaceCharacterization characterization = CreateSkSurfaceCharacterization(
+      size, BufferFormat(format), mipmap, std::move(color_space),
+      true /* is_root_render_pass */);
+  if (!characterization.isValid())
+    return nullptr;
+
+  current_paint_.emplace(characterization);
+  return current_paint_->recorder()->getCanvas();
+}
+
+sk_sp<SkDeferredDisplayList>
+SkiaOutputSurfaceImpl::EndPaintRenderPassOverlay() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(current_paint_);
+
+  auto ddl = current_paint_->recorder()->detach();
+  current_paint_.reset();
+  return ddl;
+}
+#endif  // defined(OS_APPLE)
 
 gpu::SyncToken SkiaOutputSurfaceImpl::SubmitPaint(
     base::OnceClosure on_finished) {
@@ -570,7 +607,7 @@ gpu::SyncToken SkiaOutputSurfaceImpl::SubmitPaint(
 }
 
 sk_sp<SkImage> SkiaOutputSurfaceImpl::MakePromiseSkImageFromRenderPass(
-    const RenderPassId& id,
+    const AggregatedRenderPassId& id,
     const gfx::Size& size,
     ResourceFormat format,
     bool mipmap,
@@ -605,7 +642,7 @@ sk_sp<SkImage> SkiaOutputSurfaceImpl::MakePromiseSkImageFromRenderPass(
 }
 
 void SkiaOutputSurfaceImpl::RemoveRenderPassResource(
-    std::vector<RenderPassId> ids) {
+    std::vector<AggregatedRenderPassId> ids) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!ids.empty());
 
@@ -632,7 +669,7 @@ void SkiaOutputSurfaceImpl::RemoveRenderPassResource(
 }
 
 void SkiaOutputSurfaceImpl::CopyOutput(
-    RenderPassId id,
+    AggregatedRenderPassId id,
     const copy_output::RenderPassGeometry& geometry,
     const gfx::ColorSpace& color_space,
     std::unique_ptr<CopyOutputRequest> request) {
@@ -660,8 +697,10 @@ void SkiaOutputSurfaceImpl::ScheduleOverlays(
     std::vector<gpu::SyncToken> sync_tokens) {
   auto task =
       base::BindOnce(&SkiaOutputSurfaceImplOnGpu::ScheduleOverlays,
-                     base::Unretained(impl_on_gpu_.get()), std::move(overlays));
+                     base::Unretained(impl_on_gpu_.get()), std::move(overlays),
+                     std::move(images_in_current_paint_));
   ScheduleGpuTask(std::move(task), std::move(sync_tokens));
+  images_in_current_paint_.clear();
 }
 
 gpu::MemoryTracker* SkiaOutputSurfaceImpl::GetMemoryTracker() {
@@ -728,7 +767,6 @@ bool SkiaOutputSurfaceImpl::Initialize() {
   if (capabilities_.preserve_buffer_content &&
       capabilities_.supports_post_sub_buffer) {
     capabilities_.only_invalidates_damage_rect = false;
-    capabilities_.supports_target_damage = true;
     // If there is only one pending frame, then we can use damage area hint from
     // SkiaOutputDevice, otherwise we have to track damage area in
     // SkiaOutputSurfaceImpl.
@@ -779,7 +817,7 @@ void SkiaOutputSurfaceImpl::InitializeOnGpuThread(
 SkSurfaceCharacterization
 SkiaOutputSurfaceImpl::CreateSkSurfaceCharacterization(
     const gfx::Size& surface_size,
-    ResourceFormat format,
+    gfx::BufferFormat format,
     bool mipmap,
     sk_sp<SkColorSpace> color_space,
     bool is_root_render_pass) {
@@ -791,15 +829,15 @@ SkiaOutputSurfaceImpl::CreateSkSurfaceCharacterization(
   SkSurfaceProps surface_props(0 /*flags */,
                                SkSurfaceProps::kLegacyFontHost_InitType);
   if (is_root_render_pass) {
-    auto color_type =
-        is_hdr_ && capabilities_.sk_color_type_for_hdr != kUnknown_SkColorType
-            ? capabilities_.sk_color_type_for_hdr
-            : capabilities_.sk_color_type;
-
-    const auto& backend_format =
-        is_hdr_ && capabilities_.gr_backend_format_for_hdr.isValid()
-            ? capabilities_.gr_backend_format_for_hdr
-            : capabilities_.gr_backend_format;
+    const auto format_index = static_cast<int>(format);
+    const auto& color_type = capabilities_.sk_color_types[format_index];
+    const auto backend_format = gr_context_thread_safe_->defaultBackendFormat(
+        color_type, GrRenderable::kYes);
+    DCHECK(color_type != kUnknown_SkColorType)
+        << "SkColorType is invalid for buffer format_index: " << format_index;
+    DCHECK(backend_format.isValid())
+        << "GrBackendFormat is invalid for buffer format_index: "
+        << format_index;
     auto surface_origin =
         capabilities_.output_surface_origin == gfx::SurfaceOrigin::kBottomLeft
             ? kBottomLeft_GrSurfaceOrigin
@@ -838,8 +876,9 @@ SkiaOutputSurfaceImpl::CreateSkSurfaceCharacterization(
     return characterization;
   }
 
-  auto color_type =
-      ResourceFormatToClosestSkColorType(true /* gpu_compositing */, format);
+  auto resource_format = GetResourceFormat(format);
+  auto color_type = ResourceFormatToClosestSkColorType(
+      true /* gpu_compositing */, resource_format);
   auto backend_format = gr_context_thread_safe_->defaultBackendFormat(
       color_type, GrRenderable::kYes);
   DCHECK(backend_format.isValid());
@@ -876,11 +915,14 @@ void SkiaOutputSurfaceImpl::DidSwapBuffersComplete(
     DCHECK(damage_of_current_buffer_);
   }
 
-  if (!params.texture_in_use_responses.empty())
-    client_->DidReceiveTextureInUseResponses(params.texture_in_use_responses);
+  // texture_in_use_responses is used for GLRenderer only.
+  DCHECK(params.texture_in_use_responses.empty());
+
   if (!params.ca_layer_params.is_empty)
     client_->DidReceiveCALayerParams(params.ca_layer_params);
   client_->DidReceiveSwapBuffersAck(params.swap_response.timings);
+  if (!params.released_overlays.empty())
+    client_->DidReceiveReleasedOverlays(params.released_overlays);
   if (needs_swap_size_notifications_)
     client_->DidSwapWithSize(pixel_size);
 }

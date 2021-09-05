@@ -38,6 +38,7 @@
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
+#include "third_party/blink/public/common/frame/transient_allow_fullscreen.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
@@ -45,6 +46,7 @@
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/reporting_observer.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/link_to_text/link_to_text.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/optimization_guide/optimization_guide.mojom-blink.h"
 #include "third_party/blink/public/mojom/reporting/reporting.mojom-blink.h"
@@ -76,6 +78,7 @@
 #if defined(OS_MAC)
 #include "third_party/blink/public/mojom/input/text_input_host.mojom-blink.h"
 #endif
+#include "ui/gfx/range/range.h"
 #include "ui/gfx/transform.h"
 
 namespace base {
@@ -126,9 +129,9 @@ class Node;
 class NodeTraversal;
 class PerformanceMonitor;
 class PluginData;
-class ScriptController;
 class SmoothScrollSequencer;
 class SpellChecker;
+class TextFragmentSelectorGenerator;
 class TextSuggestionController;
 class VirtualKeyboardOverlayChangedObserver;
 class WebContentSettingsClient;
@@ -159,6 +162,9 @@ class CORE_EXPORT LocalFrame final
       LocalFrameClient*,
       Page&,
       FrameOwner*,
+      Frame* parent,
+      Frame* previous_sibling,
+      FrameInsertType insert_type,
       const base::UnguessableToken& frame_token,
       WindowAgentFactory* inheriting_agent_factory,
       InterfaceRegistry*,
@@ -224,7 +230,6 @@ class CORE_EXPORT LocalFrame final
   FrameSelection& Selection() const;
   InputMethodController& GetInputMethodController() const;
   TextSuggestionController& GetTextSuggestionController() const;
-  ScriptController& GetScriptController() const;
   SpellChecker& GetSpellChecker() const;
   FrameConsole& Console() const;
 
@@ -291,6 +296,14 @@ class CORE_EXPORT LocalFrame final
 
   void EndPrinting();
   bool ShouldUsePrintingLayout() const;
+
+  // Save the current scroll offset of the scrollable area associated with the
+  // given node (if not already saved). All saved scroll offsets can be restored
+  // via RestoreScrollOffsets() (this will also clear all entries for saved
+  // scroll offsets).
+  void EnsureSaveScrollOffset(Node&);
+  void RestoreScrollOffsets();
+
   FloatSize ResizePageRectsKeepingRatio(const FloatSize& original_size,
                                         const FloatSize& expected_size) const;
 
@@ -317,6 +330,9 @@ class CORE_EXPORT LocalFrame final
 
   String SelectedText() const;
   String SelectedTextForClipboard() const;
+  void TextSelectionChanged(const WTF::String& selection_text,
+                            uint32_t offset,
+                            const gfx::Range& range) const;
 
   PositionWithAffinityTemplate<EditingAlgorithm<NodeTraversal>>
   PositionForPoint(const PhysicalOffset& frame_point);
@@ -485,7 +501,7 @@ class CORE_EXPORT LocalFrame final
 
   // Returns the frame host ptr. The interface returned is backed by an
   // associated interface with the legacy Chrome IPC channel.
-  mojom::blink::LocalFrameHost& GetLocalFrameHostRemote();
+  mojom::blink::LocalFrameHost& GetLocalFrameHostRemote() const;
 
   // Returns the bfcache controller host ptr. The interface returned is backed
   // by an associated interface with the legacy Chrome IPC channel.
@@ -573,7 +589,8 @@ class CORE_EXPORT LocalFrame final
   void SendInterventionReport(const String& id, const String& message) final;
   void SetFrameOwnerProperties(
       mojom::blink::FrameOwnerPropertiesPtr properties) final;
-  void NotifyUserActivation() final;
+  void NotifyUserActivation(
+      mojom::blink::UserActivationNotificationType notification_type) final;
   void NotifyVirtualKeyboardOverlayRect(const gfx::Rect& keyboard_rect) final;
   void AddMessageToConsole(mojom::blink::ConsoleMessageLevel level,
                            const WTF::String& message,
@@ -644,8 +661,9 @@ class CORE_EXPORT LocalFrame final
       network::mojom::blink::CoopAccessReportType report_type,
       const base::UnguessableToken& accessed_window,
       mojo::PendingRemote<
-          network::mojom::blink::CrossOriginOpenerPolicyReporter> reporter)
-      final;
+          network::mojom::blink::CrossOriginOpenerPolicyReporter> reporter,
+      bool endpoint_defined,
+      const WTF::String& reported_window_url) final;
   void OnPortalActivated(
       const PortalToken& portal_token,
       mojo::PendingAssociatedRemote<mojom::blink::Portal> portal,
@@ -654,8 +672,7 @@ class CORE_EXPORT LocalFrame final
       OnPortalActivatedCallback callback) final;
   void ForwardMessageFromHost(
       BlinkTransferableMessage message,
-      const scoped_refptr<const SecurityOrigin>& source_origin,
-      const scoped_refptr<const SecurityOrigin>& target_origin) final;
+      const scoped_refptr<const SecurityOrigin>& source_origin) final;
 
   SystemClipboard* GetSystemClipboard();
   RawSystemClipboard* GetRawSystemClipboard();
@@ -668,16 +685,21 @@ class CORE_EXPORT LocalFrame final
   // access).
   bool CanAccessEvent(const WebInputEventAttribution&) const;
 
+  // Return true if the frame has a transient affordance to enter fullscreen.
+  bool IsTransientAllowFullscreenActive() const;
+
   void SetOptimizationGuideHints(
-      mojom::blink::BlinkOptimizationGuideHintsPtr hints) {
-    optimization_guide_hints_ = std::move(hints);
-  }
+      mojom::blink::BlinkOptimizationGuideHintsPtr hints);
   mojom::blink::BlinkOptimizationGuideHints* GetOptimizationGuideHints() {
     return optimization_guide_hints_.get();
   }
 
   LocalFrameToken GetLocalFrameToken() const {
     return LocalFrameToken(GetFrameToken());
+  }
+
+  TextFragmentSelectorGenerator* GetTextFragmentSelectorGenerator() const {
+    return text_fragment_selector_generator_;
   }
 
  private:
@@ -752,6 +774,10 @@ class CORE_EXPORT LocalFrame final
   void BindToHighPriorityReceiver(
       mojo::PendingReceiver<mojom::blink::HighPriorityLocalFrame> receiver);
 
+  void BindTextFragmentSelectorProducer(
+      mojo::PendingReceiver<mojom::blink::TextFragmentSelectorProducer>
+          receiver);
+
   std::unique_ptr<FrameScheduler> frame_scheduler_;
 
   // Holds all PauseSubresourceLoadingHandles allowing either |this| to delete
@@ -776,7 +802,6 @@ class CORE_EXPORT LocalFrame final
   // Usually 0. Non-null if this is the top frame of PagePopup.
   Member<Element> page_popup_owner_;
 
-  const Member<ScriptController> script_controller_;
   const Member<Editor> editor_;
   const Member<FrameSelection> selection_;
   const Member<EventHandler> event_handler_;
@@ -892,7 +917,15 @@ class CORE_EXPORT LocalFrame final
   // Access to the global raw/unsanitized system clipboard
   Member<RawSystemClipboard> raw_system_clipboard_;
 
+  using SavedScrollOffsets = HeapHashMap<Member<Node>, ScrollOffset>;
+  Member<SavedScrollOffsets> saved_scroll_offsets_;
+
   mojom::blink::BlinkOptimizationGuideHintsPtr optimization_guide_hints_;
+
+  Member<TextFragmentSelectorGenerator> text_fragment_selector_generator_;
+
+  // Manages a transient affordance for this frame to enter fullscreen.
+  TransientAllowFullscreen transient_allow_fullscreen_;
 };
 
 inline FrameLoader& LocalFrame::Loader() const {
@@ -901,10 +934,6 @@ inline FrameLoader& LocalFrame::Loader() const {
 
 inline LocalFrameView* LocalFrame::View() const {
   return view_.Get();
-}
-
-inline ScriptController& LocalFrame::GetScriptController() const {
-  return *script_controller_;
 }
 
 inline FrameSelection& LocalFrame::Selection() const {

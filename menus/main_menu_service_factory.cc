@@ -59,7 +59,7 @@ KeyedService* MainMenuServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   std::unique_ptr<Menu_Model> service(new Menu_Model(context,
                                                      Menu_Model::kMainMenu));
-  service->Load(Profile::FromBrowserContext(context)->GetIOTaskRunner());
+  service->Load();
   return service.release();
 }
 

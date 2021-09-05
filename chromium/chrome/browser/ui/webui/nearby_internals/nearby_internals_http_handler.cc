@@ -24,15 +24,13 @@ namespace {
 enum class Rpc {
   kCertificate = 0,
   kContact = 1,
-  kDevice = 2
+  kDevice = 2,
+  kDeviceState = 3
 };
 
 // This enum class needs to stay in sync with the Direction definition in
 // chrome/browser/resources/nearby_internals/types.js.
-enum class Direction {
-  kRequest = 0,
-  kResponse = 1
-};
+enum class Direction { kRequest = 0, kResponse = 1 };
 
 std::string FormatAsJSON(const base::Value& value) {
   std::string json;
@@ -139,8 +137,7 @@ void NearbyInternalsHttpHandler::ListContactPeople(
   NearbySharingService* service_ =
       NearbySharingServiceFactory::GetForBrowserContext(context_);
   if (service_) {
-    service_->GetContactManager()->DownloadContacts(
-        /*only_download_if_contacts_changed=*/false);
+    service_->GetContactManager()->DownloadContacts();
   } else {
     NS_LOG(ERROR) << "No NearbyShareService instance to call.";
   }
@@ -194,16 +191,4 @@ void NearbyInternalsHttpHandler::OnListPublicCertificatesResponse(
       HttpMessageToDictionary(
           ListPublicCertificatesResponseToReadableDictionary(response),
           Direction::kResponse, Rpc::kCertificate));
-}
-
-void NearbyInternalsHttpHandler::OnCheckContactsReachabilityRequest(
-    const nearbyshare::proto::CheckContactsReachabilityRequest& request) {
-  // No FireWebUIListener() because internal debug page does not support
-  // CheckContactsReachabilityRequest.
-}
-
-void NearbyInternalsHttpHandler::OnCheckContactsReachabilityResponse(
-    const nearbyshare::proto::CheckContactsReachabilityResponse& response) {
-  // No FireWebUIListener() because internal debug page does not support
-  // CheckContactsReachabilityResponse.
 }

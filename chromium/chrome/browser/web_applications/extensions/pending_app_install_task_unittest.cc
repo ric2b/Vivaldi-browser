@@ -141,7 +141,7 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
                        const FinalizeOptions& options,
                        InstallFinalizedCallback callback) override {
     DCHECK(
-        base::Contains(next_finalize_install_results_, web_app_info.app_url));
+        base::Contains(next_finalize_install_results_, web_app_info.start_url));
 
     web_app_info_list_.push_back(web_app_info);
     finalize_options_list_.push_back(options);
@@ -149,9 +149,9 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
     AppId app_id;
     InstallResultCode code;
     std::tie(app_id, code) =
-        next_finalize_install_results_[web_app_info.app_url];
-    next_finalize_install_results_.erase(web_app_info.app_url);
-    const GURL& url = web_app_info.app_url;
+        next_finalize_install_results_[web_app_info.start_url];
+    next_finalize_install_results_.erase(web_app_info.start_url);
+    const GURL& url = web_app_info.start_url;
 
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
@@ -288,8 +288,9 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
     auto install_manager = std::make_unique<WebAppInstallManager>(profile());
     install_manager_ = install_manager.get();
 
-    auto os_integration_manager =
-        std::make_unique<TestOsIntegrationManager>(profile());
+    auto os_integration_manager = std::make_unique<TestOsIntegrationManager>(
+        profile(), /*app_shortcut_manager=*/nullptr,
+        /*file_handler_manager=*/nullptr);
     os_integration_manager_ = os_integration_manager.get();
 
     auto ui_manager = std::make_unique<TestWebAppUiManager>();
@@ -335,9 +336,8 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
     install_manager_->SetDataRetrieverFactoryForTesting(
         GetFactoryForRetriever(std::move(data_retriever)));
     auto manifest = std::make_unique<blink::Manifest>();
-    manifest->start_url = options.url;
-    manifest->name =
-        base::NullableString16(base::ASCIIToUTF16("Manifest Name"));
+    manifest->start_url = options.install_url;
+    manifest->name = base::ASCIIToUTF16("Manifest Name");
 
     data_retriever_->SetRendererWebApplicationInfo(
         std::make_unique<WebApplicationInfo>());
@@ -347,10 +347,10 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
     data_retriever_->SetIcons(IconsMap{});
 
     install_finalizer_->SetNextFinalizeInstallResult(
-        options.url, InstallResultCode::kSuccessNewInstall);
+        options.install_url, InstallResultCode::kSuccessNewInstall);
 
     os_integration_manager_->SetNextCreateShortcutsResult(
-        install_finalizer_->GetAppIdForUrl(options.url), true);
+        install_finalizer_->GetAppIdForUrl(options.install_url), true);
 
     auto task = std::make_unique<PendingAppInstallTask>(
         profile(), registrar_, os_integration_manager_, ui_manager_,
@@ -646,7 +646,7 @@ TEST_F(PendingAppInstallTaskTest, InstallPlaceholder) {
             finalizer()->web_app_info_list().at(0);
 
         EXPECT_EQ(base::UTF8ToUTF16(WebAppUrl().spec()), web_app_info.title);
-        EXPECT_EQ(WebAppUrl(), web_app_info.app_url);
+        EXPECT_EQ(WebAppUrl(), web_app_info.start_url);
         EXPECT_TRUE(web_app_info.open_as_window);
         EXPECT_TRUE(web_app_info.icon_infos.empty());
         EXPECT_TRUE(web_app_info.icon_bitmaps_any.empty());
@@ -682,7 +682,7 @@ TEST_F(PendingAppInstallTaskTest, InstallPlaceholderNoCreateOsShorcuts) {
             finalizer()->web_app_info_list().at(0);
 
         EXPECT_EQ(base::UTF8ToUTF16(WebAppUrl().spec()), web_app_info.title);
-        EXPECT_EQ(WebAppUrl(), web_app_info.app_url);
+        EXPECT_EQ(WebAppUrl(), web_app_info.start_url);
         EXPECT_TRUE(web_app_info.open_as_window);
         EXPECT_TRUE(web_app_info.icon_infos.empty());
         EXPECT_TRUE(web_app_info.icon_bitmaps_any.empty());
@@ -853,7 +853,7 @@ TEST_F(PendingAppInstallTaskTest, UninstallAndReplace) {
     run_loop.Run();
   }
   {
-    // Migration shouldn't run on subsequent installs of the same app.
+    // Migration should run on every install of the app.
     options.uninstall_and_replace = {"app3"};
 
     base::RunLoop run_loop;
@@ -864,7 +864,7 @@ TEST_F(PendingAppInstallTaskTest, UninstallAndReplace) {
           EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result.code);
           EXPECT_EQ(app_id, *result.app_id);
 
-          EXPECT_FALSE(ui_manager()->DidUninstallAndReplace("app3", app_id));
+          EXPECT_TRUE(ui_manager()->DidUninstallAndReplace("app3", app_id));
 
           run_loop.Quit();
         }));

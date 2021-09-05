@@ -163,6 +163,36 @@ class ServiceConnection {
       mojom::CrosHealthdDiagnosticsService::RunBatteryDischargeRoutineCallback
           callback) = 0;
 
+  // Requests that cros_healthd runs the battery charge routine. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void RunBatteryChargeRoutine(
+      base::TimeDelta exec_duration,
+      uint32_t minimum_charge_percent_required,
+      mojom::CrosHealthdDiagnosticsService::RunBatteryChargeRoutineCallback
+          callback) = 0;
+
+  // Requests that cros_healthd runs the memory routine. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void RunMemoryRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunMemoryRoutineCallback
+          callback) = 0;
+
+  // Requests that cros_healthd runs the lan connectivity routine. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void RunLanConnectivityRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunLanConnectivityRoutineCallback
+          callback) = 0;
+
+  // Requests that cros_healthd runs the lan connectivity routine. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void RunSignalStrengthRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunSignalStrengthRoutineCallback
+          callback) = 0;
+
   // Subscribes to cros_healthd's Bluetooth-related events. See
   // src/chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom for
   // details.
@@ -222,6 +252,11 @@ class ServiceConnection {
   // is set, and anytime the mojo connection to CrosHealthd is disconnected.
   virtual void SetBindNetworkDiagnosticsRoutinesCallback(
       BindNetworkDiagnosticsRoutinesCallback callback) = 0;
+
+  // Calls FlushForTesting method on all mojo::Remote objects owned by
+  // ServiceConnection. This method can be used for example to gracefully
+  // observe destruction of the cros_healthd client.
+  virtual void FlushForTesting() = 0;
 
  protected:
   ServiceConnection() = default;

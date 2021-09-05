@@ -39,10 +39,7 @@ class SESSIONS_EXPORT LiveTabContext {
   virtual int GetTabCount() const = 0;
   virtual int GetSelectedIndex() const = 0;
   virtual std::string GetAppName() const = 0;
-
-   // see Browser::ext_data()
-  virtual std::string GetExtData() const;
-
+  virtual std::string GetUserTitle() const = 0;
   virtual LiveTab* GetLiveTabAt(int index) const = 0;
   virtual LiveTab* GetActiveLiveTab() const = 0;
   virtual bool IsTabPinned(int index) const = 0;
@@ -76,6 +73,24 @@ class SESSIONS_EXPORT LiveTabContext {
       bool from_last_session,
       const PlatformSpecificTabData* tab_platform_data,
       const sessions::SerializedUserAgentOverride& user_agent_override);
+
+  // Note: |tab_platform_data| may be null (e.g., if |from_last_session| is
+  // true, as this data is not persisted, or if the platform does not provide
+  // platform-specific data).
+  virtual LiveTab* ReplaceRestoredTab(
+      const std::vector<SerializedNavigationEntry>& navigations,
+      base::Optional<tab_groups::TabGroupId> group,
+      int selected_navigation,
+      bool from_last_session,
+      const std::string& extension_app_id,
+      const PlatformSpecificTabData* tab_platform_data,
+      const sessions::SerializedUserAgentOverride& user_agent_override);
+
+  virtual void CloseTab() = 0;
+
+   // see Browser::ext_data()
+  virtual std::string GetExtData() const;
+
   virtual LiveTab* AddRestoredTab(
     const std::vector<SerializedNavigationEntry>& navigations,
     int tab_index,
@@ -90,17 +105,6 @@ class SESSIONS_EXPORT LiveTabContext {
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::string& ext_data);
 
-  // Note: |tab_platform_data| may be null (e.g., if |from_last_session| is
-  // true, as this data is not persisted, or if the platform does not provide
-  // platform-specific data).
-  virtual LiveTab* ReplaceRestoredTab(
-      const std::vector<SerializedNavigationEntry>& navigations,
-      base::Optional<tab_groups::TabGroupId> group,
-      int selected_navigation,
-      bool from_last_session,
-      const std::string& extension_app_id,
-      const PlatformSpecificTabData* tab_platform_data,
-      const sessions::SerializedUserAgentOverride& user_agent_override);
   virtual LiveTab* ReplaceRestoredTab(
     const std::vector<SerializedNavigationEntry>& navigations,
     base::Optional<tab_groups::TabGroupId> group,
@@ -110,9 +114,6 @@ class SESSIONS_EXPORT LiveTabContext {
     const PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::string& ext_data);
-
-  virtual void CloseTab() = 0;
-
  protected:
   virtual ~LiveTabContext() {}
 };

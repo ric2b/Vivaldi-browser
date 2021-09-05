@@ -357,14 +357,6 @@ class OptimizationGuideHintsManagerTest
     hint1->set_version("someversion");
     optimization_guide::proto::PageHint* page_hint1 = hint1->add_page_hints();
     page_hint1->set_page_pattern("/news/");
-    optimization_guide::proto::Optimization* experimental_opt =
-        page_hint1->add_whitelisted_optimizations();
-    experimental_opt->set_optimization_type(
-        optimization_guide::proto::NOSCRIPT);
-    experimental_opt->set_experiment_name("experiment");
-    optimization_guide::proto::PreviewsMetadata* experimental_opt_metadata =
-        experimental_opt->mutable_previews_metadata();
-    experimental_opt_metadata->set_inflation_percent(12345);
     optimization_guide::proto::Optimization* default_opt =
         page_hint1->add_whitelisted_optimizations();
     default_opt->set_optimization_type(optimization_guide::proto::NOSCRIPT);
@@ -1977,46 +1969,6 @@ TEST_F(OptimizationGuideHintsManagerTest,
             optimization_type_decision);
 }
 
-class OptimizationGuideHintsManagerExperimentTest
-    : public OptimizationGuideHintsManagerTest {
- public:
-  OptimizationGuideHintsManagerExperimentTest() {
-    scoped_list_.InitAndEnableFeatureWithParameters(
-        optimization_guide::features::kOptimizationHintsExperiments,
-        {{"experiment_name", "experiment"}});
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_list_;
-};
-
-TEST_F(OptimizationGuideHintsManagerExperimentTest,
-       CanApplyOptimizationAndPopulatesMetadataWithFirstOptThatMatchesWithExp) {
-  InitializeWithDefaultConfig("1.0.0.0");
-
-  std::unique_ptr<content::MockNavigationHandle> navigation_handle =
-      CreateMockNavigationHandleWithOptimizationGuideWebContentsObserver(
-          url_with_hints());
-  base::RunLoop run_loop;
-  hints_manager()->OnNavigationStartOrRedirect(navigation_handle.get(),
-                                               run_loop.QuitClosure());
-  run_loop.Run();
-
-  hints_manager()->RegisterOptimizationTypes(
-      {optimization_guide::proto::NOSCRIPT});
-  optimization_guide::OptimizationMetadata optimization_metadata;
-  optimization_guide::OptimizationTypeDecision optimization_type_decision =
-      hints_manager()->CanApplyOptimization(
-          navigation_handle->GetURL(), /*navigation_id=*/base::nullopt,
-          optimization_guide::proto::NOSCRIPT, &optimization_metadata);
-
-  EXPECT_EQ(
-      12345,
-      optimization_metadata.previews_metadata().value().inflation_percent());
-  EXPECT_EQ(optimization_guide::OptimizationTypeDecision::kAllowedByHint,
-            optimization_type_decision);
-}
-
 class OptimizationGuideHintsManagerFetchingDisabledTest
     : public OptimizationGuideHintsManagerTest {
  public:
@@ -2225,8 +2177,8 @@ TEST_F(OptimizationGuideHintsManagerFetchingTest,
   EXPECT_EQ(1, top_host_provider->get_num_top_hosts_called());
   EXPECT_EQ(1, batch_update_hints_fetcher()->num_fetches_requested());
 
-  // Check that hints should not be fetched again after the delay for a failed
-  // hints fetch attempt.
+  // Check that hints should not be fetched again after the delay for a hints
+  // fetch attempt with no hints.
   MoveClockForwardBy(base::TimeDelta::FromSeconds(kTestFetchRetryDelaySecs));
   // This should be called exactly once, confirming that hints are not fetched
   // again after |kTestFetchRetryDelaySecs|.
@@ -2244,9 +2196,7 @@ TEST_F(OptimizationGuideHintsManagerFetchingTest, HintsFetcherTimerRetryDelay) {
   CreateServiceAndHintsManager({optimization_guide::proto::DEFER_ALL_SCRIPT},
                                top_host_provider.get());
   hints_manager()->SetHintsFetcherFactoryForTesting(
-      BuildTestHintsFetcherFactory(
-          {HintsFetcherEndState::kFetchFailed,
-           HintsFetcherEndState::kFetchSuccessWithHostHints}));
+      BuildTestHintsFetcherFactory({HintsFetcherEndState::kFetchFailed}));
   InitializeWithDefaultConfig("1.0.0");
 
   // Force timer to expire and schedule a hints fetch - first time.
@@ -2254,11 +2204,10 @@ TEST_F(OptimizationGuideHintsManagerFetchingTest, HintsFetcherTimerRetryDelay) {
   EXPECT_EQ(1, top_host_provider->get_num_top_hosts_called());
   EXPECT_EQ(1, batch_update_hints_fetcher()->num_fetches_requested());
 
-  // Force speculative timer to expire after fetch fails first time, update
-  // hints fetcher so it succeeds this time.
+  // Force speculative timer to expire after fetch fails.
   MoveClockForwardBy(base::TimeDelta::FromSeconds(kTestFetchRetryDelaySecs));
-  EXPECT_EQ(2, top_host_provider->get_num_top_hosts_called());
-  EXPECT_EQ(2, batch_update_hints_fetcher()->num_fetches_requested());
+  EXPECT_EQ(1, top_host_provider->get_num_top_hosts_called());
+  EXPECT_EQ(1, batch_update_hints_fetcher()->num_fetches_requested());
 }
 
 TEST_F(OptimizationGuideHintsManagerFetchingTest,

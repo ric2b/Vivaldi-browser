@@ -28,18 +28,6 @@ class FakeNearbyShareClient : public NearbyShareClient {
     UpdateDeviceCallback callback;
     ErrorCallback error_callback;
   };
-  struct CheckContactsReachabilityRequest {
-    CheckContactsReachabilityRequest(
-        const nearbyshare::proto::CheckContactsReachabilityRequest& request,
-        CheckContactsReachabilityCallback&& callback,
-        ErrorCallback&& error_callback);
-    CheckContactsReachabilityRequest(
-        CheckContactsReachabilityRequest&& request);
-    ~CheckContactsReachabilityRequest();
-    nearbyshare::proto::CheckContactsReachabilityRequest request;
-    CheckContactsReachabilityCallback callback;
-    ErrorCallback error_callback;
-  };
   struct ListContactPeopleRequest {
     ListContactPeopleRequest(
         const nearbyshare::proto::ListContactPeopleRequest& request,
@@ -69,10 +57,6 @@ class FakeNearbyShareClient : public NearbyShareClient {
   std::vector<UpdateDeviceRequest>& update_device_requests() {
     return update_device_requests_;
   }
-  std::vector<CheckContactsReachabilityRequest>&
-  check_contacts_reachabilty_requests() {
-    return check_contacts_reachabilty_requests_;
-  }
   std::vector<ListContactPeopleRequest>& list_contact_people_requests() {
     return list_contact_people_requests_;
   }
@@ -88,10 +72,6 @@ class FakeNearbyShareClient : public NearbyShareClient {
   void UpdateDevice(const nearbyshare::proto::UpdateDeviceRequest& request,
                     UpdateDeviceCallback&& callback,
                     ErrorCallback&& error_callback) override;
-  void CheckContactsReachability(
-      const nearbyshare::proto::CheckContactsReachabilityRequest& request,
-      CheckContactsReachabilityCallback&& callback,
-      ErrorCallback&& error_callback) override;
   void ListContactPeople(
       const nearbyshare::proto::ListContactPeopleRequest& request,
       ListContactPeopleCallback&& callback,
@@ -103,8 +83,6 @@ class FakeNearbyShareClient : public NearbyShareClient {
   std::string GetAccessTokenUsed() override;
 
   std::vector<UpdateDeviceRequest> update_device_requests_;
-  std::vector<CheckContactsReachabilityRequest>
-      check_contacts_reachabilty_requests_;
   std::vector<ListContactPeopleRequest> list_contact_people_requests_;
   std::vector<ListPublicCertificatesRequest> list_public_certificates_requests_;
   std::string access_token_used_;

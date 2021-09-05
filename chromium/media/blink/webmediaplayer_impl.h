@@ -311,6 +311,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void RequestVideoFrameCallback() override;
   std::unique_ptr<blink::WebMediaPlayer::VideoFramePresentationMetadata>
   GetVideoFramePresentationMetadata() override;
+  void UpdateFrameIfStale() override;
 
   base::WeakPtr<blink::WebMediaPlayer> AsWeakPtr() override;
 
@@ -399,6 +400,9 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Called after asynchronous initialization of a data source completed.
   void DataSourceInitialized(bool success);
+
+  // Called if the |MultiBufferDataSource| is redirected.
+  void OnDataSourceRedirected();
 
   // Called when the data source is downloading or paused.
   void NotifyDownloading(bool is_downloading);
@@ -789,6 +793,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   IPCDemuxer* ipc_demuxer_ = nullptr;
   std::unique_ptr<media::IPCMediaPipelineHost> ipc_media_pipeline_host_;
+  // This is only set for data-urls.
+  std::string mime_type_;
 
 #if defined(OS_MAC)
   CoreAudioDemuxer* audio_demuxer_ = nullptr;

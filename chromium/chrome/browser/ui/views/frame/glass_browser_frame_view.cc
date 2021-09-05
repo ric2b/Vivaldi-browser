@@ -37,6 +37,7 @@
 #include "ui/display/win/screen_win.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/dip_util.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/icon_util.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/scoped_canvas.h"
@@ -95,13 +96,13 @@ GlassBrowserFrameView::GlassBrowserFrameView(BrowserFrame* frame,
   if (browser_view->CanShowWindowIcon()) {
     InitThrobberIcons();
 
-    window_icon_ = new TabIconView(this, nullptr);
+    window_icon_ = new TabIconView(this, views::Button::PressedCallback());
     window_icon_->set_is_light(true);
     window_icon_->SetID(VIEW_ID_WINDOW_ICON);
     // Stop the icon from intercepting clicks intended for the HTSYSMENU region
     // of the window. Even though it does nothing on click, it will still
     // prevent us from giving the event back to Windows to handle properly.
-    window_icon_->set_can_process_events_within_subtree(false);
+    window_icon_->SetCanProcessEventsWithinSubtree(false);
     AddChildView(window_icon_);
   }
 
@@ -310,8 +311,17 @@ int GlassBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
                                         DWMWA_CAPTION_BUTTON_BOUNDS,
                                         &button_bounds,
                                         sizeof(button_bounds)))) {
-      gfx::Rect buttons = GetMirroredRect(gfx::ConvertRectToDIP(
-          display::win::GetDPIScale(), gfx::Rect(button_bounds)));
+      gfx::RectF button_bounds_in_dips = gfx::ConvertRectToDips(
+          gfx::Rect(button_bounds), display::win::GetDPIScale());
+      // TODO(crbug.com/1131681): GetMirroredRect() requires an integer rect,
+      // but the size in DIPs may not be an integer with a fractional device
+      // scale factor. If we want to keep using integers, the choice to use
+      // ToFlooredRectDeprecated() seems to be doing the wrong thing given the
+      // comment below about insetting 1 DIP instead of 1 physical pixel. We
+      // should probably use ToEnclosedRect() and then we could have inset 1
+      // physical pixel here.
+      gfx::Rect buttons =
+          GetMirroredRect(gfx::ToFlooredRectDeprecated(button_bounds_in_dips));
 
       // There is a small one-pixel strip right above the caption buttons in
       // which the resize border "peeks" through.
@@ -356,12 +366,6 @@ void GlassBrowserFrameView::ResetWindowControls() {
   BrowserNonClientFrameView::ResetWindowControls();
   if (caption_button_container_)
     caption_button_container_->ResetWindowControls();
-}
-
-void GlassBrowserFrameView::ButtonPressed(views::Button* sender,
-                                          const ui::Event& event) {
-  if (caption_button_container_)
-    caption_button_container_->ButtonPressed(sender);
 }
 
 bool GlassBrowserFrameView::ShouldTabIconViewAnimate() const {
@@ -648,8 +652,14 @@ void GlassBrowserFrameView::LayoutTitleBar() {
     window_icon_->SetVisible(show_icon);
   if (window_title_)
     window_title_->SetVisible(show_title);
-  if (!show_icon && !show_title && !web_app_frame_toolbar())
+  if (!show_icon && !show_title &&
+      (!web_app_frame_toolbar() || frame()->IsFullscreen())) {
+    // TODO(crbug.com/1132767): The "frame()->IsFullscreen()" term is required
+    // because we cannot currently lay out the toolbar in fullscreen mode
+    // without breaking a bunch of bubble anchoring. Please remove when the
+    // issue is resolved.
     return;
+  }
 
   const int icon_size =
       display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYSMICON);

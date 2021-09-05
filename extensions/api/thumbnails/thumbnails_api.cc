@@ -225,21 +225,15 @@ bool SaveBitmapOnWorkerThread(SkBitmap bitmap,
                               base::FilePath* file_path) {
   DCHECK(image_data->empty());
   DCHECK(file_path->empty());
-  std::vector<unsigned char> data;
-  std::string mime_type;
-  bool encoded = ::vivaldi::skia_utils::EncodeBitmap(
-      bitmap, format.image_format, format.encode_quality, data, mime_type);
-  if (!encoded)
-    return false;
   if (!format.save_to_disk) {
-    // If the base path is not set, we want to encode the image as a data url.
-    base::StringPiece base64_input(reinterpret_cast<const char*>(&data[0]),
-                                   data.size());
-    Base64Encode(base64_input, image_data);
-    image_data->insert(
-        0, base::StringPrintf("data:%s;base64,", mime_type.c_str()));
-    return true;
+    *image_data = ::vivaldi::skia_utils::EncodeBitmapAsDataUrl(
+        std::move(bitmap), format.image_format, format.encode_quality);
+    return !image_data->empty();
   }
+  std::vector<unsigned char> data = ::vivaldi::skia_utils::EncodeBitmap(
+      std::move(bitmap), format.image_format, format.encode_quality);
+  if (data.empty())
+    return false;
   base::FilePath path = base::FilePath::FromUTF8Unsafe(format.save_folder);
   if (!base::PathExists(path)) {
     base::CreateDirectory(path);
@@ -519,7 +513,8 @@ ExtensionFunction::ResponseAction ThumbnailsCaptureTabFunction::Run() {
       screen->GetDisplayNearestWindow(window);
     scale = display.device_scale_factor();
   }
-  capture_params.rect = gfx::ConvertRectToPixel(scale, rect);
+  capture_params.rect =
+      gfx::ToFlooredRectDeprecated(gfx::ConvertRectToPixels(rect, scale));
   capture_params.target_size = out_dimension;
 
   ::vivaldi::CapturePage::Capture(

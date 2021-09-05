@@ -219,9 +219,14 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
                            Thread::IdleTask) override;
   scoped_refptr<base::SingleThreadTaskRunner> V8TaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
-  AgentGroupSchedulerImpl* CreateAgentGroupScheduler();
+  // TODO(crbug/1113102): rename to CreateAgentGroupScheduler when integrate
+  // with AgentSchedulingGroup
+  AgentGroupSchedulerImpl& EnsureAgentGroupScheduler();
   std::unique_ptr<PageScheduler> CreatePageScheduler(
       PageScheduler::Delegate*) override;
+  AgentGroupScheduler* GetCurrentAgentGroupScheduler() override;
+  void SetCurrentAgentGroupScheduler(
+      AgentGroupSchedulerImpl* agent_group_scheduler_impl);
   std::unique_ptr<ThreadScheduler::RendererPauseHandle> PauseScheduler()
       override;
   base::TimeTicks MonotonicallyIncreasingVirtualTime() override;
@@ -273,9 +278,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       MainThreadTaskQueue::QueueType queue_type,
       FrameSchedulerImpl* frame_scheduler);
 
-  // Returns a new timer task queue. This queue is intended for DOM Timers.
-  scoped_refptr<MainThreadTaskQueue> NewTimerTaskQueue(
-      MainThreadTaskQueue::QueueType queue_type,
+  // Returns a new throttleable task queue to be used for tests.
+  scoped_refptr<MainThreadTaskQueue> NewThrottleableTaskQueueForTest(
       FrameSchedulerImpl* frame_scheduler);
 
   using VirtualTimePolicy = PageScheduler::VirtualTimePolicy;
@@ -406,7 +410,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   base::WeakPtr<MainThreadSchedulerImpl> GetWeakPtr();
 
   base::sequence_manager::TaskQueue::QueuePriority compositor_priority() const {
-    return main_thread_only().current_policy.compositor_priority();
+    return main_thread_only().compositor_priority;
   }
 
   bool should_prioritize_loading_with_compositing() const {
@@ -475,80 +479,12 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   bool IsAnyMainFrameWaitingForFirstContentfulPaint() const;
   bool IsAnyMainFrameWaitingForFirstMeaningfulPaint() const;
 
-  struct TaskQueuePolicy {
-    // Default constructor of TaskQueuePolicy should match behaviour of a
-    // newly-created task queue.
-    TaskQueuePolicy()
-        : is_enabled(true),
-          is_paused(false),
-          is_deferred(false),
-          use_virtual_time(false) {}
-
-    bool is_enabled;
-    bool is_paused;
-    bool is_deferred;
-    bool use_virtual_time;
-
-    bool IsQueueEnabled(MainThreadTaskQueue* task_queue) const;
-
-    TimeDomainType GetTimeDomainType(MainThreadTaskQueue* task_queue) const;
-
-    bool operator==(const TaskQueuePolicy& other) const {
-      return is_enabled == other.is_enabled && is_paused == other.is_paused &&
-             is_deferred == other.is_deferred &&
-             use_virtual_time == other.use_virtual_time;
-    }
-
-    void AsValueInto(base::trace_event::TracedValue* state) const;
-  };
-
   class Policy {
     DISALLOW_NEW();
 
    public:
-    Policy();
+    Policy() = default;
     ~Policy() = default;
-
-    TaskQueuePolicy& compositor_queue_policy() {
-      return policies_[static_cast<size_t>(
-          MainThreadTaskQueue::QueueClass::kCompositor)];
-    }
-    const TaskQueuePolicy& compositor_queue_policy() const {
-      return policies_[static_cast<size_t>(
-          MainThreadTaskQueue::QueueClass::kCompositor)];
-    }
-
-    TaskQueuePolicy& loading_queue_policy() {
-      return policies_[static_cast<size_t>(
-          MainThreadTaskQueue::QueueClass::kLoading)];
-    }
-    const TaskQueuePolicy& loading_queue_policy() const {
-      return policies_[static_cast<size_t>(
-          MainThreadTaskQueue::QueueClass::kLoading)];
-    }
-
-    TaskQueuePolicy& timer_queue_policy() {
-      return policies_[static_cast<size_t>(
-          MainThreadTaskQueue::QueueClass::kTimer)];
-    }
-    const TaskQueuePolicy& timer_queue_policy() const {
-      return policies_[static_cast<size_t>(
-          MainThreadTaskQueue::QueueClass::kTimer)];
-    }
-
-    TaskQueuePolicy& default_queue_policy() {
-      return policies_[static_cast<size_t>(
-          MainThreadTaskQueue::QueueClass::kNone)];
-    }
-    const TaskQueuePolicy& default_queue_policy() const {
-      return policies_[static_cast<size_t>(
-          MainThreadTaskQueue::QueueClass::kNone)];
-    }
-
-    const TaskQueuePolicy& GetQueuePolicy(
-        MainThreadTaskQueue::QueueClass queue_class) const {
-      return policies_[static_cast<size_t>(queue_class)];
-    }
 
     RAILMode& rail_mode() { return rail_mode_; }
     RAILMode rail_mode() const { return rail_mode_; }
@@ -575,12 +511,20 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       return should_freeze_compositor_task_queue_;
     }
 
-    base::sequence_manager::TaskQueue::QueuePriority& compositor_priority() {
-      return compositor_priority_;
+    bool& should_defer_task_queues() { return should_defer_task_queues_; }
+    bool should_defer_task_queues() const { return should_defer_task_queues_; }
+
+    bool& should_pause_task_queues() { return should_pause_task_queues_; }
+    bool should_pause_task_queues() const { return should_pause_task_queues_; }
+
+    bool& use_virtual_time() { return use_virtual_time_; }
+    bool use_virtual_time() const { return use_virtual_time_; }
+
+    bool& should_pause_task_queues_for_android_webview() {
+      return should_pause_task_queues_for_android_webview_;
     }
-    base::sequence_manager::TaskQueue::QueuePriority compositor_priority()
-        const {
-      return compositor_priority_;
+    bool should_pause_task_queues_for_android_webview() const {
+      return should_pause_task_queues_for_android_webview_;
     }
 
     base::sequence_manager::TaskQueue::QueuePriority& find_in_page_priority() {
@@ -595,38 +539,43 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     UseCase use_case() const { return use_case_; }
 
     bool operator==(const Policy& other) const {
-      return policies_ == other.policies_ && rail_mode_ == other.rail_mode_ &&
+      return rail_mode_ == other.rail_mode_ &&
              should_disable_throttling_ == other.should_disable_throttling_ &&
              frozen_when_backgrounded_ == other.frozen_when_backgrounded_ &&
              should_prioritize_loading_with_compositing_ ==
                  other.should_prioritize_loading_with_compositing_ &&
              should_freeze_compositor_task_queue_ ==
                  other.should_freeze_compositor_task_queue_ &&
-             compositor_priority_ == other.compositor_priority_ &&
+             should_defer_task_queues_ == other.should_defer_task_queues_ &&
+             should_pause_task_queues_ == other.should_pause_task_queues_ &&
+             use_virtual_time_ == other.use_virtual_time_ &&
+             should_pause_task_queues_for_android_webview_ ==
+                 other.should_pause_task_queues_for_android_webview_ &&
              find_in_page_priority_ == other.find_in_page_priority_ &&
              use_case_ == other.use_case_;
     }
 
     void AsValueInto(base::trace_event::TracedValue* state) const;
 
+    bool IsQueueEnabled(MainThreadTaskQueue* task_queue) const;
+
+    TimeDomainType GetTimeDomainType() const;
+
    private:
-    RAILMode rail_mode_;
-    bool should_disable_throttling_;
-    bool frozen_when_backgrounded_;
-    bool should_prioritize_loading_with_compositing_;
+    RAILMode rail_mode_{RAILMode::kAnimation};
+    bool should_disable_throttling_{false};
+    bool frozen_when_backgrounded_{false};
+    bool should_prioritize_loading_with_compositing_{false};
     bool should_freeze_compositor_task_queue_{false};
+    bool should_defer_task_queues_{false};
+    bool should_pause_task_queues_{false};
+    bool use_virtual_time_{false};
+    bool should_pause_task_queues_for_android_webview_{false};
 
-    // Priority of task queues belonging to the compositor class (Check
-    // MainThread::QueueClass).
-    base::sequence_manager::TaskQueue::QueuePriority compositor_priority_;
+    base::sequence_manager::TaskQueue::QueuePriority find_in_page_priority_{
+        FindInPageBudgetPoolController::kFindInPageBudgetNotExhaustedPriority};
 
-    base::sequence_manager::TaskQueue::QueuePriority find_in_page_priority_;
-
-    UseCase use_case_;
-
-    std::array<TaskQueuePolicy,
-               static_cast<size_t>(MainThreadTaskQueue::QueueClass::kCount)>
-        policies_;
+    UseCase use_case_{UseCase::kNone};
   };
 
   class TaskDurationMetricTracker;
@@ -751,8 +700,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       MainThreadTaskQueue* task_queue,
       base::sequence_manager::TaskQueue::QueueEnabledVoter*
           task_queue_enabled_voter,
-      const TaskQueuePolicy& old_task_queue_policy,
-      const TaskQueuePolicy& new_task_queue_policy,
+      const Policy& old_policy,
+      const Policy& new_policy,
       bool should_update_priority) const;
 
   void PauseRendererImpl();
@@ -780,9 +729,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   // the use case. Defaults to kNormalPriority.
   TaskQueue::QueuePriority ComputeCompositorPriority() const;
 
-  // Used to update the compositor policy on the main thread when there is a
-  // change in the compositor priority.
-  void UpdateCompositorPolicy();
+  // Used to update the compositor priority on the main thread.
+  void UpdateCompositorTaskQueuePriority();
 
   // Computes the priority for compositing based on the current use case.
   // Returns nullopt if the use case does not need to set the priority.
@@ -904,8 +852,11 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
         longest_jank_free_task_duration;
     TraceableCounter<int, TracingCategoryName::kInfo>
         renderer_pause_count;  // Renderer is paused if non-zero.
-    TraceableState<RAILMode, TracingCategoryName::kInfo>
+
+    TraceableObjectState<RAILMode,
+                         TracingCategoryName::kTopLevel>
         rail_mode_for_tracing;  // Don't use except for tracing.
+
     TraceableState<bool, TracingCategoryName::kTopLevel> renderer_hidden;
     base::Optional<base::ScopedSampleMetadata> renderer_hidden_metadata;
     TraceableState<bool, TracingCategoryName::kTopLevel> renderer_backgrounded;
@@ -930,7 +881,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     base::TimeTicks background_status_changed_at;
     HashSet<PageSchedulerImpl*> page_schedulers;  // Not owned.
     base::ObserverList<RAILModeObserver>::Unchecked
-        rail_mode_observers;                // Not owned.
+        rail_mode_observers;  // Not owned.
     MainThreadMetricsHelper metrics_helper;
     TraceableState<WebRendererProcessType, TracingCategoryName::kTopLevel>
         process_type;
@@ -983,6 +934,11 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     CompositorPriorityExperiments compositor_priority_experiments;
 
     bool main_thread_compositing_is_fast;
+
+    // Priority given to the main thread's compositor task queue. Defaults to
+    // kNormalPriority and is updated via UpdateCompositorTaskQueuePriority().
+    TraceableState<TaskQueue::QueuePriority, TracingCategoryName::kDefault>
+        compositor_priority;
   };
 
   struct AnyThread {
@@ -1064,9 +1020,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   PollableThreadSafeFlag policy_may_need_update_;
   PollableThreadSafeFlag notify_agent_strategy_task_posted_;
   WTF::HashSet<AgentGroupSchedulerImpl*> agent_group_schedulers_;
+  AgentGroupSchedulerImpl* current_agent_group_scheduler_{nullptr};
   // TODO(crbug/1113102): tentatively, we hold AgentGroupSchedulerImpl here.
-  WTF::HashSet<std::unique_ptr<AgentGroupSchedulerImpl>>
-      agent_group_scheduler_set_;
+  std::unique_ptr<AgentGroupSchedulerImpl> agent_group_scheduler_;
 
   base::WeakPtrFactory<MainThreadSchedulerImpl> weak_factory_{this};
 

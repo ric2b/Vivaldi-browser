@@ -69,6 +69,12 @@
       <structure name="IDR_OS_SETTINGS_A11Y_PAGE_HTML"
                  file="chromeos/os_a11y_page/os_a11y_page.html"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_A11Y_PAGE_BROWSER_PROXY_JS"
+                 file="chromeos/os_a11y_page/os_a11y_page_browser_proxy.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_A11Y_PAGE_BROWSER_PROXY_HTML"
+                 file="chromeos/os_a11y_page/os_a11y_page_browser_proxy.html"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_AMBIENT_MODE_PAGE_JS"
                  file="chromeos/ambient_mode_page/ambient_mode_page.js"
                  compress="false" type="chrome_html" />
@@ -270,6 +276,12 @@
       <structure name="IDR_OS_SETTINGS_APP_MANAGEMENT_PLUGIN_VM_SHARED_PATHS_JS"
                 file="chromeos/os_apps_page/app_management_page/plugin_vm_page/plugin_vm_shared_paths.js"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_APP_MANAGEMENT_PLUGIN_VM_SHARED_USB_DEVICES_HTML"
+                file="chromeos/os_apps_page/app_management_page/plugin_vm_page/plugin_vm_shared_usb_devices.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_APP_MANAGEMENT_PLUGIN_VM_SHARED_USB_DEVICES_JS"
+                file="chromeos/os_apps_page/app_management_page/plugin_vm_page/plugin_vm_shared_usb_devices.js"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_APP_MANAGEMENT_PLUGIN_VM_BROWSER_PROXY_JS"
                 file="chromeos/os_apps_page/app_management_page/plugin_vm_page/plugin_vm_browser_proxy.js"
                  compress="false" type="chrome_html" />
@@ -300,6 +312,12 @@
       <structure name="IDR_OS_SETTINGS_MANAGE_A11Y_PAGE_HTML"
                  file="chromeos/os_a11y_page/manage_a11y_page.html"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_MANAGE_A11Y_PAGE_BROWSER_PROXY_JS"
+                 file="chromeos/os_a11y_page/manage_a11y_page_browser_proxy.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_MANAGE_A11Y_PAGE_BROWSER_PROXY_HTML"
+                 file="chromeos/os_a11y_page/manage_a11y_page_browser_proxy.html"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_SWITCH_ACCESS_CONSTANTS_JS"
                  file="chromeos/os_a11y_page/switch_access_constants.js"
                  compress="false" type="chrome_html" />
@@ -317,6 +335,12 @@
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_TTS_SUBPAGE_HTML"
                  file="chromeos/os_a11y_page/tts_subpage.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_TTS_SUBPAGE_BROWSER_PROXY_JS"
+                 file="chromeos/os_a11y_page/tts_subpage_browser_proxy.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_TTS_SUBPAGE_BROWSER_PROXY_HTML"
+                 file="chromeos/os_a11y_page/tts_subpage_browser_proxy.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_MANIFEST"
                  file="os_settings_manifest.json"
@@ -683,11 +707,23 @@
                  file="languages_page/languages_browser_proxy.js"
                  preprocess="true"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_ADD_INPUT_METHODS_DIALOG_HTML"
+                 file="chromeos/os_languages_page/add_input_methods_dialog.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_ADD_INPUT_METHODS_DIALOG_JS"
+                 file="chromeos/os_languages_page/add_input_methods_dialog.js"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_ADD_LANGUAGES_DIALOG_HTML"
                  file="chromeos/os_languages_page/os_add_languages_dialog.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_ADD_LANGUAGES_DIALOG_JS"
                  file="chromeos/os_languages_page/os_add_languages_dialog.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_CHANGE_DEVICE_LANGUAGE_DIALOG_HTML"
+                 file="chromeos/os_languages_page/change_device_language_dialog.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_CHANGE_DEVICE_LANGUAGE_DIALOG_JS"
+                 file="chromeos/os_languages_page/change_device_language_dialog.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_METRICS_PROXY_HTML"
                  file="chromeos/os_languages_page/languages_metrics_proxy.html"
@@ -706,6 +742,12 @@
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_PAGE_INPUT_PAGE_JS"
                  file="chromeos/os_languages_page/input_page.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_PAGE_OS_EDIT_DICTIONARY_PAGE_HTML"
+                 file="chromeos/os_languages_page/os_edit_dictionary_page.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_PAGE_OS_EDIT_DICTIONARY_PAGE_JS"
+                 file="chromeos/os_languages_page/os_edit_dictionary_page.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_PAGE_OS_LANGUAGES_PAGE_V2_HTML"
                  file="chromeos/os_languages_page/os_languages_page_v2.html"
@@ -736,6 +778,12 @@
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_INPUT_METHOD_UTIL_JS"
                  file="chromeos/os_languages_page/input_method_util.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_SHARED_STYLE_HTML"
+                 file="chromeos/os_languages_page/shared_style.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_LANGUAGES_SHARED_VARS_HTML"
+                 file="chromeos/os_languages_page/shared_vars.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_LANGUAGES_SMART_INPUTS_PAGE_HTML"
                  file="chromeos/os_languages_page/smart_inputs_page.html"
@@ -1223,6 +1271,12 @@
       <structure name="IDR_OS_SETTINGS_INTERNET_PAGE_BROWSER_PROXY_JS"
                  file="chromeos/internet_page/internet_page_browser_proxy.js"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_CELLULAR_SETUP_SETTINGS_DELEGATE_HTML"
+                 file="chromeos/internet_page/cellular_setup_settings_delegate.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_CELLULAR_SETUP_SETTINGS_DELEGATE_JS"
+                 file="chromeos/internet_page/cellular_setup_settings_delegate.js"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_INTERNET_PAGE_HTML"
                  file="chromeos/internet_page/internet_page.html"
                  compress="false" type="chrome_html" />
@@ -1274,6 +1328,12 @@
       <structure name="IDR_OS_SETTINGS_MULTIDEVICE_PAGE_JS"
                  file="chromeos/multidevice_page/multidevice_page.js"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_MULTIDEVICE_NOTIFICATIONS_ACCESS_SETUP_DIALOG_HTML"
+                 file="chromeos/multidevice_page/multidevice_notification_access_setup_dialog.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_MULTIDEVICE_NOTIFICATIONS_ACCESS_SETUP_DIALOG_JS"
+                 file="chromeos/multidevice_page/multidevice_notification_access_setup_dialog.js"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_MULTIDEVICE_RADIO_BUTTON_HTML"
                  file="chromeos/multidevice_page/multidevice_radio_button.html"
                  compress="false" type="chrome_html" />
@@ -1298,29 +1358,65 @@
       <structure name="IDR_OS_SETTINGS_MULTIDEVICE_TETHER_ITEM_JS"
                  file="chromeos/multidevice_page/multidevice_tether_item.js"
                  compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_CONFIRM_PAGE_HTML"
+                 file="chromeos/nearby_share_page/nearby_share_confirm_page.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_CONFIRM_PAGE_JS"
+                 file="chromeos/nearby_share_page/nearby_share_confirm_page.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_CONTACT_VISIBILITY_DIALOG_HTML"
+                 file="chromeos/nearby_share_page/nearby_share_contact_visibility_dialog.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_CONTACT_VISIBILITY_DIALOG_JS"
+                 file="chromeos/nearby_share_page/nearby_share_contact_visibility_dialog.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_ACCOUNT_MANAGER_BROWSER_PROXY_HTML"
+                 file="chromeos/nearby_share_page/nearby_account_manager_browser_proxy.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_ACCOUNT_MANAGER_BROWSER_PROXY_JS"
+                 file="chromeos/nearby_share_page/nearby_account_manager_browser_proxy.js"
+                 compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_DEVICE_NAME_DIALOG_HTML"
-                 file="nearby_share_page/nearby_share_device_name_dialog.html"
+                 file="chromeos/nearby_share_page/nearby_share_device_name_dialog.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_DEVICE_NAME_DIALOG_JS"
-                 file="nearby_share_page/nearby_share_device_name_dialog.js"
+                 file="chromeos/nearby_share_page/nearby_share_device_name_dialog.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_HIGH_VISIBILITY_PAGE_HTML"
+                 file="chromeos/nearby_share_page/nearby_share_high_visibility_page.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_HIGH_VISIBILITY_PAGE_JS"
+                 file="chromeos/nearby_share_page/nearby_share_high_visibility_page.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_RECEIVE_DIALOG_HTML"
+                 file="chromeos/nearby_share_page/nearby_share_receive_dialog.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_RECEIVE_DIALOG_JS"
+                 file="chromeos/nearby_share_page/nearby_share_receive_dialog.js"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_RECEIVE_MANAGER_HTML"
+                 file="chromeos/nearby_share_page/nearby_share_receive_manager.html"
+                 compress="false" type="chrome_html" />
+      <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_RECEIVE_MANAGER_JS"
+                 file="chromeos/nearby_share_page/nearby_share_receive_manager.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_DATA_USAGE_DIALOG_HTML"
-                 file="nearby_share_page/nearby_share_data_usage_dialog.html"
+                 file="chromeos/nearby_share_page/nearby_share_data_usage_dialog.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_DATA_USAGE_DIALOG_JS"
-                 file="nearby_share_page/nearby_share_data_usage_dialog.js"
+                 file="chromeos/nearby_share_page/nearby_share_data_usage_dialog.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_TYPES_HTML"
-                 file="nearby_share_page/types.html"
+                 file="chromeos/nearby_share_page/types.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_TYPES_JS"
-                 file="nearby_share_page/types.js"
+                 file="chromeos/nearby_share_page/types.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_SUBPAGE_HTML"
-                 file="nearby_share_page/nearby_share_subpage.html"
+                 file="chromeos/nearby_share_page/nearby_share_subpage.html"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_NEARBY_SHARE_SUBPAGE_JS"
-                 file="nearby_share_page/nearby_share_subpage.js"
+                 file="chromeos/nearby_share_page/nearby_share_subpage.js"
                  compress="false" type="chrome_html" />
       <structure name="IDR_OS_SETTINGS_NETWORK_PROXY_SECTION_HTML"
                  file="chromeos/internet_page/network_proxy_section.html"

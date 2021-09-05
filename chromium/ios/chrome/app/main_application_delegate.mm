@@ -78,7 +78,6 @@
                                        startupInformation:_startupInformation
                                       applicationDelegate:self];
     [_mainController setAppState:_appState];
-    [_appState addObserver:_mainController];
 
     if (!IsSceneStartupSupported()) {
       // When the UIScene APU is not supported, this object holds a "scene"
@@ -90,9 +89,6 @@
           [[SceneController alloc] initWithSceneState:_sceneState];
       _sceneState.controller = _sceneController;
 
-      // TODO(crbug.com/1040501): remove this.
-      // This is temporary plumbing that's not supposed to be here.
-      _sceneController.mainController = (id<MainControllerGuts>)_mainController;
       _tabSwitcherProtocol = _sceneController;
       _tabOpener = _sceneController;
     }
@@ -130,7 +126,9 @@
       [_appState requiresHandlingAfterLaunchWithOptions:launchOptions
                                         stateBackground:inBackground];
   if (!IsSceneStartupSupported()) {
-    self.sceneState.activationLevel = SceneActivationLevelForegroundInactive;
+    self.sceneState.activationLevel =
+        inBackground ? SceneActivationLevelBackground
+                     : SceneActivationLevelForegroundInactive;
   }
 
   if (@available(iOS 13, *)) {
@@ -169,9 +167,11 @@
   if ([_appState isInSafeMode])
     return;
 
-  [_appState resumeSessionWithTabOpener:_tabOpener
-                            tabSwitcher:_tabSwitcherProtocol
-                  connectionInformation:self.sceneController];
+  if (!IsSceneStartupSupported()) {
+    [_appState resumeSessionWithTabOpener:_tabOpener
+                              tabSwitcher:_tabSwitcherProtocol
+                    connectionInformation:self.sceneController];
+  }
 }
 
 - (void)applicationWillResignActive:(UIApplication*)application {
@@ -193,9 +193,7 @@
   }
 
   [_appState applicationDidEnterBackground:application
-                              memoryHelper:_memoryHelper
-                   incognitoContentVisible:self.sceneController
-                                               .incognitoContentVisible];
+                              memoryHelper:_memoryHelper];
 }
 
 // Called when returning to the foreground.
@@ -206,8 +204,7 @@
 
   [_appState applicationWillEnterForeground:application
                             metricsMediator:_metricsMediator
-                               memoryHelper:_memoryHelper
-                                  tabOpener:_tabOpener];
+                               memoryHelper:_memoryHelper];
 }
 
 - (void)applicationWillTerminate:(UIApplication*)application {
@@ -275,8 +272,7 @@
     if (self.foregroundSceneCount == 0) {
       [_appState applicationWillEnterForeground:UIApplication.sharedApplication
                                 metricsMediator:_metricsMediator
-                                   memoryHelper:_memoryHelper
-                                      tabOpener:_tabOpener];
+                                   memoryHelper:_memoryHelper];
     }
   }
 }
@@ -285,9 +281,7 @@
   DCHECK(IsSceneStartupSupported());
   if (@available(iOS 13, *)) {
     [_appState applicationDidEnterBackground:UIApplication.sharedApplication
-                                memoryHelper:_memoryHelper
-                     incognitoContentVisible:self.sceneController
-                                                 .incognitoContentVisible];
+                                memoryHelper:_memoryHelper];
   }
 }
 
@@ -296,8 +290,7 @@
   if (@available(iOS 13, *)) {
     [_appState applicationWillEnterForeground:UIApplication.sharedApplication
                               metricsMediator:_metricsMediator
-                                 memoryHelper:_memoryHelper
-                                    tabOpener:_tabOpener];
+                                 memoryHelper:_memoryHelper];
   }
 }
 

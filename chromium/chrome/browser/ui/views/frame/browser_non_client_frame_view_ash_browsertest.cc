@@ -4,7 +4,6 @@
 
 #include <string>
 
-#include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/public/cpp/default_frame_header.h"
@@ -74,6 +73,7 @@
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chromeos/ui/chromeos_ui_constants.h"
 #include "components/account_id/account_id.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
@@ -287,7 +287,7 @@ IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTestNoWebUiTabStrip,
   EXPECT_EQ(HTTOP, frame_view->NonClientHitTest(top_edge));
 
   // Click just below the resize handle hits the caption.
-  gfx::Point below_resize(kWindowWidth / 2, ash::kResizeInsideBoundsSize);
+  gfx::Point below_resize(kWindowWidth / 2, chromeos::kResizeInsideBoundsSize);
   EXPECT_EQ(HTCAPTION, frame_view->NonClientHitTest(below_resize));
 
   // Click in the top edge of a maximized window now hits the client area,
@@ -871,7 +871,7 @@ class WebAppNonClientFrameViewAshTest
   // the Network Service process has been setup properly.
   void SetUpWebApp() {
     auto web_app_info = std::make_unique<WebApplicationInfo>();
-    web_app_info->app_url = GetAppURL();
+    web_app_info->start_url = GetAppURL();
     web_app_info->scope = GetAppURL().GetWithoutFilename();
     web_app_info->display_mode = blink::mojom::DisplayMode::kStandalone;
     web_app_info->theme_color = GetThemeColor();
@@ -1272,61 +1272,6 @@ IN_PROC_BROWSER_TEST_P(WebAppNonClientFrameViewAshTest, PopupHasNoToolbar) {
   EXPECT_FALSE(frame_view->web_app_frame_toolbar_for_testing());
 }
 
-namespace {
-
-class BrowserNonClientFrameViewAshBackButtonTest
-    : public TopChromeMdParamTest<InProcessBrowserTest> {
- public:
-  BrowserNonClientFrameViewAshBackButtonTest() = default;
-  ~BrowserNonClientFrameViewAshBackButtonTest() override = default;
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(ash::switches::kAshEnableV1AppBackButton);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(BrowserNonClientFrameViewAshBackButtonTest);
-};
-
-}  // namespace
-
-// Test if the V1 apps' frame has a back button.
-IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshBackButtonTest,
-                       V1BackButton) {
-  // Normal browser windows don't have a frame back button.
-  BrowserNonClientFrameViewAsh* frame_view =
-      GetFrameViewAsh(BrowserView::GetBrowserViewForBrowser(browser()));
-  EXPECT_FALSE(frame_view->back_button_);
-
-  browser()->window()->Close();
-
-  // Open a new app window.
-  Browser::CreateParams params = Browser::CreateParams::CreateForApp(
-      "test_browser_app", true /* trusted_source */, gfx::Rect(),
-      browser()->profile(), true);
-  params.initial_show_state = ui::SHOW_STATE_DEFAULT;
-  Browser* app_browser = new Browser(params);
-  AddBlankTabAndShow(app_browser);
-
-  BrowserNonClientFrameViewAsh* app_frame_view =
-      GetFrameViewAsh(BrowserView::GetBrowserViewForBrowser(app_browser));
-  ASSERT_TRUE(app_frame_view->back_button_);
-  EXPECT_TRUE(app_frame_view->back_button_->GetVisible());
-  // The back button should be disabled initially.
-  EXPECT_FALSE(app_frame_view->back_button_->GetEnabled());
-
-  // Nagivate to a page. The back button should now be enabled.
-  const GURL kAppStartURL("http://example.org/");
-  NavigateParams nav_params(app_browser, kAppStartURL,
-                            ui::PAGE_TRANSITION_LINK);
-  ui_test_utils::NavigateToURL(&nav_params);
-  EXPECT_TRUE(app_frame_view->back_button_->GetEnabled());
-
-  // Go back to the blank. The back button should be disabled again.
-  chrome::GoBack(app_browser, WindowOpenDisposition::CURRENT_TAB);
-  EXPECT_FALSE(app_frame_view->back_button_->GetEnabled());
-}
-
 // Test the normal type browser's kTopViewInset is always 0.
 IN_PROC_BROWSER_TEST_P(BrowserNonClientFrameViewAshTest, TopViewInset) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
@@ -1586,5 +1531,4 @@ INSTANTIATE_TEST_SUITE(BrowserNonClientFrameViewAshTestWithWebUiTabStrip);
 INSTANTIATE_TEST_SUITE(ImmersiveModeBrowserViewTest);
 INSTANTIATE_TEST_SUITE(ImmersiveModeBrowserViewTestNoWebUiTabStrip);
 INSTANTIATE_TEST_SUITE(WebAppNonClientFrameViewAshTest);
-INSTANTIATE_TEST_SUITE(BrowserNonClientFrameViewAshBackButtonTest);
 INSTANTIATE_TEST_SUITE(HomeLauncherBrowserNonClientFrameViewAshTest);

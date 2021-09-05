@@ -6,7 +6,7 @@
  * This class handles the behavior of keyboard nodes directly associated with a
  * single AutomationNode.
  */
-class KeyboardNode extends NodeWrapper {
+class KeyboardNode extends BasicNode {
   /**
    * @param {!AutomationNode} node
    * @param {!SARootNode} parent
@@ -35,6 +35,23 @@ class KeyboardNode extends NodeWrapper {
   }
 
   /** @override */
+  isValidAndVisible() {
+    if (super.isValidAndVisible()) {
+      return true;
+    }
+    if (!KeyboardNode.resetting &&
+        NavigationManager.currentGroupHasChild(this)) {
+      // TODO(crbug/1130773): move this code to another location, if possible
+      KeyboardNode.resetting = true;
+      KeyboardRootNode.ignoreNextExit_ = true;
+      NavigationManager.exitKeyboard();
+      NavigationManager.enterKeyboard();
+    }
+
+    return false;
+  }
+
+  /** @override */
   performAction(action) {
     if (action !== SwitchAccessMenuAction.SELECT) {
       return SAConstants.ActionResponse.NO_ACTION_TAKEN;
@@ -47,8 +64,8 @@ class KeyboardNode extends NodeWrapper {
 
     // doDefault() does nothing on Virtual Keyboard buttons, so we must
     // simulate a mouse click.
-    const center = RectHelper.center(keyLocation);
-    EventHelper.simulateMouseClick(
+    const center = RectUtil.center(keyLocation);
+    EventGenerator.sendMouseClick(
         center.x, center.y, SAConstants.VK_KEY_PRESS_DURATION_MS);
 
     return SAConstants.ActionResponse.CLOSE_MENU;
@@ -59,13 +76,14 @@ class KeyboardNode extends NodeWrapper {
  * This class handles the top-level Keyboard node, as well as the construction
  * of the Keyboard tree.
  */
-class KeyboardRootNode extends RootNodeWrapper {
+class KeyboardRootNode extends BasicRootNode {
   /**
    * @param {!AutomationNode} groupNode
    * @private
    */
   constructor(groupNode) {
     super(groupNode);
+    KeyboardNode.resetting = false;
   }
 
   // ================= General methods =================
@@ -80,6 +98,11 @@ class KeyboardRootNode extends RootNodeWrapper {
 
   /** @override */
   onExit() {
+    if (KeyboardRootNode.ignoreNextExit_) {
+      KeyboardRootNode.ignoreNextExit_ = false;
+      return;
+    }
+
     // If the keyboard is currently visible, ignore the corresponding
     // state change.
     if (KeyboardRootNode.isVisible_) {
@@ -133,7 +156,7 @@ class KeyboardRootNode extends RootNodeWrapper {
         SwitchAccessPredicate.isVisible(keyboardObject);
 
     new EventHandler(
-        keyboardObject, chrome.automation.EventType.ARIA_ATTRIBUTE_CHANGED,
+        keyboardObject, chrome.automation.EventType.STATE_CHANGED,
         KeyboardRootNode.checkVisibilityChanged_, {exactMatch: true})
         .start();
   }
@@ -177,8 +200,8 @@ class KeyboardRootNode extends RootNodeWrapper {
     const interestingChildren =
         root.automationNode.findAll({role: chrome.automation.RoleType.BUTTON});
     /** @type {!Array<!SAChildNode>} */
-    const children =
-        GroupNode.separateByRow(interestingChildren.map(childConstructor));
+    const children = GroupNode.separateByRow(
+        interestingChildren.map(childConstructor), root.automationNode);
 
     children.push(new BackButtonNode(root));
     root.children = children;

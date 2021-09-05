@@ -256,10 +256,9 @@ void ProgressBar::MaybeNotifyAccessibilityValueChanged() {
   NotifyAccessibilityEvent(ax::mojom::Event::kValueChanged, true);
 }
 
-BEGIN_METADATA(ProgressBar)
-METADATA_PARENT_CLASS(View)
-ADD_PROPERTY_METADATA(ProgressBar, SkColor, ForegroundColor)
-ADD_PROPERTY_METADATA(ProgressBar, SkColor, BackgroundColor)
-END_METADATA()
+BEGIN_METADATA(ProgressBar, View)
+ADD_PROPERTY_METADATA(SkColor, ForegroundColor)
+ADD_PROPERTY_METADATA(SkColor, BackgroundColor)
+END_METADATA
 
 }  // namespace views

@@ -164,7 +164,13 @@ IN_PROC_BROWSER_TEST_F(ScrollbarTest, LongPromptScrollbar) {
 
 // Tests that a scrollbar isn't shown for this regression case.
 // See crbug.com/385570 for details.
-IN_PROC_BROWSER_TEST_F(ScrollbarTest, DISABLED_ScrollbarRegression) {
+// TODO(http://crbug.com/988934): Flaky on some Mac release bots.
+#if defined(OS_MAC) && defined(NDEBUG)
+#define MAYBE_ScrollbarRegression DISABLED_ScrollbarRegression
+#else
+#define MAYBE_ScrollbarRegression ScrollbarRegression
+#endif
+IN_PROC_BROWSER_TEST_F(ScrollbarTest, MAYBE_ScrollbarRegression) {
   base::string16 permission_string(base::ASCIIToUTF16(
       "Read and modify your data on *.facebook.com"));
   PermissionMessages permissions;
@@ -205,9 +211,12 @@ class ExtensionInstallDialogViewTest
 
 IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewTest, NotifyDelegate) {
   {
-    // User presses install.
+    // User presses install. Note that we have to wait for the 0ms delay for
+    // the install button to become enabled, hence the RunLoop later.
+    ExtensionInstallDialogView::SetInstallButtonDelayForTesting(0);
     ExtensionInstallPromptTestHelper helper;
     ExtensionInstallDialogView* delegate_view = CreateAndShowPrompt(&helper);
+    base::RunLoop().RunUntilIdle();
     delegate_view->AcceptDialog();
     EXPECT_EQ(ExtensionInstallPrompt::Result::ACCEPTED, helper.result());
   }
@@ -223,6 +232,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionInstallDialogViewTest, NotifyDelegate) {
     // cancel.
     ExtensionInstallPromptTestHelper helper;
     ExtensionInstallDialogView* delegate_view = CreateAndShowPrompt(&helper);
+    // Note that the close button isn't present, but the dialog can still be
+    // closed this way via Esc.
+    EXPECT_FALSE(delegate_view->ShouldShowCloseButton());
     CloseAndWait(delegate_view->GetWidget());
     // TODO(devlin): Should this be ABORTED?
     EXPECT_EQ(ExtensionInstallPrompt::Result::USER_CANCELED, helper.result());

@@ -9,6 +9,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/media/feeds/media_feeds_store.mojom.h"
 #include "chrome/browser/media/history/media_history_store.mojom.h"
+#include "chrome/browser/media/kaleidoscope/mojom/kaleidoscope.mojom.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/media_player_watch_time.h"
@@ -247,7 +248,10 @@ class MediaHistoryKeyedService : public KeyedService,
       // Returns the top feeds to be displayed. These will be sorted by the
       // by audio+video watchtime descending and we will also populate the
       // |origin_audio_video_watchtime_percentile| field in |MediaFeedPtr|.
-      kTopFeedsForDisplay
+      kTopFeedsForDisplay,
+
+      // Returns the feeeds that have been selected by the user to be fetched.
+      kSelectedFeedsForFetch,
     };
 
     static GetMediaFeedsRequest CreateTopFeedsForFetch(
@@ -259,6 +263,8 @@ class MediaHistoryKeyedService : public KeyedService,
         int fetched_items_min,
         bool fetched_items_min_should_be_safe,
         base::Optional<media_feeds::mojom::MediaFeedItemType> filter_by_type);
+
+    static GetMediaFeedsRequest CreateSelectedFeedsForFetch();
 
     GetMediaFeedsRequest();
     GetMediaFeedsRequest(const GetMediaFeedsRequest& t);
@@ -331,6 +337,24 @@ class MediaHistoryKeyedService : public KeyedService,
       base::OnceCallback<void(base::Optional<MediaFeedFetchDetails>)>;
   void GetMediaFeedFetchDetails(const int64_t feed_id,
                                 GetMediaFeedFetchDetailsCallback callback);
+
+  // Updates the FeedUserStatus for a feed.
+  void UpdateFeedUserStatus(const int64_t feed_id,
+                            media_feeds::mojom::FeedUserStatus status);
+
+  // Stores the Kaleidocope data keyed against a GAIA ID.
+  void SetKaleidoscopeData(media::mojom::GetCollectionsResponsePtr data,
+                           const std::string& gaia_id);
+
+  // Retrieves the Kaleidoscope data keyed against a GAIA ID. The data expires
+  // after 24 hours or if the GAIA ID changes.
+  using GetKaleidoscopeDataCallback =
+      base::OnceCallback<void(media::mojom::GetCollectionsResponsePtr)>;
+  void GetKaleidoscopeData(const std::string& gaia_id,
+                           GetKaleidoscopeDataCallback callback);
+
+  // Delete any stored data.
+  void DeleteKaleidoscopeData();
 
  protected:
   friend class media_feeds::MediaFeedsService;

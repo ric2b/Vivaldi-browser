@@ -23,8 +23,6 @@
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/testing/find_cc_layer.h"
 
-#include "third_party/blink/renderer/core/paint/compositing/graphics_layer_tree_as_text.h"
-
 namespace blink {
 
 // TODO(wangxianzhu): Though these tests don't directly apply in
@@ -90,7 +88,7 @@ class CompositedLayerMappingTest : public RenderingTest {
 
 TEST_F(CompositedLayerMappingTest, SubpixelAccumulationChange) {
   SetBodyInnerHTML(
-      "<div id='target' style='will-change: transform; background: lightblue; "
+      "<div id='target' style='will-change: opacity; background: lightblue; "
       "position: relative; left: 0.4px; width: 100px; height: 100px'>");
 
   Element* target = GetDocument().getElementById("target");
@@ -113,7 +111,7 @@ TEST_F(CompositedLayerMappingTest,
        SubpixelAccumulationChangeUnderInvalidation) {
   ScopedPaintUnderInvalidationCheckingForTest test(true);
   SetBodyInnerHTML(
-      "<div id='target' style='will-change: transform; background: lightblue; "
+      "<div id='target' style='will-change: opacity; background: lightblue; "
       "position: relative; left: 0.4px; width: 100px; height: 100px'>");
 
   Element* target = GetDocument().getElementById("target");
@@ -124,8 +122,8 @@ TEST_F(CompositedLayerMappingTest,
 
   PaintLayer* paint_layer =
       ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
-  // Directly composited layers are not invalidated on subpixel accumulation
-  // change.
+  // Invalidate directly composited layers on subpixel accumulation change
+  // when PaintUnderInvalidationChecking is enabled.
   EXPECT_TRUE(paint_layer->GraphicsLayerBacking()
                   ->GetPaintController()
                   .GetPaintArtifact()
@@ -1844,6 +1842,67 @@ TEST_F(CompositedLayerMappingTest,
             mapping->SquashingLayer(*squashed));
   EXPECT_TRUE(GetNonScrollingSquashedLayer(*mapping, *squashed));
   EXPECT_FALSE(GetSquashedLayerInScrollingContents(*mapping, *squashed));
+}
+
+// Unlike CompositingTest.WillChangeTransformHintInSVG, will-change hints on the
+// SVG element itself should not opt into creating layers after paint.
+TEST_F(CompositedLayerMappingTest, WillChangeTransformHintOnSVG) {
+  ScopedCompositeSVGForTest enable_feature(true);
+  SetBodyInnerHTML(R"HTML(
+    <svg width="99" height="99" id="willChange" style="will-change: transform;">
+      <rect width="100%" height="100%" fill="blue"></rect>
+    </svg>
+  )HTML");
+
+  Element* svg = GetDocument().getElementById("willChange");
+  PaintLayer* paint_layer =
+      ToLayoutBoxModelObject(svg->GetLayoutObject())->Layer();
+  GraphicsLayer* graphics_layer = paint_layer->GraphicsLayerBacking();
+  EXPECT_FALSE(graphics_layer->ShouldCreateLayersAfterPaint());
+}
+
+// Test that will-change changes inside SVG correctly update whether the
+// graphics layer should create layers after paint.
+TEST_F(CompositedLayerMappingTest, WillChangeTransformHintInSVGChanged) {
+  ScopedCompositeSVGForTest enable_feature(true);
+  SetBodyInnerHTML(R"HTML(
+    <svg width="99" height="99" id="svg" style="will-change: transform;">
+      <rect id="rect" width="100%" height="100%" fill="blue"></rect>
+    </svg>
+  )HTML");
+
+  Element* svg = GetDocument().getElementById("svg");
+  PaintLayer* paint_layer =
+      ToLayoutBoxModelObject(svg->GetLayoutObject())->Layer();
+  EXPECT_FALSE(
+      paint_layer->GraphicsLayerBacking()->ShouldCreateLayersAfterPaint());
+
+  Element* rect = GetDocument().getElementById("rect");
+  rect->setAttribute(html_names::kStyleAttr, "will-change: transform;");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(
+      paint_layer->GraphicsLayerBacking()->ShouldCreateLayersAfterPaint());
+
+  rect->removeAttribute(html_names::kStyleAttr);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(
+      paint_layer->GraphicsLayerBacking()->ShouldCreateLayersAfterPaint());
+
+  // Remove will-change from the svg element and perform the same tests. The
+  // z-index just ensures a paint layer exists so the test is similar.
+  svg->setAttribute(html_names::kStyleAttr, "z-index: 5;");
+  UpdateAllLifecyclePhasesForTest();
+  paint_layer = ToLayoutBoxModelObject(svg->GetLayoutObject())->Layer();
+  EXPECT_FALSE(paint_layer->GraphicsLayerBacking());
+
+  rect->setAttribute(html_names::kStyleAttr, "will-change: transform;");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(
+      paint_layer->GraphicsLayerBacking()->ShouldCreateLayersAfterPaint());
+
+  rect->removeAttribute(html_names::kStyleAttr);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(paint_layer->GraphicsLayerBacking());
 }
 
 }  // namespace blink

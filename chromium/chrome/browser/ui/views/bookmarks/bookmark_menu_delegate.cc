@@ -579,7 +579,7 @@ void BookmarkMenuDelegate::BuildMenusForPermanentNodes(
 }
 
 void BookmarkMenuDelegate::BuildMenuForPermanentNode(const BookmarkNode* node,
-                                                     const gfx::ImageSkia& icon,
+                                                     const ui::ImageModel& icon,
                                                      MenuItemView* menu,
                                                      bool* added_separator) {
   if (!node->IsVisible() || node->GetTotalNodeCount() == 1)
@@ -590,9 +590,10 @@ void BookmarkMenuDelegate::BuildMenuForPermanentNode(const BookmarkNode* node,
     menu->AppendSeparator();
   }
 
-  AddMenuToMaps(menu->AppendSubMenu(next_menu_id_++,
-                                    MaybeEscapeLabel(node->GetTitle()), icon),
-                node);
+  AddMenuToMaps(
+      menu->AppendSubMenu(next_menu_id_++, MaybeEscapeLabel(node->GetTitle()),
+                          *icon.GetImage().ToImageSkia()),
+      node);
 }
 
 void BookmarkMenuDelegate::BuildMenuForManagedNode(MenuItemView* menu) {
@@ -610,7 +611,7 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
                                      MenuItemView* menu) {
   DCHECK_LE(start_child_index, parent->children().size());
   ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
-  const gfx::ImageSkia folder_icon =
+  const ui::ImageModel folder_icon =
       vivaldi::IsVivaldiRunning() ?
       vivaldi::GetBookmarkFolderIcon(TextColorForMenu(menu, parent_)) :
       chrome::GetBookmarkFolderIcon(TextColorForMenu(menu, parent_));
@@ -658,14 +659,17 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
     } else {
       DCHECK(node->is_folder());
       if (vivaldi::IsVivaldiRunning()) {
-        child_menu_item = vivaldi::AddMenuItem(menu, &menu_index, id,
-            MaybeEscapeLabel(node->GetTitle()),
-            vivaldi_bookmark_kit::GetSpeeddial(node) ?
-            vivaldi::GetBookmarkSpeeddialIcon(TextColorForMenu(menu, parent_)) :
-            folder_icon, MenuItemView::Type::kSubMenu);
+        child_menu_item = vivaldi::AddMenuItem(
+            menu, &menu_index, id, MaybeEscapeLabel(node->GetTitle()),
+            *(vivaldi_bookmark_kit::GetSpeeddial(node)
+                  ? vivaldi::GetBookmarkSpeeddialIcon(
+                        TextColorForMenu(menu, parent_))
+                  : folder_icon).GetImage().ToImageSkia(),
+            MenuItemView::Type::kSubMenu);
       } else {
-      child_menu_item = menu->AppendSubMenu(
-          id, MaybeEscapeLabel(node->GetTitle()), folder_icon);
+      child_menu_item =
+          menu->AppendSubMenu(id, MaybeEscapeLabel(node->GetTitle()),
+                              *folder_icon.GetImage().ToImageSkia());
       }
       child_menu_item->GetViewAccessibility().OverrideDescription("");
     }

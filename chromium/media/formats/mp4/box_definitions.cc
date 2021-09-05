@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/big_endian.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -89,6 +90,27 @@ bool ReadMdcvColorCoordinate(BoxReader* reader,
   }
 
   *normalized_value_in_float = value_in_float / kColorCoordinateUpperBound;
+  return true;
+}
+
+// Read "fixed point" value as defined in the
+// SMPTE2086MasteringDisplayMetadataBox ('SmDm') box. See
+// https://www.webmproject.org/vp9/mp4/#data-types-and-fields
+bool ReadFixedPoint16(float fixed_point_divisor,
+                      BoxReader* reader,
+                      float* normalized_value_in_float) {
+  uint16_t value;
+  RCHECK(reader->Read2(&value));
+  *normalized_value_in_float = value / fixed_point_divisor;
+  return true;
+}
+
+bool ReadFixedPoint32(float fixed_point_divisor,
+                      BoxReader* reader,
+                      float* normalized_value_in_float) {
+  uint32_t value;
+  RCHECK(reader->Read4(&value));
+  *normalized_value_in_float = value / fixed_point_divisor;
   return true;
 }
 
@@ -697,6 +719,83 @@ bool AVCDecoderConfigurationRecord::ParseInternal(BufferReader* reader,
 
   return true;
 }
+
+bool AVCDecoderConfigurationRecord::Serialize(
+    std::vector<uint8_t>& output) const {
+  // See ISO/IEC 14496-15 5.3.3.1.2 for the format description
+  constexpr uint8_t sps_list_size_mask = (1 << 5) - 1;  // 5 bits
+  if (sps_list.size() > sps_list_size_mask)
+    return false;
+
+  constexpr uint8_t pps_list_size_mask = 0xff;
+  if (pps_list.size() > pps_list_size_mask)
+    return false;
+
+  if (length_size > 4)
+    return false;
+
+  // Calculating total size of the buffer we'll need for serialization
+  size_t expected_size =
+      1 +  // configurationVersion
+      1 +  // AVCProfileIndication
+      1 +  // profile_compatibility
+      1 +  // AVCLevelIndication
+      1 +  // lengthSizeMinusOne
+      1 +  // numOfSequenceParameterSets, i.e. length of sps_list
+      1;   // numOfPictureParameterSets, i.e. length of pps_list
+
+  constexpr size_t max_vector_size = (1 << 16) - 1;  // 2 bytes
+  for (auto& sps : sps_list) {
+    expected_size += 2;  // 2 bytes for sequenceParameterSetLength
+    if (sps.size() > max_vector_size)
+      return false;
+    expected_size += sps.size();
+  }
+
+  for (auto& pps : pps_list) {
+    expected_size += 2;  // 2 bytes for pictureParameterSetLength;
+    if (pps.size() > max_vector_size)
+      return false;
+    expected_size += pps.size();
+  }
+
+  output.clear();
+  output.resize(expected_size);
+  base::BigEndianWriter writer(reinterpret_cast<char*>(output.data()),
+                               output.size());
+  bool result = true;
+
+  // configurationVersion
+  result &= writer.WriteU8(version);
+  // AVCProfileIndication
+  result &= writer.WriteU8(profile_indication);
+  // profile_compatibility
+  result &= writer.WriteU8(profile_compatibility);
+  // AVCLevelIndication
+  result &= writer.WriteU8(avc_level);
+  // lengthSizeMinusOne
+  uint8_t length_size_minus_one = (length_size - 1) | 0xfc;
+  result &= writer.WriteU8(length_size_minus_one);
+  // numOfSequenceParameterSets
+  uint8_t sps_size = sps_list.size() | ~sps_list_size_mask;
+  result &= writer.WriteU8(sps_size);
+  // sequenceParameterSetNALUnits
+  for (auto& sps : sps_list) {
+    result &= writer.WriteU16(sps.size());
+    writer.WriteBytes(sps.data(), sps.size());
+  }
+  // numOfPictureParameterSets
+  uint8_t pps_size = pps_list.size();
+  result &= writer.WriteU8(pps_size);
+  // pictureParameterSetNALUnit
+  for (auto& pps : pps_list) {
+    result &= writer.WriteU16(pps.size());
+    writer.WriteBytes(pps.data(), pps.size());
+  }
+
+  return result;
+}
+
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 VPCodecConfigurationRecord::VPCodecConfigurationRecord()
@@ -879,6 +978,7 @@ FourCC MasteringDisplayColorVolume::BoxType() const {
 bool MasteringDisplayColorVolume::Parse(BoxReader* reader) {
   // Technically the color coordinates may be in any order.  The spec recommends
   // GBR and it is assumed that the color coordinates are in such order.
+  constexpr float kUnitOfMasteringLuminance = 10000;
   RCHECK(ReadMdcvColorCoordinate(reader, &display_primaries_gx) &&
          ReadMdcvColorCoordinate(reader, &display_primaries_gy) &&
          ReadMdcvColorCoordinate(reader, &display_primaries_bx) &&
@@ -887,18 +987,38 @@ bool MasteringDisplayColorVolume::Parse(BoxReader* reader) {
          ReadMdcvColorCoordinate(reader, &display_primaries_ry) &&
          ReadMdcvColorCoordinate(reader, &white_point_x) &&
          ReadMdcvColorCoordinate(reader, &white_point_y) &&
-         reader->Read4(&max_display_mastering_luminance) &&
-         reader->Read4(&min_display_mastering_luminance));
-
-  const uint32_t kUnitOfMasteringLuminance = 10000;
-  max_display_mastering_luminance /= kUnitOfMasteringLuminance;
-  min_display_mastering_luminance /= kUnitOfMasteringLuminance;
-
+         ReadFixedPoint32(kUnitOfMasteringLuminance, reader,
+                          &max_display_mastering_luminance) &&
+         ReadFixedPoint32(kUnitOfMasteringLuminance, reader,
+                          &min_display_mastering_luminance));
   return true;
 }
 
 FourCC SMPTE2086MasteringDisplayMetadataBox::BoxType() const {
   return FOURCC_SMDM;
+}
+
+bool SMPTE2086MasteringDisplayMetadataBox::Parse(BoxReader* reader) {
+  constexpr float kColorCoordinateUnit = 1 << 16;
+  constexpr float kLuminanceMaxUnit = 1 << 8;
+  constexpr float kLuminanceMinUnit = 1 << 14;
+
+  // Technically the color coordinates may be in any order.  The spec recommends
+  // RGB and it is assumed that the color coordinates are in such order.
+  RCHECK(
+      ReadFixedPoint16(kColorCoordinateUnit, reader, &display_primaries_rx) &&
+      ReadFixedPoint16(kColorCoordinateUnit, reader, &display_primaries_ry) &&
+      ReadFixedPoint16(kColorCoordinateUnit, reader, &display_primaries_gx) &&
+      ReadFixedPoint16(kColorCoordinateUnit, reader, &display_primaries_gy) &&
+      ReadFixedPoint16(kColorCoordinateUnit, reader, &display_primaries_bx) &&
+      ReadFixedPoint16(kColorCoordinateUnit, reader, &display_primaries_by) &&
+      ReadFixedPoint16(kColorCoordinateUnit, reader, &white_point_x) &&
+      ReadFixedPoint16(kColorCoordinateUnit, reader, &white_point_y) &&
+      ReadFixedPoint32(kLuminanceMaxUnit, reader,
+                       &max_display_mastering_luminance) &&
+      ReadFixedPoint32(kLuminanceMinUnit, reader,
+                       &min_display_mastering_luminance));
+  return true;
 }
 
 ContentLightLevelInformation::ContentLightLevelInformation() = default;

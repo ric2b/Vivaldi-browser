@@ -237,6 +237,8 @@ class LoggerImpl : public sample::mojom::Logger {
   explicit LoggerImpl(mojo::PendingReceiver<sample::mojom::Logger> receiver)
       : receiver_(this, std::move(receiver)) {}
   ~Logger() override {}
+  Logger(const Logger&) = delete;
+  Logger& operator=(const Logger&) = delete;
 
   // sample::mojom::Logger:
   void Log(const std::string& message) override {
@@ -245,8 +247,6 @@ class LoggerImpl : public sample::mojom::Logger {
 
  private:
   mojo::Receiver<sample::mojom::Logger> receiver_;
-
-  DISALLOW_COPY_AND_ASSIGN(LoggerImpl);
 };
 ```
 
@@ -318,9 +318,11 @@ class Logger {
 As before, both clients and implementations of this interface use the same
 signature for the `GetTail` method: implementations use the `callback` argument
 to *respond* to the request, while clients pass a `callback` argument to
-asynchronously `receive` the response. A client's `callback` runs on the same
-sequence on which they invoked `GetTail` (the sequence to which their `logger`
-is bound). Here's an updated implementation:
+asynchronously `receive` the response. The parameter `GetTailCallback` passed to
+the implementation of `GetTail` is sequence-affine. It must be invoked on the
+same sequence that `GetTail` is called on. A client's `callback` runs on the
+same sequence on which they invoked `GetTail` (the sequence to which their
+`logger` is bound). Here's an updated implementation:
 
 ```cpp
 class LoggerImpl : public sample::mojom::Logger {
@@ -331,6 +333,8 @@ class LoggerImpl : public sample::mojom::Logger {
   explicit LoggerImpl(mojo::PendingReceiver<sample::mojom::Logger> receiver)
       : receiver_(this, std::move(receiver)) {}
   ~Logger() override {}
+  Logger(const Logger&) = delete;
+  Logger& operator=(const Logger&) = delete;
 
   // sample::mojom::Logger:
   void Log(const std::string& message) override {
@@ -345,8 +349,6 @@ class LoggerImpl : public sample::mojom::Logger {
  private:
   mojo::Receiver<sample::mojom::Logger> receiver_;
   std::vector<std::string> lines_;
-
-  DISALLOW_COPY_AND_ASSIGN(LoggerImpl);
 };
 ```
 
@@ -1157,7 +1159,7 @@ over one end of the primary interface, or over one end of another associated
 interface which itself already has a primary interface.
 
 If you want to test an associated interface endpoint without first
-associating it, you can use `AssociatedRemote::BindNewEndpointAndPassDedicatedReceiverForTesting`.
+associating it, you can use `AssociatedRemote::BindNewEndpointAndPassDedicatedReceiver`.
 This will create working associated interface endpoints which are not actually
 associated with anything else.
 

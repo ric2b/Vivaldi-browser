@@ -101,23 +101,33 @@ class AccessibilityPrivateSendSyntheticMouseEventFunction
 };
 
 // API function that is called when the Select-to-Speak extension state changes.
-class AccessibilityPrivateOnSelectToSpeakStateChangedFunction
+class AccessibilityPrivateSetSelectToSpeakStateFunction
     : public ExtensionFunction {
-  ~AccessibilityPrivateOnSelectToSpeakStateChangedFunction() override {}
+  ~AccessibilityPrivateSetSelectToSpeakStateFunction() override {}
   ResponseAction Run() override;
-  DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.onSelectToSpeakStateChanged",
-                             ACCESSIBILITY_PRIVATE_ONSELECTTOSPEAKSTATECHANGED)
+  DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.setSelectToSpeakState",
+                             ACCESSIBILITY_PRIVATE_SETSELECTTOSPEAKSTATE)
 };
 
 // API function that is called when the Accessibility Common extension finds
 // scrollable bounds.
-class AccessibilityPrivateOnScrollableBoundsForPointFoundFunction
+class AccessibilityPrivateHandleScrollableBoundsForPointFoundFunction
     : public ExtensionFunction {
-  ~AccessibilityPrivateOnScrollableBoundsForPointFoundFunction() override {}
+  ~AccessibilityPrivateHandleScrollableBoundsForPointFoundFunction() override {}
   ResponseAction Run() override;
   DECLARE_EXTENSION_FUNCTION(
-      "accessibilityPrivate.onScrollableBoundsForPointFound",
-      ACCESSIBILITY_PRIVATE_ONSCROLLABLEBOUNDSFORPOINTFOUND)
+      "accessibilityPrivate.handleScrollableBoundsForPointFound",
+      ACCESSIBILITY_PRIVATE_HANDLESCROLLABLEBOUNDSFORPOINTFOUND)
+};
+
+// API function that is called by the Accessibility Common extension to center
+// the magnifier viewport on a passed-in rect.
+class AccessibilityPrivateMoveMagnifierToRectFunction
+    : public ExtensionFunction {
+  ~AccessibilityPrivateMoveMagnifierToRectFunction() override {}
+  ResponseAction Run() override;
+  DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.moveMagnifierToRect",
+                             ACCESSIBILITY_PRIVATE_MOVEMAGNIFIERTORECT)
 };
 
 // API function that is called when a user toggles Dictation from another
@@ -169,6 +179,15 @@ class AccessibilityPrivateSetVirtualKeyboardVisibleFunction
   ResponseAction Run() override;
   DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.setVirtualKeyboardVisible",
                              ACCESSIBILITY_PRIVATE_SETVIRTUALKEYBOARDVISIBLE)
+};
+
+// API function that performs an accelerator action.
+class AccessibilityPrivatePerformAcceleratorActionFunction
+    : public ExtensionFunction {
+  ~AccessibilityPrivatePerformAcceleratorActionFunction() override {}
+  ResponseAction Run() override;
+  DECLARE_EXTENSION_FUNCTION("accessibilityPrivate.performAcceleratorAction",
+                             ACCESSIBILITY_PRIVATE_PERFORMACCELERATORACTION)
 };
 #endif  // defined (OS_CHROMEOS)
 

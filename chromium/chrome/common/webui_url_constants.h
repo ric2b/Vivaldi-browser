@@ -71,7 +71,8 @@ extern const char kChromeUIDownloadInternalsHost[];
 extern const char kChromeUIDownloadsHost[];
 extern const char kChromeUIDownloadsURL[];
 extern const char kChromeUIDriveInternalsHost[];
-extern const char kChromeUIEDUCoexistenceLoginURL[];
+extern const char kChromeUIEDUCoexistenceLoginURLV1[];
+extern const char kChromeUIEDUCoexistenceLoginURLV2[];
 extern const char kChromeUIExtensionIconHost[];
 extern const char kChromeUIExtensionIconURL[];
 extern const char kChromeUIExtensionsHost[];
@@ -194,6 +195,7 @@ extern const char kChromeUINativeExploreURL[];
 extern const char kChromeUINativeHistoryURL[];
 extern const char kChromeUINativeNewTabURL[];
 extern const char kChromeUISnippetsInternalsHost[];
+extern const char kChromeUIUntrustedVideoPlayerUrl[];
 extern const char kChromeUIWebApksHost[];
 #else
 extern const char kChromeUINearbyInternalsHost[];
@@ -236,7 +238,6 @@ extern const char kChromeUICrostiniUpgraderUrl[];
 extern const char kChromeUICryptohomeHost[];
 extern const char kChromeUIDeviceEmulatorHost[];
 extern const char kChromeUIDiscoverURL[];
-extern const char kChromeUIFileManagerHost[];
 extern const char kChromeUIFirstRunHost[];
 extern const char kChromeUIFirstRunURL[];
 extern const char kChromeUIIntenetConfigDialogURL[];
@@ -245,6 +246,8 @@ extern const char kChromeUIInternetConfigDialogHost[];
 extern const char kChromeUIInternetDetailDialogHost[];
 extern const char kChromeUICrostiniCreditsHost[];
 extern const char kChromeUICrostiniCreditsURL[];
+extern const char kChromeUILockScreenStartReauthHost[];
+extern const char kChromeUILockScreenStartReauthURL[];
 extern const char kChromeUIMachineLearningInternalsHost[];
 extern const char kChromeUIMobileSetupHost[];
 extern const char kChromeUIMobileSetupURL[];
@@ -296,6 +299,7 @@ extern const char kChromeUIHatsHost[];
 extern const char kChromeUIHatsURL[];
 extern const char kChromeUIProfilePickerHost[];
 extern const char kChromeUIProfilePickerUrl[];
+extern const char kChromeUIProfilePickerStartupQuery[];
 #endif
 
 #if !defined(OS_ANDROID)
@@ -333,6 +337,8 @@ extern const char kChromeUITabStripURL[];
 #endif
 
 #if !defined(OS_ANDROID)
+extern const char kChromeUICommanderHost[];
+extern const char kChromeUICommanderURL[];
 extern const char kChromeUITabSearchHost[];
 extern const char kChromeUITabSearchURL[];
 #endif
@@ -364,6 +370,7 @@ extern const char kPrintingSettingsSubPage[];
 extern const char kPrivacySubPage[];
 extern const char kResetSubPage[];
 extern const char kResetProfileSettingsSubPage[];
+extern const char kSafeBrowsingEnhancedProtectionSubPage[];
 extern const char kSafetyCheckSubPage[];
 extern const char kSearchSubPage[];
 extern const char kSearchEnginesSubPage[];

@@ -11,6 +11,8 @@ goog.provide('CommandHandler');
 goog.require('ChromeVoxState');
 goog.require('Color');
 goog.require('CustomAutomationEvent');
+goog.require('EventGenerator');
+goog.require('KeyCode');
 goog.require('LogStore');
 goog.require('Output');
 goog.require('PhoneticData');
@@ -647,15 +649,9 @@ CommandHandler.onCommand = function(command) {
             actionNode.state.editable) {
           // Dispatch a click to ensure the VK gets shown.
           const location = actionNode.location;
-          const event = {
-            type: chrome.accessibilityPrivate.SyntheticMouseEventType.PRESS,
-            x: location.left + Math.round(location.width / 2),
-            y: location.top + Math.round(location.height / 2)
-          };
-          chrome.accessibilityPrivate.sendSyntheticMouseEvent(event);
-          event.type =
-              chrome.accessibilityPrivate.SyntheticMouseEventType.RELEASE;
-          chrome.accessibilityPrivate.sendSyntheticMouseEvent(event);
+          EventGenerator.sendMouseClick(
+              location.left + Math.round(location.width / 2),
+              location.top + Math.round(location.height / 2));
           return false;
         }
 
@@ -1224,6 +1220,10 @@ CommandHandler.onCommand = function(command) {
           const innerCallback = function(currentNode, evt) {
             scrollable.removeEventListener(
                 EventType.SCROLL_POSITION_CHANGED, innerCallback);
+            scrollable.removeEventListener(
+                EventType.SCROLL_HORIZONTAL_POSITION_CHANGED, innerCallback);
+            scrollable.removeEventListener(
+                EventType.SCROLL_VERTICAL_POSITION_CHANGED, innerCallback);
 
             if (pred || (currentNode && currentNode.root)) {
               // Jump or if there is a valid current range, then move from it
@@ -1247,8 +1247,15 @@ CommandHandler.onCommand = function(command) {
             ChromeVoxState.instance.navigateToRange(
                 cursors.Range.fromNode(sync), false, speechProps);
           }.bind(this, current.start.node);
+          // This is sent by ARC++.
           scrollable.addEventListener(
               EventType.SCROLL_POSITION_CHANGED, innerCallback, true);
+          // These two events are sent by Web and Views via AXEventGenerator.
+          scrollable.addEventListener(
+              EventType.SCROLL_HORIZONTAL_POSITION_CHANGED, innerCallback,
+              true);
+          scrollable.addEventListener(
+              EventType.SCROLL_VERTICAL_POSITION_CHANGED, innerCallback, true);
         } else {
           ChromeVoxState.instance.navigateToRange(current, false, speechProps);
         }
@@ -1394,16 +1401,16 @@ CommandHandler.onEditCommand_ = function(command) {
   const isMultiline = AutomationPredicate.multiline(textEditHandler.node);
   switch (command) {
     case 'previousCharacter':
-      BackgroundKeyboardHandler.sendKeyPress(36, {shift: true});
+      EventGenerator.sendKeyPress(KeyCode.HOME, {shift: true});
       break;
     case 'nextCharacter':
-      BackgroundKeyboardHandler.sendKeyPress(35, {shift: true});
+      EventGenerator.sendKeyPress(KeyCode.END, {shift: true});
       break;
     case 'previousWord':
-      BackgroundKeyboardHandler.sendKeyPress(36, {shift: true, ctrl: true});
+      EventGenerator.sendKeyPress(KeyCode.HOME, {shift: true, ctrl: true});
       break;
     case 'nextWord':
-      BackgroundKeyboardHandler.sendKeyPress(35, {shift: true, ctrl: true});
+      EventGenerator.sendKeyPress(KeyCode.END, {shift: true, ctrl: true});
       break;
     case 'previousObject':
       if (!isMultiline) {
@@ -1415,7 +1422,7 @@ CommandHandler.onEditCommand_ = function(command) {
             cursors.Range.fromNode(textEditHandler.node));
         return true;
       }
-      BackgroundKeyboardHandler.sendKeyPress(36);
+      EventGenerator.sendKeyPress(KeyCode.HOME);
       break;
     case 'nextObject':
       if (!isMultiline) {
@@ -1427,7 +1434,7 @@ CommandHandler.onEditCommand_ = function(command) {
         return false;
       }
 
-      BackgroundKeyboardHandler.sendKeyPress(35);
+      EventGenerator.sendKeyPress(KeyCode.END);
       break;
     case 'previousLine':
       if (!isMultiline) {
@@ -1438,7 +1445,7 @@ CommandHandler.onEditCommand_ = function(command) {
             cursors.Range.fromNode(textEditHandler.node));
         return true;
       }
-      BackgroundKeyboardHandler.sendKeyPress(33);
+      EventGenerator.sendKeyPress(KeyCode.PRIOR);
       break;
     case 'nextLine':
       if (!isMultiline) {
@@ -1449,13 +1456,13 @@ CommandHandler.onEditCommand_ = function(command) {
         textEditHandler.moveToAfterEditText();
         return false;
       }
-      BackgroundKeyboardHandler.sendKeyPress(34);
+      EventGenerator.sendKeyPress(KeyCode.NEXT);
       break;
     case 'jumpToTop':
-      BackgroundKeyboardHandler.sendKeyPress(36, {ctrl: true});
+      EventGenerator.sendKeyPress(KeyCode.HOME, {ctrl: true});
       break;
     case 'jumpToBottom':
-      BackgroundKeyboardHandler.sendKeyPress(35, {ctrl: true});
+      EventGenerator.sendKeyPress(KeyCode.END, {ctrl: true});
       break;
     default:
       return true;

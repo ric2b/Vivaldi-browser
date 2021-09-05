@@ -356,28 +356,32 @@ class OmniboxEditModel {
 
   // Called when any relevant data changes.  This rolls together several
   // separate pieces of data into one call so we can update all the UI
-  // efficiently:
-  //   |text| is either the new temporary text from the user manually selecting
-  //     a different match, or the inline autocomplete text.
-  //   |is_temporary_text| is true if |text| contains the temporary text for
-  //     a match, and is false if |text| contains the inline autocomplete text.
-  //   |prefix_autocompletion_text| is the prefix autocomplete text.
+  // efficiently. Specifically, it's invoked for temporary text, autocompletion,
+  // and keyword changes.
+  //   |temporary_text| is the new temporary text from the user selecting a
+  //   different match. This will be empty when selecting a suggestion
+  //   without a |fill_into_edit| (e.g. FOCUSED_BUTTON_HEADER) and when
+  //   |is_temporary_test| is false.
+  //   |is_temporary_text| is true if invoked because of a temporary text change
+  //     or false if |temporary_text| should be ignored.
+  //   |inline_autocompletion| and |prefix_autocompletion| are the autocomplete
+  //     texts.
   //   |destination_for_temporary_text_change| is NULL (if temporary text should
-  //     not change) or the pre-change destination URL (if temporary text should
-  //     change) so we can save it off to restore later.
-  //   |keyword| is the keyword to show a hint for if |is_keyword_hint| is true,
-  //     or the currently selected keyword if |is_keyword_hint| is false (see
-  //     comments on keyword_ and is_keyword_hint_).
+  //     not change) or the pre-change destination URL (if temporary text
+  //     should change) so we can save it off to restore later.
+  //   |keyword| is the keyword to show a hint for if |is_keyword_hint| is true
+  //     or the currently selected keyword if |is_keyword_hint| is false
+  //     (see comments on keyword_ and is_keyword_hint_).
   //   |additional_text| is additional omnibox text to be displayed adjacent to
-  //   the omnibox view.
+  //     the omnibox view.
   // Virtual to allow testing.
-  virtual void OnPopupDataChanged(
-      const base::string16& text,
-      bool is_temporary_text,
-      const base::string16& prefix_autocompletion_text,
-      const base::string16& keyword,
-      bool is_keyword_hint,
-      const base::string16& additional_text);
+  virtual void OnPopupDataChanged(const base::string16& temporary_text,
+                                  bool is_temporary_text,
+                                  const base::string16& inline_autocompletion,
+                                  const base::string16& prefix_autocompletion,
+                                  const base::string16& keyword,
+                                  bool is_keyword_hint,
+                                  const base::string16& additional_text);
 
   // Called by the OmniboxView after something changes, with details about what
   // state changes occurred.  Updates internal state, updates the popup if
@@ -579,15 +583,15 @@ class OmniboxEditModel {
   base::string16 url_for_remembered_user_selection_;
 
   // Inline autocomplete is allowed if the user has not just deleted text, and
-  // no temporary text is showing.  In this case, inline_autocomplete_text_ is
+  // no temporary text is showing.  In this case, inline_autocompletion_ is
   // appended to the user_text_ and displayed selected (at least initially).
   //
   // NOTE: When the popup is closed there should never be inline autocomplete
   // text (actions that close the popup should either accept the text, convert
   // it to a normal selection, or change the edit entirely).
   bool just_deleted_text_;
-  base::string16 inline_autocomplete_text_;
-  base::string16 prefix_autocompletion_text_;
+  base::string16 inline_autocompletion_;
+  base::string16 prefix_autocompletion_;
 
   // Used by OnPopupDataChanged to keep track of whether there is currently a
   // temporary text.

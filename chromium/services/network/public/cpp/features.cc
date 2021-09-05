@@ -26,14 +26,6 @@ const base::Feature kNetworkService {
       base::FEATURE_ENABLED_BY_DEFAULT
 };
 
-// Out of Blink CORS for browsers is launched at m79 (http://crbug.com/1001450),
-// and one for WebView will be at m81 (http://crbug.com/1035763).
-// The legacy CORS will be also maintained at least until m81 for enterprise
-// users. See https://sites.google.com/a/chromium.org/dev/Home/loading/oor-cors
-// for FYI Builders information.
-const base::Feature kOutOfBlinkCors{"OutOfBlinkCors",
-                                    base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kReporting{"Reporting", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Based on the field trial parameters, this feature will override the value of
@@ -113,15 +105,7 @@ const base::Feature kCrossOriginEmbedderPolicy{
 // Enables the most recent developments on the crossOriginIsolated property.
 // https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/crossOriginIsolated
 const base::Feature kCrossOriginIsolated{"CrossOriginIsolated",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
-
-// When kBlockInsecurePrivateNetworkRequests is enabled, requests initiated
-// from a less-private network may only target a more-private network if the
-// initiating context is secure.
-//
-// https://wicg.github.io/cors-rfc1918/#integration-fetch
-const base::Feature kBlockInsecurePrivateNetworkRequests{
-    "BlockInsecurePrivateNetworkRequests", base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or defaults splittup up server (not proxy) entries in the
 // HttpAuthCache.
@@ -180,7 +164,7 @@ const base::FeatureParam<std::string> kEmergencyLegacyCookieAccessParam{
 // [1]
 // https://www.chromium.org/Home/chromium-security/extension-content-script-fetches
 const base::Feature kCorbAllowlistAlsoAppliesToOorCors = {
-    "CorbAllowlistAlsoAppliesToOorCors", base::FEATURE_DISABLED_BY_DEFAULT};
+    "CorbAllowlistAlsoAppliesToOorCors", base::FEATURE_ENABLED_BY_DEFAULT};
 const char kCorbAllowlistAlsoAppliesToOorCorsParamName[] =
     "AllowlistForCorbAndCors";
 
@@ -193,14 +177,11 @@ const char kCorbAllowlistAlsoAppliesToOorCorsParamName[] =
 // See also https://crbug.com/920634
 const base::Feature kRequestInitiatorSiteLockEnfocement = {
     "RequestInitiatorSiteLockEnfocement",
+#if defined(OS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT};
-
-// The preflight parser should reject Access-Control-Allow-* headers which do
-// not conform to ABNF. But if the strict check is applied directly, some
-// existing sites might fail to load. The feature flag controls whether a strict
-// check will be used or not.
-const base::Feature kStrictAccessControlAllowListCheck = {
-    "StrictAccessControlAllowListCheck", base::FEATURE_ENABLED_BY_DEFAULT};
+#else
+    base::FEATURE_ENABLED_BY_DEFAULT};
+#endif
 
 // When the CertVerifierService is enabled, certificate verification will not be
 // performed in the network service, but will instead be brokered to a separate
@@ -246,21 +227,14 @@ const base::FeatureParam<TrustTokenOriginTrialSpec>
 
 // Enables the Content Security Policy Embedded Enforcement check out of blink
 const base::Feature kOutOfBlinkCSPEE{"OutOfBlinkCSPEE",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
-
-bool ShouldEnableOutOfBlinkCorsForTesting() {
-  return base::FeatureList::IsEnabled(features::kOutOfBlinkCors);
-}
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kWebSocketReassembleShortMessages{
     "WebSocketReassembleShortMessages", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Controls whether SCT audit reports are queued and the rate at which they
-// should be sampled.
-const base::Feature kSCTAuditing{"SCTAuditing",
-                                 base::FEATURE_DISABLED_BY_DEFAULT};
-constexpr base::FeatureParam<double> kSCTAuditingSamplingRate{
-    &kSCTAuditing, "sampling_rate", 0.0};
+// Enables usage of First Party Sets to determine cookie availability.
+constexpr base::Feature kFirstPartySets{"FirstPartySets",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features
 }  // namespace network

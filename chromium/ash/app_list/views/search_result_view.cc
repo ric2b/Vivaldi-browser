@@ -17,6 +17,7 @@
 #include "ash/app_list/views/search_result_actions_view.h"
 #include "ash/app_list/views/search_result_list_view.h"
 #include "ash/app_list/views/search_result_page_view.h"
+#include "ash/public/cpp/app_list/app_list_color_provider.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_switches.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
@@ -44,14 +45,8 @@ constexpr int kActionButtonRightMargin = 8;
 constexpr int kTitleLineHeight = 20;
 constexpr int kDetailsLineHeight = 16;
 
-// Matched text color.
-constexpr SkColor kMatchedTextColor = gfx::kGoogleGrey900;
-// Default text color.
-constexpr SkColor kDefaultTextColor = gfx::kGoogleGrey700;
 // URL color.
 constexpr SkColor kUrlColor = gfx::kGoogleBlue600;
-// Row selected color, Google Grey 8%.
-constexpr SkColor kRowHighlightedColor = SkColorSetA(gfx::kGoogleGrey900, 0x14);
 // Search result border color.
 constexpr SkColor kResultBorderColor = SkColorSetARGB(0xFF, 0xE5, 0xE5, 0xE5);
 
@@ -75,13 +70,13 @@ SearchResultView::SearchResultView(SearchResultListView* list_view,
       AddChildView(std::make_unique<SearchResultActionsView>(this));
   set_actions_view(actions_view);
 
-  icon_->set_can_process_events_within_subtree(false);
-  display_icon_->set_can_process_events_within_subtree(false);
+  icon_->SetCanProcessEventsWithinSubtree(false);
+  display_icon_->SetCanProcessEventsWithinSubtree(false);
   SetDisplayIcon(gfx::ImageSkia());
-  badge_icon_->set_can_process_events_within_subtree(false);
+  badge_icon_->SetCanProcessEventsWithinSubtree(false);
 
   set_context_menu_controller(this);
-  set_notify_enter_exit_on_child(true);
+  SetNotifyEnterExitOnChild(true);
 }
 
 SearchResultView::~SearchResultView() = default;
@@ -122,15 +117,16 @@ void SearchResultView::CreateTitleRenderText() {
   // When result is an omnibox non-url search, the matched tag indicates
   // proposed query. For all other cases, the matched tag indicates typed search
   // query.
-  render_text->SetColor(result()->is_omnibox_search() ? kDefaultTextColor
-                                                      : kMatchedTextColor);
+  render_text->SetColor(AppListColorProvider::Get()->GetSearchBoxTextColor(
+      kDeprecatedSearchBoxTextDefaultColor));
   const SearchResult::Tags& tags = result()->title_tags();
   for (const auto& tag : tags) {
     if (tag.styles & SearchResult::Tag::URL) {
       render_text->ApplyColor(kUrlColor, tag.range);
     } else if (tag.styles & SearchResult::Tag::MATCH) {
       render_text->ApplyColor(
-          result()->is_omnibox_search() ? kMatchedTextColor : kDefaultTextColor,
+          AppListColorProvider::Get()->GetSearchBoxTextColor(
+              kDeprecatedSearchBoxTextDefaultColor),
           tag.range);
     }
   }
@@ -148,7 +144,8 @@ void SearchResultView::CreateDetailsRenderText() {
   render_text->SetText(result()->details());
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   render_text->SetFontList(rb.GetFontList(ui::ResourceBundle::BaseFont));
-  render_text->SetColor(kDefaultTextColor);
+  render_text->SetColor(AppListColorProvider::Get()->GetSearchBoxTextColor(
+      kDeprecatedSearchBoxTextDefaultColor));
   const SearchResult::Tags& tags = result()->details_tags();
   for (const auto& tag : tags) {
     if (tag.styles & SearchResult::Tag::URL)
@@ -270,13 +267,16 @@ void SearchResultView::PaintButtonContents(gfx::Canvas* canvas) {
 
   // Set solid color background to avoid broken text. See crbug.com/746563.
   // This should be drawn before selected color which is semi-transparent.
-  canvas->FillRect(text_bounds,
-                   AppListConfig::instance().card_background_color());
+  canvas->FillRect(
+      text_bounds,
+      AppListColorProvider::Get()->GetSearchBoxCardBackgroundColor());
 
   // Possibly call FillRect a second time (these colours are partially
   // transparent, so the previous FillRect is not redundant).
   if (selected() && !actions_view()->HasSelectedAction()) {
-    canvas->FillRect(content_rect, kRowHighlightedColor);
+    canvas->FillRect(
+        content_rect,
+        AppListColorProvider::Get()->GetSearchResultViewHighlightColor());
   }
 
   gfx::Rect border_bottom = gfx::SubtractRects(rect, content_rect);

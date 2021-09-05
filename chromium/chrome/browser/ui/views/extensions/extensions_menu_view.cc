@@ -55,15 +55,6 @@ ExtensionsMenuItemView* GetAsMenuItemView(views::View* view) {
 
 }  // namespace
 
-ExtensionsMenuView::ButtonListener::ButtonListener(Browser* browser)
-    : browser_(browser) {}
-
-void ExtensionsMenuView::ButtonListener::ButtonPressed(views::Button* sender,
-                                                       const ui::Event& event) {
-  DCHECK_EQ(sender->GetID(), EXTENSIONS_SETTINGS_ID);
-  chrome::ShowExtensions(browser_, std::string());
-}
-
 ExtensionsMenuView::ExtensionsMenuView(
     views::View* anchor_view,
     Browser* browser,
@@ -76,7 +67,6 @@ ExtensionsMenuView::ExtensionsMenuView(
       allow_pinning_(allow_pinning),
       toolbar_model_(ToolbarActionsModel::Get(browser_->profile())),
       toolbar_model_observer_(this),
-      button_listener_(browser_),
       cant_access_{nullptr, nullptr,
                    IDS_EXTENSIONS_MENU_CANT_ACCESS_SITE_DATA_SHORT,
                    IDS_EXTENSIONS_MENU_CANT_ACCESS_SITE_DATA,
@@ -148,16 +138,34 @@ void ExtensionsMenuView::Populate() {
 
   AddChildView(std::make_unique<views::Separator>());
 
+  // TODO(pbos): Consider moving this a footnote view (::SetFootnoteView()).
+  // If so this needs to be created before being added to a widget, constructor
+  // would do.
+  constexpr int kSettingsIconSize = 16;
   auto footer = CreateBubbleMenuItem(
       EXTENSIONS_SETTINGS_ID, l10n_util::GetStringUTF16(IDS_MANAGE_EXTENSION),
-      &button_listener_);
+      base::BindRepeating(&chrome::ShowExtensions, browser_, std::string()));
   footer->SetImage(
       views::Button::STATE_NORMAL,
-      gfx::CreateVectorIcon(vector_icons::kSettingsIcon, 16,
+      gfx::CreateVectorIcon(vector_icons::kSettingsIcon, kSettingsIconSize,
                             GetNativeTheme()->GetSystemColor(
                                 ui::NativeTheme::kColorId_MenuIconColor)));
-  footer->SetImageLabelSpacing(ChromeLayoutProvider::Get()->GetDistanceMetric(
-      views::DISTANCE_BUTTON_HORIZONTAL_PADDING));
+
+  // Extension icons are larger-than-favicon as they contain internal padding
+  // (space for badging). Add the same padding left and right of the icon to
+  // visually align the settings icon and text with extension menu items.
+  // TODO(pbos): Note that this code relies on CreateBubbleMenuItem() and
+  // ExtensionsMenuItemView using the same horizontal border size and
+  // image-label spacing. This dependency should probably be more explicit.
+  constexpr int kSettingsIconHorizontalPadding =
+      (ExtensionsMenuItemView::kIconSize.width() - kSettingsIconSize) / 2;
+
+  footer->SetBorder(views::CreateEmptyBorder(
+      footer->border()->GetInsets() +
+      gfx::Insets(0, kSettingsIconHorizontalPadding, 0, 0)));
+  footer->SetImageLabelSpacing(footer->GetImageLabelSpacing() +
+                               kSettingsIconHorizontalPadding);
+
   manage_extensions_button_for_testing_ = footer.get();
   AddChildView(std::move(footer));
 
@@ -191,7 +199,7 @@ ExtensionsMenuView::CreateExtensionButtonsContainer() {
         // Add an emphasized short header explaining the section.
         auto header = std::make_unique<views::Label>(
             l10n_util::GetStringUTF16(section->header_string_id),
-            ChromeTextContext::CONTEXT_BODY_TEXT_SMALL,
+            ChromeTextContext::CONTEXT_DIALOG_BODY_TEXT_SMALL,
             ChromeTextStyle::STYLE_EMPHASIZED);
         header->SetHorizontalAlignment(gfx::ALIGN_LEFT);
         header->SetBorder(views::CreateEmptyBorder(
@@ -203,7 +211,7 @@ ExtensionsMenuView::CreateExtensionButtonsContainer() {
         // Add longer text that explains the section in more detail.
         auto description = std::make_unique<views::Label>(
             l10n_util::GetStringUTF16(section->description_string_id),
-            ChromeTextContext::CONTEXT_BODY_TEXT_SMALL,
+            ChromeTextContext::CONTEXT_DIALOG_BODY_TEXT_SMALL,
             views::style::STYLE_PRIMARY);
         description->SetMultiLine(true);
         description->SetHorizontalAlignment(gfx::ALIGN_LEFT);

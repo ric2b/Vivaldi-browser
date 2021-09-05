@@ -4,7 +4,7 @@
 <translation id="1033008476608128425">Paisaje 3</translation>
 <translation id="1118377629180821201">Paisaje 12</translation>
 <translation id="1158503667684816647">No volver a solicitar confirmación</translation>
-<translation id="1276145862619442150">Marcadores rápidos</translation>
+<translation id="1276145862619442150">Accesos rápidos</translation>
 <translation id="1281950884873973195">Animal 6</translation>
 <translation id="1411638389238344450">Enviar el enlace por correo</translation>
 <translation id="1454726940098520109">No volver a solicitar confirmación</translation>
@@ -19,7 +19,7 @@
 <translation id="1921101374471252440">Recargar la &amp;imagen</translation>
 <translation id="1924750141060565109">Paisaje 15</translation>
 <translation id="19598411548897379">Genérico</translation>
-<translation id="2079036669923635404">Haz clic aquí para actualizar Vivaldi a la versión <ph name="VERSION" />.</translation>
+<translation id="2079036669923635404">Clica aquí para actualizar Vivaldi a la versión <ph name="VERSION" />.</translation>
 <translation id="2441056087170876076">Monstruo 2</translation>
 <translation id="2444387452209867610">Ingresar nota</translation>
 <translation id="2486841023299517366">Animal 4</translation>
@@ -29,7 +29,7 @@
 <translation id="2923448633003185837">Pegar e ir</translation>
 <translation id="2977472760057091832">Abrir enlace en una ventana privada</translation>
 <translation id="2989805286512600854">Abrir en una pestaña nueva</translation>
-<translation id="3027988479108856431">Lamentablemente tus preferencias de Yandex no estarán disponibles mientras dicho navegador esté ejecutándose. Para poder importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Yandex y luego haz clic en Continuar.</translation>
+<translation id="3027988479108856431">Lamentablemente tus preferencias de Yandex no estarán disponibles mientras dicho navegador esté ejecutándose. Para poder importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Yandex y luego clica en Continuar.</translation>
 <translation id="3084011186245865060">Paisaje 6</translation>
 <translation id="3127383884976966729">Animal 7</translation>
 <translation id="3156398087075132709">Marcador nuevo</translation>
@@ -85,8 +85,8 @@
 <translation id="5770433027661640693">Paisaje 10</translation>
 <translation id="5857090052475505287">Carpeta nueva</translation>
 <translation id="588258955323874662">Pantalla completa</translation>
-<translation id="5916080360077521750">Lamentablemente sus preferencias de Chrome no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarde tu trabajo, cierre todas las ventanas de Chrome y luego haz clic en Continuar.</translation>
-<translation id="6229528619562190452">Haz clic aquí para actualizar Vivaldi.</translation>
+<translation id="5916080360077521750">Lamentablemente tus preferencias de Chrome no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Chrome y luego clica en Continuar.</translation>
+<translation id="6229528619562190452">Clica aquí para actualizar Vivaldi.</translation>
 <translation id="6234173136417926046">Usar imagen como fondo de la pantalla de inicio</translation>
 <translation id="630690498669249215">Archivo de marcadores de Opera</translation>
 <translation id="6339818817272922368">Cuenta local</translation>
@@ -96,12 +96,12 @@
 <translation id="6538338088414940408">Abrir enlace en una pestaña en segundo plano</translation>
 <translation id="6551219277044048123">Añadir como motor de búsqueda...</translation>
 <translation id="6630781781151951863">Paisaje 18</translation>
-<translation id="6804831687363620480">Lamentablemente tus preferencias de Opera 15+ no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Opera 15+ y luego haz clic en Continuar.</translation>
+<translation id="6804831687363620480">Lamentablemente tus preferencias de Opera 15+ no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Opera 15+ y luego clica en Continuar.</translation>
 <translation id="6896758677409633944">Copiar</translation>
 <translation id="7086554968911045110">Paisaje 7</translation>
 <translation id="7111492742514999492">Paisaje 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
-<translation id="7496505986576158197">Vivaldi ha sido hecho posible gracias al proyecto de código abierto <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> y a otros <ph name="BEGIN_LINK_OSS" />softwares de código abierto<ph name="END_LINK_OSS" />.</translation>
+<translation id="7496505986576158197">Vivaldi ha sido hecho posible gracias al proyecto de código abierto <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> y a otros <ph name="BEGIN_LINK_OSS" />programas de código abierto<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Ignorar actualización</translation>
 <translation id="7724603315864178912">Cortar</translation>
 <translation id="7793738202466490491">Añadir como evento en el calendario</translation>

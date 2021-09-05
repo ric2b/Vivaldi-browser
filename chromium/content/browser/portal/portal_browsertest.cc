@@ -20,13 +20,13 @@
 #include "components/download/public/common/download_item.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "content/browser/compositor/surface_utils.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/frame_host/render_frame_host_manager.h"
-#include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/portal/portal.h"
 #include "content/browser/renderer_host/input/synthetic_smooth_scroll_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_tap_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_touchpad_pinch_gesture.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_manager.h"
+#include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
@@ -2368,15 +2368,22 @@ class PortalPixelBrowserTest : public PortalBrowserTest {
 // embedder page. Both page scales should be accounted for so the pattern in
 // the portal should appear the correct size (4x4 checkerboard tiles) as well
 // as be re-rastered for the embedder's zoom so it should appear crisp.
-IN_PROC_BROWSER_TEST_F(PortalPixelBrowserTest, PageScaleRaster) {
+//
+// Flaky on Android: https://crbug.com/1120213
+#if defined(OS_ANDROID)
+#define MAYBE_PageScaleRaster DISABLED_PageScaleRaster
+#else
+#define MAYBE_PageScaleRaster PageScaleRaster
+#endif
+IN_PROC_BROWSER_TEST_F(PortalPixelBrowserTest, MAYBE_PageScaleRaster) {
   ShellContentBrowserClient::Get()->set_override_web_preferences_callback(
-      base::BindRepeating([](WebPreferences* prefs) {
+      base::BindRepeating([](blink::web_pref::WebPreferences* prefs) {
         // Enable processing of the viewport <meta> tag in the same way the
         // Android browser would.
         prefs->viewport_enabled = true;
         prefs->viewport_meta_enabled = true;
         prefs->shrinks_viewport_contents_to_fit = true;
-        prefs->viewport_style = content::ViewportStyle::MOBILE;
+        prefs->viewport_style = blink::web_pref::ViewportStyle::kMobile;
 
         // Hide scrollbars to make pixel testing more robust.
         prefs->hide_scrollbars = true;

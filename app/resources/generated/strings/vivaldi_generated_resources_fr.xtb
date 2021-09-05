@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Afficher le code source du cadre</translation>
 <translation id="1165039591588034296">Erreur</translation>
 <translation id="1175364870820465910">Im&amp;primer...</translation>
-<translation id="1177863135347784049">Personnalisées</translation>
 <translation id="1181037720776840403">Supprimer</translation>
 <translation id="1187722533808055681">Sorties de veille</translation>
 <translation id="119944043368869598">Tout effacer</translation>
 <translation id="1221825588892235038">Sélection uniquement</translation>
 <translation id="1244303850296295656">Erreur au niveau des extensions</translation>
+<translation id="125220115284141797">Par défaut</translation>
 <translation id="1274977772557788323">Paramètres de stockage d’Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destination</translation>
 <translation id="1303101771013849280">Fichier de signets au format HTML</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nouvelle fenêtre</translation>
 <translation id="1725149567830788547">Afficher les &amp;commandes</translation>
 <translation id="1729533290416704613">Elle contrôle également la page qui s’affiche lorsque vous effectuez une recherche dans la barre d’adresses.</translation>
+<translation id="174123615272205933">Personnalisées</translation>
 <translation id="1744108098763830590">page d’arrière-plan</translation>
 <translation id="176587472219019965">&amp;Nouvelle fenêtre</translation>
 <translation id="1769104665586091481">Ouvrir le lien dans une nouvelle &amp;fenêtre</translation>
+<translation id="1779468444204342338">Minimum</translation>
 <translation id="1815083418640426271">Coller en tant que texte brut</translation>
 <translation id="1828901632669367785">Imprimer en utilisant le dialogue du système...</translation>
 <translation id="1850508293116537636">Rotation &amp;horaire</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Demander l’autorisation avant d’envoyer (recommandé)</translation>
 <translation id="241082044617551207">Plugin inconnu</translation>
 <translation id="2423578206845792524">En&amp;registrer l’image sous…</translation>
-<translation id="2436707352762155834">Minimum</translation>
 <translation id="2439110203301358333">Un autre programme sur votre ordinateur a ajouté une extension qui risque de modifier le fonctionnement de Vivaldi.</translation>
 <translation id="2445081178310039857">Le répertoire racine de l’extension doit être indiqué.</translation>
 <translation id="2470702053775288986">Désactivation des extensions non compatibles</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Pré-rendu : <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Microphone</translation>
 <translation id="3241680850019875542">Sélectionnez le répertoire racine de l’extension à empaqueter. Pour mettre à jour une extension, sélectionnez également le fichier de clé privée à réutiliser.</translation>
+<translation id="3266179261140759675">Empêcher les sites fermés d'envoyer et de recevoir des données</translation>
 <translation id="3280237271814976245">Enregistrer &amp;sous…</translation>
 <translation id="3285322247471302225">Nouvel ongle&amp;t</translation>
 <translation id="3288047731229977326">Les extensions exécutées en mode développeur peuvent nuire à votre ordinateur. Si vous n’êtes pas un développeur, nous vous recommandons de désactiver celles-ci afin d’assurer la sécurité de votre ordinateur.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Autoriser</translation>
 <translation id="5057110919553308744">Lorsque vous cliquez sur l’extension</translation>
 <translation id="5063480226653192405">Utilisation</translation>
-<translation id="5068918910148307423">Ne pas autoriser les sites fermés récemment à terminer l’envoi et la réception de données</translation>
 <translation id="5116628073786783676">En&amp;registrer le fichier audio sous…</translation>
 <translation id="5143374789336132547">L’extension <ph name="EXTENSION_NAME" /> a modifié la page affichée lorsque vous cliquez sur le bouton Accueil.</translation>
 <translation id="5154108062446123722">Paramètres avancés pour <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">L’extension <ph name="EXTENSION_NAME" /> a modifié la page qui s’affiche lorsque vous effectuez une recherche dans la barre d’adresses.</translation>
 <translation id="5360150013186312835">Afficher dans la barre d’outils</translation>
 <translation id="5362741141255528695">Sélectionnez le fichier de clé privée.</translation>
+<translation id="536638840841140142">Aucune</translation>
 <translation id="5370819323174483825">&amp;Recharger la page</translation>
 <translation id="5398572795982417028">Plage de pages hors limite. Le nombre maximal de pages est <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Continuer le téléchargement</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Destinataire : <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installée par votre administrateur</translation>
 <translation id="7685049629764448582">Mémoire JavaScript</translation>
-<translation id="7701040980221191251">Aucune</translation>
 <translation id="7701869757853594372">Handles utilisateur</translation>
 <translation id="7704305437604973648">Tâche</translation>
 <translation id="7710568461918838723">Ca&amp;ster...</translation>

@@ -149,12 +149,16 @@ bool StructTraits<network::mojom::TrustedUrlRequestParamsDataView,
                   network::ResourceRequest::TrustedParams>::
     Read(network::mojom::TrustedUrlRequestParamsDataView data,
          network::ResourceRequest::TrustedParams* out) {
-  if (!data.ReadIsolationInfo(&out->isolation_info))
+  if (!data.ReadIsolationInfo(&out->isolation_info)) {
     return false;
+  }
   out->disable_secure_dns = data.disable_secure_dns();
   out->has_user_activation = data.has_user_activation();
   out->cookie_observer = data.TakeCookieObserver<
       mojo::PendingRemote<network::mojom::CookieAccessObserver>>();
+  if (!data.ReadClientSecurityState(&out->client_security_state)) {
+    return false;
+  }
   return true;
 }
 
@@ -262,10 +266,6 @@ bool StructTraits<network::mojom::DataElementDataView, network::DataElement>::
     network::debug::SetDeserializationCrashKeyString("data_element_path");
     return false;
   }
-  if (!data.ReadFile(&out->file_)) {
-    network::debug::SetDeserializationCrashKeyString("data_element_file");
-    return false;
-  }
   if (!data.ReadBlobUuid(&out->blob_uuid_)) {
     network::debug::SetDeserializationCrashKeyString("data_element_blob_uuid");
     return false;
@@ -275,6 +275,8 @@ bool StructTraits<network::mojom::DataElementDataView, network::DataElement>::
   }
   if (data.type() == network::mojom::DataElementType::kBytes) {
     if (!data.ReadBuf(&out->buf_))
+      return false;
+    if (data.length() != out->buf_.size())
       return false;
   }
   out->type_ = data.type();

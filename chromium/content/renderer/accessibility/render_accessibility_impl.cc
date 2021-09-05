@@ -36,7 +36,7 @@
 #include "services/metrics/public/cpp/mojo_ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/public/platform/web_float_rect.h"
+#include "third_party/blink/public/web/web_disallow_transition_scope.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
@@ -52,7 +52,6 @@ using blink::WebAXContext;
 using blink::WebAXObject;
 using blink::WebDocument;
 using blink::WebElement;
-using blink::WebFloatRect;
 using blink::WebLocalFrame;
 using blink::WebNode;
 using blink::WebRect;
@@ -136,9 +135,12 @@ void AXTreeSnapshotterImpl::Snapshot(ui::AXMode ax_mode,
 void AXTreeSnapshotterImpl::SnapshotContentTree(ui::AXMode ax_mode,
                                                 size_t max_node_count,
                                                 ui::AXTreeUpdate* response) {
-  WebAXObject root = context_->Root();
-  if (!root.UpdateLayoutAndCheckValidity())
+  if (!render_frame_->GetWebFrame())
     return;
+  if (!WebAXObject::MaybeUpdateLayoutAndCheckValidity(
+          render_frame_->GetWebFrame()->GetDocument()))
+    return;
+  WebAXObject root = context_->Root();
 
   BlinkAXTreeSource tree_source(render_frame_, ax_mode);
   tree_source.SetRoot(root);
@@ -222,6 +224,12 @@ RenderAccessibilityImpl::RenderAccessibilityImpl(
   settings->SetAriaModalPrunesAXTree(true);
 #endif
 
+#if defined(OS_CHROMEOS)
+  // Do not ignore SVG grouping (<g>) elements on ChromeOS, which is needed so
+  // Select-to-Speak can read SVG text nodes in natural reading order.
+  settings->SetAccessibilityIncludeSvgGElement(true);
+#endif
+
   if (render_frame_->IsMainFrame())
     event_schedule_mode_ = EventScheduleMode::kDeferEvents;
   else
@@ -252,10 +260,9 @@ RenderAccessibilityImpl::RenderAccessibilityImpl(
 
     // It's possible that the webview has already loaded a webpage without
     // accessibility being enabled. Initialize the browser's cached
-    // accessibility tree by sending it a notification.
-    WebAXObject root_object = WebAXObject::FromWebDocument(document);
-    HandleAXEvent(
-        ui::AXEvent(root_object.AxID(), ax::mojom::Event::kLayoutComplete));
+    // accessibility tree by firing a layout complete for the document.
+    // Ensure that this occurs after initial layout is actually complete.
+    ScheduleSendPendingAccessibilityEvents();
   }
 
   image_annotation_debugging_ =
@@ -316,7 +323,7 @@ void RenderAccessibilityImpl::AccessibilityModeChanged(const ui::AXMode& mode) {
       if (settings) {
         if (mode.has_mode(ui::AXMode::kInlineTextBoxes)) {
           settings->SetInlineTextBoxAccessibilityEnabled(true);
-          tree_source_->GetRoot().UpdateLayoutAndCheckValidity();
+          tree_source_->GetRoot().MaybeUpdateLayoutAndCheckValidity();
           tree_source_->GetRoot().LoadInlineTextBoxes();
         } else {
           settings->SetInlineTextBoxAccessibilityEnabled(false);
@@ -334,7 +341,7 @@ void RenderAccessibilityImpl::AccessibilityModeChanged(const ui::AXMode& mode) {
     // If there are any events in flight, |HandleAXEvent| will refuse to process
     // our new event.
     pending_events_.clear();
-    auto root_object = WebAXObject::FromWebDocument(document);
+    auto root_object = WebAXObject::FromWebDocument(document, false);
     ax::mojom::Event event = root_object.IsLoaded()
                                  ? ax::mojom::Event::kLoadComplete
                                  : ax::mojom::Event::kLayoutComplete;
@@ -351,7 +358,7 @@ void RenderAccessibilityImpl::HitTest(
   const WebDocument& document = GetMainDocument();
   if (!document.IsNull()) {
     auto root_obj = WebAXObject::FromWebDocument(document);
-    if (root_obj.UpdateLayoutAndCheckValidity())
+    if (root_obj.MaybeUpdateLayoutAndCheckValidity())
       ax_object = root_obj.HitTest(point);
   }
 
@@ -422,7 +429,7 @@ void RenderAccessibilityImpl::PerformAction(const ui::AXActionData& data) {
     return;
 
   auto root = WebAXObject::FromWebDocument(document);
-  if (!root.UpdateLayoutAndCheckValidity())
+  if (!root.MaybeUpdateLayoutAndCheckValidity())
     return;
 
   // If an action was requested, we no longer want to defer events.
@@ -542,7 +549,7 @@ void RenderAccessibilityImpl::Reset(int32_t reset_token) {
   if (!document.IsNull()) {
     // Tree-only mode gets used by the automation extension API which requires a
     // load complete event to invoke listener callbacks.
-    auto root_object = WebAXObject::FromWebDocument(document);
+    auto root_object = WebAXObject::FromWebDocument(document, false);
     ax::mojom::Event event = root_object.IsLoaded()
                                  ? ax::mojom::Event::kLoadComplete
                                  : ax::mojom::Event::kLayoutComplete;
@@ -576,24 +583,6 @@ void RenderAccessibilityImpl::HandleAXEvent(const ui::AXEvent& event) {
   auto obj = WebAXObject::FromWebDocumentByID(document, event.id);
   if (obj.IsDetached())
     return;
-
-  if (document.GetFrame()) {
-    gfx::Size scroll_offset = document.GetFrame()->GetScrollOffset();
-    if (scroll_offset != last_scroll_offset_) {
-      // Make sure the browser is always aware of the scroll position of
-      // the root document element by posting a generic notification that
-      // will update it.
-      // TODO(dmazzoni): remove this as soon as
-      // https://bugs.webkit.org/show_bug.cgi?id=73460 is fixed.
-      last_scroll_offset_ = scroll_offset;
-      auto root_object = WebAXObject::FromWebDocument(document);
-      if (!obj.Equals(root_object)) {
-        HandleAXEvent(ui::AXEvent(root_object.AxID(),
-                                  ax::mojom::Event::kLayoutComplete,
-                                  event.event_from));
-      }
-    }
-  }
 
 #if defined(OS_ANDROID)
   // Force the newly focused node to be re-serialized so we include its
@@ -776,8 +765,24 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
   if (document.IsNull())
     return;
 
+  if (needs_initial_ax_tree_root_) {
+    // At the very start of accessibility for this document, push a layout
+    // complete for the entire document, in order to initialize the browser's
+    // cached accessibility tree.
+    needs_initial_ax_tree_root_ = false;
+    auto obj = WebAXObject::FromWebDocument(document);
+    pending_events_.insert(
+        pending_events_.begin(),
+        ui::AXEvent(obj.AxID(), ax::mojom::Event::kLayoutComplete));
+  }
+
   if (pending_events_.empty() && dirty_objects_.empty())
     return;
+
+  // Update layout before snapshotting the events so that live state read from
+  // the DOM during freezing (e.g. which node currently has focus) is consistent
+  // with the events and node data we're about to send up.
+  WebAXObject::UpdateLayout(document);
 
   // Make a copy of the events, because it's possible that
   // actions inside this loop will cause more events to be
@@ -793,8 +798,9 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
   std::vector<DirtyObject> dirty_objects = dirty_objects_;
   dirty_objects_.clear();
 
-  // If there's a layout complete message, we need to send location changes.
-  bool had_layout_complete_messages = false;
+  // If there's a layout complete or a scroll changed message, we need to send
+  // location changes.
+  bool need_to_send_location_changes = false;
 
   // If there's a load complete message, we need to change the event schedule
   // mode.
@@ -802,14 +808,22 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
 
   ScopedFreezeBlinkAXTreeSource freeze(tree_source_.get());
 
-  // Save the page language.
   WebAXObject root = tree_source_->GetRoot();
+#if DCHECK_IS_ON()
+  // Never causes a document lifecycle change during serialization,
+  // because the assumption is that layout is in a safe, stable state.
+  blink::WebDisallowTransitionScope disallow(&document);
+#endif
+
+  // Save the page language.
   page_language_ = root.Language().Utf8();
 
   // Loop over each event and generate an updated event message.
   for (ui::AXEvent& event : src_events) {
-    if (event.event_type == ax::mojom::Event::kLayoutComplete)
-      had_layout_complete_messages = true;
+    if (event.event_type == ax::mojom::Event::kLayoutComplete ||
+        event.event_type == ax::mojom::Event::kScrollPositionChanged) {
+      need_to_send_location_changes = true;
+    }
 
     if (event.event_type == ax::mojom::Event::kLoadComplete)
       had_load_complete_messages = true;
@@ -817,7 +831,9 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
     auto obj = WebAXObject::FromWebDocumentByID(document, event.id);
 
     // Make sure the object still exists.
-    if (!obj.UpdateLayoutAndCheckValidity())
+    // TODO(accessibility) Change this to CheckValidity() if there aren't crash
+    // reports of illegal lifecycle changes from WebDisallowTransitionScope.
+    if (!obj.MaybeUpdateLayoutAndCheckValidity())
       continue;
 
     // Make sure it's a descendant of our root node - exceptions include the
@@ -892,13 +908,23 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
   WebDocument popup_document = GetPopupDocument();
   if (!popup_document.IsNull()) {
     WebAXObject popup_root_obj = WebAXObject::FromWebDocument(popup_document);
-    if (!popup_root_obj.UpdateLayoutAndCheckValidity()) {
+    if (!popup_root_obj.MaybeUpdateLayoutAndCheckValidity()) {
       // If a popup is open but we can't ensure its validity, return without
       // sending an update bundle, the same as we would for a node in the main
       // document.
       return;
     }
   }
+
+#if DCHECK_IS_ON()
+  // Protect against lifecycle changes in the popup document, if any.
+  // If no popup document, use the main document -- it's harmless to protect it
+  // twice, and some document is needed because this cannot be done in an if
+  // statement because it's scoped.
+  WebDocument popup_or_main_document =
+      popup_document.IsNull() ? document : popup_document;
+  blink::WebDisallowTransitionScope disallow2(&popup_or_main_document);
+#endif
 
   // Keep track of if the host node for a plugin has been invalidated,
   // because if so, the plugin subtree will need to be re-serialized.
@@ -914,7 +940,9 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
     auto obj = dirty_objects[i].obj;
     // Dirty objects can be added using MarkWebAXObjectDirty(obj) from other
     // parts of the code as well, so we need to ensure the object still exists.
-    if (!obj.UpdateLayoutAndCheckValidity())
+    // TODO(accessibility) Change this to CheckValidity() if there aren't crash
+    // reports of illegal lifecycle changes from WebDisallowTransitionScope.
+    if (!obj.MaybeUpdateLayoutAndCheckValidity())
       continue;
 
     // If the object in question is not included in the tree, get the
@@ -964,7 +992,7 @@ void RenderAccessibilityImpl::SendPendingAccessibilityEvents() {
                      weak_factory_for_pending_events_.GetWeakPtr()));
   reset_token_ = 0;
 
-  if (had_layout_complete_messages)
+  if (need_to_send_location_changes)
     SendLocationChanges();
 
   if (had_load_complete_messages) {
@@ -995,7 +1023,10 @@ void RenderAccessibilityImpl::SendLocationChanges() {
 
   // Update layout on the root of the tree.
   WebAXObject root = tree_source_->GetRoot();
-  if (!root.UpdateLayoutAndCheckValidity())
+
+  // TODO(accessibility) Change this to CheckValidity() if there aren't crash
+  // reports of illegal lifecycle changes from WebDisallowTransitionScope.
+  if (!root.MaybeUpdateLayoutAndCheckValidity())
     return;
 
   blink::WebVector<WebAXObject> changed_bounds_objects;
@@ -1016,6 +1047,9 @@ void RenderAccessibilityImpl::SendLocationChanges() {
     // Save the new location.
     tree_source_->SetCachedBoundingBox(id, new_location);
   }
+
+  if (changes.empty())
+    return;
 
   // Ensure that the number of cached bounding boxes doesn't exceed the
   // number of nodes in the tree, that would indicate the cache could
@@ -1310,7 +1344,7 @@ blink::WebDocument RenderAccessibilityImpl::GetPopupDocument() {
 WebAXObject RenderAccessibilityImpl::GetPluginRoot() {
   ScopedFreezeBlinkAXTreeSource freeze(tree_source_.get());
   WebAXObject root = tree_source_->GetRoot();
-  if (!root.UpdateLayoutAndCheckValidity())
+  if (!root.MaybeUpdateLayoutAndCheckValidity())
     return WebAXObject();
 
   base::queue<WebAXObject> objs_to_explore;

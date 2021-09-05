@@ -6,12 +6,6 @@ import("///ui/ozone/ozone.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/ui.gni")
 
-# Reset sources_assignment_filter for the BUILD.gn file to prevent
-# regression during the migration of Chromium away from the feature.
-# See docs/no_sources_assignment_filter.md for more information.
-# TODO(crbug.com/1018739): remove this when migration is done.
-set_sources_assignment_filter([])
-
 component("clipboard_types") {
   output_name = "ui_base_clipboard_types"
   sources = [
@@ -67,11 +61,13 @@ component("clipboard") {
     "clipboard.h",
     "clipboard_data_endpoint.cc",
     "clipboard_data_endpoint.h",
+    "clipboard_dlp_controller.cc",
     "clipboard_dlp_controller.h",
     "clipboard_metrics.cc",
     "clipboard_metrics.h",
     "clipboard_monitor.cc",
     "clipboard_monitor.h",
+    "clipboard_observer.cc",
     "clipboard_observer.h",
     "custom_data_helper.cc",
     "custom_data_helper.h",
@@ -231,7 +227,8 @@ source_set("clipboard_test") {
     ]
   }
 
-  if (use_aura && !chromeos_is_browser_only && !use_x11 && !is_win) {
+  if (use_aura && !chromeos_is_browser_only && !use_x11 && !is_win &&
+      !use_ozone) {
     sources += [
       "clipboard_data_unittest.cc",
       "clipboard_non_backed_unittest.cc",
@@ -245,6 +242,7 @@ source_set("clipboard_test") {
     "//testing/gtest",
     "//ui/events/platform",
     "//ui/gfx:test_support",
+    "//url:url",
   ]
 
   if (is_mac) {

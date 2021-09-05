@@ -1,18 +1,21 @@
-# tags: [ android
+# tags: [ android android-pie
 #         chromeos
 #         linux
 #         mac highsierra mojave sierra catalina
-#         win win7 win10 ]
+#         win win7 win10]
+# tags: [ desktop mobile ]
 # tags: [ d3d11 no-angle vulkan opengl opengles no-use-gl ]
 # tags: [ passthrough no-passthrough ]
 # tags: [ intel intel-0x3e92 intel-0x5912 intel-0xa2e
 #         amd amd-0x6613 amd-0x699f amd-0x679e amd-0x6821
+#         apple apple-apple-A12Z
 #         nvidia nvidia-0xf02 nvidia-0xfe9 nvidia-0x1cb3 nvidia-0x2184
 #         qualcomm qualcomm-adreno-(tm)-540 ]
 # tags: [ debug ]
 # tags: [ intel_lt_25.20.100.6444 intel_lt_25.20.100.6577
 #         intel_lt_26.20.100.7870 intel_lt_26.20.100.8141
-#         mesa_lt_19.1 mesa_lt_19.1.2 ]
+#         intel_lt_27.20.100.8280
+#         mesa_lt_19.1 mesa_ge_20.1 ]
 # tags: [ no-asan asan ]
 # results: [ Failure RetryOnFailure Skip ]
 
@@ -44,6 +47,7 @@
 [ mac ] WebglExtension_EXT_texture_compression_bptc [ Skip ]
 [ android qualcomm ] WebglExtension_EXT_texture_compression_bptc [ Skip ]
 [ android qualcomm ] WebglExtension_EXT_texture_compression_rgtc [ Skip ]
+[ desktop no-passthrough ] WebglExtension_EXT_color_buffer_half_float [ Skip ]
 crbug.com/776222 [ android ] WebglExtension_WEBGL_video_texture [ Skip ]
 crbug.com/1058744 [ no-passthrough ] WebglExtension_OES_draw_buffers_indexed [ Skip ]
 
@@ -69,10 +73,10 @@ crbug.com/891861 [ android no-passthrough ] WebglExtension_WEBGL_multi_draw_inst
 # ========================
 
 # Failing new updated tests
-crbug.com/1108588 conformance/glsl/bugs/character-set.html [ Failure ]
+crbug.com/1131224 conformance2/rendering/framebuffer-mismatched-attachment-targets.html [ Failure ]
 crbug.com/1108044 conformance2/renderbuffers/readbuffer.html [ Failure ]
 crbug.com/1108086 [ no-passthrough ] conformance2/renderbuffers/framebuffer-object-attachment.html [ Failure ]
-crbug.com/angleproject/4807 [ win passthrough ] conformance2/glsl3/switch-case.html [ Failure ]
+crbug.com/angleproject/4807 [ win d3d11 passthrough ] conformance2/glsl3/switch-case.html [ Failure ]
 crbug.com/1081973 conformance/buffers/buffer-data-and-buffer-sub-data.html [ Failure ]
 crbug.com/1082455 [ win ] conformance2/renderbuffers/multisampled-depth-renderbuffer-initialization.html [ Failure ]
 crbug.com/1082455 [ linux ] conformance2/renderbuffers/multisampled-depth-renderbuffer-initialization.html [ Failure ]
@@ -127,14 +131,15 @@ crbug.com/792210 [ nvidia ] conformance/glsl/bugs/in-parameter-passed-as-inout-a
 # Win failures     #
 ####################
 
-crbug.com/1081973 [ win opengl passthrough ] conformance2/textures/misc/compressed-tex-image.html [ Failure ]
-crbug.com/1081973 [ win vulkan passthrough ] conformance2/textures/misc/compressed-tex-image.html [ Failure ]
 crbug.com/angleproject/4417 [ win d3d11 ] conformance2/rendering/framebuffer-render-to-layer.html [ Failure ]
 crbug.com/angleproject/4417 [ win d3d11 ] conformance2/rendering/framebuffer-render-to-layer-angle-issue.html [ Failure ]
+crbug.com/1127867 [ win d3d11 ] conformance2/textures/image_data/tex-3d-rgb565-rgb-unsigned_byte.html [ RetryOnFailure ]
 
 # Intel flaky issues
+crbug.com/1122744 [ win d3d11 intel ] conformance/textures/misc/texparameter-test.html [ RetryOnFailure ]
 crbug.com/912579 [ opengl win passthrough intel ] conformance2/rendering/out-of-bounds-index-buffers-after-copying.html [ RetryOnFailure ]
 crbug.com/1114780 [ win intel ] deqp/functional/gles3/multisample.html [ RetryOnFailure ]
+crbug.com/1127867 [ win d3d11 intel ] conformance2/textures/image_data/tex-3d-r16f-red-half_float.html [ RetryOnFailure ]
 # Flakily times out on driver 26.20.100.8141.
 crbug.com/1093482 [ win10 intel-0x3e92 ] deqp/functional/gles3/shadermatrix/div_dynamic.html [ RetryOnFailure ]
 crbug.com/1093482 [ win10 intel-0x5912 ] deqp/functional/gles3/shadermatrix/div_dynamic.html [ RetryOnFailure ]
@@ -142,11 +147,11 @@ crbug.com/1093482 [ win10 intel-0x3e92 ] deqp/functional/gles3/shadermatrix/sub_
 crbug.com/1093482 [ win10 intel-0x5912 ] deqp/functional/gles3/shadermatrix/sub_dynamic.html [ RetryOnFailure ]
 
 # Intel failed issues
-crbug.com/795030 [ opengl win passthrough intel ] deqp/functional/gles3/shadercommonfunction.html [ Failure ]
 crbug.com/angleproject/2994 [ opengl win passthrough intel ] conformance2/textures/misc/copy-texture-image-same-texture.html [ Failure ]
 crbug.com/1042246 [ opengl win passthrough intel ] conformance2/extensions/ext-texture-norm16.html [ Skip ]
 
 # Intel driver issues
+crbug.com/795030 [ win intel opengl passthrough intel_lt_27.20.100.8280 ] deqp/functional/gles3/shadercommonfunction.html [ Failure ]
 crbug.com/602688 [ win intel opengl passthrough intel_lt_26.20.100.7870 ] conformance2/glsl3/vector-dynamic-indexing.html [ Failure ]
 crbug.com/1082565 [ win intel opengl passthrough intel_lt_26.20.100.8141 ] conformance/canvas/webgl-to-2d-canvas.html [ Failure ]
 
@@ -186,7 +191,6 @@ crbug.com/angleproject/1465 [ win no-use-gl ] conformance2/glsl3/tricky-loop-con
 crbug.com/angleproject/1465 [ win d3d11 ] conformance2/glsl3/tricky-loop-conditions.html [ Failure ]
 
 # Win / NVidia
-crbug.com/631317 [ d3d11 win nvidia ] deqp/functional/gles3/fbomultisample* [ RetryOnFailure ]
 crbug.com/679639 [ d3d11 win nvidia ] conformance2/rendering/draw-with-integer-texture-base-level.html [ Failure ]
 # Flake seen once.
 crbug.com/691951 [ d3d11 win nvidia ] deqp/functional/gles3/shaderoperator/binary_operator_11.html [ RetryOnFailure ]
@@ -233,9 +237,9 @@ crbug.com/905003 [ opengl win passthrough nvidia        ] conformance2/textures/
 crbug.com/887578 [ opengl win passthrough nvidia        ] deqp/data/gles3/shaders/conversions.html [ RetryOnFailure ]
 crbug.com/965648 [ opengl win passthrough nvidia-0x1cb3 ] deqp/functional/gles3/shaderstruct.html [ RetryOnFailure ]
 crbug.com/822733 [ opengl win nvidia-0x1cb3             ] deqp/functional/gles3/transformfeedback/* [ RetryOnFailure ]
-crbug.com/1060024 [ opengl win passthrough nvidia-0x1cb3 ] deqp/functional/gles3/shaderloop_do_while.html [ RetryOnFailure ]
-crbug.com/1060024 [ opengl win passthrough nvidia-0x1cb3 ] deqp/functional/gles3/shaderloop_for.html [ RetryOnFailure ]
-crbug.com/1060024 [ opengl win passthrough nvidia-0x1cb3 ] deqp/functional/gles3/shaderloop_while.html [ RetryOnFailure ]
+crbug.com/1060024 [ opengl win passthrough nvidia ] deqp/functional/gles3/shaderloop_do_while.html [ RetryOnFailure ]
+crbug.com/1060024 [ opengl win passthrough nvidia ] deqp/functional/gles3/shaderloop_for.html [ RetryOnFailure ]
+crbug.com/1060024 [ opengl win passthrough nvidia ] deqp/functional/gles3/shaderloop_while.html [ RetryOnFailure ]
 crbug.com/angleproject/4555 [ win opengl passthrough nvidia ] conformance/misc/type-conversion-test.html [ Skip ]
 
 
@@ -316,6 +320,16 @@ crbug.com/1085222 [ win10 intel-0x3e92 ] deqp/functional/gles3/shaderoperator/un
 crbug.com/1085222 [ win10 intel-0x5912 ] deqp/functional/gles3/shaderoperator/binary_operator_* [ Skip ]
 crbug.com/1085222 [ win10 intel-0x5912 ] deqp/functional/gles3/shaderoperator/unary_operator_01.html [ Skip ]
 crbug.com/1085222 [ win10 intel-0x5912 ] deqp/functional/gles3/shaderoperator/unary_operator_02.html [ Skip ]
+
+# Flaky timeouts on Linux Intel HD 630/UHD 630 GPUs
+crbug.com/1085222 [ linux intel-0x3e92 ] deqp/functional/gles3/shaderoperator/binary_operator_* [ RetryOnFailure ]
+crbug.com/1085222 [ linux intel-0x3e92 ] deqp/functional/gles3/shadermatrix/sub_* [ RetryOnFailure ]
+crbug.com/1085222 [ linux intel-0x3e92 ] deqp/functional/gles3/shadermatrix/mul_* [ RetryOnFailure ]
+crbug.com/1085222 [ linux intel-0x3e92 ] deqp/functional/gles3/shadermatrix/add_* [ RetryOnFailure ]
+crbug.com/1085222 [ linux intel-0x5912 ] deqp/functional/gles3/shaderoperator/binary_operator_* [ RetryOnFailure ]
+crbug.com/1085222 [ linux intel-0x5912 ] deqp/functional/gles3/shadermatrix/sub_* [ RetryOnFailure ]
+crbug.com/1085222 [ linux intel-0x5912 ] deqp/functional/gles3/shadermatrix/mul_* [ RetryOnFailure ]
+crbug.com/1085222 [ linux intel-0x5912 ] deqp/functional/gles3/shadermatrix/add_* [ RetryOnFailure ]
 
 # Flaky direct composition failure on Windows 10 1909 Intel UHD 630 GPUs w/ 26.20.100.8141
 crbug.com/1087993 [ win10 intel-0x5912 d3d11 ] conformance2/textures/image_data/tex-2d-rgb8ui-rgb_integer-unsigned_byte.html [ RetryOnFailure ]
@@ -474,8 +488,6 @@ crbug.com/1086194 [ mac nvidia-0xfe9 ] conformance/textures/canvas_sub_rectangle
 # rather than flaky.
 crbug.com/870856 [ mac amd ] conformance2/textures/misc/tex-base-level-bug.html [ Failure ]
 crbug.com/870856 [ mac amd no-passthrough ] conformance2/textures/misc/tex-mipmap-levels.html [ Failure ]
-
-crbug.com/angleproject/3701 [ mac amd ] conformance2/textures/canvas/tex-2d-rg8-rg-unsigned_byte.html [ RetryOnFailure ]
 
 crbug.com/1044638 [ mac amd ] conformance2/rendering/framebuffer-texture-level1.html [ RetryOnFailure ]
 
@@ -698,19 +710,50 @@ crbug.com/1027605 [ mac amd-0x679e no-passthrough ] deqp/functional/gles3/transf
 crbug.com/1027605 [ mac amd-0x679e no-passthrough ] deqp/functional/gles3/transformfeedback/random_separate_points.html [ Failure ]
 crbug.com/1027605 [ mac amd-0x679e no-passthrough ] deqp/functional/gles3/transformfeedback/random_separate_triangles.html [ Failure ]
 
+# ARM-based Mac DTKs
+crbug.com/1130112 [ mac apple-apple-a12z ] deqp/functional/gles3/texturefiltering/cube_combinations_00.html [ Failure ]
+crbug.com/1130112 [ mac apple-apple-a12z ] deqp/functional/gles3/texturefiltering/cube_combinations_02.html [ Failure ]
+crbug.com/1130112 [ mac apple-apple-a12z ] deqp/functional/gles3/texturefiltering/cube_combinations_04.html [ Failure ]
+crbug.com/1130112 [ mac apple-apple-a12z ] deqp/functional/gles3/texturefiltering/cube_sizes_03.html [ Failure ]
+crbug.com/1130112 [ mac apple-apple-a12z ] deqp/functional/gles3/texturefiltering/cube_sizes_04.html [ Failure ]
+crbug.com/1130114 [ mac apple-apple-a12z ] conformance2/extensions/ext-color-buffer-float.html [ Failure ]
+crbug.com/1130117 [ mac apple-apple-a12z ] deqp/functional/gles3/fbomultisample.2_samples.html [ Failure ]
+crbug.com/1130117 [ mac apple-apple-a12z ] deqp/functional/gles3/fbomultisample.4_samples.html [ Failure ]
+crbug.com/1130117 [ mac apple-apple-a12z no-asan ] deqp/functional/gles3/multisample.html [ Failure ]
+crbug.com/1130118 [ mac apple-apple-a12z ] conformance2/rendering/blitframebuffer-filter-srgb.html [ Failure ]
+crbug.com/1130118 [ mac apple-apple-a12z ] deqp/functional/gles3/framebufferblit/rect_03.html [ Failure ]
+crbug.com/1130118 [ mac apple-apple-a12z ] deqp/functional/gles3/framebufferblit/rect_04.html [ Failure ]
+crbug.com/1130119 [ mac apple-apple-a12z ] conformance2/glsl3/vector-dynamic-indexing.html [ Failure ]
+crbug.com/1130119 [ mac apple-apple-a12z ] conformance2/textures/misc/tex-base-level-bug.html [ Failure ]
+crbug.com/1130119 [ mac apple-apple-a12z ] conformance2/rendering/framebuffer-completeness-unaffected.html [ Failure ]
+crbug.com/1130119 [ mac apple-apple-a12z passthrough opengl ] conformance2/rendering/framebuffer-render-to-layer.html [ Failure ]
+crbug.com/1130119 [ mac apple-apple-a12z ] deqp/functional/gles3/fbocompleteness.html [ Failure ]
+crbug.com/1130119 [ mac apple-apple-a12z ] deqp/functional/gles3/fbodepthbuffer.html [ Failure ]
+crbug.com/1130119 [ mac apple-apple-a12z ] deqp/functional/gles3/shadertexturefunction/texturegrad.html [ Failure ]
+crbug.com/1130703 [ mac apple-apple-a12z no-passthrough ] conformance/textures/misc/texture-copying-and-deletion.html [ Failure ]
+crbug.com/1130703 [ mac apple-apple-a12z no-passthrough ] conformance/textures/misc/texture-copying-feedback-loops.html [ Failure ]
+crbug.com/1130708 [ mac apple-apple-a12z no-passthrough ] conformance2/textures/canvas/tex-2d-rgb5_a1-rgba-unsigned_byte.html [ Failure ]
+crbug.com/1130708 [ mac apple-apple-a12z no-passthrough ] conformance2/textures/canvas_sub_rectangle/tex-2d-rgb5_a1-rgba-unsigned_byte.html [ Failure ]
+crbug.com/1130708 [ mac apple-apple-a12z no-passthrough ] conformance2/textures/image_bitmap_from_canvas/tex-2d-rgb5_a1-rgba-unsigned_byte.html [ Failure ]
+crbug.com/1130708 [ mac apple-apple-a12z no-passthrough ] conformance2/textures/image_bitmap_from_video/tex-2d-rgb5_a1-rgba-unsigned_byte.html [ Failure ]
+crbug.com/1130708 [ mac apple-apple-a12z no-passthrough ] conformance2/textures/video/tex-2d-rgb5_a1-rgba-unsigned_byte.html [ Failure ]
+crbug.com/1130708 [ mac apple-apple-a12z no-passthrough ] conformance2/textures/webgl_canvas/tex-2d-rgb5_a1-rgba-unsigned_byte.html [ Failure ]
+crbug.com/1130708 [ mac apple-apple-a12z no-passthrough ] conformance2/textures/misc/tex-mipmap-levels.html [ Failure ]
+crbug.com/1130711 [ mac apple-apple-a12z no-passthrough ] deqp/functional/gles3/negativeshaderapi.html [ Failure ]
+
 ####################
 # Linux failures   #
 ####################
 
-crbug.com/1081973 [ linux opengl passthrough ] conformance2/textures/misc/compressed-tex-image.html [ Failure ]
 crbug.com/1060012 [ linux no-passthrough ] conformance/extensions/webgl-compressed-texture-astc.html [ Failure ]
 crbug.com/angleproject/4417 [ linux no-passthrough ] conformance2/rendering/framebuffer-render-to-layer.html [ Failure ]
-crbug.com/1081978 [ linux intel opengl passthrough ] conformance2/textures/misc/tex-3d-size-limit.html [ Failure ]
 
 # Mesa issues
 # Driver tag doesn't work on the passthrough command decoder because the detected driver version is ANGLE's version.
-crbug.com/950552 [ linux intel mesa_lt_19.1.2 ] conformance2/textures/misc/tex-base-level-bug.html [ Failure ]
+crbug.com/1127180 [ linux intel no-passthrough mesa_ge_20.1 ] deqp/functional/gles3/shaderindexing/tmp.html [ Failure ]
+crbug.com/1127180 [ linux intel no-passthrough mesa_ge_20.1 ] deqp/data/gles3/shaders/functions.html [ Failure ]
 crbug.com/1084864 [ linux intel opengl passthrough ] conformance2/rendering/blitframebuffer-filter-outofbounds.html [ Failure ]
+crbug.com/1081978 [ linux intel opengl passthrough ] conformance2/textures/misc/tex-3d-size-limit.html [ Failure ]
 crbug.com/angleproject/4242 [ linux intel opengl passthrough ] conformance2/glsl3/matrix-row-major-dynamic-indexing.html [ Failure ]
 crbug.com/angleproject/4242 [ linux intel no-passthrough mesa_lt_19.1 ] conformance2/glsl3/matrix-row-major-dynamic-indexing.html [ Failure ]
 
@@ -801,7 +844,7 @@ crbug.com/705865 [ linux amd ] conformance2/textures/image/tex-2d-r11f_g11f_b10f
 
 # Uniform buffer related failures
 crbug.com/483282 [ linux amd ] deqp/functional/gles3/uniformbuffers/random.html [ Failure ]
-crbug.com/angleproject/2103 [ linux amd ] conformance2/uniforms/uniform-blocks-with-arrays.html [ Failure ]
+crbug.com/angleproject/5014 [ linux amd ] conformance2/uniforms/uniform-blocks-with-arrays.html [ Failure ]
 crbug.com/809595 [ no-angle linux amd ] conformance2/uniforms/simple-buffer-change.html [ Failure ]
 
 # Linux AMD R7 240
@@ -840,6 +883,13 @@ crbug.com/951628 [ android no-passthrough ] conformance/rendering/blending.html 
 crbug.com/1000354 [ android no-passthrough ] conformance2/extensions/ext-texture-norm16.html [ Skip ]
 
 # Qualcomm (Pixel 2) failures
+
+# TODO(kbr): flakiness is seen on this configuration with the
+# passthrough command decoder across many different WebGL conformance
+# tests. Limit this blanket suppression to Android P in case this is
+# caused by driver bugs.
+crbug.com/1132297 [ android-pie qualcomm-adreno-(tm)-540 passthrough ] * [ RetryOnFailure ]
+
 crbug.com/906737 [ android qualcomm ] conformance/extensions/webgl-compressed-texture-astc.html [ Failure ]
 crbug.com/906742 [ android qualcomm no-passthrough ] conformance2/glsl3/compare-structs-containing-arrays.html [ Failure ]
 crbug.com/1008535 [ android qualcomm-adreno-(tm)-540 passthrough ] conformance2/textures/misc/tex-image-with-bad-args-from-dom-elements.html [ Skip ]
@@ -850,9 +900,53 @@ crbug.com/1022410 [ android qualcomm ] conformance2/transform_feedback/switching
 crbug.com/1027125 [ android qualcomm ] deqp/functional/gles3/negativetextureapi.html [ Failure ]
 crbug.com/1092734 [ android qualcomm-adreno-(tm)-540 passthrough ] conformance2/textures/webgl_canvas/tex-2d-rgb565-rgb-unsigned_short_5_6_5.html [ Failure ]
 crbug.com/1092734 [ android qualcomm-adreno-(tm)-540 passthrough ] conformance2/textures/webgl_canvas/tex-2d-rgb565-rgb-unsigned_byte.html [ Failure ]
+crbug.com/1126631 [ android qualcomm-adreno-(tm)-540 passthrough ] conformance2/textures/webgl_canvas/tex-2d-rgba8-rgba-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1126631 [ android qualcomm-adreno-(tm)-540 passthrough ] conformance2/textures/webgl_canvas/tex-3d-r11f_g11f_b10f-rgb-half_float.html [ RetryOnFailure ]
+crbug.com/1126631 [ android qualcomm-adreno-(tm)-540 passthrough ] conformance2/textures/webgl_canvas/tex-2d-rgb9_e5-rgb-half_float.html [ RetryOnFailure ]
+crbug.com/1126631 [ android qualcomm-adreno-(tm)-540 passthrough ] conformance2/textures/webgl_canvas/tex-2d-r11f_g11f_b10f-rgb-unsigned_int_10f_11f_11f_rev.html [ RetryOnFailure ]
+crbug.com/1126631 [ android qualcomm-adreno-(tm)-540 passthrough ] conformance/textures/webgl_canvas/tex-2d-luminance-luminance-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance/textures/canvas/tex-2d-alpha-alpha-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance/textures/canvas/tex-2d-luminance-luminance-unsigned_byte.html [ RetryOnFailure ]
 crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance/textures/canvas/tex-2d-luminance_alpha-luminance_alpha-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance/textures/canvas/tex-2d-rgb-rgb-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance/textures/canvas/tex-2d-rgb-rgb-unsigned_short_5_6_5.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance/textures/canvas/tex-2d-rgba-rgba-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance/textures/canvas/tex-2d-rgba-rgba-unsigned_short_4_4_4_4.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance/textures/canvas/tex-2d-rgba-rgba-unsigned_short_5_5_5_1.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-r11f_g11f_b10f-rgb-float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-r11f_g11f_b10f-rgb-half_float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-r11f_g11f_b10f-rgb-unsigned_int_10f_11f_11f_rev.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-r16f-red-float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-r16f-red-half_float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-r32f-red-float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-r8-red-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-r8ui-red_integer-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rg16f-rg-float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rg16f-rg-half_float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rg32f-rg-float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rg8-rg-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rg8ui-rg_integer-unsigned_byte.html [ RetryOnFailure ]
 crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb10_a2-rgba-unsigned_int_2_10_10_10_rev.html [ RetryOnFailure ]
-crbug.com/1111516 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-r11f_g11f_b10f-rgb-unsigned_int_10f_11f_11f_rev.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb16f-rgb-float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb16f-rgb-half_float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb32f-rgb-float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb565-rgb-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb565-rgb-unsigned_short_5_6_5.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb5_a1-rgba-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb5_a1-rgba-unsigned_short_5_5_5_1.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb8-rgb-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb8ui-rgb_integer-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb9_e5-rgb-float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgb9_e5-rgb-half_float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgba16f-rgba-float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgba16f-rgba-half_float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgba32f-rgba-float.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgba4-rgba-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgba4-rgba-unsigned_short_4_4_4_4.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgba8-rgba-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-rgba8ui-rgba_integer-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-srgb8-rgb-unsigned_byte.html [ RetryOnFailure ]
+crbug.com/1095679 [ android qualcomm-adreno-(tm)-540 no-passthrough ] conformance2/textures/canvas/tex-2d-srgb8_alpha8-rgba-unsigned_byte.html [ RetryOnFailure ]
 
 # This test is failing on Android Pixel 2 and 3 (Qualcomm)
 # Seems to be an OpenGL ES bug.

@@ -10,7 +10,10 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuClickHandler;
 import org.chromium.chrome.browser.ui.appmenu.CustomViewBinder;
 
 /**
@@ -31,8 +34,9 @@ class ManagedByMenuItemViewBinder implements CustomViewBinder {
     }
 
     @Override
-    public View getView(
-            MenuItem item, View convertView, ViewGroup parent, LayoutInflater inflater) {
+    public View getView(MenuItem item, @Nullable View convertView, ViewGroup parent,
+            LayoutInflater inflater, AppMenuClickHandler appMenuClickHandler,
+            @Nullable Integer highlightedItemId) {
         assert item.getItemId() == R.id.managed_by_menu_id;
 
         if (convertView == null) {

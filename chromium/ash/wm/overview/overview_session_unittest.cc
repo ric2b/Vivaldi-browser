@@ -94,6 +94,7 @@
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/transform.h"
 #include "ui/gfx/transform_util.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/widget/widget.h"
@@ -366,9 +367,7 @@ class OverviewSessionTest : public MultiDisplayOverviewAndSplitViewTest {
  private:
   void CheckOverviewHistogram(const char* histogram,
                               std::vector<int>&& counts) {
-    ASSERT_EQ(4u, counts.size());
-    // There should be no histogram for split view.
-    histograms_.ExpectTotalCount(histogram + std::string(".SplitView"), 0);
+    ASSERT_EQ(5u, counts.size());
 
     histograms_.ExpectTotalCount(histogram + std::string(".ClamshellMode"),
                                  counts[0]);
@@ -378,6 +377,8 @@ class OverviewSessionTest : public MultiDisplayOverviewAndSplitViewTest {
                                  counts[2]);
     histograms_.ExpectTotalCount(
         histogram + std::string(".MinimizedTabletMode"), counts[3]);
+    histograms_.ExpectTotalCount(histogram + std::string(".SplitView"),
+                                 counts[4]);
   }
 
   std::unique_ptr<ShelfViewTestAPI> shelf_view_test_api_;
@@ -434,7 +435,7 @@ TEST_P(OverviewSessionTest, Basic) {
   // Hide the cursor before entering overview to test that it will be shown.
   aura::client::GetCursorClient(root_window)->HideCursor();
 
-  CheckOverviewEnterExitHistogram("Init", {0, 0, 0, 0}, {0, 0, 0, 0});
+  CheckOverviewEnterExitHistogram("Init", {0, 0, 0, 0, 0}, {0, 0, 0, 0, 0});
   // In overview mode the windows should no longer overlap and the overview
   // focus window should be focused.
   ToggleOverview();
@@ -443,7 +444,7 @@ TEST_P(OverviewSessionTest, Basic) {
   EXPECT_EQ(overview_session()->GetOverviewFocusWindow(),
             window_util::GetFocusedWindow());
   EXPECT_FALSE(WindowsOverlapping(window1.get(), window2.get()));
-  CheckOverviewEnterExitHistogram("Enter", {1, 0, 0, 0}, {0, 0, 0, 0});
+  CheckOverviewEnterExitHistogram("Enter", {1, 0, 0, 0, 0}, {0, 0, 0, 0, 0});
 
   // Clicking window 1 should activate it.
   ClickWindow(window1.get());
@@ -456,7 +457,7 @@ TEST_P(OverviewSessionTest, Basic) {
   // Cursor should have been unlocked.
   EXPECT_FALSE(aura::client::GetCursorClient(root_window)->IsCursorLocked());
 
-  CheckOverviewEnterExitHistogram("Exit", {1, 0, 0, 0}, {1, 0, 0, 0});
+  CheckOverviewEnterExitHistogram("Exit", {1, 0, 0, 0, 0}, {1, 0, 0, 0, 0});
 }
 
 // Tests activating minimized window.
@@ -839,25 +840,25 @@ TEST_P(OverviewSessionTest, FullscreenWindow) {
   // Enter overview and select the fullscreen window.
   ToggleOverview();
   WaitForOverviewEnterAnimation();
-  CheckOverviewEnterExitHistogram("FullscreenWindowEnter1", {0, 1, 0, 0},
-                                  {0, 0, 0, 0});
+  CheckOverviewEnterExitHistogram("FullscreenWindowEnter1", {0, 1, 0, 0, 0},
+                                  {0, 0, 0, 0, 0});
   ClickWindow(window1.get());
   WaitForOverviewExitAnimation();
   EXPECT_TRUE(WindowState::Get(window1.get())->IsFullscreen());
-  CheckOverviewEnterExitHistogram("FullscreenWindowExit1", {0, 1, 0, 0},
-                                  {0, 1, 0, 0});
+  CheckOverviewEnterExitHistogram("FullscreenWindowExit1", {0, 1, 0, 0, 0},
+                                  {0, 1, 0, 0, 0});
 
   // Entering overview and selecting another window, the previous window remains
   // fullscreen.
   ToggleOverview();
   WaitForOverviewEnterAnimation();
-  CheckOverviewEnterExitHistogram("FullscreenWindowEnter2", {0, 2, 0, 0},
-                                  {0, 1, 0, 0});
+  CheckOverviewEnterExitHistogram("FullscreenWindowEnter2", {0, 2, 0, 0, 0},
+                                  {0, 1, 0, 0, 0});
   ClickWindow(window2.get());
   WaitForOverviewExitAnimation();
   EXPECT_TRUE(WindowState::Get(window1.get())->IsFullscreen());
-  CheckOverviewEnterExitHistogram("FullscreenWindowExit2", {0, 2, 0, 0},
-                                  {1, 1, 0, 0});
+  CheckOverviewEnterExitHistogram("FullscreenWindowExit2", {0, 2, 0, 0, 0},
+                                  {1, 1, 0, 0, 0});
 }
 
 // Tests entering overview mode with maximized window.
@@ -876,23 +877,23 @@ TEST_P(OverviewSessionTest, MaximizedWindow) {
   // Enter overview and select the fullscreen window.
   ToggleOverview();
   WaitForOverviewEnterAnimation();
-  CheckOverviewEnterExitHistogram("MaximizedWindowEnter1", {0, 1, 0, 0},
-                                  {0, 0, 0, 0});
+  CheckOverviewEnterExitHistogram("MaximizedWindowEnter1", {0, 1, 0, 0, 0},
+                                  {0, 0, 0, 0, 0});
   ClickWindow(window1.get());
   WaitForOverviewExitAnimation();
   EXPECT_TRUE(WindowState::Get(window1.get())->IsMaximized());
-  CheckOverviewEnterExitHistogram("MaximizedWindowExit1", {0, 1, 0, 0},
-                                  {0, 1, 0, 0});
+  CheckOverviewEnterExitHistogram("MaximizedWindowExit1", {0, 1, 0, 0, 0},
+                                  {0, 1, 0, 0, 0});
 
   ToggleOverview();
   WaitForOverviewEnterAnimation();
-  CheckOverviewEnterExitHistogram("MaximizedWindowEnter2", {0, 2, 0, 0},
-                                  {0, 1, 0, 0});
+  CheckOverviewEnterExitHistogram("MaximizedWindowEnter2", {0, 2, 0, 0, 0},
+                                  {0, 1, 0, 0, 0});
   ClickWindow(window2.get());
   WaitForOverviewExitAnimation();
   EXPECT_TRUE(WindowState::Get(window1.get())->IsMaximized());
-  CheckOverviewEnterExitHistogram("MaximizedWindowExit2", {0, 2, 0, 0},
-                                  {1, 1, 0, 0});
+  CheckOverviewEnterExitHistogram("MaximizedWindowExit2", {0, 2, 0, 0, 0},
+                                  {1, 1, 0, 0, 0});
 }
 
 TEST_P(OverviewSessionTest, TabletModeHistograms) {
@@ -905,24 +906,24 @@ TEST_P(OverviewSessionTest, TabletModeHistograms) {
   // Enter overview with the window maximized.
   ToggleOverview();
   WaitForOverviewEnterAnimation();
-  CheckOverviewEnterExitHistogram("MaximizedWindowTabletEnter", {0, 0, 1, 0},
-                                  {0, 0, 0, 0});
+  CheckOverviewEnterExitHistogram("MaximizedWindowTabletEnter", {0, 0, 1, 0, 0},
+                                  {0, 0, 0, 0, 0});
 
   ToggleOverview();
   WaitForOverviewExitAnimation();
-  CheckOverviewEnterExitHistogram("MaximizedWindowTabletExit", {0, 0, 1, 0},
-                                  {0, 0, 1, 0});
+  CheckOverviewEnterExitHistogram("MaximizedWindowTabletExit", {0, 0, 1, 0, 0},
+                                  {0, 0, 1, 0, 0});
 
   WindowState::Get(window1.get())->Minimize();
   ToggleOverview();
   WaitForOverviewEnterAnimation();
-  CheckOverviewEnterExitHistogram("MinimizedWindowTabletEnter", {0, 0, 1, 1},
-                                  {0, 0, 1, 0});
+  CheckOverviewEnterExitHistogram("MinimizedWindowTabletEnter", {0, 0, 1, 1, 0},
+                                  {0, 0, 1, 0, 0});
 
   ToggleOverview();
   WaitForOverviewExitAnimation();
-  CheckOverviewEnterExitHistogram("MinimizedWindowTabletExit", {0, 0, 1, 1},
-                                  {0, 0, 1, 1});
+  CheckOverviewEnterExitHistogram("MinimizedWindowTabletExit", {0, 0, 1, 1, 0},
+                                  {0, 0, 1, 1, 0});
 }
 
 // Tests that entering overview when a fullscreen window is active in maximized
@@ -961,8 +962,8 @@ TEST_P(OverviewSessionTest, FullscreenWindowTabletMode) {
   WaitForOverviewEnterAnimation();
   EXPECT_EQ(fullscreen,
             screen->GetDisplayNearestWindow(window1.get()).work_area());
-  CheckOverviewEnterExitHistogram("FullscreenWindowTabletEnter1", {0, 0, 1, 0},
-                                  {0, 0, 0, 0});
+  CheckOverviewEnterExitHistogram("FullscreenWindowTabletEnter1",
+                                  {0, 0, 1, 0, 0}, {0, 0, 0, 0, 0});
 
   // Window 2 would normally resize to normal window bounds on showing the shelf
   // for overview but this is deferred until overview is exited.
@@ -975,15 +976,15 @@ TEST_P(OverviewSessionTest, FullscreenWindowTabletMode) {
   // Since the fullscreen window is still active, window2 will still have the
   // larger bounds.
   EXPECT_EQ(fullscreen_window_bounds, window2->GetTargetBounds());
-  CheckOverviewEnterExitHistogram("FullscreenWindowTabletExit1", {0, 0, 1, 0},
-                                  {0, 0, 1, 0});
+  CheckOverviewEnterExitHistogram("FullscreenWindowTabletExit1",
+                                  {0, 0, 1, 0, 0}, {0, 0, 1, 0, 0});
 
   // Enter overview again and select window 2. Selecting window 2 should show
   // the shelf bringing window2 back to the normal bounds.
   ToggleOverview();
   WaitForOverviewEnterAnimation();
-  CheckOverviewEnterExitHistogram("FullscreenWindowTabletEnter2", {0, 0, 2, 0},
-                                  {0, 0, 1, 0});
+  CheckOverviewEnterExitHistogram("FullscreenWindowTabletEnter2",
+                                  {0, 0, 2, 0, 0}, {0, 0, 1, 0, 0});
 
   ClickWindow(window2.get());
   WaitForOverviewExitAnimation();
@@ -991,13 +992,13 @@ TEST_P(OverviewSessionTest, FullscreenWindowTabletMode) {
   EXPECT_EQ(normal_work_area,
             screen->GetDisplayNearestWindow(window1.get()).work_area());
   EXPECT_EQ(normal_window_bounds, window2->GetTargetBounds());
-  CheckOverviewEnterExitHistogram("FullscreenWindowTabletExit2", {0, 0, 2, 0},
-                                  {0, 0, 2, 0});
+  CheckOverviewEnterExitHistogram("FullscreenWindowTabletExit2",
+                                  {0, 0, 2, 0, 0}, {0, 0, 2, 0, 0});
 
   ToggleOverview();
   WaitForOverviewEnterAnimation();
-  CheckOverviewEnterExitHistogram("FullscreenWindowTabletEnter3", {0, 0, 3, 0},
-                                  {0, 0, 2, 0});
+  CheckOverviewEnterExitHistogram("FullscreenWindowTabletEnter3",
+                                  {0, 0, 3, 0, 0}, {0, 0, 2, 0, 0});
   EXPECT_EQ(normal_work_area,
             screen->GetDisplayNearestWindow(window1.get()).work_area());
   ClickWindow(window1.get());
@@ -1006,8 +1007,8 @@ TEST_P(OverviewSessionTest, FullscreenWindowTabletMode) {
   // well.
   EXPECT_EQ(fullscreen,
             screen->GetDisplayNearestWindow(window1.get()).work_area());
-  CheckOverviewEnterExitHistogram("FullscreenWindowTabletExit3", {0, 0, 3, 0},
-                                  {0, 0, 3, 0});
+  CheckOverviewEnterExitHistogram("FullscreenWindowTabletExit3",
+                                  {0, 0, 3, 0, 0}, {0, 0, 3, 0, 0});
 }
 
 TEST_P(OverviewSessionTest, SkipOverviewWindow) {
@@ -1433,57 +1434,6 @@ TEST_P(OverviewSessionTest, NoCrashOnTabAfterExitWithNoWindows) {
   ToggleOverview();
   SendKey(ui::VKEY_TAB);
   EXPECT_FALSE(InOverviewSession());
-}
-
-// Tests that dragging a window from the top of a display creates a drop target
-// on that display. The workflow will be real after the tablet disambiguation
-// work. Until then, this test can safely be disabled.
-TEST_P(OverviewSessionTest,
-       DISABLED_DropTargetOnCorrectDisplayForDraggingFromTop) {
-  UpdateDisplay("600x600,600x600");
-  EnterTabletMode();
-  // DisplayConfigurationObserver enables mirror mode when tablet mode is
-  // enabled. Disable mirror mode to test multiple displays.
-  display_manager()->SetMirrorMode(display::MirrorMode::kOff, base::nullopt);
-  base::RunLoop().RunUntilIdle();
-
-  const aura::Window::Windows root_windows = Shell::Get()->GetAllRootWindows();
-  ASSERT_EQ(2u, root_windows.size());
-
-  std::unique_ptr<aura::Window> primary_screen_window =
-      CreateTestWindow(gfx::Rect(0, 0, 600, 600));
-  primary_screen_window->SetProperty(aura::client::kAppType,
-                                     static_cast<int>(AppType::BROWSER));
-  ASSERT_EQ(root_windows[0], primary_screen_window->GetRootWindow());
-  std::unique_ptr<aura::Window> secondary_screen_window =
-      CreateTestWindow(gfx::Rect(600, 0, 600, 600));
-  secondary_screen_window->SetProperty(aura::client::kAppType,
-                                       static_cast<int>(AppType::BROWSER));
-  ASSERT_EQ(root_windows[1], secondary_screen_window->GetRootWindow());
-
-  ASSERT_FALSE(InOverviewSession());
-  {
-    std::unique_ptr<WindowResizer> resizer =
-        CreateWindowResizer(primary_screen_window.get(), gfx::PointF(400, 0),
-                            HTCAPTION, ::wm::WINDOW_MOVE_SOURCE_TOUCH);
-    ASSERT_TRUE(InOverviewSession());
-    EXPECT_FALSE(GetDropTarget(1));
-    ASSERT_TRUE(GetDropTarget(0));
-    EXPECT_EQ(root_windows[0], GetDropTarget(0)->root_window());
-    resizer->CompleteDrag();
-  }
-  ASSERT_FALSE(InOverviewSession());
-  {
-    std::unique_ptr<WindowResizer> resizer =
-        CreateWindowResizer(secondary_screen_window.get(), gfx::PointF(400, 0),
-                            HTCAPTION, ::wm::WINDOW_MOVE_SOURCE_TOUCH);
-    ASSERT_TRUE(InOverviewSession());
-    EXPECT_FALSE(GetDropTarget(0));
-    ASSERT_TRUE(GetDropTarget(1));
-    EXPECT_EQ(root_windows[1], GetDropTarget(1)->root_window());
-    resizer->CompleteDrag();
-  }
-  ASSERT_FALSE(InOverviewSession());
 }
 
 // Tests that dragging a window from overview creates a drop target on the same
@@ -3018,7 +2968,7 @@ class TestEventHandler : public ui::EventHandler {
  public:
   TestEventHandler() = default;
   ~TestEventHandler() override = default;
-  // ui::EventHandler
+  // ui::EventHandler:
   void OnKeyEvent(ui::KeyEvent* event) override {
     if (event->type() != ui::ET_KEY_PRESSED)
       return;
@@ -3198,6 +3148,60 @@ TEST_P(OverviewSessionTest, FadeOutExit) {
   EXPECT_EQ(0.0f, grid_item_widget->GetLayer()->GetTargetOpacity());
   EXPECT_TRUE(grid_item_widget->GetLayer()->GetAnimator()->IsAnimatingProperty(
       ui::LayerAnimationElement::OPACITY));
+}
+
+// Tests that accessibility overrides are set as expected on overview related
+// widgets.
+TEST_P(OverviewSessionTest, AccessibilityFocusAnnotator) {
+  auto window3 = CreateTestWindow(gfx::Rect(100, 100));
+  auto window2 = CreateTestWindow(gfx::Rect(100, 100));
+  auto window1 = CreateTestWindow(gfx::Rect(100, 100));
+
+  ToggleOverview();
+  WaitForOverviewEnterAnimation();
+
+  auto* focus_widget = views::Widget::GetWidgetForNativeWindow(
+      GetOverviewSession()->GetOverviewFocusWindow());
+  DCHECK(focus_widget);
+
+  OverviewGrid* grid = GetOverviewSession()->grid_list()[0].get();
+  auto* desk_widget = const_cast<views::Widget*>(grid->desks_widget());
+  DCHECK(desk_widget);
+
+  // Overview items are in MRU order, so the expected order in the grid list is
+  // the reverse creation order.
+  auto* item_widget1 = GetOverviewItemForWindow(window1.get())->item_widget();
+  auto* item_widget2 = GetOverviewItemForWindow(window2.get())->item_widget();
+  auto* item_widget3 = GetOverviewItemForWindow(window3.get())->item_widget();
+
+  // Helper that takes in a current widget and checks if the accessibility next
+  // and previous focus widgets match the given.
+  auto check_a11y_overrides = [](const std::string& id, views::Widget* widget,
+                                 views::Widget* expected_previous,
+                                 views::Widget* expected_next) -> void {
+    SCOPED_TRACE(id);
+    views::View* contents_view = widget->GetContentsView();
+    views::ViewAccessibility& view_accessibility =
+        contents_view->GetViewAccessibility();
+    EXPECT_EQ(expected_previous, view_accessibility.GetPreviousFocus());
+    EXPECT_EQ(expected_next, view_accessibility.GetNextFocus());
+  };
+
+  // Order should be [focus_widget, desk_widget, item_widget1, item_widget2,
+  // item_widget3].
+  check_a11y_overrides("focus", focus_widget, item_widget3, desk_widget);
+  check_a11y_overrides("desk", desk_widget, focus_widget, item_widget1);
+  check_a11y_overrides("item1", item_widget1, desk_widget, item_widget2);
+  check_a11y_overrides("item2", item_widget2, item_widget1, item_widget3);
+  check_a11y_overrides("item3", item_widget3, item_widget2, focus_widget);
+
+  // Remove |window2|. The new order should be [focus_widget, desk_widget,
+  // item_widget1, item_widget3].
+  window2.reset();
+  check_a11y_overrides("focus", focus_widget, item_widget3, desk_widget);
+  check_a11y_overrides("desk", desk_widget, focus_widget, item_widget1);
+  check_a11y_overrides("item1", item_widget1, desk_widget, item_widget3);
+  check_a11y_overrides("item3", item_widget3, item_widget1, focus_widget);
 }
 
 class TabletModeOverviewSessionTest : public OverviewSessionTest {
@@ -5368,6 +5372,7 @@ TEST_P(SplitViewOverviewSessionTest, SnappedWindowBoundsWithMinimumSizeTest) {
   std::unique_ptr<aura::Window> window2(CreateWindowWithMinimumSize(
       bounds, gfx::Size(work_area_length / 3 + 20, 0)));
 
+  ToggleOverview();
   split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
   split_view_controller()->StartResize(
       GetSplitViewDividerBounds(/*is_dragging=*/false).CenterPoint());
@@ -5994,6 +5999,18 @@ TEST_P(SplitViewOverviewSessionTest,
   EXPECT_EQ(minimized_window.get(), window_util::GetActiveWindow());
 }
 
+// Verify no crash (or DCHECK failure) if you exit and re-enter mirror mode
+// while in tablet split view with empty overview.
+TEST_P(SplitViewOverviewSessionTest,
+       ExitAndReenterMirrorModeWithEmptyOverview) {
+  UpdateDisplay("800x600,800x600");
+  std::unique_ptr<aura::Window> window = CreateTestWindow();
+  ToggleOverview();
+  split_view_controller()->SnapWindow(window.get(), SplitViewController::LEFT);
+  display_manager()->SetMirrorMode(display::MirrorMode::kOff, base::nullopt);
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
+}
+
 // Test the split view and overview functionalities in clamshell mode. Split
 // view is only active when overview is active in clamshell mode.
 class SplitViewOverviewSessionInClamshellTest
@@ -6181,6 +6198,30 @@ TEST_P(SplitViewOverviewSessionInClamshellTest, BasicFunctionalitiesTest) {
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(overview_controller()->InOverviewSession());
   EXPECT_FALSE(split_view_controller()->InSplitViewMode());
+}
+
+// Test overview exit animation histograms when you drag to snap two windows on
+// opposite sides.
+TEST_P(SplitViewOverviewSessionInClamshellTest,
+       BothSnappedOverviewExitAnimationHistogramTest) {
+  ui::ScopedAnimationDurationScaleMode anmatin_scale(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  const gfx::Rect bounds(400, 400);
+  std::unique_ptr<aura::Window> left_window(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> right_window(CreateWindow(bounds));
+  CheckOverviewEnterExitHistogram("Init", {0, 0, 0, 0, 0}, {0, 0, 0, 0, 0});
+
+  ToggleOverview();
+  WaitForOverviewEnterAnimation();
+  CheckOverviewEnterExitHistogram("EnterOverview", {1, 0, 0, 0, 0},
+                                  {0, 0, 0, 0, 0});
+
+  DragWindowTo(GetOverviewItemForWindow(left_window.get()), gfx::PointF(0, 0));
+  DragWindowTo(GetOverviewItemForWindow(right_window.get()),
+               gfx::PointF(799, 300));
+  WaitForOverviewExitAnimation();
+  CheckOverviewEnterExitHistogram("SnapBothSides", {1, 0, 0, 0, 0},
+                                  {1, 0, 0, 0, 1});
 }
 
 // Test that when overview and splitview are both active, only resize that

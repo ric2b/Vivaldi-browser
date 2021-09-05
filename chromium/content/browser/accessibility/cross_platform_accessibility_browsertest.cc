@@ -1240,6 +1240,96 @@ IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
   EXPECT_EQ(text->GetId(), anchor_waiter.event_target_id());
 }
 
+IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest, GeneratedText) {
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kLoadComplete);
+  GURL url(
+      "data:text/html,"
+      "<style>h1.generated::before{content:'   [   ';}"
+      "h1.generated::after{content:'   ]    ';}</style>"
+      "<h1 class='generated'>Foo</h1>");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  waiter.WaitForNotification();
+
+  const BrowserAccessibility* root = GetManager()->GetRoot();
+  ASSERT_EQ(1U, root->PlatformChildCount());
+
+  const BrowserAccessibility* heading = root->PlatformGetChild(0);
+  ASSERT_EQ(3U, heading->PlatformChildCount());
+
+  const BrowserAccessibility* static1 = heading->PlatformGetChild(0);
+  EXPECT_EQ(ax::mojom::Role::kStaticText, static1->GetData().role);
+  EXPECT_STREQ(
+      "[ ",
+      GetAttr(static1->node(), ax::mojom::StringAttribute::kName).c_str());
+
+  const BrowserAccessibility* static2 = heading->PlatformGetChild(1);
+  EXPECT_EQ(ax::mojom::Role::kStaticText, static2->GetData().role);
+  EXPECT_STREQ(
+      "Foo",
+      GetAttr(static2->node(), ax::mojom::StringAttribute::kName).c_str());
+
+  const BrowserAccessibility* static3 = heading->PlatformGetChild(2);
+  EXPECT_EQ(ax::mojom::Role::kStaticText, static3->GetData().role);
+  EXPECT_STREQ(
+      " ]",
+      GetAttr(static3->node(), ax::mojom::StringAttribute::kName).c_str());
+}
+
+IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
+                       FocusFiresJavascriptOnfocus) {
+  LoadInitialAccessibilityTreeFromHtmlFilePath(
+      "/accessibility/html/iframe-focus.html");
+  // There are two iframes in the test page, so wait for both of them to
+  // complete loading before proceeding.
+  WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
+                                                "Ordinary Button");
+  WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
+                                                "Button with focus handler");
+
+  BrowserAccessibilityManager* root_accessibility_manager = GetManager();
+  ASSERT_NE(nullptr, root_accessibility_manager);
+  BrowserAccessibility* root_browser_accessibility =
+      root_accessibility_manager->GetRoot();
+  ASSERT_NE(nullptr, root_browser_accessibility);
+
+  // Focus the button within the second iframe to set focus on that document,
+  // then set focus on the first iframe (with the Javascript onfocus handler)
+  // and ensure onfocus fires there.
+  BrowserAccessibility* second_iframe_browser_accessibility =
+      root_browser_accessibility->InternalDeepestLastChild();
+  ASSERT_NE(nullptr, second_iframe_browser_accessibility);
+  BrowserAccessibility* second_iframe_root_browser_accessibility =
+      second_iframe_browser_accessibility->PlatformGetChild(0);
+  ASSERT_NE(nullptr, second_iframe_root_browser_accessibility);
+  BrowserAccessibility* second_button = FindNodeByRole(
+      second_iframe_root_browser_accessibility, ax::mojom::Role::kButton);
+  ASSERT_NE(nullptr, second_button);
+  AccessibilityNotificationWaiter waiter(
+      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kFocus);
+  second_iframe_root_browser_accessibility->manager()->SetFocus(*second_button);
+  waiter.WaitForNotification();
+  EXPECT_EQ(second_button, root_accessibility_manager->GetFocus());
+
+  BrowserAccessibility* first_iframe_browser_accessibility =
+      root_browser_accessibility->InternalDeepestFirstChild();
+  ASSERT_NE(nullptr, first_iframe_browser_accessibility);
+  BrowserAccessibility* first_iframe_root_browser_accessibility =
+      first_iframe_browser_accessibility->PlatformGetChild(0);
+  ASSERT_NE(nullptr, first_iframe_root_browser_accessibility);
+  BrowserAccessibility* first_button = FindNodeByRole(
+      first_iframe_root_browser_accessibility, ax::mojom::Role::kButton);
+  ASSERT_NE(nullptr, first_button);
+
+  // The page in the first iframe will append the word "Focused" when onfocus is
+  // fired, so wait for that node to be added.
+  first_iframe_root_browser_accessibility->manager()->SetFocus(*first_button);
+  WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
+                                                "Focused");
+  EXPECT_EQ(first_button, root_accessibility_manager->GetFocus());
+}
+
 IN_PROC_BROWSER_TEST_F(CrossPlatformAccessibilityBrowserTest,
                        IFrameContentHadFocus_ThenRootDocumentGainedFocus) {
   // Start by loading a document with iframes.

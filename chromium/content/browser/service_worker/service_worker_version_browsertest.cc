@@ -47,7 +47,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/result_codes.h"
-#include "content/public/common/web_preferences.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -63,6 +62,7 @@
 #include "storage/browser/test/blob_test_utils.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
 #include "third_party/blink/public/common/service_worker/service_worker_type_converters.h"
+#include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 
 using blink::mojom::CacheStorageError;
@@ -552,7 +552,7 @@ class ServiceWorkerVersionBrowserTest : public ContentBrowserTest {
   }
 
   void FindRegistrationForId(int64_t id,
-                             const GURL& origin,
+                             const url::Origin& origin,
                              blink::ServiceWorkerStatusCode expected_status) {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::UI));
     blink::ServiceWorkerStatusCode status =
@@ -570,7 +570,7 @@ class ServiceWorkerVersionBrowserTest : public ContentBrowserTest {
   void FindRegistrationForIdOnCoreThread(base::OnceClosure done,
                                          blink::ServiceWorkerStatusCode* result,
                                          int64_t id,
-                                         const GURL& origin) {
+                                         const url::Origin& origin) {
     ASSERT_TRUE(
         BrowserThread::CurrentlyOn(ServiceWorkerContext::GetCoreThreadId()));
     wrapper()->context()->registry()->FindRegistrationForId(
@@ -631,10 +631,11 @@ class ServiceWorkerVersionBrowserTest : public ContentBrowserTest {
       base::OnceClosure done,
       base::Optional<blink::ServiceWorkerStatusCode>* out_result,
       int request_id,
-      blink::mojom::ServiceWorkerEventStatus status) {
-    version_->FinishRequest(
-        request_id,
-        status == blink::mojom::ServiceWorkerEventStatus::COMPLETED);
+      blink::mojom::ServiceWorkerEventStatus status,
+      uint32_t fetch_count) {
+    version_->FinishRequestWithFetchCount(
+        request_id, status == blink::mojom::ServiceWorkerEventStatus::COMPLETED,
+        fetch_count);
 
     *out_result = mojo::ConvertTo<blink::ServiceWorkerStatusCode>(status);
     if (!done.is_null())
@@ -876,7 +877,7 @@ class MockContentBrowserClient : public TestContentBrowserClient {
   }
 
   void OverrideWebkitPrefs(RenderViewHost* render_view_host,
-                           WebPreferences* prefs) override {
+                           blink::web_pref::WebPreferences* prefs) override {
     prefs->data_saver_enabled = data_saver_enabled_;
   }
 
@@ -1002,7 +1003,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, ReadResourceFailure) {
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, version_->status());
 
   // The registration should be deleted from storage.
-  FindRegistrationForId(registration_->id(), registration_->scope().GetOrigin(),
+  FindRegistrationForId(registration_->id(), registration_->origin(),
                         blink::ServiceWorkerStatusCode::kErrorNotFound);
   EXPECT_TRUE(registration_->is_uninstalled());
 }
@@ -1053,7 +1054,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest,
 
   // The whole registration should be deleted from storage even though the
   // waiting version was not the broken one.
-  FindRegistrationForId(registration_->id(), registration_->scope().GetOrigin(),
+  FindRegistrationForId(registration_->id(), registration_->origin(),
                         blink::ServiceWorkerStatusCode::kErrorNotFound);
   EXPECT_TRUE(registration_->is_uninstalled());
 }
@@ -1732,16 +1733,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserV8FullCodeCacheTest,
   StopWorker();
 }
 
-class CacheStorageEagerReadingTestBase
-    : public ServiceWorkerVersionBrowserTest {
+class CacheStorageEagerReadingTest : public ServiceWorkerVersionBrowserTest {
  public:
-  explicit CacheStorageEagerReadingTestBase(bool enabled) {
-    if (enabled)
-      feature_list.InitAndEnableFeature(features::kCacheStorageEagerReading);
-    else
-      feature_list.InitAndDisableFeature(features::kCacheStorageEagerReading);
-  }
-
   void SetupServiceWorkerAndDoFetch(
       std::string fetch_url,
       blink::mojom::FetchAPIResponsePtr* response_out) {
@@ -1804,42 +1797,14 @@ class CacheStorageEagerReadingTestBase
   base::test::ScopedFeatureList feature_list;
 };
 
-class CacheStorageEagerReadingEnabledTest
-    : public CacheStorageEagerReadingTestBase {
- public:
-  CacheStorageEagerReadingEnabledTest()
-      : CacheStorageEagerReadingTestBase(true) {}
-};
-
-class CacheStorageEagerReadingDisabledTest
-    : public CacheStorageEagerReadingTestBase {
- public:
-  CacheStorageEagerReadingDisabledTest()
-      : CacheStorageEagerReadingTestBase(false) {}
-};
-
-IN_PROC_BROWSER_TEST_F(CacheStorageEagerReadingDisabledTest,
-                       CacheMatchInRelatedFetchEvent) {
-  blink::mojom::FetchAPIResponsePtr response;
-  SetupServiceWorkerAndDoFetch(kCacheMatchURL, &response);
-  ExpectNormalCacheResponse(std::move(response));
-}
-
-IN_PROC_BROWSER_TEST_F(CacheStorageEagerReadingDisabledTest,
-                       CacheMatchInUnrelatedFetchEvent) {
-  blink::mojom::FetchAPIResponsePtr response;
-  SetupServiceWorkerAndDoFetch(kOtherURL, &response);
-  ExpectNormalCacheResponse(std::move(response));
-}
-
-IN_PROC_BROWSER_TEST_F(CacheStorageEagerReadingEnabledTest,
+IN_PROC_BROWSER_TEST_F(CacheStorageEagerReadingTest,
                        CacheMatchInRelatedFetchEvent) {
   blink::mojom::FetchAPIResponsePtr response;
   SetupServiceWorkerAndDoFetch(kCacheMatchURL, &response);
   ExpectEagerlyReadCacheResponse(std::move(response));
 }
 
-IN_PROC_BROWSER_TEST_F(CacheStorageEagerReadingEnabledTest,
+IN_PROC_BROWSER_TEST_F(CacheStorageEagerReadingTest,
                        CacheMatchInUnrelatedFetchEvent) {
   blink::mojom::FetchAPIResponsePtr response;
   SetupServiceWorkerAndDoFetch(kOtherURL, &response);

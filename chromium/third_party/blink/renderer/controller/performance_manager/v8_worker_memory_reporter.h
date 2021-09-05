@@ -6,9 +6,9 @@
 #define THIRD_PARTY_BLINK_RENDERER_CONTROLLER_PERFORMANCE_MANAGER_V8_WORKER_MEMORY_REPORTER_H_
 
 #include "base/callback.h"
+#include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "testing/gtest/include/gtest/gtest_prod.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/renderer/controller/controller_export.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -59,6 +59,9 @@ class CONTROLLER_EXPORT V8WorkerMemoryReporter {
                                        WorkerMemoryUsage memory_usage);
   static void NotifyMeasurementFailure(WorkerThread*,
                                        base::WeakPtr<V8WorkerMemoryReporter>);
+
+  // Injects the implementation for the performance.measureMemory Web API.
+  static void RegisterWebMemoryReporter();
 
  private:
   // The initial state is kWaiting.

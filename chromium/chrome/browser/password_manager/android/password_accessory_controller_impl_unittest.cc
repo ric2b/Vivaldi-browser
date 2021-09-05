@@ -68,6 +68,7 @@ using FillingSource = ManualFillingController::FillingSource;
 using IsPslMatch = autofill::UserInfo::IsPslMatch;
 
 constexpr char kExampleSite[] = "https://example.com";
+constexpr char kExampleHttpSite[] = "http://example.com";
 constexpr char kExampleSiteMobile[] = "https://m.example.com";
 constexpr char kExampleSignonRealm[] = "https://example.com/";
 constexpr char kExampleDomain[] = "example.com";
@@ -145,6 +146,11 @@ base::string16 no_user_str() {
 base::string16 show_other_passwords_str() {
   return l10n_util::GetStringUTF16(
       IDS_PASSWORD_MANAGER_ACCESSORY_USE_OTHER_PASSWORD);
+}
+
+base::string16 show_other_username_str() {
+  return l10n_util::GetStringUTF16(
+      IDS_PASSWORD_MANAGER_ACCESSORY_USE_OTHER_USERNAME);
 }
 
 base::string16 manage_passwords_str() {
@@ -651,6 +657,46 @@ TEST_F(PasswordAccessoryControllerTest, AddsShowOtherPasswordsIfEnabled) {
       /*is_manual_generation_available=*/false);
 }
 
+TEST_F(PasswordAccessoryControllerTest, AddsShowOtherUsername) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      password_manager::features::kFillingPasswordsFromAnyOrigin);
+  AccessorySheetData::Builder data_builder(AccessoryTabType::PASSWORDS,
+                                           passwords_empty_str(kExampleDomain));
+  data_builder
+      .AppendFooterCommand(show_other_username_str(),
+                           autofill::AccessoryAction::USE_OTHER_PASSWORD)
+      .AppendFooterCommand(manage_passwords_str(),
+                           autofill::AccessoryAction::MANAGE_PASSWORDS);
+  EXPECT_CALL(mock_manual_filling_controller_,
+              RefreshSuggestions(std::move(data_builder).Build()));
+
+  controller()->RefreshSuggestionsForField(
+      FocusedFieldType::kFillableUsernameField,
+      /*is_manual_generation_available=*/false);
+}
+
+TEST_F(PasswordAccessoryControllerTest,
+       AddsShowOtherPasswordForOnlySecuredSites) {
+  // `Setup` method sets the URL to https but http is required for this method.
+  NavigateAndCommit(GURL(kExampleHttpSite));
+  FocusWebContentsOnMainFrame();
+
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      password_manager::features::kFillingPasswordsFromAnyOrigin);
+  AccessorySheetData::Builder data_builder(
+      AccessoryTabType::PASSWORDS, passwords_empty_str(kExampleHttpSite));
+  data_builder.AppendFooterCommand(manage_passwords_str(),
+                                   autofill::AccessoryAction::MANAGE_PASSWORDS);
+  EXPECT_CALL(mock_manual_filling_controller_,
+              RefreshSuggestions(std::move(data_builder).Build()));
+
+  controller()->RefreshSuggestionsForField(
+      FocusedFieldType::kFillablePasswordField,
+      /*is_manual_generation_available=*/false);
+}
+
 TEST_F(PasswordAccessoryControllerTest, HidesShowOtherPasswordsIfDisabled) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndDisableFeature(
@@ -722,6 +768,32 @@ TEST_F(PasswordAccessoryControllerTest, AddsSaveToggleIfWasBlacklisted) {
               RefreshSuggestions(std::move(data_builder).Build()));
   controller()->RefreshSuggestionsForField(
       FocusedFieldType::kFillablePasswordField,
+      /*is_manual_generation_available=*/false);
+}
+
+TEST_F(PasswordAccessoryControllerTest, AddsSaveToggleOnUsernameIfBlacklisted) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {password_manager::features::kRecoverFromNeverSaveAndroid,
+       autofill::features::kAutofillKeyboardAccessory},
+      {});
+  cache()->SaveCredentialsAndBlacklistedForOrigin(
+      {}, CredentialCache::IsOriginBlacklisted(true),
+      url::Origin::Create(GURL(kExampleSite)));
+  ON_CALL(*password_client(), IsSavingAndFillingEnabled(GURL(kExampleSite)))
+      .WillByDefault(Return(true));
+  AccessorySheetData::Builder data_builder(AccessoryTabType::PASSWORDS,
+                                           passwords_empty_str(kExampleDomain));
+  data_builder
+      .SetOptionToggle(
+          l10n_util::GetStringUTF16(IDS_PASSWORD_SAVING_STATUS_TOGGLE), false,
+          autofill::AccessoryAction::TOGGLE_SAVE_PASSWORDS)
+      .AppendFooterCommand(manage_passwords_str(),
+                           autofill::AccessoryAction::MANAGE_PASSWORDS);
+  EXPECT_CALL(mock_manual_filling_controller_,
+              RefreshSuggestions(std::move(data_builder).Build()));
+  controller()->RefreshSuggestionsForField(
+      FocusedFieldType::kFillableUsernameField,
       /*is_manual_generation_available=*/false);
 }
 

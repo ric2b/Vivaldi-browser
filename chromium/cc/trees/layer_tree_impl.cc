@@ -312,7 +312,7 @@ void LayerTreeImpl::UpdateScrollbarGeometries() {
     }
 
     for (auto* scrollbar : ScrollbarsFor(scrolling_element_id)) {
-      if (scrollbar->orientation() == HORIZONTAL) {
+      if (scrollbar->orientation() == ScrollbarOrientation::HORIZONTAL) {
         scrollbar->SetCurrentPos(current_offset.x());
         scrollbar->SetClipLayerLength(bounds_size.width());
         scrollbar->SetScrollLayerLength(scrolling_size.width());
@@ -615,8 +615,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
 
   if (TakeNewLocalSurfaceIdRequest())
     target_tree->RequestNewLocalSurfaceId();
-  target_tree->SetLocalSurfaceIdAllocationFromParent(
-      local_surface_id_allocation_from_parent());
+  target_tree->SetLocalSurfaceIdFromParent(local_surface_id_from_parent());
 
   target_tree->pending_page_scale_animation_ =
       std::move(pending_page_scale_animation_);
@@ -675,7 +674,7 @@ void LayerTreeImpl::HandleTickmarksVisibilityChange() {
     return;
 
   for (ScrollbarLayerImplBase* scrollbar : controller->Scrollbars()) {
-    if (scrollbar->orientation() != VERTICAL)
+    if (scrollbar->orientation() != ScrollbarOrientation::VERTICAL)
       continue;
 
     // Android Overlay Scrollbar don't have FindInPage Tickmarks.
@@ -1175,11 +1174,9 @@ void LayerTreeImpl::SetDeviceScaleFactor(float device_scale_factor) {
   host_impl_->SetNeedUpdateGpuRasterizationStatus();
 }
 
-void LayerTreeImpl::SetLocalSurfaceIdAllocationFromParent(
-    const viz::LocalSurfaceIdAllocation&
-        local_surface_id_allocation_from_parent) {
-  local_surface_id_allocation_from_parent_ =
-      local_surface_id_allocation_from_parent;
+void LayerTreeImpl::SetLocalSurfaceIdFromParent(
+    const viz::LocalSurfaceId& local_surface_id_from_parent) {
+  local_surface_id_from_parent_ = local_surface_id_from_parent;
 }
 
 void LayerTreeImpl::RequestNewLocalSurfaceId() {
@@ -1656,7 +1653,7 @@ LayerImpl* LayerTreeImpl::FindPendingTreeLayerById(int id) {
 }
 
 bool LayerTreeImpl::PinchGestureActive() const {
-  return host_impl_->GetInputHandler().pinch_gesture_active();
+  return host_impl_->IsPinchGestureActive();
 }
 
 const viz::BeginFrameArgs& LayerTreeImpl::CurrentBeginFrameArgs() const {
@@ -1917,9 +1914,10 @@ void LayerTreeImpl::RegisterScrollbar(ScrollbarLayerImplBase* scrollbar_layer) {
     return;
 
   auto* scrollbar_ids = &element_id_to_scrollbar_layer_ids_[scroll_element_id];
-  int* scrollbar_layer_id = scrollbar_layer->orientation() == HORIZONTAL
-                                ? &scrollbar_ids->horizontal
-                                : &scrollbar_ids->vertical;
+  int* scrollbar_layer_id =
+      scrollbar_layer->orientation() == ScrollbarOrientation::HORIZONTAL
+          ? &scrollbar_ids->horizontal
+          : &scrollbar_ids->vertical;
 
   // We used to DCHECK this was not the case but this can occur on Android: as
   // the visual viewport supplies scrollbars for the outer viewport, if the
@@ -1932,9 +1930,10 @@ void LayerTreeImpl::RegisterScrollbar(ScrollbarLayerImplBase* scrollbar_layer) {
 
     // The scrollbar_ids could have been erased above so get it again.
     scrollbar_ids = &element_id_to_scrollbar_layer_ids_[scroll_element_id];
-    scrollbar_layer_id = scrollbar_layer->orientation() == HORIZONTAL
-                             ? &scrollbar_ids->horizontal
-                             : &scrollbar_ids->vertical;
+    scrollbar_layer_id =
+        scrollbar_layer->orientation() == ScrollbarOrientation::HORIZONTAL
+            ? &scrollbar_ids->horizontal
+            : &scrollbar_ids->vertical;
   }
 
   *scrollbar_layer_id = scrollbar_layer->id();
@@ -1957,7 +1956,7 @@ void LayerTreeImpl::UnregisterScrollbar(
     return;
 
   auto& scrollbar_ids = element_id_to_scrollbar_layer_ids_[scroll_element_id];
-  if (scrollbar_layer->orientation() == HORIZONTAL)
+  if (scrollbar_layer->orientation() == ScrollbarOrientation::HORIZONTAL)
     scrollbar_ids.horizontal = Layer::INVALID_ID;
   else
     scrollbar_ids.vertical = Layer::INVALID_ID;

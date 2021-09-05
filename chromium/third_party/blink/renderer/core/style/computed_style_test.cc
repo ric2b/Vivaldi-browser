@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/css/properties/css_property_ref.h"
 #include "third_party/blink/renderer/core/css/property_registry.h"
+#include "third_party/blink/renderer/core/css/resolver/style_adjuster.h"
 #include "third_party/blink/renderer/core/css/resolver/style_cascade.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
@@ -683,10 +684,10 @@ TEST(ComputedStyleTest, ApplyColorSchemeLightOnDark) {
   light_value->Append(*CSSIdentifierValue::Create(CSSValueID::kLight));
 
   To<Longhand>(ref.GetProperty()).ApplyValue(state, *dark_value);
-  EXPECT_EQ(WebColorScheme::kDark, style->UsedColorScheme());
+  EXPECT_EQ(ColorScheme::kDark, style->UsedColorScheme());
 
   To<Longhand>(ref.GetProperty()).ApplyValue(state, *light_value);
-  EXPECT_EQ(WebColorScheme::kLight, style->UsedColorScheme());
+  EXPECT_EQ(ColorScheme::kLight, style->UsedColorScheme());
 }
 
 TEST(ComputedStyleTest, ApplyInternalLightDarkColor) {
@@ -945,6 +946,154 @@ TEST(ComputedStyleTest, BorderWidthZoom) {
       EXPECT_EQ(test.expected_px, numeric_value->DoubleValue()) << prop_name;
     }
   }
+}
+
+TEST(ComputedStyleTest, TextDecorationEqualDoesNotRequireRecomputeInkOverflow) {
+  using css_test_helpers::ParseDeclarationBlock;
+
+  std::unique_ptr<DummyPageHolder> dummy_page_holder_ =
+      std::make_unique<DummyPageHolder>(IntSize(0, 0), nullptr);
+  const ComputedStyle* initial = &ComputedStyle::InitialStyle();
+
+  StyleResolverState state(dummy_page_holder_->GetDocument(),
+                           *dummy_page_holder_->GetDocument().documentElement(),
+                           initial, initial);
+
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+
+  // Set up the initial text decoration properties
+  style->SetTextDecorationStyle(ETextDecorationStyle::kSolid);
+  style->SetTextDecorationColor(StyleColor(CSSValueID::kGreen));
+  style->SetTextDecoration(TextDecoration::kUnderline);
+  style->SetTextDecorationThickness(
+      TextDecorationThickness(Length(5, Length::Type::kFixed)));
+  style->SetTextUnderlineOffset(Length(2, Length::Type::kFixed));
+  style->SetTextUnderlinePosition(kTextUnderlinePositionUnder);
+  state.SetStyle(style);
+  StyleAdjuster::AdjustComputedStyle(state, nullptr /* element */);
+  EXPECT_EQ(TextDecoration::kUnderline, style->TextDecorationsInEffect());
+
+  scoped_refptr<ComputedStyle> other = ComputedStyle::Clone(*style);
+  StyleDifference diff1;
+  style->UpdatePropertySpecificDifferences(*other, diff1);
+  EXPECT_FALSE(diff1.NeedsRecomputeVisualOverflow());
+
+  // Change the color, and it should not invalidate
+  other->SetTextDecorationColor(StyleColor(CSSValueID::kBlue));
+  state.SetStyle(other);
+  StyleAdjuster::AdjustComputedStyle(state, nullptr /* element */);
+  StyleDifference diff2;
+  style->UpdatePropertySpecificDifferences(*other, diff2);
+  EXPECT_FALSE(diff2.NeedsRecomputeVisualOverflow());
+}
+
+TEST(ComputedStyleTest, TextDecorationNotEqualRequiresRecomputeInkOverflow) {
+  using css_test_helpers::ParseDeclarationBlock;
+
+  std::unique_ptr<DummyPageHolder> dummy_page_holder_ =
+      std::make_unique<DummyPageHolder>(IntSize(0, 0), nullptr);
+  const ComputedStyle* initial = &ComputedStyle::InitialStyle();
+
+  StyleResolverState state(dummy_page_holder_->GetDocument(),
+                           *dummy_page_holder_->GetDocument().documentElement(),
+                           initial, initial);
+
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+
+  // Set up the initial text decoration properties
+  style->SetTextDecorationStyle(ETextDecorationStyle::kSolid);
+  style->SetTextDecorationColor(StyleColor(CSSValueID::kGreen));
+  style->SetTextDecoration(TextDecoration::kUnderline);
+  style->SetTextDecorationThickness(
+      TextDecorationThickness(Length(5, Length::Type::kFixed)));
+  style->SetTextUnderlineOffset(Length(2, Length::Type::kFixed));
+  style->SetTextUnderlinePosition(kTextUnderlinePositionUnder);
+  state.SetStyle(style);
+  StyleAdjuster::AdjustComputedStyle(state, nullptr /* element */);
+
+  // Change decoration style
+  scoped_refptr<ComputedStyle> other = ComputedStyle::Clone(*style);
+  other->SetTextDecorationStyle(ETextDecorationStyle::kWavy);
+  state.SetStyle(other);
+  StyleAdjuster::AdjustComputedStyle(state, nullptr /* element */);
+  StyleDifference diff_decoration_style;
+  style->UpdatePropertySpecificDifferences(*other, diff_decoration_style);
+  EXPECT_TRUE(diff_decoration_style.NeedsRecomputeVisualOverflow());
+
+  // Change decoration line
+  other = ComputedStyle::Clone(*style);
+  other->SetTextDecoration(TextDecoration::kOverline);
+  state.SetStyle(other);
+  StyleAdjuster::AdjustComputedStyle(state, nullptr /* element */);
+  StyleDifference diff_decoration_line;
+  style->UpdatePropertySpecificDifferences(*other, diff_decoration_line);
+  EXPECT_TRUE(diff_decoration_line.NeedsRecomputeVisualOverflow());
+
+  // Change decoration thickness
+  other = ComputedStyle::Clone(*style);
+  other->SetTextDecorationThickness(
+      TextDecorationThickness(Length(3, Length::Type::kFixed)));
+  state.SetStyle(other);
+  StyleAdjuster::AdjustComputedStyle(state, nullptr /* element */);
+  StyleDifference diff_decoration_thickness;
+  style->UpdatePropertySpecificDifferences(*other, diff_decoration_thickness);
+  EXPECT_TRUE(diff_decoration_thickness.NeedsRecomputeVisualOverflow());
+
+  // Change underline offset
+  other = ComputedStyle::Clone(*style);
+  other->SetTextUnderlineOffset(Length(4, Length::Type::kFixed));
+  state.SetStyle(other);
+  StyleAdjuster::AdjustComputedStyle(state, nullptr /* element */);
+  StyleDifference diff_underline_offset;
+  style->UpdatePropertySpecificDifferences(*other, diff_underline_offset);
+  EXPECT_TRUE(diff_underline_offset.NeedsRecomputeVisualOverflow());
+
+  // Change underline position
+  other = ComputedStyle::Clone(*style);
+  other->SetTextUnderlinePosition(kTextUnderlinePositionLeft);
+  state.SetStyle(other);
+  StyleAdjuster::AdjustComputedStyle(state, nullptr /* element */);
+  StyleDifference diff_underline_position;
+  style->UpdatePropertySpecificDifferences(*other, diff_underline_position);
+  EXPECT_TRUE(diff_underline_position.NeedsRecomputeVisualOverflow());
+}
+
+// Verify that cloned ComputedStyle is independent from source, i.e.
+// copy-on-write works as expected.
+TEST(ComputedStyleTest, ClonedStyleAnimationsAreIndependent) {
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+
+  auto& animations = style->AccessAnimations();
+  animations.DelayList().clear();
+  animations.DelayList().push_back(CSSAnimationData::InitialDelay());
+  EXPECT_EQ(1u, style->Animations()->DelayList().size());
+
+  scoped_refptr<ComputedStyle> cloned_style = ComputedStyle::Clone(*style);
+  auto& cloned_style_animations = cloned_style->AccessAnimations();
+  EXPECT_EQ(1u, cloned_style_animations.DelayList().size());
+  cloned_style_animations.DelayList().push_back(
+      CSSAnimationData::InitialDelay());
+
+  EXPECT_EQ(2u, cloned_style->Animations()->DelayList().size());
+  EXPECT_EQ(1u, style->Animations()->DelayList().size());
+}
+
+TEST(ComputedStyleTest, ClonedStyleTransitionsAreIndependent) {
+  scoped_refptr<ComputedStyle> style = ComputedStyle::Create();
+
+  auto& transitions = style->AccessTransitions();
+  transitions.PropertyList().clear();
+  transitions.PropertyList().push_back(CSSTransitionData::InitialProperty());
+  EXPECT_EQ(1u, style->Transitions()->PropertyList().size());
+
+  scoped_refptr<ComputedStyle> cloned_style = ComputedStyle::Clone(*style);
+  auto& cloned_style_transitions = cloned_style->AccessTransitions();
+  EXPECT_EQ(1u, cloned_style_transitions.PropertyList().size());
+  cloned_style_transitions.PropertyList().push_back(
+      CSSTransitionData::InitialProperty());
+
+  EXPECT_EQ(2u, cloned_style->Transitions()->PropertyList().size());
+  EXPECT_EQ(1u, style->Transitions()->PropertyList().size());
 }
 
 }  // namespace blink

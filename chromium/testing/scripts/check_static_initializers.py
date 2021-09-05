@@ -11,10 +11,10 @@ import sys
 
 import common
 
-# A list of whitelisted files that are allowed to have static initializers.
+# A list of files that are allowed to have static initializers.
 # If something adds a static initializer, revert it. We don't accept regressions
 # in static initializers.
-_LINUX_SI_FILE_WHITELIST = {
+_LINUX_SI_FILE_ALLOWLIST = {
     'chrome': [
         'InstrProfilingRuntime.cpp',  # Only in coverage builds, not production.
         'atomicops_internals_x86.cc',  # TODO(crbug.com/973551): Remove.
@@ -24,11 +24,28 @@ _LINUX_SI_FILE_WHITELIST = {
     ],
     'nacl_helper_bootstrap': [],
 }
-_LINUX_SI_FILE_WHITELIST['nacl_helper'] = _LINUX_SI_FILE_WHITELIST['chrome']
+_LINUX_SI_FILE_ALLOWLIST['nacl_helper'] = _LINUX_SI_FILE_ALLOWLIST['chrome']
 
-# Mac can use a whitelist when a dsym is available, otherwise we will fall back
+# The lists for Chrome OS are conceptually the same as the Linux ones above.
+# If something adds a static initializer, revert it. We don't accept regressions
+# in static initializers.
+_CROS_SI_FILE_ALLOWLIST = {
+    'chrome': [
+        'InstrProfilingRuntime.cpp',  # Only in coverage builds, not production.
+        'atomicops_internals_x86.cc',  # TODO(crbug.com/973551): Remove.
+        'debugallocation_shim.cc',  # TODO(crbug.com/973552): Remove.
+        'iostream.cpp',  # TODO(crbug.com/973554): Remove.
+        'spinlock.cc',  # TODO(crbug.com/973556): Remove.
+        'int256.cc',  # TODO(crbug.com/537099): Remove.
+        'rpc.pb.cc',  # TODO(crbug.com/537099): Remove.
+    ],
+    'nacl_helper_bootstrap': [],
+}
+_CROS_SI_FILE_ALLOWLIST['nacl_helper'] = _LINUX_SI_FILE_ALLOWLIST['chrome']
+
+# Mac can use this list when a dsym is available, otherwise it will fall back
 # to checking the count.
-_MAC_SI_FILE_WHITELIST = [
+_MAC_SI_FILE_ALLOWLIST = [
     'InstrProfilingRuntime.cpp', # Only in coverage builds, not in production.
     'sysinfo.cc', # Only in coverage builds, not in production.
     'iostream.cpp', # Used to setup std::cin/cout/cerr.
@@ -102,7 +119,7 @@ def main_mac(src_dir):
               [dump_static_initializers, chromium_framework_dsym])
           for line in stdout:
             if re.match('0x[0-9a-f]+', line) and not any(
-                f in line for f in _MAC_SI_FILE_WHITELIST):
+                f in line for f in _MAC_SI_FILE_ALLOWLIST):
               ret = 1
               print 'Found invalid static initializer: {}'.format(line)
           print stdout
@@ -110,6 +127,7 @@ def main_mac(src_dir):
           print('Expected <= %d static initializers in %s, but found %d' %
               (FALLBACK_EXPECTED_MAC_SI_COUNT, chromium_framework_executable,
                si_count))
+          ret = 1
           show_mod_init_func = os.path.join(mac_tools_path,
                                             'show_mod_init_func.py')
           args = [show_mod_init_func]
@@ -127,9 +145,11 @@ def main_mac(src_dir):
   return ret
 
 
-def main_linux(src_dir):
+def main_linux(src_dir, is_chromeos):
   ret = 0
-  for binary_name in _LINUX_SI_FILE_WHITELIST:
+  allowlist = _CROS_SI_FILE_ALLOWLIST if is_chromeos else \
+      _LINUX_SI_FILE_ALLOWLIST
+  for binary_name in allowlist:
     if not os.path.exists(binary_name):
       continue
 
@@ -153,7 +173,7 @@ def main_linux(src_dir):
       files_with_si.add(parts[1])
 
     for f in files_with_si:
-      if f not in _LINUX_SI_FILE_WHITELIST[binary_name]:
+      if f not in allowlist[binary_name]:
         ret = 1
         print('Error: file "%s" is not expected to have static initializers in'
               ' binary "%s"') % (f, binary_name)
@@ -175,7 +195,9 @@ def main_run(args):
   if sys.platform.startswith('darwin'):
     rc = main_mac(src_dir)
   elif sys.platform == 'linux2':
-    rc = main_linux(src_dir)
+    is_chromeos = 'buildername' in args.properties and \
+        'chromeos' in args.properties['buildername']
+    rc = main_linux(src_dir, is_chromeos)
   else:
     sys.stderr.write('Unsupported platform %s.\n' % repr(sys.platform))
     return 2

@@ -19,8 +19,6 @@ extern const base::Feature kNetworkErrorLogging;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kNetworkService;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kOutOfBlinkCors;
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kReporting;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kThrottleDelayable;
@@ -46,8 +44,6 @@ COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginEmbedderPolicy;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCrossOriginIsolated;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kBlockInsecurePrivateNetworkRequests;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kSplitAuthCacheByNetworkIsolationKey;
 COMPONENT_EXPORT(NETWORK_CPP)
@@ -76,8 +72,6 @@ extern const char kCorbAllowlistAlsoAppliesToOorCorsParamName[];
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kRequestInitiatorSiteLockEnfocement;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kStrictAccessControlAllowListCheck;
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCertVerifierService;
 
 COMPONENT_EXPORT(NETWORK_CPP)
@@ -97,15 +91,10 @@ COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kOutOfBlinkCSPEE;
 
 COMPONENT_EXPORT(NETWORK_CPP)
-bool ShouldEnableOutOfBlinkCorsForTesting();
-
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kWebSocketReassembleShortMessages;
 
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kSCTAuditing;
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::FeatureParam<double> kSCTAuditingSamplingRate;
+extern const base::Feature kFirstPartySets;
 
 }  // namespace features
 }  // namespace network

@@ -161,6 +161,9 @@ chrome.fileManagerPrivate.DeviceEventType = {
   RENAME_START: 'rename_start',
   RENAME_SUCCESS: 'rename_success',
   RENAME_FAIL: 'rename_fail',
+  PARTITION_START: 'partition_start',
+  PARTITION_SUCCESS: 'partition_success',
+  PARTITION_FAIL: 'partition_fail',
 };
 
 /** @enum {string} */
@@ -265,12 +268,6 @@ chrome.fileManagerPrivate.CrostiniEventType = {
   DISABLE: 'disable',
   SHARE: 'share',
   UNSHARE: 'unshare',
-};
-
-/** @enum {string} */
-chrome.fileManagerPrivate.ContentMetadataType = {
-  METADATATAGSIMAGES: 'metadataTagsImages',
-  METADATATAGS: 'metadataTags',
 };
 
 /**
@@ -483,7 +480,8 @@ chrome.fileManagerPrivate.DriveMetadataSearchResult;
  * @typedef {{
  *   type: !chrome.fileManagerPrivate.DriveConnectionStateType,
  *   reason: (!chrome.fileManagerPrivate.DriveOfflineReason|undefined),
- *   hasCellularNetworkAccess: boolean
+ *   hasCellularNetworkAccess: boolean,
+ *   canPinHostedFiles: boolean
  * }}
  */
 chrome.fileManagerPrivate.DriveConnectionState;
@@ -576,6 +574,13 @@ chrome.fileManagerPrivate.AttachedImages;
  * }}
  */
 chrome.fileManagerPrivate.MediaMetadata;
+
+/**
+ * @typedef {{
+ *   itemUrls: !Array<string>
+ * }}
+ */
+chrome.fileManagerPrivate.HoldingSpaceState;
 
 /**
  * Logout the current user for navigating to the re-authentication screen for
@@ -785,6 +790,14 @@ chrome.fileManagerPrivate.startCopy = function(entry, parentEntry, newName,
     callback) {};
 
 /**
+ * Copies an image to the system clipboard. |entry| Entry of the image to copy
+ * to the system clipboard.
+ * @param {!Entry} entry
+ * @param {function()} callback
+ */
+chrome.fileManagerPrivate.copyImageToClipboard = function(entry, callback) {};
+
+/**
  * Cancels the running copy task. |copyId| ID of the copy task to be cancelled.
  * |callback| Completion callback of the cancel.
  * @param {number} copyId
@@ -810,6 +823,16 @@ chrome.fileManagerPrivate.getSizeStats = function(volumeId, callback) {};
  */
 chrome.fileManagerPrivate.formatVolume = function(volumeId, filesystem,
     volumeLabel) {};
+
+/**
+ * Deletes partitions of removable device, creates a single partition
+ * and format it.
+ * @param {string} devicePath
+ * @param {chrome.fileManagerPrivate.FormatFileSystemType} filesystem
+ * @param {string} volumeLabel
+ */
+chrome.fileManagerPrivate.singlePartitionFormat = function(devicePath,
+  filesystem, volumeLabel) {};
 
 /**
  * Renames a mounted volume. |volumeId| ID of the volume to be renamed to
@@ -1127,6 +1150,26 @@ chrome.fileManagerPrivate.sharesheetHasTargets = function(entries, callback) {};
  * @param {function()} callback
  */
 chrome.fileManagerPrivate.invokeSharesheet = function(entries, callback) {};
+
+/**
+ * Adds or removes a list of entries to temporary holding space. Any entries
+ * whose current holding space state matches the intended state will be skipped.
+ * |entries| The list of entries whose holding space needs to be updated. |add|
+ * Whether items should be added or removed from the holding space. |callback|
+ * Completion callback.
+ * @param {!Array<!Entry>} entries
+ * @param {boolean} added
+ * @param {function(): void=} callback Callback that does not take arguments.
+ */
+chrome.fileManagerPrivate.toggleAddedToHoldingSpace = function(entries, added, callback) {};
+
+/**
+ * Retrieves the current holding space state, for example the list of items the
+ * holding space currently contains. |callback| The result callback.
+ * @param {function(!chrome.fileManagerPrivate.HoldingSpaceState): void}
+ *     callback |state| Describes the current holding space state.
+ */
+chrome.fileManagerPrivate.getHoldingSpaceState = function(callback) {};
 
 /** @type {!ChromeEvent} */
 chrome.fileManagerPrivate.onMountCompleted;

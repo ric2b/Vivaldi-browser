@@ -25,9 +25,13 @@ const char kInitDoneNotifierSwitch[] = "init-done-notifier";
 const char kNoRateLimitSwitch[] = "no-rate-limit";
 const char kEnableLoggingSwitch[] = "enable-logging";
 const char kLoggingModuleSwitch[] = "vmodule";
-const char kSingleProcessSwitch[] = "single-process";
-const char kAppIdSwitch[] = "appid";
+const char kAppIdSwitch[] = "app-id";
+const char kAppVersionSwitch[] = "app-version";
 const char kWakeSwitch[] = "wake";
+
+const char kServerServiceSwitch[] = "service";
+const char kServerControlServiceSwitchValue[] = "control";
+const char kServerUpdateServiceSwitchValue[] = "update";
 
 #if defined(OS_WIN)
 const char kInstallFromOutDir[] = "install-from-out-dir";

@@ -446,6 +446,7 @@ void NodeController::AcceptBrokerClientInvitationOnIOThread(
       inviter_name_ = ports::kInvalidNodeName;
     }
 
+    const bool leak_endpoint = connection_params.leak_endpoint();
     // At this point we don't know the inviter's name, so we can't yet insert it
     // into our |peers_| map. That will happen as soon as we receive an
     // AcceptInvitee message from them.
@@ -454,7 +455,7 @@ void NodeController::AcceptBrokerClientInvitationOnIOThread(
                             Channel::HandlePolicy::kAcceptHandles,
                             io_task_runner_, ProcessErrorCallback());
 
-    if (connection_params.leak_endpoint()) {
+    if (leak_endpoint) {
       // Prevent the inviter pipe handle from being closed on shutdown. Pipe
       // closure may be used by the inviter to detect that the invited process
       // has terminated. In such cases, the invited process must not be invited
@@ -992,11 +993,8 @@ void NodeController::OnAcceptBrokerClient(const ports::NodeName& from_node,
   // Feed the broker any pending invitees of our own.
   while (!pending_broker_clients.empty()) {
     const ports::NodeName& invitee_name = pending_broker_clients.front();
-    auto it = pending_invitations_.find(invitee_name);
-    // If for any reason we don't have a pending invitation for the invitee,
-    // there's nothing left to do: we've already swapped the relevant state into
-    // the stack.
-    if (it != pending_invitations_.end()) {
+    auto it = peers_.find(invitee_name);
+    if (it != peers_.end()) {
       broker->AddBrokerClient(invitee_name,
                               it->second->CloneRemoteProcessHandle());
     }

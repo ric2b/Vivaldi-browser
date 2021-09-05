@@ -12,17 +12,38 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_out_of_flow_layout_part.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/mathml/mathml_element.h"
+#include "third_party/blink/renderer/core/mathml/mathml_operator_element.h"
 
 namespace blink {
 namespace {
 
 inline LayoutUnit InlineOffsetForDisplayMathCentering(
-    bool is_display_math,
+    bool is_display_block_math,
     LayoutUnit available_inline_size,
     LayoutUnit max_row_inline_size) {
-  if (is_display_math)
+  if (is_display_block_math)
     return (available_inline_size - max_row_inline_size) / 2;
   return LayoutUnit();
+}
+
+static void DetermineOperatorSpacing(const NGLayoutInputNode& node,
+                                     LayoutUnit* lspace,
+                                     LayoutUnit* rspace) {
+  auto* core_operator =
+      DynamicTo<MathMLOperatorElement>(node.GetDOMNode());
+  if (core_operator) {
+    // TODO(crbug.com/1124298): Implement embellished operators.
+    LayoutUnit leading_space(core_operator->DefaultLeadingSpace() *
+                             node.Style().FontSize());
+    *lspace = std::max<LayoutUnit>(
+        ValueForLength(node.Style().GetMathLSpace(), leading_space),
+        LayoutUnit());
+    LayoutUnit trailing_space(core_operator->DefaultTrailingSpace() *
+                              node.Style().FontSize());
+    *rspace = std::max<LayoutUnit>(
+        ValueForLength(node.Style().GetMathRSpace(), trailing_space),
+        LayoutUnit());
+  }
 }
 
 }  // namespace
@@ -51,6 +72,8 @@ void NGMathRowLayoutAlgorithm::LayoutRowItems(
           To<NGBlockNode>(child), BorderScrollbarPadding().StartOffset());
       continue;
     }
+    LayoutUnit lspace, rspace;
+    DetermineOperatorSpacing(child, &lspace, &rspace);
     const ComputedStyle& child_style = child.Style();
     NGConstraintSpace child_space = CreateConstraintSpaceForMathChild(
         Node(), ChildAvailableSize(), ConstraintSpace(), child);
@@ -69,7 +92,8 @@ void NGMathRowLayoutAlgorithm::LayoutRowItems(
     LayoutUnit ascent = margins.block_start + fragment.BaselineOrSynthesize();
     *max_row_block_baseline = std::max(*max_row_block_baseline, ascent);
 
-    // TODO(rbuis): Operators can add lspace and rspace.
+    // TODO(crbug.com/1125136): take into account italic correction.
+    inline_offset += lspace;
 
     children->emplace_back(
         To<NGBlockNode>(child), margins,
@@ -77,6 +101,8 @@ void NGMathRowLayoutAlgorithm::LayoutRowItems(
         std::move(&physical_fragment));
 
     inline_offset += fragment.InlineSize() + margins.inline_end;
+
+    inline_offset += rspace;
 
     max_row_ascent = std::max(max_row_ascent, ascent + margins.block_start);
     max_row_descent = std::max(
@@ -90,8 +116,8 @@ void NGMathRowLayoutAlgorithm::LayoutRowItems(
 scoped_refptr<const NGLayoutResult> NGMathRowLayoutAlgorithm::Layout() {
   DCHECK(!BreakToken());
 
-  bool is_display_math =
-      Node().IsMathRoot() && Style().Display() == EDisplay::kMath;
+  bool is_display_block_math =
+      Node().IsMathRoot() && (Style().Display() == EDisplay::kBlockMath);
 
   LogicalSize max_row_size;
   LayoutUnit max_row_block_baseline;
@@ -104,7 +130,7 @@ scoped_refptr<const NGLayoutResult> NGMathRowLayoutAlgorithm::Layout() {
   // Add children taking into account centering, baseline and
   // border/scrollbar/padding.
   LayoutUnit center_offset = InlineOffsetForDisplayMathCentering(
-      is_display_math, container_builder_.InlineSize(),
+      is_display_block_math, container_builder_.InlineSize(),
       max_row_size.inline_size);
 
   LogicalOffset adjust_offset = BorderScrollbarPadding().StartOffset();
@@ -149,10 +175,14 @@ MinMaxSizesResult NGMathRowLayoutAlgorithm::ComputeMinMaxSizes(
     child_result.sizes += child_margins.InlineSum();
 
     sizes += child_result.sizes;
+
+    LayoutUnit lspace, rspace;
+    DetermineOperatorSpacing(child, &lspace, &rspace);
+    sizes += lspace + rspace;
     depends_on_percentage_block_size |=
         child_result.depends_on_percentage_block_size;
 
-    // TODO(rbuis): Operators can add lspace and rspace.
+    // TODO(crbug.com/1125136): take into account italic correction.
   }
 
   // Due to negative margins, it is possible that we calculated a negative

@@ -131,7 +131,13 @@ enum DeviceEventType {
   // Rename succeeded.
   rename_success,
   // Rename failed.
-  rename_fail
+  rename_fail,
+  // Partition started.
+  partition_start,
+  // Partition succeeded.
+  partition_success,
+  // Partition failed.
+  partition_fail
 };
 
 // Drive sync error type.
@@ -152,10 +158,12 @@ enum DriveSyncErrorType {
 // Result of task execution. If changing, update the strings used in
 // ui/file_manager/file_manager/foreground/js/file_tasks.js
 enum TaskResult {
-  // The task execution succeeded and a new window/tab was opened.
+  // The task execution succeeded and a new window/tab was opened on the current
+  // desktop.
   opened,
   // The task execution succeeded and the message was sent to the proper
-  // extension.
+  // extension or app. This could result in a window being opened on a different
+  // desktop.
   message_sent,
   // The task execution failed.
   failed,
@@ -249,12 +257,10 @@ enum CrostiniEventType {
   unshare
 };
 
-// Metadata extraction types for getContentMetadata().
-enum ContentMetadataType {
-  // Extract metadata tags and images.
-  metadataTagsImages,
-  // Extract metadata tags only.
-  metadataTags
+enum ProviderSource {
+  file,
+  device,
+  network
 };
 
 // A file task represents an action that the file manager can perform over the
@@ -648,6 +654,9 @@ dictionary DriveConnectionState {
   // Whether the device has a cellular network access or not. i.e. the |type|
   // can be 'metered' or not.
   boolean hasCellularNetworkAccess;
+
+  // Whether or not hosted files can be pinned.
+  boolean canPinHostedFiles;
 };
 
 // Device event dispatched to listeners of onDeviceChaged.  See also
@@ -682,7 +691,7 @@ dictionary Provider {
   boolean multipleMounts;
 
   // Source of file systems' data.
-  manifestTypes.FileSystemProviderSource source;
+  ProviderSource source;
 };
 
 // Information about a Linux package in response to GetLinuxPackageInfo.
@@ -771,6 +780,11 @@ dictionary MediaMetadata {
   // Raw images embedded in the media file. This is most often audio album
   // art or video thumbnails.
   AttachedImages[] attachedImages;
+};
+
+dictionary HoldingSpaceState {
+  // File system URLs of items pinned to the holding space.
+  DOMString[] itemUrls;
 };
 
 // Callback that does not take arguments.
@@ -905,6 +919,9 @@ callback GetThumbnailCallback = void(DOMString thumbnailDataUrl);
 // |apps| List of Android picker apps.
 callback GetAndroidPickerAppsCallback = void(AndroidApp[] apps);
 
+// |state| Describes the current holding space state.
+callback HoldingSpaceStateCallback = void(HoldingSpaceState state);
+
 interface Functions {
   // Logout the current user for navigating to the re-authentication screen for
   // the Google account.
@@ -959,12 +976,13 @@ interface Functions {
   // Gets metadata from an Audio or Video file.
   // |fileEntry| The file entry to be checked.
   // |mimeType| Content sniffed mimeType of the file.
-  // |type| Content metadata type to extact.
+  // |includeImages| False returns metadata tags only. True returns
+  //     metadata tags and metadata (thumbnail) images.
   // |callback|
   [nocompile]
   static void getContentMetadata([instanceof=FileEntry] object fileEntry,
                                  DOMString mimeType,
-                                 ContentMetadataType type,
+                                 boolean includeImages,
                                  GetContentMetadataCallback callback);
 
   // Gets localized strings and initialization data.
@@ -1063,6 +1081,12 @@ interface Functions {
   // |callback|
   static void getVolumeMetadataList(GetVolumeMetadataListCallback callback);
 
+  // Copies an image to the system clipboard.
+  // |entry| Entry of the image to copy to the system clipboard.
+  [nocompile]
+  static void copyImageToClipboard([instanceof=Entry] object entry,
+                                   SimpleCallback callback);
+
   // Starts to copy an entry. If the source is a directory, the copy is done
   // recursively.
   // |entry| Entry of the source entry to be copied.
@@ -1090,6 +1114,15 @@ interface Functions {
   // |filesystem| Filesystem type to be formatted to.
   // |volumeLabel| Label of the drive after formatting.
   static void formatVolume(DOMString volumeId,
+                           FormatFileSystemType filesystem,
+                           DOMString volumeLabel);
+
+  // Deletes partitions of removable device, creates a new partition and format
+  // it.
+  // |deviceStoragePath| Storage path of the device to be formatted.
+  // |filesystem| Filesystem type to be formatted to.
+  // |volumeLabel| Label of the drive after formatting.
+  static void singlePartitionFormat(DOMString deviceStoragePath,
                            FormatFileSystemType filesystem,
                            DOMString volumeLabel);
 
@@ -1313,6 +1346,22 @@ interface Functions {
   [nocompile]
   static void invokeSharesheet([instanceof=Entry] object[] entries,
                                      SimpleCallback callback);
+
+  // Adds or removes a list of entries to temporary holding space. Any entries
+  // whose current holding space state matches the intended state will be
+  // skipped.
+  // |entries| The list of entries whose holding space needs to be updated.
+  // |add| Whether items should be added or removed from the holding space.
+  // |callback| Completion callback.
+  [nocompile]
+  static void toggleAddedToHoldingSpace([instanceOf=Entry] object[] entries,
+                                        boolean added,
+                                        optional SimpleCallback callback);
+
+  // Retrieves the current holding space state, for example the list of items
+  // the holding space currently contains.
+  // |callback| The result callback.
+  static void getHoldingSpaceState(HoldingSpaceStateCallback callback);
 };
 
 interface Events {

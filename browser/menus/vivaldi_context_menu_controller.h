@@ -28,6 +28,10 @@ namespace favicon_base {
 struct FaviconImageResult;
 }
 
+namespace ui {
+class Accelerator;
+}
+
 namespace vivaldi {
 class VivaldiContextMenu;
 
@@ -95,6 +99,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
 
   typedef std::map<int, bool> IdToBoolMap;
   typedef std::map<int, std::string*> IdToStringMap;
+  typedef std::map<int, ui::Accelerator> IdToAcceleratorMap;
 
   Delegate* delegate_;
   content::WebContents* web_contents_;  // Not owned by us.
@@ -111,6 +116,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   std::unique_ptr<VivaldiContextMenu> menu_;
   IdToStringMap id_to_url_map_;
   IdToBoolMap id_to_checked_map_;
+  IdToAcceleratorMap id_to_accelerator_map_;
   gfx::Rect rect_;
 
   std::unique_ptr<DeveloperToolsMenuController> developertools_controller_;

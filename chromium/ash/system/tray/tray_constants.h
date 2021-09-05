@@ -6,6 +6,7 @@
 #define ASH_SYSTEM_TRAY_TRAY_CONSTANTS_H_
 
 #include "ash/ash_export.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -128,6 +129,7 @@ constexpr int kUnifiedTrayTextRightPadding = 1;
 constexpr int kUnifiedTrayTimeLeftPadding = 1;
 constexpr int kUnifiedTraySpacingBetweenIcons = 6;
 constexpr int kUnifiedTrayBatteryWidth = 12;
+constexpr int kUnifiedTrayBatteryBottomPadding = 1;
 constexpr int kUnifiedTrayCornerRadius = 16;
 constexpr int kUnifiedTrayContentPadding = 12;
 constexpr int kUnifiedTopShortcutSpacing = 16;
@@ -234,9 +236,12 @@ constexpr int kPrivacyScreenToastSubLabelFontSize = 13;
 constexpr gfx::Insets kPrivacyScreenToastInsets(10, 16);
 constexpr int kPrivacyScreenToastSpacing = 16;
 
-// constants used for holding space tray.
-constexpr gfx::Insets kHoldingSpaceContainerPadding = gfx::Insets(16);
-constexpr int kHoldingSpaceContainerSeparation = 8;
+// Constants used for media tray.
+constexpr int kMediaTrayPadding = 8;
+
+// There is no active user session during oobe, which means it doesn't support
+// dark mode. Sets the icon color to be constant.
+constexpr SkColor kIconColorInOobe = gfx::kGoogleGrey700;
 
 }  // namespace ash
 

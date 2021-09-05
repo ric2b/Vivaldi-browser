@@ -27,7 +27,10 @@ import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.base.ViewUtils;
 
+import org.chromium.chrome.browser.searchwidget.SearchActivity;
+
 import org.vivaldi.browser.common.VivaldiUtils;
+
 
 /** Common functionality of the Omnibox suggestions dropdown. */
 class OmniboxSuggestionsDropdownDelegate implements View.OnAttachStateChangeListener {
@@ -202,8 +205,9 @@ class OmniboxSuggestionsDropdownDelegate implements View.OnAttachStateChangeList
         // the anchor view.
         ViewGroup.LayoutParams layoutParams = mSuggestionsDropdown.getLayoutParams();
         if (layoutParams != null && layoutParams instanceof ViewGroup.MarginLayoutParams) {
-            // Note(david@vivaldi.com): We consider the bottomMargin when toolbar is at the bottom.
-            if (!VivaldiUtils.isTopToolbarOn()) {
+            // Note(david@vivaldi.com): We consider the bottomMargin when we can anchor to the
+            // bottom.
+            if (shouldAnchorToBottom()) {
                 ((ViewGroup.MarginLayoutParams) layoutParams).bottomMargin = topMargin;
                 ((ViewGroup.MarginLayoutParams) layoutParams).topMargin = 0;
             } else
@@ -212,11 +216,11 @@ class OmniboxSuggestionsDropdownDelegate implements View.OnAttachStateChangeList
     }
 
     private int calculateAvailableViewportHeight(int anchorBottomRelativeToContent) {
-        // Note(david@vivaldi.com): We don't take the visible display frame into account when
-        // toolbar is at the bottom.
-        if(!VivaldiUtils.isTopToolbarOn()) {
+        // Note(david@vivaldi.com): We don't take the visible display frame into account when we
+        // can anchor to the bottom.
+        if (shouldAnchorToBottom())
             return anchorBottomRelativeToContent;
-        }
+
         mEmbedder.getWindowDelegate().getWindowVisibleDisplayFrame(mTempRect);
         return mTempRect.height() - anchorBottomRelativeToContent;
     }
@@ -264,5 +268,11 @@ class OmniboxSuggestionsDropdownDelegate implements View.OnAttachStateChangeList
     private boolean isAdaptiveSuggestionsCountEnabled() {
         return ChromeFeatureList.isInitialized() &&
                 ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_ADAPTIVE_SUGGESTIONS_COUNT);
+    }
+
+    /** Vivaldi: Whether we should anchor the suggestion drop down to the bottom or not */
+    private boolean shouldAnchorToBottom() {
+        return !VivaldiUtils.isTopToolbarOn()
+                && !(mAnchorView.getContext() instanceof SearchActivity);
     }
 }

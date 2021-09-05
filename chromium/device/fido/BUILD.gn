@@ -16,8 +16,11 @@ component("fido") {
     "cable/cable_discovery_data.h",
     "cable/noise.cc",
     "cable/noise.h",
+    "cable/v2_constants.h",
     "cable/v2_handshake.cc",
     "cable/v2_handshake.h",
+    "cable/websocket_adapter.cc",
+    "cable/websocket_adapter.h",
     "cbor_extract.cc",
     "ed25519_public_key.cc",
     "ed25519_public_key.h",
@@ -113,8 +116,8 @@ component("fido") {
       "cable/fido_cable_handshake_handler.h",
       "cable/fido_tunnel_device.cc",
       "cable/fido_tunnel_device.h",
-      "cable/websocket_adapter.cc",
-      "cable/websocket_adapter.h",
+      "cable/v2_discovery.cc",
+      "cable/v2_discovery.h",
       "client_data.cc",
       "client_data.h",
       "credential_management.cc",
@@ -160,6 +163,8 @@ component("fido") {
       "hid/fido_hid_message.h",
       "hid/fido_hid_packet.cc",
       "hid/fido_hid_packet.h",
+      "large_blob.cc",
+      "large_blob.h",
       "make_credential_request_handler.cc",
       "make_credential_request_handler.h",
       "make_credential_task.cc",
@@ -259,6 +264,50 @@ component("fido") {
       "//dbus",
     ]
   }
+}
+
+static_library("cablev2_registration") {
+  sources = [
+    "cable/v2_registration.cc",
+    "cable/v2_registration.h",
+  ]
+  deps = [
+    ":fido",
+    "//base",
+    "//components/cbor",
+    "//components/device_event_log",
+    "//components/gcm_driver",
+    "//components/gcm_driver/instance_id",
+  ]
+}
+
+static_library("cablev2_authenticator") {
+  sources = [
+    "cable/v2_authenticator.cc",
+    "cable/v2_authenticator.h",
+  ]
+  deps = [
+    ":fido",
+    "//components/cbor",
+    "//components/device_event_log",
+    "//services/network/public/mojom",
+  ]
+}
+
+static_library("cablev2_test_util") {
+  testonly = true
+  sources = [
+    "cable/v2_test_util.cc",
+    "cable/v2_test_util.h",
+  ]
+  deps = [
+    ":cablev2_authenticator",
+    ":fido",
+    "//components/cbor",
+    "//crypto",
+    "//services/network:test_support",
+    "//services/network/public/mojom",
+  ]
 }
 
 if (is_chromeos) {

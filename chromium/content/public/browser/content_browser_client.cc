@@ -9,7 +9,7 @@
 // declarations instead of including more headers. If that is infeasible, adjust
 // the limit. For more info, see
 // https://chromium.googlesource.com/chromium/src/+/HEAD/docs/wmax_tokens.md
-#pragma clang max_tokens_here 880000
+#pragma clang max_tokens_here 890000
 
 #include <utility>
 
@@ -379,7 +379,7 @@ bool ContentBrowserClient::AllowSignedExchange(BrowserContext* context) {
 
 bool ContentBrowserClient::OverrideWebPreferencesAfterNavigation(
     WebContents* web_contents,
-    WebPreferences* prefs) {
+    blink::web_pref::WebPreferences* prefs) {
   return false;
 }
 
@@ -763,6 +763,7 @@ ContentBrowserClient::CreateURLLoaderThrottles(
 void ContentBrowserClient::RegisterNonNetworkNavigationURLLoaderFactories(
     int frame_tree_node_id,
     base::UkmSourceId ukm_source_id,
+    NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
     NonNetworkURLLoaderFactoryMap* factories) {}
 
 void ContentBrowserClient::
@@ -778,6 +779,7 @@ void ContentBrowserClient::
 void ContentBrowserClient::RegisterNonNetworkSubresourceURLLoaderFactories(
     int render_process_id,
     int render_frame_id,
+    NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
     NonNetworkURLLoaderFactoryMap* factories) {}
 
 bool ContentBrowserClient::WillCreateURLLoaderFactory(
@@ -787,6 +789,7 @@ bool ContentBrowserClient::WillCreateURLLoaderFactory(
     URLLoaderFactoryType type,
     const url::Origin& request_initiator,
     base::Optional<int64_t> navigation_id,
+    base::UkmSourceId ukm_source_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
@@ -1060,6 +1063,13 @@ void ContentBrowserClient::AugmentNavigationDownloadPolicy(
     bool user_gesture,
     NavigationDownloadPolicy* download_policy) {}
 
+std::string ContentBrowserClient::GetInterestCohortForJsApi(
+    content::BrowserContext* browser_context,
+    const url::Origin& requesting_origin,
+    const net::SiteForCookies& site_for_cookies) {
+  return std::string();
+}
+
 bool ContentBrowserClient::IsBluetoothScanningBlocked(
     content::BrowserContext* browser_context,
     const url::Origin& requesting_origin,
@@ -1102,9 +1112,6 @@ bool ContentBrowserClient::CanEnterFullscreenWithoutUserActivation() {
   return false;
 }
 
-void ContentBrowserClient::LogUkmEventForCrossOriginFetchFromContentScript3(
-    const std::string& isolated_world_host) {}
-
 #if BUILDFLAG(ENABLE_PLUGINS)
 bool ContentBrowserClient::ShouldAllowPluginCreation(
     const url::Origin& embedder_origin,
@@ -1129,23 +1136,29 @@ bool ContentBrowserClient::IsOriginTrialRequiredForAppCache(
 }
 
 void ContentBrowserClient::BindBrowserControlInterface(
-    mojo::GenericPendingReceiver receiver) {}
+    mojo::ScopedMessagePipeHandle pipe) {}
 
 bool ContentBrowserClient::ShouldInheritCrossOriginEmbedderPolicyImplicitly(
     const GURL& url) {
   return false;
 }
 
-network::mojom::PrivateNetworkRequestPolicy
-ContentBrowserClient::GetPrivateNetworkRequestPolicy(
+bool ContentBrowserClient::ShouldAllowInsecurePrivateNetworkRequests(
     BrowserContext* browser_context,
     const GURL& url) {
-  return network::mojom::PrivateNetworkRequestPolicy::
-      kBlockFromInsecureToMorePrivate;
+  return false;
 }
 
 ukm::UkmService* ContentBrowserClient::GetUkmService() {
   return nullptr;
 }
+
+#if defined(OS_MAC)
+bool ContentBrowserClient::SetupEmbedderSandboxParameters(
+    sandbox::policy::SandboxType sandbox_type,
+    sandbox::SeatbeltExecClient* client) {
+  return false;
+}
+#endif  // defined(OS_MAC)
 
 }  // namespace content

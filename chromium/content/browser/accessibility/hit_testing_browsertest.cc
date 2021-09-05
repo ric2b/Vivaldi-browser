@@ -262,7 +262,7 @@ void AccessibilityHitTestingBrowserTest::SimulatePinchZoom(
   accessibility_waiter.WaitForNotification();
 }
 
-base::string16
+std::string
 AccessibilityHitTestingBrowserTest::FormatHitTestAccessibilityTree() {
   std::unique_ptr<AccessibilityTreeFormatter> accessibility_tree_formatter =
       AccessibilityTreeFormatterBlink::CreateBlink();
@@ -271,7 +271,7 @@ AccessibilityHitTestingBrowserTest::FormatHitTestAccessibilityTree() {
       {{"name=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW},
        {"location=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW},
        {"size=*", AccessibilityTreeFormatter::PropertyFilter::ALLOW}});
-  base::string16 accessibility_tree;
+  std::string accessibility_tree;
   accessibility_tree_formatter->FormatAccessibilityTreeForTesting(
       GetRootAndAssertNonNull(), &accessibility_tree);
   return accessibility_tree;
@@ -571,8 +571,17 @@ IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
 }
 
 #if !defined(OS_ANDROID) && !defined(OS_MAC)
+// Fails flakily with compared ID differences. TODO(crbug.com/1121099): Re-nable
+// this test.
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+#define MAYBE_CachingAsyncHitTest_WithPinchZoom \
+  DISABLED_CachingAsyncHitTest_WithPinchZoom
+#else
+#define MAYBE_CachingAsyncHitTest_WithPinchZoom \
+  CachingAsyncHitTest_WithPinchZoom
+#endif
 IN_PROC_BROWSER_TEST_P(AccessibilityHitTestingBrowserTest,
-                       CachingAsyncHitTest_WithPinchZoom) {
+                       MAYBE_CachingAsyncHitTest_WithPinchZoom) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));

@@ -1,3 +1,4 @@
+import("//vivaldi/testing/testing.gni")
 
 if (vivaldi_build_tests) {
   update_target("//components:components_unittests") {

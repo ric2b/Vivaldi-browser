@@ -24,6 +24,7 @@ class PrefRegistrySimple;
 namespace ash {
 
 class SystemTrayNotifier;
+enum class SupervisedAction;
 
 // LoginScreenController implements LoginScreen and wraps the LoginScreenClient
 // interface. This lets a consumer of ash provide a LoginScreenClient, which we
@@ -117,14 +118,6 @@ class ASH_EXPORT LoginScreenController : public LoginScreen,
   std::unique_ptr<ScopedGuestButtonBlocker> GetScopedGuestButtonBlocker()
       override;
 
-  // TODO(agawronska): Change all callers of this to use
-  // Shell::Get()->parent_access_controller()->ShowWidget() directly and delete
-  // this method.
-  void ShowParentAccessWidget(const AccountId& child_account_id,
-                              base::OnceCallback<void(bool success)> callback,
-                              ParentAccessRequestReason reason,
-                              bool extra_dimmer,
-                              base::Time validation_time) override;
   void RequestSecurityTokenPin(SecurityTokenPinRequest request) override;
   void ClearSecurityTokenPinRequest() override;
   bool SetLoginShelfGestureHandler(const base::string16& nudge_text,
@@ -143,6 +136,8 @@ class ASH_EXPORT LoginScreenController : public LoginScreen,
   }
 
   LoginDataDispatcher* data_dispatcher() { return &login_data_dispatcher_; }
+
+  void NotifyLoginScreenShown();
 
  private:
   void OnAuthenticateComplete(OnAuthenticateCallback callback, bool success);

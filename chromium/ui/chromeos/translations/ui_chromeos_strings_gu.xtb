@@ -30,6 +30,7 @@
 <translation id="1208421848177517699">લિવ્યંતરણ (namaste → નમસ્તે)</translation>
 <translation id="1243314992276662751">અપલોડ કરો</translation>
 <translation id="1249250836236328755">શૈલી</translation>
+<translation id="1276362640455948667">પોર્ટુગીઝ, US આંતરરાષ્ટ્રીય કીબોર્ડ સાથે</translation>
 <translation id="1278813325885878377">હંગેરિયન QWERTY કીબોર્ડ</translation>
 <translation id="1293556467332435079">Files</translation>
 <translation id="1297922636971898492">Google ડ્રાઇવ હાલમાં ઉપલબ્ધ નથી. Google ડ્રાઇવ પાછું આવી જાય તે પછી અપલોડિંગ ઑટોમૅટિક રીતે ફરીથી શરૂ થશે.</translation>
@@ -63,6 +64,7 @@
 <translation id="1572585716423026576">વૉલપેપર તરીકે સેટ કરો</translation>
 <translation id="158809615184981282">ફોરિસ્ત કીબોર્ડ</translation>
 <translation id="1589128298353575783"><ph name="NUMBER_OF_PB" /> PB</translation>
+<translation id="1620510694547887537">કૅમેરો</translation>
 <translation id="1646136617204068573">હંગેરિયન કીબોર્ડ</translation>
 <translation id="164729547906544836">તમિલ કીબોર્ડ (itrans)</translation>
 <translation id="164969095109328410">Chrome ઉપકરણ</translation>
@@ -70,13 +72,14 @@
 <translation id="1673103856845176271">સુરક્ષા કારણોસર ફાઇલ ઍક્સેસ કરી શકાઈ નથી.</translation>
 <translation id="169515659049020177">Shift</translation>
 <translation id="1722487484194605434"><ph name="NUMBER_OF_ITEMS" /> આઇટમને ઝિપ કરી રહ્યું છે...</translation>
+<translation id="1731889557567069540"><ph name="NUMBER_OF_ITEMS" /> આઇટમ કૉપિ કરી.</translation>
 <translation id="174173592514158117">બધા Play ફોલ્ડરો બતાવો</translation>
 <translation id="174937106936716857">કુલ ફાઇલની સંખ્યા</translation>
 <translation id="1775381402323441512">વીડિયોની માહિતી</translation>
 <translation id="180035236176489073">આ ફાઇલો ઍક્સેસ કરવા માટે તમારું ઑનલાઇન હોું જરૂરી છે.</translation>
 <translation id="1807938677607439181">બધી ફાઇલો</translation>
 <translation id="1810764548349082891">કોઈ પ્રીવ્યૂ ઉપલબ્ધ નથી</translation>
-<translation id="1815861158988915678"><ph name="BEGIN_BOLD" />ચેતવણી:<ph name="END_BOLD" />  આ ફાઇલો અસ્થાયી છે અને બની શકે કે ડિસ્ક સ્થાન ખાલી કરવા માટે આપમેળે કાઢી નાંખવામાં આવે.  <ph name="BEGIN_LINK" />વધુ જાણો<ph name="END_LINK" /></translation>
+<translation id="1815861158988915678"><ph name="BEGIN_BOLD" />ચેતવણી:<ph name="END_BOLD" />  આ ફાઇલો અસ્થાયી છે અને બની શકે કે ડિસ્ક સ્થાન ખાલી કરવા માટે ઑટોમૅટિક રીતે કાઢી નાખવામાં આવે.  <ph name="BEGIN_LINK" />વધુ જાણો<ph name="END_LINK" /></translation>
 <translation id="1829129547161959350">પેન્ગ્વિન</translation>
 <translation id="183183971458492120">માહિતી લોડ કરી રહ્યું છે...</translation>
 <translation id="1838709767668011582">Google સાઇટ</translation>
@@ -114,7 +117,9 @@
 <translation id="2208158072373999562">ઝિપ આર્કાઈવ</translation>
 <translation id="2225536596944493418">શું તમે ખરેખર <ph name="NUMBER_OF_ITEMS" /> આઇટમને ડિલીટ કરવા માંગો છો?</translation>
 <translation id="2230062665678605299">ફોલ્ડર "<ph name="FOLDER_NAME" />" બનાવવામાં અક્ષમ. <ph name="ERROR_MESSAGE" /></translation>
+<translation id="2275059641601412272">ખસેડી.</translation>
 <translation id="2278988676849463018">કન્નડા કીબોર્ડ (ધ્વન્યાત્મક)</translation>
+<translation id="2287742181953707290">પોર્ટુગીઝ, US આંતરરાષ્ટ્રીય PC કીબોર્ડ સાથે</translation>
 <translation id="2288278176040912387">રેકોર્ડ પ્લેયર</translation>
 <translation id="2291538123825441971"><ph name="NUMBER_OF_FILES" /> ફાઇલ ખુલી રહી છે.</translation>
 <translation id="2303301624314357662"><ph name="FILE_NAME" /> ફાઇલ ખુલી રહી છે.</translation>
@@ -185,7 +190,6 @@
 <translation id="3064388234319122767">લિવ્યંતરણ (zdravo → здраво)</translation>
 <translation id="3067790092342515856">Windows ફાઇલો</translation>
 <translation id="3078461028045006476"><ph name="EXTENSION_NAME" /> સાથે શેર કરો</translation>
-<translation id="3088034400796962477">લિવ્યંતરણ (salam ← سلام)</translation>
 <translation id="3116361045094675131">યુકે કીબોર્ડ</translation>
 <translation id="3126026824346185272">Ctrl</translation>
 <translation id="3144126448740580210">થઈ ગયું</translation>
@@ -219,6 +223,7 @@
 <translation id="3473378059788601120"><ph name="FOLDER_NAME" />માં કૉપિ કર્યા.</translation>
 <translation id="3475447146579922140">Google સ્પ્રેડશીટ</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> ભૂલો.</translation>
+<translation id="349603508045926994">પર્શિયન લિપ્યંતર</translation>
 <translation id="3519867315646775981">લિવ્યંતરણ (shalom ← שלום)</translation>
 <translation id="3522708245912499433">પોર્ટુગીઝ</translation>
 <translation id="3524311639100184459">ચેતવણી: આ ફાઇલો અસ્થાયી છે અને બની શકે કે ડિસ્ક પર સ્પેસ ખાલી કરવા માટે તેમને ઑટોમૅટિક રીતે ડિલીટ કરવામાં આવે  <ph name="BEGIN_LINK" />વધુ જાણો<ph name="END_LINK" /></translation>
@@ -235,6 +240,7 @@
 <translation id="3620292326130836921">તમામનો બેક અપ લેવાયો!</translation>
 <translation id="3626281679859535460">તેજ</translation>
 <translation id="3644896802912593514">પહોળાઈ</translation>
+<translation id="3645233063072417428"><ph name="NUMBER_OF_ITEMS" /> આઇટમ ખસેડી.</translation>
 <translation id="3645531960514756307">ફોલ્ડરને અનપિન કરો</translation>
 <translation id="3678559383040232393">માલ્ટિઝ કીબોર્ડ</translation>
 <translation id="3685122418104378273">મોબાઇલ ડેટાનો ઉપયોગ કરી રહ્યાં હોય ત્યારે, Google ડ્રાઇવ સિંક ડિફોલ્ટ રૂપે બંધ છે.</translation>
@@ -276,6 +282,7 @@
 <translation id="4072248638558688893">તમિલ કીબોર્ડ (ધ્વન્યાત્મક)</translation>
 <translation id="4124935795427217608">યુનિકોર્ન - એક કાલ્પનિક પાંખવાળો ઘોડો</translation>
 <translation id="4158739975813877944">પ્લે લિસ્ટ ખોલો</translation>
+<translation id="4159731583141908892"><ph name="FILE_NAME" /> ખસેડી.</translation>
 <translation id="418179967336296930">રશિયન ધ્વન્યાત્મક (YaZHert) કીબોર્ડ</translation>
 <translation id="4193154014135846272">Google દસ્તાવેજ</translation>
 <translation id="4195249722193633765">Linux (બીટા)વાળી ઍપ ઇન્સ્ટૉલ કરો</translation>
@@ -289,6 +296,7 @@
 <translation id="4298972503445160211">ડેનિશ કીબોર્ડ</translation>
 <translation id="4299729908419173967">બ્રાઝિલિયન</translation>
 <translation id="4309915981827077375">સામાન્ય માહિતી</translation>
+<translation id="4315949787858895817">ડચ (બેલ્જિયમ)</translation>
 <translation id="4326192123064055915">કૉફી</translation>
 <translation id="4336032328163998280">કૉપિ ઑપરેશન નિષ્ફળ થયું. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">ટેટી</translation>
@@ -300,7 +308,6 @@
 <translation id="4477219268485577442">બલ્ગેરિયન ધ્વન્યાત્મક</translation>
 <translation id="4479812471636796472">યુએસ ડ્વોરેક કીબોર્ડ</translation>
 <translation id="4481711095103932593">આ ફોલ્ડર Windows સાથે શેર થાય છે</translation>
-<translation id="4487088045714738411">બેલ્જિયન કીબોર્ડ</translation>
 <translation id="4522570452068850558">વિગતો</translation>
 <translation id="4542387084127299777">"<ph name="PATH" />"ને ખોલી શકતાં નથી</translation>
 <translation id="4552678318981539154">વધુ સ્ટોરેજ ખરીદો</translation>
@@ -311,6 +318,7 @@
 <translation id="4582497162516204941">Linux (બીટા) ઇન્સ્ટૉલ કરો</translation>
 <translation id="4594543368593301662"><ph name="SEARCH_TERM" /> માટે પરિણામો બતાવી રહ્યાં છીએ.</translation>
 <translation id="4603392156942865207"><ph name="FILE_NAME" />ની <ph name="FOLDER_NAME" />માં કૉપિ કરી રહ્યાં છીએ</translation>
+<translation id="4627439232948440198">સંસ્કૃત</translation>
 <translation id="4631887759990505102">કલાકાર</translation>
 <translation id="4656293982926141856">આ કમ્પ્યુટર</translation>
 <translation id="4669606053856530811">'<ph name="SOURCE_NAME" />'ના સભ્યો ઍક્સેસ ગુમાવશે સિવાય કે આ આઇટમને તેમની સાથે શેર કરવામાં ન આવી હોય.</translation>
@@ -336,6 +344,7 @@
 <translation id="4804827417948292437">એવોકેડો</translation>
 <translation id="4823651846660089135">ઉપકરણ ફક્ત વાંચવા માટે છે</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" /> આઇટમ્સ પસંદ કરી</translation>
+<translation id="4849981557599196363">જર્મન (બેલ્જિયમ)</translation>
 <translation id="4850886885716139402">જુઓ</translation>
 <translation id="485316830061041779">જર્મન</translation>
 <translation id="4867079195717347957">કૉલમને: ઉતરતા ક્રમમાં સૉર્ટ કરવા માટે ક્લિક કરો.</translation>
@@ -361,6 +370,7 @@
 <translation id="5010406651457630570">કમ્પ્યુટર</translation>
 <translation id="5011233892417813670">Chromebook</translation>
 <translation id="5024856940085636730">ઑપરેશનમાં અપેક્ષિત કરતાં વધુ સમય લાગી રહ્યો છે. શું તમે તેને નિરસ્ત કરવા માગો છો?</translation>
+<translation id="5026887030745057099">હિન્દી</translation>
 <translation id="5036159836254554629">Parallels ડેસ્કટૉપ સાથે શેર કરવાને મેનેજ કરો</translation>
 <translation id="5038625366300922036">વધુ જુઓ...</translation>
 <translation id="5061708541166515394">કોન્ટ્રાસ્ટ</translation>
@@ -371,6 +381,7 @@
 <translation id="5098629044894065541">હીબ્રુ</translation>
 <translation id="5123433949759960244">બાસ્કેટબૉલ</translation>
 <translation id="5129662217315786329">પોલીશ</translation>
+<translation id="5132435854979302863">ફિલિપિનો</translation>
 <translation id="5144820558584035333">હંગુલ 3 સેટ (390)</translation>
 <translation id="5145331109270917438">સંશોધિત કર્યાની તારીખ</translation>
 <translation id="515594325917491223">ચેસ</translation>
@@ -395,7 +406,9 @@
     તમારા ડિવાઇસને શું થયું છે એનાથી કોઈ ફેર પડતો નથી, તમારી ફાઇલને સલામત રીતે Google ડ્રાઇવમાં સ્ટોર કરવામાં આવે છે.<ph name="MARKUP_6" />
     <ph name="MARKUP_7" />એક જ સ્થાનમાં ફાઇલ શેર કરો, બનાવો<ph name="MARKUP_8" />
     અને અન્ય લોકો સાથે તેના પર સહયોગ કરો.<ph name="MARKUP_9" /></translation>
+<translation id="5274350207900771082">કૉપિ કરી.</translation>
 <translation id="5275973617553375938">Google ડ્રાઇવમાંથી પુનર્પ્રાપ્ત ફાઇલો</translation>
+<translation id="5283140566205748520">ફ્રેન્ચ (બેલ્જિયમ)</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
 <translation id="5317780077021120954">સાચવો</translation>
 <translation id="5318819489018851358">Linux સાથે શેર કરો</translation>
@@ -412,16 +425,17 @@
 <translation id="5418923334382419584">મ્યાંમાર કીબોર્ડ</translation>
 <translation id="5428105026674456456">સ્પેનિશ</translation>
 <translation id="5438282218546237410"><ph name="SEARCH_TERM" /> માટે કોઈ પરિણામ નથી.</translation>
+<translation id="5449551289610225147">અમાન્ય પાસવર્ડ</translation>
 <translation id="5464696796438641524">પૉલીશ કીબોર્ડ</translation>
 <translation id="5465122519792752163">નેપાળી કીબોર્ડ (ઇનસ્ક્રિપ્ટ)</translation>
 <translation id="5469868506864199649">ઇટાલિયન</translation>
+<translation id="5484429245813572665">ઇન્ડોનેશિયન</translation>
 <translation id="5494920125229734069">બધા પસંદ કરો</translation>
 <translation id="5500122897333236901">આઇસલેન્ડિક</translation>
 <translation id="5508696409934741614">બિંદુઓ</translation>
 <translation id="5522908512596376669">ફાઇલ સૂચિને સૂચિ દૃશ્યમાં બદલી છે.</translation>
 <translation id="5524517123096967210">ફાઇલ વાંચી શકાઈ નથી.</translation>
 <translation id="5533102081734025921"><ph name="IMAGE_TYPE" /> છબી</translation>
-<translation id="5533555070048896610">લિવ્યંતરણ (namaste → नमस्ते)</translation>
 <translation id="5534520101572674276">કદની ગણના કરી રહ્યું છે</translation>
 <translation id="5583640892426849032">Backspace</translation>
 <translation id="5605830556594064952">યુએસ ડ્વોરેક</translation>
@@ -593,6 +607,7 @@
 <translation id="751507702149411736">બેલારુશિયન</translation>
 <translation id="7544853251252956727">શફલ કરો</translation>
 <translation id="7547811415869834682">ડચ</translation>
+<translation id="7551643184018910560">શેલ્ફ પર પિન કરો</translation>
 <translation id="7576032389798113292">6x4</translation>
 <translation id="7589661784326793847">ક્ષણભર રોકાવ</translation>
 <translation id="7603724359189955920">ગ્રીડ</translation>
@@ -601,8 +616,10 @@
 <translation id="7649070708921625228">સહાય</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> આઇટમ ખસેડી રહ્યું છે...</translation>
 <translation id="7658239707568436148">રદ કરો</translation>
+<translation id="7693909743393669729">ડ્રાઇવને ફૉર્મેટ કરવાથી તેના પર સ્ટોર કરેલો બધો ડેટા ભૂંસાઈ જશે અને કદાચ દેખાતા ન હોય તેવા વિભાગો સહિત હાલના બધા વિભાગો કાઢી નખાશે. આ ક્રિયા રદ કરી શકાતી નથી.</translation>
 <translation id="7695430100978772476"><ph name="DRIVE_NAME" />ને ફોર્મેટ કરી શક્યાં નથી</translation>
 <translation id="770015031906360009">ગ્રીક</translation>
+<translation id="7705251383879779343"><ph name="FILE_NAME" /> કૉપિ કરી.</translation>
 <translation id="7706319470528945664">પોર્ટુગીઝ કીબોર્ડ</translation>
 <translation id="7711920809702896782">છબીની માહિતી</translation>
 <translation id="7724603315864178912">કાપો</translation>
@@ -630,6 +647,7 @@
 <translation id="78946041517601018">શેર કરેલી ડ્રાઇવ</translation>
 <translation id="7896906914454843592">યુએસ વિસ્તૃત કીબોર્ડ</translation>
 <translation id="7898607018410277265">ગુજરાતી કીબોર્ડ (નવું ફોનેટિક)</translation>
+<translation id="7908793776359722643">વિભાગને ફૉર્મેટ કરવાથી તેમાં સ્ટોર કરેલો બધો ડેટા કાઢી નાખવામાં આવશે. આ ક્રિયા રદ કરી શકાતી નથી.</translation>
 <translation id="7917972308273378936">લિથુનિયન કીબોર્ડ</translation>
 <translation id="7925686952655276919">સમન્વયન માટે ડેટા માહિતીની ઉપયોગ કરશો નહીં</translation>
 <translation id="7928710562641958568">ઉપકરણ હટાવો</translation>
@@ -674,7 +692,9 @@
 <translation id="8299269255470343364">જાપાનીઝ</translation>
 <translation id="8312871300878166382">ફોલ્ડરમાં પેસ્ટ કરો</translation>
 <translation id="8329978297633540474">સાદી ટેક્સ્ટ</translation>
+<translation id="8335587457941836791">શેલ્ફમાંથી અનપિન કરો</translation>
 <translation id="8336153091935557858">ગઈ કાલે <ph name="YESTERDAY_DAYTIME" /></translation>
+<translation id="8336524887811696057">નેપાળી લિપ્યંતર</translation>
 <translation id="8336579025507394412">આઇસલેન્ડિક કીબોર્ડ</translation>
 <translation id="8342318071240498787">સમાન નામની ફાઇલ અથવા ડિરેક્ટરી પહેલાથી જ અસ્તિત્વમાં છે.</translation>
 <translation id="8382450452152102026"><ph name="FOLDER_NAME" />માં</translation>
@@ -700,13 +720,15 @@
 <translation id="8600173386174225982">ફાઇલ સૂચિને થંબનેલ દૃશ્યમાં બદલી છે.</translation>
 <translation id="8601932370724196034">Crostini છબી ફાઇલ</translation>
 <translation id="8669949407341943408">ખસેડી રહ્યું છે...</translation>
+<translation id="8694836330346852143">ઉર્દુ</translation>
 <translation id="8698464937041809063">Google રેખાંકન</translation>
 <translation id="8714406895390098252">સાયકલ</translation>
 <translation id="8719721339511222681"><ph name="ENTRY_NAME" /> પસંદ કર્યું</translation>
 <translation id="8722421161699219904">યુએસ આંતરરાષ્ટ્રીય કીબોર્ડ</translation>
 <translation id="872537912056138402">ક્રોએશિયન</translation>
 <translation id="874420130893181774">પરંપરાગત પિનયિન ઇનપુટ પદ્ધતિ</translation>
-<translation id="8775404590947523323">તમારા સંપાદનો આપમેળે સચવાયા છે.<ph name="BREAKS" />મૂળ છબીની કૉપિ રાખવા માટે, "મૂળ પર ઓવરરાઇટ કરો" ને  અનચેક કરો</translation>
+<translation id="8770002329960263418">ડચ (નેધરલૅન્ડ), US આંતરરાષ્ટ્રીય PC કીબોર્ડ સાથે</translation>
+<translation id="8775404590947523323">તમારા ફેરફારો ઑટોમૅટિક રીતે સચવાયા છે.<ph name="BREAKS" />મૂળ છબીની કૉપિ રાખવા માટે, "મૂળ પર ઓવરરાઇટ કરો" ને  અનચેક કરો</translation>
 <translation id="8803496343472038847">રશિયન ધ્વન્યાત્મક કીબોર્ડ</translation>
 <translation id="8808686172382650546">બિલાડી</translation>
 <translation id="8810671769985673465">ઝિપ કરવાનું નિષ્ફળ, આઇટમ અસ્તિત્વમાં છે: "<ph name="FILE_NAME" />"</translation>
@@ -716,6 +738,7 @@
 <translation id="8900820606136623064">હંગેરિયન</translation>
 <translation id="8901822611024316615">ચેક QWERTY કીબોર્ડ</translation>
 <translation id="8919081441417203123">ડેનિશ</translation>
+<translation id="8941776146379310519">મલય</translation>
 <translation id="8960999352790021682">બંગાળી કીબોર્ડ (ધ્વન્યાત્મક)</translation>
 <translation id="8965697826696209160">પર્યાપ્ત સ્થાન નથી.</translation>
 <translation id="9017798300203431059">રશિયન ધ્વન્યાત્મક</translation>

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "chrome/browser/after_startup_task_utils.h"
@@ -548,6 +549,9 @@ void NTPUserDataLogger::LogEvent(NTPLoggingEventType event,
     case NTP_CUSTOMIZE_SHORTCUT_VISIBILITY_TOGGLE_CLICKED:
       RecordAction(LoggingEventToShortcutUserActionName(event));
       break;
+    case NTP_MODULES_SHOWN:
+      UMA_HISTOGRAM_LOAD_TIME("NewTabPage.Modules.ShownTime", time);
+      break;
   }
 }
 
@@ -587,6 +591,31 @@ void NTPUserDataLogger::LogMostVisitedNavigation(
   // Records the action. This will be available as a time-stamped stream
   // server-side and can be used to compute time-to-long-dwell.
   base::RecordAction(base::UserMetricsAction("MostVisited_Clicked"));
+}
+
+void NTPUserDataLogger::LogModuleImpression(const std::string& id,
+                                            base::TimeDelta time) {
+  UMA_HISTOGRAM_LOAD_TIME("NewTabPage.Modules.Impression", time);
+  base::UmaHistogramCustomTimes("NewTabPage.Modules.Impression." + id, time,
+                                base::TimeDelta::FromMilliseconds(1),
+                                base::TimeDelta::FromSeconds(60), 100);
+}
+
+void NTPUserDataLogger::LogModuleLoaded(const std::string& id,
+                                        base::TimeDelta time) {
+  UMA_HISTOGRAM_LOAD_TIME("NewTabPage.Modules.Loaded", time);
+  base::UmaHistogramCustomTimes("NewTabPage.Modules.Loaded." + id, time,
+                                base::TimeDelta::FromMilliseconds(1),
+                                base::TimeDelta::FromSeconds(60), 100);
+}
+
+void NTPUserDataLogger::LogModuleUsage(const std::string& id) {
+  UMA_HISTOGRAM_EXACT_LINEAR("NewTabPage.Modules.Usage", 1, 1);
+  base::UmaHistogramExactLinear("NewTabPage.Modules.Usage." + id, 1, 1);
+}
+
+void NTPUserDataLogger::SetModulesVisible(bool visible) {
+  modules_visible_ = visible;
 }
 
 NTPUserDataLogger::NTPUserDataLogger(content::WebContents* contents)
@@ -712,6 +741,11 @@ void NTPUserDataLogger::EmitNtpStatistics(base::TimeDelta load_time) {
           "NewTabPage.Customized",
           LoggingEventToCustomizedFeature(NTP_BACKGROUND_CUSTOMIZED));
     }
+  }
+
+  if (base::FeatureList::IsEnabled(ntp_features::kModules)) {
+    base::UmaHistogramBoolean("NewTabPage.Modules.VisibleOnNTPLoad",
+                              modules_visible_);
   }
 
   has_emitted_ = true;

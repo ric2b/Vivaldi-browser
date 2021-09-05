@@ -1961,13 +1961,9 @@ TEST_F(WebStateObserverTest, DownloadNavigation) {
 }
 
 // Tests failed load after the navigation is sucessfully finished.
-// TODO(crbug.com/954232): this test is flaky on device.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_FailedLoad FailedLoad
-#else
-#define MAYBE_FailedLoad FLAKY_FailedLoad
-#endif
-TEST_F(WebStateObserverTest, MAYBE_FailedLoad) {
+// TODO(crbug.com/954232): this test is flaky on device, and as of iOS14
+// simulator as well.
+TEST_F(WebStateObserverTest, FLAKY_FailedLoad) {
   GURL url = test_server_->GetURL("/exabyte_response");
 
   NavigationContext* context = nullptr;
@@ -2032,8 +2028,19 @@ TEST_F(WebStateObserverTest, FailedSslConnection) {
       .WillOnce(VerifyPageStartedContext(
           web_state(), url, ui::PageTransition::PAGE_TRANSITION_TYPED, &context,
           &nav_id));
-  // TODO(crbug.com/921916): DidFinishNavigation is not called for SSL errors.
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  if (base::FeatureList::IsEnabled(web::features::kSSLCommittedInterstitials)) {
+    // First, a placeholder navigation starts and finishes.
+    EXPECT_CALL(observer_, DidStartLoading(web_state()));
+    EXPECT_CALL(observer_, DidStopLoading(web_state()));
+    EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
+    EXPECT_CALL(observer_,
+                PageLoaded(web_state(), PageLoadCompletionStatus::FAILURE));
+
+    // Finally, the error page itself is loaded.
+    EXPECT_CALL(observer_, DidStartLoading(web_state()));
+    EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  }
 
   test::LoadUrl(web_state(), url);
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^{
@@ -2080,19 +2087,11 @@ TEST_F(WebStateObserverTest, DisallowRequestAndShowError) {
           WebStatePolicyDecider::PolicyDecision::CancelAndDisplayError(error)));
 
   EXPECT_CALL(observer_, DidStartNavigation(web_state(), _));
-  EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
   EXPECT_CALL(observer_, TitleWasSet(web_state()));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
   EXPECT_CALL(observer_,
               PageLoaded(web_state(), PageLoadCompletionStatus::FAILURE));
-  // TODO(crbug.com/1071117): DidStartNavigation is over-triggered when
-  // |web::features::kUseJSForErrorPage| is enabled.
-  EXPECT_CALL(observer_, DidStartNavigation(web_state(), _));
-  EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
-  EXPECT_CALL(observer_, DidStartNavigation(web_state(), _));
-  EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
-  EXPECT_CALL(observer_,
-              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
 
   GURL url = test_server_->GetURL("/echo");
   test::LoadUrl(web_state(), url);

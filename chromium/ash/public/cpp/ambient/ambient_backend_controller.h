@@ -5,6 +5,7 @@
 #ifndef ASH_PUBLIC_CPP_AMBIENT_AMBIENT_BACKEND_CONTROLLER_H_
 #define ASH_PUBLIC_CPP_AMBIENT_AMBIENT_BACKEND_CONTROLLER_H_
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -19,6 +20,17 @@ class TimeDelta;
 
 namespace ash {
 
+enum class AmbientModeTopicType {
+  kCurated,
+  kPersonal,
+  kFeatured,
+  kGeo,
+  kCulturalInstitute,
+  kRss,
+  kCapturedOnPixel,
+  kOther,
+};
+
 // AmbientModeTopic contains the information we need for rendering photo frame
 // for Ambient Mode. Corresponding to the |backdrop::ScreenUpdate::Topic| proto.
 struct ASH_PUBLIC_EXPORT AmbientModeTopic {
@@ -27,9 +39,6 @@ struct ASH_PUBLIC_EXPORT AmbientModeTopic {
   AmbientModeTopic& operator=(const AmbientModeTopic&);
   ~AmbientModeTopic();
 
-  // Returns a non-empty url to load the landscape or portrait image.
-  std::string GetUrl() const;
-
   // Details, i.e. the attribution, to be displayed for the current photo on
   // ambient.
   std::string details;
@@ -37,9 +46,10 @@ struct ASH_PUBLIC_EXPORT AmbientModeTopic {
   // Image url.
   std::string url;
 
-  // Optional for non-cropped portrait style images. The same image as in
-  // |url| but it is not cropped and is better for portrait displaying.
-  base::Optional<std::string> portrait_image_url;
+  // Only support portrait image tiling in landscape orientation.
+  base::Optional<std::string> related_image_url;
+
+  AmbientModeTopicType topic_type = AmbientModeTopicType::kOther;
 };
 
 // WeatherInfo contains the weather information we need for rendering a
@@ -99,6 +109,8 @@ class ASH_PUBLIC_EXPORT AmbientBackendController {
   using OnSettingsAndAlbumsFetchedCallback =
       base::OnceCallback<void(const base::Optional<AmbientSettings>& settings,
                               PersonalAlbums personal_albums)>;
+  using FetchWeatherCallback =
+      base::OnceCallback<void(const base::Optional<WeatherInfo>& weather_info)>;
 
   static AmbientBackendController* Get();
 
@@ -142,6 +154,13 @@ class ASH_PUBLIC_EXPORT AmbientBackendController {
 
   // Set the photo refresh interval in ambient mode.
   virtual void SetPhotoRefreshInterval(base::TimeDelta interval) = 0;
+
+  // Fetch the weather information.
+  virtual void FetchWeather(FetchWeatherCallback) = 0;
+
+  // Get stock photo urls to cache in advance in case Ambient mode is started
+  // without internet access.
+  virtual const std::array<const char*, 2>& GetBackupPhotoUrls() const = 0;
 };
 
 }  // namespace ash

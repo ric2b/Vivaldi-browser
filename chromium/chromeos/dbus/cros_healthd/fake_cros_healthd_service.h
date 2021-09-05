@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_diagnostics.mojom.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_events.mojom.h"
@@ -92,6 +93,15 @@ class FakeCrosHealthdService final
       uint32_t length_seconds,
       uint32_t maximum_discharge_percent_allowed,
       RunBatteryDischargeRoutineCallback callback) override;
+  void RunBatteryChargeRoutine(
+      uint32_t length_seconds,
+      uint32_t minimum_charge_percent_required,
+      RunBatteryChargeRoutineCallback callback) override;
+  void RunMemoryRoutine(RunMemoryRoutineCallback callback) override;
+  void RunLanConnectivityRoutine(
+      RunLanConnectivityRoutineCallback callback) override;
+  void RunSignalStrengthRoutine(
+      RunSignalStrengthRoutineCallback callback) override;
 
   // CrosHealthdEventService overrides:
   void AddBluetoothObserver(
@@ -129,6 +139,9 @@ class FakeCrosHealthdService final
   // ProbeProcessInfo IPCs received.
   void SetProbeProcessInfoResponseForTesting(mojom::ProcessResultPtr& result);
 
+  // Adds a delay before the passed callback is called.
+  void SetCallbackDelay(base::TimeDelta delay);
+
   // Calls the power event OnAcInserted for all registered power observers.
   void EmitAcInsertedEventForTesting();
 
@@ -138,6 +151,9 @@ class FakeCrosHealthdService final
 
   // Calls the lid event OnLidClosed for all registered lid observers.
   void EmitLidClosedEventForTesting();
+
+  // Calls the lid event OnLidOpened for all registered lid observers.
+  void EmitLidOpenedEventForTesting();
 
   // Requests the network health state using the network_health_remote_.
   void RequestNetworkHealthForTesting(
@@ -185,6 +201,8 @@ class FakeCrosHealthdService final
   // interface.
   mojo::Remote<chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines>
       network_diagnostics_routines_;
+
+  base::TimeDelta callback_delay_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeCrosHealthdService);
 };

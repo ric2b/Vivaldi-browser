@@ -118,6 +118,7 @@ const int DeviceManagementService::kDeviceNotFound;
 const int DeviceManagementService::kPendingApproval;
 const int DeviceManagementService::kRequestTooLarge;
 const int DeviceManagementService::kConsumerAccountWithPackagedLicense;
+const int DeviceManagementService::kTooManyRequests;
 const int DeviceManagementService::kInternalServerError;
 const int DeviceManagementService::kServiceUnavailable;
 const int DeviceManagementService::kPolicyNotFound;
@@ -189,6 +190,9 @@ std::string DeviceManagementService::JobConfiguration::GetJobTypeAsString(
     case DeviceManagementService::JobConfiguration::
         TYPE_CERT_PROVISIONING_REQUEST:
       return "CertProvisioningRequest";
+    case DeviceManagementService::JobConfiguration::
+        TYPE_PSM_HAS_DEVICE_STATE_REQUEST:
+      return "PSMDeviceStateRequest";
   }
   NOTREACHED() << "Invalid job type " << type;
   return "";

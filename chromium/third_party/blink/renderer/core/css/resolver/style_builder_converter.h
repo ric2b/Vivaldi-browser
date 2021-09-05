@@ -201,7 +201,6 @@ class StyleBuilderConverter {
   static StyleColor ConvertStyleColor(StyleResolverState&,
                                       const CSSValue&,
                                       bool for_visited_link = false);
-  static CSSValueID ConvertCSSValueID(StyleResolverState&, const CSSValue&);
   static StyleAutoColor ConvertStyleAutoColor(StyleResolverState&,
                                               const CSSValue&,
                                               bool for_visited_link = false);
@@ -280,8 +279,8 @@ class StyleBuilderConverter {
 
   static LengthSize ConvertIntrinsicSize(StyleResolverState&, const CSSValue&);
 
-  static base::Optional<IntSize> ConvertAspectRatio(StyleResolverState&,
-                                                    const CSSValue&);
+  static StyleAspectRatio ConvertAspectRatio(StyleResolverState&,
+                                             const CSSValue&);
 
   static bool ConvertInternalEmptyLineHeight(StyleResolverState& state,
                                              const CSSValue& value);

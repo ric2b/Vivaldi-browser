@@ -444,13 +444,31 @@ class CalendarCreateNotificationFunction : public CalendarAsyncFunction {
 
   // Callback for the calendar function to provide results.
   void CreateNotificationComplete(
-      std::shared_ptr<calendar::CreateNotificationResult> results);
+      std::shared_ptr<calendar::NotificationResult> results);
 
  private:
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
 
   DISALLOW_COPY_AND_ASSIGN(CalendarCreateNotificationFunction);
+};
+
+class CalendarUpdateNotificationFunction : public CalendarFunctionWithCallback {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.updateNotification",
+                             CALENDAR_UPDATENOTIFICATION)
+  CalendarUpdateNotificationFunction() = default;
+
+ protected:
+  ~CalendarUpdateNotificationFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void UpdateNotificationComplete(
+      std::shared_ptr<calendar::NotificationResult> results);
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CalendarUpdateNotificationFunction);
 };
 
 class CalendarDeleteNotificationFunction : public CalendarAsyncFunction {

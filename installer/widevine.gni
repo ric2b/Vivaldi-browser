@@ -1,0 +1,113 @@
+
+assert(is_win || is_mac)
+
+import("//vivaldi/gn/config/features.gni")
+import("//vivaldi/gn/config/signer_features.gni")
+
+declare_args() {
+  widevine_signing_script = ""
+  widevine_verify_script = ""
+  widevine_private_key = ""
+  widevine_signing_cert = ""
+}
+
+template("widevine_sign") {
+  signing_target_name = "${target_name}_sign"
+  verify_target_name = "${target_name}_verify"
+
+  action(signing_target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "file",
+                             "signature_file",
+                             "flags",
+                             "deps",
+                           ])
+
+    script = widevine_signing_script
+
+    if (!defined(signature_file)) {
+      signature_file = "$file.sig"
+    }
+
+    inputs = [
+      widevine_private_key,
+      widevine_signing_cert,
+    ]
+    if (!is_full_signer) {
+      inputs += [file]
+    }
+
+    outputs = [
+      signature_file,
+    ]
+
+    args = [
+      "--input",
+      rebase_path(file),
+      "--output",
+      rebase_path(signature_file),
+      "--private_key",
+      rebase_path(widevine_private_key),
+      "--certificate",
+      rebase_path(widevine_signing_cert),
+    ]
+
+    if (defined(flags) && flags != 0) {
+      args += [
+        "--flags", "1",
+      ]
+    }
+  }
+
+  action(verify_target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "file",
+                             "signature_file",
+                             "flags",
+                             "deps",
+                           ])
+
+    script = widevine_verify_script
+
+    if (!defined(signature_file)) {
+      signature_file = "$file.sig"
+    }
+
+    inputs = [
+      signature_file,
+    ]
+    if (!is_full_signer) {
+      inputs += [file]
+    }
+
+    outputs = [ "${target_gen_dir}/${verify_target_name}.stamp"]
+
+    args = [
+      "--input",
+      rebase_path(file),
+      "--sig_file",
+      rebase_path(signature_file),
+      "--verbose",
+    ]
+
+    if (defined(flags) && flags != 0) {
+      args += [
+        "--flags", "1",
+      ]
+    }
+
+    if(!defined(deps)) {
+      deps = []
+    }
+    deps += [ ":${signing_target_name}" ]
+  }
+
+  group(target_name) {
+    public_deps = [
+      ":${signing_target_name}",
+      ":${verify_target_name}",
+    ]
+  }
+}

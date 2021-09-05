@@ -8,9 +8,11 @@
 #include "base/bind.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/ui/ash/chrome_screenshot_grabber.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "ui/aura/window.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/skia_util.h"
@@ -98,6 +100,19 @@ bool DlpContentManager::IsScreenshotRestricted(
   return false;
 }
 
+bool DlpContentManager::IsPrintingRestricted(
+    content::WebContents* web_contents) const {
+  // If we're viewing the PDF in a MimeHandlerViewGuest, use its embedder
+  // WebContents.
+  auto* guest_view =
+      extensions::MimeHandlerViewGuest::FromWebContents(web_contents);
+  web_contents =
+      guest_view ? guest_view->embedder_web_contents() : web_contents;
+
+  return GetConfidentialRestrictions(web_contents)
+      .HasRestriction(DlpContentRestriction::kPrint);
+}
+
 /* static */
 void DlpContentManager::SetDlpContentManagerForTesting(
     DlpContentManager* dlp_content_manager) {
@@ -136,7 +151,26 @@ void DlpContentManager::OnWebContentsDestroyed(
 DlpContentRestrictionSet DlpContentManager::GetRestrictionSetForURL(
     const GURL& url) const {
   DlpContentRestrictionSet set;
-  // TODO(crbug/1109783): Implement based on the policy.
+  if (!DlpRulesManager::IsInitialized())
+    return set;
+  DlpRulesManager* dlp_rules_manager = DlpRulesManager::Get();
+
+  static const base::NoDestructor<
+      base::flat_map<DlpRulesManager::Restriction, DlpContentRestriction>>
+      kRestrictionsMap({{DlpRulesManager::Restriction::kScreenshot,
+                         DlpContentRestriction::kScreenshot},
+                        {DlpRulesManager::Restriction::kPrivacyScreen,
+                         DlpContentRestriction::kPrivacyScreen},
+                        {DlpRulesManager::Restriction::kPrinting,
+                         DlpContentRestriction::kPrint}});
+
+  for (const auto& restriction : *kRestrictionsMap) {
+    if (dlp_rules_manager->IsRestricted(url, restriction.first) ==
+        DlpRulesManager::Level::kBlock) {
+      set.SetRestriction(restriction.second);
+    }
+  }
+
   return set;
 }
 

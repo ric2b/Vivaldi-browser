@@ -6,19 +6,18 @@
 #define UI_GFX_X_XPROTO_TYPES_H_
 
 #include <xcb/xcb.h>
-#include <xcb/xcbext.h>
 
 #include <cstdint>
 #include <memory>
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/component_export.h"
 #include "base/files/scoped_file.h"
 #include "base/memory/free_deleter.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
-#include "ui/gfx/x/xproto_util.h"
 
 typedef struct _XDisplay XDisplay;
 

@@ -354,13 +354,12 @@ ci.dawn_thin_tester(
     triggered_by = [builder_name("Dawn Mac x64 DEPS Builder")],
 )
 
-ci.dawn_builder(
+ci.dawn_windows_builder(
     name = "Dawn Win10 x64 DEPS Builder",
     console_view_entry = ci.console_view_entry(
         category = "DEPS|Windows|Builder",
         short_name = "x64",
     ),
-    os = os.WINDOWS_ANY,
 )
 
 ci.dawn_thin_tester(
@@ -381,13 +380,12 @@ ci.dawn_thin_tester(
     triggered_by = [builder_name("Dawn Win10 x64 DEPS Builder")],
 )
 
-ci.dawn_builder(
+ci.dawn_windows_builder(
     name = "Dawn Win10 x86 DEPS Builder",
     console_view_entry = ci.console_view_entry(
         category = "DEPS|Windows|Builder",
         short_name = "x86",
     ),
-    os = os.WINDOWS_ANY,
 )
 
 ci.dawn_thin_tester(

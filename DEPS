@@ -45,25 +45,11 @@ hooks = [
     ],
   },
   {
-    # Check out Android specific submodules based on chromium/DEPS if android is enabled
-    # Use build/enable_android_build.sh to enable Android build specific actions
-    # Use build/disable_android_build.sh to disable Android build
-    'name': 'checkout_android_submodules',
+    # Check out cipd submodules based on chromium/DEPS for all OSes
+    'name': 'checkout_general_submodules',
     'pattern': '.',
-    'condition': 'checkout_android',
     'action': [
-      'python', "-u",
-      'scripts/android_submodules.py',
-    ],
-  },
-  {
-    # Check out Linux specific submodules based on chromium/DEPS if linux is the target OS
-    'name': 'checkout_linux_submodules',
-    'pattern': '.',
-    'condition': 'checkout_linux and not checkout_android',
-    'action': [
-      'python', "-u",
-      'scripts/linux_submodules.py',
+      'python', "-u", 'scripts/general_submodules.py',
     ],
   },
   {
@@ -290,26 +276,6 @@ hooks = [
     ],
   },
 
-  # Download Telemetry's binary dependencies via conditionals
-    {
-    'name': 'checkout_telemetry_binary_dependencies',
-    'condition': 'checkout_telemetry_dependencies',
-    'pattern': '.',
-    'action': [ 'python', "-u",
-                'chromium/third_party/catapult/telemetry/bin/fetch_telemetry_binary_dependencies',
-    ],
-  },
-	#
-  # Download Telemetry's benchmark binary dependencies via conditionals
-  {
-    'name': 'checkout_telemetry_benchmark_deps',
-    'condition': 'checkout_telemetry_dependencies',
-    'pattern': '.',
-    'action': [ 'python', "-u",
-                'chromium/tools/perf/fetch_benchmark_deps.py',
-                '-f',
-    ],
-  },
   # Pull down Android RenderTest goldens
   {
     'name': 'Fetch Android RenderTest goldens',
@@ -430,6 +396,51 @@ hooks = [
                 '-s', 'chromium/third_party/subresource-filter-ruleset/data/UnindexedRules.sha1',
     ],
   },
+  # Download PGO profiles.
+  {
+    'name': 'Fetch PGO profiles for win32',
+    'pattern': '.',
+    'condition': 'checkout_pgo_profiles and checkout_win',
+    'action': [ 'vpython',
+                'chromium/tools/update_pgo_profiles.py',
+                '--target=win32',
+                'update',
+                '--gs-url-base=chromium-optimization-profiles/pgo_profiles',
+    ],
+  },
+  {
+    'name': 'Fetch PGO profiles for win64',
+    'pattern': '.',
+    'condition': 'checkout_pgo_profiles and checkout_win',
+    'action': [ 'vpython',
+                'chromium/tools/update_pgo_profiles.py',
+                '--target=win64',
+                'update',
+                '--gs-url-base=chromium-optimization-profiles/pgo_profiles',
+    ],
+  },
+  {
+    'name': 'Fetch PGO profiles for mac',
+    'pattern': '.',
+    'condition': 'checkout_pgo_profiles and checkout_mac',
+    'action': [ 'vpython',
+                'chromium/tools/update_pgo_profiles.py',
+                '--target=mac',
+                'update',
+                '--gs-url-base=chromium-optimization-profiles/pgo_profiles',
+    ],
+  },
+  {
+    'name': 'Fetch PGO profiles for linux',
+    'pattern': '.',
+    'condition': 'checkout_pgo_profiles and checkout_linux',
+    'action': [ 'vpython',
+                'chromium/tools/update_pgo_profiles.py',
+                '--target=linux',
+                'update',
+                '--gs-url-base=chromium-optimization-profiles/pgo_profiles',
+    ],
+  },
   # Download and initialize "vpython" VirtualEnv environment packages.
   {
     'name': 'vpython_common',
@@ -437,15 +448,6 @@ hooks = [
     'action': [ 'vpython',
                 '-vpython-spec', 'chromium/.vpython',
                 '-vpython-tool', 'install',
-    ],
-  },
-  {
-    'name': 'mac-dsymutil',
-    'pattern': '.',
-    "condition": "checkout_mac",
-    'action': [
-      'python', "-u",
-      'scripts/mac_build_tools.py',
     ],
   },
   {

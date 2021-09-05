@@ -12,6 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
+#include "base/strings/nullable_string16.h"
 #include "base/strings/string_util.h"
 #include "base/unguessable_token.h"
 #include "base/util/type_safety/id_type.h"
@@ -731,20 +732,6 @@ struct FuzzTraits<viz::LocalSurfaceId> {
 };
 
 template <>
-struct FuzzTraits<viz::LocalSurfaceIdAllocation> {
-  static bool Fuzz(viz::LocalSurfaceIdAllocation* p, Fuzzer* fuzzer) {
-    viz::LocalSurfaceId local_surface_id = p->local_surface_id();
-    base::TimeTicks allocation_time = p->allocation_time();
-    if (!FuzzParam(&local_surface_id, fuzzer))
-      return false;
-    if (!FuzzParam(&allocation_time, fuzzer))
-      return false;
-    *p = viz::LocalSurfaceIdAllocation(local_surface_id, allocation_time);
-    return true;
-  }
-};
-
-template <>
 struct FuzzTraits<viz::ResourceFormat> {
   static bool Fuzz(viz::ResourceFormat* p, Fuzzer* fuzzer) {
     int format = RandInRange(viz::ResourceFormat::RESOURCE_FORMAT_MAX + 1);
@@ -770,8 +757,8 @@ struct FuzzTraits<viz::QuadList> {
 };
 
 template <>
-struct FuzzTraits<viz::RenderPass> {
-  static bool Fuzz(viz::RenderPass* p, Fuzzer* fuzzer) {
+struct FuzzTraits<viz::CompositorRenderPass> {
+  static bool Fuzz(viz::CompositorRenderPass* p, Fuzzer* fuzzer) {
     if (!FuzzParam(&p->id, fuzzer))
       return false;
     if (!FuzzParam(&p->output_rect, fuzzer))
@@ -792,8 +779,8 @@ struct FuzzTraits<viz::RenderPass> {
 };
 
 template <>
-struct FuzzTraits<viz::RenderPassList> {
-  static bool Fuzz(viz::RenderPassList* p, Fuzzer* fuzzer) {
+struct FuzzTraits<viz::CompositorRenderPassList> {
+  static bool Fuzz(viz::CompositorRenderPassList* p, Fuzzer* fuzzer) {
     if (!fuzzer->ShouldGenerate()) {
       for (size_t i = 0; i < p->size(); ++i) {
         if (!FuzzParam(p->at(i).get(), fuzzer))
@@ -804,7 +791,7 @@ struct FuzzTraits<viz::RenderPassList> {
 
     size_t count = RandElementCount();
     for (size_t i = 0; i < count; ++i) {
-      std::unique_ptr<viz::RenderPass> render_pass = viz::RenderPass::Create();
+      auto render_pass = viz::CompositorRenderPass::Create();
       if (!FuzzParam(render_pass.get(), fuzzer))
         return false;
       p->push_back(std::move(render_pass));
@@ -965,18 +952,6 @@ struct FuzzTraits<gfx::ColorSpace::TransferID> {
 template <>
 struct FuzzTraits<gfx::GpuFenceHandle> {
   static bool Fuzz(gfx::GpuFenceHandle* p, Fuzzer* fuzzer) {
-    if (!FuzzParam(&p->type, fuzzer))
-      return false;
-    return true;
-  }
-};
-
-template <>
-struct FuzzTraits<gfx::GpuFenceHandleType> {
-  static bool Fuzz(gfx::GpuFenceHandleType* p, Fuzzer* fuzzer) {
-    int type =
-        RandInRange(static_cast<int>(gfx::GpuFenceHandleType::kLast) + 1);
-    *p = static_cast<gfx::GpuFenceHandleType>(type);
     return true;
   }
 };

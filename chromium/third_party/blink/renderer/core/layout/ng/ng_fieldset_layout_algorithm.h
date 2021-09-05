@@ -51,7 +51,8 @@ class CORE_EXPORT NGFieldsetLayoutAlgorithm
   const NGConstraintSpace CreateConstraintSpaceForFieldsetContent(
       NGBlockNode fieldset_content,
       LogicalSize padding_box_size,
-      LayoutUnit block_offset);
+      LayoutUnit block_offset,
+      NGCacheSlot slot);
   bool IsFragmentainerOutOfSpace(LayoutUnit block_offset) const;
 
   const WritingMode writing_mode_;
@@ -67,10 +68,6 @@ class CORE_EXPORT NGFieldsetLayoutAlgorithm
   // represents the minimum block size needed by the border box to encompass
   // the legend.
   LayoutUnit minimum_border_box_block_size_;
-
-  // The amount of the border block-start that was consumed in previous
-  // fragments.
-  LayoutUnit consumed_border_block_start_;
 
   // If true, the legend is taller than the block-start border, so that it
   // sticks below it, allowing for a class C breakpoint [1] before any fieldset

@@ -198,8 +198,7 @@ ExtensionFunction::ResponseAction MenuContentGetFunction::Run() {
     } else {
       AddRef();  // Balanced in MenuModelLoaded().
       model->AddObserver(this);
-      model->Load(Profile::FromBrowserContext(
-          browser_context())->GetIOTaskRunner());
+      model->Load();
       return RespondLater();
     }
   }
@@ -385,9 +384,7 @@ ExtensionFunction::ResponseAction MenuContentResetFunction::Run() {
         }
       }
     } else {
-      // We do have a node here, but it is quicker to reset the whole menu and
-      // the node in question is the menu itself.
-      pair.second->Reset(params->named_menu);
+      pair.second->Reset(pair.first);
     }
   } else if (pair.first) {
     // Reset all and report back that name menu is to be used afterwards.

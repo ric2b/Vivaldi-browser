@@ -66,6 +66,8 @@
 
 #if defined(OS_MAC)
 #include "chrome/browser/ui/cocoa/keystone_infobar_delegate.h"
+#include "chrome/browser/ui/cocoa/rosetta_required_infobar_delegate.h"
+#include "chrome/browser/ui/startup/mac_system_infobar_delegate.h"
 #endif
 
 #if !defined(USE_AURA)
@@ -193,6 +195,7 @@ void InfoBarUiTest::ShowUi(const std::string& name) {
       {"plugin_observer", IBD::PLUGIN_OBSERVER_INFOBAR_DELEGATE},
       {"file_access_disabled", IBD::FILE_ACCESS_DISABLED_INFOBAR_DELEGATE},
       {"keystone_promotion", IBD::KEYSTONE_PROMOTION_INFOBAR_DELEGATE_MAC},
+      {"mac_system", IBD::SYSTEM_INFOBAR_DELEGATE_MAC},
       {"collected_cookies", IBD::COLLECTED_COOKIES_INFOBAR_DELEGATE},
       {"installation_error", IBD::INSTALLATION_ERROR_INFOBAR_DELEGATE},
       {"bad_flags", IBD::BAD_FLAGS_INFOBAR_DELEGATE},
@@ -205,6 +208,7 @@ void InfoBarUiTest::ShowUi(const std::string& name) {
       {"previews_lite_page", IBD::LITE_PAGE_PREVIEWS_INFOBAR},
       {"flash_deprecation", IBD::FLASH_DEPRECATION_INFOBAR_DELEGATE},
       {"tab_sharing", IBD::TAB_SHARING_INFOBAR_DELEGATE},
+      {"rosetta_required", IBD::ROSETTA_REQUIRED_INFOBAR_DELEGATE},
   };
   auto id_entry = kIdentifiers.find(name);
   if (id_entry == kIdentifiers.end()) {
@@ -299,6 +303,14 @@ void InfoBarUiTest::ShowUi(const std::string& name) {
 #endif
       break;
 
+    case IBD::SYSTEM_INFOBAR_DELEGATE_MAC:
+#if defined(OS_MAC)
+      MacSystemInfoBarDelegate::Create(GetInfoBarService());
+#else
+      ADD_FAILURE() << "This infobar is not supported on this OS.";
+#endif
+      break;
+
     case IBD::COLLECTED_COOKIES_INFOBAR_DELEGATE:
       CollectedCookiesInfoBarDelegate::Create(GetInfoBarService());
       break;
@@ -381,6 +393,14 @@ void InfoBarUiTest::ShowUi(const std::string& name) {
           base::ASCIIToUTF16("application.com"), false, true, nullptr);
       break;
 
+    case IBD::ROSETTA_REQUIRED_INFOBAR_DELEGATE:
+#if defined(OS_MAC)
+      RosettaRequiredInfoBarDelegate::Create(GetWebContents());
+#else
+      ADD_FAILURE() << "This infobar is not supported on this OS.";
+#endif
+      break;
+
     default:
       break;
   }
@@ -434,6 +454,9 @@ IN_PROC_BROWSER_TEST_F(InfoBarUiTest, InvokeUi_file_access_disabled) {
 
 #if defined(OS_MAC)
 IN_PROC_BROWSER_TEST_F(InfoBarUiTest, InvokeUi_keystone_promotion) {
+  ShowAndVerifyUi();
+}
+IN_PROC_BROWSER_TEST_F(InfoBarUiTest, InvokeUi_mac_system) {
   ShowAndVerifyUi();
 }
 #endif

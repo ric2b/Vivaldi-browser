@@ -43,6 +43,8 @@ import org.chromium.chrome.browser.toolbar.KeyboardNavigationListener;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
 import org.chromium.chrome.browser.toolbar.ToolbarColors;
+import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
+import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.styles.ChromeColors;
@@ -169,15 +171,6 @@ public class ToolbarTablet extends ToolbarLayout
 
         mBookmarkButton = findViewById(R.id.bookmark_button);
 
-        final View menuButtonWrapper = getMenuButtonWrapper();
-        menuButtonWrapper.setVisibility(View.VISIBLE);
-
-        if (mAccessibilitySwitcherButton.getVisibility() == View.GONE
-                && menuButtonWrapper.getVisibility() == View.GONE) {
-            ViewCompat.setPaddingRelative((View) menuButtonWrapper.getParent(), 0, 0,
-                    getResources().getDimensionPixelSize(R.dimen.tablet_toolbar_end_padding), 0);
-        }
-
         mSaveOfflineButton = findViewById(R.id.save_offline_button);
 
         // Initialize values needed for showing/hiding toolbar buttons when the activity size
@@ -297,7 +290,7 @@ public class ToolbarTablet extends ToolbarLayout
         mBookmarkButton.setOnClickListener(this);
         mBookmarkButton.setOnLongClickListener(this);
 
-        getMenuButton().setOnKeyListener(new KeyboardNavigationListener() {
+        getMenuButtonCoordinator().setOnKeyListener(new KeyboardNavigationListener() {
             @Override
             public View getNextFocusForward() {
                 return getCurrentTabView();
@@ -310,7 +303,7 @@ public class ToolbarTablet extends ToolbarLayout
 
             @Override
             protected boolean handleEnterKeyPress() {
-                return getMenuButtonHelper().onEnterKeyPress(getMenuButton());
+                return getMenuButtonCoordinator().onEnterKeyPress();
             }
         });
         if (HomepageManager.isHomepageEnabled()) {
@@ -569,6 +562,13 @@ public class ToolbarTablet extends ToolbarLayout
 
             menuButtonCoordinator.setAppMenuUpdateBadgeSuppressed(false);
         }
+    }
+
+    @Override
+    protected void initialize(ToolbarDataProvider toolbarDataProvider,
+            ToolbarTabController tabController, MenuButtonCoordinator menuButtonCoordinator) {
+        super.initialize(toolbarDataProvider, tabController, menuButtonCoordinator);
+        menuButtonCoordinator.setVisibility(true);
     }
 
     @Override

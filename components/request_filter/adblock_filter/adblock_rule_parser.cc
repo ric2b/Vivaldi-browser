@@ -198,10 +198,13 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
     options_start = rule_string.rfind('$');
   }
 
+  base::StringPiece options_string;
+  if (options_start != base::StringPiece::npos)
+    options_string = rule_string.substr(options_start);
+
   // Even if the options string is empty, there is some common setup code
   // that we want to run.
-  Result result =
-      ParseFilterRuleOptions(rule_string.substr(options_start), rule);
+  Result result = ParseFilterRuleOptions(options_string, rule);
   if (result != kFilterRule)
     return result;
 
@@ -456,7 +459,8 @@ RuleParser::Result RuleParser::ParseFilterRuleOptions(base::StringPiece options,
         for (auto csp :
              base::SplitStringPiece(option_value, ";", base::TRIM_WHITESPACE,
                                     base::SPLIT_WANT_NONEMPTY)) {
-          if (base::StartsWith(csp, "base-uri") || base::StartsWith(csp, "referrer") ||
+          if (base::StartsWith(csp, "base-uri") ||
+              base::StartsWith(csp, "referrer") ||
               base::StartsWith(csp, "report") ||
               base::StartsWith(csp, "upgrade-insecure-requests"))
             return kError;

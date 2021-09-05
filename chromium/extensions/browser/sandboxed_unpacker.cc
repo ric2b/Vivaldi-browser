@@ -341,7 +341,8 @@ void SandboxedUnpacker::Unzip(const base::FilePath& crx_path,
 
   DCHECK(crx_path.DirName() == temp_dir_.GetPath());
 
-  ZipFileInstaller::Create(base::BindOnce(&SandboxedUnpacker::UnzipDone, this))
+  ZipFileInstaller::Create(unpacker_io_task_runner_,
+                           base::BindOnce(&SandboxedUnpacker::UnzipDone, this))
       ->LoadFromZipFileInDir(crx_path, unzipped_dir);
 }
 
@@ -472,7 +473,8 @@ void SandboxedUnpacker::UnpackExtensionSucceeded(base::Value manifest) {
   image_sanitizer_ = ImageSanitizer::CreateAndStart(
       &data_decoder_, extension_root_, image_paths,
       base::BindRepeating(&SandboxedUnpacker::ImageSanitizerDecodedImage, this),
-      base::BindOnce(&SandboxedUnpacker::ImageSanitizationDone, this));
+      base::BindOnce(&SandboxedUnpacker::ImageSanitizationDone, this),
+      unpacker_io_task_runner_);
 }
 
 void SandboxedUnpacker::ImageSanitizerDecodedImage(const base::FilePath& path,
@@ -566,7 +568,8 @@ void SandboxedUnpacker::SanitizeMessageCatalogs(
   DCHECK(unpacker_io_task_runner_->RunsTasksInCurrentSequence());
   json_file_sanitizer_ = JsonFileSanitizer::CreateAndStart(
       &data_decoder_, message_catalog_paths,
-      base::BindOnce(&SandboxedUnpacker::MessageCatalogsSanitized, this));
+      base::BindOnce(&SandboxedUnpacker::MessageCatalogsSanitized, this),
+      unpacker_io_task_runner_);
 }
 
 void SandboxedUnpacker::MessageCatalogsSanitized(
@@ -631,7 +634,7 @@ void SandboxedUnpacker::OnJSONRulesetsIndexed(
   if (!result.warnings.empty())
     extension_->AddInstallWarnings(std::move(result.warnings));
 
-  ruleset_checksums_ = std::move(result.ruleset_checksums);
+  ruleset_install_prefs_ = std::move(result.ruleset_install_prefs);
 
   CheckComputeHashes();
 }
@@ -891,11 +894,11 @@ void SandboxedUnpacker::ReportSuccess() {
       temp_dir_.Take(), extension_root_,
       base::DictionaryValue::From(
           base::Value::ToUniquePtrValue(std::move(manifest_.value()))),
-      extension_.get(), install_icon_, std::move(ruleset_checksums_));
+      extension_.get(), install_icon_, std::move(ruleset_install_prefs_));
 
   // Interestingly, the C++ standard doesn't guarantee that a moved-from vector
   // is empty.
-  ruleset_checksums_.clear();
+  ruleset_install_prefs_.clear();
 
   extension_.reset();
 

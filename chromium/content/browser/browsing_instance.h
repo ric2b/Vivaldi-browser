@@ -18,6 +18,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_process_host_observer.h"
+#include "url/origin.h"
 
 class GURL;
 
@@ -25,6 +26,7 @@ namespace content {
 class RenderProcessHost;
 class SiteInfo;
 class SiteInstanceImpl;
+struct UrlInfo;
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -82,7 +84,16 @@ class CONTENT_EXPORT BrowsingInstance final
   static BrowsingInstanceId NextBrowsingInstanceId();
 
   // Create a new BrowsingInstance.
-  explicit BrowsingInstance(BrowserContext* context);
+  // |is_coop_coep_cross_origin_isolated| indicates whether the BrowsingInstance
+  // should contain only cross-origin isolated pages, i.e. pages with
+  // cross-origin-opener-policy set to same-origin and
+  // cross-origin-embedder-policy set to require-corp.
+  // |cross_origin_isolated_origin| the origin shared by all the top level pages
+  // if the BrowsingInstance is cross-origin isolated.
+  explicit BrowsingInstance(
+      BrowserContext* context,
+      bool is_coop_coep_cross_origin_isolated,
+      const base::Optional<url::Origin>& cross_origin_isolated_origin);
 
   ~BrowsingInstance() final;
 
@@ -101,7 +112,7 @@ class CONTENT_EXPORT BrowsingInstance final
   // the site of |site_info|.
   bool HasSiteInstance(const SiteInfo& site_info);
 
-  // Get the SiteInstance responsible for rendering the given URL.  Should
+  // Get the SiteInstance responsible for rendering the given UrlInfo.  Should
   // create a new one if necessary, but should not create more than one
   // SiteInstance per site.
   //
@@ -112,26 +123,31 @@ class CONTENT_EXPORT BrowsingInstance final
   // GetSiteURL() and lock_url() calls because the default instance is not
   // bound to a single site.
   scoped_refptr<SiteInstanceImpl> GetSiteInstanceForURL(
-      const GURL& url,
+      const UrlInfo& url_info,
       bool allow_default_instance);
 
-  // Returns a SiteInfo with site and process-lock URLs for |url| that are
+  // Returns a SiteInfo with site and process-lock URLs for |url_info| that are
   // identical with what these values would be if we called
-  // GetSiteInstanceForURL() with the same |url| and |allow_default_instance|.
-  // This method is used when we need this information, but do not want to
-  // create a SiteInstance yet.
-  SiteInfo GetSiteInfoForURL(const GURL& url, bool allow_default_instance);
+  // GetSiteInstanceForURL() with the same |url_info| and
+  // |allow_default_instance|. This method is used when we need this
+  // information, but do not want to create a SiteInstance yet.
+  //
+  // Note: Unlike ComputeSiteInfoForURL() this method can return a SiteInfo for
+  // a default SiteInstance, if |url_info| can be placed in the default
+  // SiteInstance and |allow_default_instance| is true.
+  SiteInfo GetSiteInfoForURL(const UrlInfo& url_info,
+                             bool allow_default_instance);
 
   // Helper function used by GetSiteInstanceForURL() and GetSiteInfoForURL()
   // that returns an existing SiteInstance from |site_instance_map_| or
   // returns |default_site_instance_| if |allow_default_instance| is true and
   // other conditions are met. If there is no existing SiteInstance that is
-  // appropriate for |url|, |allow_default_instance| combination, then a nullptr
-  // is returned.
+  // appropriate for |url_info|, |allow_default_instance| combination, then a
+  // nullptr is returned.
   //
   // Note: This method is not intended to be called by code outside this object.
   scoped_refptr<SiteInstanceImpl> GetSiteInstanceForURLHelper(
-      const GURL& url,
+      const UrlInfo& url_info,
       bool allow_default_instance);
 
   // Adds the given SiteInstance to our map, to ensure that we do not create
@@ -170,22 +186,43 @@ class CONTENT_EXPORT BrowsingInstance final
   bool IsSiteInDefaultSiteInstance(const GURL& site_url) const;
 
   // Attempts to convert |site_instance| into a default SiteInstance,
-  // if |url| can be placed inside a default SiteInstance, and the default
+  // if |url_info| can be placed inside a default SiteInstance, and the default
   // SiteInstance has not already been set for this object.
   // Returns true if |site_instance| was successfully converted to a default
   // SiteInstance. Otherwise, returns false.
   bool TrySettingDefaultSiteInstance(SiteInstanceImpl* site_instance,
-                                     const GURL& url);
+                                     const UrlInfo& url_info);
 
   // Helper function used by other methods in this class to ensure consistent
-  // mapping between |url| and SiteInfo.
+  // mapping between |url_info| and SiteInfo. This method will never return a
+  // SiteInfo for the default SiteInstance. It will always return something
+  // specific to |url_info|.
+  //
   // Note: This should not be used by code outside this class.
-  SiteInfo GetSiteInfoForURL(const GURL& url) const;
+  SiteInfo ComputeSiteInfoForURL(const UrlInfo& url_info) const;
 
   // Map of SiteInfo to SiteInstance, to ensure we only have one SiteInstance
   // per SiteInfo. See https://crbug.com/1085275#c2 for the rationale behind
   // why SiteInfo is the right class to key this on.
   typedef std::map<SiteInfo, SiteInstanceImpl*> SiteInstanceMap;
+
+  // Returns true if the BrowsingInstance was created to contain only
+  // cross-origin isolated pages, i.e. pages with cross-origin-opener-policy set
+  // to same-origin and cross-origin-embedder-policy set to require-corp.
+  // The same-origin COOP also implies that all pages in the BrowsingInstance
+  // have the same top-level origin.
+  // See
+  // https://html.spec.whatwg.org/multipage/webappapis.html#dom-crossoriginisolated
+  bool is_coop_coep_cross_origin_isolated() const {
+    return is_coop_coep_cross_origin_isolated_;
+  }
+
+  // If the BrowsingInstance is cross-origin isolated, returns the origin shared
+  // by all the top level pages. Empty otherwise.
+  const base::Optional<url::Origin>& coop_coep_cross_origin_isolated_origin()
+      const {
+    return coop_coep_cross_origin_isolated_origin_;
+  }
 
   // The next available browser-global BrowsingInstance ID.
   static int next_browsing_instance_id_;
@@ -228,6 +265,18 @@ class CONTENT_EXPORT BrowsingInstance final
   // |default_site_instance_|.
   // TODO(wjmaclean): Revise this to store SiteInfos instead of GURLs.
   std::set<GURL> site_url_set_;
+
+  // Tracks whether this BrowsingInstance contains pages using COOP
+  // "same-origin" and COEP "require-corp". This is set in the constructor and
+  // is immutable.
+  // As a general rule, cross-origin isolated BrowsingInstances are only hosted
+  // by processes that do not host non cross-origin isolated pages.
+  const bool is_coop_coep_cross_origin_isolated_;
+
+  // When the BrowsingInstance is cross-origin isolated, all the top level pages
+  // are same origin. This member stores this origin. The notable exception is
+  // error pages that stay in the same BrowsingInstance.
+  const base::Optional<url::Origin> coop_coep_cross_origin_isolated_origin_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowsingInstance);
 };

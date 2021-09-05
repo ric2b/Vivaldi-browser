@@ -32,7 +32,6 @@ component("aura") {
     "env_observer.h",
     "event_injector.h",
     "input_state_lookup.h",
-    "input_state_lookup_win.h",
     "layout_manager.h",
     "null_window_targeter.h",
     "scoped_enable_unadjusted_mouse_events.h",
@@ -74,12 +73,9 @@ component("aura") {
     "env_input_state_controller.cc",
     "event_injector.cc",
     "input_state_lookup.cc",
-    "input_state_lookup_win.cc",
     "layout_manager.cc",
     "native_window_occlusion_tracker.cc",
     "native_window_occlusion_tracker.h",
-    "native_window_occlusion_tracker_win.cc",
-    "native_window_occlusion_tracker_win.h",
     "null_window_targeter.cc",
     "scoped_keyboard_hook.cc",
     "scoped_simple_keyboard_hook.cc",
@@ -139,6 +135,15 @@ component("aura") {
     "//ui/base/ime",
     "//ui/compositor",
   ]
+
+  if (is_win) {
+    public += [ "input_state_lookup_win.h" ]
+    sources += [
+      "input_state_lookup_win.cc",
+      "native_window_occlusion_tracker_win.cc",
+      "native_window_occlusion_tracker_win.h",
+    ]
+  }
 
   if (use_x11) {
     public_deps += [ "//ui/base/x" ]
@@ -247,7 +252,7 @@ static_library("test_support") {
     sources += [ "test/ui_controls_factory_aurawin.cc" ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos) {
     sources += [ "test/ui_controls_factory_aura_linux.cc" ]
   }
 
@@ -255,7 +260,6 @@ static_library("test_support") {
     sources += [
       "test/ui_controls_aurax11.cc",
       "test/ui_controls_aurax11.h",
-      "test/x11_event_sender.cc",
       "test/x11_event_sender.h",
     ]
 
@@ -314,9 +318,7 @@ executable("aura_demo") {
 }
 
 test("aura_unittests") {
-  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
-    use_xvfb = true
-  }
+  use_xvfb = use_xvfb_in_this_config
 
   sources = [
     "../compositor_extra/shadow_unittest.cc",

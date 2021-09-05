@@ -37,15 +37,14 @@
 #include "components/viz/client/frame_evictor.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/file_system/file_system_manager_impl.h"
-#include "content/browser/frame_host/cross_process_frame_connector.h"
-#include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/navigation_request.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/frame_host/render_frame_proxy_host.h"
+#include "content/browser/renderer_host/cross_process_frame_connector.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/input/synthetic_touchscreen_pinch_gesture.h"
+#include "content/browser/renderer_host/navigation_request.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_frame_metadata_provider_impl.h"
+#include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
@@ -55,12 +54,11 @@
 #include "content/browser/storage_partition_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
+#include "content/common/frame.mojom.h"
 #include "content/common/frame_messages.h"
-#include "content/common/frame_visual_properties.h"
 #include "content/common/input_messages.h"
 #include "content/common/widget_messages.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/browser_plugin_guest_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_termination_info.h"
@@ -115,6 +113,7 @@
 #include "storage/browser/file_system/file_system_context.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/frame/frame_visual_properties.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -425,8 +424,7 @@ CrossSiteRedirectResponseHandler(const net::EmbeddedTestServer* test_server,
   GURL redirect_target(redirect_server.Resolve(path));
   DCHECK(redirect_target.is_valid());
 
-  std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
-      new net::test_server::BasicHttpResponse);
+  auto http_response = std::make_unique<net::test_server::BasicHttpResponse>();
   http_response->set_code(http_status_code);
   http_response->AddCustomHeader("Location", redirect_target.spec());
   return std::move(http_response);
@@ -487,8 +485,7 @@ bool HasGzipHeader(const base::RefCountedMemory& maybe_gzipped) {
 
 void AppendGzippedResource(const base::RefCountedMemory& encoded,
                            std::string* to_append) {
-  std::unique_ptr<net::MockSourceStream> source_stream(
-      new net::MockSourceStream());
+  auto source_stream = std::make_unique<net::MockSourceStream>();
   source_stream->AddReadResult(encoded.front_as<char>(), encoded.size(),
                                net::OK, net::MockSourceStream::SYNC);
   // Add an EOF.
@@ -594,15 +591,21 @@ bool NavigateToURL(WebContents* web_contents,
 bool NavigateIframeToURL(WebContents* web_contents,
                          const std::string& iframe_id,
                          const GURL& url) {
+  TestNavigationObserver load_observer(web_contents);
+  bool result = BeginNavigateIframeToURL(web_contents, iframe_id, url);
+  load_observer.Wait();
+  return result;
+}
+
+bool BeginNavigateIframeToURL(WebContents* web_contents,
+                              const std::string& iframe_id,
+                              const GURL& url) {
   std::string script = base::StringPrintf(
       "setTimeout(\""
       "var iframes = document.getElementById('%s');iframes.src='%s';"
       "\",0)",
       iframe_id.c_str(), url.spec().c_str());
-  TestNavigationObserver load_observer(web_contents);
-  bool result = ExecuteScript(web_contents, script);
-  load_observer.Wait();
-  return result;
+  return ExecuteScript(web_contents, script);
 }
 
 void NavigateToURLBlockUntilNavigationsComplete(WebContents* web_contents,
@@ -682,6 +685,30 @@ std::string ReferrerPolicyToString(
   return "";
 }
 
+mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
+BindFakeFrameWidgetInterfaces(RenderFrameHost* frame) {
+  RenderWidgetHostImpl* render_widget_host_impl =
+      static_cast<RenderFrameHostImpl*>(frame)->GetRenderWidgetHost();
+
+  mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> blink_frame_widget_host;
+  auto blink_frame_widget_host_receiver =
+      blink_frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
+
+  mojo::AssociatedRemote<blink::mojom::FrameWidget> blink_frame_widget;
+  auto blink_frame_widget_receiver =
+      blink_frame_widget.BindNewEndpointAndPassDedicatedReceiver();
+
+  render_widget_host_impl->BindFrameWidgetInterfaces(
+      std::move(blink_frame_widget_host_receiver), blink_frame_widget.Unbind());
+
+  return blink_frame_widget_receiver;
+}
+
+void SimulateActiveStateForWidget(RenderFrameHost* frame, bool active) {
+  static_cast<RenderFrameHostImpl*>(frame)->GetRenderWidgetHost()->SetActive(
+      active);
+}
+
 void WaitForLoadStopWithoutSuccessCheck(WebContents* web_contents) {
   // In many cases, the load may have finished before we get here.  Only wait if
   // the tab still has a pending navigation.
@@ -705,11 +732,12 @@ bool WaitForLoadStop(WebContents* web_contents) {
   if (!is_page_normal) {
     NavigationEntry* last_entry =
         web_contents->GetController().GetLastCommittedEntry();
-    if (last_entry)
+    if (last_entry) {
       LOG(ERROR) << "Http status code = " << last_entry->GetHttpStatusCode()
                  << ", page type = " << last_entry->GetPageType();
-    else
+    } else {
       LOG(ERROR) << "No committed entry.";
+    }
   }
   return is_page_normal;
 }
@@ -730,9 +758,7 @@ bool IsLastCommittedEntryOfPageType(WebContents* web_contents,
                                     content::PageType page_type) {
   NavigationEntry* last_entry =
       web_contents->GetController().GetLastCommittedEntry();
-  if (!last_entry)
-    return false;
-  return last_entry->GetPageType() == page_type;
+  return last_entry && last_entry->GetPageType() == page_type;
 }
 
 void OverrideLastCommittedOrigin(RenderFrameHost* render_frame_host,
@@ -820,11 +846,9 @@ void SimulateMouseClickAt(WebContents* web_contents,
                           int modifiers,
                           blink::WebMouseEvent::Button button,
                           const gfx::Point& point) {
-  content::WebContentsImpl* web_contents_impl =
-      static_cast<content::WebContentsImpl*>(web_contents);
-  content::RenderWidgetHostViewBase* rwhvb =
-      static_cast<content::RenderWidgetHostViewBase*>(
-          web_contents->GetRenderWidgetHostView());
+  auto* web_contents_impl = static_cast<WebContentsImpl*>(web_contents);
+  auto* rwhvb = static_cast<RenderWidgetHostViewBase*>(
+      web_contents->GetRenderWidgetHostView());
   blink::WebMouseEvent mouse_event(blink::WebInputEvent::Type::kMouseDown,
                                    modifiers, ui::EventTimeForNow());
   mouse_event.button = button;
@@ -844,37 +868,33 @@ void SimulateMouseClickAt(WebContents* web_contents,
 void SimulateMouseClickOrTapElementWithId(content::WebContents* web_contents,
                                           const std::string& id) {
   // Get the center coordinates of the DOM element.
-  const int x =
-      content::EvalJs(
-          web_contents,
-          content::JsReplace("const bounds = "
-                             "document.getElementById($1)."
-                             "getBoundingClientRect();"
-                             "Math.floor(bounds.left + bounds.width / 2)",
-                             id))
-          .ExtractInt();
-  const int y =
-      content::EvalJs(
-          web_contents,
-          content::JsReplace("const bounds = "
-                             "document.getElementById($1)."
-                             "getBoundingClientRect();"
-                             "Math.floor(bounds.top + bounds.height / 2)",
-                             id))
-          .ExtractInt();
+  const int x = EvalJs(web_contents,
+                       JsReplace("const bounds = "
+                                 "document.getElementById($1)."
+                                 "getBoundingClientRect();"
+                                 "Math.floor(bounds.left + bounds.width / 2)",
+                                 id))
+                    .ExtractInt();
+  const int y = EvalJs(web_contents,
+                       JsReplace("const bounds = "
+                                 "document.getElementById($1)."
+                                 "getBoundingClientRect();"
+                                 "Math.floor(bounds.top + bounds.height / 2)",
+                                 id))
+                    .ExtractInt();
 #if defined(OS_ANDROID)
-  content::SimulateTapDownAt(web_contents, gfx::Point(x, y));
-  content::SimulateTapAt(web_contents, gfx::Point(x, y));
+  SimulateTapDownAt(web_contents, gfx::Point(x, y));
+  SimulateTapAt(web_contents, gfx::Point(x, y));
 #else
-  content::SimulateMouseClickAt(
-      web_contents, 0, blink::WebMouseEvent::Button::kLeft, gfx::Point(x, y));
+  SimulateMouseClickAt(web_contents, 0, blink::WebMouseEvent::Button::kLeft,
+                       gfx::Point(x, y));
 #endif  // defined(OS_ANDROID)
 }
 
 void SendMouseDownToWidget(RenderWidgetHost* target,
                            int modifiers,
                            blink::WebMouseEvent::Button button) {
-  auto* view = static_cast<content::RenderWidgetHostImpl*>(target)->GetView();
+  auto* view = static_cast<RenderWidgetHostImpl*>(target)->GetView();
 
   blink::WebMouseEvent mouse_event(blink::WebInputEvent::Type::kMouseDown,
                                    modifiers, ui::EventTimeForNow());
@@ -897,11 +917,9 @@ void SimulateMouseEvent(WebContents* web_contents,
                         blink::WebInputEvent::Type type,
                         blink::WebMouseEvent::Button button,
                         const gfx::Point& point) {
-  content::WebContentsImpl* web_contents_impl =
-      static_cast<content::WebContentsImpl*>(web_contents);
-  content::RenderWidgetHostViewBase* rwhvb =
-      static_cast<content::RenderWidgetHostViewBase*>(
-          web_contents->GetRenderWidgetHostView());
+  auto* web_contents_impl = static_cast<WebContentsImpl*>(web_contents);
+  auto* rwhvb = static_cast<RenderWidgetHostViewBase*>(
+      web_contents->GetRenderWidgetHostView());
   blink::WebMouseEvent mouse_event(type, 0, ui::EventTimeForNow());
   mouse_event.button = button;
   mouse_event.SetPositionInWidget(point.x(), point.y());
@@ -1227,7 +1245,7 @@ void ScopedSimulateModifierKeyPress::KeyPressWithoutChar(
 
 bool IsWebcamAvailableOnSystem(WebContents* web_contents) {
   std::string result;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
       web_contents, kHasVideoInputDeviceOnSystem, &result));
   return result == kHasVideoInputDevice;
 }
@@ -1949,7 +1967,7 @@ bool WaitForRenderFrameReady(RenderFrameHost* rfh) {
 
 void RemoveWebContentsReceiverSet(WebContents* web_contents,
                                   const std::string& interface_name) {
-  static_cast<content::WebContentsImpl*>(web_contents)
+  static_cast<WebContentsImpl*>(web_contents)
       ->RemoveReceiverSetForTesting(interface_name);
 }
 
@@ -2123,14 +2141,6 @@ void UiaGetPropertyValueVtArrayVtUnknownValidate(
 }
 #endif
 
-bool IsWebContentsBrowserPluginFocused(content::WebContents* web_contents) {
-  WebContentsImpl* web_contents_impl =
-      static_cast<WebContentsImpl*>(web_contents);
-  BrowserPluginGuest* browser_plugin_guest =
-      web_contents_impl->GetBrowserPluginGuest();
-  return browser_plugin_guest ? browser_plugin_guest->focused() : false;
-}
-
 RenderWidgetHost* GetMouseLockWidget(WebContents* web_contents) {
   return static_cast<WebContentsImpl*>(web_contents)->GetMouseLockWidget();
 }
@@ -2227,8 +2237,7 @@ void TitleWatcher::AlsoWaitForTitle(const base::string16& expected_title) {
   expected_titles_.push_back(expected_title);
 }
 
-TitleWatcher::~TitleWatcher() {
-}
+TitleWatcher::~TitleWatcher() = default;
 
 const base::string16& TitleWatcher::WaitAndGetTitle() {
   TestTitle();
@@ -2419,7 +2428,7 @@ DOMMessageQueue::DOMMessageQueue(RenderFrameHost* render_frame_host)
   render_frame_host_ = render_frame_host;
 }
 
-DOMMessageQueue::~DOMMessageQueue() {}
+DOMMessageQueue::~DOMMessageQueue() = default;
 
 void DOMMessageQueue::Observe(int type,
                               const NotificationSource& source,
@@ -2516,7 +2525,7 @@ WebContentsAddedObserver::~WebContentsAddedObserver() {
 void WebContentsAddedObserver::WebContentsCreated(WebContents* web_contents) {
   DCHECK(!web_contents_);
   web_contents_ = web_contents;
-  child_observer_.reset(new RenderViewCreatedObserver(web_contents));
+  child_observer_ = std::make_unique<RenderViewCreatedObserver>(web_contents);
 
   if (quit_closure_)
     std::move(quit_closure_).Run();
@@ -2836,10 +2845,10 @@ class FrameFocusedObserver::FrameTreeNodeObserverImpl
 };
 
 FrameFocusedObserver::FrameFocusedObserver(RenderFrameHost* owner_host)
-    : impl_(new FrameTreeNodeObserverImpl(
+    : impl_(std::make_unique<FrameTreeNodeObserverImpl>(
           static_cast<RenderFrameHostImpl*>(owner_host)->frame_tree_node())) {}
 
-FrameFocusedObserver::~FrameFocusedObserver() {}
+FrameFocusedObserver::~FrameFocusedObserver() = default;
 
 void FrameFocusedObserver::Wait() {
   impl_->Run();
@@ -2867,7 +2876,7 @@ class FrameDeletedObserver::FrameTreeNodeObserverImpl
 };
 
 FrameDeletedObserver::FrameDeletedObserver(RenderFrameHost* owner_host)
-    : impl_(new FrameTreeNodeObserverImpl(
+    : impl_(std::make_unique<FrameTreeNodeObserverImpl>(
           static_cast<RenderFrameHostImpl*>(owner_host)->frame_tree_node())) {}
 
 FrameDeletedObserver::~FrameDeletedObserver() = default;
@@ -2887,7 +2896,7 @@ TestNavigationManager::TestNavigationManager(WebContents* web_contents,
 
 TestNavigationManager::~TestNavigationManager() {
   if (navigation_paused_)
-    request_->CallResumeForTesting();
+    request_->GetNavigationThrottleRunnerForTesting()->CallResumeForTesting();
 }
 
 bool TestNavigationManager::WaitForRequestStart() {
@@ -2905,7 +2914,7 @@ void TestNavigationManager::ResumeNavigation() {
   DCHECK_EQ(current_state_, desired_state_);
   DCHECK(navigation_paused_);
   navigation_paused_ = false;
-  request_->CallResumeForTesting();
+  request_->GetNavigationThrottleRunnerForTesting()->CallResumeForTesting();
 }
 
 NavigationHandle* TestNavigationManager::GetNavigationHandle() {
@@ -2927,13 +2936,12 @@ void TestNavigationManager::DidStartNavigation(NavigationHandle* handle) {
     return;
 
   request_ = NavigationRequest::From(handle);
-  std::unique_ptr<NavigationThrottle> throttle(
-      new TestNavigationManagerThrottle(
-          request_,
-          base::BindOnce(&TestNavigationManager::OnWillStartRequest,
-                         weak_factory_.GetWeakPtr()),
-          base::BindOnce(&TestNavigationManager::OnWillProcessResponse,
-                         weak_factory_.GetWeakPtr())));
+  auto throttle = std::make_unique<TestNavigationManagerThrottle>(
+      request_,
+      base::BindOnce(&TestNavigationManager::OnWillStartRequest,
+                     weak_factory_.GetWeakPtr()),
+      base::BindOnce(&TestNavigationManager::OnWillProcessResponse,
+                     weak_factory_.GetWeakPtr()));
   request_->RegisterThrottleForTesting(std::move(throttle));
 }
 
@@ -2969,7 +2977,7 @@ bool TestNavigationManager::WaitForDesiredState() {
 
   // Resume the navigation if it was paused.
   if (navigation_paused_)
-    request_->CallResumeForTesting();
+    request_->GetNavigationThrottleRunnerForTesting()->CallResumeForTesting();
 
   // Wait for the desired state if needed.
   if (current_state_ < desired_state_) {
@@ -2995,7 +3003,7 @@ void TestNavigationManager::OnNavigationStateChanged() {
 
   // Otherwise, the navigation should be resumed if it was previously paused.
   if (navigation_paused_)
-    request_->CallResumeForTesting();
+    request_->GetNavigationThrottleRunnerForTesting()->CallResumeForTesting();
 }
 
 bool TestNavigationManager::ShouldMonitorNavigation(NavigationHandle* handle) {
@@ -3013,7 +3021,7 @@ void TestNavigationManager::AllowNestableTasks() {
 NavigationHandleCommitObserver::NavigationHandleCommitObserver(
     content::WebContents* web_contents,
     const GURL& url)
-    : content::WebContentsObserver(web_contents),
+    : WebContentsObserver(web_contents),
       url_(url),
       has_committed_(false),
       was_same_document_(false),
@@ -3125,6 +3133,18 @@ void PwnMessageHelper::FileSystemWrite(RenderProcessHost* process,
   waiter.WaitForOperationToFinish();
 }
 
+void PwnMessageHelper::OpenURL(RenderFrameHost* render_frame_host,
+                               const GURL& url) {
+  auto params = content::mojom::OpenURLParams::New();
+  params->url = url;
+  params->disposition = WindowOpenDisposition::CURRENT_TAB;
+  params->should_replace_current_entry = false;
+  params->user_gesture = true;
+  static_cast<mojom::FrameHost*>(
+      static_cast<RenderFrameHostImpl*>(render_frame_host))
+      ->OpenURL(std::move(params));
+}
+
 #if defined(USE_AURA)
 namespace {
 
@@ -3201,17 +3221,17 @@ void VerifyStaleContentOnFrameEviction(
 #endif  // defined(USE_AURA)
 
 ContextMenuFilter::ContextMenuFilter()
-    : content::BrowserMessageFilter(FrameMsgStart),
-      run_loop_(new base::RunLoop),
+    : BrowserMessageFilter(FrameMsgStart),
+      run_loop_(std::make_unique<base::RunLoop>()),
       quit_closure_(run_loop_->QuitClosure()) {}
 
 bool ContextMenuFilter::OnMessageReceived(const IPC::Message& message) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (message.type() == FrameHostMsg_ContextMenu::ID) {
     FrameHostMsg_ContextMenu::Param params;
     FrameHostMsg_ContextMenu::Read(&message, &params);
-    content::UntrustworthyContextMenuParams menu_params = std::get<0>(params);
-    content::GetUIThreadTaskRunner({})->PostTask(
+    UntrustworthyContextMenuParams menu_params = std::get<0>(params);
+    GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(&ContextMenuFilter::OnContextMenu, this, menu_params));
   }
@@ -3219,7 +3239,7 @@ bool ContextMenuFilter::OnMessageReceived(const IPC::Message& message) {
 }
 
 void ContextMenuFilter::Wait() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   run_loop_->Run();
   run_loop_ = nullptr;
 }
@@ -3228,7 +3248,7 @@ ContextMenuFilter::~ContextMenuFilter() = default;
 
 void ContextMenuFilter::OnContextMenu(
     const content::UntrustworthyContextMenuParams& params) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   last_params_ = params;
   std::move(quit_closure_).Run();
 }
@@ -3269,7 +3289,7 @@ void UpdateUserActivationStateInterceptor::UpdateUserActivationState(
 
 WebContents* GetEmbedderForGuest(content::WebContents* guest) {
   CHECK(guest);
-  return static_cast<content::WebContentsImpl*>(guest)->GetOuterWebContents();
+  return static_cast<WebContentsImpl*>(guest)->GetOuterWebContents();
 }
 
 namespace {
@@ -3288,7 +3308,7 @@ int LoadBasicRequest(
   // Allow access to SameSite cookies in tests.
   request->site_for_cookies = net::SiteForCookies::FromUrl(url);
 
-  content::SimpleURLLoaderTestHelper simple_loader_helper;
+  SimpleURLLoaderTestHelper simple_loader_helper;
   std::unique_ptr<network::SimpleURLLoader> simple_loader =
       network::SimpleURLLoader::Create(std::move(request),
                                        TRAFFIC_ANNOTATION_FOR_TESTS);
@@ -3361,9 +3381,8 @@ bool TestGuestAutoresize(RenderProcessHost* embedder_rph,
 
   embedder_rph_impl->AddFilter(filter.get());
 
-  viz::LocalSurfaceId current_id = guest_rwh_impl->GetView()
-                                       ->GetLocalSurfaceIdAllocation()
-                                       .local_surface_id();
+  viz::LocalSurfaceId current_id =
+      guest_rwh_impl->GetView()->GetLocalSurfaceId();
   // The guest may not yet be fully attached / initted. If not, |current_id|
   // will be invalid, and we should wait for an ID before proceeding.
   if (!current_id.is_valid())
@@ -3384,8 +3403,7 @@ bool TestGuestAutoresize(RenderProcessHost* embedder_rph,
                                        current_id.embed_token());
   cc::RenderFrameMetadata metadata;
   metadata.viewport_size_in_pixels = gfx::Size(75, 75);
-  metadata.local_surface_id_allocation =
-      viz::LocalSurfaceIdAllocation(local_surface_id, base::TimeTicks::Now());
+  metadata.local_surface_id = local_surface_id;
   guest_rwh_impl->OnLocalSurfaceIdChanged(metadata);
 
   // This won't generate a response, as we short-circuit auto-resizes, so cause
@@ -3402,7 +3420,7 @@ bool TestGuestAutoresize(RenderProcessHost* embedder_rph,
 
 SynchronizeVisualPropertiesMessageFilter::
     SynchronizeVisualPropertiesMessageFilter()
-    : content::BrowserMessageFilter(FrameMsgStart),
+    : BrowserMessageFilter(FrameMsgStart),
       screen_space_rect_run_loop_(std::make_unique<base::RunLoop>()),
       screen_space_rect_received_(false),
       pinch_gesture_active_set_(false),
@@ -3415,19 +3433,13 @@ void SynchronizeVisualPropertiesMessageFilter::WaitForRect() {
 
 void SynchronizeVisualPropertiesMessageFilter::ResetRectRunLoop() {
   last_rect_ = gfx::Rect();
-  screen_space_rect_run_loop_.reset(new base::RunLoop);
+  screen_space_rect_run_loop_ = std::make_unique<base::RunLoop>();
   screen_space_rect_received_ = false;
-}
-
-viz::FrameSinkId SynchronizeVisualPropertiesMessageFilter::GetOrWaitForId() {
-  // No-op if already quit.
-  frame_sink_id_run_loop_.Run();
-  return frame_sink_id_;
 }
 
 viz::LocalSurfaceId
 SynchronizeVisualPropertiesMessageFilter::WaitForSurfaceId() {
-  surface_id_run_loop_.reset(new base::RunLoop);
+  surface_id_run_loop_ = std::make_unique<base::RunLoop>();
   surface_id_run_loop_->Run();
   return last_surface_id_;
 }
@@ -3437,14 +3449,12 @@ SynchronizeVisualPropertiesMessageFilter::
 
 void SynchronizeVisualPropertiesMessageFilter::
     OnSynchronizeFrameHostVisualProperties(
-        const viz::FrameSinkId& frame_sink_id,
-        const FrameVisualProperties& visual_properties) {
-  OnSynchronizeVisualProperties(frame_sink_id, visual_properties);
+        const blink::FrameVisualProperties& visual_properties) {
+  OnSynchronizeVisualProperties(visual_properties);
 }
 
 void SynchronizeVisualPropertiesMessageFilter::OnSynchronizeVisualProperties(
-    const viz::FrameSinkId& frame_sink_id,
-    const FrameVisualProperties& visual_properties) {
+    const blink::FrameVisualProperties& visual_properties) {
   // Monitor |is_pinch_gesture_active| to determine when pinch gestures begin
   // and end.
   if (visual_properties.is_pinch_gesture_active &&
@@ -3470,33 +3480,22 @@ void SynchronizeVisualPropertiesMessageFilter::OnSynchronizeVisualProperties(
                       1.f / visual_properties.screen_info.device_scale_factor));
   }
   // Track each rect updates.
-  content::GetUIThreadTaskRunner({})->PostTask(
+  GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(
           &SynchronizeVisualPropertiesMessageFilter::OnUpdatedFrameRectOnUI,
           this, screen_space_rect_in_dip));
 
   // Track each surface id update.
-  content::GetUIThreadTaskRunner({})->PostTask(
+  GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(
           &SynchronizeVisualPropertiesMessageFilter::OnUpdatedSurfaceIdOnUI,
-          this,
-          visual_properties.local_surface_id_allocation.local_surface_id()));
-
-  // Record the received value. We cannot check the current state of the child
-  // frame, as it can only be processed on the UI thread, and we cannot block
-  // here.
-  frame_sink_id_ = frame_sink_id;
-
-  // There can be several updates before a valid viz::FrameSinkId is ready. Do
-  // not quit |run_loop_| until after we receive a valid one.
-  if (!frame_sink_id_.is_valid())
-    return;
+          this, visual_properties.local_surface_id));
 
   // We can't nest on the IO thread. So tests will wait on the UI thread, so
   // post there to exit the nesting.
-  content::GetUIThreadTaskRunner({})->PostTask(
+  GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(
           &SynchronizeVisualPropertiesMessageFilter::OnUpdatedFrameSinkIdOnUI,
@@ -3515,7 +3514,7 @@ void SynchronizeVisualPropertiesMessageFilter::OnUpdatedFrameRectOnUI(
 }
 
 void SynchronizeVisualPropertiesMessageFilter::OnUpdatedFrameSinkIdOnUI() {
-  frame_sink_id_run_loop_.Quit();
+  run_loop_.Quit();
 }
 
 void SynchronizeVisualPropertiesMessageFilter::OnUpdatedSurfaceIdOnUI(
@@ -3620,7 +3619,7 @@ bool CompareWebContentsOutputToReference(
     run_loop.Run();
   }
 
-  content::RenderWidgetHostImpl* rwh = content::RenderWidgetHostImpl::From(
+  auto* rwh = RenderWidgetHostImpl::From(
       web_contents->GetRenderViewHost()->GetWidget());
 
   if (!rwh->GetView() || !rwh->GetView()->IsSurfaceAvailableForCopy()) {

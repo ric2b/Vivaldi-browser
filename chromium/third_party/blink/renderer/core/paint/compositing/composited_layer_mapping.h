@@ -119,7 +119,7 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   GraphicsLayer* MaskLayer() const { return mask_layer_.get(); }
 
   GraphicsLayer* ParentForSublayers() const;
-  void SetSublayers(const GraphicsLayerVector&);
+  void SetSublayers(GraphicsLayerVector);
 
   // Returns the GraphicsLayer that |layer| is squashed into, which may be
   // NonScrollingSquashingLayer or ScrollingContentsLayer.
@@ -179,11 +179,9 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
                      const IntRect& interest_rect) const override;
   bool ShouldThrottleRendering() const override;
   bool IsUnderSVGHiddenContainer() const override;
-  bool IsSVGRoot() const override;
   bool IsTrackingRasterInvalidations() const override;
   void GraphicsLayersDidChange() override;
-  bool PaintBlockedByDisplayLockIncludingAncestors(
-      DisplayLockContextLifecycleTarget) const override;
+  bool PaintBlockedByDisplayLockIncludingAncestors() const override;
   void NotifyDisplayLockNeedsGraphicsLayerCollection() override;
 
 #if DCHECK_IS_ON()
@@ -359,11 +357,6 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
 
   GraphicsLayerPaintingPhase PaintingPhaseForPrimaryLayer() const;
 
-  // Result is transform origin in pixels.
-  FloatPoint3D ComputeTransformOrigin(const IntRect& border_box) const;
-
-  void UpdateTransform(const ComputedStyle&);
-
   bool PaintsChildren() const;
 
   // Returns true if this layer has content that needs to be displayed by
@@ -405,16 +398,17 @@ class CORE_EXPORT CompositedLayerMapping final : public GraphicsLayerClient {
   // looks like this:
   //
   //    + graphics_layer_
+  //      + layer_for_vertical_scrollbar_ [OPTIONAL][*]
+  //      + layer_for_horizontal_scrollbar_ [OPTIONAL][*]
+  //      + layer_for_scroll_corner_ [OPTIONAL][*]
   //      + contents layers (or contents layers under scrolling_contents_layer_)
-  //      + layer_for_vertical_scrollbar_ [OPTIONAL]
-  //      + layer_for_horizontal_scrollbar_ [OPTIONAL]
-  //      + layer_for_scroll_corner_ [OPTIONAL]
   //      + decoration_outline_layer_ [OPTIONAL]
   //      + mask_layer_ [ OPTIONAL ]
   //      + non_scrolling_squashing_layer_ [ OPTIONAL ]
   //
-  // The overflow controls may need to be repositioned in the graphics layer
-  // tree by the RLC to ensure that they stack above scrolling content.
+  // [*] Overlay overflow controls may be placed above
+  //     scrolling_contents_layer_, or repositioned in the graphics layer tree
+  //     to ensure that they stack above scrolling content.
   //
   // Contents layers are directly under |graphics_layer_|, or under
   // |scrolling_contents_layer_| when the layer is using composited scrolling.

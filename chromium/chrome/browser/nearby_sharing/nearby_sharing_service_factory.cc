@@ -25,6 +25,13 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/nearby_sharing/power_client_chromeos.h"
+#else  // !defined(OS_CHROMEOS)
+#include "chrome/browser/nearby_sharing/power_client.h"
+#endif  // defined(OS_CHROMEOS)
+
 namespace {
 
 constexpr char kServiceName[] = "NearbySharingService";
@@ -61,8 +68,25 @@ KeyedService* NearbySharingServiceFactory::BuildServiceInstanceFor(
     return nullptr;
   }
 
-  NearbyProcessManager& process_manager = NearbyProcessManager::GetInstance();
   Profile* profile = Profile::FromBrowserContext(context);
+  NearbyProcessManager& process_manager = NearbyProcessManager::GetInstance();
+
+#if defined(OS_CHROMEOS)
+  // On ChromeOS we will only support the active profile.
+  if (!chromeos::ProfileHelper::IsPrimaryProfile(profile)) {
+    NS_LOG(VERBOSE)
+        << __func__
+        << ": Nearby Sharing service is skipping non-primary profile: "
+        << profile->GetProfileUserName();
+    return nullptr;
+  }
+  NS_LOG(VERBOSE) << __func__
+                  << "Nearby Sharing service is forcing active profile: "
+                  << profile->GetProfileUserName();
+  // Force active profile for ChromeOS for now.
+  process_manager.SetActiveProfile(profile);
+#endif
+
   PrefService* pref_service = profile->GetPrefs();
   NotificationDisplayService* notification_display_service =
       NotificationDisplayServiceFactory::GetForProfile(profile);
@@ -70,10 +94,17 @@ KeyedService* NearbySharingServiceFactory::BuildServiceInstanceFor(
   auto nearby_connections_manager =
       std::make_unique<NearbyConnectionsManagerImpl>(&process_manager, profile);
 
-  NS_LOG(VERBOSE) << __func__ << ": creating NearbySharingService.";
+  NS_LOG(VERBOSE) << __func__ << ": creating NearbySharingService for profile: "
+                  << profile->GetProfileUserName();
+
   return new NearbySharingServiceImpl(
       pref_service, notification_display_service, profile,
-      std::move(nearby_connections_manager), &process_manager);
+      std::move(nearby_connections_manager), &process_manager,
+#if defined(OS_CHROMEOS)
+      std::make_unique<PowerClientChromeos>());
+#else   // !defined(OS_CHROMEOS)
+      std::make_unique<PowerClient>());
+#endif  // defined(OS_CHROMEOS)
 }
 
 content::BrowserContext* NearbySharingServiceFactory::GetBrowserContextToUse(

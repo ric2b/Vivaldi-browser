@@ -17,7 +17,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/network_session_configurator/common/network_switches.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/webauth/authenticator_environment_impl.h"
 #include "content/browser/webauth/authenticator_impl.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
@@ -514,11 +514,12 @@ class WebAuthLocalClientBrowserTest : public WebAuthBrowserTestBase {
         rp, user, kTestChallenge, parameters, base::TimeDelta::FromSeconds(30),
         std::vector<device::PublicKeyCredentialDescriptor>(),
         device::AuthenticatorSelectionCriteria(),
-        device::AttestationConveyancePreference::kNone, nullptr,
-        false /* no hmac_secret */, false /* no PRF extension */,
+        device::AttestationConveyancePreference::kNone,
+        /*cable_registration_data=*/nullptr,
+        /*hmac_create_secret=*/false, /*prf_enable=*/false,
         blink::mojom::ProtectionPolicy::UNSPECIFIED,
-        false /* protection policy not enforced */,
-        base::nullopt /* no appid_exclude */);
+        /*enforce_protection_policy=*/false, /*appid_exclude=*/base::nullopt,
+        /*cred_props=*/false);
 
     return mojo_options;
   }
@@ -711,9 +712,10 @@ IN_PROC_BROWSER_TEST_F(WebAuthLocalClientBrowserTest,
   // factory as one of the first steps. Here, the request should not have been
   // serviced at all, so the fake request should still be pending on the fake
   // factory.
-  auto hid_discovery = discovery_factory_->Create(
-      ::device::FidoTransportProtocol::kUsbHumanInterfaceDevice);
-  ASSERT_TRUE(!!hid_discovery);
+  std::vector<std::unique_ptr<device::FidoDiscoveryBase>> discoveries =
+      discovery_factory_->Create(
+          ::device::FidoTransportProtocol::kUsbHumanInterfaceDevice);
+  EXPECT_EQ(discoveries.size(), 1u);
 
   // The next active document should be able to successfully call
   // navigator.credentials.create({publicKey: ...}) again.

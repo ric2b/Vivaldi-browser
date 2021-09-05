@@ -5,14 +5,17 @@
 #ifndef CHROME_COMMON_WEB_APPLICATION_INFO_H_
 #define CHROME_COMMON_WEB_APPLICATION_INFO_H_
 
+#include <functional>
 #include <iosfwd>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
+#include "components/services/app_service/public/cpp/share_target.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -21,6 +24,8 @@
 #include "url/gurl.h"
 
 using SquareSizePx = int;
+// Iterates in ascending order (checked in SortedSizesPxIsAscending test).
+using SortedSizesPx = base::flat_set<SquareSizePx, std::less<>>;
 using ShortcutsMenuIconsBitmaps = std::vector<std::map<SquareSizePx, SkBitmap>>;
 using IconPurpose = blink::Manifest::ImageResource::Purpose;
 
@@ -95,8 +100,12 @@ struct WebApplicationInfo {
   // Description of the application.
   base::string16 description;
 
-  // The launch URL for the app.
-  GURL app_url;
+  // The start_url for the app.
+  // https://www.w3.org/TR/appmanifest/#start_url-member
+  GURL start_url;
+
+  // Optional query parameters to add to the start_url when launching the app.
+  base::Optional<std::string> launch_query_params;
 
   // Scope for the app. Dictates what URLs will be opened in the app.
   GURL scope;
@@ -151,6 +160,9 @@ struct WebApplicationInfo {
 
   // The extensions and mime types the app can handle.
   std::vector<blink::Manifest::FileHandler> file_handlers;
+
+  // File types the app accepts as a Web Share Target.
+  base::Optional<apps::ShareTarget> share_target;
 
   // Additional search terms that users can use to find the app.
   std::vector<std::string> additional_search_terms;

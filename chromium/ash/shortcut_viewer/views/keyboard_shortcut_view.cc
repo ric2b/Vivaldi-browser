@@ -16,6 +16,7 @@
 #include "ash/public/cpp/resources/grit/ash_public_unscaled_resources.h"
 #include "ash/public/cpp/shelf_item.h"
 #include "ash/public/cpp/window_properties.h"
+#include "ash/search_box/search_box_view_base.h"
 #include "ash/shell.h"
 #include "ash/shortcut_viewer/keyboard_shortcut_viewer_metadata.h"
 #include "ash/shortcut_viewer/strings/grit/shortcut_viewer_strings.h"
@@ -38,7 +39,6 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/events/keyboard_layout_util.h"
-#include "ui/chromeos/search_box/search_box_view_base.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -307,7 +307,7 @@ void KeyboardShortcutView::OnPaint(gfx::Canvas* canvas) {
                                 weak_factory_.GetWeakPtr(), kAllCategories));
 }
 
-void KeyboardShortcutView::QueryChanged(search_box::SearchBoxViewBase* sender) {
+void KeyboardShortcutView::QueryChanged(ash::SearchBoxViewBase* sender) {
   const bool query_empty = sender->IsSearchBoxTrimmedQueryEmpty();
   if (is_search_box_empty_ != query_empty) {
     is_search_box_empty_ = query_empty;
@@ -333,8 +333,7 @@ void KeyboardShortcutView::BackButtonPressed() {
   search_box_view_->SetSearchBoxActive(false, ui::ET_UNKNOWN);
 }
 
-void KeyboardShortcutView::ActiveChanged(
-    search_box::SearchBoxViewBase* sender) {
+void KeyboardShortcutView::ActiveChanged(ash::SearchBoxViewBase* sender) {
   const bool is_search_box_active = sender->is_search_box_active();
   is_search_box_empty_ = sender->IsSearchBoxTrimmedQueryEmpty();
   sender->ShowBackOrGoogleIcon(is_search_box_active);
@@ -383,7 +382,7 @@ void KeyboardShortcutView::InitViews() {
       continue;
 
     for (auto category : item.categories) {
-      shortcut_views_.emplace_back(
+      shortcut_views_.push_back(
           std::make_unique<KeyboardShortcutItemView>(item, category));
       shortcut_views_.back()->set_owned_by_client();
     }
@@ -472,7 +471,7 @@ void KeyboardShortcutView::InitCategoriesTabbedPane(
     // Clear any styles used to highlight matched search query in search mode.
     description_label_view->ClearStyleRanges();
     item_list_view->AddChildView(item_view.get());
-    shortcut_items.emplace_back(item_view.get());
+    shortcut_items.push_back(item_view.get());
     // Remove the search query highlight.
     description_label_view->InvalidateLayout();
   }
@@ -557,7 +556,7 @@ void KeyboardShortcutView::ShowSearchResults(
       }
 
       found_items_list_view->AddChildView(item_view.get());
-      found_shortcut_items_.emplace_back(item_view.get());
+      found_shortcut_items_.push_back(item_view.get());
     }
   }
 
@@ -565,7 +564,7 @@ void KeyboardShortcutView::ShowSearchResults(
   const int number_search_results = found_shortcut_items_.size();
   if (!found_items_list_view->children().empty()) {
     UpdateAXNodeDataPosition(found_shortcut_items_);
-    replacement_strings.emplace_back(
+    replacement_strings.push_back(
         base::NumberToString16(number_search_results));
 
     // To offset the padding between the bottom of the |search_box_view_| and
@@ -577,7 +576,7 @@ void KeyboardShortcutView::ShowSearchResults(
     search_container_content_view =
         CreateScrollView(std::move(found_items_list_view)).release();
   }
-  replacement_strings.emplace_back(search_query);
+  replacement_strings.push_back(search_query);
   search_box_view_->SetAccessibleValue(l10n_util::GetStringFUTF16(
       number_search_results == 0
           ? IDS_KSV_SEARCH_BOX_ACCESSIBILITY_VALUE_WITHOUT_RESULTS

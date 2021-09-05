@@ -53,6 +53,7 @@ bool CalendarTable::CreateCalendarTable() {
       "iconindex INTEGER DEFAULT 0,"
       "last_checked INTEGER NOT NULL,"
       "timezone LONGVARCHAR,"
+      "supported_component_set INTEGER,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -70,6 +71,9 @@ bool CalendarTable::CreateDefaultCalendar(AccountID account_id) {
   row.set_name(l10n_util::GetStringUTF16(IDS_DEFAULT_CALENDAR_NAME));
   row.set_color("#4FACF2");
   row.set_account_id(account_id);
+  int component_set = CALENDAR_VEVENT;
+  component_set |= CALENDAR_VTODO;
+  row.set_supported_component_set(component_set);
   CalendarID id = CreateCalendar(row);
   if (id)
     return true;
@@ -83,8 +87,9 @@ CalendarID CalendarTable::CreateCalendar(CalendarRow row) {
       "INSERT INTO calendar "
       "(account_id, name, description, ctag, "
       "orderindex, color, hidden, active, iconindex, "
-      "last_checked, timezone, created, last_modified) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+      "last_checked, timezone, supported_component_set, "
+      "created, last_modified) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
   int column_index = 0;
   statement.BindInt64(column_index++, row.account_id());
   statement.BindString16(column_index++, row.name());
@@ -96,8 +101,9 @@ CalendarID CalendarTable::CreateCalendar(CalendarRow row) {
   statement.BindInt(column_index++, row.active() ? 1 : 0);
   statement.BindInt(column_index++, row.iconindex());
   statement.BindInt64(column_index++, row.last_checked().ToInternalValue());
-
   statement.BindString(column_index++, row.timezone());
+  statement.BindInt(column_index++, row.supported_component_set());
+
   statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
   statement.BindInt64(column_index++, base::Time().Now().ToInternalValue());
 
@@ -113,7 +119,7 @@ bool CalendarTable::GetAllCalendars(CalendarRows* calendars) {
       SQL_FROM_HERE,
       "SELECT id, account_id, name, description, "
       " ctag, orderindex, color, hidden, active, iconindex, "
-      "last_checked, timezone, "
+      "last_checked, timezone, supported_component_set, "
       "created, last_modified FROM calendar"));
   while (s.Step()) {
     CalendarRow calendar;
@@ -129,7 +135,7 @@ bool CalendarTable::UpdateCalendarRow(const CalendarRow& calendar) {
                                                       "UPDATE calendar SET \
         name=?, description=?, ctag=?, orderindex=?, color=?, hidden=?, \
         active=?, iconindex=?, last_checked=?, \
-        timezone=?  WHERE id=?"));
+        timezone=?, supported_component_set=? WHERE id=?"));
   int column_index = 0;
   statement.BindString16(column_index++, calendar.name());
   statement.BindString16(column_index++, calendar.description());
@@ -142,6 +148,7 @@ bool CalendarTable::UpdateCalendarRow(const CalendarRow& calendar) {
   statement.BindInt64(column_index++,
                       calendar.last_checked().ToInternalValue());
   statement.BindString(column_index++, calendar.timezone());
+  statement.BindInt(column_index++, calendar.supported_component_set());
 
   statement.BindInt64(column_index++, calendar.id());
 
@@ -186,6 +193,7 @@ void CalendarTable::FillCalendarRow(sql::Statement& statement,
   base::Time last_checked =
       base::Time::FromInternalValue(statement.ColumnInt64(column_index++));
   std::string timezone = statement.ColumnString(column_index++);
+  int supported_component_set = statement.ColumnInt(column_index++);
 
   calendar->set_id(id);
   calendar->set_account_id(account_id);
@@ -199,6 +207,7 @@ void CalendarTable::FillCalendarRow(sql::Statement& statement,
   calendar->set_iconindex(iconindex);
   calendar->set_last_checked(last_checked);
   calendar->set_timezone(timezone);
+  calendar->set_supported_component_set(supported_component_set);
 }
 
 bool CalendarTable::DoesCalendarIdExist(CalendarID calendar_id) {
@@ -240,6 +249,21 @@ bool CalendarTable::MigrateCalendarToVersion3() {
     // modify the table to add that field.
     if (!GetDB().Execute("ALTER TABLE calendar "
                          "ADD COLUMN last_checked INTEGER DEFAULT 0 not NULL"))
+      return false;
+  }
+  return true;
+}
+
+// Updates to version 10. Adds columns supported_component_set
+bool CalendarTable::MigrateCalendarToVersion10() {
+  if (!GetDB().DoesTableExist("calendar")) {
+    NOTREACHED() << "Calendar table should exist before migration";
+    return false;
+  }
+
+  if (!GetDB().DoesColumnExist("calendar", "supported_component_set")) {
+    if (!GetDB().Execute("ALTER TABLE calendar "
+                         "ADD COLUMN supported_component_set INTEGER"))
       return false;
   }
   return true;

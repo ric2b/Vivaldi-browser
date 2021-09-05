@@ -31,14 +31,17 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
+import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.common.ContentUrlConstants;
 
 /**
@@ -46,6 +49,7 @@ import org.chromium.content_public.common.ContentUrlConstants;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@Features.DisableFeatures({ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY})
 public class IdentityDiscControllerTest {
     private final ChromeTabbedActivityTestRule mActivityTestRule =
             new ChromeTabbedActivityTestRule();
@@ -71,7 +75,7 @@ public class IdentityDiscControllerTest {
     @MediumTest
     public void testIdentityDiscWithNavigation() {
         // User is signed in.
-        mAccountManagerTestRule.addAndSignInTestAccount();
+        mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
         waitForView(allOf(withId(R.id.optional_toolbar_button), isDisplayed()));
 
         // Identity Disc should be hidden on navigation away from NTP.
@@ -84,7 +88,35 @@ public class IdentityDiscControllerTest {
 
     @Test
     @MediumTest
-    public void testIdentityDiscWithSignInState() {
+    @Features.EnableFeatures(ChromeFeatureList.MOBILE_IDENTITY_CONSISTENCY)
+    public void testIdentityDiscWithSignin() {
+        // When user is signed out, Identity Disc should not be visible on the NTP.
+        onView(withId(R.id.optional_toolbar_button)).check((view, noViewException) -> {
+            if (view != null) {
+                ViewMatchers.assertThat("IdentityDisc view should be gone if it exists",
+                        view.getVisibility(), Matchers.is(View.GONE));
+            }
+        });
+
+        // Identity Disc should be shown on sign-in state change with a NTP refresh.
+        mAccountManagerTestRule.addTestAccountThenSignin();
+        // TODO(https://crbug.com/1132291): Remove the reload once the sign-in without sync observer
+        //  is implemented.
+        TestThreadUtils.runOnUiThreadBlocking(mTab::reload);
+        waitForView(allOf(withId(R.id.optional_toolbar_button), isDisplayed()));
+
+        onView(withId(R.id.optional_toolbar_button))
+                .check(matches(
+                        withContentDescription(R.string.accessibility_toolbar_btn_identity_disc)));
+
+        mAccountManagerTestRule.signOut();
+        waitForView(allOf(withId(R.id.optional_toolbar_button),
+                withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
+    }
+
+    @Test
+    @MediumTest
+    public void testIdentityDiscWithSigninAndEnableSync() {
         // When user is signed out, Identity Disc should not be visible on the NTP.
         onView(withId(R.id.optional_toolbar_button)).check((view, noViewException) -> {
             if (view != null) {
@@ -94,7 +126,7 @@ public class IdentityDiscControllerTest {
         });
 
         // Identity Disc should be shown on sign-in state change without NTP refresh.
-        mAccountManagerTestRule.addAndSignInTestAccount();
+        mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
         waitForView(allOf(withId(R.id.optional_toolbar_button), isDisplayed()));
 
         onView(withId(R.id.optional_toolbar_button))
@@ -102,6 +134,18 @@ public class IdentityDiscControllerTest {
                         withContentDescription(R.string.accessibility_toolbar_btn_identity_disc)));
 
         mAccountManagerTestRule.signOut();
+        waitForView(allOf(withId(R.id.optional_toolbar_button),
+                withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
+    }
+
+    @Test
+    @MediumTest
+    public void testIdentityDiscWithSwitchToIncognito() {
+        mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
+        waitForView(allOf(withId(R.id.optional_toolbar_button), isDisplayed()));
+
+        // Identity Disc should not be visible, when switched from sign in state to incognito NTP.
+        mActivityTestRule.newIncognitoTabFromMenu();
         waitForView(allOf(withId(R.id.optional_toolbar_button),
                 withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
     }

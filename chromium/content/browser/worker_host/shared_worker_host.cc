@@ -14,7 +14,7 @@
 #include "base/unguessable_token.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/service_worker/service_worker_object_host.h"
 #include "content/browser/storage_partition_impl.h"
@@ -270,22 +270,17 @@ SharedWorkerHost::CreateNetworkFactoryForSubresources(
       default_factory_receiver =
           pending_default_factory.InitWithNewPipeAndPassReceiver();
 
-  url::Origin origin = url::Origin::Create(instance_.url());
-
   // TODO(https://crbug.com/1060832): Implement COEP reporter for shared
   // workers.
   network::mojom::URLLoaderFactoryParamsPtr factory_params =
-      URLLoaderFactoryParamsHelper::CreateForWorker(
-          worker_process_host_, instance_.constructor_origin(),
-          net::IsolationInfo::Create(
-              net::IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
-              net::SiteForCookies::FromOrigin(origin)),
-          /*coep_reporter=*/mojo::NullRemote());
+      CreateNetworkFactoryParamsForSubresources();
+  url::Origin origin = url::Origin::Create(instance_.url());
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       worker_process_host_->GetBrowserContext(),
       /*frame=*/nullptr, worker_process_host_->GetID(),
       ContentBrowserClient::URLLoaderFactoryType::kWorkerSubResource, origin,
-      /*navigation_id=*/base::nullopt, &default_factory_receiver,
+      /*navigation_id=*/base::nullopt,
+      base::UkmSourceId::FromInt64(ukm_source_id_), &default_factory_receiver,
       &factory_params->header_client, bypass_redirect_checks,
       /*disable_secure_dns=*/nullptr, &factory_params->factory_override);
 
@@ -297,6 +292,23 @@ SharedWorkerHost::CreateNetworkFactoryForSubresources(
       std::move(default_factory_receiver), std::move(factory_params));
 
   return pending_default_factory;
+}
+
+network::mojom::URLLoaderFactoryParamsPtr
+SharedWorkerHost::CreateNetworkFactoryParamsForSubresources() {
+  url::Origin origin = url::Origin::Create(instance_.url());
+
+  // TODO(https://crbug.com/1060832): Implement COEP reporter for shared
+  // workers.
+  network::mojom::URLLoaderFactoryParamsPtr factory_params =
+      URLLoaderFactoryParamsHelper::CreateForWorker(
+          worker_process_host_, instance_.constructor_origin(),
+          net::IsolationInfo::Create(
+              net::IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
+              net::SiteForCookies::FromOrigin(origin)),
+          /*coep_reporter=*/mojo::NullRemote(), /*debug_tag=*/
+          "SharedWorkerHost::CreateNetworkFactoryForSubresources");
+  return factory_params;
 }
 
 void SharedWorkerHost::AllowFileSystem(

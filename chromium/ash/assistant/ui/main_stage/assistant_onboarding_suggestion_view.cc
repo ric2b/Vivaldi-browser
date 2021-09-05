@@ -144,10 +144,10 @@ void AssistantOnboardingSuggestionView::InitLayout(
 
   // Ink Drop.
   SetInkDropMode(InkDropMode::ON);
-  set_has_ink_drop_action_on_click(true);
-  set_ink_drop_base_color(GetForegroundColor(index_));
-  set_ink_drop_visible_opacity(kInkDropVisibleOpacity);
-  set_ink_drop_highlight_opacity(kInkDropHighlightOpacity);
+  SetHasInkDropActionOnClick(true);
+  SetInkDropBaseColor(GetForegroundColor(index_));
+  SetInkDropVisibleOpacity(kInkDropVisibleOpacity);
+  SetInkDropHighlightOpacity(kInkDropHighlightOpacity);
 
   // Installing this highlight path generator will set the desired shape for
   // both ink drop effects as well as our focus ring.
@@ -211,13 +211,15 @@ void AssistantOnboardingSuggestionView::InitLayout(
   label_->SetLineHeight(kLabelLineHeight);
   label_->SetMaxLines(2);
   label_->SetMultiLine(true);
-  label_->SetPreferredSize(gfx::Size(INT_MAX, INT_MAX));
   label_->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
-                               views::MaximumFlexSizeRule::kUnbounded,
-                               /*adjust_height_for_width=*/true));
+                               views::MaximumFlexSizeRule::kUnbounded));
   label_->SetText(base::UTF8ToUTF16(suggestion.text));
+
+  // Workaround issue where multiline label is not allocated enough height.
+  label_->SetPreferredSize(
+      gfx::Size(label_->GetPreferredSize().width(), 2 * kLabelLineHeight));
 }
 
 void AssistantOnboardingSuggestionView::UpdateIcon(const gfx::ImageSkia& icon) {

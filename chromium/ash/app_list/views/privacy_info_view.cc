@@ -7,19 +7,24 @@
 #include <memory>
 #include <utility>
 
+#include "ash/public/cpp/app_list/app_list_color_provider.h"
+#include "base/bind.h"
+#include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/image_view.h"
-#include "ui/views/controls/label.h"
+#include "ui/views/controls/link.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
@@ -38,6 +43,28 @@ constexpr int kRightPaddingDip = 4;
 constexpr int kCellSpacingDip = 18;
 constexpr int kIconSizeDip = 20;
 
+// Text view used inside the privacy notice.
+class PrivacyTextView : public views::StyledLabel {
+ public:
+  explicit PrivacyTextView(PrivacyInfoView* privacy_view)
+      : StyledLabel(), privacy_view_(privacy_view) {}
+
+  // views::View:
+  bool HandleAccessibleAction(const ui::AXActionData& action_data) override {
+    switch (action_data.action) {
+      case ax::mojom::Action::kDoDefault:
+        privacy_view_->LinkClicked();
+        return true;
+      default:
+        break;
+    }
+    return views::StyledLabel::HandleAccessibleAction(action_data);
+  }
+
+ private:
+  PrivacyInfoView* const privacy_view_;  // Not owned.
+};
+
 }  // namespace
 
 PrivacyInfoView::PrivacyInfoView(const int info_string_id,
@@ -46,6 +73,9 @@ PrivacyInfoView::PrivacyInfoView(const int info_string_id,
       info_string_id_(info_string_id),
       link_string_id_(link_string_id) {
   InitLayout();
+  // This view behaves like a container and should not hold focus, but instead
+  // pass focus to its children.
+  SetFocusBehavior(FocusBehavior::NEVER);
 }
 
 PrivacyInfoView::~PrivacyInfoView() = default;
@@ -71,11 +101,20 @@ void PrivacyInfoView::OnPaintBackground(gfx::Canvas* canvas) {
   if (selected_action_ == Action::kCloseButton) {
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
-    flags.setColor(SkColorSetA(gfx::kGoogleGrey900, 0x14));
+    flags.setColor(SkColorSetA(
+        AppListColorProvider::Get()->GetSearchResultViewHighlightColor(),
+        0x14));
     flags.setStyle(cc::PaintFlags::kFill_Style);
     canvas->DrawCircle(close_button_->bounds().CenterPoint(),
                        close_button_->width() / 2, flags);
   }
+}
+
+void PrivacyInfoView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  // ChromeVox does not support nested buttons, so reassign this view's role to
+  // be a container. This allows ChromeVox to focus onto the text view and close
+  // button.
+  node_data->role = ax::mojom::Role::kGenericContainer;
 }
 
 void PrivacyInfoView::OnMouseEvent(ui::MouseEvent* event) {
@@ -114,7 +153,6 @@ void PrivacyInfoView::OnKeyEvent(ui::KeyEvent* event) {
         CloseButtonPressed();
         break;
       case Action::kNone:
-      case Action::kDefault:
         break;
     }
   }
@@ -122,14 +160,8 @@ void PrivacyInfoView::OnKeyEvent(ui::KeyEvent* event) {
 
 void PrivacyInfoView::SelectInitialResultAction(bool reverse_tab_order) {
   if (!reverse_tab_order) {
-    if (is_default_result()) {
-      // Hold the selection but do nothing. This is so that the text view is not
-      // selected immediately after the launcher opens.
-      selected_action_ = Action::kDefault;
-    } else {
-      selected_action_ = Action::kTextLink;
-      text_view_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
-    }
+    selected_action_ = Action::kTextLink;
+    text_view_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
   } else {
     selected_action_ = Action::kCloseButton;
     close_button_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
@@ -141,48 +173,20 @@ void PrivacyInfoView::SelectInitialResultAction(bool reverse_tab_order) {
 }
 
 bool PrivacyInfoView::SelectNextResultAction(bool reverse_tab_order) {
-  // There are three selection elements: default -> text view -> close button.
-  // The default selection is not traversed if selection is caused by user
-  // action.
   bool action_changed = false;
 
-  if (!reverse_tab_order) {
-    switch (selected_action_) {
-      case Action::kDefault:
-        // Move selection forward from default to the text view.
-        selected_action_ = Action::kTextLink;
-        text_view_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection,
-                                             true);
-        action_changed = true;
-        break;
-      case Action::kTextLink:
-        // Move selection forward from the text view to the close button.
-        selected_action_ = Action::kCloseButton;
-        close_button_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection,
-                                                true);
-        action_changed = true;
-        break;
-      case Action::kNone:
-      case Action::kCloseButton:
-        break;
-    }
+  // There are two traversal elements, the text view and close button.
+  if (!reverse_tab_order && selected_action_ == Action::kTextLink) {
+    // Move selection forward from the text view to the close button.
+    selected_action_ = Action::kCloseButton;
+    close_button_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+    action_changed = true;
+  } else if (reverse_tab_order && selected_action_ == Action::kCloseButton) {
+    // Move selection backward from the close button to the text view.
+    selected_action_ = Action::kTextLink;
+    text_view_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+    action_changed = true;
   } else {
-    switch (selected_action_) {
-      case Action::kCloseButton:
-        // Move selection backward from the close button to the text view.
-        selected_action_ = Action::kTextLink;
-        text_view_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection,
-                                             true);
-        action_changed = true;
-        break;
-      case Action::kNone:
-      case Action::kDefault:
-      case Action::kTextLink:
-        break;
-    }
-  }
-
-  if (!action_changed) {
     selected_action_ = Action::kNone;
   }
 
@@ -192,17 +196,24 @@ bool PrivacyInfoView::SelectNextResultAction(bool reverse_tab_order) {
   return action_changed;
 }
 
+void PrivacyInfoView::NotifyA11yResultSelected() {
+  switch (selected_action_) {
+    case Action::kTextLink:
+      text_view_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+      break;
+    case Action::kCloseButton:
+      close_button_->NotifyAccessibilityEvent(ax::mojom::Event::kSelection,
+                                              true);
+      break;
+    case Action::kNone:
+      break;
+  }
+}
+
 void PrivacyInfoView::ButtonPressed(views::Button* sender,
                                     const ui::Event& event) {
   if (sender == close_button_)
     CloseButtonPressed();
-}
-
-void PrivacyInfoView::StyledLabelLinkClicked(views::StyledLabel* label,
-                                             const gfx::Range& range,
-                                             int event_flags) {
-  if (label == text_view_)
-    LinkClicked();
 }
 
 void PrivacyInfoView::InitLayout() {
@@ -245,27 +256,32 @@ void PrivacyInfoView::InitText() {
   size_t offset;
   const base::string16 text =
       l10n_util::GetStringFUTF16(info_string_id_, link, &offset);
-  auto text_view = std::make_unique<views::StyledLabel>(text, this);
+  text_view_ = AddChildView(std::make_unique<PrivacyTextView>(this));
+  text_view_->SetText(text);
+  text_view_->SetAutoColorReadabilityEnabled(false);
+  text_view_->SetFocusBehavior(FocusBehavior::ALWAYS);
+  // Make the whole text view behave as a link for accessibility.
+  text_view_->GetViewAccessibility().OverrideRole(ax::mojom::Role::kLink);
 
   views::StyledLabel::RangeStyleInfo style;
-  style.override_color = gfx::kGoogleGrey900;
-  text_view->AddStyleRange(gfx::Range(0, offset), style);
+  style.override_color = AppListColorProvider::Get()->GetSearchBoxTextColor(
+      kDeprecatedSearchBoxTextDefaultColor);
+  text_view_->AddStyleRange(gfx::Range(0, offset), style);
 
-  // TODO(crbug.com/1114628): Remove the custom view once RangeStyleInfo
-  // supports selected links.
+  // Create a custom view for the link portion of the text. This allows an
+  // underline font style to be applied when the link is focused. This is done
+  // manually because default focus handling remains on the search box.
   views::StyledLabel::RangeStyleInfo link_style;
   link_style.disable_line_wrapping = true;
-  auto custom_view = std::make_unique<views::Label>(link);
+  auto custom_view = std::make_unique<views::Link>(link);
+  custom_view->set_callback(base::BindRepeating(&PrivacyInfoView::LinkClicked,
+                                                base::Unretained(this)));
   custom_view->SetEnabledColor(gfx::kGoogleBlue700);
   link_style.custom_view = custom_view.get();
   link_view_ = custom_view.get();
-  text_view->AddCustomView(std::move(custom_view));
-  text_view->AddStyleRange(gfx::Range(offset, offset + link.length()),
-                           link_style);
-
-  text_view->SetFocusBehavior(FocusBehavior::ALWAYS);
-  text_view->SetAutoColorReadabilityEnabled(false);
-  text_view_ = AddChildView(std::move(text_view));
+  text_view_->AddCustomView(std::move(custom_view));
+  text_view_->AddStyleRange(gfx::Range(offset, offset + link.length()),
+                            link_style);
 }
 
 void PrivacyInfoView::InitCloseButton() {
@@ -290,21 +306,17 @@ void PrivacyInfoView::InitCloseButton() {
   constexpr SkColor kInkDropBaseColor = gfx::kGoogleGrey900;
   constexpr float kInkDropVisibleOpacity = 0.06f;
   constexpr float kInkDropHighlightOpacity = 0.08f;
-  close_button->set_ink_drop_visible_opacity(kInkDropVisibleOpacity);
-  close_button->set_ink_drop_highlight_opacity(kInkDropHighlightOpacity);
-  close_button->set_ink_drop_base_color(kInkDropBaseColor);
-  close_button->set_has_ink_drop_action_on_click(true);
+  close_button->SetInkDropVisibleOpacity(kInkDropVisibleOpacity);
+  close_button->SetInkDropHighlightOpacity(kInkDropHighlightOpacity);
+  close_button->SetInkDropBaseColor(kInkDropBaseColor);
+  close_button->SetHasInkDropActionOnClick(true);
   views::InstallCircleHighlightPathGenerator(close_button.get());
   close_button_ = AddChildView(std::move(close_button));
 }
 
 void PrivacyInfoView::UpdateLinkStyle() {
-  if (selected_action_ == Action::kTextLink) {
-    link_view_->SetFontList(
-        text_view_->GetFontList().DeriveWithStyle(gfx::Font::UNDERLINE));
-  } else {
-    link_view_->SetFontList(text_view_->GetFontList());
-  }
+  bool link_selected = selected_action_ == Action::kTextLink;
+  link_view_->SetForceUnderline(link_selected);
 }
 
 }  // namespace ash

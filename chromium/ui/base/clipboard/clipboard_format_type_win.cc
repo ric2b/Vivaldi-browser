@@ -5,6 +5,7 @@
 #include "ui/base/clipboard/clipboard_format_type.h"
 
 #include <shlobj.h>
+#include <urlmon.h>
 
 #include "base/containers/flat_map.h"
 #include "base/memory/ptr_util.h"
@@ -173,22 +174,8 @@ const ClipboardFormatType& ClipboardFormatType::GetUrlType() {
 }
 
 // static
-const ClipboardFormatType& ClipboardFormatType::GetMozUrlType() {
-  static base::NoDestructor<ClipboardFormatType> format(
-      ::RegisterClipboardFormat(L"text/x-moz-url"));
-  return *format;
-}
-
-// static
 const ClipboardFormatType& ClipboardFormatType::GetPlainTextType() {
   static base::NoDestructor<ClipboardFormatType> format(CF_UNICODETEXT);
-  return *format;
-}
-
-// static
-const ClipboardFormatType& ClipboardFormatType::GetFilenameType() {
-  static base::NoDestructor<ClipboardFormatType> format(
-      ::RegisterClipboardFormat(CFSTR_FILENAMEW));
   return *format;
 }
 
@@ -198,6 +185,13 @@ const ClipboardFormatType& ClipboardFormatType::GetFilenameType() {
 const ClipboardFormatType& ClipboardFormatType::GetHtmlType() {
   static base::NoDestructor<ClipboardFormatType> format(
       ::RegisterClipboardFormat(L"HTML Format"));
+  return *format;
+}
+
+// static
+const ClipboardFormatType& ClipboardFormatType::GetSvgType() {
+  static base::NoDestructor<ClipboardFormatType> format(
+      ::RegisterClipboardFormat(CFSTR_MIME_SVG_XML));
   return *format;
 }
 
@@ -304,9 +298,23 @@ const ClipboardFormatType& ClipboardFormatType::GetFileContentAtIndexType(
 }
 
 // static
+const ClipboardFormatType& ClipboardFormatType::GetFilenameType() {
+  static base::NoDestructor<ClipboardFormatType> format(
+      ::RegisterClipboardFormat(CFSTR_FILENAMEW));
+  return *format;
+}
+
+// static
 const ClipboardFormatType& ClipboardFormatType::GetIDListType() {
   static base::NoDestructor<ClipboardFormatType> format(
       ::RegisterClipboardFormat(CFSTR_SHELLIDLIST));
+  return *format;
+}
+
+// static
+const ClipboardFormatType& ClipboardFormatType::GetMozUrlType() {
+  static base::NoDestructor<ClipboardFormatType> format(
+      ::RegisterClipboardFormat(L"text/x-moz-url"));
   return *format;
 }
 

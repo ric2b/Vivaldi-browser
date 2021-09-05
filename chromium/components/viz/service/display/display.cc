@@ -25,8 +25,8 @@
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/shared_quad_state.h"
-#include "components/viz/common/surfaces/aggregated_frame.h"
 #include "components/viz/common/viz_utils.h"
+#include "components/viz/service/display/aggregated_frame.h"
 #include "components/viz/service/display/damage_frame_annotator.h"
 #include "components/viz/service/display/direct_renderer.h"
 #include "components/viz/service/display/display_client.h"
@@ -312,8 +312,6 @@ Display::Display(
   DCHECK(frame_sink_id_.is_valid());
   if (scheduler_)
     scheduler_->SetClient(this);
-  enable_quad_splitting_ = features::ShouldSplitPartiallyOccludedQuads() &&
-                           !overlay_processor_->DisableSplittingQuads();
 }
 
 Display::~Display() {
@@ -521,23 +519,10 @@ void Display::InitializeRenderer(bool enable_shared_images) {
       mode, output_surface_->context_provider(), bitmap_manager_,
       enable_shared_images);
   if (settings_.use_skia_renderer && mode == DisplayResourceProvider::kGpu) {
-    // Default to use DDL if skia_output_surface is not null.
-    if (skia_output_surface_) {
-      renderer_ = std::make_unique<SkiaRenderer>(
-          &settings_, debug_settings_, output_surface_.get(),
-          resource_provider_.get(), overlay_processor_.get(),
-          skia_output_surface_, SkiaRenderer::DrawMode::DDL);
-    } else {
-      // GPU compositing with GL to an SKP.
-      DCHECK(output_surface_);
-      DCHECK(output_surface_->context_provider());
-      DCHECK(settings_.record_sk_picture);
-      DCHECK(!overlay_processor_->IsOverlaySupported());
-      renderer_ = std::make_unique<SkiaRenderer>(
-          &settings_, debug_settings_, output_surface_.get(),
-          resource_provider_.get(), overlay_processor_.get(),
-          nullptr /* skia_output_surface */, SkiaRenderer::DrawMode::SKPRECORD);
-    }
+    renderer_ = std::make_unique<SkiaRenderer>(
+        &settings_, debug_settings_, output_surface_.get(),
+        resource_provider_.get(), overlay_processor_.get(),
+        skia_output_surface_);
   } else if (output_surface_->context_provider()) {
     renderer_ = std::make_unique<GLRenderer>(
         &settings_, debug_settings_, output_surface_.get(),
@@ -985,6 +970,12 @@ void Display::DidReceivePresentationFeedback(
   pending_presentation_group_timings_.pop_front();
 }
 
+void Display::DidReceiveReleasedOverlays(
+    const std::vector<gpu::Mailbox>& released_overlays) {
+  if (renderer_)
+    renderer_->DidReceiveReleasedOverlays(released_overlays);
+}
+
 void Display::SetNeedsRedrawRect(const gfx::Rect& damage_rect) {
   aggregator_->SetFullDamageForSurface(current_surface_id_);
   damage_tracker_->SetRootSurfaceDamaged();
@@ -1036,7 +1027,7 @@ void Display::RemoveOverdrawQuads(AggregatedFrame* frame) {
   if (frame->render_pass_list.empty())
     return;
 
-  base::flat_map<RenderPassId, gfx::Rect> backdrop_filter_rects;
+  base::flat_map<AggregatedRenderPassId, gfx::Rect> backdrop_filter_rects;
   for (const auto& pass : frame->render_pass_list) {
     if (!pass->backdrop_filters.IsEmpty() &&
         pass->backdrop_filters.HasFilterThatMovesPixels()) {
@@ -1064,15 +1055,18 @@ void Display::RemoveOverdrawQuads(AggregatedFrame* frame) {
     cc::Region occlusion_in_quad_content_space;
     gfx::Rect render_pass_quads_in_content_space;
     for (auto quad = pass->quad_list.begin(); quad != quad_list_end;) {
-      // Skip quad if it is a RenderPassDrawQuad because RenderPassDrawQuad is a
+      // Sanity check: we should not have a Compositor
+      // CompositorRenderPassDrawQuad here.
+      DCHECK_NE(quad->material, DrawQuad::Material::kCompositorRenderPass);
+      // Skip quad if it is a AggregatedRenderPassDrawQuad because it is a
       // special type of DrawQuad where the visible_rect of shared quad state is
       // not entirely covered by draw quads in it.
-      if (quad->material == ContentDrawQuadBase::Material::kRenderPass) {
+      if (quad->material == DrawQuad::Material::kAggregatedRenderPass) {
         // A RenderPass with backdrop filters may apply to a quad underlying
         // RenderPassQuad. These regions should be tracked so that correctly
         // handle splitting and occlusion of the underlying quad.
-        auto it = backdrop_filter_rects.find(
-            RenderPassDrawQuad::MaterialCast(*quad)->render_pass_id);
+        auto* rpdq = AggregatedRenderPassDrawQuad::MaterialCast(*quad);
+        auto it = backdrop_filter_rects.find(rpdq->render_pass_id);
         if (it != backdrop_filter_rects.end()) {
           backdrop_filters_in_target_space.Union(it->second);
         }
@@ -1210,7 +1204,7 @@ void Display::RemoveOverdrawQuads(AggregatedFrame* frame) {
         // Split quad into multiple draw quads when area can be reduce by
         // more than X fragments.
         const bool should_split_quads =
-            enable_quad_splitting_ &&
+            !overlay_processor_->DisableSplittingQuads() &&
             !visible_region.Intersects(render_pass_quads_in_content_space) &&
             ReduceComplexity(visible_region, settings_.quad_split_limit,
                              &cached_visible_region_) &&

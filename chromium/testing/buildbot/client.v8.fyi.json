@@ -338,6 +338,13 @@
       }
     ]
   },
+  "Linux ASAN Builder": {
+    "additional_compile_targets": [
+      "extensions_browsertests",
+      "net_unittests",
+      "unit_tests"
+    ]
+  },
   "Linux V8 FYI Release (NVIDIA)": {
     "isolated_scripts": [
       {
@@ -1314,10 +1321,16 @@
   },
   "V8 Android GN (dbg)": {
     "additional_compile_targets": [
-      "chrome_public_apk"
+      "chrome_public_apk",
+      "blink_tests",
+      "gin_unittests",
+      "net_unittests"
     ]
   },
   "V8 Blink Linux": {
+    "additional_compile_targets": [
+      "blink_tests"
+    ],
     "gtest_tests": [
       {
         "args": [
@@ -1370,6 +1383,9 @@
     ]
   },
   "V8 Blink Linux Debug": {
+    "additional_compile_targets": [
+      "blink_tests"
+    ],
     "gtest_tests": [
       {
         "args": [
@@ -1425,6 +1441,9 @@
     ]
   },
   "V8 Blink Linux Future": {
+    "additional_compile_targets": [
+      "blink_tests"
+    ],
     "gtest_tests": [
       {
         "args": [
@@ -1532,6 +1551,9 @@
     ]
   },
   "V8 Blink Mac": {
+    "additional_compile_targets": [
+      "blink_tests"
+    ],
     "gtest_tests": [
       {
         "args": [
@@ -1584,6 +1606,9 @@
     ]
   },
   "V8 Blink Win": {
+    "additional_compile_targets": [
+      "blink_tests"
+    ],
     "isolated_scripts": [
       {
         "args": [
@@ -1616,6 +1641,7 @@
     "additional_compile_targets": [
       "accessibility_unittests",
       "aura_unittests",
+      "blink_tests",
       "browser_tests",
       "capture_unittests",
       "cast_unittests",
@@ -1634,6 +1660,7 @@
       "extensions_unittests",
       "gcm_unit_tests",
       "gfx_unittests",
+      "gin_unittests",
       "google_apis_unittests",
       "gpu_unittests",
       "interactive_ui_tests",
@@ -1645,6 +1672,8 @@
       "nacl_loader_unittests",
       "net_unittests",
       "pdf_unittests",
+      "pdfium_test",
+      "postmortem-metadata",
       "ppapi_unittests",
       "printing_unittests",
       "remoting_unittests",
@@ -1683,8 +1712,8 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148",
-              "os": "Windows-10|Windows-10-18363",
+              "gpu": "10de:1cb3-27.21.14.5148",
+              "os": "Windows-10-18363",
               "pool": "chromium.tests.gpu"
             }
           ],
@@ -1713,8 +1742,8 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148",
-              "os": "Windows-10|Windows-10-18363",
+              "gpu": "10de:1cb3-27.21.14.5148",
+              "os": "Windows-10-18363",
               "pool": "chromium.tests.gpu"
             }
           ],
@@ -1743,8 +1772,8 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148",
-              "os": "Windows-10|Windows-10-18363",
+              "gpu": "10de:1cb3-27.21.14.5148",
+              "os": "Windows-10-18363",
               "pool": "chromium.tests.gpu"
             }
           ],
@@ -1773,8 +1802,8 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148",
-              "os": "Windows-10|Windows-10-18363",
+              "gpu": "10de:1cb3-27.21.14.5148",
+              "os": "Windows-10-18363",
               "pool": "chromium.tests.gpu"
             }
           ],
@@ -1812,8 +1841,8 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148",
-              "os": "Windows-10|Windows-10-18363",
+              "gpu": "10de:1cb3-27.21.14.5148",
+              "os": "Windows-10-18363",
               "pool": "chromium.tests.gpu"
             }
           ],
@@ -1851,8 +1880,8 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148",
-              "os": "Windows-10|Windows-10-18363",
+              "gpu": "10de:1cb3-27.21.14.5148",
+              "os": "Windows-10-18363",
               "pool": "chromium.tests.gpu"
             }
           ],
@@ -1882,8 +1911,8 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148",
-              "os": "Windows-10|Windows-10-18363",
+              "gpu": "10de:1cb3-27.21.14.5148",
+              "os": "Windows-10-18363",
               "pool": "chromium.tests.gpu"
             }
           ],
@@ -1912,8 +1941,8 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148",
-              "os": "Windows-10|Windows-10-18363",
+              "gpu": "10de:1cb3-27.21.14.5148",
+              "os": "Windows-10-18363",
               "pool": "chromium.tests.gpu"
             }
           ],
@@ -1944,8 +1973,8 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148",
-              "os": "Windows-10|Windows-10-18363",
+              "gpu": "10de:1cb3-27.21.14.5148",
+              "os": "Windows-10-18363",
               "pool": "chromium.tests.gpu"
             }
           ],
@@ -1976,8 +2005,8 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "10de:1cb3-26.21.14.3102|10de:1cb3-27.21.14.5148",
-              "os": "Windows-10|Windows-10-18363",
+              "gpu": "10de:1cb3-27.21.14.5148",
+              "os": "Windows-10-18363",
               "pool": "chromium.tests.gpu"
             }
           ],

@@ -99,6 +99,7 @@
 <translation id="4235360514405112390">Voimassa</translation>
 <translation id="4250431568374086873">Sivuston yhteys ei ole täysin suojattu</translation>
 <translation id="4265872034478892965">Järjestelmänvalvojan sallima</translation>
+<translation id="4305666528087210886">Tiedostoa ei voi käyttää</translation>
 <translation id="4312866146174492540">Estä (oletus)</translation>
 <translation id="4356973930735388585">Sivustolle hyökännyt taho voi yrittää asentaa tietokoneellesi vaarallisia ohjelmia, jotka varastavat tai poistavat tietojasi kuten kuviasi, salasanojasi, viestejäsi tai luottokorttitietojasi.</translation>
 <translation id="4408413947728134509">Evästeet <ph name="NUM_COOKIES" /></translation>
@@ -153,6 +154,7 @@
 <translation id="6165508094623778733">Lisätietoja</translation>
 <translation id="6177128806592000436">Yhteys sivustoon ei ole suojattu</translation>
 <translation id="6203231073485539293">Tarkista internetyhteytesi</translation>
+<translation id="6225522625585012689">Estetyt URL-osoitteet ja muut järjestelmänvalvojasi pakottamat käytännöt näkee osoitteesta &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
 <translation id="625755898061068298">Olet poistanut sivuston tietoturvavaroitukset käytöstä.</translation>
 <translation id="6264485186158353794">Palaa suojattuun tilaan</translation>
 <translation id="6305205051461490394">Sivustoon <ph name="URL" /> ei saada yhteyttä.</translation>
@@ -202,7 +204,6 @@
 <translation id="8041940743680923270">Käytä yleistä oletusasetusta (kysy)</translation>
 <translation id="808894953321890993">Vaihda salasana</translation>
 <translation id="8119307142152921512">jäljitys ja mainokset</translation>
-<translation id="8142868475871995937">Voit lukea listan kielletyistä URL-osoitteista ja muut järjestelmänvalvojasi määräämät käytännöt osoitteessa &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
 <translation id="8149426793427495338">Tietokoneesi siirtyi nukkumaan.</translation>
 <translation id="8150722005171944719">Tiedosto osoitteessa <ph name="URL" /> ei ole luettavissa. Se on voitu poistaa tai siirtää, tai tiedoston käyttöluvat voivat estää sen käytön.</translation>
 <translation id="8184538546369750125">Käytä yleistä oletusasetusta (salli)</translation>
@@ -225,6 +226,7 @@
 <translation id="9011424611726486705">Avaa sivustoasetukset</translation>
 <translation id="9025348182339809926">(Virheellinen)</translation>
 <translation id="9039213469156557790">Sivulla on kuitenkin osia, joita ei ole suojattu. Muut voivat tarkastella näitä osia siirrettäessä, ja hyökkääjä voi muuttaa sivun käyttäytymistä muokkaamalla niitä.</translation>
+<translation id="9062620674789239642">Se on voitu siirtää tai poistaa tai sitä on muutettu.</translation>
 <translation id="9069693763241529744">Laajennuksen estämä</translation>
 <translation id="9169664750068251925">Estä aina tällä sivustolla</translation>
 <translation id="9180553614777056266">Mainosesto</translation>

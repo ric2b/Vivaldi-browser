@@ -4,28 +4,49 @@
 
 #include "content/browser/font_access/font_enumeration_cache.h"
 
+#include "base/feature_list.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "build/build_config.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-
-#if defined(OS_WIN)
-#include "content/browser/font_access/font_enumeration_cache_win.h"
-#endif
+#include "third_party/blink/public/common/features.h"
 
 namespace content {
 
 FontEnumerationCache::FontEnumerationCache() = default;
 FontEnumerationCache::~FontEnumerationCache() = default;
 
-// static
+#if !defined(PLATFORM_HAS_LOCAL_FONT_ENUMERATION_IMPL)
+//  static
 FontEnumerationCache* FontEnumerationCache::GetInstance() {
-#if defined(OS_WIN)
-  return FontEnumerationCacheWin::GetInstance();
+  return nullptr;
+}
 #endif
 
-  return nullptr;
+void FontEnumerationCache::QueueShareMemoryRegionWhenReady(
+    scoped_refptr<base::TaskRunner> task_runner,
+    blink::mojom::FontAccessManager::EnumerateLocalFontsCallback callback) {
+  DCHECK(base::FeatureList::IsEnabled(blink::features::kFontAccess));
+
+  callbacks_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &FontEnumerationCache::RunPendingCallback,
+          // Safe because this is an initialized singleton.
+          base::Unretained(this),
+          CallbackOnTaskRunner(std::move(task_runner), std::move(callback))));
+
+  if (!enumeration_cache_build_started_.IsSet()) {
+    enumeration_cache_build_started_.Set();
+
+    SchedulePrepareFontEnumerationCache();
+  }
+}
+
+bool FontEnumerationCache::IsFontEnumerationCacheReady() {
+  DCHECK(base::FeatureList::IsEnabled(blink::features::kFontAccess));
+
+  return enumeration_cache_built_.IsSet() && IsFontEnumerationCacheValid();
 }
 
 void FontEnumerationCache::ResetStateForTesting() {
@@ -70,6 +91,22 @@ void FontEnumerationCache::StartCallbacksTaskQueue() {
 bool FontEnumerationCache::IsFontEnumerationCacheValid() const {
   return enumeration_cache_memory_.IsValid() &&
          enumeration_cache_memory_.mapping.size();
+}
+
+void FontEnumerationCache::BuildEnumerationCache(
+    std::unique_ptr<blink::FontEnumerationTable> table) {
+  DCHECK(!enumeration_cache_built_.IsSet());
+
+  enumeration_cache_memory_ =
+      base::ReadOnlySharedMemoryRegion::Create(table->ByteSizeLong());
+
+  if (!IsFontEnumerationCacheValid() ||
+      !table->SerializeToArray(enumeration_cache_memory_.mapping.memory(),
+                               enumeration_cache_memory_.mapping.size())) {
+    enumeration_cache_memory_ = base::MappedReadOnlyRegion();
+  }
+
+  enumeration_cache_built_.Set();
 }
 
 }  // namespace content

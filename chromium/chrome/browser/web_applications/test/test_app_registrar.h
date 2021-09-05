@@ -14,6 +14,7 @@
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
+#include "chrome/common/web_application_info.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -58,7 +59,11 @@ class TestAppRegistrar : public AppRegistrar {
   base::Optional<SkColor> GetAppThemeColor(const AppId& app_id) const override;
   base::Optional<SkColor> GetAppBackgroundColor(
       const AppId& app_id) const override;
-  const GURL& GetAppLaunchURL(const AppId& app_id) const override;
+  const GURL& GetAppStartUrl(const AppId& app_id) const override;
+  const std::string* GetAppLaunchQueryParams(
+      const AppId& app_id) const override;
+  const apps::ShareTarget* GetAppShareTarget(
+      const AppId& app_id) const override;
   base::Optional<GURL> GetAppScopeInternal(const AppId& app_id) const override;
   DisplayMode GetAppDisplayMode(const AppId& app_id) const override;
   DisplayMode GetAppUserDisplayMode(const AppId& app_id) const override;
@@ -68,7 +73,7 @@ class TestAppRegistrar : public AppRegistrar {
   base::Time GetAppInstallTime(const web_app::AppId& app_id) const override;
   std::vector<WebApplicationIconInfo> GetAppIconInfos(
       const AppId& app_id) const override;
-  std::vector<SquareSizePx> GetAppDownloadedIconSizesAny(
+  SortedSizesPx GetAppDownloadedIconSizesAny(
       const AppId& app_id) const override;
   std::vector<WebApplicationShortcutsMenuItemInfo> GetAppShortcutsMenuItemInfos(
       const AppId& app_id) const override;

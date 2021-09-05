@@ -10,11 +10,12 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_impl.h"
-#include "chrome/browser/ui/views/global_media_controls/media_notification_audio_device_selector_view_delegate.h"
+#include "chrome/browser/ui/views/global_media_controls/media_notification_device_selector_view_delegate.h"
 #include "chrome/browser/ui/views/global_media_controls/overlay_media_notification_view.h"
 #include "components/media_message_center/media_notification_container.h"
 #include "components/media_message_center/media_notification_view_impl.h"
 #include "media/audio/audio_device_description.h"
+#include "media/base/media_switches.h"
 #include "ui/views/animation/slide_out_controller_delegate.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/focus/focus_manager.h"
@@ -29,7 +30,7 @@ class ImageButton;
 class SlideOutController;
 }  // namespace views
 
-class MediaNotificationAudioDeviceSelectorView;
+class MediaNotificationDeviceSelectorView;
 class MediaNotificationContainerObserver;
 class MediaNotificationService;
 
@@ -40,7 +41,7 @@ class MediaNotificationContainerImplView
     : public views::Button,
       public media_message_center::MediaNotificationContainer,
       public MediaNotificationContainerImpl,
-      public MediaNotificationAudioDeviceSelectorViewDelegate,
+      public MediaNotificationDeviceSelectorViewDelegate,
       public views::SlideOutControllerDelegate,
       public views::ButtonListener,
       public views::FocusChangeListener {
@@ -48,7 +49,10 @@ class MediaNotificationContainerImplView
   MediaNotificationContainerImplView(
       const std::string& id,
       base::WeakPtr<media_message_center::MediaNotificationItem> item,
-      MediaNotificationService* service);
+      MediaNotificationService* service,
+      media_message_center::MediaNotificationViewImpl::BackgroundStyle
+          background_style = media_message_center::MediaNotificationViewImpl::
+              BackgroundStyle::kDefault);
   ~MediaNotificationContainerImplView() override;
 
   // views::Button:
@@ -92,10 +96,18 @@ class MediaNotificationContainerImplView
   void AddObserver(MediaNotificationContainerObserver* observer) override;
   void RemoveObserver(MediaNotificationContainerObserver* observer) override;
 
-  // MediaNotificationAudioDeviceSelectorViewDelegate
+  // MediaNotificationDeviceSelectorViewDelegate
   // Called when an audio device has been selected for output.
   void OnAudioSinkChosen(const std::string& sink_id) override;
-  void OnAudioDeviceSelectorViewSizeChanged() override;
+  void OnDeviceSelectorViewSizeChanged() override;
+  std::unique_ptr<MediaNotificationDeviceProvider::
+                      GetOutputDevicesCallbackList::Subscription>
+  RegisterAudioOutputDeviceDescriptionsCallback(
+      MediaNotificationDeviceProvider::GetOutputDevicesCallbackList::
+          CallbackType callback) override;
+  std::unique_ptr<base::RepeatingCallbackList<void(bool)>::Subscription>
+  RegisterIsAudioOutputDeviceSwitchingSupportedCallback(
+      base::RepeatingCallback<void(bool)> callback) override;
 
   // Sets up the notification to be ready to display in an overlay instead of
   // the dialog.
@@ -109,7 +121,8 @@ class MediaNotificationContainerImplView
   views::ImageButton* GetDismissButtonForTesting();
 
   media_message_center::MediaNotificationViewImpl* view_for_testing() {
-    return view_;
+    DCHECK(!base::FeatureList::IsEnabled(media::kGlobalMediaControlsModernUI));
+    return static_cast<media_message_center::MediaNotificationViewImpl*>(view_);
   }
 
   bool is_playing_for_testing() { return is_playing_; }
@@ -158,9 +171,8 @@ class MediaNotificationContainerImplView
   views::View* dismiss_button_container_ = nullptr;
 
   DismissButton* dismiss_button_ = nullptr;
-  media_message_center::MediaNotificationViewImpl* view_ = nullptr;
-  MediaNotificationAudioDeviceSelectorView* audio_device_selector_view_ =
-      nullptr;
+  media_message_center::MediaNotificationView* view_ = nullptr;
+  MediaNotificationDeviceSelectorView* audio_device_selector_view_ = nullptr;
 
   SkColor foreground_color_;
   SkColor background_color_;

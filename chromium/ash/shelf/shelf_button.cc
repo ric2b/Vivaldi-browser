@@ -8,6 +8,8 @@
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_button_delegate.h"
+#include "ash/style/default_color_constants.h"
+#include "ash/style/default_colors.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/views/animation/ink_drop_impl.h"
@@ -20,10 +22,10 @@ ShelfButton::ShelfButton(Shelf* shelf,
       shelf_(shelf),
       shelf_button_delegate_(shelf_button_delegate) {
   DCHECK(shelf_button_delegate_);
-  set_hide_ink_drop_when_showing_context_menu(false);
-  set_ink_drop_base_color(ShelfConfig::Get()->shelf_ink_drop_base_color());
-  set_ink_drop_visible_opacity(
-      ShelfConfig::Get()->shelf_ink_drop_visible_opacity());
+  SetHideInkDropWhenShowingContextMenu(false);
+  SetInkDropBaseColor(DeprecatedGetInkDropBaseColor(kDefaultShelfInkDropColor));
+  SetInkDropVisibleOpacity(
+      DeprecatedGetInkDropOpacity(kDefaultShelfInkDropOpacity));
   SetFocusBehavior(FocusBehavior::ALWAYS);
   SetInkDropMode(InkDropMode::ON_NO_GESTURE_HANDLER);
   SetFocusPainter(views::Painter::CreateSolidFocusPainter(

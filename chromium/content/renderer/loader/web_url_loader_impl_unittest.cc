@@ -41,6 +41,7 @@
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_error.h"
 #include "third_party/blink/public/platform/web_url_loader_client.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -455,32 +456,101 @@ TEST_F(WebURLLoaderImplTest, DefersLoadingBeforeStart) {
   EXPECT_TRUE(dispatcher()->defers_loading());
 }
 
-TEST_F(WebURLLoaderImplTest, ResponseIPAddress) {
+TEST_F(WebURLLoaderImplTest, ResponseIPEndpoint) {
   GURL url("http://example.test/");
 
   struct TestCase {
     const char* ip;
-    const char* expected;
+    uint16_t port;
   } cases[] = {
-      {"127.0.0.1", "127.0.0.1"},
-      {"123.123.123.123", "123.123.123.123"},
-      {"::1", "[::1]"},
-      {"2001:0db8:85a3:0000:0000:8a2e:0370:7334",
-       "[2001:db8:85a3::8a2e:370:7334]"},
-      {"2001:db8:85a3:0:0:8a2e:370:7334", "[2001:db8:85a3::8a2e:370:7334]"},
-      {"2001:db8:85a3::8a2e:370:7334", "[2001:db8:85a3::8a2e:370:7334]"},
-      {"::ffff:192.0.2.128", "[::ffff:c000:280]"}};
+      {"127.0.0.1", 443},
+      {"123.123.123.123", 80},
+      {"::1", 22},
+      {"2001:0db8:85a3:0000:0000:8a2e:0370:7334", 1337},
+      {"2001:db8:85a3:0:0:8a2e:370:7334", 12345},
+      {"2001:db8:85a3::8a2e:370:7334", 8080},
+      {"::ffff:192.0.2.128", 8443},
+  };
 
   for (const auto& test : cases) {
     SCOPED_TRACE(test.ip);
-    network::mojom::URLResponseHead head;
+
     net::IPAddress address;
     ASSERT_TRUE(address.AssignFromIPLiteral(test.ip));
-    head.remote_endpoint = net::IPEndPoint(address, 443);
+
+    network::mojom::URLResponseHead head;
+    head.remote_endpoint = net::IPEndPoint(address, test.port);
+
     blink::WebURLResponse response;
     WebURLLoaderImpl::PopulateURLResponse(url, head, &response, true, -1);
-    EXPECT_EQ(test.expected, response.RemoteIPAddress().Utf8());
+    EXPECT_EQ(head.remote_endpoint, response.RemoteIPEndpoint());
   };
+}
+
+TEST_F(WebURLLoaderImplTest, ResponseAddressSpace) {
+  using AddressSpace = network::mojom::IPAddressSpace;
+
+  struct TestCase {
+    std::string url;
+    std::string ip;
+    AddressSpace expected;
+  } cases[] = {
+      {"http://localhost", "127.0.0.1", AddressSpace::kLocal},
+      {"http://localhost", "::1", AddressSpace::kLocal},
+      {"file:///a/path", "", AddressSpace::kLocal},
+      {"file:///a/path", "8.8.8.8", AddressSpace::kLocal},
+      {"http://router.local", "10.1.0.1", AddressSpace::kPrivate},
+      {"http://router.local", "::ffff:192.0.2.128", AddressSpace::kPrivate},
+      {"https://bleep.test", "8.8.8.8", AddressSpace::kPublic},
+      {"http://a.test", "2001:db8:85a3::8a2e:370:7334", AddressSpace::kPublic},
+      {"http://invalid", "", AddressSpace::kUnknown},
+  };
+
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.url + ", " + test.ip);
+
+    GURL url(test.url);
+
+    // We are forced to use the result of AssignFromIPLiteral(), and we cannot
+    // just assign it to an unused variable. Check that all non-empty literals
+    // are correctly parsed.
+    net::IPAddress address;
+    EXPECT_EQ(!test.ip.empty(), address.AssignFromIPLiteral(test.ip));
+
+    network::mojom::URLResponseHead head;
+    head.remote_endpoint = net::IPEndPoint(address, 443);
+
+    blink::WebURLResponse response;
+    WebURLLoaderImpl::PopulateURLResponse(url, head, &response, true, -1);
+
+    EXPECT_EQ(test.expected, response.AddressSpace());
+  }
+}
+
+// This test verifies that the IPAddressSpace set on WebURLResponse takes into
+// account WebURLResponse::ResponseUrl() instead of
+// WebURLResponse::CurrentRequestUrl().
+TEST_F(WebURLLoaderImplTest, ResponseAddressSpaceConsidersResponseUrl) {
+  GURL request_url("http://request.test");
+
+  // The remote endpoint contains a public IP address, but the response was
+  // ultimately fetched by a service worker from a file URL.
+  network::mojom::URLResponseHead head;
+  head.remote_endpoint = net::IPEndPoint(net::IPAddress(8, 8, 8, 8), 80);
+  head.was_fetched_via_service_worker = true;
+  head.url_list_via_service_worker = {
+      GURL("http://redirect.test"),
+      GURL("file:///a/path"),
+  };
+
+  blink::WebURLResponse response;
+  WebURLLoaderImpl::PopulateURLResponse(request_url, head, &response, true, -1);
+
+  // The address space of the response reflects the fact the it was fetched
+  // from a file, even though the request was initially to a public website.
+  EXPECT_EQ(GURL("http://request.test"), GURL(response.CurrentRequestUrl()));
+  EXPECT_EQ(GURL("file:///a/path"), GURL(response.ResponseUrl()));
+  EXPECT_EQ(network::mojom::IPAddressSpace::kLocal, response.AddressSpace());
 }
 
 TEST_F(WebURLLoaderImplTest, ResponseCert) {

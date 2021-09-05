@@ -29,7 +29,7 @@
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/scoped_binders.h"
 
-#if defined(OS_LINUX) && BUILDFLAG(USE_DAWN)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && BUILDFLAG(USE_DAWN)
 #include "gpu/command_buffer/service/external_vk_image_dawn_representation.h"
 #endif
 
@@ -127,8 +127,9 @@ bool UseSeparateGLTexture(SharedContextState* context_state,
   if (format != viz::ResourceFormat::BGRA_8888)
     return false;
 
-  const auto* version_info = context_state->real_context()->GetVersionInfo();
-  const auto& ext = gl::g_current_gl_driver->ext;
+  auto* gl_context = context_state->real_context();
+  const auto* version_info = gl_context->GetVersionInfo();
+  const auto& ext = gl_context->GetCurrentGL()->Driver->ext;
   if (!ext.b_GL_EXT_texture_format_BGRA8888)
     return true;
 
@@ -166,7 +167,7 @@ void WaitSemaphoresOnGrContext(GrDirectContext* gr_context,
 
 // static
 std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
-    SharedContextState* context_state,
+    scoped_refptr<SharedContextState> context_state,
     VulkanCommandPool* command_pool,
     const Mailbox& mailbox,
     viz::ResourceFormat format,
@@ -206,7 +207,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
     // Must request all available image usage flags if aliasing GL texture. This
     // is a spec requirement per EXT_memory_object. However, if
     // ANGLE_memory_object_flags is supported, usage flags can be arbitrary.
-    if (UseMinimalUsageFlags(context_state)) {
+    if (UseMinimalUsageFlags(context_state.get())) {
       // The following additional usage flags are provided for ANGLE:
       //
       // - TRANSFER_SRC: Used for copies from this image.
@@ -247,10 +248,11 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
   if (!image)
     return nullptr;
 
-  bool use_separate_gl_texture = UseSeparateGLTexture(context_state, format);
+  bool use_separate_gl_texture =
+      UseSeparateGLTexture(context_state.get(), format);
   auto backing = std::make_unique<ExternalVkImageBacking>(
       util::PassKey<ExternalVkImageBacking>(), mailbox, format, size,
-      color_space, surface_origin, alpha_type, usage, context_state,
+      color_space, surface_origin, alpha_type, usage, std::move(context_state),
       std::move(image), command_pool, use_separate_gl_texture);
 
   if (!pixel_data.empty()) {
@@ -263,7 +265,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
 
 // static
 std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::CreateFromGMB(
-    SharedContextState* context_state,
+    scoped_refptr<SharedContextState> context_state,
     VulkanCommandPool* command_pool,
     const Mailbox& mailbox,
     gfx::GpuMemoryBufferHandle handle,
@@ -293,11 +295,12 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::CreateFromGMB(
     }
 
     bool use_separate_gl_texture =
-        UseSeparateGLTexture(context_state, resource_format);
+        UseSeparateGLTexture(context_state.get(), resource_format);
     auto backing = std::make_unique<ExternalVkImageBacking>(
         util::PassKey<ExternalVkImageBacking>(), mailbox, resource_format, size,
-        color_space, surface_origin, alpha_type, usage, context_state,
-        std::move(image), command_pool, use_separate_gl_texture);
+        color_space, surface_origin, alpha_type, usage,
+        std::move(context_state), std::move(image), command_pool,
+        use_separate_gl_texture);
     backing->SetCleared();
     return backing;
   }
@@ -313,10 +316,10 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::CreateFromGMB(
   if (!shared_memory_wrapper.Initialize(handle, size, resource_format))
     return nullptr;
 
-  auto backing =
-      Create(context_state, command_pool, mailbox, resource_format, size,
-             color_space, surface_origin, alpha_type, usage, image_usage_cache,
-             base::span<const uint8_t>(), true /* using_gmb */);
+  auto backing = Create(std::move(context_state), command_pool, mailbox,
+                        resource_format, size, color_space, surface_origin,
+                        alpha_type, usage, image_usage_cache,
+                        base::span<const uint8_t>(), true /* using_gmb */);
   if (!backing)
     return nullptr;
 
@@ -333,7 +336,7 @@ ExternalVkImageBacking::ExternalVkImageBacking(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
-    SharedContextState* context_state,
+    scoped_refptr<SharedContextState> context_state,
     std::unique_ptr<VulkanImage> image,
     VulkanCommandPool* command_pool,
     bool use_separate_gl_texture)
@@ -346,7 +349,7 @@ ExternalVkImageBacking::ExternalVkImageBacking(
                                       usage,
                                       image->device_size(),
                                       false /* is_thread_safe */),
-      context_state_(context_state),
+      context_state_(std::move(context_state)),
       image_(std::move(image)),
       backend_texture_(size.width(),
                        size.height(),
@@ -554,10 +557,8 @@ void ExternalVkImageBacking::AddSemaphoresToPendingListOrRelease(
     // signalling but have not been signalled. In that case, we have to release
     // them via fence helper to make sure all submitted GPU works is finished
     // before releasing them.
-    // |context_state_| is out live fence_helper, so it is safe to use
-    // base::Unretained(context_state_).
     fence_helper()->EnqueueCleanupTaskForSubmittedWork(base::BindOnce(
-        [](SharedContextState* shared_context_state,
+        [](scoped_refptr<SharedContextState> shared_context_state,
            std::vector<ExternalSemaphore>, VulkanDeviceQueue* device_queue,
            bool device_lost) {
           if (!gl::GLContext::GetCurrent()) {
@@ -565,7 +566,7 @@ void ExternalVkImageBacking::AddSemaphoresToPendingListOrRelease(
                                               /*needs_gl=*/true);
           }
         },
-        base::Unretained(context_state_), std::move(semaphores)));
+        context_state_, std::move(semaphores)));
   }
 }
 
@@ -582,7 +583,7 @@ std::unique_ptr<SharedImageRepresentationDawn>
 ExternalVkImageBacking::ProduceDawn(SharedImageManager* manager,
                                     MemoryTypeTracker* tracker,
                                     WGPUDevice wgpuDevice) {
-#if defined(OS_LINUX) && BUILDFLAG(USE_DAWN)
+#if (defined(OS_LINUX) || defined(OS_CHROMEOS)) && BUILDFLAG(USE_DAWN)
   auto wgpu_format = viz::ToWGPUFormat(format());
 
   if (wgpu_format == WGPUTextureFormat_Undefined) {
@@ -601,7 +602,7 @@ ExternalVkImageBacking::ProduceDawn(SharedImageManager* manager,
 
   return std::make_unique<ExternalVkImageDawnRepresentation>(
       manager, this, tracker, wgpuDevice, wgpu_format, std::move(memory_fd));
-#else  // !defined(OS_LINUX) || !BUILDFLAG(USE_DAWN)
+#else  // (!defined(OS_LINUX) && !defined(OS_CHROMEOS)) || !BUILDFLAG(USE_DAWN)
   NOTIMPLEMENTED_LOG_ONCE();
   return nullptr;
 #endif
@@ -614,7 +615,7 @@ GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
   gl::GLApi* api = gl::g_current_gl_context;
   base::Optional<ScopedDedicatedMemoryObject> memory_object;
   if (!use_separate_gl_texture()) {
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
     auto memory_fd = image_->GetMemoryFd();
     if (!memory_fd.is_valid())
       return 0;
@@ -662,7 +663,7 @@ GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
     // If ANGLE_memory_object_flags is supported, use that to communicate the
     // exact create and usage flags the image was created with.
     DCHECK(image_->usage() != 0);
-    if (UseMinimalUsageFlags(context_state_)) {
+    if (UseMinimalUsageFlags(context_state())) {
       api->glTexStorageMemFlags2DANGLEFn(
           GL_TEXTURE_2D, 1, internal_format, size().width(), size().height(),
           memory_object->id(), 0, image_->flags(), image_->usage());
@@ -749,7 +750,7 @@ ExternalVkImageBacking::ProduceSkia(
     scoped_refptr<SharedContextState> context_state) {
   // This backing type is only used when vulkan is enabled, so SkiaRenderer
   // should also be using Vulkan.
-  DCHECK_EQ(context_state_, context_state.get());
+  DCHECK_EQ(context_state_, context_state);
   DCHECK(context_state->GrContextIsVulkan());
   return std::make_unique<ExternalVkImageSkiaRepresentation>(manager, this,
                                                              tracker);

@@ -18,7 +18,10 @@
 
 namespace gpu {
 class CommandBufferStub;
+class SharedImageBacking;
+class SharedImageRepresentationFactoryRef;
 class SharedImageStub;
+class TextureBase;
 }  // namespace gpu
 
 namespace gl {
@@ -58,6 +61,12 @@ class MEDIA_GPU_EXPORT CommandBufferHelper
 
   // Makes the GL context current.
   virtual bool MakeContextCurrent() = 0;
+
+  // Register a shared image backing
+  virtual std::unique_ptr<gpu::SharedImageRepresentationFactoryRef> Register(
+      std::unique_ptr<gpu::SharedImageBacking> backing) = 0;
+
+  virtual gpu::TextureBase* GetTexture(GLuint service_id) const = 0;
 
   // Creates a texture and returns its |service_id|.
   //
@@ -124,6 +133,12 @@ class MEDIA_GPU_EXPORT CommandBufferHelper
   // Set the callback to be called when our stub is destroyed. This callback
   // may not change the current context.
   virtual void SetWillDestroyStubCB(WillDestroyStubCB will_destroy_stub_cb) = 0;
+
+  // Is the backing command buffer passthrough (versus validating).
+  virtual bool IsPassthrough() const = 0;
+
+  // Does this command buffer support ARB_texture_rectangle.
+  virtual bool SupportsTextureRectangle() const = 0;
 
  protected:
   explicit CommandBufferHelper(

@@ -186,6 +186,7 @@ cc_component("cc") {
     "metrics/throughput_ukm_reporter.h",
     "metrics/total_frame_counter.cc",
     "metrics/total_frame_counter.h",
+    "metrics/ukm_smoothness_data.h",
     "metrics/video_playback_roughness_reporter.cc",
     "metrics/video_playback_roughness_reporter.h",
     "raster/bitmap_raster_buffer_provider.cc",
@@ -413,6 +414,7 @@ cc_component("cc") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//components/viz/client",
+    "//device/base/synchronization",
     "//gpu",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/command_buffer/client:raster_interface",
@@ -567,6 +569,8 @@ cc_test_static_library("test_support") {
     "test/test_tile_priorities.h",
     "test/test_tile_task_runner.cc",
     "test/test_tile_task_runner.h",
+    "test/test_types.cc",
+    "test/test_types.h",
     "test/test_ukm_recorder_factory.cc",
     "test/test_ukm_recorder_factory.h",
     "test/transfer_cache_test_helper.cc",
@@ -617,6 +621,8 @@ cc_test_static_library("test_support") {
 }
 
 cc_test("cc_unittests") {
+  use_xvfb = use_xvfb_in_this_config
+
   sources = [
     "base/delayed_unique_notifier_unittest.cc",
     "base/float_quad_unittest.cc",
@@ -677,6 +683,7 @@ cc_test("cc_unittests") {
     "metrics/compositor_frame_reporter_unittest.cc",
     "metrics/compositor_frame_reporting_controller_unittest.cc",
     "metrics/compositor_timing_history_unittest.cc",
+    "metrics/dropped_frame_counter_unittest.cc",
     "metrics/events_metrics_manager_unittest.cc",
     "metrics/frame_sequence_metrics_unittest.cc",
     "metrics/frame_sequence_tracker_unittest.cc",
@@ -820,8 +827,6 @@ cc_test("cc_unittests") {
     "//third_party/mesa_headers",
   ]
 
-  defines = []
-
   if (is_fuchsia) {
     manifest = "//build/config/fuchsia/gfx_tests.cmx"
   }
@@ -831,19 +836,6 @@ cc_test("cc_unittests") {
       "//gpu/vulkan:test_support",
       "//gpu/vulkan/init",
     ]
-
-    # TODO(samans): Support more configurations.
-    # CFI issue: https://crbug.com/967819
-    # LSAN issue: https://crbug.com/971325
-    # Fuchsia ARM64 https://crbug.com/1058247
-    if ((use_x11 && !is_cfi && !is_lsan) ||
-        (is_fuchsia && target_cpu == "x64")) {
-      defines += [ "ENABLE_CC_VULKAN_TESTS" ]
-    }
-  }
-
-  if (skia_use_dawn && enable_skia_dawn_gtests) {
-    defines += [ "ENABLE_CC_DAWN_TESTS" ]
   }
 }
 

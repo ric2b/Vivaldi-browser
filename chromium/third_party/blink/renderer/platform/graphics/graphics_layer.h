@@ -128,7 +128,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   // This is different from |DrawsContent| because hit test data are internal
   // to blink and are not copied to the cc::Layer's display list.
   bool PaintsHitTest() const { return paints_hit_test_; }
-  void SetPaintsHitTest(bool paints) { paints_hit_test_ = paints; }
+  void SetPaintsHitTest(bool);
 
   bool PaintsContentOrHitTest() const {
     return draws_content_ || paints_hit_test_;
@@ -227,6 +227,7 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
   bool PaintWithoutCommitForTesting(
       const base::Optional<IntRect>& interest_rect = base::nullopt);
 
+  void SetShouldCreateLayersAfterPaint(bool);
   bool ShouldCreateLayersAfterPaint() const {
     return should_create_layers_after_paint_;
   }
@@ -244,8 +245,6 @@ class PLATFORM_EXPORT GraphicsLayer : public DisplayItemClient,
       PaintingControlSetting painting_control) final;
   bool FillsBoundsCompletely() const override { return false; }
   size_t GetApproximateUnsharedMemoryUsage() const final;
-
-  void UpdateShouldCreateLayersAfterPaint();
 
   // Returns true if PaintController::PaintArtifact() changed and needs commit.
   bool PaintWithoutCommit(const IntRect* interest_rect = nullptr);
@@ -335,8 +334,7 @@ void ForAllActiveGraphicsLayers(
     return;
   }
 
-  if (layer.Client().PaintBlockedByDisplayLockIncludingAncestors(
-          DisplayLockContextLifecycleTarget::kSelf)) {
+  if (layer.Client().PaintBlockedByDisplayLockIncludingAncestors()) {
     // If we skip the layer, then we need to ensure to notify the
     // display-lock, since we need to force recollect the layers when we commit.
     layer.Client().NotifyDisplayLockNeedsGraphicsLayerCollection();
@@ -374,5 +372,10 @@ void ForAllPaintingGraphicsLayers(GraphicsLayerType& layer,
 }
 
 }  // namespace blink
+
+#if DCHECK_IS_ON()
+// Outside the blink namespace for ease of invocation from gdb.
+PLATFORM_EXPORT void showGraphicsLayerTree(const blink::GraphicsLayer*);
+#endif
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_GRAPHICS_LAYER_H_

@@ -42,6 +42,7 @@ def _RemoveUnneededFields(schema):
   _RemoveKey(ret, 'nocompile', bool)
   _RemoveKey(ret, 'noinline_doc', bool)
   _RemoveKey(ret, 'jsexterns', object)
+  _RemoveKey(ret, 'manifest_keys', object)
   return ret
 
 def _PrefixSchemaWithNamespace(schema):
@@ -259,7 +260,7 @@ class _APICCGenerator(object):
                      'generated_api_registration.h')))
     c.Append()
     c.Append('#include "build/build_config.h"')
-    c.Append('#include "build/lacros_buildflags.h"')
+    c.Append('#include "build/chromeos_buildflags.h"')
     c.Append()
     for namespace in self._bundle._model.namespaces.values():
       namespace_name = namespace.unix_name.replace("experimental_", "")

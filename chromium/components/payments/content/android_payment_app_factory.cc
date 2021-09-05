@@ -152,13 +152,14 @@ class AppFinder : public base::SupportsUserData::Data {
         continue;
       }
 
+      const std::string package = single_activity_app->package;
+      const std::string service_name =
+          single_activity_app->service_names.front();
       std::map<std::string, std::set<std::string>>
           stringified_method_data_copy = *stringified_method_data;
       communication_->IsReadyToPay(
-          single_activity_app->package,
-          single_activity_app->service_names.front(),
-          stringified_method_data_copy, delegate_->GetTopOrigin(),
-          delegate_->GetFrameOrigin(),
+          package, service_name, stringified_method_data_copy,
+          delegate_->GetTopOrigin(), delegate_->GetFrameOrigin(),
           delegate_->GetSpec()->details().id.value(),
           base::BindOnce(&AppFinder::OnIsReadyToPay,
                          weak_ptr_factory_.GetWeakPtr(),
@@ -224,8 +225,11 @@ AndroidPaymentAppFactory::AndroidPaymentAppFactory(
 AndroidPaymentAppFactory::~AndroidPaymentAppFactory() = default;
 
 void AndroidPaymentAppFactory::Create(base::WeakPtr<Delegate> delegate) {
-  auto app_finder = AppFinder::CreateAndSetOwnedBy(delegate->GetWebContents());
-  app_finder->FindApps(communication_, delegate);
+  content::WebContents* web_contents = delegate->GetWebContents();
+  if (web_contents) {
+    auto app_finder = AppFinder::CreateAndSetOwnedBy(web_contents);
+    app_finder->FindApps(communication_, delegate);
+  }
 }
 
 }  // namespace payments

@@ -32,6 +32,7 @@
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/sudden_termination_disabler_type.mojom.h"
+#include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-forward.h"
 #include "third_party/blink/public/mojom/webauthn/authenticator.mojom.h"
 #include "ui/accessibility/ax_tree_id.h"
@@ -266,6 +267,23 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // result, pass in a default-constructed callback. If provided, the callback
   // will be invoked on the UI thread.
   using JavaScriptResultCallback = base::OnceCallback<void(base::Value)>;
+
+  // This API allows to execute JavaScript methods in this frame, without
+  // having to serialize the arguments into a single string, and is a lot
+  // cheaper than ExecuteJavaScript below since it avoids the need to compile
+  // and evaluate new scripts all the time.
+  //
+  // Calling
+  //
+  //   ExecuteJavaScriptMethod("obj", "foo", [1, true], callback)
+  //
+  // is semantically equivalent to
+  //
+  //   ExecuteJavaScript("obj.foo(1, true)", callback)
+  virtual void ExecuteJavaScriptMethod(const base::string16& object_name,
+                                       const base::string16& method_name,
+                                       base::Value arguments,
+                                       JavaScriptResultCallback callback) = 0;
 
   // This is the default API to run JavaScript in this frame. This API can only
   // be called on chrome:// or devtools:// URLs.
@@ -537,6 +555,11 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // FrameTreeNode associated with this RenderFrameHost.
   virtual bool HasTransientUserActivation() = 0;
 
+  // Notifies the renderer of a user activation event for the associated frame.
+  // The |notification_type| parameter is used for histograms only.
+  virtual void NotifyUserActivation(
+      blink::mojom::UserActivationNotificationType notification_type) = 0;
+
   // Notifies the renderer whether hiding/showing the browser controls is
   // enabled, what the current state should be, and whether or not to animate to
   // the proper state.
@@ -592,7 +615,7 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // DidChangeLifecycleState.
   virtual bool IsInBackForwardCache() = 0;
 
-  // Return the UKM source id for the page load (last committed cross-document
+  // Returns the UKM source id for the page load (last committed cross-document
   // non-bfcache navigation in the main frame).
   // This id typically has an associated PageLoad UKM event.
   // Note: this can be called on any frame, but this id for all subframes is the

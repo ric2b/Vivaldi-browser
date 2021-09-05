@@ -5,11 +5,11 @@
 #include "chrome/browser/chromeos/login/saml/password_sync_token_verifier.h"
 
 #include "base/time/default_clock.h"
+#include "chrome/browser/chromeos/login/login_pref_names.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -64,7 +64,6 @@ class PasswordSyncTokenVerifierTest : public testing::Test {
   void DestroyPasswordSyncTokenVerifier();
   void OnTokenVerified(bool is_verified);
   bool PasswordSyncTokenFetcherIsAllocated();
-  void InvalidatePasswordSyncTokenFetcher();
 
   const AccountId saml_login_account_id_ =
       AccountId::FromUserEmailGaiaId(kSAMLUserEmail1, kSAMLUserId1);
@@ -125,19 +124,10 @@ void PasswordSyncTokenVerifierTest::OnTokenVerified(bool is_verified) {
   verifier_->OnTokenVerified(is_verified);
 }
 
-bool PasswordSyncTokenVerifierTest::PasswordSyncTokenFetcherIsAllocated() {
-  return verifier_->password_sync_token_fetcher_ != nullptr;
-}
-
-void PasswordSyncTokenVerifierTest::InvalidatePasswordSyncTokenFetcher() {
-  verifier_->password_sync_token_fetcher_.reset();
-}
-
 TEST_F(PasswordSyncTokenVerifierTest, EmptySyncToken) {
   CreatePasswordSyncTokenVerifier();
   verifier_->CheckForPasswordNotInSync();
   OnTokenVerified(false);
-  EXPECT_TRUE(PasswordSyncTokenFetcherIsAllocated());
   EXPECT_TRUE(user_manager_->GetActiveUser()->force_online_signin());
 }
 
@@ -166,9 +156,7 @@ TEST_F(PasswordSyncTokenVerifierTest, SyncTokenValidationAfterDelay) {
   verifier_->CheckForPasswordNotInSync();
   OnTokenVerified(true);
   EXPECT_FALSE(user_manager_->GetActiveUser()->force_online_signin());
-  InvalidatePasswordSyncTokenFetcher();
   test_environment_.FastForwardBy(kSyncTokenCheckInterval);
-  EXPECT_TRUE(PasswordSyncTokenFetcherIsAllocated());
   OnTokenVerified(false);
   EXPECT_TRUE(user_manager_->GetActiveUser()->force_online_signin());
 }
@@ -198,6 +186,48 @@ TEST_F(PasswordSyncTokenVerifierTest, PasswordChangePolicyNotSet) {
                                                  std::string());
   test_environment_.FastForwardBy(kSyncTokenCheckInterval);
   EXPECT_FALSE(user_manager_->GetActiveUser()->force_online_signin());
+}
+
+TEST_F(PasswordSyncTokenVerifierTest, SyncTokenNotSet) {
+  CreatePasswordSyncTokenVerifier();
+  verifier_->FetchSyncTokenOnReauth();
+  verifier_->OnTokenFetched(kSyncToken);
+  EXPECT_EQ(
+      user_manager::known_user::GetPasswordSyncToken(saml_login_account_id_),
+      kSyncToken);
+  EXPECT_EQ(
+      primary_profile_->GetPrefs()->GetString(prefs::kSamlPasswordSyncToken),
+      kSyncToken);
+}
+
+TEST_F(PasswordSyncTokenVerifierTest, SyncTokenInitForUser) {
+  CreatePasswordSyncTokenVerifier();
+  verifier_->FetchSyncTokenOnReauth();
+  // Token API not initilized for the user - request token creation.
+  verifier_->OnTokenFetched(std::string());
+  verifier_->OnTokenCreated(kSyncToken);
+  EXPECT_EQ(
+      user_manager::known_user::GetPasswordSyncToken(saml_login_account_id_),
+      kSyncToken);
+  EXPECT_EQ(
+      primary_profile_->GetPrefs()->GetString(prefs::kSamlPasswordSyncToken),
+      kSyncToken);
+  // Start regular polling after session init.
+  test_environment_.FastForwardBy(kSyncTokenCheckInterval);
+  OnTokenVerified(true);
+  EXPECT_FALSE(user_manager_->GetActiveUser()->force_online_signin());
+}
+
+TEST_F(PasswordSyncTokenVerifierTest, SyncTokenPrefsAreNotSyncable) {
+  CreatePasswordSyncTokenVerifier();
+  EXPECT_EQ(primary_profile_->GetPrefs()
+                ->FindPreference(prefs::kSamlPasswordSyncToken)
+                ->registration_flags(),
+            PrefRegistry::NO_REGISTRATION_FLAGS);
+  EXPECT_EQ(primary_profile_->GetPrefs()
+                ->FindPreference(prefs::kSamlInSessionPasswordChangeEnabled)
+                ->registration_flags(),
+            PrefRegistry::NO_REGISTRATION_FLAGS);
 }
 
 }  // namespace chromeos

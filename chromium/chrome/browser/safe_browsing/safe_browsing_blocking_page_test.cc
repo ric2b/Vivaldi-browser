@@ -29,6 +29,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/interstitials/security_interstitial_idn_test.h"
 #include "chrome/browser/password_manager/password_manager_test_base.h"
+#include "chrome/browser/policy/policy_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
@@ -49,6 +50,9 @@
 #include "components/google/core/common/google_util.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/permissions/permission_util.h"
+#include "components/policy/core/common/policy_map.h"
+#include "components/policy/core/common/policy_types.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/threat_details.h"
 #include "components/safe_browsing/content/common/safe_browsing.mojom.h"
@@ -124,6 +128,7 @@ const char kPageWithCrossOriginMaliciousIframe[] =
 const char kCrossOriginMaliciousIframeHost[] = "malware.test";
 const char kMaliciousIframe[] = "/safe_browsing/malware_iframe.html";
 const char kUnrelatedUrl[] = "https://www.google.com";
+const char kEnhancedProtectionUrl[] = "chrome://settings/security?q=enhanced";
 
 }  // namespace
 
@@ -183,7 +188,7 @@ Visibility GetVisibility(Browser* browser, const std::string& node_id) {
 bool Click(Browser* browser, const std::string& node_id) {
   DCHECK(node_id == "primary-button" || node_id == "proceed-link" ||
          node_id == "whitepaper-link" || node_id == "details-button" ||
-         node_id == "opt-in-checkbox")
+         node_id == "opt-in-checkbox" || node_id == "enhanced-protection-link")
       << "Unexpected node_id: " << node_id;
   content::RenderFrameHost* rfh = GetRenderFrameHost(browser);
   if (!rfh)
@@ -452,6 +457,8 @@ class TestSafeBrowsingBlockingPageFactory
         IsEnhancedProtectionEnabled(*prefs), is_proceed_anyway_disabled,
         true,  // should_open_links_in_new_tab
         always_show_back_to_safety_,
+        IsEnhancedProtectionMessageInInterstitialsEnabled(),
+        IsSafeBrowsingPolicyManaged(*prefs),
         "cpn_safe_browsing" /* help_center_article_link */);
     return new TestSafeBrowsingBlockingPage(
         delegate, web_contents, main_frame_url, unsafe_resources,
@@ -1227,7 +1234,13 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
   EXPECT_EQ(url, controller.GetVisibleEntry()->GetURL());
 }
 
-IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, LearnMore) {
+#if (defined(OS_MAC) && !defined(NDEBUG)) || defined(MEMORY_SANITIZER)
+// TODO(crbug.com/1132307): Address flaky timeout.
+#define MAYBE_LearnMore DISABLED_LearnMore
+#else
+#define MAYBE_LearnMore LearnMore
+#endif
+IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, MAYBE_LearnMore) {
   SetupWarningAndNavigate(browser());
 
   SafeBrowsingBlockingPage* sb_interstitial;
@@ -1408,8 +1421,16 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest, WhitelistUnsaved) {
   AssertNoInterstitial(true);
 }
 
+#if (defined(OS_MAC) && !defined(NDEBUG)) || defined(MEMORY_SANITIZER)
+// TODO(crbug.com/1132307): Address flay failure.
+#define MAYBE_VerifyHitReportSentOnSBERAndNotIncognito \
+  DISABLED_VerifyHitReportSentOnSBERAndNotIncognito
+#else
+#define MAYBE_VerifyHitReportSentOnSBERAndNotIncognito \
+  VerifyHitReportSentOnSBERAndNotIncognito
+#endif
 IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
-                       VerifyHitReportSentOnSBERAndNotIncognito) {
+                       MAYBE_VerifyHitReportSentOnSBERAndNotIncognito) {
   // The extended reporting opt-in is presented in the interstitial for malware,
   // phishing, and UwS threats.
   const bool expect_threat_details =
@@ -1744,8 +1765,14 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
 }
 
 // Check back and forward work correctly after clicking through an interstitial.
+#if (defined(OS_MAC) && !defined(NDEBUG)) || defined(MEMORY_SANITIZER)
+// TODO(crbug.com/1132307): Address flay failure.
+#define MAYBE_NavigatingBackAndForth DISABLED_NavigatingBackAndForth
+#else
+#define MAYBE_NavigatingBackAndForth NavigatingBackAndForth
+#endif
 IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
-                       NavigatingBackAndForth) {
+                       MAYBE_NavigatingBackAndForth) {
   // Load a safe page. (Despite the name, kMaliciousPage is not the page flagged
   // as bad in this test.)
   GURL safe_url(embedded_test_server()->GetURL(kMaliciousPage));
@@ -2654,6 +2681,144 @@ IN_PROC_BROWSER_TEST_P(
   // The interstitial should be shown immediately.
   EXPECT_TRUE(WaitForReady(browser()));
   EXPECT_TRUE(IsShowingInterstitial(contents));
+}
+
+class SafeBrowsingBlockingPageEnhancedProtectionMessageTest
+    : public policy::PolicyTest {
+ public:
+  SafeBrowsingBlockingPageEnhancedProtectionMessageTest() = default;
+
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        safe_browsing::kEnhancedProtectionMessageInInterstitials);
+    InProcessBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    content::SetupCrossSiteRedirector(embedded_test_server());
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
+
+  void CreatedBrowserMainParts(
+      content::BrowserMainParts* browser_main_parts) override {
+    // Test UI manager and test database manager should be set before
+    // the browser is started but after threads are created.
+    factory_.SetTestUIManager(new FakeSafeBrowsingUIManager());
+    factory_.SetTestDatabaseManager(new FakeSafeBrowsingDatabaseManager());
+    SafeBrowsingService::RegisterFactory(&factory_);
+    SafeBrowsingBlockingPage::RegisterFactory(&blocking_page_factory_);
+    ThreatDetails::RegisterFactory(&details_factory_);
+  }
+
+ protected:
+  void SetupWarningAndNavigateToURL(GURL url, Browser* browser) {
+    TestSafeBrowsingService* service = factory_.test_safe_browsing_service();
+    ASSERT_TRUE(service);
+
+    static_cast<FakeSafeBrowsingDatabaseManager*>(
+        service->database_manager().get())
+        ->SetURLThreatType(url, SB_THREAT_TYPE_URL_MALWARE);
+
+    ui_test_utils::NavigateToURL(browser, url);
+    EXPECT_TRUE(WaitForReady(browser));
+  }
+
+ private:
+  TestSafeBrowsingServiceFactory factory_;
+  TestSafeBrowsingBlockingPageFactory blocking_page_factory_;
+  TestThreatDetailsFactory details_factory_;
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(
+      SafeBrowsingBlockingPageEnhancedProtectionMessageTest);
+};
+
+IN_PROC_BROWSER_TEST_F(SafeBrowsingBlockingPageEnhancedProtectionMessageTest,
+                       VerifyEnhancedProtectionMessageShownAndClicked) {
+  safe_browsing::SetExtendedReportingPrefForTests(
+      browser()->profile()->GetPrefs(), true);
+  safe_browsing::SetSafeBrowsingState(
+      browser()->profile()->GetPrefs(),
+      safe_browsing::SafeBrowsingState::STANDARD_PROTECTION);
+  SetupWarningAndNavigateToURL(embedded_test_server()->GetURL("/empty.html"),
+                               browser());
+
+  // Check SBER opt in is not shown.
+  EXPECT_EQ(HIDDEN, ::safe_browsing::GetVisibility(
+                        browser(), "extended-reporting-opt-in"));
+  // Check enhanced protection message is shown.
+  EXPECT_EQ(VISIBLE, ::safe_browsing::GetVisibility(
+                         browser(), "enhanced-protection-message"));
+  WebContents* interstitial_tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(interstitial_tab);
+  ASSERT_TRUE(IsShowingInterstitial(
+      browser()->tab_strip_model()->GetActiveWebContents()));
+
+  content::TestNavigationObserver nav_observer(nullptr);
+  nav_observer.StartWatchingNewWebContents();
+  // Click the enhanced protection link.
+  EXPECT_TRUE(Click(browser(), "enhanced-protection-link"));
+
+  nav_observer.Wait();
+
+  // There are two tabs open.
+  EXPECT_EQ(2, browser()->tab_strip_model()->count());
+  // The second tab is visible.
+  EXPECT_EQ(1, browser()->tab_strip_model()->active_index());
+
+  // Assert the interstitial is not present in the foreground tab.
+  ASSERT_FALSE(IsShowingInterstitial(
+      browser()->tab_strip_model()->GetActiveWebContents()));
+
+  // Foreground tab displays the setting page.
+  WebContents* new_tab = browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(new_tab);
+  EXPECT_EQ(GURL(kEnhancedProtectionUrl), new_tab->GetURL());
+
+  // Interstitial should still display in the background tab.
+  browser()->tab_strip_model()->ActivateTabAt(
+      0, {TabStripModel::GestureType::kOther});
+  EXPECT_EQ(0, browser()->tab_strip_model()->active_index());
+  EXPECT_EQ(interstitial_tab,
+            browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_TRUE(IsShowingInterstitial(
+      browser()->tab_strip_model()->GetActiveWebContents()));
+}
+
+IN_PROC_BROWSER_TEST_F(SafeBrowsingBlockingPageEnhancedProtectionMessageTest,
+                       VerifyEnhancedProtectionMessageNotShownAlreadyInEp) {
+  safe_browsing::SetExtendedReportingPrefForTests(
+      browser()->profile()->GetPrefs(), true);
+  safe_browsing::SetSafeBrowsingState(
+      browser()->profile()->GetPrefs(),
+      safe_browsing::SafeBrowsingState::ENHANCED_PROTECTION);
+  SetupWarningAndNavigateToURL(embedded_test_server()->GetURL("/empty.html"),
+                               browser());
+  EXPECT_TRUE(IsShowingInterstitial(
+      browser()->tab_strip_model()->GetActiveWebContents()));
+  // Check enhanced protection message is not shown.
+  EXPECT_EQ(HIDDEN, ::safe_browsing::GetVisibility(
+                        browser(), "enhanced-protection-message"));
+}
+
+IN_PROC_BROWSER_TEST_F(SafeBrowsingBlockingPageEnhancedProtectionMessageTest,
+                       VerifyEnhancedProtectionMessageNotShownManaged) {
+  policy::PolicyMap policies;
+  policies.Set(policy::key::kSafeBrowsingProtectionLevel,
+               policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+               policy::POLICY_SOURCE_CLOUD,
+               base::Value(/* standard protection */ 1), nullptr);
+  UpdateProviderPolicy(policies);
+  SetupWarningAndNavigateToURL(embedded_test_server()->GetURL("/empty.html"),
+                               browser());
+
+  EXPECT_TRUE(IsShowingInterstitial(
+      browser()->tab_strip_model()->GetActiveWebContents()));
+  // Check enhanced protection message is not shown.
+  EXPECT_EQ(HIDDEN, ::safe_browsing::GetVisibility(
+                        browser(), "enhanced-protection-message"));
 }
 
 }  // namespace safe_browsing

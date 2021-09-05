@@ -20,8 +20,8 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/page_visibility_state.h"
+#include "content/public/common/result_codes.h"
 #include "content/public/common/url_constants.h"
-#include "services/service_manager/embedder/result_codes.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "weblayer/browser/browser_process.h"
 #include "weblayer/browser/cookie_settings_factory.h"
@@ -50,7 +50,10 @@
 #include "net/base/network_change_notifier.h"
 #include "weblayer/browser/android/metrics/uma_utils.h"
 #include "weblayer/browser/java/jni/MojoInterfaceRegistrar_jni.h"
+#include "weblayer/browser/media/local_presentation_manager_factory.h"
+#include "weblayer/browser/media/media_router_factory.h"
 #include "weblayer/browser/weblayer_factory_impl_android.h"
+#include "weblayer/common/features.h"
 #endif
 
 #if defined(USE_X11)
@@ -86,6 +89,12 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   TranslateRankerFactory::GetInstance();
   PrerenderLinkManagerFactory::GetInstance();
   PrerenderManagerFactory::GetInstance();
+#if defined(OS_ANDROID)
+  if (base::FeatureList::IsEnabled(features::kMediaRouter)) {
+    LocalPresentationManagerFactory::GetInstance();
+    MediaRouterFactory::GetInstance();
+  }
+#endif
 }
 
 void StopMessageLoop(base::OnceClosure quit_closure) {
@@ -131,7 +140,7 @@ int BrowserMainPartsImpl::PreCreateThreads() {
   }
 #endif
 
-  return service_manager::RESULT_CODE_NORMAL_EXIT;
+  return content::RESULT_CODE_NORMAL_EXIT;
 }
 
 void BrowserMainPartsImpl::PreMainMessageLoopStart() {
@@ -148,7 +157,7 @@ int BrowserMainPartsImpl::PreEarlyInitialization() {
   if (!features::IsUsingOzonePlatform())
     ui::SetDefaultX11ErrorHandlers();
 #endif
-#if defined(USE_AURA) && defined(OS_LINUX)
+#if defined(USE_AURA) && (defined(OS_LINUX) || defined(OS_CHROMEOS))
   ui::InitializeInputMethodForTesting();
 #endif
 #if defined(OS_ANDROID)
@@ -162,7 +171,7 @@ int BrowserMainPartsImpl::PreEarlyInitialization() {
       BrowserProcess::GetInstance()->GetSharedURLLoaderFactory());
   download_manager->set_application_locale(i18n::GetApplicationLocale());
 
-  return service_manager::RESULT_CODE_NORMAL_EXIT;
+  return content::RESULT_CODE_NORMAL_EXIT;
 }
 
 void BrowserMainPartsImpl::PreMainMessageLoopRun() {

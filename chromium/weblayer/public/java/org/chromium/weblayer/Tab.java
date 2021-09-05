@@ -55,8 +55,13 @@ public class Tab {
     private Profile.DownloadCallbackClientImpl mDownloadCallbackClient;
     private FullscreenCallbackClientImpl mFullscreenCallbackClient;
     private NewTabCallback mNewTabCallback;
+    private final ObserverList<ScrollOffsetCallback> mScrollOffsetCallbacks;
     // Id from the remote side.
     private final int mId;
+
+    // See comments in onTabDestroyed() for details.
+    // TODO(sky): this is necessary for < 87. Remove in 90.
+    private boolean mDestroyOnRemove;
 
     // Constructor for test mocking.
     protected Tab() {
@@ -65,6 +70,7 @@ public class Tab {
         mFindInPageController = null;
         mMediaCaptureController = null;
         mCallbacks = null;
+        mScrollOffsetCallbacks = null;
         mId = 0;
     }
 
@@ -79,6 +85,7 @@ public class Tab {
         }
 
         mCallbacks = new ObserverList<TabCallback>();
+        mScrollOffsetCallbacks = new ObserverList<ScrollOffsetCallback>();
         mNavigationController = NavigationController.create(mImpl);
         mFindInPageController = new FindInPageController(mImpl);
         mMediaCaptureController = new MediaCaptureController(mImpl);
@@ -107,6 +114,12 @@ public class Tab {
         return tabs;
     }
 
+    private void throwIfDestroyed() {
+        if (mImpl == null) {
+            throw new IllegalStateException("Tab can not be used once destroyed");
+        }
+    }
+
     int getId() {
         return mId;
     }
@@ -118,6 +131,7 @@ public class Tab {
     @NonNull
     public Browser getBrowser() {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         return mBrowser;
     }
 
@@ -126,6 +140,7 @@ public class Tab {
      */
     public void setDownloadCallback(@Nullable DownloadCallback callback) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         try {
             if (callback != null) {
                 mDownloadCallbackClient = new Profile.DownloadCallbackClientImpl(callback);
@@ -141,6 +156,7 @@ public class Tab {
 
     public void setErrorPageCallback(@Nullable ErrorPageCallback callback) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         try {
             mImpl.setErrorPageCallbackClient(
                     callback == null ? null : new ErrorPageCallbackClientImpl(callback));
@@ -151,6 +167,7 @@ public class Tab {
 
     public void setFullscreenCallback(@Nullable FullscreenCallback callback) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         try {
             if (callback != null) {
                 mFullscreenCallbackClient = new FullscreenCallbackClientImpl(callback);
@@ -183,6 +200,7 @@ public class Tab {
      */
     public @NonNull FaviconFetcher createFaviconFetcher(@NonNull FaviconCallback callback) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         if (WebLayer.getSupportedMajorVersionInternal() < 86) {
             throw new UnsupportedOperationException();
         }
@@ -200,6 +218,7 @@ public class Tab {
      */
     public void setTranslateTargetLanguage(@NonNull String targetLanguage) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         if (WebLayer.getSupportedMajorVersionInternal() < 86) {
             throw new UnsupportedOperationException();
         }
@@ -223,6 +242,7 @@ public class Tab {
     public void executeScript(@NonNull String script, boolean useSeparateIsolate,
             @Nullable ValueCallback<JSONObject> callback) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         try {
             ValueCallback<String> stringCallback = (String result) -> {
                 if (callback == null) {
@@ -248,12 +268,10 @@ public class Tab {
      * asynchronously closes the tab.
      *
      * If there is a beforeunload handler a dialog is shown to the user which will allow them to
-     * choose whether to proceed with closing the tab. If the WebLayer implementation is < 84 the
-     * closure will be notified via {@link NewTabCallback#onCloseTab}; on 84 and above, WebLayer
-     * closes the tab internally and the embedder will be notified via
-     * TabListCallback#onTabRemoved(). The tab will not close if the user chooses to cancel the
-     * action. If there is no beforeunload handler, the tab closure will be asynchronous (but
-     * immediate) and will be notified in the same way.
+     * choose whether to proceed with closing the tab. WebLayer closes the tab internally and the
+     * embedder will be notified via TabListCallback#onTabRemoved(). The tab will not close if the
+     * user chooses to cancel the action. If there is no beforeunload handler, the tab closure will
+     * be asynchronous (but immediate) and will be notified in the same way.
      *
      * To close the tab synchronously without running beforeunload, use {@link Browser#destroyTab}.
      *
@@ -261,9 +279,7 @@ public class Tab {
      */
     public void dispatchBeforeUnloadAndClose() {
         ThreadCheck.ensureOnUiThread();
-        if (WebLayer.getSupportedMajorVersionInternal() < 82) {
-            throw new UnsupportedOperationException();
-        }
+        throwIfDestroyed();
         try {
             mImpl.dispatchBeforeUnloadAndClose();
         } catch (RemoteException e) {
@@ -285,9 +301,7 @@ public class Tab {
      */
     public boolean dismissTransientUi() {
         ThreadCheck.ensureOnUiThread();
-        if (WebLayer.getSupportedMajorVersionInternal() < 82) {
-            throw new UnsupportedOperationException();
-        }
+        throwIfDestroyed();
         try {
             return mImpl.dismissTransientUi();
         } catch (RemoteException e) {
@@ -297,6 +311,7 @@ public class Tab {
 
     public void setNewTabCallback(@Nullable NewTabCallback callback) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         mNewTabCallback = callback;
         try {
             mImpl.setNewTabsEnabled(mNewTabCallback != null);
@@ -308,59 +323,105 @@ public class Tab {
     @Nullable
     public FullscreenCallback getFullscreenCallback() {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         return mFullscreenCallbackClient != null ? mFullscreenCallbackClient.getCallback() : null;
     }
 
     @NonNull
     public NavigationController getNavigationController() {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         return mNavigationController;
     }
 
     @NonNull
     public FindInPageController getFindInPageController() {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         return mFindInPageController;
     }
 
     @NonNull
     public MediaCaptureController getMediaCaptureController() {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         return mMediaCaptureController;
     }
 
     public void registerTabCallback(@NonNull TabCallback callback) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         mCallbacks.addObserver(callback);
     }
 
     public void unregisterTabCallback(@NonNull TabCallback callback) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         mCallbacks.removeObserver(callback);
     }
 
     /**
-     * Take a screenshot of this tab and return it as a Bitmap.
-     * This API captures only the web content, not any Java Views, including the
-     * view in Browser.setTopView. The browser top view shrinks the height of
-     * the screenshot if it is not completely hidden.
-     * This method will fail if
-     * * the Fragment of this Tab is not started during the operation
-     * * this tab is not the active tab in its Browser
-     * * if scale is not in the range (0, 1]
-     * * Bitmap allocation fails
-     * The API is asynchronous when successful, but can be synchronous on
-     * failure. So embedder must take care when implementing resultCallback to
-     * allow reentrancy.
+     * Registers {@link callback} to be notified when the scroll offset changes. <b>WARNING:</b>
+     * adding a {@link ScrollOffsetCallback} impacts performance, ensure
+     * {@link ScrollOffsetCallback} are only installed when needed. See {@link ScrollOffsetCallback}
+     * for more details.
+     *
+     * @param callback The ScrollOffsetCallback to notify
+     *
+     * @since 87
+     */
+    public void registerScrollOffsetCallback(@NonNull ScrollOffsetCallback callback) {
+        ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
+        if (WebLayer.getSupportedMajorVersionInternal() < 87) {
+            throw new UnsupportedOperationException();
+        }
+        if (mScrollOffsetCallbacks.isEmpty()) {
+            try {
+                mImpl.setScrollOffsetsEnabled(true);
+            } catch (RemoteException e) {
+                throw new APICallException(e);
+            }
+        }
+        mScrollOffsetCallbacks.addObserver(callback);
+    }
+
+    public void unregisterScrollOffsetCallback(@NonNull ScrollOffsetCallback callback) {
+        ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
+        if (WebLayer.getSupportedMajorVersionInternal() < 87) {
+            throw new UnsupportedOperationException();
+        }
+        mScrollOffsetCallbacks.removeObserver(callback);
+        if (mScrollOffsetCallbacks.isEmpty()) {
+            try {
+                mImpl.setScrollOffsetsEnabled(false);
+            } catch (RemoteException e) {
+                throw new APICallException(e);
+            }
+        }
+    }
+
+    /**
+     * Take a screenshot of this tab and return it as a Bitmap.
+     * This API captures only the web content, not any Java Views, including the
+     * view in Browser.setTopView. The browser top view shrinks the height of
+     * the screenshot if it is not completely hidden.
+     * This method will fail if
+     * * the Fragment of this Tab is not started during the operation
+     * * this tab is not the active tab in its Browser
+     * * if scale is not in the range (0, 1]
+     * * Bitmap allocation fails
+     * The API is asynchronous when successful, but can be synchronous on
+     * failure. So embedder must take care when implementing resultCallback to
+     * allow reentrancy.
      * @param scale Scale applied to the Bitmap.
-     * @param resultCallback Called when operation is complete.
+     * @param resultCallback Called when operation is complete.
      * @since 84
      */
     public void captureScreenShot(float scale, @NonNull CaptureScreenShotCallback callback) {
         ThreadCheck.ensureOnUiThread();
-        if (WebLayer.getSupportedMajorVersionInternal() < 84) {
-            throw new UnsupportedOperationException();
-        }
+        throwIfDestroyed();
         try {
             mImpl.captureScreenShot(scale,
                     ObjectWrapper.wrap(
@@ -385,9 +446,7 @@ public class Tab {
     @NonNull
     public String getGuid() {
         ThreadCheck.ensureOnUiThread();
-        if (WebLayer.getSupportedMajorVersionInternal() < 82) {
-            throw new UnsupportedOperationException();
-        }
+        throwIfDestroyed();
         try {
             return mImpl.getGuid();
         } catch (RemoteException e) {
@@ -408,6 +467,7 @@ public class Tab {
      */
     public void setData(@NonNull Map<String, String> data) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         if (WebLayer.getSupportedMajorVersionInternal() < 85) {
             throw new UnsupportedOperationException();
         }
@@ -429,6 +489,7 @@ public class Tab {
     @NonNull
     public Map<String, String> getData() {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         if (WebLayer.getSupportedMajorVersionInternal() < 85) {
             throw new UnsupportedOperationException();
         }
@@ -448,6 +509,7 @@ public class Tab {
      */
     public void setGoogleAccountsCallback(@Nullable GoogleAccountsCallback callback) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         if (WebLayer.getSupportedMajorVersionInternal() < 86) {
             throw new UnsupportedOperationException();
         }
@@ -602,6 +664,7 @@ public class Tab {
     public void registerWebMessageCallback(@NonNull WebMessageCallback callback,
             @NonNull String jsObjectName, @NonNull List<String> allowedOrigins) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         if (WebLayer.getSupportedMajorVersionInternal() < 85) {
             throw new UnsupportedOperationException();
         }
@@ -622,6 +685,7 @@ public class Tab {
      */
     public void unregisterWebMessageCallback(@NonNull String jsObjectName) {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         if (WebLayer.getSupportedMajorVersionInternal() < 85) {
             throw new UnsupportedOperationException();
         }
@@ -639,6 +703,7 @@ public class Tab {
      */
     public boolean canTranslate() {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         if (WebLayer.getSupportedMajorVersionInternal() < 85) {
             throw new UnsupportedOperationException();
         }
@@ -656,6 +721,7 @@ public class Tab {
      */
     public void showTranslateUi() {
         ThreadCheck.ensureOnUiThread();
+        throwIfDestroyed();
         if (WebLayer.getSupportedMajorVersionInternal() < 85) {
             throw new UnsupportedOperationException();
         }
@@ -663,6 +729,15 @@ public class Tab {
             mImpl.showTranslateUi();
         } catch (RemoteException e) {
             throw new APICallException(e);
+        }
+    }
+
+    // Called by Browser when removed.
+    void onRemovedFromBrowser() {
+        if (mDestroyOnRemove) {
+            unregisterTab(this);
+            mDestroyOnRemove = false;
+            mImpl = null;
         }
     }
 
@@ -725,24 +800,19 @@ public class Tab {
         }
 
         @Override
-        public void onCloseTab() {
-            StrictModeWorkaround.apply();
-
-            // Prior to 84 this method was used to signify that the embedder should take action to
-            // close the Tab; 84+ it's deprecated and no longer sent..
-            assert WebLayer.getSupportedMajorVersionInternal() < 84;
-
-            // This should only be hit if setNewTabCallback() has been called with a non-null
-            // value.
-            assert mNewTabCallback != null;
-            mNewTabCallback.onCloseTab();
-        }
-
-        @Override
         public void onTabDestroyed() {
-            // Ensure that the app will fail fast if the embedder mistakenly tries to call back
-            // into the implementation via this Tab.
-            mImpl = null;
+            // Prior to 87 this was called *before* onTabRemoved(). Post 87 this is called after
+            // onTabRemoved(). onTabRemoved() needs the Tab to be registered, so unregisterTab()
+            // should only be called in >= 87 (in < 87 it is called from
+            // Browser.prepareForDestroy()).
+            if (WebLayer.getSupportedMajorVersionInternal() >= 87) {
+                unregisterTab(Tab.this);
+                // Ensure that the app will fail fast if the embedder mistakenly tries to call back
+                // into the implementation via this Tab.
+                mImpl = null;
+            } else {
+                mDestroyOnRemove = true;
+            }
         }
 
         @Override
@@ -811,6 +881,14 @@ public class Tab {
                 callback.onScrollNotification(notificationType, currentScrollRatio);
             }
         }
+
+        @Override
+        public void onVerticalScrollOffsetChanged(int value) {
+            StrictModeWorkaround.apply();
+            for (ScrollOffsetCallback callback : mScrollOffsetCallbacks) {
+                callback.onVerticalScrollOffsetChanged(value);
+            }
+        }
     }
 
     private static final class ErrorPageCallbackClientImpl extends IErrorPageCallbackClient.Stub {
@@ -874,12 +952,14 @@ public class Tab {
         @Override
         public void onGoogleAccountsRequest(
                 int serviceType, String email, String continueUrl, boolean isSameTab) {
+            StrictModeWorkaround.apply();
             mCallback.onGoogleAccountsRequest(new GoogleAccountsParams(
                     serviceType, email, Uri.parse(continueUrl), isSameTab));
         }
 
         @Override
         public String getGaiaId() {
+            StrictModeWorkaround.apply();
             return mCallback.getGaiaId();
         }
     }

@@ -17,21 +17,67 @@ void NearbyShareCertificateManager::RemoveObserver(Observer* observer) {
 }
 
 void NearbyShareCertificateManager::Start() {
-  DCHECK(!is_running_);
+  if (is_running_)
+    return;
+
   is_running_ = true;
   OnStart();
 }
 
 void NearbyShareCertificateManager::Stop() {
-  DCHECK(is_running_);
+  if (!is_running_)
+    return;
+
   is_running_ = false;
   OnStop();
 }
 
-void NearbyShareCertificateManager::NotifyPublicCertificatesDownloaded(
-    bool new_certs_added) {
+base::Optional<NearbyShareEncryptedMetadataKey>
+NearbyShareCertificateManager::EncryptPrivateCertificateMetadataKey(
+    nearby_share::mojom::Visibility visibility) {
+  base::Optional<NearbySharePrivateCertificate> cert =
+      GetValidPrivateCertificate(visibility);
+  if (!cert)
+    return base::nullopt;
+
+  base::Optional<NearbyShareEncryptedMetadataKey> encrypted_key =
+      cert->EncryptMetadataKey();
+
+  // Every salt consumed to encrypt the metadata encryption key is tracked by
+  // the NearbySharePrivateCertificate. Update the private certificate in
+  // storage to reflect the new list of consumed salts.
+  UpdatePrivateCertificateInStorage(*cert);
+
+  return encrypted_key;
+}
+
+base::Optional<std::vector<uint8_t>>
+NearbyShareCertificateManager::SignWithPrivateCertificate(
+    nearby_share::mojom::Visibility visibility,
+    base::span<const uint8_t> payload) const {
+  base::Optional<NearbySharePrivateCertificate> cert =
+      GetValidPrivateCertificate(visibility);
+  if (!cert)
+    return base::nullopt;
+
+  return cert->Sign(payload);
+}
+
+base::Optional<std::vector<uint8_t>>
+NearbyShareCertificateManager::HashAuthenticationTokenWithPrivateCertificate(
+    nearby_share::mojom::Visibility visibility,
+    base::span<const uint8_t> authentication_token) const {
+  base::Optional<NearbySharePrivateCertificate> cert =
+      GetValidPrivateCertificate(visibility);
+  if (!cert)
+    return base::nullopt;
+
+  return cert->HashAuthenticationToken(authentication_token);
+}
+
+void NearbyShareCertificateManager::NotifyPublicCertificatesDownloaded() {
   for (auto& observer : observers_)
-    observer.OnPublicCertificatesDownloaded(new_certs_added);
+    observer.OnPublicCertificatesDownloaded();
 }
 
 void NearbyShareCertificateManager::NotifyPrivateCertificatesChanged() {

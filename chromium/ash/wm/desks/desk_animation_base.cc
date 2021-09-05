@@ -7,39 +7,24 @@
 #include "ash/shell.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desks_controller.h"
-#include "ash/wm/window_util.h"
+#include "ash/wm/desks/desks_util.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/compositor/compositor.h"
 
 namespace ash {
 
-namespace {
-
-// Selects and returns the compositor to measure the animation smoothness.
-ui::Compositor* GetSelectedCompositorForAnimationSmoothness() {
-  // Favor the compositor associated with the active window's root window (if
-  // any), or that of the primary root window.
-  auto* active_window = window_util::GetActiveWindow();
-  auto* selected_root = active_window && active_window->GetRootWindow()
-                            ? active_window->GetRootWindow()
-                            : Shell::GetPrimaryRootWindow();
-  DCHECK(selected_root);
-  return selected_root->layer()->GetCompositor();
-}
-
-}  // namespace
-
-// -----------------------------------------------------------------------------
-// DeskAnimationBase:
-
 DeskAnimationBase::DeskAnimationBase(DesksController* controller,
-                                     const Desk* ending_desk)
+                                     int ending_desk_index,
+                                     bool is_continuous_gesture_animation)
     : controller_(controller),
-      ending_desk_(ending_desk),
-      throughput_tracker_(GetSelectedCompositorForAnimationSmoothness()
-                              ->RequestNewThroughputTracker()) {
+      ending_desk_index_(ending_desk_index),
+      is_continuous_gesture_animation_(is_continuous_gesture_animation),
+      throughput_tracker_(
+          desks_util::GetSelectedCompositorForPerformanceMetrics()
+              ->RequestNewThroughputTracker()) {
   DCHECK(controller_);
-  DCHECK(ending_desk_);
+  DCHECK_LE(ending_desk_index_, int{controller_->desks().size()});
+  DCHECK_GE(ending_desk_index_, 0);
 }
 
 DeskAnimationBase::~DeskAnimationBase() = default;
@@ -58,14 +43,26 @@ void DeskAnimationBase::Launch() {
   // This window must be able to accept events (See
   // `aura::Window::CanAcceptEvent()`) even though its desk is still being
   // activated. https://crbug.com/1008574.
-  const_cast<Desk*>(ending_desk_)->PrepareForActivationAnimation();
+  controller_->desks()[ending_desk_index_]->PrepareForActivationAnimation();
 
   DCHECK(!desk_switch_animators_.empty());
   for (auto& animator : desk_switch_animators_)
     animator->TakeStartingDeskScreenshot();
 }
 
-void DeskAnimationBase::OnStartingDeskScreenshotTaken(const Desk* ending_desk) {
+bool DeskAnimationBase::Replace(bool moving_left, DesksSwitchSource source) {
+  return false;
+}
+
+bool DeskAnimationBase::UpdateSwipeAnimation(float scroll_delta_x) {
+  return false;
+}
+
+bool DeskAnimationBase::EndSwipeAnimation() {
+  return false;
+}
+
+void DeskAnimationBase::OnStartingDeskScreenshotTaken(int ending_desk_index) {
   DCHECK(!desk_switch_animators_.empty());
 
   // Once all starting desk screenshots on all roots are taken and placed on
@@ -81,7 +78,7 @@ void DeskAnimationBase::OnStartingDeskScreenshotTaken(const Desk* ending_desk) {
   for (auto* root : roots)
     root->GetHost()->compositor()->SetAllowLocksToExtendTimeout(true);
 
-  OnStartingDeskScreenshotTakenInternal(ending_desk);
+  OnStartingDeskScreenshotTakenInternal(ending_desk_index);
 
   for (auto* root : roots)
     root->GetHost()->compositor()->SetAllowLocksToExtendTimeout(false);
@@ -101,6 +98,12 @@ void DeskAnimationBase::OnEndingDeskScreenshotTaken() {
     if (!animator->ending_desk_screenshot_taken())
       return;
   }
+
+  // Continuous gesture animations do not want to start an animation on
+  // creation/replacement (because they want to update). They will request an
+  // animation explicitly if they need (gesture end).
+  if (is_continuous_gesture_animation_)
+    return;
 
   for (auto& animator : desk_switch_animators_)
     animator->StartAnimation();

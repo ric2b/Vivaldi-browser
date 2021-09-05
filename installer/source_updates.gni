@@ -79,6 +79,7 @@ if (is_linux && !is_component_build) {
       "//vivaldi/installer/linux/common/vivaldi.info",
       "//vivaldi/installer/linux/common/wrapper",
       "//vivaldi/installer/linux/common/xfce-helper.template",
+      "//vivaldi/installer/win/EULA.html",
     ]
   }
 }

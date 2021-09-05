@@ -12,13 +12,18 @@ class GroupNode extends SAChildNode {
   /**
    * @param {!Array<!SAChildNode>} children The nodes that this group contains.
    *     Should not include the back button.
+   * @param {!AutomationNode} containingNode The automation node most closely
+   * containing the children.
    * @private
    */
-  constructor(children) {
+  constructor(children, containingNode) {
     super();
 
-    /** @type {!Array<!SAChildNode>} */
+    /** @private {!Array<!SAChildNode>} */
     this.children_ = children;
+
+    /** @private {!AutomationNode} */
+    this.containingNode_ = containingNode;
   }
 
   // ================= Getters and setters =================
@@ -30,13 +35,14 @@ class GroupNode extends SAChildNode {
 
   /** @override */
   get automationNode() {
-    return null;
+    return this.containingNode_;
   }
 
   /** @override */
   get location() {
-    const childLocations = this.children_.map(c => c.location);
-    return RectHelper.unionAll(childLocations);
+    const childLocations =
+        this.children_.filter(c => c.isValidAndVisible()).map(c => c.location);
+    return RectUtil.unionAll(childLocations);
   }
 
   /** @override */
@@ -48,12 +54,10 @@ class GroupNode extends SAChildNode {
 
   /** @override */
   asRootNode() {
-    const root = new SARootNode();
+    const root = new SARootNode(this.containingNode_);
 
-    const children = [];
-    for (const child of this.children_) {
-      children.push(child);
-    }
+    // Make a copy of the children array.
+    const children = [...this.children_];
 
     children.push(new BackButtonNode(root));
     root.children = children;
@@ -123,9 +127,10 @@ class GroupNode extends SAChildNode {
   /**
    * Assumes nodes are visually in rows.
    * @param {!Array<!SAChildNode>} nodes
+   * @param {!AutomationNode} containingNode
    * @return {!Array<!GroupNode>}
    */
-  static separateByRow(nodes) {
+  static separateByRow(nodes, containingNode) {
     const result = [];
 
     for (let i = 0; i < nodes.length;) {
@@ -134,18 +139,12 @@ class GroupNode extends SAChildNode {
       i++;
 
       while (i < nodes.length &&
-             RectHelper.sameRow(children[0].location, nodes[i].location)) {
+             RectUtil.sameRow(children[0].location, nodes[i].location)) {
         children.push(nodes[i]);
         i++;
       }
-      if (children.length <= 1) {
-        throw SwitchAccess.error(
-            SAConstants.ErrorType.ROW_TOO_SHORT,
-            'Cannot group row with only one element.',
-            true /* shouldRecover */);
-      }
 
-      result.push(new GroupNode(children));
+      result.push(new GroupNode(children, containingNode));
     }
 
     return result;

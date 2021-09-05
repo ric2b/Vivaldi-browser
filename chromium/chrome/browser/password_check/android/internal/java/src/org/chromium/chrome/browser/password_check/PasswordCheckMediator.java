@@ -59,6 +59,7 @@ class PasswordCheckMediator
     private HashSet<CompromisedCredential> mPreCheckSet;
     private final PasswordCheckIconHelper mIconHelper;
     private long mLastStatusUpdate;
+    private boolean mCctIsOpened;
 
     PasswordCheckMediator(PasswordCheckChangePasswordHelper changePasswordDelegate,
             PasswordCheckReauthenticationHelper reauthenticationHelper,
@@ -73,6 +74,7 @@ class PasswordCheckMediator
         mModel = model;
         mDelegate = delegate;
         mLaunchCheckupInAccount = launchCheckupInAccount;
+        mCctIsOpened = false;
 
         PasswordCheckMetricsRecorder.recordPasswordCheckReferrer(passwordCheckReferrer);
 
@@ -86,6 +88,26 @@ class PasswordCheckMediator
             PasswordCheckMetricsRecorder.recordUiUserAction(
                     PasswordCheckUserAction.START_CHECK_AUTOMATICALLY);
             getPasswordCheck().startCheck();
+        }
+    }
+
+    void onResumeFragment() {
+        // If the fragment is resumed, a CCT is closed.
+        mCctIsOpened = false;
+    }
+
+    void onUserLeavesCheckPage() {
+        // A user can leave the page because they opened a CCT in browser. As a user is fixing a
+        // compromised credential, don't count such a case as a user |DID_NOTHING| for the remaining
+        // credentials.
+        if (!mCctIsOpened) {
+            // A user closes the check page.
+            ListModel<ListItem> items = mModel.get(ITEMS);
+            for (int i = 1; i < items.size(); i++) {
+                PasswordCheckMetricsRecorder.recordCheckResolutionAction(
+                        PasswordCheckResolutionAction.DID_NOTHING,
+                        items.get(i).model.get(COMPROMISED_CREDENTIAL));
+            }
         }
     }
 
@@ -229,6 +251,8 @@ class PasswordCheckMediator
                     public void onClick(DialogInterface dialog, int which) {
                         PasswordCheckMetricsRecorder.recordUiUserAction(
                                 PasswordCheckUserAction.DELETED_PASSWORD);
+                        PasswordCheckMetricsRecorder.recordCheckResolutionAction(
+                                PasswordCheckResolutionAction.DELETED_PASSWORD, credential);
                         if (which != AlertDialog.BUTTON_POSITIVE) return;
                         mDelegate.removeCredential(credential);
                         mModel.set(DELETION_CONFIRMATION_HANDLER, null);
@@ -274,17 +298,23 @@ class PasswordCheckMediator
 
     @Override
     public void onChangePasswordButtonClick(CompromisedCredential credential) {
-        PasswordCheckMetricsRecorder.recordUiUserAction(credential.hasScript()
+        PasswordCheckMetricsRecorder.recordUiUserAction(credential.hasAutoChangeButton()
                         ? PasswordCheckUserAction.CHANGE_PASSWORD_MANUALLY
                         : PasswordCheckUserAction.CHANGE_PASSWORD);
+        PasswordCheckMetricsRecorder.recordCheckResolutionAction(
+                PasswordCheckResolutionAction.OPENED_SITE, credential);
+        mCctIsOpened = true;
         mChangePasswordDelegate.launchAppOrCctWithChangePasswordUrl(credential);
     }
 
     @Override
     public void onChangePasswordWithScriptButtonClick(CompromisedCredential credential) {
-        assert credential.hasScript();
+        assert credential.hasAutoChangeButton();
         PasswordCheckMetricsRecorder.recordUiUserAction(
                 PasswordCheckUserAction.CHANGE_PASSWORD_AUTOMATICALLY);
+        PasswordCheckMetricsRecorder.recordCheckResolutionAction(
+                PasswordCheckResolutionAction.STARTED_SCRIPT, credential);
+        mCctIsOpened = true;
         mChangePasswordDelegate.launchCctWithScript(credential);
     }
 
@@ -350,7 +380,7 @@ class PasswordCheckMediator
         mIconHelper.getLargeIcon(credential, (faviconOrFallback) -> {
             credentialModel.set(FAVICON_OR_FALLBACK, faviconOrFallback);
         });
-        return new ListItem(credential.hasScript()
+        return new ListItem(credential.hasAutoChangeButton()
                         ? PasswordCheckProperties.ItemType.COMPROMISED_CREDENTIAL_WITH_SCRIPT
                         : PasswordCheckProperties.ItemType.COMPROMISED_CREDENTIAL,
                 credentialModel);

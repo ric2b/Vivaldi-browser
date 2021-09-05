@@ -2,9 +2,17 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/linux/pkg_config.gni")
 import("//build/config/ui.gni")
 import("//chrome/common/features.gni")
 import("//testing/test.gni")
+import("//ui/base/ui_features.gni")
+
+if (use_xkbcommon) {
+  pkg_config("xkbcommon") {
+    packages = [ "xkbcommon" ]
+  }
+}
 
 static_library("exo") {
   sources = [
@@ -25,6 +33,10 @@ static_library("exo") {
     "display.h",
     "drag_drop_operation.cc",
     "drag_drop_operation.h",
+    "extended_drag_offer.cc",
+    "extended_drag_offer.h",
+    "extended_drag_source.cc",
+    "extended_drag_source.h",
     "frame_sink_resource_manager.cc",
     "frame_sink_resource_manager.h",
     "input_trace.h",
@@ -115,6 +127,7 @@ static_library("exo") {
       "//ash/keyboard/ui",
       "//ash/public/cpp",
       "//chromeos/constants",
+      "//ui/events/ozone/layout",
     ]
     sources += [
       "client_controlled_accelerators.cc",
@@ -131,6 +144,7 @@ static_library("exo") {
       "input_method_surface_manager.h",
       "keyboard.cc",
       "keyboard.h",
+      "keyboard_modifiers.h",
       "notification.cc",
       "notification.h",
       "notification_surface.cc",
@@ -145,11 +159,18 @@ static_library("exo") {
       "toast_surface.cc",
       "toast_surface.h",
       "toast_surface_manager.h",
+      "ui_lock_controller.cc",
+      "ui_lock_controller.h",
       "wm_helper_chromeos.cc",
       "wm_helper_chromeos.h",
       "xdg_shell_surface.cc",
       "xdg_shell_surface.h",
+      "xkb_tracker.cc",
+      "xkb_tracker.h",
     ]
+    if (use_xkbcommon) {
+      configs += [ ":xkbcommon" ]
+    }
   }
 
   if (is_chromecast) {
@@ -268,6 +289,7 @@ source_set("unit_tests") {
       "text_input_unittest.cc",
       "toast_surface_unittest.cc",
       "touch_unittest.cc",
+      "ui_lock_controller_unittest.cc",
       "xdg_shell_surface_unittest.cc",
     ]
 
@@ -290,6 +312,8 @@ source_set("unit_tests") {
 }
 
 test("exo_unittests") {
+  use_xvfb = use_xvfb_in_this_config
+
   sources = [ "test/run_all_unittests.cc" ]
 
   deps = [

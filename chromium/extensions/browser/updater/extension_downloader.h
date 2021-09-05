@@ -23,8 +23,11 @@
 #include "extensions/browser/updater/request_queue.h"
 #include "extensions/browser/updater/safe_manifest_parser.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_id.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/http/http_request_headers.h"
+#include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "url/gurl.h"
 
 namespace crx_file {
@@ -40,9 +43,6 @@ struct AccessTokenInfo;
 namespace network {
 class SharedURLLoaderFactory;
 class SimpleURLLoader;
-namespace mojom {
-class URLLoaderFactory;
-}
 struct ResourceRequest;
 }  // namespace network
 
@@ -200,14 +200,16 @@ class ExtensionDownloader {
                    const GURL& url,
                    const std::string& package_hash,
                    const std::string& version,
-                   const std::set<int>& request_ids);
+                   const std::set<int>& request_ids,
+                   ManifestFetchData::FetchPriority fetch_priority);
     ~ExtensionFetch();
 
-    std::string id;
+    ExtensionId id;
     GURL url;
     std::string package_hash;
-    std::string version;
+    base::Version version;
     std::set<int> request_ids;
+    ManifestFetchData::FetchPriority fetch_priority;
 
     enum CredentialsMode {
       CREDENTIALS_NONE = 0,
@@ -370,12 +372,12 @@ class ExtensionDownloader {
   // arguments because there is no guarantee that callback won't indirectly
   // change source of IDs.
   void NotifyExtensionsDownloadStageChanged(
-      std::set<std::string> extension_ids,
+      ExtensionIdSet extension_ids,
       ExtensionDownloaderDelegate::Stage stage);
 
   // Calls NotifyExtensionsDownloadFailedWithFailureData with empty failure
   // data.
-  void NotifyExtensionsDownloadFailed(std::set<std::string> id_set,
+  void NotifyExtensionsDownloadFailed(ExtensionIdSet id_set,
                                       std::set<int> request_ids,
                                       ExtensionDownloaderDelegate::Error error);
 
@@ -384,7 +386,7 @@ class ExtensionDownloader {
   // a copy of arguments because there is no guarantee that callback won't
   // indirectly change source of IDs.
   void NotifyExtensionsDownloadFailedWithFailureData(
-      std::set<std::string> extension_ids,
+      ExtensionIdSet extension_ids,
       std::set<int> request_ids,
       ExtensionDownloaderDelegate::Error error,
       const ExtensionDownloaderDelegate::FailureData& data);
@@ -441,7 +443,7 @@ class ExtensionDownloader {
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   // The URL loader factory exclusively used to load file:// URLs.
-  std::unique_ptr<network::mojom::URLLoaderFactory> file_url_loader_factory_;
+  mojo::Remote<network::mojom::URLLoaderFactory> file_url_loader_factory_;
 
   // The profile path used to load file:// URLs. It can be invalid.
   base::FilePath profile_path_for_url_loader_factory_;
@@ -466,7 +468,7 @@ class ExtensionDownloader {
   RequestQueue<ExtensionFetch> extensions_queue_;
 
   // Maps an extension-id to its PingResult data.
-  std::map<std::string, ExtensionDownloaderDelegate::PingResult> ping_results_;
+  std::map<ExtensionId, ExtensionDownloaderDelegate::PingResult> ping_results_;
 
   // Cache for .crx files.
   ExtensionCache* extension_cache_;

@@ -24,12 +24,6 @@
 # crbug/1040088
 -org.chromium.chrome.browser.payments.PaymentRequestRetryTest.testRetryWithShippingAddressErrorsAndPayerErrors
 
-# crbug/1036553
--org.chromium.chrome.browser.translate.TranslateCompactInfoBarTest.testTabMenuDismissedOnOrientationChange
--org.chromium.chrome.browser.translate.TranslateCompactInfoBarTest.testTranslateCompactInfoBarAppears
--org.chromium.chrome.browser.translate.TranslateCompactInfoBarTest.testTranslateCompactInfoBarOverflowMenus
--org.chromium.chrome.browser.translate.TranslateCompactInfoBarTest.testTranslateCompactInfoBarReopenOnTarget
-
 # crbug.com/1059168
 -org.chromium.chrome.browser.autofill_assistant.AutofillAssistantBottomsheetTest.testNoResize
 -org.chromium.chrome.browser.autofill_assistant.AutofillAssistantBottomsheetTest.testResizeLayoutViewport
@@ -74,9 +68,6 @@
 
 # crbug.com/1061214
 -org.chromium.chrome.browser.customtabs.CustomTabActivityTest.testHiddenTabAndChangingFragmentDontWait
-
-# crbug.com/1061216
--org.chromium.chrome.browser.gesturenav.NavigationHandlerTest.testRightSwipeNavigateForwardOnNativePage
 
 # crbug.com/1058877
 -org.chromium.chrome.browser.autofill.AutofillUpstreamTest.testSaveCardInfoBarContinueButton_EmptyExpDate_launchesExpDateFixFlow

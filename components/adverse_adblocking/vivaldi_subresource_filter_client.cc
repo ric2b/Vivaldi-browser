@@ -9,11 +9,14 @@
 #include "base/task/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/subresource_filter/ads_intervention_manager.h"
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 #include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_throttle.h"
+#include "components/safe_browsing/core/db/database_manager.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/ruleset_service.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -39,6 +42,9 @@ VivaldiSubresourceFilterClient::VivaldiSubresourceFilterClient(
   throttle_manager_ = std::make_unique<
       subresource_filter::ContentSubresourceFilterThrottleManager>(
       this, dealer, web_contents);
+  profile_context_ = SubresourceFilterProfileContextFactory::GetForProfile(
+    Profile::FromBrowserContext(web_contents->GetBrowserContext()));
+
 }
 
 VivaldiSubresourceFilterClient::~VivaldiSubresourceFilterClient() {}
@@ -54,7 +60,7 @@ void VivaldiSubresourceFilterClient::MaybeAppendNavigationThrottles(
             navigation_handle, AsWeakPtr()));
   }
   throttle_manager_->MaybeAppendNavigationThrottles(navigation_handle,
-                                                    throttles);
+                                                    throttles, true);
 }
 
 void VivaldiSubresourceFilterClient::DidStartNavigation(
@@ -81,6 +87,34 @@ VivaldiSubresourceFilterClient::OnPageActivationComputed(
   return ChromeSubresourceFilterClient::FromWebContents(web_contents())
       ->OnPageActivationComputed(navigation_handle, initial_activation_level,
                                  decision);
+}
+
+const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
+VivaldiSubresourceFilterClient::GetSafeBrowsingDatabaseManager() {
+  safe_browsing::SafeBrowsingService* safe_browsing_service =
+      g_browser_process->safe_browsing_service();
+  return safe_browsing_service ? safe_browsing_service->database_manager()
+                               : nullptr;
+}
+
+void VivaldiSubresourceFilterClient::OnAdsViolationTriggered(content::RenderFrameHost* rfh,
+  subresource_filter::mojom::AdsViolation triggered_violation) {
+
+  // lifted from ChromeSubresourceFilterClient::OnAdsViolationTriggered
+  const GURL& url = rfh->GetLastCommittedURL();
+  base::Optional<AdsInterventionManager::LastAdsIntervention>
+    last_intervention =
+    profile_context_->ads_intervention_manager()->GetLastAdsIntervention(
+      url);
+  if (last_intervention &&
+    last_intervention->duration_since <
+    subresource_filter::kAdsInterventionDuration.Get())
+    return;
+
+  profile_context_->ads_intervention_manager()
+    ->TriggerAdsInterventionForUrlOnSubsequentLoads(url, triggered_violation);
+
+
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(VivaldiSubresourceFilterClient)

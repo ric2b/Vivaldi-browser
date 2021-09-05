@@ -7,6 +7,7 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/callback_forward.h"
 #include "base/no_destructor.h"
 #include "base/optional.h"
 #include "base/time/time.h"
@@ -15,8 +16,8 @@
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_invalidator.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_metrics.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_serializer.h"
-#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager.h"
-#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager_user_service.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service_factory.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service_factory.h"
@@ -113,6 +114,12 @@ int GetStateOrderedIndex(CertProvisioningWorkerState state) {
   return res;
 }
 
+void OnSetCoporateKeyDone(platform_keys::Status status) {
+  if (status != platform_keys::Status::kSuccess) {
+    LOG(ERROR) << "Cannot mark key corporate: "
+               << platform_keys::StatusToString(status);
+  }
+}
 // Marks the key |public_key_spki_der| as corporate. |profile| can be nullptr if
 // |scope| is CertScope::kDevice.
 void MarkKeyAsCorporate(CertScope scope,
@@ -127,10 +134,9 @@ void MarkKeyAsCorporate(CertScope scope,
   }
   DCHECK(profile);
 
-  platform_keys::KeyPermissionsManagerUserServiceFactory::GetForBrowserContext(
-      profile)
-      ->key_permissions_manager()
-      ->SetCorporateKey(public_key_spki_der, GetPlatformKeysTokenId(scope));
+  platform_keys::KeyPermissionsServiceFactory::GetForBrowserContext(profile)
+      ->SetCorporateKey(public_key_spki_der,
+                        base::BindOnce(&OnSetCoporateKeyDone));
 }
 
 }  // namespace
@@ -157,11 +163,13 @@ std::unique_ptr<CertProvisioningWorker> CertProvisioningWorkerFactory::Create(
     const CertProfile& cert_profile,
     policy::CloudPolicyClient* cloud_policy_client,
     std::unique_ptr<CertProvisioningInvalidator> invalidator,
-    CertProvisioningWorkerCallback callback) {
+    base::RepeatingClosure state_change_callback,
+    CertProvisioningWorkerCallback result_callback) {
   RecordEvent(cert_scope, CertProvisioningEvent::kWorkerCreated);
   return std::make_unique<CertProvisioningWorkerImpl>(
       cert_scope, profile, pref_service, cert_profile, cloud_policy_client,
-      std::move(invalidator), std::move(callback));
+      std::move(invalidator), std::move(state_change_callback),
+      std::move(result_callback));
 }
 
 std::unique_ptr<CertProvisioningWorker>
@@ -172,10 +180,12 @@ CertProvisioningWorkerFactory::Deserialize(
     const base::Value& saved_worker,
     policy::CloudPolicyClient* cloud_policy_client,
     std::unique_ptr<CertProvisioningInvalidator> invalidator,
-    CertProvisioningWorkerCallback callback) {
+    base::RepeatingClosure state_change_callback,
+    CertProvisioningWorkerCallback result_callback) {
   auto worker = std::make_unique<CertProvisioningWorkerImpl>(
       cert_scope, profile, pref_service, CertProfile(), cloud_policy_client,
-      std::move(invalidator), std::move(callback));
+      std::move(invalidator), std::move(state_change_callback),
+      std::move(result_callback));
   if (!CertProvisioningSerializer::DeserializeWorker(saved_worker,
                                                      worker.get())) {
     RecordEvent(cert_scope,
@@ -201,12 +211,14 @@ CertProvisioningWorkerImpl::CertProvisioningWorkerImpl(
     const CertProfile& cert_profile,
     policy::CloudPolicyClient* cloud_policy_client,
     std::unique_ptr<CertProvisioningInvalidator> invalidator,
-    CertProvisioningWorkerCallback callback)
+    base::RepeatingClosure state_change_callback,
+    CertProvisioningWorkerCallback result_callback)
     : cert_scope_(cert_scope),
       profile_(profile),
       pref_service_(pref_service),
       cert_profile_(cert_profile),
-      callback_(std::move(callback)),
+      state_change_callback_(std::move(state_change_callback)),
+      result_callback_(std::move(result_callback)),
       request_backoff_(&kBackoffPolicy),
       cloud_policy_client_(cloud_policy_client),
       invalidator_(std::move(invalidator)) {
@@ -333,6 +345,7 @@ void CertProvisioningWorkerImpl::UpdateState(
 
   HandleSerialization();
 
+  state_change_callback_.Run();
   if (IsFinalState(state_)) {
     CleanUpAndRunCallback();
   }
@@ -829,7 +842,7 @@ void CertProvisioningWorkerImpl::OnCleanUpDone() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   RecordResult(cert_scope_, state_, prev_state_);
-  std::move(callback_).Run(cert_profile_, state_);
+  std::move(result_callback_).Run(cert_profile_, state_);
 }
 
 void CertProvisioningWorkerImpl::HandleSerialization() {
@@ -890,10 +903,13 @@ void CertProvisioningWorkerImpl::RegisterForInvalidationTopic() {
     return;
   }
 
+  // Registering the callback with base::Unretained is OK because this class
+  // owns |invalidator_|, and the callback will never be called after
+  // |invalidator_| is destroyed.
   invalidator_->Register(
       invalidation_topic_,
       base::BindRepeating(&CertProvisioningWorkerImpl::OnShouldContinue,
-                          weak_factory_.GetWeakPtr(),
+                          base::Unretained(this),
                           ContinueReason::kInvalidation));
 
   RecordEvent(cert_scope_,

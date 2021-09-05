@@ -146,7 +146,7 @@ void ManifestUpdateTask::OnDidGetInstallableData(const InstallableData& data) {
 bool ManifestUpdateTask::IsUpdateNeededForManifest() const {
   DCHECK(web_application_info_.has_value());
 
-  if (app_id_ != GenerateAppIdFromURL(web_application_info_->app_url))
+  if (app_id_ != GenerateAppIdFromURL(web_application_info_->start_url))
     return false;
 
   if (web_application_info_->theme_color !=
@@ -174,6 +174,17 @@ bool ManifestUpdateTask::IsUpdateNeededForManifest() const {
           features::kDesktopPWAsAppIconShortcutsMenu) &&
       web_application_info_->shortcuts_menu_item_infos !=
           registrar_.GetAppShortcutsMenuItemInfos(app_id_)) {
+    return true;
+  }
+
+  const apps::ShareTarget* app_share_target =
+      registrar_.GetAppShareTarget(app_id_);
+  if (app_share_target) {
+    if (!web_application_info_->share_target ||
+        *web_application_info_->share_target != *app_share_target) {
+      return true;
+    }
+  } else if (web_application_info_->share_target) {
     return true;
   }
 

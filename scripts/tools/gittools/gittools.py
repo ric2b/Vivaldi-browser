@@ -181,6 +181,7 @@ class Git(object):
         self.GitCommandStdout("submodule", ["foreach", "--recursive",
                                           "git clean -fd"])
       if self.GitCommandStdout("fetch", ["--recurse-submodules=yes",
+                                         "--tags",
                                          "origin"],) != 0:
         raise Exception("Fetching for %s failed" %(self.root,))
 

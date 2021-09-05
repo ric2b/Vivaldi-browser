@@ -19,6 +19,7 @@
 #include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
 #include "base/location.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -59,6 +60,7 @@
 #include "media/remoting/remoting_constants.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/data_url.h"
+#include "third_party/blink/public/platform/media/webmediaplayer_delegate.h"
 #include "third_party/blink/public/platform/web_encrypted_media_types.h"
 #include "third_party/blink/public/platform/web_fullscreen_video_status.h"
 #include "third_party/blink/public/platform/web_media_player_client.h"
@@ -455,10 +457,20 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
   // Report a false "EncrytpedEvent" here as a baseline.
   RecordEncryptedEvent(false);
 
+  auto on_audio_source_provider_set_client_callback = base::BindOnce(
+      [](base::WeakPtr<WebMediaPlayerImpl> self,
+         blink::WebMediaPlayerDelegate* const delegate, int delegate_id) {
+        if (!self)
+          return;
+        delegate->DidDisableAudioOutputSinkChanges(self->delegate_id_);
+      },
+      weak_this_, delegate_, delegate_id_);
+
   // TODO(xhwang): When we use an external Renderer, many methods won't work,
   // e.g. GetCurrentFrameFromCompositor(). See http://crbug.com/434861
   audio_source_provider_ = new blink::WebAudioSourceProviderImpl(
-      params->audio_renderer_sink(), media_log_.get());
+      params->audio_renderer_sink(), media_log_.get(),
+      std::move(on_audio_source_provider_set_client_callback));
 
   if (observer_)
     observer_->SetClient(this);
@@ -841,6 +853,10 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
         return;
       }
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+      mime_type_ = mime_type;
+#endif // USE_SYSTEM_PROPRIETARY_CODECS
+
       // Replace |loaded_url_| with an empty data:// URL since it may be large.
       loaded_url_ = GURL("data:,");
 
@@ -862,6 +878,8 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
         base::BindRepeating(&WebMediaPlayerImpl::NotifyDownloading,
                             weak_this_));
     data_source_.reset(mb_data_source_);
+    mb_data_source_->OnRedirect(base::BindRepeating(
+        &WebMediaPlayerImpl::OnDataSourceRedirected, weak_this_));
     mb_data_source_->SetPreload(preload_);
     mb_data_source_->SetIsClientAudioElement(client_->IsAudioElement());
     mb_data_source_->Initialize(
@@ -2086,7 +2104,6 @@ void WebMediaPlayerImpl::ActivateSurfaceLayerForVideo() {
       base::BindOnce(
           &VideoFrameCompositor::EnableSubmission,
           base::Unretained(compositor_.get()), bridge_->GetSurfaceId(),
-          bridge_->GetLocalSurfaceIdAllocationTime(),
           pipeline_metadata_.video_decoder_config.video_transformation()
               .rotation,
           IsInPictureInPicture()));
@@ -2734,10 +2751,20 @@ void WebMediaPlayerImpl::DataSourceInitialized(bool success) {
         base::BindOnce(&WebMediaPlayerImpl::SniffProtocol, weak_this_));
     return;
   }
-  StartIPCPipeline(std::string());
+  StartIPCPipeline(mime_type_);
 #else
   StartPipeline();
 #endif  // USE_SYSTEM_PROPRIETARY_CODECS
+}
+
+void WebMediaPlayerImpl::OnDataSourceRedirected() {
+  DVLOG(1) << __func__;
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  DCHECK(mb_data_source_);
+
+  if (WouldTaintOrigin()) {
+    audio_source_provider_->TaintOrigin();
+  }
 }
 
 void WebMediaPlayerImpl::NotifyDownloading(bool is_downloading) {
@@ -3025,7 +3052,8 @@ scoped_refptr<VideoFrame> WebMediaPlayerImpl::GetCurrentFrameFromCompositor()
   vfc_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&VideoFrameCompositor::UpdateCurrentFrameIfStale,
-                     base::Unretained(compositor_.get())));
+                     base::Unretained(compositor_.get()),
+                     VideoFrameCompositor::UpdateType::kNormal));
 
   return video_frame;
 }
@@ -3558,6 +3586,18 @@ void WebMediaPlayerImpl::OnNewFramePresentedCallback() {
 std::unique_ptr<blink::WebMediaPlayer::VideoFramePresentationMetadata>
 WebMediaPlayerImpl::GetVideoFramePresentationMetadata() {
   return compositor_->GetLastPresentedFrameMetadata();
+}
+
+void WebMediaPlayerImpl::UpdateFrameIfStale() {
+  // base::Unretained is safe here because |compositor_| is destroyed on
+  // |vfc_task_runner_|. The destruction is queued from |this|' destructor,
+  // which also runs on |main_task_runner_|, which makes it impossible for
+  // UpdateCurrentFrameIfStale() to be queued after |compositor_|'s dtor.
+  vfc_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&VideoFrameCompositor::UpdateCurrentFrameIfStale,
+                     base::Unretained(compositor_.get()),
+                     VideoFrameCompositor::UpdateType::kBypassClient));
 }
 
 base::WeakPtr<blink::WebMediaPlayer> WebMediaPlayerImpl::AsWeakPtr() {

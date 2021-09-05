@@ -8,8 +8,10 @@
 #include <memory>
 #include <vector>
 
+#include "base/sequence_checker.h"
 #include "base/task/post_task.h"
 #include "base/task_runner.h"
+#include "chrome/browser/policy/messaging_layer/util/shared_vector.h"
 #include "chrome/browser/policy/messaging_layer/util/status.h"
 #include "chrome/browser/policy/messaging_layer/util/status_macros.h"
 #include "chrome/browser/policy/messaging_layer/util/statusor.h"
@@ -18,6 +20,10 @@
 #include "components/policy/proto/record.pb.h"
 #include "components/policy/proto/record_constants.pb.h"
 #include "net/base/backoff_entry.h"
+
+#ifdef OS_CHROMEOS
+#include "chrome/browser/profiles/profile.h"
+#endif  // OS_CHROMEOS
 
 namespace reporting {
 
@@ -37,7 +43,7 @@ class DmServerUploadService {
   using ReportSuccessfulUploadCallback =
       base::RepeatingCallback<void(SequencingInformation)>;
 
-  using CompletionResponse = StatusOr<std::vector<SequencingInformation>>;
+  using CompletionResponse = StatusOr<SequencingInformation>;
 
   using CompletionCallback = base::OnceCallback<void(CompletionResponse)>;
 
@@ -51,20 +57,22 @@ class DmServerUploadService {
     virtual Status HandleRecord(Record record) = 0;
 
    protected:
-    policy::CloudPolicyClient* GetClient() { return client_; }
+    policy::CloudPolicyClient* GetClient() const { return client_; }
 
    private:
-    policy::CloudPolicyClient* client_;
+    policy::CloudPolicyClient* const client_;
   };
 
+  // Context runner for handling the upload of events passed to the
+  // DmServerUploadService. Will process records by verifying that they are
+  // parseable and sending them to the appropriate handler.
   class DmServerUploader : public TaskRunnerContext<CompletionResponse> {
    public:
     DmServerUploader(
         std::unique_ptr<std::vector<EncryptedRecord>> records,
-        std::vector<std::unique_ptr<RecordHandler>>* handlers,
+        scoped_refptr<SharedVector<std::unique_ptr<RecordHandler>>> handlers,
         CompletionCallback completion_cb,
-        scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner,
-        base::TimeDelta max_delay);
+        scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner);
 
    private:
     struct RecordInfo {
@@ -74,22 +82,26 @@ class DmServerUploadService {
 
     ~DmServerUploader() override;
 
-    // OnStart calls ProcessRecords to start the upload.
+    // OnStart checks to ensure that our record set isn't empty, and requests
+    // handler size status from |handlers_|.
     void OnStart() override;
+
+    // The callback for handler size status. Will early exit if there are no
+    // available handlers. Otherwise schedules ProcessRecords.
+    void IsHandlerVectorEmptyCheck(bool handler_is_empty);
 
     // ProcessRecords verifies that the records provided are parseable and sets
     // the |Record|s up for handling by the |RecordHandler|s. On completion,
-    // ProcessRecords |Schedule|s |HandleRecords| with an initial delay value of
-    // 1 second.
+    // ProcessRecords |Schedule|s |HandleRecords|.
     void ProcessRecords();
 
     // HandleRecords sends the records to the |record_handlers_|, allowing them
-    // to upload to DmServer. |delay| is used to schedule the next call if the
-    // server is currently unavailable. |delay| is doubled on each call, and if
-    // it grows larger than |max_delay_| HandleRecords will abort trying to
-    // upload records and report completion for any records it was able to
-    // upload.
+    // to upload to DmServer.
     void HandleRecords();
+
+    // Called at the end of HandleRecords determines if all records have been
+    // processed and calls Complete.
+    void OnRecordsHandled();
 
     // Complete evaluates if any records were successfully uploaded.  If no
     // records were successfully uploaded and |status| is not ok - it calls
@@ -97,33 +109,48 @@ class DmServerUploadService {
     // the list of successful uploads (even if some were not successful).
     void Complete(Status status);
 
-    void AddSuccessfulUpload(SequencingInformation sequencing_information);
+    // Helper function for determining if a Record is valid and adding it to
+    // |record_infos_|.
+    Status IsRecordValid(const EncryptedRecord& encrypted_record);
 
-    base::TimeDelta GetNextDelay();
-    void ResetDelay();
+    // Helper function for tracking the highest sequencing information per
+    // generation id. Schedules ProcessSuccessfulUploadAddition.
+    void AddSuccessfulUpload(
+        base::RepeatingClosure done_cb,
+        const SequencingInformation& sequencing_information);
+
+    // Processes successful uploads on sequence.
+    void ProcessSuccessfulUploadAddition(
+        base::RepeatingClosure done_cb,
+        SequencingInformation sequencing_information);
 
     std::unique_ptr<std::vector<EncryptedRecord>> encrypted_records_;
-    std::vector<std::unique_ptr<RecordHandler>>* handlers_;
+    const scoped_refptr<SharedVector<std::unique_ptr<RecordHandler>>> handlers_;
+
+    // generation_id_ will be set to the generation of the first record in
+    // encrypted_records_.
+    uint64_t generation_id_;
 
     std::vector<RecordInfo> record_infos_;
-    base::flat_map<uint64_t, SequencingInformation> successful_uploads_;
+    base::Optional<SequencingInformation> highest_successful_sequence_;
 
-    base::TimeDelta max_delay_;
-    std::unique_ptr<::net::BackoffEntry> backoff_entry_;
+    SEQUENCE_CHECKER(sequence_checker_);
   };
 
-  // Will create a DMServerUploadService with handlers.
-  // On successful completion returns a DMServerUploadService.
-  // If |client| is null, will return error::INVALID_ARGUMENT.
+  // Will asynchronously create a DMServerUploadService with handlers.
+  // On successful completion will call |created_cb| with DMServerUploadService.
+  // If |client| is null, will call |created_cb| with error::INVALID_ARGUMENT.
   // If any handlers fail to create, or the policy::CloudPolicyClient is null,
-  // will return error::UNAVAILABLE.
+  // will call |created_cb| with error::UNAVAILABLE.
   //
   // |client| must not be null.
-  // |completion_cb| should report back to the holder of the created object
-  // whenever a record set is successfully uploaded.
-  static StatusOr<std::unique_ptr<DmServerUploadService>> Create(
+  // |report_upload_success_cb| should report back to the holder of the created
+  // object whenever a record set is successfully uploaded.
+  static void Create(
       std::unique_ptr<policy::CloudPolicyClient> client,
-      ReportSuccessfulUploadCallback completion_cb);
+      ReportSuccessfulUploadCallback report_upload_success_cb,
+      base::OnceCallback<void(StatusOr<std::unique_ptr<DmServerUploadService>>)>
+          created_cb);
   ~DmServerUploadService();
 
   Status EnqueueUpload(std::unique_ptr<std::vector<EncryptedRecord>> record);
@@ -132,9 +159,15 @@ class DmServerUploadService {
   DmServerUploadService(std::unique_ptr<policy::CloudPolicyClient> client,
                         ReportSuccessfulUploadCallback completion_cb);
 
-  Status InitRecordHandlers();
+  static void InitRecordHandlers(
+      std::unique_ptr<DmServerUploadService> uploader,
+#ifdef OS_CHROMEOS
+      Profile* primary_profile,
+#endif  // OS_CHROMEOS
+      base::OnceCallback<void(StatusOr<std::unique_ptr<DmServerUploadService>>)>
+          created_cb);
 
-  void UploadCompletion(StatusOr<std::vector<SequencingInformation>>) const;
+  void UploadCompletion(StatusOr<SequencingInformation>) const;
 
   policy::CloudPolicyClient* GetClient();
 
@@ -142,7 +175,7 @@ class DmServerUploadService {
   ReportSuccessfulUploadCallback upload_cb_;
   scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_;
 
-  std::vector<std::unique_ptr<RecordHandler>> record_handlers_;
+  scoped_refptr<SharedVector<std::unique_ptr<RecordHandler>>> record_handlers_;
 };
 
 }  // namespace reporting

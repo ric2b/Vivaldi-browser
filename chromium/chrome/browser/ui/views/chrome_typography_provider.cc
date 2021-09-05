@@ -56,8 +56,7 @@ const gfx::FontList& ChromeTypographyProvider::GetFont(int context,
       size_delta =
           kTouchableLabelSize - gfx::PlatformFont::kDefaultBaseFontSize;
       break;
-    case views::style::CONTEXT_MESSAGE_BOX_BODY_TEXT:
-    case CONTEXT_BODY_TEXT_LARGE:
+    case views::style::CONTEXT_DIALOG_BODY_TEXT:
     case CONTEXT_TAB_HOVER_CARD_TITLE:
     case CONTEXT_DOWNLOAD_SHELF:
       size_delta = kBodyTextLargeSize - gfx::PlatformFont::kDefaultBaseFontSize;
@@ -77,14 +76,25 @@ const gfx::FontList& ChromeTypographyProvider::GetFont(int context,
     font_weight = gfx::Font::Weight::SEMIBOLD;
   }
 
+  if (context == CONTEXT_TAB_COUNTER &&
+      style == views::style::STYLE_SECONDARY) {
+    // Secondary font is for double-digit counts. Because we have control over
+    // system fonts on ChromeOS, we can just choose a condensed font. For other
+    // platforms we adjust size.
+#if defined(OS_CHROMEOS)
+    typeface = "Roboto Condensed";
+#else
+    size_delta -= 2;
+#endif
+  }
+
   if (style == STYLE_EMPHASIZED || style == STYLE_EMPHASIZED_SECONDARY) {
     // Limit emphasizing text to contexts where it's obviously correct. If you
     // hit this DCHECK, ensure it's sane and UX-approved to extend it to your
     // new case (e.g. don't add CONTEXT_BUTTON_MD).
     DCHECK(context == views::style::CONTEXT_LABEL ||
-           context == views::style::CONTEXT_MESSAGE_BOX_BODY_TEXT ||
-           context == CONTEXT_BODY_TEXT_LARGE ||
-           context == CONTEXT_BODY_TEXT_SMALL ||
+           context == views::style::CONTEXT_DIALOG_BODY_TEXT ||
+           context == CONTEXT_DIALOG_BODY_TEXT_SMALL ||
            context == CONTEXT_DOWNLOAD_SHELF);
     font_weight = gfx::Font::Weight::SEMIBOLD;
   }
@@ -109,7 +119,8 @@ SkColor ChromeTypographyProvider::GetColor(const views::View& view,
                                            int context,
                                            int style) const {
   // Body text styles are the same as for labels.
-  if (context == CONTEXT_BODY_TEXT_LARGE || context == CONTEXT_BODY_TEXT_SMALL)
+  if (context == views::style::CONTEXT_DIALOG_BODY_TEXT ||
+      context == CONTEXT_DIALOG_BODY_TEXT_SMALL)
     context = views::style::CONTEXT_LABEL;
 
   if (context == CONTEXT_DOWNLOAD_SHELF ||
@@ -198,10 +209,11 @@ int ChromeTypographyProvider::GetLineHeight(int context, int style) const {
       GetFont(views::style::CONTEXT_DIALOG_TITLE, kTemplateStyle).GetHeight() -
       kTitlePlatformHeight + kTitleHeight;
   static const int body_large_height =
-      GetFont(CONTEXT_BODY_TEXT_LARGE, kTemplateStyle).GetHeight() -
+      GetFont(views::style::CONTEXT_DIALOG_BODY_TEXT, kTemplateStyle)
+          .GetHeight() -
       kBodyTextLargePlatformHeight + kBodyHeight;
   static const int default_height =
-      GetFont(CONTEXT_BODY_TEXT_SMALL, kTemplateStyle).GetHeight() -
+      GetFont(CONTEXT_DIALOG_BODY_TEXT_SMALL, kTemplateStyle).GetHeight() -
       kBodyTextSmallPlatformHeight + kBodyHeight;
 
   switch (context) {
@@ -211,9 +223,8 @@ int ChromeTypographyProvider::GetLineHeight(int context, int style) const {
       return kButtonAbsoluteHeight;
     case views::style::CONTEXT_DIALOG_TITLE:
       return title_height;
-    case views::style::CONTEXT_MESSAGE_BOX_BODY_TEXT:
+    case views::style::CONTEXT_DIALOG_BODY_TEXT:
     case views::style::CONTEXT_TABLE_ROW:
-    case CONTEXT_BODY_TEXT_LARGE:
     case CONTEXT_TAB_HOVER_CARD_TITLE:
     case CONTEXT_DOWNLOAD_SHELF:
       return body_large_height;

@@ -60,6 +60,11 @@ XRFrameProvider::XRFrameProvider(XRSystem* xr)
       immersive_presentation_provider_(xr->GetExecutionContext()),
       last_has_focus_(xr->IsFrameFocused()) {}
 
+void XRFrameProvider::AddImmersiveSessionObserver(
+    ImmersiveSessionObserver* observer) {
+  immersive_observers_.insert(observer);
+}
+
 void XRFrameProvider::OnSessionStarted(
     XRSession* session,
     device::mojom::blink::XRSessionPtr session_ptr) {
@@ -72,6 +77,10 @@ void XRFrameProvider::OnSessionStarted(
     DCHECK(session_ptr->submit_frame_sink);
 
     immersive_session_ = session;
+
+    for (auto& observer : immersive_observers_) {
+      observer->OnImmersiveSessionStart();
+    }
 
     immersive_data_provider_.Bind(
         std::move(session_ptr->data_provider),
@@ -156,6 +165,10 @@ void XRFrameProvider::OnSessionEnded(XRSession* session) {
         session->GetExecutionContext(),
         session->GetExecutionContext()->GetTaskRunner(
             TaskType::kMiscPlatformAPI));
+
+    for (auto& observer : immersive_observers_) {
+      observer->OnImmersiveSessionEnd();
+    }
   } else {
     non_immersive_data_providers_.erase(session);
     requesting_sessions_.erase(session);
@@ -308,6 +321,10 @@ void XRFrameProvider::OnImmersiveFrameData(
   camera_image_mailbox_holder_ = data->camera_image_buffer_holder;
 
   pending_immersive_vsync_ = false;
+
+  for (auto& observer : immersive_observers_) {
+    observer->OnImmersiveFrame();
+  }
 
   // Post a task to handle scheduled animations after the current
   // execution context finishes, so that we yield to non-mojo tasks in
@@ -689,6 +706,7 @@ void XRFrameProvider::Trace(Visitor* visitor) const {
   visitor->Trace(immersive_presentation_provider_);
   visitor->Trace(non_immersive_data_providers_);
   visitor->Trace(requesting_sessions_);
+  visitor->Trace(immersive_observers_);
 }
 
 }  // namespace blink

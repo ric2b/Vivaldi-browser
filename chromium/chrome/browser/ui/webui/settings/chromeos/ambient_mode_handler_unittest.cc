@@ -61,9 +61,54 @@ class AmbientModeHandlerTest : public testing::Test {
     handler_->HandleRequestAlbums(&args);
   }
 
+  void FetchSettings() {
+    handler_->RequestSettingsAndAlbums(/*topic_source=*/base::nullopt);
+  }
+
+  void UpdateSettings() {
+    handler_->settings_ = ash::AmbientSettings();
+    handler_->UpdateSettings();
+  }
+
+  bool IsUpdateSettingsPendingAtHandler() const {
+    return handler_->is_updating_backend_;
+  }
+
+  bool HasPendingUpdatesForTesting() const {
+    return handler_->has_pending_updates_for_backend_;
+  }
+
+  base::TimeDelta GetFetchSettingsDelay() {
+    return handler_->fetch_settings_retry_backoff_.GetTimeUntilRelease();
+  }
+
+  base::TimeDelta GetUpdateSettingsDelay() {
+    return handler_->update_settings_retry_backoff_.GetTimeUntilRelease();
+  }
+
+  void FastForwardBy(base::TimeDelta time) {
+    task_environment_.FastForwardBy(time);
+  }
+
+  bool IsFetchSettingsPendingAtBackend() const {
+    return fake_backend_controller_->IsFetchSettingsAndAlbumsPending();
+  }
+
+  void ReplyFetchSettingsAndAlbums(bool success) {
+    fake_backend_controller_->ReplyFetchSettingsAndAlbums(success);
+  }
+
+  bool IsUpdateSettingsPendingAtBackend() const {
+    return fake_backend_controller_->IsUpdateSettingsPending();
+  }
+
+  void ReplyUpdateSettings(bool success) {
+    fake_backend_controller_->ReplyUpdateSettings(success);
+  }
+
   std::string BoolToString(bool x) { return x ? "true" : "false"; }
 
-  void VerifySettingsSent(base::RunLoop* run_loop) {
+  void VerifySettingsSent() {
     EXPECT_EQ(2U, web_ui_->call_data().size());
 
     // The call is structured such that the function name is the "web callback"
@@ -89,12 +134,9 @@ class AmbientModeHandlerTest : public testing::Test {
               temperature_unit_call_data.arg1()->GetString());
     // In FakeAmbientBackendControllerImpl, the |temperature_unit| is kCelsius.
     EXPECT_EQ("celsius", temperature_unit_call_data.arg2()->GetString());
-
-    run_loop->Quit();
   }
 
-  void VerifyAlbumsSent(ash::AmbientModeTopicSource topic_source,
-                        base::RunLoop* run_loop) {
+  void VerifyAlbumsSent(ash::AmbientModeTopicSource topic_source) {
     // Art gallery has an extra call to update the topic source to Art gallery.
     std::vector<std::unique_ptr<content::TestWebUI::CallData>>::size_type call_size =
         topic_source == ash::AmbientModeTopicSource::kGooglePhotos ? 1U : 2U;
@@ -148,51 +190,244 @@ class AmbientModeHandlerTest : public testing::Test {
       EXPECT_EQ(false, album1->FindKey("checked")->GetBool());
       EXPECT_EQ("art1", album1->FindKey("title")->GetString());
     }
-    run_loop->Quit();
   }
 
  private:
-  base::test::TaskEnvironment task_environment_;
+  base::test::TaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<content::TestWebUI> web_ui_;
-  std::unique_ptr<ash::AmbientBackendController> fake_backend_controller_;
+  std::unique_ptr<ash::FakeAmbientBackendControllerImpl>
+      fake_backend_controller_;
   std::unique_ptr<ash::TestImageDownloader> image_downloader_;
   std::unique_ptr<TestAmbientModeHandler> handler_;
 };
 
 TEST_F(AmbientModeHandlerTest, TestSendTemperatureUnitAndTopicSource) {
   RequestSettings();
-
-  base::RunLoop run_loop;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(&AmbientModeHandlerTest::VerifySettingsSent,
-                                base::Unretained(this), &run_loop));
-  run_loop.Run();
+  ReplyFetchSettingsAndAlbums(/*success=*/true);
+  VerifySettingsSent();
 }
 
 TEST_F(AmbientModeHandlerTest, TestSendAlbumsForGooglePhotos) {
   ash::AmbientModeTopicSource topic_source =
       ash::AmbientModeTopicSource::kGooglePhotos;
   RequestAlbums(topic_source);
-
-  base::RunLoop run_loop;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&AmbientModeHandlerTest::VerifyAlbumsSent,
-                     base::Unretained(this), topic_source, &run_loop));
-  run_loop.Run();
+  ReplyFetchSettingsAndAlbums(/*success=*/true);
+  VerifyAlbumsSent(topic_source);
 }
 
 TEST_F(AmbientModeHandlerTest, TestSendAlbumsForArtGallery) {
   ash::AmbientModeTopicSource topic_source =
       ash::AmbientModeTopicSource::kArtGallery;
   RequestAlbums(topic_source);
+  ReplyFetchSettingsAndAlbums(/*success=*/true);
+  VerifyAlbumsSent(topic_source);
+}
 
-  base::RunLoop run_loop;
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&AmbientModeHandlerTest::VerifyAlbumsSent,
-                     base::Unretained(this), topic_source, &run_loop));
-  run_loop.Run();
+TEST_F(AmbientModeHandlerTest, TestFetchSettings) {
+  FetchSettings();
+  EXPECT_TRUE(IsFetchSettingsPendingAtBackend());
+
+  ReplyFetchSettingsAndAlbums(/*success=*/true);
+  EXPECT_FALSE(IsFetchSettingsPendingAtBackend());
+}
+
+TEST_F(AmbientModeHandlerTest, TestFetchSettingsFailedWillRetry) {
+  FetchSettings();
+  EXPECT_TRUE(IsFetchSettingsPendingAtBackend());
+
+  ReplyFetchSettingsAndAlbums(/*success=*/false);
+  EXPECT_FALSE(IsFetchSettingsPendingAtBackend());
+
+  FastForwardBy(GetFetchSettingsDelay() * 1.5);
+  EXPECT_TRUE(IsFetchSettingsPendingAtBackend());
+}
+
+TEST_F(AmbientModeHandlerTest, TestFetchSettingsSecondRetryWillBackoff) {
+  FetchSettings();
+  EXPECT_TRUE(IsFetchSettingsPendingAtBackend());
+
+  ReplyFetchSettingsAndAlbums(/*success=*/false);
+  EXPECT_FALSE(IsFetchSettingsPendingAtBackend());
+
+  base::TimeDelta delay1 = GetFetchSettingsDelay();
+  FastForwardBy(delay1 * 1.5);
+  EXPECT_TRUE(IsFetchSettingsPendingAtBackend());
+
+  ReplyFetchSettingsAndAlbums(/*success=*/false);
+  EXPECT_FALSE(IsFetchSettingsPendingAtBackend());
+
+  base::TimeDelta delay2 = GetFetchSettingsDelay();
+  EXPECT_GT(delay2, delay1);
+
+  FastForwardBy(delay2 * 1.5);
+  EXPECT_TRUE(IsFetchSettingsPendingAtBackend());
+}
+
+TEST_F(AmbientModeHandlerTest,
+       TestFetchSettingsWillNotRetryMoreThanThreeTimes) {
+  FetchSettings();
+  EXPECT_TRUE(IsFetchSettingsPendingAtBackend());
+
+  ReplyFetchSettingsAndAlbums(/*success=*/false);
+  EXPECT_FALSE(IsFetchSettingsPendingAtBackend());
+
+  // 1st retry.
+  FastForwardBy(GetFetchSettingsDelay() * 1.5);
+  EXPECT_TRUE(IsFetchSettingsPendingAtBackend());
+
+  ReplyFetchSettingsAndAlbums(/*success=*/false);
+  EXPECT_FALSE(IsFetchSettingsPendingAtBackend());
+
+  // 2nd retry.
+  FastForwardBy(GetFetchSettingsDelay() * 1.5);
+  EXPECT_TRUE(IsFetchSettingsPendingAtBackend());
+
+  ReplyFetchSettingsAndAlbums(/*success=*/false);
+  EXPECT_FALSE(IsFetchSettingsPendingAtBackend());
+
+  // 3rd retry.
+  FastForwardBy(GetFetchSettingsDelay() * 1.5);
+  EXPECT_TRUE(IsFetchSettingsPendingAtBackend());
+
+  ReplyFetchSettingsAndAlbums(/*success=*/false);
+  EXPECT_FALSE(IsFetchSettingsPendingAtBackend());
+
+  // Will not retry.
+  FastForwardBy(GetFetchSettingsDelay() * 1.5);
+  EXPECT_FALSE(IsFetchSettingsPendingAtBackend());
+}
+
+TEST_F(AmbientModeHandlerTest, TestUpdateSettings) {
+  UpdateSettings();
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  ReplyUpdateSettings(/*success=*/true);
+  EXPECT_FALSE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_FALSE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+}
+
+TEST_F(AmbientModeHandlerTest, TestUpdateSettingsTwice) {
+  UpdateSettings();
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  UpdateSettings();
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_TRUE(HasPendingUpdatesForTesting());
+
+  ReplyUpdateSettings(/*success=*/true);
+  EXPECT_FALSE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_FALSE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_TRUE(HasPendingUpdatesForTesting());
+
+  FastForwardBy(GetUpdateSettingsDelay() * 1.5);
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+}
+
+TEST_F(AmbientModeHandlerTest, TestUpdateSettingsFailedWillRetry) {
+  UpdateSettings();
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  ReplyUpdateSettings(/*success=*/false);
+  EXPECT_FALSE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_FALSE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  FastForwardBy(GetUpdateSettingsDelay() * 1.5);
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+}
+
+TEST_F(AmbientModeHandlerTest, TestUpdateSettingsSecondRetryWillBackoff) {
+  UpdateSettings();
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  ReplyUpdateSettings(/*success=*/false);
+  EXPECT_FALSE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_FALSE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  base::TimeDelta delay1 = GetUpdateSettingsDelay();
+  FastForwardBy(delay1 * 1.5);
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  ReplyUpdateSettings(/*success=*/false);
+  EXPECT_FALSE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_FALSE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  base::TimeDelta delay2 = GetUpdateSettingsDelay();
+  EXPECT_GT(delay2, delay1);
+
+  FastForwardBy(delay2 * 1.5);
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+}
+
+TEST_F(AmbientModeHandlerTest,
+       TestUpdateSettingsWillNotRetryMoreThanThreeTimes) {
+  UpdateSettings();
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  ReplyUpdateSettings(/*success=*/false);
+  EXPECT_FALSE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_FALSE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  // 1st retry.
+  FastForwardBy(GetUpdateSettingsDelay() * 1.5);
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  ReplyUpdateSettings(/*success=*/false);
+  EXPECT_FALSE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_FALSE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  // 2nd retry.
+  FastForwardBy(GetUpdateSettingsDelay() * 1.5);
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  ReplyUpdateSettings(/*success=*/false);
+  EXPECT_FALSE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_FALSE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  // 3rd retry.
+  FastForwardBy(GetUpdateSettingsDelay() * 1.5);
+  EXPECT_TRUE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_TRUE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  ReplyUpdateSettings(/*success=*/false);
+  EXPECT_FALSE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_FALSE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
+
+  // Will not retry.
+  FastForwardBy(GetUpdateSettingsDelay() * 1.5);
+  EXPECT_FALSE(IsUpdateSettingsPendingAtBackend());
+  EXPECT_FALSE(IsUpdateSettingsPendingAtHandler());
+  EXPECT_FALSE(HasPendingUpdatesForTesting());
 }
 
 }  // namespace settings

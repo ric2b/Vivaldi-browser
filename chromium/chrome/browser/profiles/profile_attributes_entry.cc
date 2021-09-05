@@ -40,7 +40,7 @@
 #endif
 
 #if !defined(OS_ANDROID)
-#include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/themes/theme_properties.h"  // nogncheck crbug.com/1125897
 #include "chrome/browser/ui/signin/profile_colors_util.h"
 #endif
 
@@ -313,8 +313,19 @@ gfx::Image ProfileAttributesEntry::GetAvatarIcon(
     return *image;
 #endif
 
-  int resource_id =
-      profiles::GetDefaultAvatarIconResourceIDAtIndex(GetAvatarIconIndex());
+  const int icon_index = GetAvatarIconIndex();
+#if defined(OS_WIN)
+  if (!profiles::IsModernAvatarIconIndex(icon_index)) {
+    // Return the 2x version of the old avatar, defined specifically for
+    // Windows. No special treatment is needed for modern avatars as they
+    // already have high enough resolution.
+    const int win_resource_id =
+        profiles::GetOldDefaultAvatar2xIconResourceIDAtIndex(icon_index);
+    return ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
+        win_resource_id);
+  }
+#endif
+  int resource_id = profiles::GetDefaultAvatarIconResourceIDAtIndex(icon_index);
   return ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
       resource_id);
 }

@@ -42,6 +42,9 @@ class FakeCommandBufferHelper : public CommandBufferHelper {
   gpu::SharedImageStub* GetSharedImageStub() override;
   bool HasStub() override;
   bool MakeContextCurrent() override;
+  std::unique_ptr<gpu::SharedImageRepresentationFactoryRef> Register(
+      std::unique_ptr<gpu::SharedImageBacking> backing) override;
+  gpu::TextureBase* GetTexture(GLuint service_id) const override;
   GLuint CreateTexture(GLenum target,
                        GLenum internal_format,
                        GLsizei width,
@@ -58,6 +61,8 @@ class FakeCommandBufferHelper : public CommandBufferHelper {
   void WaitForSyncToken(gpu::SyncToken sync_token,
                         base::OnceClosure done_cb) override;
   void SetWillDestroyStubCB(WillDestroyStubCB will_destroy_stub_cb) override;
+  bool IsPassthrough() const override;
+  bool SupportsTextureRectangle() const override;
 
  private:
   ~FakeCommandBufferHelper() override;

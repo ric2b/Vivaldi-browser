@@ -66,30 +66,33 @@ source_set("platform") {
 
   if (has_native_accessibility) {
     sources += [
-      "ax_fragment_root_delegate_win.h",
-      "ax_fragment_root_win.cc",
-      "ax_fragment_root_win.h",
-      "ax_platform_node_delegate_utils_win.cc",
-      "ax_platform_node_delegate_utils_win.h",
-      "ax_platform_node_textchildprovider_win.cc",
-      "ax_platform_node_textchildprovider_win.h",
-      "ax_platform_node_textprovider_win.cc",
-      "ax_platform_node_textprovider_win.h",
-      "ax_platform_node_textrangeprovider_win.cc",
-      "ax_platform_node_textrangeprovider_win.h",
-      "ax_platform_node_win.cc",
-      "ax_platform_node_win.h",
-      "ax_platform_relation_win.cc",
-      "ax_platform_relation_win.h",
       "ax_platform_text_boundary.cc",
       "ax_platform_text_boundary.h",
-      "ax_system_caret_win.cc",
-      "ax_system_caret_win.h",
-      "uia_registrar_win.cc",
-      "uia_registrar_win.h",
     ]
 
     if (is_win) {
+      sources += [
+        "ax_fragment_root_delegate_win.h",
+        "ax_fragment_root_win.cc",
+        "ax_fragment_root_win.h",
+        "ax_platform_node_delegate_utils_win.cc",
+        "ax_platform_node_delegate_utils_win.h",
+        "ax_platform_node_textchildprovider_win.cc",
+        "ax_platform_node_textchildprovider_win.h",
+        "ax_platform_node_textprovider_win.cc",
+        "ax_platform_node_textprovider_win.h",
+        "ax_platform_node_textrangeprovider_win.cc",
+        "ax_platform_node_textrangeprovider_win.h",
+        "ax_platform_node_win.cc",
+        "ax_platform_node_win.h",
+        "ax_platform_relation_win.cc",
+        "ax_platform_relation_win.h",
+        "ax_system_caret_win.cc",
+        "ax_system_caret_win.h",
+        "uia_registrar_win.cc",
+        "uia_registrar_win.h",
+      ]
+
       public_deps += [
         "//third_party/iaccessible2",
         "//ui/accessibility/platform:ichromeaccessible",
@@ -103,6 +106,8 @@ source_set("platform") {
 
     if (is_mac) {
       sources += [
+        "ax_event_intent_mac.h",
+        "ax_event_intent_mac.mm",
         "ax_platform_node_mac.h",
         "ax_platform_node_mac.mm",
       ]

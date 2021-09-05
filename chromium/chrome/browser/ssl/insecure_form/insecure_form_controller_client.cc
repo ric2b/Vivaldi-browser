@@ -5,8 +5,11 @@
 #include "chrome/browser/ssl/insecure_form/insecure_form_controller_client.h"
 
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/interstitials/chrome_settings_page_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/webui_url_constants.h"
+#include "components/security_interstitials/content/insecure_form_tab_storage.h"
+#include "components/security_interstitials/content/settings_page_helper.h"
 #include "content/public/browser/web_contents.h"
 
 // static
@@ -27,7 +30,8 @@ InsecureFormControllerClient::InsecureFormControllerClient(
           Profile::FromBrowserContext(web_contents->GetBrowserContext())
               ->GetPrefs(),
           g_browser_process->GetApplicationLocale(),
-          GURL(chrome::kChromeUINewTabURL)),
+          GURL(chrome::kChromeUINewTabURL),
+          /*settings_page_helper=*/nullptr),
       web_contents_(web_contents) {}
 
 InsecureFormControllerClient::~InsecureFormControllerClient() = default;
@@ -37,9 +41,12 @@ void InsecureFormControllerClient::GoBack() {
 }
 
 void InsecureFormControllerClient::Proceed() {
-  // TODO(crbug.com/1093955): The simple reload logic means the interstitial is
-  // bypassed with any reload (e.g. F5), ideally this shouldn't be the case.
-
+  // Set the is_proceeding flag on the tab storage so reload doesn't trigger
+  // another interstitial.
+  security_interstitials::InsecureFormTabStorage* tab_storage =
+      security_interstitials::InsecureFormTabStorage::GetOrCreate(
+          web_contents_);
+  tab_storage->SetIsProceeding(true);
   // We don't check for repost on the proceed reload since the interstitial
   // explains this will submit the form.
   web_contents_->GetController().Reload(content::ReloadType::NORMAL, false);

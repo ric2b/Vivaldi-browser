@@ -10,10 +10,10 @@
   }
 </style>
 <cr-icon-button id="download" iron-icon="cr:file-download"
-    on-click="onDownloadClick_" aria-label$="$i18n{tooltipDownload}"
+    on-click="onDownloadClick_" aria-label="$i18n{tooltipDownload}"
     aria-haspopup$="[[downloadHasPopup_]]"
     title="$i18n{tooltipDownload}"></cr-icon-button>
-<cr-action-menu id="menu" on-close="onMenuClose_">
+<cr-action-menu id="menu" on-open-changed="onOpenChanged_">
   <button class="dropdown-item" on-click="onDownloadEditedClick_">
     $i18n{downloadEdited}
   </button>

@@ -69,7 +69,7 @@ class LiteVideoDecider
   }
 
   // blocklist::OptOutBlocklistDelegate
-  void OnUserBlocklistedStatusChange(bool blocklisted) override;
+  void OnLoadingStateChanged(bool is_loaded) override;
   void OnBlocklistCleared(base::Time time) override;
 
   // network::NetworkConnectionTracker::NetworkConnectionObserver:

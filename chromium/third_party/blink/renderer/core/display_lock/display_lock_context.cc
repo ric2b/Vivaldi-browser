@@ -307,10 +307,6 @@ void DisplayLockContext::Lock() {
     element_->NotifyPriorityScrollAnchorStatusChanged();
   }
 
-  // In either case, we schedule an animation. If we're already inside a
-  // lifecycle update, this will be a no-op.
-  ScheduleAnimation();
-
   // We need to notify the AX cache (if it exists) to update |element_|'s
   // children in the AX cache.
   if (AXObjectCache* cache = element_->GetDocument().ExistingAXObjectCache())
@@ -333,70 +329,55 @@ void DisplayLockContext::Lock() {
 // Should* and Did* function for the lifecycle phases. These functions control
 // whether or not to process the lifecycle for self or for children.
 // =============================================================================
-bool DisplayLockContext::ShouldStyle(DisplayLockLifecycleTarget target) const {
-  return !is_locked_ || target == DisplayLockLifecycleTarget::kSelf ||
-         update_forced_ ||
+bool DisplayLockContext::ShouldStyleChildren() const {
+  return !is_locked_ || update_forced_ ||
          (document_->GetDisplayLockDocumentState()
               .ActivatableDisplayLocksForced() &&
           IsActivatable(DisplayLockActivationReason::kAny));
 }
 
-void DisplayLockContext::DidStyle(DisplayLockLifecycleTarget target) {
-  if (target == DisplayLockLifecycleTarget::kSelf) {
-    // TODO(vmpstr): This needs to be in the spec.
-    if (ForceUnlockIfNeeded())
-      return;
-
-    if (!IsLocked() && state_ != EContentVisibility::kVisible) {
-      UpdateActivationObservationIfNeeded();
-      NotifyRenderAffectingStateChanged();
-    }
-
-    if (blocked_style_traversal_type_ == kStyleUpdateSelf)
-      blocked_style_traversal_type_ = kStyleUpdateNotRequired;
-  } else {
-    if (element_->ChildNeedsReattachLayoutTree())
-      element_->MarkAncestorsWithChildNeedsReattachLayoutTree();
-    blocked_style_traversal_type_ = kStyleUpdateNotRequired;
-    MarkElementsForWhitespaceReattachment();
-  }
-}
-
-bool DisplayLockContext::ShouldLayout(DisplayLockLifecycleTarget target) const {
-  return !is_locked_ || target == DisplayLockLifecycleTarget::kSelf ||
-         update_forced_ ||
-         (document_->GetDisplayLockDocumentState()
-              .ActivatableDisplayLocksForced() &&
-          IsActivatable(DisplayLockActivationReason::kAny));
-}
-
-void DisplayLockContext::DidLayout(DisplayLockLifecycleTarget target) {
-  if (target == DisplayLockLifecycleTarget::kSelf)
+void DisplayLockContext::DidStyleSelf() {
+  // TODO(vmpstr): This needs to be in the spec.
+  if (ForceUnlockIfNeeded())
     return;
+
+  if (!IsLocked() && state_ != EContentVisibility::kVisible) {
+    UpdateActivationObservationIfNeeded();
+    NotifyRenderAffectingStateChanged();
+  }
+
+  if (blocked_style_traversal_type_ == kStyleUpdateSelf)
+    blocked_style_traversal_type_ = kStyleUpdateNotRequired;
+}
+
+void DisplayLockContext::DidStyleChildren() {
+  if (element_->ChildNeedsReattachLayoutTree())
+    element_->MarkAncestorsWithChildNeedsReattachLayoutTree();
+  blocked_style_traversal_type_ = kStyleUpdateNotRequired;
+  MarkElementsForWhitespaceReattachment();
+}
+
+bool DisplayLockContext::ShouldLayoutChildren() const {
+  return !is_locked_ || update_forced_ ||
+         (document_->GetDisplayLockDocumentState()
+              .ActivatableDisplayLocksForced() &&
+          IsActivatable(DisplayLockActivationReason::kAny));
+}
+
+void DisplayLockContext::DidLayoutChildren() {
   // Since we did layout on children already, we'll clear this.
   child_layout_was_blocked_ = false;
 }
 
-bool DisplayLockContext::ShouldPrePaint(
-    DisplayLockLifecycleTarget target) const {
-  return !is_locked_ || target == DisplayLockLifecycleTarget::kSelf ||
-         update_forced_;
+bool DisplayLockContext::ShouldPrePaintChildren() const {
+  return !is_locked_ || update_forced_;
 }
 
-void DisplayLockContext::DidPrePaint(DisplayLockLifecycleTarget target) {
-  // This is here for symmetry, but could be removed if necessary.
-}
-
-bool DisplayLockContext::ShouldPaint(DisplayLockLifecycleTarget target) const {
+bool DisplayLockContext::ShouldPaintChildren() const {
   // Note that forced updates should never require us to paint, so we don't
   // check |update_forced_| here. In other words, although |update_forced_|
-  // could be true here, we still should not paint. This also holds for
-  // kUpdating state, since updates should not paint.
-  return !is_locked_ || target == DisplayLockLifecycleTarget::kSelf;
-}
-
-void DisplayLockContext::DidPaint(DisplayLockLifecycleTarget) {
-  // This is here for symmetry, but could be removed if necessary.
+  // could be true here, we still should not paint.
+  return !is_locked_;
 }
 // End Should* and Did* functions ==============================================
 
@@ -414,14 +395,17 @@ void DisplayLockContext::CommitForActivationWithSignal(
   DCHECK(IsLocked());
   DCHECK(ShouldCommitForActivation(DisplayLockActivationReason::kAny));
 
-  // Find in page scrolls content into view. However, if the position of the
-  // target is outside of the bounds that would cause the auto-context to
-  // unlock, then we can scroll into wrong content while the context remains
-  // lock. To avoid this, unlock it until the next lifecycle. If the scroll is
-  // successful, then we will gain visibility anyway so the context will be
-  // unlocked for other reasons.
-  // TODO(vmpstr): See if scrollIntoView() needs this as well.
-  if (reason == DisplayLockActivationReason::kFindInPage) {
+  // The following actions (can) scroll content into view. However, if the
+  // position of the target is outside of the bounds that would cause the
+  // auto-context to unlock, then we can scroll into wrong content while the
+  // context remains lock. To avoid this, unlock it until the next lifecycle.
+  // If the scroll is successful, then we will gain visibility anyway so the
+  // context will be unlocked for other reasons.
+  if (reason == DisplayLockActivationReason::kAccessibility ||
+      reason == DisplayLockActivationReason::kFindInPage ||
+      reason == DisplayLockActivationReason::kFragmentNavigation ||
+      reason == DisplayLockActivationReason::kScrollIntoView ||
+      reason == DisplayLockActivationReason::kSimulatedClick) {
     // Note that because the visibility is only determined at the _end_ of the
     // next frame, we need to ensure that we stay unlocked for two frames.
     SetKeepUnlockedUntilLifecycleCount(2);
@@ -534,17 +518,12 @@ void DisplayLockContext::Unlock() {
   if (!ConnectedToView())
     return;
 
-  ScheduleAnimation();
-
   // There are a few ways we can get unlocked:
   // 1. A new content-visibility property needs us to be ulocked.
   // 2. We're in 'auto' mode and we are intersecting the viewport.
-  // 3. We're activating in hidden-matchable or auto mode
   // In the first case, we are already in style processing, so we don't need to
-  // invalidate style. However, in the second and third cases we invalidate
-  // style so that `AdjustElementStyle()` can be called.
-  // TODO(vmpstr): Case 3 needs to be reworked, since the spec no longer has a
-  // notion of activation.
+  // invalidate style. However, in the second case we invalidate style so that
+  // `AdjustElementStyle()` can be called.
   if (!document_->InStyleRecalc()) {
     // Since size containment depends on the activatability state, we should
     // invalidate the style for this element, so that the style adjuster can

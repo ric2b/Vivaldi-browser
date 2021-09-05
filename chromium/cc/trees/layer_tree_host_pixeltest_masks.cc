@@ -19,6 +19,7 @@
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/solid_color_content_layer_client.h"
 #include "cc/test/test_layer_tree_frame_sink.h"
+#include "components/viz/test/buildflags.h"
 #include "third_party/skia/include/core/SkImage.h"
 
 #if !defined(OS_ANDROID)
@@ -28,25 +29,28 @@ namespace {
 
 // TODO(penghuang): Fix vulkan with one copy or zero copy
 // https://crbug.com/979703
-std::vector<PixelResourceTestCase> const kTestCases = {
-    {TestRendererType::kSoftware, TestRasterType::kBitmap},
-    {TestRendererType::kGL, TestRasterType::kGpu},
-    {TestRendererType::kGL, TestRasterType::kOneCopy},
-    {TestRendererType::kGL, TestRasterType::kZeroCopy},
-    {TestRendererType::kSkiaGL, TestRasterType::kGpu},
-    {TestRendererType::kSkiaGL, TestRasterType::kOneCopy},
-    {TestRendererType::kSkiaGL, TestRasterType::kZeroCopy},
-#if defined(ENABLE_CC_VULKAN_TESTS)
-    {TestRendererType::kSkiaVk, TestRasterType::kOop},
-    {TestRendererType::kSkiaVk, TestRasterType::kZeroCopy},
-#endif  // defined(ENABLE_CC_VULKAN_TESTS)
+std::vector<RasterTestConfig> const kTestCases = {
+    {viz::RendererType::kSoftware, TestRasterType::kBitmap},
+#if BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
+    {viz::RendererType::kGL, TestRasterType::kGpu},
+    {viz::RendererType::kGL, TestRasterType::kOneCopy},
+    {viz::RendererType::kGL, TestRasterType::kZeroCopy},
+    {viz::RendererType::kSkiaGL, TestRasterType::kGpu},
+    {viz::RendererType::kSkiaGL, TestRasterType::kOneCopy},
+    {viz::RendererType::kSkiaGL, TestRasterType::kZeroCopy},
+#endif  // BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
+#if BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
+    {viz::RendererType::kSkiaVk, TestRasterType::kOop},
+    {viz::RendererType::kSkiaVk, TestRasterType::kZeroCopy},
+#endif  // BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
 };
 
 using LayerTreeHostMasksPixelTest = ParameterizedPixelResourceTest;
 
 INSTANTIATE_TEST_SUITE_P(PixelResourceTest,
                          LayerTreeHostMasksPixelTest,
-                         ::testing::ValuesIn(kTestCases));
+                         ::testing::ValuesIn(kTestCases),
+                         ::testing::PrintToStringParamName());
 
 class MaskContentLayerClient : public ContentLayerClient {
  public:
@@ -157,7 +161,8 @@ class LayerTreeHostMaskPixelTestWithLayerList
 
 INSTANTIATE_TEST_SUITE_P(PixelResourceTest,
                          LayerTreeHostMaskPixelTestWithLayerList,
-                         ::testing::ValuesIn(kTestCases));
+                         ::testing::ValuesIn(kTestCases),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostMaskPixelTestWithLayerList, MaskWithEffect) {
   MaskContentLayerClient client(mask_bounds_);
@@ -230,7 +235,8 @@ class LayerTreeHostMaskPixelTest_SolidColorEmptyMaskWithEffectAndRenderSurface
 INSTANTIATE_TEST_SUITE_P(
     PixelResourceTest,
     LayerTreeHostMaskPixelTest_SolidColorEmptyMaskWithEffectAndRenderSurface,
-    ::testing::ValuesIn(kTestCases));
+    ::testing::ValuesIn(kTestCases),
+    ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostMaskPixelTest_SolidColorEmptyMaskWithEffectAndRenderSurface,
        Test) {
@@ -265,7 +271,8 @@ class LayerTreeHostMaskPixelTest_MaskWithEffectNoContentToMask
 INSTANTIATE_TEST_SUITE_P(
     PixelResourceTest,
     LayerTreeHostMaskPixelTest_MaskWithEffectNoContentToMask,
-    ::testing::ValuesIn(kTestCases));
+    ::testing::ValuesIn(kTestCases),
+    ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostMaskPixelTest_MaskWithEffectNoContentToMask, Test) {
   MaskContentLayerClient client(mask_bounds_);
@@ -278,14 +285,11 @@ TEST_P(LayerTreeHostMaskPixelTest_MaskWithEffectNoContentToMask, Test) {
 class LayerTreeHostMaskPixelTest_ScaledMaskWithEffect
     : public LayerTreeHostMaskPixelTestWithLayerList {
  protected:
-  // Scale the mask with a non-integral transform. This will trigger raster
-  // translation and may or may not trigger the AA path in the renderer.
+  // Scale the mask with a non-integral transform. This will trigger the
+  // AA path in the renderer.
   void SetupTree() override {
     LayerTreeHostMaskPixelTestWithLayerList::SetupTree();
 
-    // Use this offset to ensure the same rounding direction in different code
-    // paths for non-AA drawing (25.1 * 1.5 = 37.65).
-    mask_layer_->SetOffsetToTransformParent(gfx::Vector2dF(25.1, 25.1));
     auto& transform = CreateTransformNode(mask_layer_.get());
     transform.local.Scale(1.5, 1.5);
   }
@@ -293,7 +297,8 @@ class LayerTreeHostMaskPixelTest_ScaledMaskWithEffect
 
 INSTANTIATE_TEST_SUITE_P(PixelResourceTest,
                          LayerTreeHostMaskPixelTest_ScaledMaskWithEffect,
-                         ::testing::ValuesIn(kTestCases));
+                         ::testing::ValuesIn(kTestCases),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostMaskPixelTest_ScaledMaskWithEffect, Test) {
   MaskContentLayerClient client(mask_bounds_);
@@ -575,7 +580,8 @@ class LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerList
 INSTANTIATE_TEST_SUITE_P(
     PixelResourceTest,
     LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerList,
-    ::testing::ValuesIn(kTestCases));
+    ::testing::ValuesIn(kTestCases),
+    ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerList, Test) {
   base::FilePath image_name =
@@ -606,7 +612,8 @@ using LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerTree =
 INSTANTIATE_TEST_SUITE_P(
     PixelResourceTest,
     LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerTree,
-    ::testing::ValuesIn(kTestCases));
+    ::testing::ValuesIn(kTestCases),
+    ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerTree, Test) {
   scoped_refptr<SolidColorLayer> background =
@@ -737,16 +744,21 @@ constexpr uint32_t kUseAntialiasing = 1 << 0;
 constexpr uint32_t kForceShaders = 1 << 1;
 
 struct MaskTestConfig {
-  PixelResourceTestCase test_case;
+  RasterTestConfig test_config;
   uint32_t flags;
 };
+
+void PrintTo(const MaskTestConfig& config, std::ostream* os) {
+  PrintTo(config.test_config, os);
+  *os << '_' << config.flags;
+}
 
 class LayerTreeHostMaskAsBlendingPixelTest
     : public LayerTreeHostPixelResourceTest,
       public ::testing::WithParamInterface<MaskTestConfig> {
  public:
   LayerTreeHostMaskAsBlendingPixelTest()
-      : LayerTreeHostPixelResourceTest(GetParam().test_case),
+      : LayerTreeHostPixelResourceTest(GetParam().test_config),
         use_antialiasing_(GetParam().flags & kUseAntialiasing),
         force_shaders_(GetParam().flags & kForceShaders) {
     float percentage_pixels_error = 0.f;
@@ -762,10 +774,10 @@ class LayerTreeHostMaskAsBlendingPixelTest
       small_error_allowed = 1;
     } else {
 #if defined(ARCH_CPU_ARM64)
-#if defined(OS_WIN) || defined(OS_FUCHSIA)
-      // Windows and Fuchsia ARM64 has some pixels difference
+#if defined(OS_WIN) || defined(OS_FUCHSIA) || defined(OS_MAC)
+      // ARM Windows, macOS, and Fuchsia has some pixels difference
       // Affected tests: RotatedClippedCircle, RotatedClippedCircleUnderflow
-      // crbug.com/1030244, crbug.com/1048249
+      // crbug.com/1030244, crbug.com/1048249, crbug.com/1128443
       percentage_pixels_error = 6.1f;
       average_error_allowed_in_bad_pixels = 5.f;
       large_error_allowed = 20;
@@ -871,27 +883,30 @@ class LayerTreeHostMaskAsBlendingPixelTest
 };
 
 MaskTestConfig const kTestConfigs[] = {
-    MaskTestConfig{{TestRendererType::kSoftware, TestRasterType::kBitmap}, 0},
-    MaskTestConfig{{TestRendererType::kGL, TestRasterType::kZeroCopy}, 0},
-    MaskTestConfig{{TestRendererType::kGL, TestRasterType::kZeroCopy},
+    MaskTestConfig{{viz::RendererType::kSoftware, TestRasterType::kBitmap}, 0},
+#if BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
+    MaskTestConfig{{viz::RendererType::kGL, TestRasterType::kZeroCopy}, 0},
+    MaskTestConfig{{viz::RendererType::kGL, TestRasterType::kZeroCopy},
                    kUseAntialiasing},
-    MaskTestConfig{{TestRendererType::kGL, TestRasterType::kZeroCopy},
+    MaskTestConfig{{viz::RendererType::kGL, TestRasterType::kZeroCopy},
                    kForceShaders},
-    MaskTestConfig{{TestRendererType::kGL, TestRasterType::kZeroCopy},
+    MaskTestConfig{{viz::RendererType::kGL, TestRasterType::kZeroCopy},
                    kUseAntialiasing | kForceShaders},
-    MaskTestConfig{{TestRendererType::kSkiaGL, TestRasterType::kZeroCopy}, 0},
-    MaskTestConfig{{TestRendererType::kSkiaGL, TestRasterType::kZeroCopy},
+    MaskTestConfig{{viz::RendererType::kSkiaGL, TestRasterType::kZeroCopy}, 0},
+    MaskTestConfig{{viz::RendererType::kSkiaGL, TestRasterType::kZeroCopy},
                    kUseAntialiasing},
-#if defined(ENABLE_CC_VULKAN_TESTS)
-    MaskTestConfig{{TestRendererType::kSkiaVk, TestRasterType::kZeroCopy}, 0},
-    MaskTestConfig{{TestRendererType::kSkiaVk, TestRasterType::kZeroCopy},
+#endif  // BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
+#if BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
+    MaskTestConfig{{viz::RendererType::kSkiaVk, TestRasterType::kZeroCopy}, 0},
+    MaskTestConfig{{viz::RendererType::kSkiaVk, TestRasterType::kZeroCopy},
                    kUseAntialiasing},
-#endif  // defined(ENABLE_CC_VULKAN_TESTS)
+#endif  // BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostMaskAsBlendingPixelTest,
-                         ::testing::ValuesIn(kTestConfigs));
+                         ::testing::ValuesIn(kTestConfigs),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostMaskAsBlendingPixelTest, PixelAlignedNoop) {
   // This test verifies the degenerate case of a no-op mask doesn't affect
@@ -1136,7 +1151,8 @@ class LayerTreeHostMasksForBackdropFiltersAndBlendPixelTest
 
 INSTANTIATE_TEST_SUITE_P(PixelResourceTest,
                          LayerTreeHostMasksForBackdropFiltersAndBlendPixelTest,
-                         ::testing::ValuesIn(kTestCases));
+                         ::testing::ValuesIn(kTestCases),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(LayerTreeHostMasksForBackdropFiltersAndBlendPixelTest, Test) {
   base::FilePath result_path(

@@ -16,7 +16,11 @@ namespace calendar {
 CreateCalendarResult::CreateCalendarResult() {}
 
 CalendarRow::CalendarRow()
-    : orderindex_(0), hidden_(0), active_(0), iconindex_(0) {}
+    : orderindex_(0),
+      hidden_(0),
+      active_(0),
+      iconindex_(0),
+      supported_component_set_(CALENDAR_VEVENT) {}
 
 CalendarRow::~CalendarRow() {}
 
@@ -32,6 +36,7 @@ CalendarRow::CalendarRow(CalendarID id,
                          int iconindex,
                          base::Time last_checked,
                          std::string timezone,
+                         uint16_t supported_component_set,
                          base::Time created,
                          base::Time lastmodified)
     : account_id_(account_id),
@@ -45,6 +50,7 @@ CalendarRow::CalendarRow(CalendarID id,
       iconindex_(iconindex),
       last_checked_(last_checked),
       timezone_(timezone),
+      supported_component_set_(supported_component_set),
       created_(created),
       lastmodified_(lastmodified) {}
 
@@ -60,6 +66,7 @@ void CalendarRow::Swap(CalendarRow* other) {
   std::swap(iconindex_, other->iconindex_);
   std::swap(last_checked_, other->last_checked_);
   std::swap(timezone_, other->timezone_);
+  std::swap(supported_component_set_, other->supported_component_set_);
 }
 
 CalendarRow::CalendarRow(const CalendarRow& other)
@@ -75,12 +82,14 @@ CalendarRow::CalendarRow(const CalendarRow& other)
       iconindex_(other.iconindex_),
       last_checked_(other.last_checked_),
       timezone_(other.timezone_),
+      supported_component_set_(other.supported_component_set_),
       created_(other.created_),
       lastmodified_(other.lastmodified_) {}
 
 Calendar::Calendar()
     : name(base::ASCIIToUTF16("")),
       description(base::ASCIIToUTF16("")),
+      supported_component_set(0),
       updateFields(0) {}
 
 Calendar::Calendar(const Calendar& calendar)
@@ -96,6 +105,7 @@ Calendar::Calendar(const Calendar& calendar)
       iconindex(calendar.iconindex),
       last_checked(calendar.last_checked),
       timezone(calendar.timezone),
+      supported_component_set(calendar.supported_component_set),
       updateFields(calendar.updateFields) {}
 
 Calendar::~Calendar() {}

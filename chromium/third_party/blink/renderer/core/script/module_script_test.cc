@@ -107,7 +107,7 @@ class ModuleScriptTest : public ::testing::Test, public ParametrizedModuleTest {
 
     ClassicScript::CreateUnspecifiedScript(
         ScriptSourceCode("window.foo = undefined;"))
-        ->RunScriptAndReturnValue(&scope.GetFrame());
+        ->RunScript(&scope.GetFrame());
   }
 
   // Accessors for ModuleScript private members.
@@ -167,10 +167,11 @@ TEST_P(ModuleScriptTest, V8CodeCacheWithoutDiscarding) {
                                           module_script->V8Module(),
                                           module_script->SourceURL())
                     .IsEmpty());
-    ASSERT_TRUE(ModuleRecord::Evaluate(scope.GetScriptState(),
-                                       module_script->V8Module(),
-                                       module_script->SourceURL())
-                    .IsSuccess());
+    ASSERT_EQ(ModuleRecord::Evaluate(scope.GetScriptState(),
+                                     module_script->V8Module(),
+                                     module_script->SourceURL())
+                  .GetResultType(),
+              ScriptEvaluationResult::ResultType::kSuccess);
     TestFoo(scope);
 
     Checkpoint checkpoint;
@@ -249,7 +250,7 @@ TEST_P(ModuleScriptTest, V8CodeCacheWithoutDiscarding) {
   ClassicScript::CreateUnspecifiedScript(
       ScriptSourceCode(LargeSourceText(), ScriptSourceLocationType::kInternal,
                        cache_handler))
-      ->RunScriptAndReturnValue(&scope.GetFrame());
+      ->RunScript(&scope.GetFrame());
 
   checkpoint.Call(4);
 
@@ -293,10 +294,11 @@ TEST_P(ModuleScriptTest, V8CodeCacheWithDiscarding) {
                                           module_script->V8Module(),
                                           module_script->SourceURL())
                     .IsEmpty());
-    ASSERT_TRUE(ModuleRecord::Evaluate(scope.GetScriptState(),
-                                       module_script->V8Module(),
-                                       module_script->SourceURL())
-                    .IsSuccess());
+    ASSERT_EQ(ModuleRecord::Evaluate(scope.GetScriptState(),
+                                     module_script->V8Module(),
+                                     module_script->SourceURL())
+                  .GetResultType(),
+              ScriptEvaluationResult::ResultType::kSuccess);
     TestFoo(scope);
 
     Checkpoint checkpoint;
@@ -390,7 +392,7 @@ TEST_P(ModuleScriptTest, V8CodeCacheWithDiscarding) {
   ClassicScript::CreateUnspecifiedScript(
       ScriptSourceCode(LargeSourceText(), ScriptSourceLocationType::kInternal,
                        cache_handler))
-      ->RunScriptAndReturnValue(&scope.GetFrame());
+      ->RunScript(&scope.GetFrame());
   checkpoint.Call(4);
 
   TestFoo(scope);

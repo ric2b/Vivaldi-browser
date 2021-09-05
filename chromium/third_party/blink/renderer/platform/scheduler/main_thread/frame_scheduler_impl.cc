@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/common/scoped_defer_task_posting.h"
+#include "base/task/common/task_annotator.h"
 #include "base/task/sequence_manager/lazy_now.h"
 #include "base/time/time.h"
 #include "base/trace_event/blame_context.h"
@@ -374,9 +375,18 @@ QueueTraits FrameSchedulerImpl::CreateQueueTraitsForTaskType(TaskType type) {
     case TaskType::kInternalContentCapture:
       return ThrottleableTaskQueueTraits().SetPrioritisationType(
           QueueTraits::PrioritisationType::kBestEffort);
-    case TaskType::kJavascriptTimerDelayed:
-      return ThrottleableTaskQueueTraits().SetPrioritisationType(
-          QueueTraits::PrioritisationType::kJavaScriptTimer);
+    case TaskType::kJavascriptTimerDelayedLowNesting:
+      return ThrottleableTaskQueueTraits()
+          .SetPrioritisationType(
+              QueueTraits::PrioritisationType::kJavaScriptTimer)
+          .SetCanBeIntensivelyThrottled(
+              IsIntensiveWakeUpThrottlingEnabled() &&
+              CanIntensivelyThrottleLowNestingLevel());
+    case TaskType::kJavascriptTimerDelayedHighNesting:
+      return ThrottleableTaskQueueTraits()
+          .SetPrioritisationType(
+              QueueTraits::PrioritisationType::kJavaScriptTimer)
+          .SetCanBeIntensivelyThrottled(IsIntensiveWakeUpThrottlingEnabled());
     case TaskType::kJavascriptTimerImmediate: {
       return DeferrableTaskQueueTraits()
           .SetPrioritisationType(
@@ -440,7 +450,7 @@ QueueTraits FrameSchedulerImpl::CreateQueueTraitsForTaskType(TaskType type) {
           QueueTraits::PrioritisationType::kHighPriorityLocalFrame);
     case TaskType::kInternalContinueScriptLoading:
       return PausableTaskQueueTraits().SetPrioritisationType(
-          QueueTraits::PrioritisationType::kVeryHigh);
+          QueueTraits::PrioritisationType::kInternalScriptContinuation);
     case TaskType::kDatabaseAccess:
       if (base::FeatureList::IsEnabled(kHighPriorityDatabaseTaskType)) {
         return PausableTaskQueueTraits().SetPrioritisationType(
@@ -576,7 +586,7 @@ FrameSchedulerImpl::ControlTaskRunner() {
 
 AgentGroupSchedulerImpl* FrameSchedulerImpl::GetAgentGroupScheduler() {
   return parent_page_scheduler_
-             ? parent_page_scheduler_->GetAgentGroupScheduler()
+             ? &parent_page_scheduler_->GetAgentGroupScheduler()
              : nullptr;
 }
 
@@ -718,7 +728,7 @@ void FrameSchedulerImpl::ReportActiveSchedulerTrackedFeatures() {
 }
 
 base::WeakPtr<FrameSchedulerImpl>
-FrameSchedulerImpl::GetInvalidingOnBFCacheRestoreWeakPtr() {
+FrameSchedulerImpl::GetInvalidatingOnBFCacheRestoreWeakPtr() {
   return invalidating_on_bfcache_restore_weak_factory_.GetWeakPtr();
 }
 
@@ -790,17 +800,18 @@ void FrameSchedulerImpl::AsValueInto(
       "disable_background_timer_throttling",
       !RuntimeEnabledFeatures::TimerThrottlingForBackgroundTabsEnabled());
 
-  state->BeginDictionary("frame_task_queue_controller");
-  frame_task_queue_controller_->AsValueInto(state);
-  state->EndDictionary();
+  {
+    auto dictionary_scope =
+        state->BeginDictionaryScoped("frame_task_queue_controller");
+    frame_task_queue_controller_->AsValueInto(state);
+  }
 
   if (blame_context_) {
-    state->BeginDictionary("blame_context");
+    auto dictionary_scope = state->BeginDictionaryScoped("blame_context");
     state->SetString(
         "id_ref",
         PointerToString(reinterpret_cast<void*>(blame_context_->id())));
     state->SetString("scope", blame_context_->scope());
-    state->EndDictionary();
   }
 }
 
@@ -1003,11 +1014,18 @@ TaskQueue::QueuePriority FrameSchedulerImpl::ComputePriority(
   if (queue_priority_pair != resource_loading_task_queue_priorities_.end())
     return queue_priority_pair->value;
 
-  base::Optional<TaskQueue::QueuePriority> fixed_priority =
-      task_queue->FixedPriority();
-
-  if (fixed_priority)
-    return fixed_priority.value();
+  // TODO(kdillon): Ordering here is relative to the experiments below. Cleanup
+  // unused experiment logic so that this switch can be merged with the
+  // prioritisation type decisions below.
+  switch (task_queue->GetPrioritisationType()) {
+    case MainThreadTaskQueue::QueueTraits::PrioritisationType::
+        kInternalScriptContinuation:
+      return TaskQueue::QueuePriority::kVeryHighPriority;
+    case MainThreadTaskQueue::QueueTraits::PrioritisationType::kBestEffort:
+      return TaskQueue::QueuePriority::kBestEffortPriority;
+    default:
+      break;
+  }
 
   // TODO(shaseley): This should use lower priorities if the frame is
   // deprioritized. Change this once we refactor and add frame policy/priorities
@@ -1227,18 +1245,18 @@ void FrameSchedulerImpl::SetOnIPCTaskPostedWhileInBackForwardCacheHandler() {
           // Only log IPC tasks. IPC tasks are only logged currently as IPC
           // hash can be mapped back to a function name, and IPC tasks may
           // potentially post sensitive information.
-          if (!task.ipc_hash) {
+          if (!task.ipc_hash && !task.ipc_interface_name) {
             return;
           }
           base::ScopedDeferTaskPosting::PostOrDefer(
               task_runner, FROM_HERE,
               base::BindOnce(
                   &FrameSchedulerImpl::OnIPCTaskPostedWhileInBackForwardCache,
-                  frame_scheduler, task.ipc_hash, task.posted_from),
+                  frame_scheduler, task.ipc_hash, task.ipc_interface_name),
               base::TimeDelta());
         },
         main_thread_scheduler_->DefaultTaskRunner(),
-        GetInvalidingOnBFCacheRestoreWeakPtr()));
+        GetInvalidatingOnBFCacheRestoreWeakPtr()));
   }
 }
 
@@ -1253,7 +1271,20 @@ void FrameSchedulerImpl::DetachOnIPCTaskPostedWhileInBackForwardCacheHandler() {
 
 void FrameSchedulerImpl::OnIPCTaskPostedWhileInBackForwardCache(
     uint32_t ipc_hash,
-    const base::Location& task_from) {
+    const char* ipc_interface_name) {
+  // IPC tasks may have an IPC interface name in addition to, or instead of an
+  // IPC hash. IPC hash is known from the mojo Accept method. When IPC hash is
+  // 0, then the IPC hash must be calculated from the IPC interface name
+  // instead.
+  if (!ipc_hash) {
+    // base::HashMetricName produces a uint64; however, the MD5 hash calculation
+    // for an IPC interface name is always calculated as uint32; the IPC hash on
+    // a task is also a uint32. The calculation here is meant to mimic the
+    // calculation used in base::MD5Hash32Constexpr.
+    ipc_hash = base::TaskAnnotator::ScopedSetIpcHash::MD5HashMetricName(
+        ipc_interface_name);
+  }
+
   DCHECK(parent_page_scheduler_->IsStoredInBackForwardCache());
   base::UmaHistogramSparse(
       "BackForwardCache.Experimental.UnexpectedIPCMessagePostedToCachedFrame."
@@ -1324,7 +1355,8 @@ FrameSchedulerImpl::ThrottleableTaskQueueTraits() {
       .SetCanBeFrozen(true)
       .SetCanBeDeferred(true)
       .SetCanBePaused(true)
-      .SetCanRunWhenVirtualTimePaused(false);
+      .SetCanRunWhenVirtualTimePaused(false)
+      .SetCanBePausedForAndroidWebview(true);
 }
 
 // static
@@ -1335,7 +1367,8 @@ FrameSchedulerImpl::DeferrableTaskQueueTraits() {
       .SetCanBeFrozen(base::FeatureList::IsEnabled(
           blink::features::kStopNonTimersInBackground))
       .SetCanBePaused(true)
-      .SetCanRunWhenVirtualTimePaused(false);
+      .SetCanRunWhenVirtualTimePaused(false)
+      .SetCanBePausedForAndroidWebview(true);
 }
 
 // static
@@ -1344,7 +1377,8 @@ MainThreadTaskQueue::QueueTraits FrameSchedulerImpl::PausableTaskQueueTraits() {
       .SetCanBeFrozen(base::FeatureList::IsEnabled(
           blink::features::kStopNonTimersInBackground))
       .SetCanBePaused(true)
-      .SetCanRunWhenVirtualTimePaused(false);
+      .SetCanRunWhenVirtualTimePaused(false)
+      .SetCanBePausedForAndroidWebview(true);
 }
 
 // static

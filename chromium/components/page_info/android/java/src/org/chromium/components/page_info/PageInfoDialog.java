@@ -23,6 +23,7 @@ import android.widget.ScrollView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import org.chromium.components.browser_ui.widget.FadingEdgeScrollView;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -39,7 +40,7 @@ public class PageInfoDialog {
 
     @NonNull
     private final PageInfoView mView;
-    private final PageInfoSubpage mSubpageView;
+    private final PageInfoContainer mContainerView;
     private final boolean mIsSheet;
     // The dialog implementation.
     // mSheetDialog is set if the dialog appears as a sheet. Otherwise, mModalDialog is set.
@@ -68,11 +69,11 @@ public class PageInfoDialog {
      *
      */
     public PageInfoDialog(Context context, @NonNull PageInfoView view,
-            @Nullable PageInfoSubpage subpageView, View containerView, boolean isSheet,
+            @Nullable PageInfoContainer subpageView, View containerView, boolean isSheet,
             @NonNull ModalDialogManager manager,
             @NonNull ModalDialogProperties.Controller controller) {
         mView = view;
-        mSubpageView = subpageView;
+        mContainerView = subpageView;
         mIsSheet = isSheet;
         mManager = manager;
         mController = controller;
@@ -99,7 +100,7 @@ public class PageInfoDialog {
             container = new ScrollView(context);
         }
 
-        container.addView(mView);
+        container.addView(mContainerView != null ? mContainerView : mView);
 
         if (isSheet) {
             mSheetDialog = createSheetDialog(context, container);
@@ -163,8 +164,8 @@ public class PageInfoDialog {
                         // Delay the cleanup by a tiny amount to give this frame a chance to
                         // be displayed before we destroy the dialog.
                         mView.postDelayed(this::superDismiss, CLOSE_CLEANUP_DELAY_MS);
-                        if (mSubpageView != null) {
-                            mSubpageView.postDelayed(this::superDismiss, CLOSE_CLEANUP_DELAY_MS);
+                        if (mContainerView != null) {
+                            mContainerView.postDelayed(this::superDismiss, CLOSE_CLEANUP_DELAY_MS);
                         }
                     }).start();
                 }
@@ -203,11 +204,12 @@ public class PageInfoDialog {
     }
 
     private ViewGroup createSheetContainer(Context context, View containerView) {
-        return new ScrollView(context) {
+        return new FadingEdgeScrollView(context, null) {
             @Override
             protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                 heightMeasureSpec = MeasureSpec.makeMeasureSpec(
-                        containerView != null ? containerView.getHeight() : 0, MeasureSpec.AT_MOST);
+                        containerView != null ? containerView.getHeight() * 90 / 100 : 0,
+                        MeasureSpec.AT_MOST);
                 super.onMeasure(widthMeasureSpec, heightMeasureSpec);
             }
         };
@@ -238,8 +240,8 @@ public class PageInfoDialog {
     private Animator createAllAnimations(boolean isEnter, Runnable onAnimationEnd) {
         Animator dialogAnimation =
                 mIsSheet ? createDialogSlideAnimaton(isEnter, mView) : new AnimatorSet();
-        Animator subpageDialogAnimation = mIsSheet && mSubpageView != null
-                ? createDialogSlideAnimaton(isEnter, mSubpageView)
+        Animator subpageDialogAnimation = mIsSheet && mContainerView != null
+                ? createDialogSlideAnimaton(isEnter, mContainerView)
                 : new AnimatorSet();
         Animator viewAnimation = mView.createEnterExitAnimation(isEnter);
         AnimatorSet allAnimations = new AnimatorSet();

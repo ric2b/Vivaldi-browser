@@ -234,6 +234,9 @@ This file contains the strings for ash.
       <message name="IDS_ASH_QUICK_SETTINGS_BUBBLE_VPN_SETTINGS_ACCESSIBLE_DESCRIPTION" desc="The accessible description for VPN settings accessed through the VPN feature pod.">
         VPN Settings
       </message>
+      <message name="IDS_ASH_QUICK_SETTINGS_BUBBLE_MEDIA_CONTROLS_ACCESSIBLE_DESCRIPTION" is_accessibility_with_no_ui="true" desc="The accessible description for global media controls accessed through the media controls pod.">
+        Media Controls
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_BRAILLE_DISPLAY_CONNECTED" desc="The message shown on a notification when a braille display is connected">
         Braille display connected.
       </message>
@@ -294,6 +297,27 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_MESSAGE_OUT_OF_USERS" desc="The error message when all the users are added into multi-profile session.">
         All available users have already been added to this session.
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_BUTTON_LABEL" desc="The shorter label used for the button in the status tray to toggle Nearby Share high visibility mode, which makes the device visible to all nearby devices for file sharing. [CHAR_LIMIT=14]">
+        Nearby Share
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_OFF_STATE" desc="Sub-label for the Nearby Share system tray button." meaning="Nearby Share high visibility mode is currently inactive. [CHAR_LIMIT=14]">
+        Off
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_ON_STATE" desc="Sub-label for the Nearby Share system tray button." meaning="Nearby Share high visibility mode is currently active with the displayed time remaining. [CHAR_LIMIT=14]">
+        On, <ph name="REMAINING_TIME">$1<ex>40 sec</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_REMAINING_MINUTES" desc="A short string showing the nearest number of whole minutes until Nearby Share high visibility turns off. To be used with IDS_ASH_STATUS_TRAY_NEARBY_SHARE_ON_STATE. [CHAR_LIMIT=7]">
+        <ph name="MINUTES">$1<ex>2</ex></ph> min
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_REMAINING_SECONDS" desc="A short string showing the nearest number of whole seconds until Nearby Share high visibility turns off. To be used with IDS_ASH_STATUS_TRAY_NEARBY_SHARE_ON_STATE. [CHAR_LIMIT=7]">
+        <ph name="SECONDS">$1<ex>40</ex></ph> sec
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_SETTINGS_TOOLTIP" desc="Tooltip text for the status tray button that shows settings for the Nearby Share feature.">
+        Show Nearby Share settings.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TOGGLE_TOOLTIP" desc="Tooltip text used for the Nearby Share status tray button, which toggles Nearby Share high visibility mode on/off.">
+        Toggle Nearby Share high visibility.
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_NIGHT_LIGHT_BUTTON_LABEL" desc="The shorter label used for the button in the status tray to toggle the Night Light feature (which controls the color temperature of the screen) on or off. [CHAR_LIMIT=14]">
         Night Light
       </message>
@@ -330,29 +354,26 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_CAST_CAST_DESKTOP" desc="The label used in the tray popup to tell the user we are casting the desktop.">
         Casting screen to <ph name="RECEIVER_NAME">$1<ex>Living Room</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_BUTTON_LABEL" desc="The shorter label used for the button in the status tray to toggle the Dark Mode feature. [CHAR_LIMIT=14]">
-        Dark Mode
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME" desc="The label used as the header in the dark theme popup. [CHAR_LIMIT=19">
+        Dark theme
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_TOGGLE_TOOLTIP" desc="The tooltip text used for the button in the status tray to toggle the Dark Mode feature on or off.">
-        Toggle Dark Mode. <ph name="STATE_TEXT">$1<ex>Dark Mode is on.</ex></ph>
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_TOGGLE_TOOLTIP" desc="The tooltip text used for the button in the status tray to toggle the Dark theme feature on or off.">
+        Toggle Dark theme. <ph name="STATE_TEXT">$1<ex>Dark theme is on.</ex></ph>
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_ENABLED_STATE_TOOLTIP" desc="The tooltip text indicating the Dark Mode feature is on.">
-        Dark Mode is on.
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_ENABLED_STATE_TOOLTIP" desc="The tooltip text indicating the Dark theme feature is on.">
+        Dark theme is on
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_DISABLED_STATE_TOOLTIP" desc="The tooltip text indicating the Dark Mode feature is off.">
-        Dark Mode is off.
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_DISABLED_STATE_TOOLTIP" desc="The tooltip text indicating the Dark theme feature is off.">
+        Dark theme is off
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_SETTINGS_TOOLTIP" desc="The tooltip text used for the button in the status tray to show the Dark Mode feature settings.">
-        Show dark mode settings
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_SETTINGS_TOOLTIP" desc="The tooltip text used for the button in the status tray to show the Dark theme feature settings.">
+        Show dark theme settings
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_OFF_STATE" desc="Button label for the Dark Mode feature." meaning="Dark Mode feature is off. [CHAR_LIMIT=14]">
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_OFF_STATE" desc="Button label for the Dark theme feature." meaning="Dark theme feature is off. [CHAR_LIMIT=14]">
         Off
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_DARK_MODE_ON_STATE" desc="Button label for the Dark Mode feature." meaning="Dark Mode feature is on. [CHAR_LIMIT=14]">
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_ON_STATE" desc="Button label for the Dark theme feature." meaning="Dark theme feature is on. [CHAR_LIMIT=14]">
         On
-      </message>
-      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_TITLE" desc="The title for the dark theme detailed view.">
-        Dark Theme
       </message>
       <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_COLOR_MODE" desc="The title for the dark theme detailed view.">
         Color mode
@@ -360,7 +381,7 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_THEMED_TITLE" desc="The title for the dark theme detailed view.">
         Themed (default)
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_THEMED_DESCRIPTION" desc="The description for the neutral color mode.">
+      <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_THEMED_DESCRIPTION" desc="The description for the neutral color theme.">
         The themed color mode uses colors extracted from your wallpaper to lightly colorize the interface.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_DARK_THEME_MODE_NEUTRAL_TITLE" desc="The title for the dark theme detailed view.">
@@ -501,6 +522,18 @@ This file contains the strings for ash.
       <message name="IDS_GESTURE_NOTIFICATION_MESSAGE_LEARN_MORE" desc="The body of the notification to show off new gestures. This notification body links to the help page for the gestures.">
         Use gestures to quickly switch between apps and interact with your Chromebook in tablet mode.
       </message>
+      <message name="IDS_OVERVIEW_REVERSE_GESTURE_NOTIFICATION_TITLE" desc="The title of the notification to change reverse gesture when entering/exiting overview mode">
+        The Overview touchpad gesture has changed
+      </message>
+      <message name="IDS_OVERVIEW_REVERSE_GESTURE_NOTIFICATION_MESSAGE" desc="The body of the notification to change reverse gesture when entering/exiting overview mode">
+        Swipe up with three fingers to open and down to close the Overview.
+      </message>
+      <message name="IDS_CHANGE_NEXT_DESK_REVERSE_GESTURE" desc="The toast of changing reverse gesture to switch to the next desk.">
+        The touchpad gesture to switch to the next desk has changed. Swipe right with four fingers to switch to the next desk.
+      </message>
+      <message name="IDS_CHANGE_LAST_DESK_REVERSE_GESTURE" desc="The toast of changing reverse gesture to switch to the previous desk.">
+        The touchpad gesture to switch to the previous desk has changed. Swipe left with four fingers to switch to the previous desk.
+      </message>
       <message name="IDS_UPDATE_NOTIFICATION_MESSAGE_LEARN_MORE" desc="The body of the notification to notify that the user should restart to get system updates. This notification body links to the info page on the update.">
         Learn more about the latest <ph name="SYSTEM_APP_NAME">$1<ex>Chromium OS</ex></ph> update
       </message>
@@ -520,7 +553,7 @@ This file contains the strings for ash.
         <ph name="UPDATE_TEXT">$1<ex>Learn more about the latest Chromium OS update</ex></ph>. This Chromebook needs to restart to apply an update. This can take up to 1 minute.
       </message>
       <message name="IDS_DIALOG_TITLE_SLOW_BOOT" desc="The title of the Slow Boot Shutdown Confirmation Dialog.">
-	Restart may take awhile
+        Restart may take awhile
       </message>
       <message name="IDS_DIALOG_MESSAGE_SLOW_BOOT" desc="The body of the Slow Boot Shutdown Confirmation Dialog.">
         Your screen will go blank for longer than usual (up to a minute) during this update. Please don't press the power button while the update is in progress.
@@ -937,14 +970,145 @@ This file contains the strings for ash.
       </message>
 
       <!-- Holding space tray-->
+      <message name="IDS_ASH_HOLDING_SPACE_TITLE" desc="Title of the holding space tray and bubble.">
+        Recent screenshots and downloads
+      </message>
       <message name="IDS_ASH_HOLDING_SPACE_PINNED_TITLE" desc="Title of the pinned files area in the holding space bubble.">
         Pinned
       </message>
-      <message name="IDS_ASH_HOLDING_SPACE_RECENT_DOWNLOADS_TITLE" desc="Title of the recent downloads area in the holding space bubble.">
-        Recent downloads
+      <message name="IDS_ASH_HOLDING_SPACE_PINNED_EMPTY_PROMPT" desc="Prompt shown in the pinned files area of the holding space bubble if the user has no pinned files.">
+        Quickly access your important files. Right-click or touch &amp; hold a file to pin it.
+      </message>
+      <message name="IDS_ASH_HOLDING_SPACE_DOWNLOADS_TITLE" desc="Title of the downloads area in the holding space bubble.">
+        Downloads
       </message>
       <message name="IDS_ASH_HOLDING_SPACE_SCREENSHOTS_TITLE" desc="Title of the screenshots area in the holding space bubble.">
         Screenshots
+      </message>
+      <message name="IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_COPY_IMAGE_TO_CLIPBOARD" desc="Title of the option to copy an image to the clipboard in the holding space item context menu.">
+        Copy image
+      </message>
+      <message name="IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_PIN" desc="Title of the pin option in the holding space item context menu.">
+        Pin
+      </message>
+      <message name="IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_SHOW_IN_FOLDER" desc="Title of the option to show item in its folder in the holding space item context menu.">
+        Show in folder
+      </message>
+      <message name="IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_UNPIN" desc="Title of the unpin option in the holding space item context menu.">
+        Unpin
+      </message>
+
+      <!-- Phone Hub tray-->
+      <message name="IDS_ASH_PHONE_HUB_TRAY_ACCESSIBLE_NAME" desc="The accessible name of the Phone Hub tray bubble for screen readers.">
+        Phone Hub
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_ENABLE_HOTSPOT_TITLE" desc="Title of the enable hotspot toggle in the phone hub bubble.">
+        Enable Hotspot
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_SILENCE_PHONE_TITLE" desc="Title of the silence phone toggle in the phone hub bubble.">
+        Silence
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_LOCATE_PHONE_TITLE" desc="Title of the locate phone toggle in the phone hub bubble.">
+        Locate Phone
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_TOGGLE_TOOLTIP" desc="The tooltip text used for the button in phone hube bubble to toggle quick actions feature on or off.">
+        Toggle <ph name="FEATURE_NAME">$1<ex>Silence</ex></ph>. <ph name="STATE_TEXT">$2<ex>Silence is on.</ex></ph>
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_ENABLED_STATE_TOOLTIP" desc="The tooltip text indicating the quick actions feature is on.">
+        <ph name="FEATURE_NAME">$1<ex>Silence</ex></ph> is on.
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_DISABLED_STATE_TOOLTIP" desc="The tooltip text indicating the quick actions feature is off.">
+        <ph name="FEATURE_NAME">$1<ex>Silence</ex></ph> is off.
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_CONNECTING_STATE_TOOLTIP" desc="The tooltip text indicating the quick actions feature is currently sending a signal and try to connect to the phone.">
+        <ph name="FEATURE_NAME">$1<ex>Silence</ex></ph> is connecting.
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_NOT_CONNECTED_STATE_TOOLTIP" desc="The tooltip text indicating the quick actions feature is not available to use.">
+        <ph name="FEATURE_NAME">$1<ex>Enable Hotspot</ex></ph> is not connected.
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_CONNECTED_STATE_TOOLTIP" desc="The tooltip text indicating the quick actions feature is not available to use.">
+        <ph name="FEATURE_NAME">$1<ex>Enable Hotspot</ex></ph> is connected.
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_NOT_AVAILABLE_STATE_TOOLTIP" desc="The tooltip text indicating the quick actions feature is not available to use.">
+        <ph name="FEATURE_NAME">$1<ex>Silence</ex></ph> is not available.
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_OFF_STATE" desc="Quick actions state in phone hub bubble." meaning="Quick actions feature is off.">
+        Off
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_ON_STATE" desc="Quick actions state in phone hub bubble." meaning="Quick actions feature is on.">
+        On
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_CONNECTING_STATE" desc="Quick actions state in phone hub bubble." meaning="The feature is currently sending a signal and try to connect to the phone.">
+        Connecting...
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_NOT_CONNECTED_STATE" desc="Quick actions state in phone hub bubble." meaning="The feature is not connected to the phone.">
+        Not connected
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_CONNECTED_STATE" desc="Quick actions state in phone hub bubble." meaning="The feature is connected to the phone and ready to use.">
+        Connected
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_QUICK_ACTIONS_NOT_AVAILABLE_STATE" desc="Quick actions state in phone hub bubble." meaning="Quick actions feature is not available to use.">
+        Not available
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_TASK_CONTINUATION_TITLE" desc="Title of the task continuation section (where users pick up unfinished task left off from their phone, currently only support web browsing) in phone hub bubble.">
+        Continue browsing
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_ONBOARDING_DIALOG_TITLE" desc="The title of the onboarding dialog that pops up for existing multidevice users to ask for permission when the user enables this feature.">
+        Turn on Phone Hub
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_ONBOARDING_DIALOG_DESCRIPTION" desc="The description of the onboarding dialog that pops up for existing multidevice users to ask for permission when the user enables this feature." translateable="false">
+        View quick actions to extend the phone internet connection, control DND and locate your phone. Also view active Chrome tabs from your phone on your Chromebook.
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_ONBOARDING_DIALOG_DISMISS_BUTTON" desc="Dimiss button on the onboarding dialog for user to opt out this feature.">
+        Dismiss
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_ONBOARDING_DIALOG_GET_STARTED_BUTTON" desc="Get started button on the onboarding dialog for user to opt in this feature and start the consent flow.">
+        Get started
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_INITIAL_CONNECTING_DIALOG_TITLE" desc="The title of the initial connecting dialog that indicates the device is trying to connect to your phone after the user has opted in the Phone Hub feature.">
+        Connecting to your phone...
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_INITIAL_CONNECTING_DIALOG_DESCRIPTION" desc="The description of the onboarding dialog that indicates the device is trying to connect to your phone after the user has opted in the Phone Hub feature." translateable="false">
+        Make sure your phone is nearby with Bluetooth and Wi-Fi turned on.
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_TITLE" desc="The title of the dialog that pops up when the Phone Hub feature is not available because there is currently no active connection to the phone.">
+        Uh Oh! Can’t find phone
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_DESCRIPTION" desc="The description of the dialog that pops up when the Phone Hub feature is not available because there is currently no active connection to the phone.">
+        Looks like your phone is not online and we are not able to get all the goodies from it for you now.
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_REFRESH_BUTTON" desc="Refresh button on the connection error dialog to retry the connection attempt to the phone.">
+        Refresh
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_LEARN_MORE_BUTTON" desc="Learn more button on the connection error dialog to show more related information.">
+        Learn more
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_BLUETOOTH_DISABLED_DIALOG_TITLE" desc="The title of the dialog that pops up when the phone hub feature is not available because Bluetooth is disabled on this device.">
+        Uh Oh! Check your connection
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_BLUETOOTH_DISABLED_DIALOG_DESCRIPTION" desc="The description of the dialog that pops up when the phone hub feature is not available because Bluetooth is disabled on this device.">
+        Looks like your Bluetooth or Wi-Fi is turned off on your Chromebook. Please check your connection to use Phone Hub.
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_BLUETOOTH_DISABLED_DIALOG_OK_BUTTON" desc="Confirm button on the bluetooth disabled dialog to acknowledge.">
+        Ok, got it
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_BLUETOOTH_DISABLED_DIALOG_LEARN_MORE_BUTTON" desc="Learn more button on the bluetooth disabled dialog to show more related information.">
+        Learn more
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_NOTIFICATION_INLINE_REPLY_BUTTON" desc="Label for the inline reply button inside a PhoneHub notification.">
+        Reply
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_NOTIFICATION_INLINE_CANCEL_BUTTON" desc="Label for the cancel button inside a PhoneHub notification.">
+        Cancel
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_NOTIFICATION_OPT_IN_DESCRIPTION" desc="Description for the notification opt in view.">
+        Turn on Notifications from your Android phone
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_NOTIFICATION_OPT_IN_SET_UP_BUTTON" desc="Label for the set up button to start the opt in flow to show notifications from the phone.">
+        Set up
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_NOTIFICATION_OPT_IN_DISMISS_BUTTON" desc="Label for the dismiss button to opt out showing notifications from the phone.">
+        Dismiss
       </message>
 
       <message name="IDS_ASH_STYLUS_TOOLS_CAPTURE_REGION_ACTION" desc="Title of the capture region action in the stylus tools (a pop-up panel next to the status tray). This causes a partial screenshot to be taken (the user selects an area of the screen to take a screenshot of).">
@@ -1096,6 +1260,15 @@ This file contains the strings for ash.
       <message name="IDS_ASH_DESKS_ACTIVE_DESK_MINIVIEW_A11Y_EXTRA_TIP" desc="The accessibility tooltip read by screen readers for a highlighted active desk mini_view.">
         Active desk.
       </message>
+      <message name="IDS_ASH_DESKS_INACTIVE_DESK_MINIVIEW_A11Y_EXTRA_TIP" desc="The accessibility tooltip read by screen readers for a highlighted inactive desk mini_view.">
+        Inactive desk.
+      </message>
+      <message name="IDS_ASH_DESKS_DESK_ACCESSIBLE_NAME" desc="The full accessible desk name">
+        Desk: <ph name="DESK_NAME">$1</ph>
+      </message>
+      <message name="IDS_ASH_DESKS_DESK_NAME_COMMIT" desc="Alert when the desk name is committed">
+        Desk name was changed to <ph name="DESK_NAME">$1</ph>
+      </message>
 
       <!-- Status tray charging strings. -->
       <message name="IDS_ASH_STATUS_TRAY_LOW_POWER_CHARGER_TITLE" desc="The title of a notification indicating that a low-current USB charger has been connected.">
@@ -1103,6 +1276,12 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_LOW_POWER_CHARGER_MESSAGE_SHORT" desc="The message body of a notification indicating that a low-current USB charger has been connected, short version.">
         Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> may not charge while it is turned on.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_LOW_POWER_ADAPTER_TITLE" desc="The title of a notification indicating that a low-current USB adapter has been connected.">
+        Low-power adapter connected
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_LOW_POWER_ADAPTER_MESSAGE_SHORT" desc="The message body of a notification indicating that a low-current USB adapter has been connected on a device without a battery, short version.">
+        Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> may experience lower performance. Use a certified <ph name="PREFERRED_MINIMUM_POWER">$2<ex>60</ex></ph>W or higher USB-C power adapter.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_CHARGING_FROM_DUAL_ROLE_TITLE" desc="The message title of a notification indicating that the device is being charged by a connected dual-role USB Type-C device.">
         Charging from <ph name="POWER_SOURCE">$1<ex>USB-C device (left port)</ex></ph>
@@ -2149,6 +2328,18 @@ This file contains the strings for ash.
       <message name="IDS_ASH_LOGIN_MANUAL_LOCK_MESSAGE" desc="Message shown to user indicating that their parent locked the device.">
         Your parent locked this device
       </message>
+      <message name="IDS_ASH_LOGIN_MULTI_PROFILES_RESTRICTED_POLICY_TITLE" desc="Text that is shown on the title of the bubble shown for user pod which is not allowed in multi-profiles session.">
+        Can't set up multiple sign-in
+      </message>
+      <message name="IDS_ASH_LOGIN_MULTI_PROFILES_NOT_ALLOWED_POLICY_MSG" desc="Text that is shown on the bubble shown for user pod which is not allowed in multi-profiles session because of not-allowed policy or because of usage policy-pushed certificates.">
+        The administrator for this account has disallowed multiple sign-in.
+      </message>
+      <message name="IDS_ASH_LOGIN_MULTI_PROFILES_PRIMARY_ONLY_POLICY_MSG" desc="Text that is shown on the bubble shown for user pod which is not allowed in multi-profiles session because of primary-only policy.">
+        The administrator for this account requires this account to be the first signed-in account in a multiple sign-in session.
+      </message>
+      <message name="IDS_ASH_LOGIN_MULTI_PROFILES_OWNER_PRIMARY_ONLY_MSG" desc="Text that is shown on the bubble shown for owner user pod which is not allowed in multi-profiles session because it has to be primary user in the session.">
+        This owner account has to be the first signed-in account in a multiple sign-in session.
+      </message>
       <message name="IDS_ASH_LOGIN_PUBLIC_ACCOUNT_MONITORING_INFO" desc="Text shown in the warning dialog after user clicks on the learn more link, notifying the user of potential security and privacy implications of using the device">
         The admin of this device has the ability to:
       </message>
@@ -2228,6 +2419,38 @@ This file contains the strings for ash.
         Your Chromebook needs to stay on and connected to power during this time. Make sure the charger or adapter cables are completely plugged in, both to your Chromebook and the power outlet. Do not turn off your Chromebook.
       </message>
 
+      <!-- In-session auth dialog strings -->
+      <message name="IDS_ASH_IN_SESSION_AUTH_FINGERPRINT_AVAILABLE" desc="Text shown in the auth dialog to remind user that fingerprint auth is supported">
+        Authenticate with fingerprint
+      </message>
+      <message name="IDS_ASH_IN_SESSION_AUTH_FINGERPRINT_TOUCH_SENSOR" desc="Text shown in the auth dialog to warn the user they should touch the fingerprint sensor instead of the fingerprint icon">
+        Please touch the sensor
+      </message>
+      <message name="IDS_ASH_IN_SESSION_AUTH_FINGERPRINT_SUCCESS" desc="Text shown in the auth dialog that fingerprint unlock succeeded">
+        Success
+      </message>
+      <message name="IDS_ASH_IN_SESSION_AUTH_FINGERPRINT_FAILED" desc="Text shown in the auth dialog to tell user that couldn't unlock because finger is not recognized">
+        Not recognized
+      </message>
+      <message name="IDS_ASH_IN_SESSION_AUTH_FINGERPRINT_PASSWORD_REQUIRED" desc="Text shown when fingerprint has been disabled because it has been too long since the user last used the device">
+        Password required for more security
+      </message>
+      <message name="IDS_ASH_IN_SESSION_AUTH_FINGERPRINT_PIN_OR_PASSWORD_REQUIRED" desc="Text shown when fingerprint has been disabled because it has been too long since the user last used the device">
+        PIN or password required for more security
+      </message>
+      <message name="IDS_ASH_IN_SESSION_AUTH_FINGERPRINT_DISABLED_FROM_ATTEMPTS" desc="Text shown in the auth dialog to tell user that fingerprint unlock has reached maximum attempt">
+        Too many attempts
+      </message>
+      <message name="IDS_ASH_IN_SESSION_AUTH_FINGERPRINT_ACCESSIBLE_SUCCESS" desc="Accessibility text read by chromevox when the user successfully authenticated with fingerprint in in-session auth dialog">
+        Fingerprint recognized
+      </message>
+      <message name="IDS_ASH_IN_SESSION_AUTH_FINGERPRINT_ACCESSIBLE_FAILED" desc="Accessibility text read by chromevox that the user's fingerprint authentication attempt was not successful">
+        Fingerprint not recognized
+      </message>
+      <message name="IDS_ASH_IN_SESSION_AUTH_FINGERPRINT_ACCESSIBLE_DISABLED_FROM_ATTEMPTS" desc="Accessibility text read by chromevox when the user has made too many unsuccessful fingerprint unlock attempts; fingerprint is now disabled until the user authenticates with a different authentication method">
+        Too many fingerprint attempts
+      </message>
+
       <!-- Multi-profiles intro dialog -->
       <message name="IDS_ASH_MULTIPROFILES_INTRO_HEADLINE" desc="Describes which feature multi-profiles intro dialog presents.">
         Multiple sign-in
@@ -2280,6 +2503,9 @@ This file contains the strings for ash.
       <!-- Message center -->
       <message name="IDS_ASH_MESSAGE_CENTER_ACCESSIBLE_NAME" desc="The spoken feedback name for when accessible focus moves to the message center">
         Notification Center
+      </message>
+      <message name="IDS_ASH_MESSAGE_CENTER_APP_BADGING_BUTTON_TOOLTIP" desc="The tooltip text for the app badging toggle button.">
+        App badging
       </message>
       <message name="IDS_ASH_MESSAGE_CENTER_QUIET_MODE_BUTTON_TOOLTIP" desc="The tooltip text for the do not disturb button.">
         Do not disturb
@@ -2345,6 +2571,23 @@ This file contains the strings for ash.
 
       <message name="IDS_ASH_DIALOG_DONT_SHOW_AGAIN" desc="Label for checkbox dismissing show of a dialog.">
         Don't show again
+      </message>
+
+      <!-- Media Tray  -->
+      <message name="IDS_ASH_GLOBAL_MEDIA_CONTROLS_BUTTON_TOOLTIP_TEXT" desc="Tooltip for the Global Media Controls icon, which appears in the toolbar. The tooltip appears on mouseover of the icon.">
+        Control your music, videos, and more
+      </message>
+
+      <message name="IDS_ASH_GLOBAL_MEDIA_CONTROLS_TITLE" desc="The label used as global media controls' title.">
+        Media Controls
+      </message>
+
+      <message name="IDS_ASH_GLOBAL_MEDIA_CONTROLS_PINNED_BUTTON_TOOLTIP_TEXT" desc="Tooltip for pinned button showing in global media controls' title.">
+        Unpin
+      </message>
+
+      <message name="IDS_ASH_GLOBAL_MEDIA_CONTROLS_UNPINNED_BUTTON_TOOLTIP_TEXT" desc="Tooltip for unpinned button showing in global media controls' title.">
+        Pin to shelf
       </message>
 
       <!-- Power off menu  -->
@@ -2530,16 +2773,28 @@ This file contains the strings for ash.
         Hi, <ph name="USERNAME">$1</ph>
       </message>
       <message name="IDS_ASSISTANT_BETTER_ONBOARDING_GREETING_MORNING" desc="Message shown to greet the user in Assistant UI during the morning.">
-        Good morning <ph name="GIVEN_NAME">$1<ex>David</ex>,</ph>
+        Good morning <ph name="GIVEN_NAME">$1<ex>David</ex></ph>,
+      </message>
+      <message name="IDS_ASSISTANT_BETTER_ONBOARDING_GREETING_MORNING_WITHOUT_NAME" desc="Message shown to greet the user in Assistant UI during the morning.">
+        Good morning,
       </message>
       <message name="IDS_ASSISTANT_BETTER_ONBOARDING_GREETING_AFTERNOON" desc="Message shown to greet the user in Assistant UI during the afternoon.">
-        Good afternoon <ph name="GIVEN_NAME">$1<ex>David</ex>,</ph>
+        Good afternoon <ph name="GIVEN_NAME">$1<ex>David</ex></ph>,
+      </message>
+      <message name="IDS_ASSISTANT_BETTER_ONBOARDING_GREETING_AFTERNOON_WITHOUT_NAME" desc="Message shown to greet the user in Assistant UI during the afternoon.">
+        Good afternoon,
       </message>
       <message name="IDS_ASSISTANT_BETTER_ONBOARDING_GREETING_EVENING" desc="Message shown to greet the user in Assistant UI during the evening.">
-        Good evening <ph name="GIVEN_NAME">$1<ex>David</ex>,</ph>
+        Good evening <ph name="GIVEN_NAME">$1<ex>David</ex></ph>,
+      </message>
+      <message name="IDS_ASSISTANT_BETTER_ONBOARDING_GREETING_EVENING_WITHOUT_NAME" desc="Message shown to greet the user in Assistant UI during the evening.">
+        Good evening,
       </message>
       <message name="IDS_ASSISTANT_BETTER_ONBOARDING_GREETING_NIGHT" desc="Message shown to greet the user in Assistant UI during the night.">
-        Good night <ph name="GIVEN_NAME">$1<ex>David</ex>,</ph>
+        Good night <ph name="GIVEN_NAME">$1<ex>David</ex></ph>,
+      </message>
+      <message name="IDS_ASSISTANT_BETTER_ONBOARDING_GREETING_NIGHT_WITHOUT_NAME" desc="Message shown to greet the user in Assistant UI during the night.">
+        Good night,
       </message>
       <message name="IDS_ASSISTANT_BETTER_ONBOARDING_INTRO" desc="Message shown to introduce Assistant capabilities to the user.">
         I'm your Google Assistant, here to help you throughout your day!
@@ -2668,6 +2923,18 @@ Here are some things you can try to get started.
       </message>
 
       <!-- Capture Mode -->
+      <message name="IDS_ASH_SCREEN_CAPTURE_DISABLED_TITLE" desc="The title of the notification when capture mode is disabled.">
+        Screen capture disabled
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_FAILURE_TITLE" desc="The title of the notification when capture mode fails.">
+        An error occurred
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_DISABLED_MESSAGE" desc="The text of the notification when capture mode is disabled.">
+        The ability to screen capture has been disabled by your administrator.
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_FAILURE_MESSAGE" desc="The text of the notification when capture mode fails.">
+        Failed to capture screen
+      </message>
       <message name="IDS_ASH_SCREEN_CAPTURE_DISPLAY_SOURCE" desc="The name that is the display source of the screen capture notification.">
         Screen capture
       </message>
@@ -2680,24 +2947,29 @@ Here are some things you can try to get started.
       <message name="IDS_ASH_SCREEN_CAPTURE_MESSAGE" desc="The message shows in the screenshot or screen recording notification.">
         Show in folder
       </message>
-      <message name="IDS_ASH_SCREEN_CAPTURE_BUTTON_SHARE" desc="The share button label for the screen capture notifiction.">
-        Share
-      </message>
       <message name="IDS_ASH_SCREEN_CAPTURE_BUTTON_EDIT" desc="The edit button label for the screen catpure notification.">
         Edit
-      </message>
-      <message name="IDS_ASH_SCREEN_CAPTURE_BUTTON_FLOAT_ON_TOP" desc="The float-on-top button label for the screen capture notification.">
-        Float on top
       </message>
       <message name="IDS_ASH_SCREEN_CAPTURE_BUTTON_DELETE" desc="The delete button label for the screen capture notificaiton.">
         Delete
       </message>
       <!-- Switch Between TABLET/LAPTOP MODE-->
       <message name="IDS_ASH_SWITCH_TO_TABLET_MODE" desc="Alert of switching to tablet mode.">
-        Switch to tablet mode
+        Switched to tablet mode
       </message>
       <message name="IDS_ASH_SWITCH_TO_LAPTOP_MODE" desc="Alert of switching to laptop mode.">
-        Switch to laptop mode
+        Switched to laptop mode
+      </message>
+
+      <!-- Multipaste -->
+      <message name="IDS_ASH_MULTIPASTE_CONTEXTUAL_NUDGE" desc="The label used for the multipaste nudge, to be seen once the user copies and pastes multiple times in a short time span.">
+        Press <ph name="SHORTCUT_KEY_NAME">$1<ex>Launcher</ex></ph> + V to view your clipboard. The last 5 items you've copied are saved to your clipboard.
+      </message>
+      <message name="IDS_ASH_MULTIPASTE_CONTEXTUAL_NUDGE_LAUNCHER_KEY" desc="The name of the first key to be used for the keyboard shortcut for activating multipaste, when the device has a launcher key.">
+        Launcher
+      </message>
+      <message name="IDS_ASH_MULTIPASTE_CONTEXTUAL_NUDGE_SEARCH_KEY" desc="The name of the first key to be used for the keyboard shortcut for activating multipaste, when the device has a search key.">
+        Search
       </message>
     </messages>
   </release>

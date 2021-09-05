@@ -448,7 +448,12 @@ void MenuItemView::SetMinorIcon(const ui::ThemedVectorIcon& minor_icon) {
 
 void MenuItemView::SetSelected(bool selected) {
   selected_ = selected;
-  SchedulePaint();
+  OnPropertyChanged(&selected_, kPropertyEffectsPaint);
+}
+
+PropertyChangedSubscription MenuItemView::AddSelectedChangedCallback(
+    PropertyChangedCallback callback) {
+  return AddPropertyChangedCallback(&selected_, std::move(callback));
 }
 
 void MenuItemView::SetSelectionOfActionableSubmenu(
@@ -833,7 +838,7 @@ void MenuItemView::Init(MenuItemView* parent,
         type_ == Type::kRadio || (type_ == Type::kCheckbox && GetDelegate() &&
                                   GetDelegate()->IsItemChecked(GetCommand()));
     radio_check_image_view_->SetVisible(show_check_radio_icon);
-    radio_check_image_view_->set_can_process_events_within_subtree(false);
+    radio_check_image_view_->SetCanProcessEventsWithinSubtree(false);
   }
 
   if (type_ == Type::kActionableSubMenu) {
@@ -846,7 +851,7 @@ void MenuItemView::Init(MenuItemView* parent,
     vertical_separator_->SetPreferredSize(
         gfx::Size(config.actionable_submenu_vertical_separator_width,
                   config.actionable_submenu_vertical_separator_height));
-    vertical_separator_->set_can_process_events_within_subtree(false);
+    vertical_separator_->SetCanProcessEventsWithinSubtree(false);
   }
 
   if (submenu_arrow_image_view_)
@@ -1454,8 +1459,7 @@ bool MenuItemView::HasChecksOrRadioButtons() const {
       [](const auto* item) { return item->HasChecksOrRadioButtons(); });
 }
 
-BEGIN_METADATA(MenuItemView)
-METADATA_PARENT_CLASS(View)
-END_METADATA()
+BEGIN_METADATA(MenuItemView, View)
+END_METADATA
 
 }  // namespace views

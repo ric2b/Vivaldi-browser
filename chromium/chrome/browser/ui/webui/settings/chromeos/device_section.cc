@@ -167,12 +167,6 @@ const std::vector<SearchConcept>& GetTouchpadSearchConcepts() {
        mojom::SearchResultType::kSubpage,
        {.subpage = mojom::Subpage::kPointers},
        {IDS_OS_SETTINGS_TAG_TOUCHPAD_ALT1, SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_TOUCHPAD_SCROLL_ACCELERATION,
-       mojom::kPointersSubpagePath,
-       mojom::SearchResultIcon::kLaptop,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kTouchpadScrollAcceleration}},
       {IDS_OS_SETTINGS_TAG_TOUCHPAD_REVERSE_SCROLLING,
        mojom::kPointersSubpagePath,
        mojom::SearchResultIcon::kLaptop,
@@ -185,6 +179,19 @@ const std::vector<SearchConcept>& GetTouchpadSearchConcepts() {
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kTouchpadAcceleration}},
+  });
+  return *tags;
+}
+
+const std::vector<SearchConcept>&
+GetTouchpadScrollAccelerationSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_TOUCHPAD_SCROLL_ACCELERATION,
+       mojom::kPointersSubpagePath,
+       mojom::SearchResultIcon::kLaptop,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kTouchpadScrollAcceleration}},
   });
   return *tags;
 }
@@ -486,6 +493,7 @@ void AddDeviceKeyboardStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_KEYBOARD_SHOW_SHORTCUT_VIEWER},
       {"keyboardShowLanguageAndInput",
        IDS_SETTINGS_KEYBOARD_SHOW_LANGUAGE_AND_INPUT},
+      {"keyboardShowInputSettings", IDS_SETTINGS_KEYBOARD_SHOW_INPUT_SETTINGS},
   };
   AddLocalizedStringsBulk(html_source, keyboard_strings);
 
@@ -699,7 +707,8 @@ void AddDevicePowerStrings(content::WebUIDataSource* html_source) {
       {"powerIdleDisplayOffSleep", IDS_SETTINGS_POWER_IDLE_DISPLAY_OFF_SLEEP},
       {"powerIdleDisplayOff", IDS_SETTINGS_POWER_IDLE_DISPLAY_OFF},
       {"powerIdleDisplayOn", IDS_SETTINGS_POWER_IDLE_DISPLAY_ON},
-      {"powerIdleOther", IDS_SETTINGS_POWER_IDLE_OTHER},
+      {"powerIdleDisplayShutDown", IDS_SETTINGS_POWER_IDLE_SHUT_DOWN},
+      {"powerIdleDisplayStopSession", IDS_SETTINGS_POWER_IDLE_STOP_SESSION},
       {"powerLidSleepLabel", IDS_SETTINGS_POWER_LID_CLOSED_SLEEP_LABEL},
       {"powerLidSignOutLabel", IDS_SETTINGS_POWER_LID_CLOSED_SIGN_OUT_LABEL},
       {"powerLidShutDownLabel", IDS_SETTINGS_POWER_LID_CLOSED_SHUT_DOWN_LABEL},
@@ -779,13 +788,15 @@ DeviceSection::~DeviceSection() {
 void DeviceSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kDeviceStrings[] = {
       {"devicePageTitle", IDS_SETTINGS_DEVICE_TITLE},
-      {"scrollLabel", IDS_SETTINGS_SCROLL_LABEL},
       {"touchPadScrollLabel", IDS_OS_SETTINGS_TOUCHPAD_REVERSE_SCROLL_LABEL},
   };
   AddLocalizedStringsBulk(html_source, kDeviceStrings);
 
   html_source->AddBoolean("isDemoSession",
                           chromeos::DemoSession::IsDeviceInDemoMode());
+  html_source->AddBoolean("enableLanguageSettingsV2",
+                          base::FeatureList::IsEnabled(
+                              ::chromeos::features::kLanguageSettingsUpdate));
 
   AddDevicePointersStrings(html_source);
   AddDeviceKeyboardStrings(html_source);
@@ -827,6 +838,12 @@ mojom::SearchResultIcon DeviceSection::GetSectionIcon() const {
 
 std::string DeviceSection::GetSectionPath() const {
   return mojom::kDeviceSectionPath;
+}
+
+bool DeviceSection::LogMetric(mojom::Setting setting,
+                              base::Value& value) const {
+  // Unimplemented.
+  return false;
 }
 
 void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
@@ -927,11 +944,14 @@ void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
 
 void DeviceSection::TouchpadExists(bool exists) {
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+  updater.RemoveSearchTags(GetTouchpadSearchConcepts());
+  updater.RemoveSearchTags(GetTouchpadScrollAccelerationSearchConcepts());
 
-  if (exists)
+  if (exists) {
     updater.AddSearchTags(GetTouchpadSearchConcepts());
-  else
-    updater.RemoveSearchTags(GetTouchpadSearchConcepts());
+    if (base::FeatureList::IsEnabled(chromeos::features::kAllowScrollSettings))
+      updater.AddSearchTags(GetTouchpadScrollAccelerationSearchConcepts());
+  }
 }
 
 void DeviceSection::MouseExists(bool exists) {
@@ -941,6 +961,10 @@ void DeviceSection::MouseExists(bool exists) {
     updater.AddSearchTags(GetMouseSearchConcepts());
   else
     updater.RemoveSearchTags(GetMouseSearchConcepts());
+}
+
+void DeviceSection::PointingStickExists(bool exists) {
+  // TODO(crbug.com/1114828): manage search tags when the UI is implemented.
 }
 
 void DeviceSection::OnDeviceListsComplete() {

@@ -15,22 +15,12 @@ source_set("hid") {
     "hid_connection.h",
     "hid_connection_impl.cc",
     "hid_connection_impl.h",
-    "hid_connection_linux.cc",
-    "hid_connection_linux.h",
-    "hid_connection_mac.cc",
-    "hid_connection_mac.h",
-    "hid_connection_win.cc",
-    "hid_connection_win.h",
     "hid_device_info.cc",
     "hid_device_info.h",
     "hid_manager_impl.cc",
     "hid_manager_impl.h",
     "hid_service.cc",
     "hid_service.h",
-    "hid_service_mac.cc",
-    "hid_service_mac.h",
-    "hid_service_win.cc",
-    "hid_service_win.h",
   ]
 
   deps = [
@@ -43,6 +33,8 @@ source_set("hid") {
 
   if ((is_linux || is_chromeos) && use_udev) {
     sources += [
+      "hid_connection_linux.cc",
+      "hid_connection_linux.h",
       "hid_service_linux.cc",
       "hid_service_linux.h",
       "input_service_linux.cc",
@@ -56,9 +48,24 @@ source_set("hid") {
   }
 
   if (is_win) {
+    sources += [
+      "hid_connection_win.cc",
+      "hid_connection_win.h",
+      "hid_service_win.cc",
+      "hid_service_win.h",
+    ]
     libs = [
       "hid.lib",
       "setupapi.lib",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "hid_connection_mac.cc",
+      "hid_connection_mac.h",
+      "hid_service_mac.cc",
+      "hid_service_mac.h",
     ]
   }
 }

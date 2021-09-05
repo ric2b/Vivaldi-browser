@@ -110,7 +110,7 @@ NGPrePaintInfo SetupFragmentData(const NGFragmentChildIterator& iterator,
     // The fragment is block-level.
     if (IsResumingLayout(incoming_break_token)) {
       // This isn't the first fragment for the node. We now need to walk past
-      // all prededing fragments to figure out which FragmentData to return (or
+      // all preceding fragments to figure out which FragmentData to return (or
       // create, if it doesn't already exist).
       const LayoutBox& layout_box = ToLayoutBox(object);
       for (wtf_size_t idx = 0;; idx++) {
@@ -214,8 +214,8 @@ void PrePaintTreeWalk::WalkTree(LocalFrameView& root_frame_view) {
 #if DCHECK_IS_ON()
   if (needs_tree_builder_context_update) {
     if (VLOG_IS_ON(2) && root_frame_view.GetLayoutView()) {
-      LOG(ERROR) << "PrePaintTreeWalk::Walk(root_frame_view="
-                 << &root_frame_view << ")\nPaintLayer tree:";
+      VLOG(2) << "PrePaintTreeWalk::Walk(root_frame_view=" << &root_frame_view
+              << ")\nPaintLayer tree:";
       showLayerTree(root_frame_view.GetLayoutView()->Layer());
     }
     if (VLOG_IS_ON(1))
@@ -263,8 +263,8 @@ void PrePaintTreeWalk::Walk(LocalFrameView& frame_view) {
     return context_storage_.back();
   };
 
-  // ancestor_overflow_paint_layer does not cross frame boundaries.
-  context().ancestor_overflow_paint_layer = nullptr;
+  // ancestor_scroll_container_paint_layer does not cross frame boundaries.
+  context().ancestor_scroll_container_paint_layer = nullptr;
   if (context().tree_builder_context) {
     PaintPropertyTreeBuilder::SetupContextForFrame(
         frame_view, *context().tree_builder_context);
@@ -275,8 +275,8 @@ void PrePaintTreeWalk::Walk(LocalFrameView& frame_view) {
   if (LayoutView* view = frame_view.GetLayoutView()) {
 #if DCHECK_IS_ON()
     if (VLOG_IS_ON(3) && needs_tree_builder_context_update) {
-      LOG(ERROR) << "PrePaintTreeWalk::Walk(frame_view=" << &frame_view
-                 << ")\nLayout tree:";
+      VLOG(3) << "PrePaintTreeWalk::Walk(frame_view=" << &frame_view
+              << ")\nLayout tree:";
       showLayoutTree(view);
     }
 #endif
@@ -374,8 +374,8 @@ void PrePaintTreeWalk::UpdateAuxiliaryObjectProperties(
     return;
 
   PaintLayer* paint_layer = ToLayoutBoxModelObject(object).Layer();
-  paint_layer->UpdateAncestorOverflowLayer(
-      context.ancestor_overflow_paint_layer);
+  paint_layer->UpdateAncestorScrollContainerLayer(
+      context.ancestor_scroll_container_paint_layer);
 
   if (object.StyleRef().HasStickyConstrainedPosition()) {
     paint_layer->GetLayoutObject().UpdateStickyPositionConstraints();
@@ -386,8 +386,8 @@ void PrePaintTreeWalk::UpdateAuxiliaryObjectProperties(
     // update layer position and ancestor inputs updates in the same walk).
     paint_layer->UpdateLayerPosition();
   }
-  if (paint_layer->IsRootLayer() || object.HasOverflowClip())
-    context.ancestor_overflow_paint_layer = paint_layer;
+  if (object.IsScrollContainer())
+    context.ancestor_scroll_container_paint_layer = paint_layer;
 }
 
 bool PrePaintTreeWalk::NeedsTreeBuilderContextUpdate(
@@ -419,8 +419,7 @@ bool PrePaintTreeWalk::ObjectRequiresTreeBuilderContext(
     const LayoutObject& object) {
   return object.NeedsPaintPropertyUpdate() ||
          object.ShouldCheckGeometryForPaintInvalidation() ||
-         (!object.PrePaintBlockedByDisplayLock(
-              DisplayLockLifecycleTarget::kChildren) &&
+         (!object.ChildPrePaintBlockedByDisplayLock() &&
           (object.DescendantNeedsPaintPropertyUpdate() ||
            object.DescendantShouldCheckGeometryForPaintInvalidation()));
 }
@@ -649,16 +648,23 @@ void PrePaintTreeWalk::WalkNGChildren(const LayoutObject* parent,
       DCHECK((*iterator)->BoxFragment()->IsFragmentainerBox());
       PhysicalOffset offset = (*iterator)->Link().offset;
       PaintPropertyTreeBuilderFragmentContext::ContainingBlockContext*
-          fragment_context = nullptr;
+          containing_block_context = nullptr;
       if (context_storage_.back().tree_builder_context) {
         PaintPropertyTreeBuilderContext& tree_builder_context =
             context_storage_.back().tree_builder_context.value();
-        fragment_context = &tree_builder_context.fragments[0].current;
-        fragment_context->paint_offset += offset;
+        PaintPropertyTreeBuilderFragmentContext& context =
+            tree_builder_context.fragments[0];
+        containing_block_context = &context.current;
+        containing_block_context->paint_offset += offset;
+
+        if (box_fragment->IsFragmentainerBox()) {
+          context.absolute_position = *containing_block_context;
+          context.fixed_position = *containing_block_context;
+        }
       }
       WalkChildren(/* parent */ nullptr, iterator);
-      if (fragment_context)
-        fragment_context->paint_offset -= offset;
+      if (containing_block_context)
+        containing_block_context->paint_offset -= offset;
       continue;
     }
     Walk(*object, iterator);
@@ -795,10 +801,10 @@ void PrePaintTreeWalk::WalkChildren(const LayoutObject* object,
   // block-fragmenting, or that this is monolithic content. We may re-enter
   // LayoutNG fragment traversal if we get to a descendant that supports that.
   if (object && !object->CanTraversePhysicalFragments()) {
-    DCHECK(
-        !object->FlowThreadContainingBlock() ||
-        (object->IsBox() && ToLayoutBox(object)->GetPaginationBreakability() ==
-                                LayoutBox::kForbidBreaks));
+    DCHECK(!object->FlowThreadContainingBlock() ||
+           (object->IsBox() &&
+            ToLayoutBox(object)->GetNGPaginationBreakability() ==
+                LayoutBox::kForbidBreaks));
     WalkLegacyChildren(*object);
     return;
   }
@@ -866,11 +872,7 @@ void PrePaintTreeWalk::Walk(const LayoutObject& object,
 
   WalkInternal(object, iterator, context());
 
-  if (is_last_fragment)
-    object.NotifyDisplayLockDidPrePaint(DisplayLockLifecycleTarget::kSelf);
-
-  bool child_walk_blocked = object.PrePaintBlockedByDisplayLock(
-      DisplayLockLifecycleTarget::kChildren);
+  bool child_walk_blocked = object.ChildPrePaintBlockedByDisplayLock();
   // If we need a subtree walk due to context flags, we need to store that
   // information on the display lock, since subsequent walks might not set the
   // same bits on the context.
@@ -916,8 +918,6 @@ void PrePaintTreeWalk::Walk(const LayoutObject& object,
         }
       }
     }
-
-    object.NotifyDisplayLockDidPrePaint(DisplayLockLifecycleTarget::kChildren);
   }
   if (is_last_fragment)
     object.GetMutableForPainting().ClearPaintFlags();

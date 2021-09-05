@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/string_piece.h"
@@ -74,7 +75,7 @@ std::unique_ptr<views::View> CreateOriginView(const url::Origin& origin,
   base::string16 origin_text = l10n_util::GetStringFUTF16(
       text_id, url_formatter::FormatOriginForSecurityDisplay(origin));
   auto label = std::make_unique<views::Label>(
-      origin_text, ChromeTextContext::CONTEXT_BODY_TEXT_SMALL,
+      origin_text, ChromeTextContext::CONTEXT_DIALOG_BODY_TEXT_SMALL,
       views::style::STYLE_SECONDARY);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label->SetElideBehavior(gfx::ELIDE_HEAD);
@@ -97,12 +98,14 @@ class IntentPickerLabelButton : public views::LabelButton {
     SetHorizontalAlignment(gfx::ALIGN_LEFT);
     SetMinSize(gfx::Size(kMaxIntentPickerLabelButtonWidth, kRowHeight));
     SetInkDropMode(InkDropMode::ON);
-    if (!icon->IsEmpty())
-      SetImage(views::ImageButton::STATE_NORMAL, *icon->ToImageSkia());
+    if (!icon->IsEmpty()) {
+      SetImageModel(views::ImageButton::STATE_NORMAL,
+                    ui::ImageModel::FromImage(*icon));
+    }
     SetBorder(views::CreateEmptyBorder(8, 16, 8, 0));
     SetFocusForPlatform();
-    set_ink_drop_base_color(SK_ColorGRAY);
-    set_ink_drop_visible_opacity(kToolbarInkDropVisibleOpacity);
+    SetInkDropBaseColor(SK_ColorGRAY);
+    SetInkDropVisibleOpacity(kToolbarInkDropVisibleOpacity);
   }
 
   void MarkAsUnselected(const ui::Event* event) {
@@ -472,6 +475,11 @@ void IntentPickerBubbleView::RunCallbackAndCloseBubble(
     bool should_persist) {
   if (!intent_picker_cb_.is_null()) {
     // Calling Run() will make |intent_picker_cb_| null.
+    // TODO(https://crbug.com/853604): Remove this and convert to a DCHECK
+    // after finding out the root cause.
+    if (should_persist && launch_name.empty()) {
+      base::debug::DumpWithoutCrashing();
+    }
     std::move(intent_picker_cb_)
         .Run(launch_name, entry_type, close_reason, should_persist);
   }

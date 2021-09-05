@@ -27,7 +27,7 @@
 #include "content/public/browser/guest_host.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "third_party/blink/public/common/page/web_drag_operation.h"
+#include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
 #include "third_party/blink/public/web/web_drag_status.h"
@@ -89,9 +89,8 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   WebContentsImpl* CreateNewGuestWindow(
       const WebContents::CreateParams& params);
 
-  bool focused() const { return focused_; }
-
   // WebContentsObserver implementation.
+  void DidStartNavigation(NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
 
   void RenderProcessGone(base::TerminationStatus status) override;
@@ -111,8 +110,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 #endif
 
   // GuestHost implementation.
-  int LoadURLWithParams(
-      const NavigationController::LoadURLParams& load_params) override;
   void WillDestroy() override;
 
   // Exposes the protected web_contents() from WebContentsObserver.
@@ -124,11 +121,19 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
                          float client_y,
                          float screen_x,
                          float screen_y,
-                         blink::WebDragOperation operation);
+                         blink::DragOperation operation);
 
   // Called when the drag started by this guest ends at an OS-level.
   void EmbedderSystemDragEnded();
   void EndSystemDragIfApplicable();
+
+  void set_allow_blocked_by_client() { allow_blocked_by_client_ = true; }
+
+  // We need to change the delegate when we use the content from the
+  // tab-strip.
+  void set_delegate(BrowserPluginGuestDelegate* delegate) {
+    delegate_ = delegate;
+  }
 
  protected:
   // BrowserPluginGuest is a WebContentsObserver of |web_contents| and
@@ -147,12 +152,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
 
   WebContentsImpl* owner_web_contents_;
 
-  // Indicates whether this guest has been attached to a container.
-  bool attached_;
-
-  gfx::Rect frame_rect_;
-  bool focused_;
-
   // BrowserPluginGuest::Init can only be called once. This flag allows it to
   // exit early if it's already been called.
   bool initialized_;
@@ -168,7 +167,9 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // Whether or not our embedder has seen a DragSourceEndedAt() call.
   bool seen_embedder_drag_source_ended_at_;
 
-  BrowserPluginGuestDelegate* const delegate_;
+  BrowserPluginGuestDelegate* delegate_;
+
+  bool allow_blocked_by_client_ = false;
 
   // Weak pointer used to ask GeolocationPermissionContext about geolocation
   // permission.

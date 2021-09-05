@@ -13,7 +13,7 @@
 #include "base/stl_util.h"
 #include "chrome/browser/media/router/data_decoder_util.h"
 #include "chrome/browser/media/router/providers/dial/dial_media_route_provider_metrics.h"
-#include "chrome/common/media_router/media_source.h"
+#include "components/media_router/common/media_source.h"
 #include "url/origin.h"
 
 namespace media_router {
@@ -345,7 +345,7 @@ void DialMediaRouteProvider::HandleStopAppResult(
     RouteRequestResult::ResultCode result_code) {
   if (result_code == RouteRequestResult::OK) {
     media_router_->OnPresentationConnectionStateChanged(
-        route_id, mojom::MediaRouter::PresentationConnectionState::TERMINATED);
+        route_id, blink::mojom::PresentationConnectionState::TERMINATED);
     NotifyAllOnRoutesUpdated();
     DialMediaRouteProviderMetrics::RecordTerminateRouteResult(
         DialTerminateRouteResult::kSuccess);

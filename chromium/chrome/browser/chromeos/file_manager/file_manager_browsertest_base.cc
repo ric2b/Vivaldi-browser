@@ -27,6 +27,8 @@
 #include "base/test/bind_test_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_documents_provider_util.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_media_view_util.h"
@@ -1134,7 +1136,8 @@ class DriveFsTestVolume : public TestVolume {
          entry.capabilities.can_add_children},
         {entry.folder_feature.is_machine_root,
          entry.folder_feature.is_arbitrary_sync_folder,
-         entry.folder_feature.is_external_media});
+         entry.folder_feature.is_external_media},
+        "");
 
     ASSERT_TRUE(UpdateModifiedTime(entry));
   }
@@ -2303,6 +2306,24 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
         break;
       }
     }
+    return;
+  }
+
+  if (name == "hasSwaStarted") {
+    std::string swa_app_id;
+    ASSERT_TRUE(value.GetString("swaAppId", &swa_app_id));
+
+    *output = "false";
+
+    auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile());
+    proxy->InstanceRegistry().ForEachInstance(
+        [&swa_app_id, &output](const apps::InstanceUpdate& update) {
+          if (update.AppId() == swa_app_id &&
+              update.State() & apps::InstanceState::kStarted) {
+            *output = "true";
+          }
+        });
+
     return;
   }
 

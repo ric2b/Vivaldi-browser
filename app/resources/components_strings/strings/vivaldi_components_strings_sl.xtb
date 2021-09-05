@@ -153,6 +153,7 @@
 <translation id="6165508094623778733">Več o tem</translation>
 <translation id="6177128806592000436">Povezava s tem spletnim mestom ni varna</translation>
 <translation id="6203231073485539293">Preverite internetno povezavo</translation>
+<translation id="6225522625585012689">Obiščite &lt;strong&gt;vivaldi://policy&lt;/strong&gt; da si ogledate seznam blokiranih URL-jev in druge pravilnike, ki jih uveljavlja skrbnik sistema.</translation>
 <translation id="625755898061068298">Izbrali ste onemogočanje varnostnih opozoril za to spletno mesto.</translation>
 <translation id="6264485186158353794">Nazaj na varno</translation>
 <translation id="6305205051461490394">Naslov <ph name="URL" /> je nedosegljiv.</translation>
@@ -202,7 +203,6 @@
 <translation id="8041940743680923270">Uporabi globalno privzeto (Vprašaj)</translation>
 <translation id="808894953321890993">Zamenjajte geslo</translation>
 <translation id="8119307142152921512">sledilci in oglasi</translation>
-<translation id="8142868475871995937">Na &lt;strong&gt;vivaldi://policy&lt;/strong&gt; si lahko ogledate seznam blokiranih URL-jev in drugih pravilnikov, ki jih uveljavlja skrbnik sistema.</translation>
 <translation id="8149426793427495338">Računalnik je preklopil v stanje spanja.</translation>
 <translation id="8150722005171944719">Datoteke na <ph name="URL" /> ni mogoče prebrati. Morda je odstranjena, premaknjena ali pa dostop preprečujejo dovoljenja za datoteke.</translation>
 <translation id="8184538546369750125">Uporabi globalno privzeto (Dovoli)</translation>

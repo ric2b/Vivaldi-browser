@@ -18,17 +18,14 @@ AX_BASE_EXPORT extern const char
     kEnableExperimentalAccessibilityLanguageDetection[];
 AX_BASE_EXPORT extern const char
     kEnableExperimentalAccessibilityLanguageDetectionDynamic[];
-AX_BASE_EXPORT extern const char kEnableExperimentalAccessibilitySwitchAccess[];
 AX_BASE_EXPORT extern const char
     kEnableExperimentalAccessibilitySwitchAccessText[];
 AX_BASE_EXPORT extern const char
     kEnableExperimentalAccessibilityChromeVoxAnnotations[];
 AX_BASE_EXPORT extern const char
-    kDisableExperimentalAccessibilityChromeVoxLanguageSwitching[];
-AX_BASE_EXPORT extern const char
-    kDisableExperimentalAccessibilityChromeVoxSearchMenus[];
-AX_BASE_EXPORT extern const char
     kEnableExperimentalAccessibilityChromeVoxTutorial[];
+AX_BASE_EXPORT extern const char
+    kEnableExperimentalAccessibilityMagnifierNewFocusFollowing[];
 AX_BASE_EXPORT extern const char kEnableSwitchAccessPointScanning[];
 
 // Returns true if experimental accessibility language detection is enabled.

@@ -8,29 +8,27 @@
 #include "base/macros.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
-#include "ui/views/controls/button/button.h"
-#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/view.h"
 
 class OmniboxPopupContentsView;
 class OmniboxSuggestionRowButton;
 
+namespace views {
+class Button;
+}
+
 // A view to contain the button row within a result view.
-class OmniboxSuggestionButtonRowView : public views::View,
-                                       public views::ButtonListener {
+class OmniboxSuggestionButtonRowView : public views::View {
  public:
   explicit OmniboxSuggestionButtonRowView(OmniboxPopupContentsView* view,
                                           int model_index);
   ~OmniboxSuggestionButtonRowView() override;
 
-  // Called when themes, styles, and visibility is refreshed in result view.
-  void OnStyleRefresh();
+  // Called when results background color is refreshed.
+  void OnOmniboxBackgroundChange(SkColor omnibox_bg_color);
 
   // Updates the suggestion row buttons based on the model.
   void UpdateFromModel();
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   views::Button* GetActiveButton() const;
 
@@ -43,6 +41,9 @@ class OmniboxSuggestionButtonRowView : public views::View,
 
   void SetPillButtonVisibility(OmniboxSuggestionRowButton* button,
                                OmniboxPopupModel::LineState state);
+
+  void ButtonPressed(OmniboxPopupModel::LineState state,
+                     const ui::Event& event);
 
   OmniboxPopupContentsView* const popup_contents_view_;
   size_t const model_index_;

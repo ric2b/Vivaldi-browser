@@ -22,7 +22,7 @@
 #endif
 
 #if defined(OS_WIN) || defined(OS_MAC)
-#if BUILDFLAG(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ) || defined(VIVALDI_BUILD)
 #include "rlz/lib/machine_id.h"
 #else
 #error "RLZ must be enabled on Windows/Mac"

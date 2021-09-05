@@ -48,7 +48,8 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
       const std::string& app_name,
       const gfx::Rect& bounds,
       ui::WindowShowState show_state,
-      const std::string& workspace);
+      const std::string& workspace,
+      const std::string& user_title);
   // NOTE(andre@vivaldi.com) : We added ext_data to be able to restore a browser
   // window with the saved ext_data.
   virtual LiveTabContext* CreateLiveTabContext(
@@ -56,6 +57,7 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
     const gfx::Rect& bounds,
     ui::WindowShowState show_state,
     const std::string& workspace,
+    const std::string& user_title,
     const std::string& ext_data);
 
   // Returns the LiveTabContext instance that is associated with

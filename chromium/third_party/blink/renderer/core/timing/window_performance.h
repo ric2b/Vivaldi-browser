@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/frame/performance_monitor.h"
+#include "third_party/blink/renderer/core/page/page_visibility_observer.h"
 #include "third_party/blink/renderer/core/timing/event_counts.h"
 #include "third_party/blink/renderer/core/timing/memory_info.h"
 #include "third_party/blink/renderer/core/timing/performance.h"
@@ -50,7 +51,8 @@ class IntSize;
 
 class CORE_EXPORT WindowPerformance final : public Performance,
                                             public PerformanceMonitor::Client,
-                                            public ExecutionContextClient {
+                                            public ExecutionContextClient,
+                                            public PageVisibilityObserver {
   friend class WindowPerformanceTest;
 
  public:
@@ -91,6 +93,10 @@ class CORE_EXPORT WindowPerformance final : public Performance,
                         Element*);
 
   void AddLayoutShiftEntry(LayoutShift*);
+  void AddVisibilityStateEntry(bool is_visible, base::TimeTicks start_time);
+
+  // PageVisibilityObserver
+  void PageVisibilityChanged() override;
 
   void OnLargestContentfulPaintUpdated(base::TimeTicks paint_time,
                                        uint64_t paint_size,
@@ -125,8 +131,6 @@ class CORE_EXPORT WindowPerformance final : public Performance,
 
   void DispatchFirstInputTiming(PerformanceEventTiming* entry);
 
-  void MeasureMemoryExperimentTimerFired(TimerBase*);
-
   // Counter of the current frame index, based on calls to OnPaintFinished().
   uint64_t frame_index_ = 1;
   // Monotonically increasing value with the last frame index on which a swap
@@ -151,11 +155,6 @@ class CORE_EXPORT WindowPerformance final : public Performance,
   Member<EventCounts> event_counts_;
   mutable Member<PerformanceNavigation> navigation_;
   mutable Member<PerformanceTiming> timing_;
-
-  // This is used in a Finch experiment to perform a memory measurement without
-  // reporting the results to evaluate its impact on stability and performance.
-  TaskRunnerTimer<WindowPerformance> measure_memory_experiment_timer_;
-  static const int kMaxMeasureMemoryExperimentDelayInMs = 30000;
 };
 
 }  // namespace blink

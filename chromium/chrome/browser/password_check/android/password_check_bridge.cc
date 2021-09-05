@@ -12,7 +12,7 @@
 #include "chrome/browser/password_manager/android/password_checkup_launcher_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
-#include "components/password_manager/core/browser/ui/compromised_credentials_manager.h"
+#include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
 #include "url/android/gurl_android.h"
 
 namespace {
@@ -86,11 +86,11 @@ void PasswordCheckBridge::GetCompromisedCredentials(
                                                credential.change_password_url),
         base::android::ConvertUTF8ToJavaString(env, credential.package_name),
         credential.create_time.ToJavaTime(),
-        (credential.compromise_type ==
-         password_manager::CompromiseTypeFlags::kCredentialLeaked),
-        (credential.compromise_type ==
-         password_manager::CompromiseTypeFlags::kCredentialPhished),
-        credential.has_script);
+        (credential.insecure_type ==
+         password_manager::InsecureCredentialTypeFlags::kCredentialLeaked),
+        (credential.insecure_type ==
+         password_manager::InsecureCredentialTypeFlags::kCredentialPhished),
+        credential.has_startable_script, credential.has_auto_change_button);
   }
 }
 

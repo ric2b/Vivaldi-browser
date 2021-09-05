@@ -63,7 +63,6 @@ namespace incremental_marking_test {
 class IncrementalMarkingScope;
 }  // namespace incremental_marking_test
 
-class CancelableTaskScheduler;
 class MarkingVisitor;
 class MarkingSchedulingOracle;
 class PersistentNode;
@@ -558,7 +557,7 @@ class PLATFORM_EXPORT ThreadState final {
   // terminated and the worklist is empty)
   bool ConcurrentMarkingStep();
   void ScheduleConcurrentMarking();
-  void PerformConcurrentMark();
+  void PerformConcurrentMark(base::JobDelegate* job);
 
   // Schedule helpers.
   void ScheduleIdleLazySweep();
@@ -666,10 +665,7 @@ class PLATFORM_EXPORT ThreadState final {
   std::unique_ptr<IncrementalMarkingScheduler> incremental_marking_scheduler_;
   std::unique_ptr<MarkingSchedulingOracle> marking_scheduling_;
 
-  std::unique_ptr<CancelableTaskScheduler> marker_scheduler_;
-  Vector<uint8_t> available_concurrent_marking_task_ids_;
-  uint8_t active_markers_ = 0;
-  base::Lock concurrent_marker_bootstrapping_lock_;
+  base::JobHandle marker_handle_;
 
   base::JobHandle sweeper_handle_;
   std::atomic_bool has_unswept_pages_{false};
@@ -677,6 +673,10 @@ class PLATFORM_EXPORT ThreadState final {
   size_t disable_heap_verification_scope_ = 0;
 
   bool skip_incremental_marking_for_testing_ = false;
+
+  size_t last_concurrently_marked_bytes_ = 0;
+  base::TimeTicks last_concurrently_marked_bytes_update_;
+  bool concurrent_marking_priority_increased_ = false;
 
   friend class BlinkGCObserver;
   friend class incremental_marking_test::IncrementalMarkingScope;

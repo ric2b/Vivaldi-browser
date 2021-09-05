@@ -8,6 +8,7 @@
 
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -18,6 +19,7 @@
 using base::Value;
 using cast_util::EnumToString;
 using cast_util::StringToEnum;
+
 namespace cast_util {
 
 using ::cast::channel::AuthChallenge;
@@ -98,6 +100,24 @@ const EnumTable<GetAppAvailabilityResult>
 namespace cast_channel {
 
 namespace {
+
+constexpr base::StringPiece kCastReservedNamespacePrefix =
+    "urn:x-cast:com.google.cast.";
+
+constexpr const char* kReservedNamespaces[] = {
+    kAuthNamespace,
+    kHeartbeatNamespace,
+    kConnectionNamespace,
+    kReceiverNamespace,
+    kBroadcastNamespace,
+    kMediaNamespace,
+
+    // mirroring::mojom::kRemotingNamespace
+    "urn:x-cast:com.google.cast.remoting",
+
+    // mirroring::mojom::kWebRtcNamespace
+    "urn:x-cast:com.google.cast.webrtc",
+};
 
 // The value used for "sdkType" in a virtual connect request. Historically, this
 // value is used in the Media Router extension, but here it is reused in Chrome.
@@ -209,11 +229,31 @@ bool IsCastMessageValid(const CastMessage& message_proto) {
           message_proto.has_payload_binary());
 }
 
-bool IsCastInternalNamespace(const std::string& message_namespace) {
-  // Note: any namespace with the prefix is assumed to be reserved for internal
-  // messages.
-  return base::StartsWith(message_namespace, kCastInternalNamespacePrefix,
-                          base::CompareCase::SENSITIVE);
+bool IsCastReservedNamespace(base::StringPiece message_namespace) {
+  // Note: Any namespace with the prefix is theoretically reserved for internal
+  // messages, but there is at least one namespace in widespread use that uses
+  // the "reserved" prefix for app-level messages, so after matching the main
+  // prefix, we look for longer prefixes that really need to be reserved.
+  if (!base::StartsWith(message_namespace, kCastReservedNamespacePrefix))
+    return false;
+
+  const auto prefix_length = kCastReservedNamespacePrefix.length();
+  for (base::StringPiece reserved_namespace : kReservedNamespaces) {
+    DCHECK(base::StartsWith(reserved_namespace, kCastReservedNamespacePrefix));
+    // This comparison skips the first |prefix_length| characters
+    // because we already know they match.
+    if (base::StartsWith(message_namespace.substr(prefix_length),
+                         reserved_namespace.substr(prefix_length)) &&
+        // This condition allows |reserved_namespace| to be equal
+        // |message_namespace| or be a prefix of it, but if it's a
+        // prefix, it must be followed by a dot.  The subscript is
+        // never out of bounds because |message_namespace| must be
+        // at least as long as |reserved_namespace|.
+        (message_namespace.length() == reserved_namespace.length() ||
+         message_namespace[reserved_namespace.length()] == '.'))
+      return true;
+  }
+  return false;
 }
 
 CastMessageType ParseMessageTypeFromPayload(const base::Value& payload) {
@@ -315,8 +355,6 @@ CastMessage CreateVirtualConnectionRequest(
     VirtualConnectionType connection_type,
     const std::string& user_agent,
     const std::string& browser_version) {
-  DCHECK(destination_id == kPlatformReceiverId || connection_type == kStrong);
-
   // Parse system_version from user agent string. It contains platform, OS and
   // CPU info and is contained in the first set of parentheses of the user
   // agent string (e.g., X11; Linux x86_64).
@@ -599,6 +637,15 @@ LaunchSessionResponse GetLaunchSessionResponse(const base::Value& payload) {
   response.result = LaunchSessionResponse::Result::kOk;
   response.receiver_status = receiver_status->Clone();
   return response;
+}
+
+VirtualConnectionType GetConnectionType(const std::string& destination_id) {
+  // VCs to recevier-0 are invisible to the receiver application by design.
+  // We create a strong connection because some commands (e.g. LAUNCH) are
+  // not accepted from invisible connections.
+  return destination_id == kPlatformReceiverId
+             ? VirtualConnectionType::kStrong
+             : VirtualConnectionType::kInvisible;
 }
 
 }  // namespace cast_channel

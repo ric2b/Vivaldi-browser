@@ -22,12 +22,17 @@
 #include "ash/system/cast/cast_feature_pod_controller.h"
 #include "ash/system/cast/unified_cast_detailed_view_controller.h"
 #include "ash/system/dark_mode/dark_mode_detailed_view_controller.h"
+#include "ash/system/dark_mode/dark_mode_feature_pod_controller.h"
 #include "ash/system/ime/ime_feature_pod_controller.h"
 #include "ash/system/ime/unified_ime_detailed_view_controller.h"
 #include "ash/system/locale/locale_feature_pod_controller.h"
 #include "ash/system/locale/unified_locale_detailed_view_controller.h"
+#include "ash/system/media/media_tray.h"
+#include "ash/system/media/unified_media_controls_controller.h"
+#include "ash/system/media/unified_media_controls_detailed_view_controller.h"
 #include "ash/system/model/clock_model.h"
 #include "ash/system/model/system_tray_model.h"
+#include "ash/system/nearby_share/nearby_share_feature_pod_controller.h"
 #include "ash/system/network/network_feature_pod_controller.h"
 #include "ash/system/network/unified_network_detailed_view_controller.h"
 #include "ash/system/network/unified_vpn_detailed_view_controller.h"
@@ -52,6 +57,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/numerics/ranges.h"
+#include "media/base/media_switches.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/compositor/animation_metrics_reporter.h"
 #include "ui/gfx/animation/slide_animation.h"
@@ -128,6 +134,15 @@ UnifiedSystemTrayView* UnifiedSystemTrayController::CreateView() {
   DCHECK(!unified_view_);
   unified_view_ = new UnifiedSystemTrayView(this, model_->IsExpandedOnOpen());
   InitFeaturePods();
+
+  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsForChromeOS) &&
+      !Shell::Get()->session_controller()->IsScreenLocked() &&
+      !MediaTray::IsPinnedToShelf()) {
+    media_controls_controller_ =
+        std::make_unique<UnifiedMediaControlsController>(this);
+    unified_view_->AddMediaControlsView(
+        media_controls_controller_->CreateView());
+  }
 
   volume_slider_controller_ =
       std::make_unique<UnifiedVolumeSliderController>(this);
@@ -353,6 +368,11 @@ void UnifiedSystemTrayController::ShowNotifierSettingsView() {
   ShowDetailedView(std::make_unique<UnifiedNotifierSettingsController>(this));
 }
 
+void UnifiedSystemTrayController::ShowMediaControlsDetailedView() {
+  ShowDetailedView(
+      std::make_unique<UnifiedMediaControlsDetailedViewController>(this));
+}
+
 void UnifiedSystemTrayController::TransitionToMainView(bool restore_focus) {
   detailed_view_controller_.reset();
   unified_view_->ResetDetailedView();
@@ -406,6 +426,18 @@ void UnifiedSystemTrayController::OnAudioSettingsButtonClicked() {
   ShowAudioDetailedView();
 }
 
+void UnifiedSystemTrayController::ShowMediaControls() {
+  unified_view_->ShowMediaControls();
+}
+
+void UnifiedSystemTrayController::HideMediaControls() {
+  unified_view_->HideMediaControls();
+}
+
+void UnifiedSystemTrayController::OnMediaControlsViewClicked() {
+  ShowMediaControlsDetailedView();
+}
+
 void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<NetworkFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<BluetoothFeaturePodController>(this));
@@ -420,6 +452,9 @@ void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<LocaleFeaturePodController>(this));
   if (features::IsCaptureModeEnabled())
     AddFeaturePodItem(std::make_unique<CaptureModeFeaturePodController>());
+  if (features::IsDarkLightModeEnabled())
+    AddFeaturePodItem(std::make_unique<DarkModeFeaturePodController>(this));
+  AddFeaturePodItem(std::make_unique<NearbyShareFeaturePodController>(this));
 
   // If you want to add a new feature pod item, add here.
 

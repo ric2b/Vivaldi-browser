@@ -11,42 +11,57 @@
 
 namespace ash {
 
-class Desk;
 class DesksController;
+class PresentationTimeRecorder;
 
 class DeskActivationAnimation : public DeskAnimationBase {
  public:
   DeskActivationAnimation(DesksController* controller,
-                          const Desk* ending_desk,
-                          bool move_left);
+                          int starting_desk_index,
+                          int ending_desk_index,
+                          DesksSwitchSource source);
   DeskActivationAnimation(const DeskActivationAnimation&) = delete;
   DeskActivationAnimation& operator=(const DeskActivationAnimation&) = delete;
   ~DeskActivationAnimation() override;
 
   // DeskAnimationBase:
-  void OnStartingDeskScreenshotTakenInternal(const Desk* ending_desk) override;
-  void OnDeskSwitchAnimationFinishedInternal() override {}
+  bool Replace(bool moving_left, DesksSwitchSource source) override;
+  bool UpdateSwipeAnimation(float scroll_delta_x) override;
+  bool EndSwipeAnimation() override;
+  void OnStartingDeskScreenshotTakenInternal(int ending_desk_index) override;
+  void OnDeskSwitchAnimationFinishedInternal() override;
   metrics_util::ReportCallback GetReportCallback() const override;
+
+ private:
+  // Prepares the desk associated with |index| for taking a screenshot. Exits
+  // overview and splitview if necessary and then activates the desk. Restores
+  // splitview if necessary after activating the desk.
+  void PrepareDeskForScreenshot(int index);
+
+  // The switch source that requested this animation.
+  const DesksSwitchSource switch_source_;
+
+  // Used to measure the presentation time of a continuous gesture swipe.
+  std::unique_ptr<PresentationTimeRecorder> presentation_time_recorder_;
 };
 
 class DeskRemovalAnimation : public DeskAnimationBase {
  public:
   DeskRemovalAnimation(DesksController* controller,
-                       const Desk* desk_to_remove,
-                       const Desk* desk_to_activate,
-                       bool move_left,
+                       int desk_to_remove_index,
+                       int desk_to_activate_index,
                        DesksCreationRemovalSource source);
   DeskRemovalAnimation(const DeskRemovalAnimation&) = delete;
   DeskRemovalAnimation& operator=(const DeskRemovalAnimation&) = delete;
   ~DeskRemovalAnimation() override;
 
   // DeskAnimationBase:
-  void OnStartingDeskScreenshotTakenInternal(const Desk* ending_desk) override;
+  void OnStartingDeskScreenshotTakenInternal(int ending_desk_index) override;
   void OnDeskSwitchAnimationFinishedInternal() override;
   metrics_util::ReportCallback GetReportCallback() const override;
 
  private:
-  const Desk* const desk_to_remove_;
+  const int desk_to_remove_index_;
   const DesksCreationRemovalSource request_source_;
 };
 

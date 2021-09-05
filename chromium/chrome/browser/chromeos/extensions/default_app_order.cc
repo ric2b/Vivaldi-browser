@@ -64,9 +64,11 @@ const char* const kDefaultAppOrder[] = {
     arc::kPlayBooksAppId,                   // Play Books ARC app
     extension_misc::kGooglePlayBooksAppId,  // Play Books Chrome app
     extension_misc::kCameraAppId,
+    default_web_apps::kCameraAppId,
     extension_misc::kGooglePhotosAppId,
     arc::kGooglePhotosAppId,
     arc::kGoogleDuoAppId,
+    default_web_apps::kStadiaAppId,
     app_list::kDefaultPageBreak1,  // First default page break
     // TODO(crbug.com/976578): Remove after M78.
     extension_misc::kGoogleMapsAppId,

@@ -92,7 +92,7 @@ class PLATFORM_EXPORT FrameWidget
   virtual mojom::blink::DisplayMode DisplayMode() const = 0;
 
   // Returns the window segments for the widget.
-  virtual const WebVector<WebRect>& WindowSegments() const = 0;
+  virtual const WebVector<gfx::Rect>& WindowSegments() const = 0;
 
   // Sets the ink metadata on the layer tree host
   virtual void SetDelegatedInkMetadata(
@@ -121,7 +121,7 @@ class PLATFORM_EXPORT FrameWidget
 
   // Return the composition character in window coordinates.
   virtual void GetCompositionCharacterBoundsInWindow(
-      Vector<gfx::Rect>* bounds) = 0;
+      Vector<gfx::Rect>* bounds_in_dips) = 0;
 
   virtual gfx::Range CompositionRange() = 0;
   // Returns ime_text_spans and corresponding window coordinates for the list
@@ -170,7 +170,8 @@ class PLATFORM_EXPORT FrameWidget
   virtual void FinishComposingText(bool keep_selection) = 0;
 
   virtual bool IsProvisional() = 0;
-  virtual uint64_t GetScrollableContainerIdAt(const gfx::PointF& point) = 0;
+  virtual uint64_t GetScrollableContainerIdAt(
+      const gfx::PointF& point_in_dips) = 0;
 
   virtual bool ShouldHandleImeEvents() { return false; }
 
@@ -179,6 +180,28 @@ class PLATFORM_EXPORT FrameWidget
 
   // Returns information about the screen where this widget is being displayed.
   virtual const ScreenInfo& GetScreenInfo() = 0;
+
+  // Called to get the position of the widget's window in screen
+  // coordinates. Note, the window includes any decorations such as borders,
+  // scrollbars, URL bar, tab strip, etc. if they exist.
+  virtual gfx::Rect WindowRect() = 0;
+
+  // Called to get the view rect in screen coordinates. This is the actual
+  // content view area, i.e. doesn't include any window decorations.
+  virtual gfx::Rect ViewRect() = 0;
+
+  // Converts from Blink coordinate (ie. Viewport/Physical pixels) space to
+  // DIPs.
+  virtual gfx::RectF BlinkSpaceToDIPs(const gfx::RectF&) = 0;
+  virtual gfx::Rect BlinkSpaceToEnclosedDIPs(const gfx::Rect&) = 0;
+  virtual gfx::Size BlinkSpaceToFlooredDIPs(const gfx::Size& size) = 0;
+
+  // Converts from DIPs to Blink coordinate space (ie. Viewport/Physical
+  // pixels).
+  virtual gfx::RectF DIPsToBlinkSpace(const gfx::RectF& rect) = 0;
+  virtual gfx::PointF DIPsToBlinkSpace(const gfx::PointF& point) = 0;
+  virtual gfx::Point DIPsToRoundedBlinkSpace(const gfx::Point& point) = 0;
+  virtual float DIPsToBlinkSpace(float scalar) = 0;
 };
 
 }  // namespace blink

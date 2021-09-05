@@ -107,7 +107,7 @@ void TextControlElement::DispatchBlurEvent(
 
 void TextControlElement::DefaultEventHandler(Event& event) {
   if (event.type() == event_type_names::kWebkitEditableContentChanged &&
-      GetLayoutObject() && GetLayoutObject()->IsTextControl()) {
+      GetLayoutObject() && GetLayoutObject()->IsTextControlIncludingNG()) {
     last_change_was_user_edit_ = !GetDocument().IsRunningExecCommand();
     user_has_edited_the_field_ |= last_change_was_user_edit_;
 
@@ -177,7 +177,7 @@ HTMLElement* TextControlElement::PlaceholderElement() const {
     return nullptr;
   DCHECK(UserAgentShadowRoot());
   auto* element = UserAgentShadowRoot()->getElementById(
-      shadow_element_names::Placeholder());
+      shadow_element_names::kIdPlaceholder);
   CHECK(!element || IsA<HTMLElement>(element));
   return To<HTMLElement>(element);
 }
@@ -1031,10 +1031,12 @@ void TextControlElement::SetSuggestedValue(const String& value) {
 
   if (suggested_value_.IsEmpty()) {
     // Reset the pseudo-id for placeholders to use the appropriated style
-    placeholder->SetShadowPseudoId(AtomicString("-webkit-input-placeholder"));
+    placeholder->SetShadowPseudoId(
+        shadow_element_names::kPseudoInputPlaceholder);
   } else {
     // Set the pseudo-id for suggested values to use the appropriated style.
-    placeholder->SetShadowPseudoId(AtomicString("-internal-input-suggested"));
+    placeholder->SetShadowPseudoId(
+        shadow_element_names::kPseudoInternalInputSuggested);
   }
 }
 

@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_fetcher.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_fetcher_delegate.h"
-#include "components/password_manager/core/browser/android_affiliation/test_affiliation_fetcher_factory.h"
+#include "components/password_manager/core/browser/site_affiliation/affiliation_fetcher_factory.h"
 
 namespace password_manager {
 
@@ -39,14 +39,11 @@ class FakeAffiliationFetcher : public AffiliationFetcher {
   DISALLOW_COPY_AND_ASSIGN(FakeAffiliationFetcher);
 };
 
-// While this factory is in scope, calls to AffiliationFetcher::Create() will
-// produce FakeAffiliationFetchers that can be used in tests to return fake API
-// responses to users of AffiliationFetcher. Nesting is not supported.
-class ScopedFakeAffiliationFetcherFactory
-    : public TestAffiliationFetcherFactory {
+// Used in tests to return fake API responses to users of AffiliationFetcher.
+class FakeAffiliationFetcherFactory : public AffiliationFetcherFactory {
  public:
-  ScopedFakeAffiliationFetcherFactory();
-  ~ScopedFakeAffiliationFetcherFactory() override;
+  FakeAffiliationFetcherFactory();
+  ~FakeAffiliationFetcherFactory() override;
 
   // Returns the next FakeAffiliationFetcher instance previously produced, so
   // that that the testing code can inject a response and simulate completion
@@ -65,16 +62,13 @@ class ScopedFakeAffiliationFetcherFactory
   bool has_pending_fetchers() const { return !pending_fetchers_.empty(); }
 
   // AffiliationFetcherFactory:
-  FakeAffiliationFetcher* CreateInstance(
+  std::unique_ptr<AffiliationFetcherInterface> CreateInstance(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       AffiliationFetcherDelegate* delegate) override;
 
  private:
-  // Fakes created by this factory. The elements are owned by the production
-  // code that normally owns the result of AffiliationFetcher::Create().
+  // Fakes created by this factory.
   base::queue<FakeAffiliationFetcher*> pending_fetchers_;
-
-  DISALLOW_COPY_AND_ASSIGN(ScopedFakeAffiliationFetcherFactory);
 };
 
 }  // namespace password_manager

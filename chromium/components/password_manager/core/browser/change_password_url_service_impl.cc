@@ -10,6 +10,7 @@
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/timer/elapsed_timer.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
@@ -105,7 +106,7 @@ void ChangePasswordUrlServiceImpl::PrefetchURLs() {
       SimpleURLLoader::Create(std::move(resource_request), traffic_annotation);
   // Start Timer.
   fetch_timer_ = base::ElapsedTimer();
-  // Binding the callback to |this| is safe, because the navigationthrottle
+  // Binding the callback to |this| is safe, because the navigation throttle
   // defers if the request is not received yet. Thereby the throttle still exist
   // when the response arrives.
   url_loader_->DownloadToString(
@@ -120,11 +121,12 @@ GURL ChangePasswordUrlServiceImpl::GetChangePasswordUrl(const GURL& url) {
   DCHECK_NE(state_, FetchState::kNoRequestStarted)
       << "Call PrefetchURLs() before.";
   // Metrics for GetChangePasswordUrl are only logged when the request is still
-  // ongoing or if it succeeded. Network erros are logged in the resonse
+  // ongoing or if it succeeded. Network errors are logged in the response
   // callback.
   if (state_ == FetchState::kIsLoading) {
-    base::UmaHistogramEnumeration(kGetChangePasswordUrlMetricName,
-                                  GetChangePasswordUrlMetric::kNotFetchedYet);
+    base::UmaHistogramEnumeration(
+        kGetChangePasswordUrlMetricName,
+        metrics_util::GetChangePasswordUrlMetric::kNotFetchedYet);
   } else if (state_ == FetchState::kFetchSucceeded) {
     std::string domain_and_registry =
         net::registry_controlled_domains::GetDomainAndRegistry(
@@ -133,12 +135,12 @@ GURL ChangePasswordUrlServiceImpl::GetChangePasswordUrl(const GURL& url) {
     if (it != change_password_url_map_.end()) {
       base::UmaHistogramEnumeration(
           kGetChangePasswordUrlMetricName,
-          GetChangePasswordUrlMetric::kUrlOverrideUsed);
+          metrics_util::GetChangePasswordUrlMetric::kUrlOverrideUsed);
       return it->second;
     } else {
       base::UmaHistogramEnumeration(
           kGetChangePasswordUrlMetricName,
-          GetChangePasswordUrlMetric::kNoUrlOverrideAvailable);
+          metrics_util::GetChangePasswordUrlMetric::kNoUrlOverrideAvailable);
     }
   }
   // Fallback if no valid change-password url available no response available.

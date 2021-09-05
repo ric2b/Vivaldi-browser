@@ -17,6 +17,7 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_types.h"
+#include "ui/gfx/x/xproto.h"
 
 class SkCanvas;
 
@@ -29,7 +30,9 @@ class COMPONENT_EXPORT(UI_BASE_X) X11SoftwareBitmapPresenter {
   // Corresponds to SwapBuffersCallback alias in SoftwareOutputDevice.
   using SwapBuffersCallback = base::OnceCallback<void(const gfx::Size&)>;
 
-  explicit X11SoftwareBitmapPresenter(gfx::AcceleratedWidget widget);
+  X11SoftwareBitmapPresenter(x11::Connection* connection,
+                             gfx::AcceleratedWidget widget,
+                             bool enable_multibuffering);
 
   ~X11SoftwareBitmapPresenter();
 
@@ -42,23 +45,25 @@ class COMPONENT_EXPORT(UI_BASE_X) X11SoftwareBitmapPresenter {
  private:
   // Draw |data| over |widget|'s parent-relative background, and write the
   // resulting image to |widget|.  Returns true on success.
-  static bool CompositeBitmap(XDisplay* display,
-                              XID widget,
+  static bool CompositeBitmap(x11::Connection* connection,
+                              x11::Drawable widget,
                               int x,
                               int y,
                               int width,
                               int height,
                               int depth,
-                              GC gc,
+                              x11::GraphicsContext gc,
                               const void* data);
 
   bool ShmPoolReady() const;
 
   x11::Window widget_;
   x11::Connection* connection_;
-  XDisplay* display_;
-  GC gc_;
-  XWindowAttributes attributes_;
+  x11::GraphicsContext gc_{};
+  x11::VisualId visual_{};
+  int depth_ = 0;
+
+  const bool enable_multibuffering_;
 
   // If nonzero, indicates that the widget should be drawn over its
   // parent-relative background.

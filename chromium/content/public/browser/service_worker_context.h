@@ -157,7 +157,7 @@ class CONTENT_EXPORT ServiceWorkerContext {
   // specified |origin| via |callback|. Must be called from the UI thread. The
   // callback is called on the UI thread.
   virtual void CountExternalRequestsForTest(
-      const GURL& origin,
+      const url::Origin& origin,
       CountExternalRequestsCallback callback) = 0;
 
   // Whether |origin| has any registrations. Uninstalling and uninstalled
@@ -230,9 +230,12 @@ class CONTENT_EXPORT ServiceWorkerContext {
 
   // Starts the active worker of the registration for the given |scope|. If
   // there is no active worker, starts the installing worker.
-  // |info_callback| is passed information about the started worker.
+  // |info_callback| is passed information about the started worker if
+  // successful, otherwise |failure_callback| is called.
   //
-  // May be called on any thread, and the callback is called on that thread.
+  // Must be called on the core thread, and the callback is called on that
+  // thread. There is no guarantee about whether the callback is called
+  // synchronously or asynchronously.
   virtual void StartWorkerForScope(const GURL& scope,
                                    StartWorkerCallback info_callback,
                                    base::OnceClosure failure_callback) = 0;
@@ -258,7 +261,7 @@ class CONTENT_EXPORT ServiceWorkerContext {
   // Stops all running workers on the given |origin|.
   //
   // This function can be called from any thread.
-  virtual void StopAllServiceWorkersForOrigin(const GURL& origin) = 0;
+  virtual void StopAllServiceWorkersForOrigin(const url::Origin& origin) = 0;
 
   // Stops all running service workers.
   //

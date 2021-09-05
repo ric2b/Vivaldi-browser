@@ -81,6 +81,11 @@
             "optional": true,
             "description": "Url that can be used to determine a corresponding icon."
           },
+          "shortcut": {
+            "type": "string",
+            "optional": true,
+            "description": "A shortcut displayed next to the name. No binding is added."
+          },
           "icons": {
             "$ref": "Icons",
             "optional": true,

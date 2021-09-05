@@ -21,6 +21,8 @@ using blink::mojom::FontEnumerationStatus;
 namespace base {
 template <typename T>
 class NoDestructor;
+
+class ElapsedTimer;
 }
 
 namespace content {
@@ -31,6 +33,10 @@ class CONTENT_EXPORT FontEnumerationCacheWin : public FontEnumerationCache {
  public:
   FontEnumerationCacheWin();
   ~FontEnumerationCacheWin();
+
+  // Disallow copy and assign.
+  FontEnumerationCacheWin(const FontEnumerationCacheWin&) = delete;
+  FontEnumerationCacheWin operator=(const FontEnumerationCacheWin&) = delete;
 
   // A data structure to hold font family results from DirectWrite.
   struct FamilyDataResult {
@@ -43,18 +49,17 @@ class CONTENT_EXPORT FontEnumerationCacheWin : public FontEnumerationCache {
   };
   static FontEnumerationCacheWin* GetInstance();
 
-  // FontEnumerationCache methods.
-  void QueueShareMemoryRegionWhenReady(
-      scoped_refptr<base::TaskRunner> task_runner,
-      blink::mojom::FontAccessManager::EnumerateLocalFontsCallback callback)
-      override;
-  bool IsFontEnumerationCacheReady() override;
+ protected:
+  // FontEnumerationCache interface.
+  void SchedulePrepareFontEnumerationCache() override;
 
  private:
   friend class base::NoDestructor<FontEnumerationCacheWin>;
+  // This gives FontEnumerationCache::GetInstance access to the class
+  // constructor.
+  friend class FontEnumerationCache;
 
   void InitializeDirectWrite();
-  void SchedulePrepareFontEnumerationCache();
   void PrepareFontEnumerationCache();
   void AppendFontDataAndFinalizeIfNeeded(
       std::unique_ptr<FamilyDataResult> family_data_result);
@@ -64,9 +69,11 @@ class CONTENT_EXPORT FontEnumerationCacheWin : public FontEnumerationCache {
   Microsoft::WRL::ComPtr<IDWriteFontCollection> collection_;
   uint32_t outstanding_family_results_ = 0;
 
-  std::map<HRESULT, unsigned> enumeration_errors_;
+  // Protobuf structure temporarily used during cache construction and shared.
+  std::unique_ptr<blink::FontEnumerationTable> font_enumeration_table_;
 
-  DISALLOW_COPY_AND_ASSIGN(FontEnumerationCacheWin);
+  std::map<HRESULT, unsigned> enumeration_errors_;
+  std::unique_ptr<base::ElapsedTimer> enumeration_timer_;
 };
 
 }  // namespace content

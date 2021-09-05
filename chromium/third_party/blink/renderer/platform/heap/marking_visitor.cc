@@ -28,8 +28,6 @@ MarkingVisitorBase::MarkingVisitorBase(ThreadState* state,
       ephemeron_pairs_to_process_worklist_(
           Heap().GetEphemeronPairsToProcessWorklist(),
           task_id),
-      backing_store_callback_worklist_(Heap().GetBackingStoreCallbackWorklist(),
-                                       task_id),
       marking_mode_(marking_mode),
       task_id_(task_id) {}
 
@@ -37,22 +35,11 @@ void MarkingVisitorBase::FlushCompactionWorklists() {
   if (marking_mode_ != kGlobalMarkingWithCompaction)
     return;
   movable_reference_worklist_.FlushToGlobal();
-  backing_store_callback_worklist_.FlushToGlobal();
 }
 
 void MarkingVisitorBase::RegisterWeakCallback(WeakCallback callback,
                                               const void* object) {
   weak_callback_worklist_.Push({callback, object});
-}
-
-void MarkingVisitorBase::RegisterBackingStoreCallback(
-    const void* backing,
-    MovingObjectCallback callback) {
-  if (marking_mode_ != kGlobalMarkingWithCompaction)
-    return;
-  if (Heap().ShouldRegisterMovingAddress()) {
-    backing_store_callback_worklist_.Push({backing, callback});
-  }
 }
 
 void MarkingVisitorBase::RegisterMovableSlot(const void* const* slot) {
@@ -317,6 +304,11 @@ ConcurrentMarkingVisitor::ConcurrentMarkingVisitor(ThreadState* state,
   DCHECK_NE(WorklistTaskId::MutatorThread, task_id);
 }
 
+ConcurrentMarkingVisitor::~ConcurrentMarkingVisitor() {
+  // ConcurrentMarkingVisitor should report all its marked_bytes before dying.
+  DCHECK_EQ(marked_bytes_, last_marked_bytes_);
+}
+
 void ConcurrentMarkingVisitor::FlushWorklists() {
   // Flush marking worklists for further marking on the mutator thread.
   marking_worklist_.FlushToGlobal();
@@ -330,7 +322,6 @@ void ConcurrentMarkingVisitor::FlushWorklists() {
   // Flush compaction worklists.
   if (marking_mode_ == kGlobalMarkingWithCompaction) {
     movable_reference_worklist_.FlushToGlobal();
-    backing_store_callback_worklist_.FlushToGlobal();
   }
 }
 

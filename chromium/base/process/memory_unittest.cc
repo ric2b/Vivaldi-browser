@@ -17,6 +17,7 @@
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
 #include "base/memory/aligned_memory.h"
+#include "base/process/process_metrics.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,7 +35,7 @@
 #include "base/allocator/buildflags.h"
 #include "base/process/memory_unittest_mac.h"
 #endif
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include <malloc.h>
 #include "base/test/malloc_wrapper.h"
 #endif
@@ -129,9 +130,10 @@ class OutOfMemoryTest : public testing::Test {
  public:
   OutOfMemoryTest()
       : value_(nullptr),
-        // Make test size as large as possible minus a few pages so
-        // that alignment or other rounding doesn't make it wrap.
-        test_size_(std::numeric_limits<std::size_t>::max() - 12 * 1024),
+        // Make test size as large as possible minus a few pages so that
+        // alignment or other rounding doesn't make it wrap.
+        test_size_(std::numeric_limits<std::size_t>::max() -
+                   3 * base::GetPageSize()),
         // A test size that is > 2Gb and will cause the allocators to reject
         // the allocation due to security restrictions. See crbug.com/169327.
         insecure_test_size_(std::numeric_limits<int>::max()),
@@ -297,7 +299,7 @@ TEST_F(OutOfMemoryDeathTest, SecurityAlignedRealloc) {
 #endif  // defined(OS_WIN)
 #endif  // !defined(OS_MAC) && !defined(OS_ANDROID)
 
-#if defined(OS_LINUX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 TEST_F(OutOfMemoryDeathTest, Valloc) {
   ASSERT_OOM_DEATH({
@@ -343,7 +345,7 @@ TEST_F(OutOfMemoryDeathTest, ViaSharedLibraries) {
     value_ = MallocWrapper(test_size_);
   });
 }
-#endif  // OS_LINUX
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 // Android doesn't implement posix_memalign().
 #if defined(OS_POSIX) && !defined(OS_ANDROID)
@@ -435,20 +437,6 @@ TEST_F(OutOfMemoryDeathTest, CFAllocatorMallocZone) {
   });
 }
 
-#if !defined(ARCH_CPU_64_BITS)
-
-// See process_util_unittest_mac.mm for an explanation of why this test isn't
-// run in the 64-bit environment.
-
-TEST_F(OutOfMemoryDeathTest, PsychoticallyBigObjCObject) {
-  ASSERT_OOM_DEATH({
-    SetUpInDeathAssert();
-    while ((value_ = base::AllocatePsychoticallyBigObjCObject())) {
-    }
-  });
-}
-
-#endif  // !ARCH_CPU_64_BITS
 #endif  // OS_MAC
 
 class OutOfMemoryHandledTest : public OutOfMemoryTest {
@@ -507,7 +495,8 @@ TEST_F(OutOfMemoryTest, TerminateBecauseOutOfMemoryReportsAllocSize) {
 }
 #endif  // OS_WIN
 
-#if defined(ARCH_CPU_32_BITS) && (defined(OS_WIN) || defined(OS_LINUX))
+#if defined(ARCH_CPU_32_BITS) && \
+    (defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS))
 
 void TestAllocationsReleaseReservation(void* (*alloc_fn)(size_t),
                                        void (*free_fn)(void*)) {
@@ -565,20 +554,16 @@ TEST_F(OutOfMemoryHandledTest, NewReleasesReservation) {
       [](size_t size) { return static_cast<void*>(new char[size]); },
       [](void* ptr) { delete[] static_cast<char*>(ptr); });
 }
-#endif  // defined(ARCH_CPU_32_BITS) && (defined(OS_WIN) || defined(OS_LINUX))
+#endif  // defined(ARCH_CPU_32_BITS) && (defined(OS_WIN) || defined(OS_LINUX) ||
+        // defined(OS_CHROMEOS))
 
 // See the comment in |UncheckedMalloc()|, it behaves as malloc() in these
 // cases.
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) || defined(OS_ANDROID)
+#if defined(OS_ANDROID)
 
 // TODO(crbug.com/1112840): Fails on some Android bots.
-#if defined(OS_ANDROID)
 #define MAYBE_UncheckedMallocDies DISABLED_UncheckedMallocDies
 #define MAYBE_UncheckedCallocDies DISABLED_UncheckedCallocDies
-#else
-#define MAYBE_UncheckedMallocDies UncheckedMallocDies
-#define MAYBE_UncheckedCallocDies UncheckedCallocDies
-#endif  // defined(OS_ANDROID)
 
 TEST_F(OutOfMemoryDeathTest, MAYBE_UncheckedMallocDies) {
   ASSERT_OOM_DEATH({

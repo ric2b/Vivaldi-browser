@@ -7,6 +7,7 @@
 
 #include "base/optional.h"
 #include "cc/paint/paint_canvas.h"
+#include "components/viz/common/surfaces/frame_sink_id.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
@@ -73,7 +74,24 @@ class WebRemoteFrameClient {
   virtual void PageScaleFactorChanged(float page_scale_factor,
                                       bool is_pinch_gesture_active) {}
 
+  // Called when the local root's screen info changes.
   virtual void DidChangeScreenInfo(const ScreenInfo& original_screen_info) {}
+
+  // Called when the local root's window segments change.
+  virtual void DidChangeRootWindowSegments(
+      const std::vector<gfx::Rect>& root_widget_window_segments) {}
+
+  // Called when the local root's visible viewport changes size.
+  virtual void DidChangeVisibleViewportSize(
+      const gfx::Size& visible_viewport_size) {}
+
+  virtual viz::FrameSinkId GetFrameSinkId() {
+    NOTREACHED();
+    return viz::FrameSinkId();
+  }
+
+  // Inform the widget that it was evicted.
+  virtual void WasEvicted() {}
 
  protected:
   virtual ~WebRemoteFrameClient() = default;

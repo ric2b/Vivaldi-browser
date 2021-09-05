@@ -43,8 +43,7 @@ WebApp::WebApp(const WebApp& web_app) = default;
 
 WebApp& WebApp::operator=(WebApp&& web_app) = default;
 
-const std::vector<SquareSizePx>& WebApp::downloaded_icon_sizes(
-    IconPurpose purpose) const {
+const SortedSizesPx& WebApp::downloaded_icon_sizes(IconPurpose purpose) const {
   switch (purpose) {
     case IconPurpose::ANY:
       return downloaded_icon_sizes_any_;
@@ -131,9 +130,9 @@ void WebApp::SetDescription(const std::string& description) {
   description_ = description;
 }
 
-void WebApp::SetLaunchUrl(const GURL& launch_url) {
-  DCHECK(!launch_url.is_empty() && launch_url.is_valid());
-  launch_url_ = launch_url;
+void WebApp::SetStartUrl(const GURL& start_url) {
+  DCHECK(!start_url.is_empty() && start_url.is_valid());
+  start_url_ = start_url;
 }
 
 void WebApp::SetScope(const GURL& scope) {
@@ -200,9 +199,7 @@ void WebApp::SetIconInfos(std::vector<WebApplicationIconInfo> icon_infos) {
   icon_infos_ = std::move(icon_infos);
 }
 
-void WebApp::SetDownloadedIconSizes(IconPurpose purpose,
-                                    std::vector<SquareSizePx> sizes) {
-  std::sort(sizes.begin(), sizes.end());
+void WebApp::SetDownloadedIconSizes(IconPurpose purpose, SortedSizesPx sizes) {
   switch (purpose) {
     case IconPurpose::ANY:
       downloaded_icon_sizes_any_ = std::move(sizes);
@@ -223,6 +220,10 @@ void WebApp::SetIsGeneratedIcon(bool is_generated_icon) {
 
 void WebApp::SetFileHandlers(apps::FileHandlers file_handlers) {
   file_handlers_ = std::move(file_handlers);
+}
+
+void WebApp::SetShareTarget(base::Optional<apps::ShareTarget> share_target) {
+  share_target_ = std::move(share_target);
 }
 
 void WebApp::SetAdditionalSearchTerms(
@@ -262,6 +263,11 @@ void WebApp::SetSyncFallbackData(SyncFallbackData sync_fallback_data) {
   sync_fallback_data_ = std::move(sync_fallback_data);
 }
 
+void WebApp::SetLaunchQueryParams(
+    base::Optional<std::string> launch_query_params) {
+  launch_query_params_ = std::move(launch_query_params);
+}
+
 WebApp::SyncFallbackData::SyncFallbackData() = default;
 
 WebApp::SyncFallbackData::~SyncFallbackData() = default;
@@ -286,7 +292,10 @@ std::ostream& operator<<(std::ostream& out,
 std::ostream& operator<<(std::ostream& out, const WebApp& app) {
   out << "app_id: " << app.app_id_ << std::endl
       << "  name: " << app.name_ << std::endl
-      << "  launch_url: " << app.launch_url_ << std::endl
+      << "  start_url: " << app.start_url_ << std::endl
+      << "  launch_query_params: "
+      << (app.launch_query_params_ ? *app.launch_query_params_ : std::string())
+      << std::endl
       << "  scope: " << app.scope_ << std::endl
       << "  theme_color: " << ColorToString(app.theme_color_) << std::endl
       << "  background_color: " << ColorToString(app.background_color_)
@@ -322,6 +331,8 @@ std::ostream& operator<<(std::ostream& out, const WebApp& app) {
     out << "  downloaded_icon_sizes_maskable_: " << size << std::endl;
   for (const apps::FileHandler& file_handler : app.file_handlers_)
     out << "  file_handler: " << file_handler << std::endl;
+  if (app.share_target_)
+    out << "  share_target: " << *app.share_target_ << std::endl;
   for (const std::string& additional_search_term : app.additional_search_terms_)
     out << "  additional_search_term: " << additional_search_term << std::endl;
   for (const apps::ProtocolHandlerInfo& protocol_handler :
@@ -350,32 +361,32 @@ bool operator!=(const WebApp::SyncFallbackData& sync_fallback_data1,
 }
 
 bool operator==(const WebApp& app1, const WebApp& app2) {
-  return std::tie(app1.app_id_, app1.sources_, app1.name_, app1.launch_url_,
-                  app1.description_, app1.scope_, app1.theme_color_,
-                  app1.background_color_, app1.icon_infos_,
+  return std::tie(app1.app_id_, app1.sources_, app1.name_, app1.start_url_,
+                  app1.launch_query_params_, app1.description_, app1.scope_,
+                  app1.theme_color_, app1.background_color_, app1.icon_infos_,
                   app1.downloaded_icon_sizes_any_,
                   app1.downloaded_icon_sizes_maskable_, app1.is_generated_icon_,
                   app1.display_mode_, app1.display_mode_override_,
                   app1.user_display_mode_, app1.user_page_ordinal_,
                   app1.user_launch_ordinal_, app1.chromeos_data_,
                   app1.is_locally_installed_, app1.is_in_sync_install_,
-                  app1.file_handlers_, app1.additional_search_terms_,
-                  app1.protocol_handlers_, app1.sync_fallback_data_,
-                  app1.last_launch_time_, app1.install_time_,
-                  app1.run_on_os_login_mode_) ==
-         std::tie(app2.app_id_, app2.sources_, app2.name_, app2.launch_url_,
-                  app2.description_, app2.scope_, app2.theme_color_,
-                  app2.background_color_, app2.icon_infos_,
+                  app1.file_handlers_, app1.share_target_,
+                  app1.additional_search_terms_, app1.protocol_handlers_,
+                  app1.sync_fallback_data_, app1.last_launch_time_,
+                  app1.install_time_, app1.run_on_os_login_mode_) ==
+         std::tie(app2.app_id_, app2.sources_, app2.name_, app2.start_url_,
+                  app2.launch_query_params_, app2.description_, app2.scope_,
+                  app2.theme_color_, app2.background_color_, app2.icon_infos_,
                   app2.downloaded_icon_sizes_any_,
                   app2.downloaded_icon_sizes_maskable_, app2.is_generated_icon_,
                   app2.display_mode_, app2.display_mode_override_,
                   app2.user_display_mode_, app2.user_page_ordinal_,
                   app2.user_launch_ordinal_, app2.chromeos_data_,
                   app2.is_locally_installed_, app2.is_in_sync_install_,
-                  app2.file_handlers_, app2.additional_search_terms_,
-                  app2.protocol_handlers_, app2.sync_fallback_data_,
-                  app2.last_launch_time_, app2.install_time_,
-                  app2.run_on_os_login_mode_);
+                  app2.file_handlers_, app2.share_target_,
+                  app2.additional_search_terms_, app2.protocol_handlers_,
+                  app2.sync_fallback_data_, app2.last_launch_time_,
+                  app2.install_time_, app2.run_on_os_login_mode_);
 }
 
 bool operator!=(const WebApp& app1, const WebApp& app2) {

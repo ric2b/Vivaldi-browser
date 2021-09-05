@@ -46,7 +46,7 @@ class FakeServiceWorkerContext : public ServiceWorkerContext {
       int64_t service_worker_version_id,
       const std::string& request_uuid) override;
   void CountExternalRequestsForTest(
-      const GURL& url,
+      const url::Origin& origin,
       CountExternalRequestsCallback callback) override;
   bool MaybeHasRegistrationForOrigin(const url::Origin& origin) override;
   void GetInstalledRegistrationOrigins(
@@ -74,7 +74,7 @@ class FakeServiceWorkerContext : public ServiceWorkerContext {
   void StartServiceWorkerForNavigationHint(
       const GURL& document_url,
       StartServiceWorkerForNavigationHintCallback callback) override;
-  void StopAllServiceWorkersForOrigin(const GURL& origin) override;
+  void StopAllServiceWorkersForOrigin(const url::Origin& origin) override;
   void StopAllServiceWorkers(base::OnceClosure callback) override;
   const base::flat_map<int64_t, ServiceWorkerRunningInfo>&
   GetRunningServiceWorkerInfos() override;
@@ -101,7 +101,7 @@ class FakeServiceWorkerContext : public ServiceWorkerContext {
     return start_service_worker_and_dispatch_long_running_message_calls_;
   }
 
-  const std::vector<GURL>& stop_all_service_workers_for_origin_calls() {
+  const std::vector<url::Origin>& stop_all_service_workers_for_origin_calls() {
     return stop_all_service_workers_for_origin_calls_;
   }
 
@@ -114,7 +114,7 @@ class FakeServiceWorkerContext : public ServiceWorkerContext {
   std::vector<StartServiceWorkerAndDispatchMessageArgs>
       start_service_worker_and_dispatch_long_running_message_calls_;
 
-  std::vector<GURL> stop_all_service_workers_for_origin_calls_;
+  std::vector<url::Origin> stop_all_service_workers_for_origin_calls_;
 
   base::ObserverList<ServiceWorkerContextObserver, true>::Unchecked observers_;
 

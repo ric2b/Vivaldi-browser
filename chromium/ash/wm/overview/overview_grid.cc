@@ -596,7 +596,9 @@ void OverviewGrid::RemoveItem(OverviewItem* overview_item,
   DCHECK(iter != window_list_.rend());
 
   // This can also be called when shutting down |this|, at which the item will
-  // be cleaning up and its associated view may be nullptr.
+  // be cleaning up and its associated view may be nullptr. |overview_item|
+  // needs to still be in |window_list_| so we can compute what the deleted
+  // index is.
   if (overview_session_ && (*iter)->overview_item_view()) {
     overview_session_->highlight_controller()->OnViewDestroyingOrDisabling(
         (*iter)->overview_item_view());
@@ -1009,6 +1011,7 @@ void OverviewGrid::OnStartingAnimationComplete(bool canceled) {
 
   for (auto& window : window_list())
     window->OnStartingAnimationComplete();
+
 }
 
 void OverviewGrid::CalculateWindowListAnimationStates(

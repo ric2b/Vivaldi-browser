@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Näytä kehyksen lähdekoodi</translation>
 <translation id="1165039591588034296">Virhe</translation>
 <translation id="1175364870820465910">Tulo&amp;sta...</translation>
-<translation id="1177863135347784049">Mukautettu</translation>
 <translation id="1181037720776840403">Poista</translation>
 <translation id="1187722533808055681">Joutotilasta palautumiset</translation>
 <translation id="119944043368869598">Tyhjennä kaikki</translation>
 <translation id="1221825588892235038">Vain valinta</translation>
 <translation id="1244303850296295656">Laajennusvirhe</translation>
+<translation id="125220115284141797">Oletus</translation>
 <translation id="1274977772557788323">Adobe Flash Playerin tallennusasetukset</translation>
 <translation id="1297175357211070620">Kohde</translation>
 <translation id="1303101771013849280">Kirjanmerkkien HTML-tiedosto</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Uusi ikkuna</translation>
 <translation id="1725149567830788547">Näytä &amp;säätimet</translation>
 <translation id="1729533290416704613">Määrittää myös Omnibox-hakujen aloitussivun.</translation>
+<translation id="174123615272205933">Mukautettu</translation>
 <translation id="1744108098763830590">taustasivu</translation>
 <translation id="176587472219019965">&amp;Uusi ikkuna</translation>
 <translation id="1769104665586091481">Avaa linkki &amp;uuteen ikkunaan</translation>
+<translation id="1779468444204342338">Vähimmäisreunukset</translation>
 <translation id="1815083418640426271">Liitä muotoilemattomana tekstinä</translation>
 <translation id="1828901632669367785">Tulosta järjestelmän kyselyikkunalla…</translation>
 <translation id="1850508293116537636">Kierrä &amp;myötäpäivään</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Kysy ennen lähettämistä (suositus)</translation>
 <translation id="241082044617551207">Tuntematon laajennus</translation>
 <translation id="2423578206845792524">T&amp;allenna kuva nimellä…</translation>
-<translation id="2436707352762155834">Vähimmäisreunukset</translation>
 <translation id="2439110203301358333">Toinen tietokoneellasi oleva ohjelma lisäsi laajennuksen, joka voi muuttaa Vivaldin toimintaa.</translation>
 <translation id="2445081178310039857">Laajennuksen juurihakemisto tarvitaan.</translation>
 <translation id="2470702053775288986">Ei-tuetut laajennukset poistettu käytöstä</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">Esihahmonna: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Mikrofoni</translation>
 <translation id="3241680850019875542">Voit pakata laajennuksen valitsemalla sen juurihakemiston. Jos haluat päivittää laajennuksen, valitse myös yksityinen avaintiedosto, jotta laajennusta voidaan käyttää uudelleen.</translation>
+<translation id="3266179261140759675">Estä suljettuja sivustoja lähettämästä ja vastaanottamasta tietoja</translation>
 <translation id="3280237271814976245">Tallenna &amp;nimellä…</translation>
 <translation id="3285322247471302225">Uusi &amp;välilehti</translation>
 <translation id="3288047731229977326">Kehittäjätilassa olevat laajennukset voivat vahingoittaa tietokonettasi. Jos et ole kehittäjä, poista kehittäjätilassa olevat laajennukset käytöstä varmuuden vuoksi.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Salli</translation>
 <translation id="5057110919553308744">Napsauttaessasi laajennusta</translation>
 <translation id="5063480226653192405">Käyttö</translation>
-<translation id="5068918910148307423">Älä anna äskettäin suljettujen sivustojen viimeistellä tietojen lähettämista ja vastaanottamista</translation>
 <translation id="5116628073786783676">T&amp;allenna ääni nimellä…</translation>
 <translation id="5143374789336132547">Laajennus <ph name="EXTENSION_NAME" /> on vaihtanut Etusivu-painikkeella avattavan sivun.</translation>
 <translation id="5154108062446123722">Tulostimen <ph name="PRINTING_DESTINATION" /> lisäasetukset</translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">Laajennus <ph name="EXTENSION_NAME" /> on vaihtanut Omnibox-hakujen aloitussivun.</translation>
 <translation id="5360150013186312835">Näytä työkalurivillä</translation>
 <translation id="5362741141255528695">Valitse yksityinen avaintiedosto.</translation>
+<translation id="536638840841140142">Ei mitään</translation>
 <translation id="5370819323174483825">&amp;Lataa uudelleen</translation>
 <translation id="5398572795982417028">Sivuviittaus on rajojen ulkopuolella, raja on <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Jatka latausta</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Vastaanottaja: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Ylläpitäjän asentama</translation>
 <translation id="7685049629764448582">JavaScript-muisti</translation>
-<translation id="7701040980221191251">Ei mitään</translation>
 <translation id="7701869757853594372">KÄYTTÄJÄ-kahvat</translation>
 <translation id="7704305437604973648">Tehtävä</translation>
 <translation id="7710568461918838723">&amp;Suoratoista…</translation>

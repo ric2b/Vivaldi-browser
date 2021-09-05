@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "components/autofill/core/browser/autofill_field.h"
+#include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
@@ -182,6 +183,13 @@ CreditCardCloudTokenData GetCreditCardCloudTokenData1();
 // one above.
 CreditCardCloudTokenData GetCreditCardCloudTokenData2();
 
+// Returns an autofill card linked offer data full of dummy info.
+AutofillOfferData GetCardLinkedOfferData1();
+
+// Returns an autofill card linked offer data full of dummy info, different from
+// the one above.
+AutofillOfferData GetCardLinkedOfferData2();
+
 // A unit testing utility that is common to a number of the Autofill unit
 // tests.  |SetProfileInfo| provides a quick way to populate a profile with
 // c-strings.
@@ -312,8 +320,8 @@ void FillQueryField(AutofillPageQueryRequest_Form_Field* field,
 // FormStructure::ParseApiQueryResponse().
 //
 // Perhaps a neater way would be to move this to TestFormStructure.
-FormAndFieldSignatures GetEncodedSignatures(const FormStructure& form);
-FormAndFieldSignatures GetEncodedSignatures(
+std::vector<FormSignature> GetEncodedSignatures(const FormStructure& form);
+std::vector<FormSignature> GetEncodedSignatures(
     const std::vector<FormStructure*>& forms);
 
 // Calls the required functions on the given external delegate to cause the

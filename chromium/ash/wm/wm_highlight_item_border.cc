@@ -20,15 +20,17 @@ constexpr int kBorderPadding = 2;
 
 }  // namespace
 
-WmHighlightItemBorder::WmHighlightItemBorder(int corner_radius)
-    : views::Border(SK_ColorTRANSPARENT), corner_radius_(corner_radius) {}
+WmHighlightItemBorder::WmHighlightItemBorder(int corner_radius,
+                                             gfx::Insets padding)
+    : views::Border(SK_ColorTRANSPARENT),
+      corner_radius_(corner_radius),
+      border_insets_(gfx::Insets(kBorderSize + kBorderPadding) + padding) {}
 
 void WmHighlightItemBorder::SetFocused(bool focused) {
   // Note that all WM features that use this custom border currently have dark
   // mode as the default color mode.
   set_color(focused ? AshColorProvider::Get()->GetControlsLayerColor(
-                          AshColorProvider::ControlsLayerType::kFocusRingColor,
-                          AshColorProvider::AshColorMode::kDark)
+                          AshColorProvider::ControlsLayerType::kFocusRingColor)
                     : SK_ColorTRANSPARENT);
 }
 
@@ -52,7 +54,7 @@ void WmHighlightItemBorder::Paint(const views::View& view,
 }
 
 gfx::Insets WmHighlightItemBorder::GetInsets() const {
-  return gfx::Insets(kBorderSize + kBorderPadding);
+  return border_insets_;
 }
 
 gfx::Size WmHighlightItemBorder::GetMinimumSize() const {

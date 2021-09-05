@@ -161,9 +161,6 @@ def _ParseOptions():
   elif not options.output_path:
     parser.error('Output path required when feature splits aren\'t used')
 
-  if options.main_dex_rules_path and not options.r8_path:
-    parser.error('R8 must be enabled to pass main dex rules.')
-
   options.classpath = build_utils.ParseGnList(options.classpath)
   options.proguard_configs = build_utils.ParseGnList(options.proguard_configs)
   options.input_paths = build_utils.ParseGnList(options.input_paths)
@@ -251,14 +248,12 @@ def _OptimizeWithR8(options,
       base_dex_context = _DexPathContext('base', options.output_path,
                                          options.input_paths, tmp_output)
 
-    cmd = [
-        build_utils.JAVA_PATH,
+    cmd = build_utils.JavaCmd(options.warnings_as_errors) + [
         '-Dcom.android.tools.r8.allowTestProguardOptions=1',
     ]
     if options.disable_outlining:
-      cmd += [' -Dcom.android.tools.r8.disableOutlining=1']
+      cmd += ['-Dcom.android.tools.r8.disableOutlining=1']
     cmd += [
-        '-Xmx1G',
         '-cp',
         options.r8_path,
         'com.android.tools.r8.R8',
@@ -378,14 +373,6 @@ def _CombineConfigs(configs, dynamic_config_data, exclude_generated=False):
 
 def _CreateDynamicConfig(options):
   ret = []
-  if not options.r8_path and options.min_api:
-    # R8 adds this option automatically, and uses -assumenosideeffects instead
-    # (which ProGuard doesn't support doing).
-    ret.append("""\
--assumevalues class android.os.Build$VERSION {
-  public static final int SDK_INT return %s..9999;
-}""" % options.min_api)
-
   if options.sourcefile:
     ret.append("-renamesourcefileattribute '%s' # OMIT FROM EXPECTATIONS" %
                options.sourcefile)

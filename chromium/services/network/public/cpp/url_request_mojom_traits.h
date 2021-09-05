@@ -24,6 +24,7 @@
 #include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/cpp/site_for_cookies_mojom_traits.h"
 #include "services/network/public/mojom/chunked_data_pipe_getter.mojom.h"
+#include "services/network/public/mojom/client_security_state.mojom-forward.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/data_pipe_getter.mojom.h"
 #include "services/network/public/mojom/trust_tokens.mojom.h"
@@ -73,6 +74,10 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
     return std::move(
         const_cast<network::ResourceRequest::TrustedParams&>(trusted_params)
             .cookie_observer);
+  }
+  static const network::mojom::ClientSecurityStatePtr& client_security_state(
+      const network::ResourceRequest::TrustedParams& trusted_params) {
+    return trusted_params.client_security_state;
   }
 
   static bool Read(network::mojom::TrustedUrlRequestParamsDataView data,
@@ -303,18 +308,11 @@ struct COMPONENT_EXPORT(NETWORK_CPP_BASE)
       const network::DataElement& element) {
     return element.type_;
   }
-  static std::vector<uint8_t> buf(const network::DataElement& element) {
-    if (element.bytes_) {
-      return std::vector<uint8_t>(element.bytes_,
-                                  element.bytes_ + element.length_);
-    }
-    return std::move(element.buf_);
+  static const std::vector<uint8_t>& buf(const network::DataElement& element) {
+    return element.buf_;
   }
   static const base::FilePath& path(const network::DataElement& element) {
     return element.path_;
-  }
-  static base::File file(const network::DataElement& element) {
-    return std::move(const_cast<network::DataElement&>(element).file_);
   }
   static const std::string& blob_uuid(const network::DataElement& element) {
     return element.blob_uuid_;

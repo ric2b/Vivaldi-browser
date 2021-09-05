@@ -17,20 +17,19 @@ namespace features {
 const base::Feature kBiometricTouchToFill = {"BiometricTouchToFill",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables creating Affiliation Service and prefetching change password info for
+// requested sites.
+const base::Feature kChangePasswordAffiliationInfo = {
+    "ChangePasswordAffiliationInfo", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // After saving/updating a password show a bubble reminder about the status of
 // other compromised credentials.
 const base::Feature kCompromisedPasswordsReengagement = {
     "CompromisedPasswordsReengagement", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables the editing of passwords in chrome://settings/passwords, i.e. the
-// Desktop passwords settings page.
-const base::Feature kEditPasswordsInDesktopSettings = {
-    "EditPasswordsInDesktopSettings", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Recovers lost passwords on Mac by deleting the ones that cannot be decrypted
-// with the present encryption key from the Keychain.
-const base::Feature kDeleteCorruptedPasswords = {
-    "DeleteCorruptedPasswords", base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables the editing of passwords in Chrome settings.
+const base::Feature kEditPasswordsInSettings = {
+    "EditPasswordsInSettings", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the overwriting of prefilled username fields if the server predicted
 // the field to contain a placeholder value.
@@ -57,10 +56,6 @@ const base::Feature kFillingPasswordsFromAnyOrigin{
 const base::Feature kFillOnAccountSelect = {"fill-on-account-select",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Integration with Google's Password Manager for signed-in and sync users.
-const base::Feature kGooglePasswordManager = {
-    "google-password-manager", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enables password change flow from leaked password dialog.
 const base::Feature kPasswordChange = {"PasswordChange",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -78,18 +73,17 @@ const base::Feature kPasswordCheck = {"PasswordCheck",
 #endif
 };
 
-// Enables editing saved passwords for Android.
-const base::Feature kPasswordEditingAndroid = {
-    "PasswordEditingAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Controls the ability to import passwords from Chrome's settings page.
 const base::Feature kPasswordImport = {"PasswordImport",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Controls whether the password manager onboarding experience is shown
-// on Android.
-const base::Feature kPasswordManagerOnboardingAndroid = {
-    "PasswordManagerOnboardingAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables password scripts fetching for the |PasswordChangeInSettings| feature.
+const base::Feature kPasswordScriptsFetching = {
+    "PasswordScriptsFetching", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables checking credentials for weakness in Password Check.
+const base::Feature kPasswordsWeaknessCheck = {
+    "PasswordsWeaknessCheck", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables showing UI which allows users to easily revert their choice to
 // never save passwords on a certain website.

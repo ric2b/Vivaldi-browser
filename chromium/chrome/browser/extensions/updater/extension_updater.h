@@ -13,12 +13,9 @@
 #include <string>
 
 #include "base/callback_forward.h"
-#include "base/compiler_specific.h"
 #include "base/files/file_path.h"
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
-#include "chrome/browser/extensions/updater/fetched_crx_file.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/extension_registry_observer.h"
@@ -33,6 +30,7 @@ class Profile;
 
 namespace extensions {
 
+class CrxInstaller;
 class ExtensionCache;
 class ExtensionPrefs;
 class ExtensionRegistry;
@@ -76,12 +74,13 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
     // Normally extension updates get installed only when the extension is idle.
     // Setting this to true causes any updates that are found to be installed
     // right away.
-    bool install_immediately;
+    bool install_immediately = false;
 
     // An extension update check can be originated by a user or by a scheduled
     // task. When the value of |fetch_priority| is FOREGROUND, the update
     // request was initiated by a user.
-    ManifestFetchData::FetchPriority fetch_priority;
+    ManifestFetchData::FetchPriority fetch_priority =
+        ManifestFetchData::FetchPriority::BACKGROUND;
 
     // Callback to call when the update check is complete. Can be null, if
     // you're not interested in when this happens.
@@ -111,6 +110,8 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
                    ExtensionCache* cache,
                    const ExtensionDownloader::Factory& downloader_factory);
 
+  ExtensionUpdater(const ExtensionUpdater&) = delete;
+  ExtensionUpdater& operator=(const ExtensionUpdater&) = delete;
   ~ExtensionUpdater() override;
 
   // Starts the updater running.  Should be called at most once.
@@ -153,17 +154,36 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
   friend class ExtensionUpdaterTest;
   friend class ExtensionUpdaterFileHandler;
 
+  // FetchedCRXFile holds information about a CRX file we fetched to disk,
+  // but have not yet installed.
+  struct FetchedCRXFile {
+    FetchedCRXFile();
+    FetchedCRXFile(const CRXFileInfo& file,
+                   bool file_ownership_passed,
+                   const std::set<int>& request_ids,
+                   InstallCallback callback);
+    FetchedCRXFile(FetchedCRXFile&& other);
+    FetchedCRXFile& operator=(FetchedCRXFile&& other);
+    ~FetchedCRXFile();
+
+    CRXFileInfo info;
+    GURL download_url;
+    bool file_ownership_passed;
+    std::set<int> request_ids;
+    InstallCallback callback;
+  };
+
   struct InProgressCheck {
     InProgressCheck();
+    InProgressCheck(const InProgressCheck&) = delete;
+    InProgressCheck& operator=(const InProgressCheck&) = delete;
     ~InProgressCheck();
 
-    bool install_immediately;
-    bool awaiting_update_service;
+    bool install_immediately = false;
+    bool awaiting_update_service = false;
     FinishedCallback callback;
     // The ids of extensions that have in-progress update checks.
     std::set<std::string> in_progress_ids_;
-
-    DISALLOW_COPY_AND_ASSIGN(InProgressCheck);
   };
 
   // Ensure that we have a valid ExtensionDownloader instance referenced by
@@ -193,9 +213,6 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
                                        Stage stage) override;
   void OnExtensionDownloadCacheStatusRetrieved(const ExtensionId& id,
                                                CacheStatus status) override;
-  void OnExtensionManifestUpdateCheckStatusReceived(
-      const ExtensionId& id,
-      const std::string& status) override;
   void OnExtensionDownloadFailed(const ExtensionId& id,
                                  Error error,
                                  const PingResult& ping,
@@ -217,7 +234,7 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
   void UpdatePingData(const ExtensionId& id, const PingResult& ping_result);
 
   // Starts installing a crx file that has been fetched but not installed yet.
-  void MaybeInstallCRXFile();
+  void InstallCRXFile(FetchedCRXFile crx_file);
 
   // content::NotificationObserver implementation.
   void Observe(int type,
@@ -246,10 +263,10 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
                               bool file_ownership_passed);
 
   // Whether Start() has been called but not Stop().
-  bool alive_;
+  bool alive_ = false;
 
   // Pointer back to the service that owns this ExtensionUpdater.
-  ExtensionServiceInterface* service_;
+  ExtensionServiceInterface* service_ = nullptr;
 
   // A closure passed into the ExtensionUpdater to teach it how to construct
   // new ExtensionDownloader instances.
@@ -263,37 +280,30 @@ class ExtensionUpdater : public ExtensionDownloaderDelegate,
   // created through a |KeyedServiceFactory| singleton, thus |update_service_|
   // will be freed by the same factory singleton before the browser is
   // shutdown.
-  UpdateService* update_service_;
+  UpdateService* update_service_ = nullptr;
 
-  bool do_scheduled_checks_;
   base::TimeDelta frequency_;
-  bool will_check_soon_;
+  bool will_check_soon_ = false;
 
-  ExtensionPrefs* extension_prefs_;
-  PrefService* prefs_;
-  Profile* profile_;
+  ExtensionPrefs* extension_prefs_ = nullptr;
+  PrefService* prefs_ = nullptr;
+  Profile* profile_ = nullptr;
 
-  ExtensionRegistry* registry_;
+  ExtensionRegistry* registry_ = nullptr;
 
   std::map<int, InProgressCheck> requests_in_progress_;
-  int next_request_id_;
+  int next_request_id_ = 0;
 
   // Observes CRX installs we initiate.
   content::NotificationRegistrar registrar_;
 
-  // True when a CrxInstaller is doing an install.  Used in MaybeUpdateCrxFile()
-  // to keep more than one install from running at once.
-  bool crx_install_is_running_;
+  // CRX installs that are currently in progress. Used to get the FetchedCRXFile
+  // when we receive NOTIFICATION_CRX_INSTALLER_DONE.
+  std::map<CrxInstaller*, FetchedCRXFile> running_crx_installs_;
 
-  // Fetched CRX files waiting to be installed.
-  std::queue<FetchedCRXFile> fetched_crx_files_;
-  FetchedCRXFile current_crx_file_;
-
-  ExtensionCache* extension_cache_;
+  ExtensionCache* extension_cache_ = nullptr;
 
   base::WeakPtrFactory<ExtensionUpdater> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionUpdater);
 };
 
 }  // namespace extensions

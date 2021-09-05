@@ -17,6 +17,7 @@
 #include "base/strings/string16.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
+#include "components/autofill_assistant/browser/public/runtime_manager.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/permission_prompt.h"
@@ -174,6 +175,16 @@ void PermissionRequestManager::AddRequest(
         auto_approval_origin.value()) {
       request->PermissionGranted();
     }
+    request->RequestFinished();
+    return;
+  }
+
+  // Cancel permission requests wile Autofill Assistant's UI is shown.
+  auto* assistant_runtime_manager =
+      autofill_assistant::RuntimeManager::GetForWebContents(web_contents());
+  if (assistant_runtime_manager && assistant_runtime_manager->GetState() ==
+                                       autofill_assistant::UIState::kShown) {
+    request->Cancelled();
     request->RequestFinished();
     return;
   }
@@ -338,6 +349,10 @@ const std::vector<PermissionRequest*>& PermissionRequestManager::Requests() {
   return requests_;
 }
 
+GURL PermissionRequestManager::GetEmbeddingOrigin() const {
+  return web_contents()->GetLastCommittedURL().GetOrigin();
+}
+
 void PermissionRequestManager::Accept() {
   if (deleting_bubble_)
     return;
@@ -386,6 +401,10 @@ void PermissionRequestManager::Closing() {
     CancelledIncludingDuplicates(*requests_iter);
   }
   FinalizeBubble(PermissionAction::DISMISSED);
+}
+
+bool PermissionRequestManager::WasCurrentRequestAlreadyDisplayed() {
+  return current_request_already_displayed_;
 }
 
 PermissionRequestManager::PermissionRequestManager(
@@ -483,7 +502,7 @@ void PermissionRequestManager::ShowBubble() {
   if (!view_)
     return;
 
-  if (!current_request_view_shown_to_user_) {
+  if (!current_request_already_displayed_) {
     PermissionUmaUtil::PermissionPromptShown(requests_);
 
     if (ShouldCurrentRequestUseQuietUI()) {
@@ -513,7 +532,7 @@ void PermissionRequestManager::ShowBubble() {
       }
     }
   }
-  current_request_view_shown_to_user_ = true;
+  current_request_already_displayed_ = true;
   NotifyBubbleAdded();
 
   // If in testing mode, automatically respond to the bubble that was shown.
@@ -544,6 +563,10 @@ void PermissionRequestManager::FinalizeBubble(
       PermissionsClient::Get()->GetPermissionDecisionAutoBlocker(
           browser_context);
 
+  base::Optional<QuietUiReason> quiet_ui_reason;
+  if (ShouldCurrentRequestUseQuietUI())
+    quiet_ui_reason = ReasonForUsingQuietUi();
+
   for (PermissionRequest* request : requests_) {
     // TODO(timloh): We only support dismiss and ignore embargo for permissions
     // which use PermissionRequestImpl as the other subclasses don't support
@@ -552,8 +575,8 @@ void PermissionRequestManager::FinalizeBubble(
       continue;
 
     PermissionsClient::Get()->OnPromptResolved(
-        browser_context, request->GetPermissionRequestType(),
-        permission_action);
+        browser_context, request->GetPermissionRequestType(), permission_action,
+        request->GetOrigin(), quiet_ui_reason);
 
     PermissionEmbargoStatus embargo_status =
         PermissionEmbargoStatus::NOT_EMBARGOED;
@@ -582,7 +605,7 @@ void PermissionRequestManager::FinalizeBubble(
   if (notification_permission_ui_selector_)
     notification_permission_ui_selector_->Cancel();
 
-  current_request_view_shown_to_user_ = false;
+  current_request_already_displayed_ = false;
   current_request_ui_to_use_.reset();
 
   if (view_)
@@ -713,18 +736,9 @@ void PermissionRequestManager::OnSelectedUiToUseForNotifications(
 
 PermissionPromptDisposition
 PermissionRequestManager::DetermineCurrentRequestUIDispositionForUMA() {
-#if defined(OS_ANDROID)
-  return ShouldCurrentRequestUseQuietUI()
-             ? PermissionPromptDisposition::MINI_INFOBAR
-             : PermissionPromptDisposition::MODAL_DIALOG;
-#else
-  return !ShouldCurrentRequestUseQuietUI()
-             ? PermissionPromptDisposition::ANCHORED_BUBBLE
-             : ReasonForUsingQuietUi() == QuietUiReason::kTriggeredByCrowdDeny
-                   ? PermissionPromptDisposition::LOCATION_BAR_RIGHT_STATIC_ICON
-                   : PermissionPromptDisposition::
-                         LOCATION_BAR_RIGHT_ANIMATED_ICON;
-#endif
+  if (view_)
+    return view_->GetPromptDisposition();
+  return PermissionPromptDisposition::NONE_VISIBLE;
 }
 
 void PermissionRequestManager::LogWarningToConsole(const char* message) {

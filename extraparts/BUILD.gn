@@ -16,8 +16,8 @@ source_set("extraparts") {
     sources += [
       "vivaldi_browser_main_extra_parts_mac.h",
       "vivaldi_browser_main_extra_parts_mac.mm",
-      "maybe_setup_vivaldi_keychain.h",
-      "maybe_setup_vivaldi_keychain.mm",
+      "vivaldi_keychain_util.h",
+      "vivaldi_keychain_util.mm",
     ]
   }
   if (is_win) {

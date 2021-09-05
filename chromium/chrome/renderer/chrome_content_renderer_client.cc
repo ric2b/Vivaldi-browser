@@ -178,6 +178,7 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/common/initialize_extensions_client.h"
+#include "chrome/common/url_loader_factory_proxy.mojom.h"
 #include "chrome/renderer/extensions/chrome_extensions_renderer_client.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_urls.h"
@@ -186,6 +187,7 @@
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/guest_view/mime_handler_view/mime_handler_view_container_manager.h"
 #include "extensions/renderer/renderer_extension_registry.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/css/preferred_color_scheme.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/public/web/web_view.h"
@@ -1026,6 +1028,19 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
             l10n_util::GetStringFUTF16(IDS_PLUGIN_OUTDATED, group_name));
         break;
       }
+      case chrome::mojom::PluginStatus::kDeprecated: {
+        // kDeprecatedPlugins act similarly to kOutdatedBlocked ones, but do
+        // not allow for loading. They still show an infobar.
+        placeholder = create_blocked_plugin(
+            IDR_BLOCKED_PLUGIN_HTML,
+            l10n_util::GetStringFUTF16(IDS_PLUGIN_DEPRECATED, group_name));
+        mojo::AssociatedRemote<chrome::mojom::PluginHost> plugin_host;
+        render_frame->GetRemoteAssociatedInterfaces()->GetInterface(
+            plugin_host.BindNewEndpointAndPassReceiver());
+        plugin_host->BlockedOutdatedPlugin(placeholder->BindPluginRenderer(),
+                                           identifier);
+        break;
+      }
       case chrome::mojom::PluginStatus::kUnauthorized: {
         placeholder = create_blocked_plugin(
             IDR_BLOCKED_PLUGIN_HTML,
@@ -1209,18 +1224,6 @@ bool ChromeContentRendererClient::HasErrorPage(int http_status_code) {
   // Use an internal error page, if we have one for the status code.
   return error_page::LocalizedError::HasStrings(
       error_page::Error::kHttpErrorDomain, http_status_code);
-}
-
-bool ChromeContentRendererClient::ShouldSuppressErrorPage(
-    content::RenderFrame* render_frame,
-    const GURL& url,
-    int error_code) {
-  // Do not flash an error page if the Instant new tab page fails to load.
-  bool is_instant_ntp = false;
-#if !defined(OS_ANDROID)
-  is_instant_ntp = SearchBouncer::GetInstance()->IsNewTabPage(url);
-#endif
-  return is_instant_ntp;
 }
 
 bool ChromeContentRendererClient::ShouldTrackUseCounter(const GURL& url) {
@@ -1452,20 +1455,6 @@ bool ChromeContentRendererClient::IsPluginAllowedToUseCameraDeviceAPI(
   return false;
 }
 
-content::BrowserPluginDelegate*
-ChromeContentRendererClient::CreateBrowserPluginDelegate(
-    content::RenderFrame* render_frame,
-    const content::WebPluginInfo& info,
-    const std::string& mime_type,
-    const GURL& original_url) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  return ChromeExtensionsRendererClient::CreateBrowserPluginDelegate(
-      render_frame, info, mime_type, original_url);
-#else
-  return nullptr;
-#endif
-}
-
 void ChromeContentRendererClient::RunScriptsAtDocumentStart(
     content::RenderFrame* render_frame) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1687,3 +1676,20 @@ bool ChromeContentRendererClient::RequiresWebComponentsV0(const GURL& url) {
   // for this purpose.
   return url.SchemeIs("file");
 }
+
+// When extension is not available, we don't need to proxy the URLLoaderFactory.
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+void ChromeContentRendererClient::MaybeProxyURLLoaderFactory(
+    content::RenderFrame* render_frame,
+    mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver) {
+  mojo::PendingRemote<network::mojom::URLLoaderFactory> original_factory;
+  mojo::PendingReceiver<::network::mojom::URLLoaderFactory> proxied_factory(
+      std::move(*factory_receiver));
+  *factory_receiver = original_factory.InitWithNewPipeAndPassReceiver();
+  mojo::Remote<chrome::mojom::UrlLoaderFactoryProxy> url_loader_factory_proxy;
+  render_frame->GetBrowserInterfaceBroker()->GetInterface(
+      url_loader_factory_proxy.BindNewPipeAndPassReceiver());
+  url_loader_factory_proxy->GetProxiedURLLoaderFactory(
+      std::move(original_factory), std::move(proxied_factory));
+}
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)

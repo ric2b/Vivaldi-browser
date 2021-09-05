@@ -25,7 +25,7 @@
         android:id="@+id/panel_button"
         app:tint="@color/default_icon_color_tint_list"
         android:visibility="gone"
-        style="@style/BottomToolbarButton"
+        style="@style/ToolbarButton"
         android:contentDescription="@string/toolbar_button_panels" />
 
 
@@ -79,6 +79,7 @@
             android:id="@+id/tab_switcher_button"
             style="@style/ToolbarButton"
             android:paddingStart="8dp"
+            android:visibility="gone"
             android:layout_gravity="top"
             android:contentDescription="@string/accessibility_toolbar_btn_tabswitcher_toggle_default"
             app:menuMaxWidth="@dimen/tab_switcher_menu_width"

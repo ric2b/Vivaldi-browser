@@ -22,7 +22,6 @@
 #include "chromecast/renderer/js_channel_bindings.h"
 #include "chromecast/renderer/media/key_systems_cast.h"
 #include "chromecast/renderer/media/media_caps_observer_impl.h"
-#include "chromecast/renderer/queryable_data_bindings.h"
 #include "components/media_control/renderer/media_playback_options.h"
 #include "components/network_hints/renderer/web_prescient_networking_impl.h"
 #include "components/on_load_script_injector/renderer/on_load_script_injector.h"
@@ -60,7 +59,6 @@
 #include "extensions/common/extension_urls.h"            // nogncheck
 #include "extensions/renderer/dispatcher.h"              // nogncheck
 #include "extensions/renderer/extension_frame_helper.h"  // nogncheck
-#include "extensions/renderer/guest_view/extensions_guest_view_container.h"  // nogncheck
 #include "extensions/renderer/guest_view/extensions_guest_view_container_dispatcher.h"  // nogncheck
 #endif
 
@@ -182,9 +180,6 @@ void CastContentRendererClient::RenderFrameCreated(
 
   // Lifetime is tied to |render_frame| via content::RenderFrameObserver.
   new media_control::MediaPlaybackOptions(render_frame);
-  if (!::chromecast::IsFeatureEnabled(kUseQueryableDataBackend)) {
-    new QueryableDataBindings(render_frame);
-  }
 
   // Add script injection support to the RenderFrame, used by Cast platform
   // APIs. The injector's lifetime is bound to the RenderFrame's lifetime.
@@ -224,20 +219,6 @@ void CastContentRendererClient::RenderFrameCreated(
           base::BindOnce(&CastContentRendererClient::OnRenderFrameRemoved,
                          base::Unretained(this),
                          render_frame->GetRoutingID())));
-}
-
-content::BrowserPluginDelegate*
-CastContentRendererClient::CreateBrowserPluginDelegate(
-    content::RenderFrame* render_frame,
-    const content::WebPluginInfo& info,
-    const std::string& mime_type,
-    const GURL& original_url) {
-#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
-  if (mime_type == content::kBrowserPluginMimeType) {
-    return new extensions::ExtensionsGuestViewContainer(render_frame);
-  }
-#endif
-  return nullptr;
 }
 
 void CastContentRendererClient::RunScriptsAtDocumentStart(
@@ -313,10 +294,10 @@ bool CastContentRendererClient::IsSupportedVideoType(
 // TODO(servolk): make use of eotf.
 
   // TODO(1066567): Check attached screen for support of type.hdr_metadata_type.
-  if (type.hdr_metadata_type != ::media::HdrMetadataType::kNone) {
-    NOTIMPLEMENTED() << "HdrMetadataType support signaling not implemented.";
-    return false;
-  }
+if (type.hdr_metadata_type != ::gl::HdrMetadataType::kNone) {
+  NOTIMPLEMENTED() << "HdrMetadataType support signaling not implemented.";
+  return false;
+}
 
 #if defined(OS_ANDROID)
   return supported_profiles_->IsSupportedVideoConfig(

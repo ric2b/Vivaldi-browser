@@ -29,6 +29,17 @@
            android:importantForAccessibility="no"
            android:layout_gravity="center"
            android:visibility="invisible" />
+
+       <!-- Vivaldi - Adding dummy button to handle long click event on + button in tab strip  -->
+       <org.chromium.chrome.browser.toolbar.TabSwitcherButtonView
+           android:id="@+id/tab_switcher_menu_helper_button"
+           style="@style/ToolbarMenuButtonPhone"
+           tools:ignore="ContentDescription"
+           android:layout_width="0dp"
+           android:layout_height="0dp"
+           android:importantForAccessibility="no"
+           android:layout_gravity="top|end"/>
+
    </org.chromium.chrome.browser.toolbar.menu_button.MenuButton>
 
 </merge>

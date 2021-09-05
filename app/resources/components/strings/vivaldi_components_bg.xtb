@@ -2,7 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="bg">
 <translation id="3830627370375585318">Разрешете достъпа на Vivaldi до мрежата от настройките на защитната стена или антивирусния софтуер.</translation>
-<translation id="4200102020577305737">Преминете към менюто на Vivaldi &gt; <ph name="SETTINGS_TITLE" /> &gt; <ph name="ADVANCED_TITLE" /> &gt; <ph name="PROXIES_TITLE" /> &gt; LAN настройки и снемете отметката пред „ Използвайте прокси сървър за вашата локална мрежа“.</translation>
+<translation id="4200102020577305737">Преминете към менюто на Vivaldi &gt; <ph name="SETTINGS_TITLE" /> &gt; <ph name="ADVANCED_TITLE" /> &gt; <ph name="PROXIES_TITLE" /> &gt; LAN настройки и снемете отметката пред „Използвайте прокси сървър за вашата локална мрежа“.</translation>
 <translation id="4932161901409251843">Преминете към менюто на Vivaldi &gt; <ph name="SETTINGS_TITLE" /> &gt; <ph name="ADVANCED_TITLE" /> &gt; <ph name="PROXIES_TITLE" /> и се уверете, че вашата конфигурация е установена на „без прокси“ или „директна“.</translation>
 <translation id="5248344925342018662">Преглеждате защитена страница във Vivaldi</translation>
 <translation id="7023871570427738255">Преминете към менюто на Vivaldi &gt; <ph name="SETTINGS_TITLE" /> &gt; <ph name="ADVANCED_TITLE" /> и снемете отметката пред „<ph name="NO_PREFETCH_DESCRIPTION" />“. В случай че това не го отстрани, препоръчваме да поставите отметката отново за подобряване на производителността.</translation>

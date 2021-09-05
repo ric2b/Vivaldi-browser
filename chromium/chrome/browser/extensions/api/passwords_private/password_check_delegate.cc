@@ -24,6 +24,7 @@
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_event_router_factory.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_utils.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/bulk_leak_check_service_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -36,8 +37,8 @@
 #include "components/password_manager/core/browser/compromised_credentials_table.h"
 #include "components/password_manager/core/browser/leak_detection/bulk_leak_check.h"
 #include "components/password_manager/core/browser/leak_detection/encryption_utils.h"
-#include "components/password_manager/core/browser/ui/compromised_credentials_manager.h"
 #include "components/password_manager/core/browser/ui/credential_utils.h"
+#include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 #include "components/password_manager/core/browser/well_known_change_password_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -56,13 +57,13 @@ namespace {
 
 using autofill::PasswordForm;
 using password_manager::CanonicalizeUsername;
-using password_manager::CompromiseTypeFlags;
 using password_manager::CredentialWithPassword;
+using password_manager::InsecureCredentialTypeFlags;
 using password_manager::LeakCheckCredential;
 using ui::TimeFormat;
 
-using CompromisedCredentialsView =
-    password_manager::CompromisedCredentialsManager::CredentialsView;
+using InsecureCredentialsView =
+    password_manager::InsecureCredentialsManager::CredentialsView;
 using SavedPasswordsView =
     password_manager::SavedPasswordsPresenter::SavedPasswordsView;
 using State = password_manager::BulkLeakCheckService::State;
@@ -194,8 +195,10 @@ std::vector<CompromisedCredentialAndType> OrderCompromisedCredentials(
   std::vector<CompromisedCredentialAndType> results;
   results.reserve(compromised_credentials.size());
   for (auto& credential : compromised_credentials) {
+    // Since CompromiseType does not contain information about weakness of
+    // credential, we need to unset this bit in the |credential.insecure_type|.
     auto type = static_cast<api::passwords_private::CompromiseType>(
-        credential.compromise_type);
+        UnsetWeakCredentialTypeFlag(credential.insecure_type));
     results.push_back({std::move(credential), type});
   }
   // Reordering phished credential to the beginning.
@@ -220,19 +223,23 @@ std::vector<CompromisedCredentialAndType> OrderCompromisedCredentials(
 
 PasswordCheckDelegate::PasswordCheckDelegate(Profile* profile)
     : profile_(profile),
-      password_store_(PasswordStoreFactory::GetForProfile(
+      profile_password_store_(PasswordStoreFactory::GetForProfile(
           profile,
           ServiceAccessType::EXPLICIT_ACCESS)),
-      saved_passwords_presenter_(password_store_),
-      compromised_credentials_manager_(password_store_,
-                                       &saved_passwords_presenter_),
+      account_password_store_(AccountPasswordStoreFactory::GetForProfile(
+          profile,
+          ServiceAccessType::EXPLICIT_ACCESS)),
+      saved_passwords_presenter_(profile_password_store_,
+                                 account_password_store_),
+      insecure_credentials_manager_(&saved_passwords_presenter_,
+                                    profile_password_store_,
+                                    account_password_store_),
       bulk_leak_check_service_adapter_(
           &saved_passwords_presenter_,
           BulkLeakCheckServiceFactory::GetForProfile(profile_),
           profile_->GetPrefs()) {
   observed_saved_passwords_presenter_.Add(&saved_passwords_presenter_);
-  observed_compromised_credentials_manager_.Add(
-      &compromised_credentials_manager_);
+  observed_insecure_credentials_manager_.Add(&insecure_credentials_manager_);
   observed_bulk_leak_check_service_.Add(
       BulkLeakCheckServiceFactory::GetForProfile(profile_));
 
@@ -241,115 +248,88 @@ PasswordCheckDelegate::PasswordCheckDelegate(Profile* profile)
   // GetCompromisedCredentials() that might happen until then will return an
   // empty list.
   saved_passwords_presenter_.Init();
-  compromised_credentials_manager_.Init();
+  insecure_credentials_manager_.Init();
 }
 
 PasswordCheckDelegate::~PasswordCheckDelegate() = default;
 
-std::vector<api::passwords_private::CompromisedCredential>
+std::vector<api::passwords_private::InsecureCredential>
 PasswordCheckDelegate::GetCompromisedCredentials() {
   std::vector<CompromisedCredentialAndType>
       ordered_compromised_credential_and_types = OrderCompromisedCredentials(
-          compromised_credentials_manager_.GetCompromisedCredentials());
+          insecure_credentials_manager_.GetCompromisedCredentials());
 
-  std::vector<api::passwords_private::CompromisedCredential>
+  std::vector<api::passwords_private::InsecureCredential>
       compromised_credentials;
   compromised_credentials.reserve(
       ordered_compromised_credential_and_types.size());
   for (const auto& credential_and_type :
        ordered_compromised_credential_and_types) {
-    const auto& credential = credential_and_type.credential;
-    api::passwords_private::CompromisedCredential api_credential;
-    auto facet = password_manager::FacetURI::FromPotentiallyInvalidSpec(
-        credential.signon_realm);
-    if (facet.IsValidAndroidFacetURI()) {
-      api_credential.is_android_credential = true;
-      // |formatted_orgin|, |detailed_origin| and |change_password_url| need
-      // special handling for Android. Here we use affiliation information
-      // instead of the origin.
-      const PasswordForm& android_form =
-          compromised_credentials_manager_.GetSavedPasswordsFor(credential)[0];
-      if (!android_form.app_display_name.empty()) {
-        api_credential.formatted_origin = android_form.app_display_name;
-        api_credential.detailed_origin = android_form.app_display_name;
-        api_credential.change_password_url =
-            GetChangePasswordUrl(GURL(android_form.affiliated_web_realm));
-      } else {
-        // In case no affiliation information could be obtained show the
-        // formatted package name to the user. An empty change_password_url will
-        // be handled by the frontend, by not including a link in this case.
-        api_credential.formatted_origin = l10n_util::GetStringFUTF8(
-            IDS_SETTINGS_PASSWORDS_ANDROID_APP,
-            base::UTF8ToUTF16(facet.android_package_name()));
-        api_credential.detailed_origin = facet.android_package_name();
-      }
-    } else {
-      api_credential.is_android_credential = false;
-      api_credential.formatted_origin =
-          base::UTF16ToUTF8(url_formatter::FormatUrl(
-              credential.url.GetOrigin(),
-              url_formatter::kFormatUrlOmitDefaults |
-                  url_formatter::kFormatUrlOmitHTTPS |
-                  url_formatter::kFormatUrlOmitTrivialSubdomains |
-                  url_formatter::kFormatUrlTrimAfterHost,
-              net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
-      api_credential.detailed_origin =
-          base::UTF16ToUTF8(url_formatter::FormatUrlForSecurityDisplay(
-              credential.url.GetOrigin()));
-      api_credential.change_password_url = GetChangePasswordUrl(credential.url);
-    }
-
-    api_credential.id =
-        compromised_credential_id_generator_.GenerateId(credential);
-    api_credential.signon_realm = credential.signon_realm;
-    api_credential.username = base::UTF16ToUTF8(credential.username);
-    api_credential.compromise_time =
+    const CredentialWithPassword& credential = credential_and_type.credential;
+    api::passwords_private::InsecureCredential api_credential =
+        ConstructInsecureCredential(credential);
+    api_credential.compromised_info =
+        std::make_unique<api::passwords_private::CompromisedInfo>();
+    api_credential.compromised_info->compromise_time =
         credential.create_time.ToJsTimeIgnoringNull();
-    api_credential.compromise_type = credential_and_type.type;
-    api_credential.elapsed_time_since_compromise =
+    api_credential.compromised_info->elapsed_time_since_compromise =
         FormatElapsedTime(credential.create_time);
+    api_credential.compromised_info->compromise_type = credential_and_type.type;
     compromised_credentials.push_back(std::move(api_credential));
   }
 
   return compromised_credentials;
 }
 
-base::Optional<api::passwords_private::CompromisedCredential>
-PasswordCheckDelegate::GetPlaintextCompromisedPassword(
-    api::passwords_private::CompromisedCredential credential) const {
-  const CredentialWithPassword* compromised_credential =
-      FindMatchingCompromisedCredential(credential);
-  if (!compromised_credential)
+std::vector<api::passwords_private::InsecureCredential>
+PasswordCheckDelegate::GetWeakCredentials() {
+  std::vector<CredentialWithPassword> weak_credentials =
+      insecure_credentials_manager_.GetWeakCredentials();
+
+  std::vector<api::passwords_private::InsecureCredential> api_credentials;
+  api_credentials.reserve(weak_credentials.size());
+  for (const auto& weak_credential : weak_credentials) {
+    api_credentials.push_back(ConstructInsecureCredential(weak_credential));
+  }
+
+  return api_credentials;
+}
+
+base::Optional<api::passwords_private::InsecureCredential>
+PasswordCheckDelegate::GetPlaintextInsecurePassword(
+    api::passwords_private::InsecureCredential credential) const {
+  const CredentialWithPassword* insecure_credential =
+      FindMatchingInsecureCredential(credential);
+  if (!insecure_credential)
     return base::nullopt;
 
   credential.password = std::make_unique<std::string>(
-      base::UTF16ToUTF8(compromised_credential->password));
+      base::UTF16ToUTF8(insecure_credential->password));
   return credential;
 }
 
-bool PasswordCheckDelegate::ChangeCompromisedCredential(
-    const api::passwords_private::CompromisedCredential& credential,
+bool PasswordCheckDelegate::ChangeInsecureCredential(
+    const api::passwords_private::InsecureCredential& credential,
     base::StringPiece new_password) {
   // Try to obtain the original CredentialWithPassword. Return false if fails.
-  const CredentialWithPassword* compromised_credential =
-      FindMatchingCompromisedCredential(credential);
-  if (!compromised_credential)
+  const CredentialWithPassword* insecure_credential =
+      FindMatchingInsecureCredential(credential);
+  if (!insecure_credential)
     return false;
 
-  return compromised_credentials_manager_.UpdateCompromisedCredentials(
-      *compromised_credential, new_password);
+  return insecure_credentials_manager_.UpdateCredential(*insecure_credential,
+                                                        new_password);
 }
 
-bool PasswordCheckDelegate::RemoveCompromisedCredential(
-    const api::passwords_private::CompromisedCredential& credential) {
+bool PasswordCheckDelegate::RemoveInsecureCredential(
+    const api::passwords_private::InsecureCredential& credential) {
   // Try to obtain the original CredentialWithPassword. Return false if fails.
-  const CredentialWithPassword* compromised_credential =
-      FindMatchingCompromisedCredential(credential);
-  if (!compromised_credential)
+  const CredentialWithPassword* insecure_credential =
+      FindMatchingInsecureCredential(credential);
+  if (!insecure_credential)
     return false;
 
-  return compromised_credentials_manager_.RemoveCompromisedCredential(
-      *compromised_credential);
+  return insecure_credentials_manager_.RemoveCredential(*insecure_credential);
 }
 
 void PasswordCheckDelegate::StartPasswordCheck(
@@ -366,6 +346,11 @@ void PasswordCheckDelegate::StartPasswordCheck(
       State::kRunning) {
     std::move(callback).Run(State::kRunning);
     return;
+  }
+
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordsWeaknessCheck)) {
+    insecure_credentials_manager_.StartWeakCheck();
   }
 
   auto progress = base::MakeRefCounted<PasswordCheckProgress>();
@@ -434,6 +419,11 @@ PasswordCheckDelegate::GetPasswordCheckStatus() const {
   return result;
 }
 
+password_manager::InsecureCredentialsManager*
+PasswordCheckDelegate::GetInsecureCredentialsManager() {
+  return &insecure_credentials_manager_;
+}
+
 void PasswordCheckDelegate::OnSavedPasswordsChanged(SavedPasswordsView) {
   // Getting the first notification about a change in saved passwords implies
   // that the delegate is initialized, and start check callbacks can be invoked,
@@ -449,10 +439,17 @@ void PasswordCheckDelegate::OnSavedPasswordsChanged(SavedPasswordsView) {
 }
 
 void PasswordCheckDelegate::OnCompromisedCredentialsChanged(
-    CompromisedCredentialsView credentials) {
+    InsecureCredentialsView credentials) {
   if (auto* event_router =
           PasswordsPrivateEventRouterFactory::GetForProfile(profile_)) {
     event_router->OnCompromisedCredentialsChanged(GetCompromisedCredentials());
+  }
+}
+
+void PasswordCheckDelegate::OnWeakCredentialsChanged() {
+  if (auto* event_router =
+          PasswordsPrivateEventRouterFactory::GetForProfile(profile_)) {
+    event_router->OnWeakCredentialsChanged(GetWeakCredentials());
   }
 }
 
@@ -485,7 +482,7 @@ void PasswordCheckDelegate::OnCredentialDone(
     const LeakCheckCredential& credential,
     password_manager::IsLeaked is_leaked) {
   if (is_leaked) {
-    compromised_credentials_manager_.SaveCompromisedCredential(credential);
+    insecure_credentials_manager_.SaveCompromisedCredential(credential);
   }
 
   // Update the progress in case there is one.
@@ -501,23 +498,22 @@ void PasswordCheckDelegate::OnCredentialDone(
 }
 
 const CredentialWithPassword*
-PasswordCheckDelegate::FindMatchingCompromisedCredential(
-    const api::passwords_private::CompromisedCredential& credential) const {
-  const CredentialWithPassword* compromised_credential =
-      compromised_credential_id_generator_.TryGetKey(credential.id);
-  if (!compromised_credential)
+PasswordCheckDelegate::FindMatchingInsecureCredential(
+    const api::passwords_private::InsecureCredential& credential) const {
+  const CredentialWithPassword* insecure_credential =
+      insecure_credential_id_generator_.TryGetKey(credential.id);
+  if (!insecure_credential)
     return nullptr;
 
-  if (credential.signon_realm != compromised_credential->signon_realm ||
-      credential.username !=
-          base::UTF16ToUTF8(compromised_credential->username) ||
+  if (credential.signon_realm != insecure_credential->signon_realm ||
+      credential.username != base::UTF16ToUTF8(insecure_credential->username) ||
       (credential.password &&
        *credential.password !=
-           base::UTF16ToUTF8(compromised_credential->password))) {
+           base::UTF16ToUTF8(insecure_credential->password))) {
     return nullptr;
   }
 
-  return compromised_credential;
+  return insecure_credential;
 }
 
 void PasswordCheckDelegate::NotifyPasswordCheckStatusChanged() {
@@ -525,6 +521,55 @@ void PasswordCheckDelegate::NotifyPasswordCheckStatusChanged() {
           PasswordsPrivateEventRouterFactory::GetForProfile(profile_)) {
     event_router->OnPasswordCheckStatusChanged(GetPasswordCheckStatus());
   }
+}
+
+api::passwords_private::InsecureCredential
+PasswordCheckDelegate::ConstructInsecureCredential(
+    const CredentialWithPassword& credential) {
+  api::passwords_private::InsecureCredential api_credential;
+  auto facet = password_manager::FacetURI::FromPotentiallyInvalidSpec(
+      credential.signon_realm);
+  if (facet.IsValidAndroidFacetURI()) {
+    api_credential.is_android_credential = true;
+    // |formatted_orgin|, |detailed_origin| and |change_password_url| need
+    // special handling for Android. Here we use affiliation information
+    // instead of the origin.
+    const PasswordForm& android_form =
+        insecure_credentials_manager_.GetSavedPasswordsFor(credential)[0];
+    if (!android_form.app_display_name.empty()) {
+      api_credential.formatted_origin = android_form.app_display_name;
+      api_credential.detailed_origin = android_form.app_display_name;
+      api_credential.change_password_url =
+          GetChangePasswordUrl(GURL(android_form.affiliated_web_realm));
+    } else {
+      // In case no affiliation information could be obtained show the
+      // formatted package name to the user. An empty change_password_url will
+      // be handled by the frontend, by not including a link in this case.
+      api_credential.formatted_origin = l10n_util::GetStringFUTF8(
+          IDS_SETTINGS_PASSWORDS_ANDROID_APP,
+          base::UTF8ToUTF16(facet.android_package_name()));
+      api_credential.detailed_origin = facet.android_package_name();
+    }
+  } else {
+    api_credential.is_android_credential = false;
+    api_credential.formatted_origin =
+        base::UTF16ToUTF8(url_formatter::FormatUrl(
+            credential.url.GetOrigin(),
+            url_formatter::kFormatUrlOmitDefaults |
+                url_formatter::kFormatUrlOmitHTTPS |
+                url_formatter::kFormatUrlOmitTrivialSubdomains |
+                url_formatter::kFormatUrlTrimAfterHost,
+            net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
+    api_credential.detailed_origin = base::UTF16ToUTF8(
+        url_formatter::FormatUrlForSecurityDisplay(credential.url.GetOrigin()));
+    api_credential.change_password_url = GetChangePasswordUrl(credential.url);
+  }
+
+  api_credential.id = insecure_credential_id_generator_.GenerateId(credential);
+  api_credential.signon_realm = credential.signon_realm;
+  api_credential.username = base::UTF16ToUTF8(credential.username);
+
+  return api_credential;
 }
 
 }  // namespace extensions

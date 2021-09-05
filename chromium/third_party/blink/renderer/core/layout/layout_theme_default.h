@@ -35,33 +35,19 @@
 
 namespace blink {
 
-class LayoutProgress;
-
 class CORE_EXPORT LayoutThemeDefault : public LayoutTheme {
  public:
   String ExtraDefaultStyleSheet() override;
   String ExtraQuirksStyleSheet() override;
 
-  Color SystemColor(CSSValueID, WebColorScheme color_scheme) const override;
-
-  // List Box selection color
-  virtual Color ActiveListBoxSelectionBackgroundColor(
-      WebColorScheme color_scheme) const;
-  virtual Color ActiveListBoxSelectionForegroundColor(
-      WebColorScheme color_scheme) const;
-  virtual Color InactiveListBoxSelectionBackgroundColor(
-      WebColorScheme color_scheme) const;
-  virtual Color InactiveListBoxSelectionForegroundColor(
-      WebColorScheme color_scheme) const;
-
   Color PlatformActiveSelectionBackgroundColor(
-      WebColorScheme color_scheme) const override;
+      ColorScheme color_scheme) const override;
   Color PlatformInactiveSelectionBackgroundColor(
-      WebColorScheme color_scheme) const override;
+      ColorScheme color_scheme) const override;
   Color PlatformActiveSelectionForegroundColor(
-      WebColorScheme color_scheme) const override;
+      ColorScheme color_scheme) const override;
   Color PlatformInactiveSelectionForegroundColor(
-      WebColorScheme color_scheme) const override;
+      ColorScheme color_scheme) const override;
 
   IntSize SliderTickSize() const override;
   int SliderTickOffsetFromTrackCenter() const override;
@@ -72,9 +58,6 @@ class CORE_EXPORT LayoutThemeDefault : public LayoutTheme {
   void AdjustInnerSpinButtonStyle(ComputedStyle&) const override;
   void AdjustButtonStyle(ComputedStyle&) const override;
 
-  bool PopsMenuByReturnKey() const override;
-  bool PopsMenuByAltDownUpOrF4Key() const override { return true; }
-
   Color PlatformTapHighlightColor() const override {
     return Color(kDefaultTapHighlightColor);
   }
@@ -84,13 +67,6 @@ class CORE_EXPORT LayoutThemeDefault : public LayoutTheme {
                           Color inactive_background_color,
                           Color inactive_foreground_color) override;
   Color PlatformFocusRingColor() const override;
-
-  // System fonts.
-  void SystemFont(CSSValueID system_font_id,
-                  FontSelectionValue& font_slope,
-                  FontSelectionValue& font_weight,
-                  float& font_size,
-                  AtomicString& font_family) const override;
 
   void AdjustSearchFieldStyle(ComputedStyle&) const override;
   void AdjustSearchFieldCancelButtonStyle(ComputedStyle&) const override;
@@ -104,8 +80,8 @@ class CORE_EXPORT LayoutThemeDefault : public LayoutTheme {
   // In short, we either go down the MenuList code path or the MenuListButton
   // codepath. We never go down both. And in both cases, they layout the
   // entire menulist.
-  void AdjustMenuListStyle(ComputedStyle&, Element*) const override;
-  void AdjustMenuListButtonStyle(ComputedStyle&, Element*) const override;
+  void AdjustMenuListStyle(ComputedStyle&) const override;
+  void AdjustMenuListButtonStyle(ComputedStyle&) const override;
 
   // These methods define the padding for the MenuList's inner block.
   int PopupInternalPaddingStart(const ComputedStyle&) const override;
@@ -124,19 +100,12 @@ class CORE_EXPORT LayoutThemeDefault : public LayoutTheme {
   LayoutThemeDefault();
   ~LayoutThemeDefault() override;
 
-  IntRect DeterminateProgressValueRectFor(LayoutProgress*,
-                                          const IntRect&) const;
-  IntRect IndeterminateProgressValueRectFor(LayoutProgress*,
-                                            const IntRect&) const;
-
  private:
   ThemePainter& Painter() override { return painter_; }
 
   int MenuListInternalPadding(const ComputedStyle&, int padding) const;
 
   static const RGBA32 kDefaultTapHighlightColor = 0x2e000000;  // 18% black.
-
-  static base::TimeDelta caret_blink_interval_;
 
   static Color active_selection_background_color_;
   static Color active_selection_foreground_color_;

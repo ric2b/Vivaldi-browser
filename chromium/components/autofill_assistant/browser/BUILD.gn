@@ -205,7 +205,9 @@ static_library("browser") {
     "//components/autofill/core/browser",
     "//components/autofill/core/common",
     "//components/autofill_assistant/browser/devtools",
+    "//components/autofill_assistant/browser/public:public",
     "//components/google/core/common:common",
+    "//components/password_manager/content/browser:browser",
     "//components/password_manager/core/browser:browser",
     "//components/password_manager/core/browser/form_parsing:form_parsing",
     "//components/signin/public/identity_manager",
@@ -256,6 +258,7 @@ static_library("unit_test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "actions/action_delegate_util_unittest.cc",
     "actions/action_test_utils.cc",
     "actions/action_test_utils.h",
     "actions/click_action_unittest.cc",
@@ -267,6 +270,8 @@ source_set("unit_tests") {
     "actions/presave_generated_password_action_unittest.cc",
     "actions/prompt_action_unittest.cc",
     "actions/save_generated_password_action_unittest.cc",
+    "actions/select_option_action_unittest.cc",
+    "actions/set_attribute_action_unittest.cc",
     "actions/set_form_field_value_action_unittest.cc",
     "actions/show_details_action_unittest.cc",
     "actions/show_generic_ui_action_unittest.cc",
@@ -312,6 +317,7 @@ source_set("unit_tests") {
     "//base",
     "//base/test:test_support",
     "//components/autofill/core/browser:test_support",
+    "//components/autofill_assistant/browser/public:unit_test_support",
     "//components/password_manager/core/browser:test_support",
     "//components/password_manager/core/common",
     "//components/strings:components_strings_grit",

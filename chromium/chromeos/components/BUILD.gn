@@ -14,9 +14,11 @@ test("chromeos_components_unittests") {
   deps = [
     "//base",
     "//base/test:test_support",
-    "//chromeos:chromeos_buildflags",
+    "//build:chromeos_buildflags",
     "//chromeos/components/account_manager:unit_tests",
+    "//chromeos/components/bloom:unit_tests",
     "//chromeos/components/cdm_factory_daemon:unit_tests",
+    "//chromeos/components/diagnostics_ui/backend:unit_tests",
     "//chromeos/components/drivefs:unit_tests",
     "//chromeos/components/local_search_service:unit_tests",
     "//chromeos/components/local_search_service/mojom:unit_tests",
@@ -27,6 +29,7 @@ test("chromeos_components_unittests") {
     "//chromeos/components/proximity_auth:unit_tests",
     "//chromeos/components/quick_answers:unit_tests",
     "//chromeos/components/security_token_pin:unit_tests",
+    "//chromeos/components/sensors:unit_tests",
     "//chromeos/components/smbfs:unit_tests",
     "//chromeos/components/string_matching:unit_tests",
     "//chromeos/components/sync_wifi:unit_tests",
@@ -44,6 +47,7 @@ group("closure_compile") {
   testonly = true
   deps = [
     "//chromeos/components/camera_app_ui:closure_compile",
+    "//chromeos/components/diagnostics_ui:closure_compile",
     "//chromeos/components/help_app_ui:closure_compile",
     "//chromeos/components/media_app_ui:closure_compile",
     "//chromeos/components/multidevice/debug_webui/resources:closure_compile",
@@ -54,6 +58,7 @@ group("closure_compile") {
 
   if (!is_official_build) {
     deps += [
+      "//chromeos/components/file_manager/resources:closure_compile",
       "//chromeos/components/sample_system_web_app_ui:closure_compile",
       "//chromeos/components/telemetry_extension_ui:closure_compile",
     ]

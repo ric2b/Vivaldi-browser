@@ -116,20 +116,19 @@
       status: "stable",
     },
     {
-      name: "AccessibilityExposeARIAAnnotations",
-      status: "stable",
-    },
-    {
       name: "AccessibilityExposeDisplayNone",
       status: "test",
     },
     {
       name: "AccessibilityExposeHTMLElement",
-      status: "experimental",
     },
     {
       name: "AccessibilityObjectModel",
       status: "experimental",
+    },
+    {
+      name: "AccessibilityUseAXPositionForDocumentMarkers",
+      status: "test",
     },
     {
       name: "AddressSpace",
@@ -146,11 +145,13 @@
     },
     {
       name: "AllowContentInitiatedDataUrlNavigations",
-      status: "stable",
     },
     {
       name: "AllowSyncXHRInPageDismissal",
       origin_trial_feature_name: "AllowSyncXHRInPageDismissal",
+    },
+    {
+      name: "AndroidDownloadableFontsMatching",
     },
     {
       name: "AnimationWorklet",
@@ -267,10 +268,6 @@
       status: "stable",
     },
     {
-      name: "BlockFlowHandlesWebkitLineClamp",
-      status: "stable",
-    },
-    {
       name: "BlockHTMLParserOnStyleSheets",
     },
     {
@@ -331,6 +328,10 @@
       status: "experimental",
     },
     {
+      name: "ClipboardSvg",
+      status: "experimental",
+    },
+    {
       name: "CompositeAfterPaint",
     },
     {
@@ -339,6 +340,7 @@
     },
     {
       name: "CompositeSVG",
+      status: "test",
     },
     {
       name: "CompositingOptimizations",
@@ -385,13 +387,11 @@
     },
     {
       name: "CookieStoreDocument",
-      origin_trial_feature_name: "CookieStore",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "CookieStoreWorker",
-      origin_trial_feature_name: "CookieStore",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "CookiesWithoutSameSiteMustBeSecure",
@@ -405,7 +405,7 @@
     },
     {
       name: "CrossOriginIsolation",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "CrossOriginOpenerPolicyReporting",
@@ -463,8 +463,16 @@
       status: "experimental",
     },
     {
-      name: "CSSFontMetricsOverride",
+      name: "CSSFontFaceAdvanceOverride",
       status: "test",
+      depends_on: ["CSSFontMetricsOverride"],
+    },
+    {
+      // @font-face descriptors ascent-override, descent-override and
+      // line-gap-override.
+      // https://drafts.csswg.org/css-fonts-4/#font-metrics-override-desc
+      name: "CSSFontMetricsOverride",
+      status: "stable",
     },
     {
       name: "CSSFontSizeAdjust",
@@ -488,7 +496,6 @@
     {
       name: "CSSLogical",
       status: "experimental",
-      settable_from_internals: true,
     },
     {
       name: "CSSLogicalOverflow",
@@ -508,12 +515,17 @@
       name: "CSSMatchedPropertiesCacheDependencies",
     },
     {
-      name: "CSSMathStyle",
+      name: "CSSMathDepth",
       status: "experimental",
       implied_by: ["MathMLCore"],
     },
     {
-      name: "CSSMathSuperscriptShiftStyle",
+      name: "CSSMathShift",
+      status: "experimental",
+      implied_by: ["MathMLCore"],
+    },
+    {
+      name: "CSSMathStyle",
       status: "experimental",
       implied_by: ["MathMLCore"],
     },
@@ -560,17 +572,10 @@
       status: "experimental",
     },
     {
-      // Perform partial style invalidation on web font loading.
-      // See https://crbug.com/441925 and https://bit.ly/35JjPmq for details.
-      name: "CSSReducedFontLoadingInvalidations",
-      status: "stable",
-      implied_by: ["CSSReducedFontLoadingLayoutInvalidations"],
-    },
-    {
       // Perform partial layout invalidation on web font loading.
       // See https://crbug.com/441925 and https://bit.ly/35JjPmq for details.
       name: "CSSReducedFontLoadingLayoutInvalidations",
-      status: "test",
+      status: "stable",
     },
     {
       name: "CSSRevert",
@@ -667,6 +672,10 @@
       status: "experimental",
     },
     {
+      name: "DirectSockets",
+      status: "test",
+    },
+    {
       name: "DisableHardwareNoiseSuppression",
       origin_trial_feature_name: "DisableHardwareNoiseSuppression",
       status: "experimental",
@@ -746,14 +755,18 @@
       name: "ExperimentalContentSecurityPolicyFeatures",
       status: "experimental",
     },
-    // Enables navigator.scheduling.isInputPending and
-    // navigator.scheduling.isFramePending, allowing long-running JS to
-    // be able to yield itself when user input is queued (crbug.com/910421) or a
-    // display update is scheduled.
+    // Enables navigator.scheduling.isFramePending, allowing long-running JS to
+    // be able to yield itself when a display update is scheduled.
+    {
+      name: "ExperimentalIsFramePending",
+      status: "experimental"
+    },
+    // Enables navigator.scheduling.isInputPending, allowing long-running JS to
+    // be able to yield itself when user input is queued (crbug.com/910421).
     {
       name: "ExperimentalIsInputPending",
       origin_trial_feature_name: "ExperimentalIsInputPending",
-      status: "experimental"
+      status: "stable"
     },
     // Enables a DOM-exposed interface to profile client JS.
     // https://github.com/WICG/js-self-profiling
@@ -827,7 +840,9 @@
     {
       name: "FontAccess",
       origin_trial_feature_name: "FontAccess",
-      status: "experimental",
+      // No status because this blink runtime feature doesn't work by itself.
+      // It's controlled by the corresponding Chromium feature which needs to
+      // be enabled to make the whole feature work.
     },
     {
       name: "FontSrcLocalMatching",
@@ -837,7 +852,9 @@
     // For simulating Android's overlay fullscreen video in web tests on Linux.
     {
       name: "ForcedColors",
-      status: "experimental",
+      // No status because this blink runtime feature doesn't work by itself.
+      // It's controlled by the corresponding Chromium feature which needs to
+      // be enabled to make the whole feature work.
     },
     {
       name: "ForceDeferScriptIntervention",
@@ -863,7 +880,6 @@
     },
     {
       name: "FractionalScrollOffsets",
-      status: "experimental",
     },
     {
       name: "FreezeFramesOnVisibility",
@@ -923,7 +939,6 @@
     },
     {
       name: "ImplicitRootScroller",
-      status: "experimental",
       settable_from_internals: true,
     },
     {
@@ -935,10 +950,6 @@
       status: "experimental",
     },
     {
-      name: "InputElementRawValue",
-      status: "experimental",
-    },
-    {
       name: "InputMultipleFieldsUI",
       // No plan to support complex UI for date/time INPUT types on Android.
       status: {"Android": "test", "default": "stable"},
@@ -946,6 +957,10 @@
     {
       name: "InstalledApp",
       status: "stable",
+    },
+    {
+      name: "InterestCohortAPI",
+      origin_trial_feature_name: "InterestCohortAPI",
     },
     {
       name: "IntersectionObserverDocumentScrollingElementRoot",
@@ -985,14 +1000,11 @@
     },
     {
       name: "LayoutNGBlockFragmentation",
+      implied_by: ["LayoutNGPrinting"],
     },
     {
       name: "LayoutNGFieldset",
       depends_on: ["LayoutNG"],
-      status: "stable",
-    },
-    {
-      name: "LayoutNGFlexBox",
       status: "stable",
     },
     {
@@ -1003,7 +1015,7 @@
     {
       name: "LayoutNGFragmentItem",
       implied_by: ["LayoutNGBlockFragmentation", "LayoutNGFragmentTraversal", "EditingNG"],
-      status: "test",
+      status: "stable",
     },
     {
       // Traverse the fragment tree when painting and hit-testing, instead of
@@ -1013,6 +1025,9 @@
     },
     {
       name: "LayoutNGGrid",
+    },
+    {
+      name: "LayoutNGPrinting",
     },
     {
       name: "LayoutNGRuby",
@@ -1046,11 +1061,6 @@
     {
       name: "LazyInitializeMediaControls",
       // This is enabled by features::kLazyInitializeMediaControls.
-    },
-    {
-      // Used for API surface that will be removed when the Native File System
-      // API is no longer guarded by an origin trial.
-      name: "LegacyNativeFileSystem",
     },
     {
       name: "LegacyWindowsDWriteFontFallback",
@@ -1102,7 +1112,7 @@
     },
     {
       name: "MediaCapturePanTilt",
-      status: "experimental",
+      status: "stable",
     },
     // Set to reflect the MediaCastOverlayButton feature.
     {
@@ -1248,7 +1258,7 @@
     {
       name: "NetInfoDownlinkMax",
       // Only Android, ChromeOS support NetInfo downlinkMax, type and ontypechange now
-      status: {"Android": "stable", "ChromeOS": "stable"},
+      status: {"Android": "stable", "ChromeOS": "stable", "default": "experimental"},
     },
     {
       name: "NeverSlowMode",
@@ -1364,10 +1374,8 @@
       origin_trial_allows_third_party: true,
     },
     {
-      name: "OutOfBlinkCors",
-    },
-    {
-      name: "OverflowIconsForMediaControls",
+      name: "OverflowClip",
+      status: "test",
     },
     {
       name: "OverscrollCustomization",
@@ -1562,10 +1570,6 @@
     {
       // Enabled when blink::features::kRawClipboard is enabled.
       name: "RawClipboard",
-    },
-    {
-      name: "ReducedReferrerGranularity",
-      status: "experimental",
     },
     {
       name: "RemotePlayback",
@@ -1788,6 +1792,9 @@
       name: "SmsReceiver",
       status: {"default": "experimental", "Android": "stable"},
     },
+    {
+      name: "SrcsetMaxDensity",
+    },
     // Used as argument in attribute of stable-release functions/interfaces
     // where a runtime-enabled feature name is required for correct IDL syntax.
     // This is a global flag; do not change its status.
@@ -1808,7 +1815,7 @@
       name: "SubresourceWebBundles",
       origin_trial_feature_name: "SubresourceWebBundles",
       origin_trial_allows_third_party: true,
-      status: "experimental"
+      status: "test"
     },
     {
       name: "SurfaceEmbeddingFeatures",
@@ -1867,14 +1874,9 @@
       origin_trial_feature_name: "ForceTouchEventFeatureDetectionForInspector",
       status: "stable",
     },
-    // When enabled, tracks the number of times each LayoutBlock
-    // goes through layout. For testing purposes only.
-    {
-      name: "TrackLayoutPassesPerBlock",
-    },
     {
       name: "TransferableStreams",
-      status: "experimental",
+      status: "stable",
       origin_trial_feature_name: "RTCInsertableStreams",
       implied_by: ["RTCInsertableStreams"],
     },
@@ -1915,7 +1917,7 @@
     },
     {
       name: "UnderlineOffsetThickness",
-      status: "test",
+      status: "stable",
     },
     {
       name: "UnoptimizedImagePolicies",
@@ -1934,7 +1936,7 @@
     },
     {
       name: "UserAgentClientHint",
-      status: "stable"
+      status: "experimental",
     },
     {
       name: "V8IdleTasks",
@@ -1967,6 +1969,10 @@
       name: "VisibilityCollapseColumn",
     },
     {
+      name: "VisibilityStateEntry",
+      status: "experimental",
+    },
+    {
       name: "WakeLock",
       origin_trial_feature_name: "WakeLock",
       implied_by: ['ScreenWakeLock', 'SystemWakeLock'],
@@ -1982,7 +1988,6 @@
     },
     {
       name: "WebAppManifestDisplayOverride",
-      status: "test",
     },
     {
       name: "WebAssemblySimd",
@@ -2002,6 +2007,10 @@
     },
     {
       name: "WebAuthenticationGetAssertionFeaturePolicy",
+      status: "experimental",
+    },
+    {
+      name: "WebAuthenticationResidentKeyRequirement",
       status: "experimental",
     },
     // WebBluetooth is enabled by default on Android, ChromeOS and Mac.
@@ -2122,6 +2131,12 @@
       status: "experimental",
     },
     {
+      name: "WebXRDepth",
+      origin_trial_feature_name: "WebXRDepth",
+      depends_on: ["WebXRARModule"],
+      status: "experimental",
+    },
+    {
       name: "WebXRHitTest",
       depends_on: ["WebXRARModule"],
       status: "stable",
@@ -2134,6 +2149,12 @@
     {
       name: "WebXRLightEstimation",
       depends_on: ["WebXRARModule"],
+      status: "experimental",
+    },
+    {
+      name: "WebXRMultiGpu",
+      depends_on: ["WebXR"],
+      // Enabled when blink::features::kWebXrMultiGpu is enabled.
       status: "experimental",
     },
     {

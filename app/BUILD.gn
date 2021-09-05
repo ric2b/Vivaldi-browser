@@ -1,5 +1,6 @@
 import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/product.gni")
+import("//vivaldi/gn/config/locales.gni")
 import("//build/config/locales.gni")
 import("//build/util/process_version.gni")
 import("//chrome/common/features.gni")

@@ -75,6 +75,9 @@ std::unique_ptr<VideoDecodeAccelerator> CreateAndInitializeVda(
   gl_client.make_context_current = base::BindRepeating(
       &CommandBufferHelper::MakeContextCurrent, command_buffer_helper);
   gl_client.bind_image = base::BindRepeating(&BindImage, command_buffer_helper);
+  gl_client.is_passthrough = command_buffer_helper->IsPassthrough();
+  gl_client.supports_arb_texture_rectangle =
+      command_buffer_helper->SupportsTextureRectangle();
 
   std::unique_ptr<GpuVideoDecodeAcceleratorFactory> factory =
       GpuVideoDecodeAcceleratorFactory::Create(gl_client);
@@ -538,7 +541,8 @@ void VdaVideoDecoder::ProvidePictureBuffersAsync(uint32_t count,
 
   std::vector<PictureBuffer> picture_buffers =
       picture_buffer_manager_->CreatePictureBuffers(
-          count, pixel_format, planes, texture_size, texture_target);
+          count, pixel_format, planes, texture_size, texture_target,
+          vda_->SupportsSharedImagePictureBuffers());
   if (picture_buffers.empty()) {
     parent_task_runner_->PostTask(
         FROM_HERE,
@@ -631,6 +635,7 @@ void VdaVideoDecoder::PictureReadyOnParentThread(Picture picture) {
     EnterErrorState();
     return;
   }
+  frame->set_hdr_metadata(config_.hdr_metadata());
 
   output_cb_.Run(std::move(frame));
 }

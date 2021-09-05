@@ -265,7 +265,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
                                     suggestionsAvailable);
                        }];
 
-  if (self.isPasswordGenerated &&
+  if ([formQuery.type isEqual:@"input"] && self.isPasswordGenerated &&
       formQuery.uniqueFieldID == self.passwordGeneratedIdentifier) {
     // On other platforms, when the user clicks on generation field, we show
     // password in clear text. And the user has the possibility to edit it. On
@@ -648,7 +648,7 @@ NSString* const kSuggestionSuffix = @" ••••••••";
   if (params.type == "password_form_removed") {
     _passwordManager->OnPasswordFormRemoved(
         _delegate.passwordManagerDriver, self.formHelper.fieldDataManager.get(),
-        FormRendererId(params.unique_form_id));
+        params.unique_form_id);
   }
 }
 

@@ -45,9 +45,7 @@ if (is_ios) {
 # no tests will run) and add a reference here. You can add more than one unit
 # test target if convenient.
 test("components_unittests") {
-  if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
-    use_xvfb = true
-  }
+  use_xvfb = use_xvfb_in_this_config
 
   if (is_android || is_linux || is_chromeos || is_mac || is_win) {
     data = [ "test/data/" ]
@@ -141,6 +139,7 @@ test("components_unittests") {
     "//components/services/heap_profiling/public/cpp:unit_tests",
     "//components/services/unzip:unit_tests",
     "//components/sessions:unit_tests",
+    "//components/shared_highlighting/core/common:unit_tests",
     "//components/signin/core/browser:unit_tests",
     "//components/signin/internal/identity_manager:unit_tests",
     "//components/signin/public/base:unit_tests",
@@ -221,11 +220,12 @@ test("components_unittests") {
       "//components/translate/ios/browser:unit_tests",
       "//components/ukm/ios:unit_tests",
     ]
-  } else {  # !iOS
+  } else {  # !is_ios
     deps += [
       "//components/autofill/content/browser:unit_tests",
       "//components/autofill/content/renderer:unit_tests",
       "//components/autofill/core/common/mojom:unit_tests",
+      "//components/background_sync:unit_tests",
       "//components/blocked_content:unit_tests",
       "//components/browsing_data/content:unit_tests",
       "//components/captive_portal/content:unit_tests",
@@ -253,6 +253,8 @@ test("components_unittests") {
       "//components/keyed_service/content:unit_tests",
       "//components/language/content/browser:unit_tests",
       "//components/link_header_util:unit_tests",
+      "//components/media_router/browser:unit_tests",
+      "//components/media_router/common:unit_tests",
       "//components/navigation_interception:unit_tests",
       "//components/network_hints/renderer:unit_tests",
       "//components/offline_pages:unit_tests",
@@ -278,6 +280,7 @@ test("components_unittests") {
       "//components/safe_browsing/content/triggers:unit_tests",
       "//components/safe_browsing/content/web_ui:unit_tests",
       "//components/safe_browsing/core/common:unit_tests",
+      "//components/safe_browsing/core/realtime:unit_tests",
       "//components/safe_browsing/core/triggers:unit_tests",
       "//components/safety_check:unit_tests",
       "//components/security_interstitials/content:unit_tests",
@@ -300,11 +303,14 @@ test("components_unittests") {
       "//components/web_cache/browser:unit_tests",
       "//components/web_package:unit_tests",
       "//components/webcrypto:unit_tests",
+      "//components/webrtc_logging/browser:unit_tests",
+      "//components/webrtc_logging/common:unit_tests",
     ]
 
-    if (!is_fuchsia) {
+    if (!is_fuchsia) {  # !iOS and !Fuchsia
       deps += [
         "//components/crash/content/browser:unit_tests",
+        "//components/crash/content/browser/error_reporting:unit_tests",
         "//components/crash/core/app:unit_tests",
         "//components/data_reduction_proxy/core/browser:unit_tests",
         "//components/data_reduction_proxy/core/common:unit_tests",
@@ -341,6 +347,8 @@ test("components_unittests") {
       "//components/gcm_driver/instance_id/android:instance_id_driver_java",
       "//components/gcm_driver/instance_id/android:instance_id_driver_test_support_java",
       "//components/invalidation/impl",
+      "//components/media_router/browser/android:java",
+      "//components/media_router/browser/android:test_support_java",
       "//components/offline_items_collection/core:native_java_unittests_java",
       "//components/paint_preview/browser/android:java",
       "//components/paint_preview/player/android:unit_tests",
@@ -351,7 +359,6 @@ test("components_unittests") {
       "//components/signin/core/browser/android:java",
       "//components/signin/public/android:java",
       "//components/spellcheck/browser/android:java",
-      "//components/url_formatter/android:native_java_unittests_java",
       "//components/variations/android:variations_java",
       "//content/public/android:content_java",
       "//content/public/browser",
@@ -404,6 +411,10 @@ test("components_unittests") {
     ]
   }
 
+  if (is_mac) {
+    deps += [ "//components/metal_util:unit_tests" ]
+  }
+
   if (toolkit_views) {
     deps += [ "//components/constrained_window:unit_tests" ]
   }
@@ -415,6 +426,7 @@ test("components_unittests") {
   if (enable_basic_printing) {
     deps += [
       "//components/printing/browser:unit_tests",
+      "//components/printing/common:unit_tests",
       "//components/services/print_compositor:unit_tests",
     ]
   }
@@ -436,12 +448,8 @@ test("components_unittests") {
     deps += [ "//components/safe_browsing/android:unit_tests_mobile" ]
   }
 
-  if (!is_ios) {
-    deps += [
-      "//components/safe_browsing/core/realtime:unit_tests",
-      "//components/webrtc_logging/browser:unit_tests",
-      "//components/webrtc_logging/common:unit_tests",
-    ]
+  if (safe_browsing_mode == 1) {
+    deps += [ "//components/safe_browsing/content/renderer/phishing_classifier:unit_tests" ]
   }
 
   if (use_dbus) {
@@ -537,7 +545,6 @@ if (is_android) {
     sources = [
       "//components/test/android/browsertests_apk/res/layout/test_activity.xml",
     ]
-    create_srcjar = false
   }
 }
 
@@ -545,9 +552,7 @@ if (is_android) {
 # no-op under Fuchsia.
 if (!is_ios && !is_fuchsia) {
   test("components_browsertests") {
-    if ((is_linux && !is_chromeos) || chromeos_is_browser_only) {
-      use_xvfb = true
-    }
+    use_xvfb = use_xvfb_in_this_config
 
     defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 
@@ -610,6 +615,7 @@ if (!is_ios && !is_fuchsia) {
       "//components/performance_manager:browser_tests",
       "//components/security_state/content",
       "//components/security_state/core",
+      "//components/shared_highlighting/core/common",
       "//components/strings",
       "//components/ukm:test_support",
       "//components/ukm/content",
@@ -770,11 +776,14 @@ if (is_android) {
       "//components/browser_ui/android/bottomsheet/internal:junit_tests",
       "//components/browser_ui/client_certificate/android:junit",
       "//components/browser_ui/media/android:junit",
+      "//components/browser_ui/photo_picker/android:junit",
       "//components/browser_ui/util/android:junit",
       "//components/browser_ui/webshare/android:junit",
       "//components/browser_ui/widget/android:junit",
       "//components/embedder_support/android:components_embedder_support_junit_tests",
       "//components/gcm_driver/android:components_gcm_driver_junit_tests",
+      "//components/media_router/browser/android:junit",
+      "//components/messages/android/internal:junit",
       "//components/permissions/android:components_permissions_junit_tests",
       "//components/policy/android:components_policy_junit_tests",
       "//components/prefs/android:junit",

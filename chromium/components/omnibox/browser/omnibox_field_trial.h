@@ -388,9 +388,6 @@ EmphasizeTitlesCondition GetEmphasizeTitlesConditionForInput(
 // ---------------------------------------------------------
 // For UI experiments.
 
-// Returns true if the reverse answers flag is enabled.
-bool IsReverseAnswersEnabled();
-
 // Returns true if the short bookmark suggestions flag is enabled.
 bool IsShortBookmarkSuggestionsEnabled();
 
@@ -412,15 +409,22 @@ bool IsKeywordSearchButtonEnabled();
 // assortment of keyword mode experiments.
 bool IsExperimentalKeywordModeEnabled();
 
+// Returns true if the new focus UI is enabled.
+bool IsRefinedFocusStateEnabled();
+
 // Rich autocompletion.
 bool IsRichAutocompletionEnabled();
 bool RichAutocompletionAutocompleteTitles();
 size_t RichAutocompletionAutocompleteTitlesMinChar();
 bool RichAutocompletionTwoLineOmnibox();
 bool RichAutocompletionShowTitles();
-bool RichAutocompletionAutocompleteNonPrefix();
+bool RichAutocompletionAutocompleteNonPrefixAll();
+bool RichAutocompletionAutocompleteNonPrefixShortcutProvider();
 size_t RichAutocompletionAutocompleteNonPrefixMinChar();
 bool RichAutocompletionShowAdditionalText();
+bool RichAutocompletionSplitTitleCompletion();
+bool RichAutocompletionSplitUrlCompletion();
+size_t RichAutocompletionSplitCompletionMinChar();
 
 // On Device Head Suggestions feature and its helper functions.
 bool IsOnDeviceHeadSuggestEnabledForIncognito();
@@ -521,6 +525,12 @@ extern const char kUIMaxAutocompleteMatchesParam[];
 extern const char kDynamicMaxAutocompleteUrlCutoffParam[];
 extern const char kDynamicMaxAutocompleteIncreasedLimitParam[];
 
+// Parameters used for ranking.
+extern const char kBubbleUrlSuggestionsAbsoluteGapParam[];
+extern const char kBubbleUrlSuggestionsRelativeGapParam[];
+extern const char kBubbleUrlSuggestionsAbsoluteBufferParam[];
+extern const char kBubbleUrlSuggestionsRelativeBufferParam[];
+
 // Parameter names used by on device head provider.
 // These four parameters are shared by both non-incognito and incognito.
 extern const char kOnDeviceHeadModelLocaleConstraint[];
@@ -541,9 +551,14 @@ extern const char kRichAutocompletionAutocompleteTitlesParam[];
 extern const char kRichAutocompletionAutocompleteTitlesMinCharParam[];
 extern const char kRichAutocompletionTwoLineOmniboxParam[];
 extern const char kRichAutocompletionShowTitlesParam[];
-extern const char kRichAutocompletionAutocompleteNonPrefixParam[];
+extern const char kRichAutocompletionAutocompleteNonPrefixAllParam[];
+extern const char
+    kRichAutocompletionAutocompleteNonPrefixShortcutProviderParam[];
 extern const char kRichAutocompletionAutocompleteNonPrefixMinCharParam[];
 extern const char kRichAutocompletionShowAdditionalTextParam[];
+extern const char kRichAutocompletionSplitTitleCompletionParam[];
+extern const char kRichAutocompletionSplitUrlCompletionParam[];
+extern const char kRichAutocompletionSplitCompletionMinCharParam[];
 
 // Parameter names used by image search experiment that shows thumbnail in front
 // of the Omnibox clipboard image search suggestion.
@@ -552,6 +567,20 @@ extern const char kImageSearchSuggestionThumbnail[];
 // Parameter names used by omnibox experiments that hide the path (and
 // optionally subdomains) in the steady state.
 extern const char kOmniboxUIUnelideURLOnHoverThresholdMsParam[];
+
+// Parameter names used by entity variations. Enabling 'shared decoder' will
+// share a decoder for all suggestion images. Enabling 'shared decoder without
+// timeout' will prevent the decoder from resetting while idle for 5 seconds.
+// Enabling the latter will implicitly enable the former.
+extern const char kEntitySuggestionsReduceLatencyDecoderTimeoutParam[];
+extern const char kEntitySuggestionsReduceLatencyDecoderWakeupParam[];
+
+// Parameter names used for bookmark path variations that determine whether
+// bookmark suggestion texts will contain the title, URL, and/or path.
+extern const char kBookmarkPathsUiReplaceTitle[];
+extern const char kBookmarkPathsUiReplaceUrl[];
+extern const char kBookmarkPathsUiAppendAfterTitle[];
+extern const char kBookmarkPathsUiDynamicReplaceUrl[];
 
 namespace internal {
 // The bundled omnibox experiment comes with a set of parameters

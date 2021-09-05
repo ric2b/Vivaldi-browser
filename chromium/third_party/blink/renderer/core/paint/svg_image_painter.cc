@@ -14,6 +14,8 @@
 #include "third_party/blink/renderer/core/paint/scoped_svg_paint_state.h"
 #include "third_party/blink/renderer/core/paint/svg_model_object_painter.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_preserve_aspect_ratio.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_rect.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg/svg_image_element.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
@@ -29,27 +31,23 @@ void SVGImagePainter::Paint(const PaintInfo& paint_info) {
       !layout_svg_image_.ImageResource()->HasImage())
     return;
 
-  if (SVGModelObjectPainter(layout_svg_image_)
-          .CullRectSkipsPainting(paint_info)) {
-    return;
+  if (SVGModelObjectPainter::CanUseCullRect(layout_svg_image_.StyleRef())) {
+    if (!paint_info.GetCullRect().IntersectsTransformed(
+            layout_svg_image_.LocalSVGTransform(),
+            layout_svg_image_.VisualRectInLocalSVGCoordinates()))
+      return;
   }
   // Images cannot have children so do not call TransformCullRect.
 
-  ScopedSVGTransformState transform_state(
-      paint_info, layout_svg_image_,
-      layout_svg_image_.LocalToSVGParentTransform());
+  ScopedSVGTransformState transform_state(paint_info, layout_svg_image_);
   {
     ScopedSVGPaintState paint_state(layout_svg_image_, paint_info);
-    if (paint_state.ApplyEffects() &&
-        !DrawingRecorder::UseCachedDrawingIfPossible(
-            paint_state.GetPaintInfo().context, layout_svg_image_,
-            paint_state.GetPaintInfo().phase)) {
-      SVGModelObjectPainter::RecordHitTestData(layout_svg_image_,
-                                               paint_state.GetPaintInfo());
-      SVGDrawingRecorder recorder(paint_state.GetPaintInfo().context,
-                                  layout_svg_image_,
-                                  paint_state.GetPaintInfo().phase);
-      PaintForeground(paint_state.GetPaintInfo());
+    if (!DrawingRecorder::UseCachedDrawingIfPossible(
+            paint_info.context, layout_svg_image_, paint_info.phase)) {
+      SVGModelObjectPainter::RecordHitTestData(layout_svg_image_, paint_info);
+      SVGDrawingRecorder recorder(paint_info.context, layout_svg_image_,
+                                  paint_info.phase);
+      PaintForeground(paint_info);
     }
   }
 

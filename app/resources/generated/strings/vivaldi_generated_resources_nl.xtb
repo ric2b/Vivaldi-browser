@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Framebron weergeven</translation>
 <translation id="1165039591588034296">Fout</translation>
 <translation id="1175364870820465910">A&amp;fdrukken...</translation>
-<translation id="1177863135347784049">Aangepast</translation>
 <translation id="1181037720776840403">Verwijderen</translation>
 <translation id="1187722533808055681">Activeringen vanuit inactief</translation>
 <translation id="119944043368869598">Alles wissen</translation>
 <translation id="1221825588892235038">Alleen selectie</translation>
 <translation id="1244303850296295656">Fout met extensie</translation>
+<translation id="125220115284141797">Standaard</translation>
 <translation id="1274977772557788323">Opslaginstellingen voor Adobe Flash Player</translation>
 <translation id="1297175357211070620">Bestemming</translation>
 <translation id="1303101771013849280">Html-bladwijzerbestand</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">&amp;Nieuw venster</translation>
 <translation id="1725149567830788547">Besturingselementen &amp;weergeven</translation>
 <translation id="1729533290416704613">Hiermee wordt ook bepaald welke pagina wordt weergegeven wanneer je vanuit het adresveld zoekt.</translation>
+<translation id="174123615272205933">Aangepast</translation>
 <translation id="1744108098763830590">achtergrondpagina</translation>
 <translation id="176587472219019965">&amp;Nieuw venster</translation>
 <translation id="1769104665586091481">Koppeling openen in nieuw &amp;venster</translation>
+<translation id="1779468444204342338">Minimum</translation>
 <translation id="1815083418640426271">Plakken als platte tekst</translation>
 <translation id="1828901632669367785">Afdrukken met systeemdialoogvenster...</translation>
 <translation id="1850508293116537636">Rechtsom d&amp;raaien</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Goedkeuring vragen vóór verzenden (aanbevolen)</translation>
 <translation id="241082044617551207">Onbekende plug-in</translation>
 <translation id="2423578206845792524">Afbeelding &amp;opslaan als...</translation>
-<translation id="2436707352762155834">Minimum</translation>
 <translation id="2439110203301358333">Een ander programma op je computer heeft een extensie toegevoegd die de manier waarop Vivaldi werkt kan wijzigen.</translation>
 <translation id="2445081178310039857">Hoofddirectory van extensie is vereist.</translation>
 <translation id="2470702053775288986">Niet-ondersteunde extensies uitgeschakeld</translation>
@@ -138,6 +139,7 @@
 <translation id="3222066309010235055">PreRender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3227137524299004712">Microfoon</translation>
 <translation id="3241680850019875542">Selecteer de hoofddirectory van de extensie die je wilt inpakken. Als je een extensie wilt bijwerken, selecteer je ook het privésleutelbestand om dit opnieuw te gebruiken.</translation>
+<translation id="3266179261140759675">Voorkomen dat gesloten sites gegevens sturen en ontvangen</translation>
 <translation id="3280237271814976245">&amp;Opslaan als...</translation>
 <translation id="3285322247471302225">Nieuwe &amp;tab</translation>
 <translation id="3288047731229977326">Extensies die in ontwikkelaarsmodus worden uitgevoerd, kunnen je computer beschadigen. Als je geen ontwikkelaar bent, dien je om veiligheidsredenen zulke extensies uit te schakelen.</translation>
@@ -245,7 +247,6 @@
 <translation id="5039804452771397117">Toestaan</translation>
 <translation id="5057110919553308744">Wanneer je op de extensie klikt</translation>
 <translation id="5063480226653192405">Gebruik</translation>
-<translation id="5068918910148307423">Niet toestaan dat onlangs gesloten websites het verzenden en ontvangen van gegevens voltooien</translation>
 <translation id="5116628073786783676">Audio op&amp;slaan als...</translation>
 <translation id="5143374789336132547">De extensie "<ph name="EXTENSION_NAME" />" heeft gewijzigd welke pagina wordt weergegeven wanneer je op de knop 'Homepage' klikt.</translation>
 <translation id="5154108062446123722">Geavanceerde instellingen voor <ph name="PRINTING_DESTINATION" /></translation>
@@ -264,6 +265,7 @@
 <translation id="5355926466126177564">De extensie "<ph name="EXTENSION_NAME" />" heeft gewijzigd welke pagina wordt weergegeven wanneer je vanuit het adresveld zoekt.</translation>
 <translation id="5360150013186312835">In werkbalk weergeven</translation>
 <translation id="5362741141255528695">Selecteer een privésleutelbestand.</translation>
+<translation id="536638840841140142">Geen</translation>
 <translation id="5370819323174483825">&amp;Herladen</translation>
 <translation id="5398572795982417028">Paginaverwijzing valt buiten bereik, limiet is <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Doorgaan met downloaden</translation>
@@ -388,7 +390,6 @@
 <translation id="7663719505383602579">Ontvanger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Geïnstalleerd door je administrator</translation>
 <translation id="7685049629764448582">JavaScript-geheugen</translation>
-<translation id="7701040980221191251">Geen</translation>
 <translation id="7701869757853594372">USER-handles</translation>
 <translation id="7704305437604973648">Taak</translation>
 <translation id="7710568461918838723">&amp;Casten...</translation>

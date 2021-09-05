@@ -207,7 +207,8 @@ class CORE_EXPORT NGBoxFragmentBuilder final
 
   void AddChild(const NGPhysicalContainerFragment&,
                 const LogicalOffset&,
-                const LayoutInline* inline_container = nullptr);
+                const LayoutInline* inline_container = nullptr,
+                const NGMarginStrut* margin_strut = nullptr);
 
   // Manually add a break token to the builder. Note that we're assuming that
   // this break token is for content in the same flow as this parent.
@@ -226,6 +227,16 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // building now.
   void SetConsumedBlockSize(LayoutUnit size) { consumed_block_size_ = size; }
 
+  // Set how much of the column block-size we've used so far. This will be used
+  // to determine the block-size of any new columns added by descendant
+  // out-of-flow positioned elements.
+  void SetBlockOffsetForAdditionalColumns(LayoutUnit size) {
+    block_offset_for_additional_columns_ = size;
+  }
+  LayoutUnit BlockOffsetForAdditionalColumns() const {
+    return block_offset_for_additional_columns_;
+  }
+
   void SetSequenceNumber(unsigned sequence_number) {
     sequence_number_ = sequence_number;
   }
@@ -234,6 +245,15 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // not because of a child break, but rather due to the size of this node).
   bool DidBreakSelf() const { return did_break_self_; }
   void SetDidBreakSelf() { did_break_self_ = true; }
+
+  // Store the previous break token, if one exists.
+  void SetPreviousBreakToken(
+      scoped_refptr<const NGBlockBreakToken> break_token) {
+    previous_break_token_ = std::move(break_token);
+  }
+  const NGBlockBreakToken* PreviousBreakToken() const {
+    return previous_break_token_.get();
+  }
 
   // Return true if we need to break before or inside any child, doesn't matter
   // if it's in-flow or not. As long as there are only breaks in parallel flows,
@@ -255,6 +275,11 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool HasInflowChildBreakInside() const {
     return has_inflow_child_break_inside_;
   }
+
+  // Return true if we need to break before or inside any floated child. Floats
+  // are encapsulated by their container if the container establishes a new
+  // block formatting context.
+  bool HasFloatBreakInside() const { return has_float_break_inside_; }
 
   // Report space shortage, i.e. how much more space would have been sufficient
   // to prevent some piece of content from breaking. This information may be
@@ -522,6 +547,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   LogicalSize child_available_size_;
   LayoutUnit overflow_block_size_ = kIndefiniteSize;
   LayoutUnit intrinsic_block_size_;
+  base::Optional<LogicalRect> inflow_bounds_;
 
   NGFragmentItemsBuilder* items_builder_ = nullptr;
 
@@ -535,6 +561,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool is_first_for_node_ = true;
   bool did_break_self_ = false;
   bool has_inflow_child_break_inside_ = false;
+  bool has_float_break_inside_ = false;
   bool has_forced_break_ = false;
   bool is_new_fc_ = false;
   bool subtree_modified_margin_strut_ = false;
@@ -542,6 +569,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool is_math_fraction_ = false;
   bool is_at_block_end_ = false;
   LayoutUnit consumed_block_size_;
+  LayoutUnit block_offset_for_additional_columns_;
   unsigned sequence_number_ = 0;
 
   LayoutUnit minimal_space_shortage_ = LayoutUnit::Max();
@@ -575,6 +603,8 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   base::Optional<int> lines_until_clamp_;
 
   std::unique_ptr<NGMathMLPaintInfo> mathml_paint_info_;
+
+  scoped_refptr<const NGBlockBreakToken> previous_break_token_;
 
 #if DCHECK_IS_ON()
   // Describes what size_.block_size represents; either the size of a single

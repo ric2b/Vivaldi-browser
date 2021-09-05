@@ -40,7 +40,6 @@ import org.junit.runner.RunWith;
 
 import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContentsClient.AwWebResourceRequest;
-import org.chromium.android_webview.AwWebResourceResponse;
 import org.chromium.android_webview.test.AwActivityTestRule.TestDependencyFactory;
 import org.chromium.autofill.mojom.SubmissionSource;
 import org.chromium.base.Log;
@@ -56,6 +55,7 @@ import org.chromium.components.autofill.AutofillManagerWrapper;
 import org.chromium.components.autofill.AutofillPopup;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.autofill.AutofillProviderUMA;
+import org.chromium.components.embedder_support.util.WebResourceResponseInfo;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -531,7 +531,7 @@ public class AwAutofillTest {
 
     private static class AwAutofillTestClient extends TestAwContentsClient {
         public interface ShouldInterceptRequestImpl {
-            AwWebResourceResponse shouldInterceptRequest(AwWebResourceRequest request);
+            WebResourceResponseInfo shouldInterceptRequest(AwWebResourceRequest request);
         }
 
         private ShouldInterceptRequestImpl mShouldInterceptRequestImpl;
@@ -541,8 +541,8 @@ public class AwAutofillTest {
         }
 
         @Override
-        public AwWebResourceResponse shouldInterceptRequest(AwWebResourceRequest request) {
-            AwWebResourceResponse response = null;
+        public WebResourceResponseInfo shouldInterceptRequest(AwWebResourceRequest request) {
+            WebResourceResponseInfo response = null;
             if (mShouldInterceptRequestImpl != null) {
                 response = mShouldInterceptRequestImpl.shouldInterceptRequest(request);
             }
@@ -983,6 +983,42 @@ public class AwAutofillTest {
         assertEquals(1, changedValues.get(2).second.getListValue());
     }
 
+    /**
+     * This test is verifying that a user interacting with a form after reloading a webpage
+     * triggers a new autofill session rather than continuing a session that was started before the
+     * reload. This is necessary to ensure that autofill is properly triggered in this case (see
+     * crbug.com/1117563 for details).
+     */
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testAutofillTriggersAfterReload() throws Throwable {
+        final String data = "<html><head></head><body><form action='a.html' name='formname'>"
+                + "<input type='text' id='text1' name='username'"
+                + " placeholder='placeholder@placeholder.com' autocomplete='username name'>"
+                + "<input type='submit'>"
+                + "</form></body></html>";
+        final String url = mWebServer.setResponse(FILE, data, null);
+        int cnt = 0;
+
+        loadUrlSync(url);
+        DOMUtils.waitForNonZeroNodeBounds(mAwContents.getWebContents(), "text1");
+        // TODO(changwan): mock out IME interaction.
+        Assert.assertTrue(DOMUtils.clickNode(mTestContainerView.getWebContents(), "text1"));
+        cnt += waitForCallbackAndVerifyTypes(cnt,
+                new Integer[] {AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED, AUTOFILL_SESSION_STARTED});
+
+        // Reload the page and check that the user clicking on the same form field ends the current
+        // autofill session and starts a new session.
+        loadUrlSync(url);
+        DOMUtils.waitForNonZeroNodeBounds(mAwContents.getWebContents(), "text1");
+        // TODO(changwan): mock out IME interaction.
+        Assert.assertTrue(DOMUtils.clickNode(mTestContainerView.getWebContents(), "text1"));
+        cnt += waitForCallbackAndVerifyTypes(cnt,
+                new Integer[] {AUTOFILL_CANCEL, AUTOFILL_VIEW_EXITED, AUTOFILL_VIEW_ENTERED,
+                        AUTOFILL_SESSION_STARTED});
+    }
+
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
@@ -1165,14 +1201,14 @@ public class AwAutofillTest {
                     private int mCallCount;
 
                     @Override
-                    public AwWebResourceResponse shouldInterceptRequest(
+                    public WebResourceResponseInfo shouldInterceptRequest(
                             AwWebResourceRequest request) {
                         try {
                             if (url.equals(request.url)) {
                                 // Only intercept the iframe's request.
                                 if (mCallCount == 1) {
                                     final String encoding = "UTF-8";
-                                    return new AwWebResourceResponse("text/html", encoding,
+                                    return new WebResourceResponseInfo("text/html", encoding,
                                             new ByteArrayInputStream(
                                                     iframeData.getBytes(encoding)));
                                 }
@@ -1238,12 +1274,13 @@ public class AwAutofillTest {
     }
 
     /**
-     * This test is verifying the session is still alive after navigation.
+     * This test is verifying that a navigation occurring while there is a probably-submitted
+     * form will trigger commit of the current autofill session.
      */
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    public void testSessionAliveAfterNavigation() throws Throwable {
+    public void testNavigationAfterProbableSubmitResultsInSessionCommit() throws Throwable {
         int cnt = 0;
         final String data = "<!DOCTYPE html>"
                 + "<html>"

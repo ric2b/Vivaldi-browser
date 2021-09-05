@@ -153,6 +153,7 @@
 <translation id="6165508094623778733">詳しく見るわ</translation>
 <translation id="6177128806592000436">このサイトへの接続、保護されてへんで</translation>
 <translation id="6203231073485539293">インターネット接続確認してもうてもええかな</translation>
+<translation id="6225522625585012689">&lt;strong&gt;vivaldi://policy&lt;/strong&gt; で、ブロックされた URL のリストとシステム管理者が設定した他のポリシー確認できるで。</translation>
 <translation id="625755898061068298">このサイトのセキュリティ警告、無効にしたで。</translation>
 <translation id="6264485186158353794">セキュリティで保護されたページに戻る</translation>
 <translation id="6305205051461490394"><ph name="URL" />にアクセスできへん。</translation>
@@ -202,7 +203,6 @@
 <translation id="8041940743680923270">グローバルのデフォルト値（つまり確認）にしとく</translation>
 <translation id="808894953321890993">パスワード変更</translation>
 <translation id="8119307142152921512">トラッカーと広告</translation>
-<translation id="8142868475871995937">&lt;strong&gt;vivaldi://policy&lt;/strong&gt;にアクセスして、システム管理者が登録したブラックリストのURLとかポリシー、確認してな。</translation>
 <translation id="8149426793427495338">さっきまでパソコン寝とったで。</translation>
 <translation id="8150722005171944719"><ph name="URL" />のファイル、読まれへんわ。消されたんか、どっか他のとこ行ったんちゃう？ファイルへのアクセス権もろてへん可能性もあるけど。</translation>
 <translation id="8184538546369750125">グローバルのデフォルト値（つまり許可）にしとく</translation>

@@ -29,6 +29,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 
@@ -103,7 +104,7 @@ size_t ReadProcStatusAndGetFieldAsSizeT(pid_t pid, StringPiece field) {
   return 0;
 }
 
-#if defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 // Read /proc/<pid>/status and look for |field|. On success, return true and
 // write the value for |field| into |result|.
 // Only works for fields in the form of "field    :     uint_value"
@@ -128,7 +129,7 @@ bool ReadProcStatusAndGetFieldAsUint64(pid_t pid,
   }
   return false;
 }
-#endif  // defined(OS_LINUX) || defined(OS_AIX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 
 // Get the total CPU from a proc stat buffer.  Return value is number of jiffies
 // on success or 0 if parsing failed.
@@ -149,44 +150,6 @@ int64_t GetProcessCPU(pid_t pid) {
 
   return ParseTotalCPUTimeFromStats(proc_stats);
 }
-
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
-// Report on Chrome OS GEM object graphics memory. /run/debugfs_gpu is a
-// bind mount into /sys/kernel/debug and synchronously reading the in-memory
-// files in /sys is fast.
-void ReadChromeOSGraphicsMemory(SystemMemoryInfoKB* meminfo) {
-#if defined(ARCH_CPU_ARM_FAMILY)
-  FilePath geminfo_file("/run/debugfs_gpu/exynos_gem_objects");
-#else
-  FilePath geminfo_file("/run/debugfs_gpu/i915_gem_objects");
-#endif
-  std::string geminfo_data;
-  meminfo->gem_objects = -1;
-  meminfo->gem_size = -1;
-  if (ReadFileToString(geminfo_file, &geminfo_data)) {
-    int gem_objects = -1;
-    long long gem_size = -1;
-    int num_res = sscanf(geminfo_data.c_str(), "%d objects, %lld bytes",
-                         &gem_objects, &gem_size);
-    if (num_res == 2) {
-      meminfo->gem_objects = gem_objects;
-      meminfo->gem_size = gem_size;
-    }
-  }
-
-#if defined(ARCH_CPU_ARM_FAMILY)
-  // Incorporate Mali graphics memory if present.
-  FilePath mali_memory_file("/sys/class/misc/mali0/device/memory");
-  std::string mali_memory_data;
-  if (ReadFileToStringNonBlocking(mali_memory_file, &mali_memory_data)) {
-    long long mali_size = -1;
-    int num_res = sscanf(mali_memory_data.c_str(), "%lld bytes", &mali_size);
-    if (num_res == 1)
-      meminfo->gem_size += mali_size;
-  }
-#endif  // defined(ARCH_CPU_ARM_FAMILY)
-}
-#endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 
 bool SupportsPerTaskTimeInState() {
   FilePath time_in_state_path = internal::GetProcPidDir(GetCurrentProcId())
@@ -297,13 +260,11 @@ bool ProcessMetrics::GetIOCounters(IoCounters* io_counters) const {
   return true;
 }
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 uint64_t ProcessMetrics::GetVmSwapBytes() const {
   return ReadProcStatusAndGetFieldAsSizeT(process_, "VmSwap") * 1024;
 }
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
 
-#if defined(OS_LINUX) || defined(OS_ANDROID)
 bool ProcessMetrics::GetPageFaultCounts(PageFaultCounts* counts) const {
   // We are not using internal::ReadStatsFileAndGetFieldAsInt64(), since it
   // would read the file twice, and return inconsistent numbers.
@@ -320,7 +281,7 @@ bool ProcessMetrics::GetPageFaultCounts(PageFaultCounts* counts) const {
       internal::GetProcStatsFieldAsInt64(proc_stats, internal::VM_MAJFLT);
   return true;
 }
-#endif  // defined(OS_LINUX) || defined(OS_ANDROID)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
 int ProcessMetrics::GetOpenFdCount() const {
   // Use /proc/<pid>/fd to count the number of entries there.
@@ -365,7 +326,7 @@ int ProcessMetrics::GetOpenFdSoftLimit() const {
   return -1;
 }
 
-#if defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 ProcessMetrics::ProcessMetrics(ProcessHandle process)
     : process_(process), last_absolute_idle_wakeups_(0) {}
 #else
@@ -483,13 +444,10 @@ bool ProcessMetrics::ParseProcTimeInState(
 }
 
 CPU::CoreType ProcessMetrics::GetCoreType(int core_index) {
-  if (!core_index_to_type_)
-    core_index_to_type_ = CPU::GuessCoreTypes();
-
-  if (static_cast<size_t>(core_index) >= core_index_to_type_->size())
+  const std::vector<CPU::CoreType>& core_types = CPU::GetGuessedCoreTypes();
+  if (static_cast<size_t>(core_index) >= core_types.size())
     return CPU::CoreType::kUnknown;
-
-  return core_index_to_type_->at(static_cast<size_t>(core_index));
+  return core_types[static_cast<size_t>(core_index)];
 }
 
 const char kProcSelfExe[] = "/proc/self/exe";
@@ -568,8 +526,6 @@ std::unique_ptr<DictionaryValue> SystemMemoryInfoKB::ToValue() const {
 #if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
   res->SetIntKey("shmem", shmem);
   res->SetIntKey("slab", slab);
-  res->SetIntKey("gem_objects", gem_objects);
-  res->SetIntKey("gem_size", gem_size);
 #endif
 
   return res;
@@ -656,9 +612,17 @@ bool ParseProcVmstat(StringPiece vmstat_data, VmStatInfo* vmstat) {
   //
   // Iterate through the whole file because the position of the
   // fields are dependent on the kernel version and configuration.
+
+  // Returns true if all of these 3 fields are present.
   bool has_pswpin = false;
   bool has_pswpout = false;
   bool has_pgmajfault = false;
+
+  // The oom_kill field is optional. The vmstat oom_kill field is available on
+  // upstream kernel 4.13. It's backported to Chrome OS kernel 3.10.
+  bool has_oom_kill = false;
+  vmstat->oom_kill = 0;
+
   for (const StringPiece& line : SplitStringPiece(
            vmstat_data, "\n", KEEP_WHITESPACE, SPLIT_WANT_NONEMPTY)) {
     std::vector<StringPiece> tokens = SplitStringPiece(
@@ -682,16 +646,18 @@ bool ParseProcVmstat(StringPiece vmstat_data, VmStatInfo* vmstat) {
       vmstat->pgmajfault = val;
       DCHECK(!has_pgmajfault);
       has_pgmajfault = true;
+    } else if (tokens[0] == "oom_kill") {
+      vmstat->oom_kill = val;
+      DCHECK(!has_oom_kill);
+      has_oom_kill = true;
     }
-    if (has_pswpin && has_pswpout && has_pgmajfault)
-      return true;
   }
 
-  return false;
+  return has_pswpin && has_pswpout && has_pgmajfault;
 }
 
 bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
-  // Synchronously reading files in /proc and /sys are safe.
+  // Synchronously reading files in /proc is safe.
   ThreadRestrictions::ScopedAllowIO allow_io;
 
   // Used memory is: total - free - buffers - caches
@@ -707,10 +673,6 @@ bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
     return false;
   }
 
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
-  ReadChromeOSGraphicsMemory(meminfo);
-#endif
-
   return true;
 }
 
@@ -723,7 +685,7 @@ std::unique_ptr<DictionaryValue> VmStatInfo::ToValue() const {
 }
 
 bool GetVmStatInfo(VmStatInfo* vmstat) {
-  // Synchronously reading files in /proc and /sys are safe.
+  // Synchronously reading files in /proc is safe.
   ThreadRestrictions::ScopedAllowIO allow_io;
 
   FilePath vmstat_file("/proc/vmstat");
@@ -902,6 +864,14 @@ std::unique_ptr<Value> SwapInfo::ToValue() const {
   return std::move(res);
 }
 
+std::unique_ptr<Value> GraphicsMemoryInfoKB::ToValue() const {
+  auto res = std::make_unique<DictionaryValue>();
+  res->SetIntKey("gpu_objects", gpu_objects);
+  res->SetDouble("gpu_memory_size", static_cast<double>(gpu_memory_size));
+
+  return std::move(res);
+}
+
 bool ParseZramMmStat(StringPiece mm_stat_data, SwapInfo* swap_info) {
   // There are 7 columns in /sys/block/zram0/mm_stat,
   // split by several spaces. The first three columns
@@ -1041,9 +1011,57 @@ bool GetSwapInfo(SwapInfo* swap_info) {
   }
   return true;
 }
+
+bool GetGraphicsMemoryInfo(GraphicsMemoryInfoKB* gpu_meminfo) {
+#if defined(ARCH_CPU_X86_FAMILY)
+  // Reading i915_gem_objects on intel platform with kernel 5.4 is slow and is
+  // prohibited.
+  // TODO(b/170397975): Update if i915_gem_objects reading time is improved.
+  static bool is_newer_kernel =
+      base::StartsWith(base::SysInfo::KernelVersion(), "5.");
+  static bool is_intel_cpu = base::CPU().vendor_name() == "GenuineIntel";
+  if (is_newer_kernel && is_intel_cpu)
+    return false;
+#endif
+
+#if defined(ARCH_CPU_ARM_FAMILY)
+  const FilePath geminfo_path("/run/debugfs_gpu/exynos_gem_objects");
+#else
+  const FilePath geminfo_path("/run/debugfs_gpu/i915_gem_objects");
+#endif
+  std::string geminfo_data;
+  gpu_meminfo->gpu_objects = -1;
+  gpu_meminfo->gpu_memory_size = -1;
+  if (ReadFileToStringNonBlocking(geminfo_path, &geminfo_data)) {
+    int gpu_objects = -1;
+    int64_t gpu_memory_size = -1;
+    int num_res = sscanf(geminfo_data.c_str(), "%d objects, %" SCNd64 " bytes",
+                         &gpu_objects, &gpu_memory_size);
+    if (num_res == 2) {
+      gpu_meminfo->gpu_objects = gpu_objects;
+      gpu_meminfo->gpu_memory_size = gpu_memory_size;
+    }
+  }
+
+#if defined(ARCH_CPU_ARM_FAMILY)
+  // Incorporate Mali graphics memory if present.
+  FilePath mali_memory_file("/sys/class/misc/mali0/device/memory");
+  std::string mali_memory_data;
+  if (ReadFileToStringNonBlocking(mali_memory_file, &mali_memory_data)) {
+    int64_t mali_size = -1;
+    int num_res =
+        sscanf(mali_memory_data.c_str(), "%" SCNd64 " bytes", &mali_size);
+    if (num_res == 1)
+      gpu_meminfo->gpu_memory_size += mali_size;
+  }
+#endif  // defined(ARCH_CPU_ARM_FAMILY)
+
+  return gpu_meminfo->gpu_memory_size != -1;
+}
+
 #endif  // defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
 
-#if defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 int ProcessMetrics::GetIdleWakeupsPerSecond() {
   uint64_t num_switches;
   static const char kSwitchStat[] = "voluntary_ctxt_switches";
@@ -1051,6 +1069,6 @@ int ProcessMetrics::GetIdleWakeupsPerSecond() {
              ? CalculateIdleWakeupsPerSecond(num_switches)
              : 0;
 }
-#endif  // defined(OS_LINUX) || defined(OS_AIX)
+#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_AIX)
 
 }  // namespace base

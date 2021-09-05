@@ -28,6 +28,10 @@ source_set("grid_ui") {
     "grid_theme.h",
     "grid_view_controller.h",
     "grid_view_controller.mm",
+    "horizontal_layout.h",
+    "horizontal_layout.mm",
+    "tab_switcher_layout.h",
+    "tab_switcher_layout.mm",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -43,7 +47,9 @@ source_set("grid_ui") {
     "//ios/chrome/browser/drag_and_drop",
     "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/elements",
+    "//ios/chrome/browser/ui/gestures",
     "//ios/chrome/browser/ui/tab_grid/transitions",
+    "//ios/chrome/browser/ui/thumb_strip:feature_flags",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/common/ui/colors",
     "//ios/chrome/common/ui/util",

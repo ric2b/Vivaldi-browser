@@ -11,16 +11,12 @@
 #include "base/check_op.h"
 #include "pdf/draw_utils/coordinates.h"
 #include "pdf/page_orientation.h"
-#include "ppapi/cpp/rect.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace base {
 class Value;
 }
-
-namespace pp {
-class Var;
-}  // namespace pp
 
 namespace chrome_pdf {
 
@@ -55,8 +51,8 @@ class DocumentLayout final {
     // Serializes layout options to a base::Value.
     base::Value ToValue() const;
 
-    // Deserializes layout options from a pp::Var.
-    void FromVar(const pp::Var& var);
+    // Deserializes layout options from a base::Value.
+    void FromValue(const base::Value& value);
 
     PageOrientation default_page_orientation() const {
       return default_page_orientation_;
@@ -113,14 +109,14 @@ class DocumentLayout final {
   size_t page_count() const { return page_layouts_.size(); }
 
   // Gets the layout rectangle for a page. Only valid after computing a layout.
-  const pp::Rect& page_rect(size_t page_index) const {
+  const gfx::Rect& page_rect(size_t page_index) const {
     DCHECK_LT(page_index, page_count());
     return page_layouts_[page_index].outer_rect;
   }
 
   // Gets the layout rectangle for a page's bounds (which excludes additional
   // regions like page shadows). Only valid after computing a layout.
-  const pp::Rect& page_bounds_rect(size_t page_index) const {
+  const gfx::Rect& page_bounds_rect(size_t page_index) const {
     DCHECK_LT(page_index, page_count());
     return page_layouts_[page_index].inner_rect;
   }
@@ -139,16 +135,16 @@ class DocumentLayout final {
   // Layout of a single page.
   struct PageLayout {
     // Bounding rectangle for the page with decorations.
-    pp::Rect outer_rect;
+    gfx::Rect outer_rect;
 
     // Bounding rectangle for the page without decorations.
-    pp::Rect inner_rect;
+    gfx::Rect inner_rect;
   };
 
   // Copies |source_rect| to |destination_rect|, setting |dirty_| to true if
   // |destination_rect| is modified as a result.
-  void CopyRectIfModified(const pp::Rect& source_rect,
-                          pp::Rect* destination_rect);
+  void CopyRectIfModified(const gfx::Rect& source_rect,
+                          gfx::Rect& destination_rect);
 
   Options options_;
 

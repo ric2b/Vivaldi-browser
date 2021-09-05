@@ -64,6 +64,12 @@ class FileTasks {
 
     /** @private @const {!ProgressCenter} */
     this.progressCenter_ = progressCenter;
+
+    /**
+     * Mutex used to serialize password dialogs.
+     * @private @const {!AsyncUtil.Queue}
+     */
+    this.mutex_ = new AsyncUtil.Queue();
   }
 
   /**
@@ -309,17 +315,6 @@ class FileTasks {
       metrics.recordEnum(
           'ZipFileTask', taskId, FileTasks.UMA_ZIP_HANDLER_TASK_IDS_);
     }
-  }
-
-  /**
-   * Records the type of dialog shown when using a crostini app to open a file.
-   * @param {!FileTasks.CrostiniShareDialogType} dialogType
-   * @private
-   */
-  static recordCrostiniShareDialogTypeUMA_(dialogType) {
-    metrics.recordEnum(
-        'CrostiniShareDialog', dialogType,
-        FileTasks.UMA_CROSTINI_SHARE_DIALOG_TYPES_);
   }
 
   /**
@@ -874,20 +869,39 @@ class FileTasks {
    */
   async mountArchive_(url) {
     // First time, try without providing a password.
-    let password = undefined;
-    const filename = util.extractFilePath(url).split('/').pop();
-    while (true) {
-      try {
-        return await this.volumeManager_.mountArchive(url, password);
-      } catch (error) {
-        // If error is not about needing a password, propagate it.
-        if (error !== VolumeManagerCommon.VolumeError.NEED_PASSWORD) {
-          throw error;
+    try {
+      return await this.volumeManager_.mountArchive(url);
+    } catch (error) {
+      // If error is not about needing a password, propagate it.
+      if (error !== VolumeManagerCommon.VolumeError.NEED_PASSWORD) {
+        throw error;
+      }
+    }
+
+    // We need a password.
+    const unlock = await this.mutex_.lock();
+    try {
+      /** @type {?string} */ let password = null;
+      const filename = util.extractFilePath(url).split('/').pop();
+      while (true) {
+        // Ask for password.
+        do {
+          password =
+              await this.ui_.passwordDialog.askForPassword(filename, password);
+        } while (!password);
+
+        // Mount archive with password.
+        try {
+          return await this.volumeManager_.mountArchive(url, password);
+        } catch (error) {
+          // If error is not about needing a password, propagate it.
+          if (error !== VolumeManagerCommon.VolumeError.NEED_PASSWORD) {
+            throw error;
+          }
         }
       }
-
-      // Prompt password.
-      password = await this.ui_.passwordDialog.askForPassword(filename);
+    } finally {
+      unlock();
     }
   }
 
@@ -1386,27 +1400,6 @@ FileTasks.EXTENSIONS_TO_SKIP_SUGGEST_APPS_ = Object.freeze([
 FileTasks.UMA_ZIP_HANDLER_TASK_IDS_ = Object.freeze([
   FileTasks.ZIP_UNPACKER_TASK_ID, FileTasks.ZIP_ARCHIVER_UNZIP_TASK_ID,
   FileTasks.ZIP_ARCHIVER_ZIP_TASK_ID
-]);
-
-/**
- * Crostini Share Dialog types.
- * Keep in sync with enums.xml FileManagerCrostiniShareDialogType.
- * @enum {string}
- */
-FileTasks.CrostiniShareDialogType = {
-  None: 'None',
-  ShareBeforeOpen: 'ShareBeforeOpen',
-  UnableToOpen: 'UnableToOpen',
-};
-
-/**
- * The indexes of these types must match with the values of
- * FileManagerCrostiniShareDialogType in enums.xml, and should not change.
- */
-FileTasks.UMA_CROSTINI_SHARE_DIALOG_TYPES_ = Object.freeze([
-  FileTasks.CrostiniShareDialogType.None,
-  FileTasks.CrostiniShareDialogType.ShareBeforeOpen,
-  FileTasks.CrostiniShareDialogType.UnableToOpen,
 ]);
 
 /**

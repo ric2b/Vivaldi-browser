@@ -224,7 +224,7 @@ cr.define('cr.ui.login.debug', function() {
       kind: ScreenKind.NORMAL,
     },
     {
-      id: 'eula',
+      id: 'oobe-eula-md',
       kind: ScreenKind.NORMAL,
       // TODO: Current logic triggers switching screens in focus(), making
       // it impossible to trigger  installation settings dialog.
@@ -234,9 +234,16 @@ cr.define('cr.ui.login.debug', function() {
       id: 'demo-setup',
       kind: ScreenKind.OTHER,
       suffix: 'demo',
+      handledSteps: 'progress,error',
       states: [
         {
-          id: 'progress',
+          id: 'download-resources',
+          trigger: (screen) => {
+            screen.setCurrentSetupStep('downloadResources');
+          },
+        },
+        {
+          id: 'enrollment',
           trigger: (screen) => {
             screen.setCurrentSetupStep('enrollment');
           },
@@ -558,9 +565,9 @@ cr.define('cr.ui.login.debug', function() {
           },
         },
         {
-          id: 'whitelist-customer',
+          id: 'allowlist-customer',
           trigger: (screen) => {
-            screen.showWhitelistCheckFailedError(true, {
+            screen.showAllowlistCheckFailedError(true, {
               enterpriseManaged: false,
             });
           },
@@ -773,21 +780,7 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'sync-consent',
       kind: ScreenKind.NORMAL,
-      states: [
-        {
-          id: 'no-split',
-          trigger: (screen) => {
-            $('sync-consent-impl')
-                .showScreen_('splitSettingsSyncConsentDialog');
-          },
-        },
-        {
-          id: 'split',
-          trigger: (screen) => {
-            $('sync-consent-impl').showScreen_('syncConsentOverviewDialog');
-          },
-        },
-      ],
+      defaultState: 'step-no-split',
     },
     {
       id: 'fingerprint-setup',
@@ -893,6 +886,20 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'app-downloading',
       kind: ScreenKind.NORMAL,
+      states: [
+        {
+          id: 'single-app',
+          data: {
+            numOfApps: 1,
+          },
+        },
+        {
+          id: 'multiple-apps',
+          data: {
+            numOfApps: 2,
+          },
+        },
+      ],
     },
     {
       id: 'assistant-optin-flow',

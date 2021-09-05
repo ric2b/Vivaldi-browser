@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_static_position.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
@@ -18,21 +19,6 @@
 namespace blink {
 
 namespace {
-
-// NOTE: Out-of-flow positioned tables require special handling:
-//  - The specified inline-size/block-size is always considered as 'auto', and
-//    instead treated as an additional "min" constraint.
-//  - They can't be "stretched" by inset constraints, ("left: 0; right: 0;"),
-//    instead they always perform shrink-to-fit sizing within this
-//    available-size, (and this is why we always compute the min/max content
-//    sizes for them).
-//  - When performing shrink-to-fit sizing, the given available size can never
-//    exceed the available-size of the containing-block (e.g.  with insets
-//    similar to: "left: -100px; right: -100px").
-bool IsTable(const ComputedStyle& style) {
-  return style.Display() == EDisplay::kTable ||
-         style.Display() == EDisplay::kInlineTable;
-}
 
 // Dominant side:
 // htb ltr => top left
@@ -335,9 +321,21 @@ void ComputeAbsoluteSize(const LayoutUnit border_padding_size,
 
 }  // namespace
 
-bool AbsoluteNeedsChildInlineSize(const ComputedStyle& style) {
-  if (IsTable(style))
+// NOTE: Out-of-flow positioned tables require special handling:
+//  - The specified inline-size/block-size is always considered as 'auto', and
+//    instead treated as an additional "min" constraint.
+//  - They can't be "stretched" by inset constraints, ("left: 0; right: 0;"),
+//    instead they always perform shrink-to-fit sizing within this
+//    available-size, (and this is why we always compute the min/max content
+//    sizes for them).
+//  - When performing shrink-to-fit sizing, the given available size can never
+//    exceed the available-size of the containing-block (e.g.  with insets
+//    similar to: "left: -100px; right: -100px").
+
+bool AbsoluteNeedsChildInlineSize(const NGBlockNode& node) {
+  if (node.IsTable())
     return true;
+  const auto& style = node.Style();
   return style.LogicalWidth().IsIntrinsic() ||
          style.LogicalMinWidth().IsIntrinsic() ||
          style.LogicalMaxWidth().IsIntrinsic() ||
@@ -345,9 +343,10 @@ bool AbsoluteNeedsChildInlineSize(const ComputedStyle& style) {
           (style.LogicalLeft().IsAuto() || style.LogicalRight().IsAuto()));
 }
 
-bool AbsoluteNeedsChildBlockSize(const ComputedStyle& style) {
-  if (IsTable(style))
+bool AbsoluteNeedsChildBlockSize(const NGBlockNode& node) {
+  if (node.IsTable())
     return true;
+  const auto& style = node.Style();
   return style.LogicalHeight().IsIntrinsic() ||
          style.LogicalMinHeight().IsIntrinsic() ||
          style.LogicalMaxHeight().IsIntrinsic() ||
@@ -355,9 +354,10 @@ bool AbsoluteNeedsChildBlockSize(const ComputedStyle& style) {
           (style.LogicalTop().IsAuto() || style.LogicalBottom().IsAuto()));
 }
 
-bool IsInlineSizeComputableFromBlockSize(const ComputedStyle& style) {
+bool IsInlineSizeComputableFromBlockSize(const NGBlockNode& node) {
+  const auto& style = node.Style();
   DCHECK(style.HasOutOfFlowPosition());
-  if (!style.AspectRatio())
+  if (style.AspectRatio().IsAuto())
     return false;
   // An explicit block size should take precedence over specified insets.
   bool have_inline_size =
@@ -370,8 +370,8 @@ bool IsInlineSizeComputableFromBlockSize(const ComputedStyle& style) {
     return true;
   // If we have block insets but no inline insets, we compute based on the
   // insets.
-  return !AbsoluteNeedsChildBlockSize(style) &&
-         AbsoluteNeedsChildInlineSize(style);
+  return !AbsoluteNeedsChildBlockSize(node) &&
+         AbsoluteNeedsChildInlineSize(node);
 }
 
 base::Optional<LayoutUnit> ComputeAbsoluteDialogYPosition(
@@ -425,40 +425,59 @@ base::Optional<LayoutUnit> ComputeAbsoluteDialogYPosition(
 }
 
 void ComputeOutOfFlowInlineDimensions(
+    const NGBlockNode& node,
     const NGConstraintSpace& space,
-    const ComputedStyle& style,
     const NGBoxStrut& border_padding,
     const NGLogicalStaticPosition& static_position,
-    const base::Optional<MinMaxSizes>& min_max_sizes,
+    const base::Optional<MinMaxSizes>& minmax_content_sizes,
+    const base::Optional<MinMaxSizes>& minmax_intrinsic_sizes_for_ar,
     const base::Optional<LogicalSize>& replaced_size,
     const WritingMode container_writing_mode,
     const TextDirection container_direction,
     NGLogicalOutOfFlowDimensions* dimensions) {
   DCHECK(dimensions);
 
-  LayoutUnit min_inline_size = ResolveMinInlineLength(
-      space, style, border_padding, min_max_sizes, style.LogicalMinWidth(),
-      LengthResolvePhase::kLayout);
+  const auto& style = node.Style();
+  Length min_inline_length = style.LogicalMinWidth();
+  base::Optional<MinMaxSizes> min_size_minmax = minmax_content_sizes;
+  // We don't need to check for IsInlineSizeComputableFromBlockSize; this is
+  // done by the caller.
+  if (minmax_intrinsic_sizes_for_ar) {
+    min_inline_length = Length::MinIntrinsic();
+    min_size_minmax = minmax_intrinsic_sizes_for_ar;
+  }
+  LayoutUnit min_inline_size =
+      ResolveMinInlineLength(space, style, border_padding, min_size_minmax,
+                             min_inline_length, LengthResolvePhase::kLayout);
   LayoutUnit max_inline_size = ResolveMaxInlineLength(
-      space, style, border_padding, min_max_sizes, style.LogicalMaxWidth(),
-      LengthResolvePhase::kLayout);
+      space, style, border_padding, minmax_content_sizes,
+      style.LogicalMaxWidth(), LengthResolvePhase::kLayout);
 
-  bool is_table = IsTable(style);
+  // This implements the transferred min/max sizes per
+  // https://drafts.csswg.org/css-sizing-4/#aspect-ratio
+  if (!style.AspectRatio().IsAuto() &&
+      dimensions->size.block_size == kIndefiniteSize) {
+    MinMaxSizes sizes = ComputeMinMaxInlineSizesFromAspectRatio(
+        space, style, border_padding, LengthResolvePhase::kLayout);
+    min_inline_size = std::max(sizes.min_size, min_inline_size);
+    max_inline_size = std::min(sizes.max_size, max_inline_size);
+  }
+
+  // Tables are never allowed to go below their min-content size.
+  const bool is_table = node.IsTable();
+  if (is_table)
+    min_inline_size = std::max(min_inline_size, minmax_content_sizes->min_size);
+
   base::Optional<LayoutUnit> inline_size;
   if (!style.LogicalWidth().IsAuto()) {
-    LayoutUnit resolved_inline_size = ResolveMainInlineLength(
-        space, style, border_padding, min_max_sizes, style.LogicalWidth());
-
-    // Tables use the inline-size as a minimum.
-    if (is_table)
-      min_inline_size = std::max(min_inline_size, resolved_inline_size);
-    else
-      inline_size = resolved_inline_size;
+    inline_size =
+        ResolveMainInlineLength(space, style, border_padding,
+                                minmax_content_sizes, style.LogicalWidth());
   } else if (replaced_size.has_value()) {
     inline_size = replaced_size->inline_size;
-  } else if (IsInlineSizeComputableFromBlockSize(style)) {
-    DCHECK(min_max_sizes.has_value());
-    inline_size = min_max_sizes->min_size;
+  } else if (IsInlineSizeComputableFromBlockSize(node)) {
+    DCHECK(minmax_content_sizes.has_value());
+    inline_size = minmax_content_sizes->min_size;
   }
 
   bool is_start_dominant;
@@ -473,7 +492,7 @@ void ComputeOutOfFlowInlineDimensions(
   }
 
   ComputeAbsoluteSize(
-      border_padding.InlineSum(), min_max_sizes,
+      border_padding.InlineSum(), minmax_content_sizes,
       space.PercentageResolutionInlineSizeForParentWritingMode(),
       space.AvailableSize().inline_size, style.MarginStart(), style.MarginEnd(),
       style.LogicalInlineStart(), style.LogicalInlineEnd(), min_inline_size,
@@ -486,8 +505,8 @@ void ComputeOutOfFlowInlineDimensions(
 }
 
 void ComputeOutOfFlowBlockDimensions(
+    const NGBlockNode& node,
     const NGConstraintSpace& space,
-    const ComputedStyle& style,
     const NGBoxStrut& border_padding,
     const NGLogicalStaticPosition& static_position,
     const base::Optional<LayoutUnit>& child_block_size,
@@ -495,13 +514,13 @@ void ComputeOutOfFlowBlockDimensions(
     const WritingMode container_writing_mode,
     const TextDirection container_direction,
     NGLogicalOutOfFlowDimensions* dimensions) {
+  const auto& style = node.Style();
   // After partial size has been computed, child block size is either unknown,
   // or fully computed, there is no minmax. To express this, a 'fixed' minmax
   // is created where min and max are the same.
   base::Optional<MinMaxSizes> min_max_sizes;
-  if (child_block_size.has_value()) {
+  if (child_block_size.has_value())
     min_max_sizes = MinMaxSizes{*child_block_size, *child_block_size};
-  }
 
   LayoutUnit child_block_size_or_indefinite =
       child_block_size.value_or(kIndefiniteSize);
@@ -513,18 +532,16 @@ void ComputeOutOfFlowBlockDimensions(
       space, style, border_padding, style.LogicalMaxHeight(),
       LengthResolvePhase::kLayout);
 
-  bool is_table = IsTable(style);
+  // Tables are never allowed to go below their "auto" block-size.
+  const bool is_table = node.IsTable();
+  if (is_table)
+    min_block_size = std::max(min_block_size, min_max_sizes->min_size);
+
   base::Optional<LayoutUnit> block_size;
   if (!style.LogicalHeight().IsAuto()) {
-    LayoutUnit resolved_block_size = ResolveMainBlockLength(
+    block_size = ResolveMainBlockLength(
         space, style, border_padding, style.LogicalHeight(),
         child_block_size_or_indefinite, LengthResolvePhase::kLayout);
-
-    // Tables use the block-size as a minimum.
-    if (is_table)
-      min_block_size = std::max(min_block_size, resolved_block_size);
-    else
-      block_size = resolved_block_size;
   } else if (replaced_size.has_value()) {
     block_size = replaced_size->block_size;
   }

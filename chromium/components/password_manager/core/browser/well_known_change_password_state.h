@@ -8,7 +8,9 @@
 #include <memory>
 
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/timer/timer.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "url/gurl.h"
@@ -19,13 +21,7 @@ class SharedURLLoaderFactory;
 }
 
 namespace password_manager {
-
-// Creates a SimpleURLLoader for a request to the non existing resource path for
-// a given |origin|.
-// TODO(crbug.com/927473): move method to anonymous namespace when State is
-// integrated in NavigationThrottle.
-std::unique_ptr<network::SimpleURLLoader>
-CreateResourceRequestToWellKnownNonExistingResourceFor(const GURL& url);
+class AffiliationService;
 
 // A delegate that is notified when the processing is done and its known if
 // .well-known/change-password is supported.
@@ -38,6 +34,12 @@ class WellKnownChangePasswordStateDelegate {
 // Processes if .well-known/change-password is supported by a site.
 class WellKnownChangePasswordState {
  public:
+  // Time to wait for the callback from AffiliationService before finishing
+  // processing. A callback signals the prefetch action was completed regardless
+  // if the response arrived or not.
+  static constexpr base::TimeDelta kPrefetchTimeout =
+      base::TimeDelta::FromSeconds(2);
+
   explicit WellKnownChangePasswordState(
       password_manager::WellKnownChangePasswordStateDelegate* delegate);
   ~WellKnownChangePasswordState();
@@ -50,6 +52,9 @@ class WellKnownChangePasswordState {
       base::Optional<url::Origin> request_initiator = base::nullopt,
       base::Optional<network::ResourceRequest::TrustedParams> trusted_params =
           base::nullopt);
+  // Prefetch change password URLs from |affiliation_service|.
+  void PrefetchChangePasswordURLs(AffiliationService* affiliation_service,
+                                  const std::vector<GURL>& urls);
   // The request to .well-known/change-password is not made by this State. To
   // get the response code for the request the owner of the state has to call
   // this method to tell the state.
@@ -59,18 +64,23 @@ class WellKnownChangePasswordState {
   // Callback for the request to the "not exist" path.
   void FetchNonExistingResourceCallback(
       scoped_refptr<net::HttpResponseHeaders> headers);
+  // Callback for the request to the Affiliation Service prefetch.
+  void PrefetchChangePasswordURLsCallback();
   // Function is called when both requests are finished. Decides to continue or
-  // redirect to homepage.
+  // redirect to change password URL or homepage.
   void ContinueProcessing();
   // Checks if both requests are finished.
   bool BothRequestsFinished() const;
-  // Checks the status codes and returns if change password is supported.
-  bool SupportsChangePasswordUrl() const;
+  // Checks the status codes and returns if .well-known/change-password is
+  // supported.
+  bool SupportsWellKnownChangePasswordUrl() const;
 
   WellKnownChangePasswordStateDelegate* delegate_ = nullptr;
   int non_existing_resource_response_code_ = 0;
   int change_password_response_code_ = 0;
   std::unique_ptr<network::SimpleURLLoader> url_loader_;
+  base::OneShotTimer prefetch_timer_;
+  base::WeakPtrFactory<WellKnownChangePasswordState> weak_factory_{this};
 };
 
 }  // namespace password_manager

@@ -80,7 +80,7 @@ class BatteryImageSource : public gfx::CanvasImageSource {
     // case, still draw 1dip of charge.
 
     SkPath path;
-    gfx::RectF fill_rect = gfx::RectF(8, 6, 6, 12);
+    gfx::RectF fill_rect = gfx::RectF(8, 6, 6, 11);
     fill_rect.Scale(const_scale);
     path.addRect(gfx::RectToSkRect(gfx::ToEnclosingRect(fill_rect)));
     cc::PaintFlags flags;
@@ -98,8 +98,7 @@ class BatteryImageSource : public gfx::CanvasImageSource {
     canvas->ClipRect(clip_rect);
 
     const SkColor alert_color = AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kIconColorAlert,
-        AshColorProvider::AshColorMode::kDark);
+        AshColorProvider::ContentLayerType::kIconColorAlert);
     const bool use_alert_color =
         charge_level == min_charge_level && info_.alert_if_low;
     flags.setColor(use_alert_color ? alert_color : fg_color_);
@@ -484,6 +483,10 @@ base::string16 PowerStatus::GetInlinedStatusString() const {
   } else {
     return status_text;
   }
+}
+
+double PowerStatus::GetPreferredMinimumPower() const {
+  return proto_.preferred_minimum_external_power();
 }
 
 PowerStatus::PowerStatus() {

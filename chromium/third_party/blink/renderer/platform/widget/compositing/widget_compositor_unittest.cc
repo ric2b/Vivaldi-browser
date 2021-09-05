@@ -35,10 +35,11 @@ class StubWidgetBaseClient : public WidgetBaseClient {
   void FocusChanged(bool) override {}
   void UpdateVisualProperties(
       const VisualProperties& visual_properties) override {}
-  void UpdateScreenRects(const gfx::Rect& widget_screen_rect,
-                         const gfx::Rect& window_screen_rect) override {}
-  ScreenInfo GetOriginalScreenInfo() override { return ScreenInfo(); }
+  const ScreenInfo& GetOriginalScreenInfo() override { return screen_info_; }
   gfx::Rect ViewportVisibleRect() override { return gfx::Rect(); }
+
+ private:
+  ScreenInfo screen_info_;
 };
 
 class FakeWidgetCompositor : public WidgetCompositor {
@@ -70,7 +71,9 @@ class WidgetCompositorTest : public cc::LayerTreeTest {
         blink::CrossVariantMojoAssociatedRemote<
             blink::mojom::WidgetHostInterfaceBase>(),
         blink::CrossVariantMojoAssociatedReceiver<
-            blink::mojom::WidgetInterfaceBase>());
+            blink::mojom::WidgetInterfaceBase>(),
+        /* is_hidden */ false,
+        /* never_composited */ false);
 
     widget_compositor_ = base::MakeRefCounted<FakeWidgetCompositor>(
         layer_tree_host(), widget_base_->GetWeakPtr(),

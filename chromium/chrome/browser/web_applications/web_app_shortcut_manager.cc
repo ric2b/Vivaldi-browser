@@ -47,16 +47,19 @@ void WebAppShortcutManager::GetShortcutInfoForApp(
     const AppId& app_id,
     GetShortcutInfoCallback callback) {
   const WebApp* app = GetWebAppRegistrar().GetAppById(app_id);
-  DCHECK(app);
+
+  // app could be nullptr if registry profile is being deleted.
+  if (!app) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
 
   // Build a common intersection between desired and downloaded icons.
   auto icon_sizes_in_px = base::STLSetIntersection<std::vector<SquareSizePx>>(
       app->downloaded_icon_sizes(IconPurpose::ANY),
       GetDesiredIconSizesForShortcut());
 
-  // Optimistic check to help debug low-frequency crash.
-  // TODO(crbug.com/1113276): Make this a DCHECK before hitting stable.
-  CHECK(icon_manager_);
+  DCHECK(icon_manager_);
   if (!icon_sizes_in_px.empty()) {
     icon_manager_->ReadIcons(app_id, IconPurpose::ANY, icon_sizes_in_px,
                              base::BindOnce(&WebAppShortcutManager::OnIconsRead,
@@ -111,7 +114,7 @@ std::unique_ptr<ShortcutInfo> WebAppShortcutManager::BuildShortcutInfoForWebApp(
   auto shortcut_info = std::make_unique<ShortcutInfo>();
 
   shortcut_info->extension_id = app->app_id();
-  shortcut_info->url = app->launch_url();
+  shortcut_info->url = app->start_url();
   shortcut_info->title = base::UTF8ToUTF16(app->name());
   shortcut_info->description = base::UTF8ToUTF16(app->description());
   shortcut_info->profile_path = profile()->GetPath();

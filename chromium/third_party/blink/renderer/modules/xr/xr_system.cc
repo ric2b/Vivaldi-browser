@@ -137,6 +137,9 @@ base::Optional<device::mojom::XRSessionFeature> StringToXRSessionFeature(
   } else if (RuntimeEnabledFeatures::WebXRPlaneDetectionEnabled(context) &&
              feature_string == "plane-detection") {
     return device::mojom::XRSessionFeature::PLANE_DETECTION;
+  } else if (RuntimeEnabledFeatures::WebXRDepthEnabled(context) &&
+             feature_string == "depth-sensing") {
+    return device::mojom::XRSessionFeature::DEPTH;
   }
 
   return base::nullopt;
@@ -172,8 +175,9 @@ bool IsFeatureValidForMode(device::mojom::XRSessionFeature feature,
     case device::mojom::XRSessionFeature::LIGHT_ESTIMATION:
     case device::mojom::XRSessionFeature::CAMERA_ACCESS:
     case device::mojom::XRSessionFeature::PLANE_DETECTION:
-      // Fallthrough - light estimation, camera access and plane detection APIs
-      // are all valid only for immersive AR mode for now.
+    case device::mojom::XRSessionFeature::DEPTH:
+      // Fallthrough - light estimation, camera access, plane detection and
+      // depth APIs are all valid only for immersive AR mode for now.
       return mode == device::mojom::blink::XRSessionMode::kImmersiveAr;
   }
 }
@@ -196,6 +200,7 @@ bool HasRequiredFeaturePolicy(const ExecutionContext* context,
     case device::mojom::XRSessionFeature::ANCHORS:
     case device::mojom::XRSessionFeature::CAMERA_ACCESS:
     case device::mojom::XRSessionFeature::PLANE_DETECTION:
+    case device::mojom::XRSessionFeature::DEPTH:
       return context->IsFeatureEnabled(
           mojom::blink::FeaturePolicyFeature::kWebXr,
           ReportOptions::kReportOnFailure);
@@ -246,6 +251,18 @@ const char* GetConsoleMessage(device::mojom::RequestSessionError error) {
       return "An error occurred while initializing fullscreen support";
     case device::mojom::RequestSessionError::UNKNOWN_FAILURE:
       return "An unknown error occurred";
+  }
+}
+
+bool IsFeatureRequested(
+    device::mojom::XRSessionFeatureRequestStatus requestStatus) {
+  switch (requestStatus) {
+    case device::mojom::XRSessionFeatureRequestStatus::kOptionalAccepted:
+    case device::mojom::XRSessionFeatureRequestStatus::kRequired:
+      return true;
+    case device::mojom::XRSessionFeatureRequestStatus::kNotRequested:
+    case device::mojom::XRSessionFeatureRequestStatus::kOptionalRejected:
+      return false;
   }
 }
 
@@ -479,6 +496,8 @@ void XRSystem::PendingRequestSessionQuery::ReportRequestSessionResult(
       GetFeatureRequestStatus(XRSessionFeature::REF_SPACE_UNBOUNDED, session);
   auto feature_request_dom_overlay =
       GetFeatureRequestStatus(XRSessionFeature::DOM_OVERLAY, session);
+  auto feature_request_depth_sensing =
+      GetFeatureRequestStatus(XRSessionFeature::DEPTH, session);
 
   ukm::builders::XR_WebXR_SessionRequest(ukm_source_id_)
       .SetMode(static_cast<int64_t>(mode_))
@@ -494,10 +513,20 @@ void XRSystem::PendingRequestSessionQuery::ReportRequestSessionResult(
   // If the session was successfully created and DOM overlay was requested,
   // count this as a use of the DOM overlay feature.
   if (session && status == SessionRequestStatus::kSuccess &&
-      feature_request_dom_overlay !=
-          device::mojom::XRSessionFeatureRequestStatus::kNotRequested) {
+      IsFeatureRequested(feature_request_dom_overlay)) {
+    DVLOG(2) << __func__ << ": DOM overlay was requested, logging a UseCounter";
     UseCounter::Count(session->GetExecutionContext(),
                       WebFeature::kXRDOMOverlay);
+  }
+
+  // If the session was successfully created and depth-sensing was requested,
+  // count this as a use of depth sensing feature.
+  if (session && status == SessionRequestStatus::kSuccess &&
+      IsFeatureRequested(feature_request_depth_sensing)) {
+    DVLOG(2) << __func__
+             << ": depth sensing was requested, logging a UseCounter";
+    UseCounter::Count(session->GetExecutionContext(),
+                      WebFeature::kXRDepthSensing);
   }
 
   if (session && metrics_recorder) {
@@ -1259,17 +1288,31 @@ ScriptPromise XRSystem::requestSession(ScriptState* script_state,
 
 void XRSystem::MakeXrCompatibleAsync(
     device::mojom::blink::VRService::MakeXrCompatibleCallback callback) {
+  if (!GetExecutionContext()->IsFeatureEnabled(
+          mojom::blink::FeaturePolicyFeature::kWebXr)) {
+    std::move(callback).Run(
+        device::mojom::XrCompatibleResult::kWebXrFeaturePolicyBlocked);
+    return;
+  }
+
   TryEnsureService();
   if (service_.is_bound()) {
     service_->MakeXrCompatible(std::move(callback));
   } else {
-    std::move(callback).Run(device::mojom::XrCompatibleResult::kNotCompatible);
+    std::move(callback).Run(
+        device::mojom::XrCompatibleResult::kNoDeviceAvailable);
   }
 }
 
 void XRSystem::MakeXrCompatibleSync(
     device::mojom::XrCompatibleResult* xr_compatible_result) {
-  *xr_compatible_result = device::mojom::XrCompatibleResult::kNotCompatible;
+  if (!GetExecutionContext()->IsFeatureEnabled(
+          mojom::blink::FeaturePolicyFeature::kWebXr)) {
+    *xr_compatible_result =
+        device::mojom::XrCompatibleResult::kWebXrFeaturePolicyBlocked;
+    return;
+  }
+  *xr_compatible_result = device::mojom::XrCompatibleResult::kNoDeviceAvailable;
 
   TryEnsureService();
   if (service_.is_bound())
@@ -1381,11 +1424,11 @@ void XRSystem::OnRequestSessionReturned(
     enabled_features.insert(feature);
   }
 
-  XRSession* session =
-      CreateSession(query->mode(), blend_mode, interaction_mode,
-                    std::move(session_ptr->client_receiver),
-                    std::move(session_ptr->display_info),
-                    session_ptr->uses_input_eventing, enabled_features);
+  XRSession* session = CreateSession(
+      query->mode(), blend_mode, interaction_mode,
+      std::move(session_ptr->client_receiver),
+      std::move(session_ptr->display_info), session_ptr->uses_input_eventing,
+      session_ptr->default_framebuffer_scale, enabled_features);
 
   frameProvider()->OnSessionStarted(session, std::move(session_ptr));
 
@@ -1490,11 +1533,13 @@ XRSession* XRSystem::CreateSession(
         client_receiver,
     device::mojom::blink::VRDisplayInfoPtr display_info,
     bool uses_input_eventing,
+    float default_framebuffer_scale,
     XRSessionFeatureSet enabled_features,
     bool sensorless_session) {
   XRSession* session = MakeGarbageCollected<XRSession>(
       this, std::move(client_receiver), mode, blend_mode, interaction_mode,
-      uses_input_eventing, sensorless_session, std::move(enabled_features));
+      uses_input_eventing, default_framebuffer_scale, sensorless_session,
+      std::move(enabled_features));
   if (display_info)
     session->SetXRDisplayInfo(std::move(display_info));
   sessions_.insert(session);
@@ -1510,6 +1555,7 @@ XRSession* XRSystem::CreateSensorlessInlineSession() {
       device::mojom::blink::XRSessionMode::kInline, blend_mode,
       interaction_mode, mojo::NullReceiver() /* client receiver */,
       nullptr /* display_info */, false /* uses_input_eventing */,
+      1.0 /* default_framebuffer_scale */,
       {device::mojom::XRSessionFeature::REF_SPACE_VIEWER},
       true /* sensorless_session */);
 }

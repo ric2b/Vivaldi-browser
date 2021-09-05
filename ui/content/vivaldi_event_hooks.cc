@@ -6,55 +6,63 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 
+VivaldiEventHooks* VivaldiEventHooks::instance_ = nullptr;
+
 // static
-const void* VivaldiEventHooks::UserDataKey() {
-  static const int kUserDataKey = 0;
-  return &kUserDataKey;
+bool VivaldiEventHooks::HasInstance() {
+  return instance_ != nullptr;
 }
 
 // static
-VivaldiEventHooks* VivaldiEventHooks::FromOutermostContents(
-    content::WebContents* web_contents) {
-  DCHECK(::vivaldi::IsVivaldiRunning());
-  DCHECK(!web_contents->GetOuterWebContents());
-  // data is null for DevTools
-  base::SupportsUserData::Data* data = web_contents->GetUserData(UserDataKey());
-  return static_cast<VivaldiEventHooks*>(data);
+void VivaldiEventHooks::InitInstance(VivaldiEventHooks& instance) {
+  DCHECK(!instance_) << "This should be called only once";
+  instance_ = &instance;
 }
 
 // static
-VivaldiEventHooks* VivaldiEventHooks::FromRootView(
-    content::RenderWidgetHostViewBase* root_view) {
-  // Follow Chromium pattern for ::From methods and allow a null argument.
-  if (!root_view)
-    return nullptr;
-  DCHECK(root_view == root_view->GetRootView());
-
-  // For a root view WebContents is the outermost. So to skip a rather expensive
-  // call to WebContens::GetOutermostWebContents() inline FromRenderWidgetHost.
-  content::RenderWidgetHostImpl* widget_host = root_view->host();
-  if (!widget_host)
-    return nullptr;
-  content::WebContents* web_contents =
-      widget_host->delegate()->GetAsWebContents();
-  if (!web_contents)
-    return nullptr;
-  return FromOutermostContents(web_contents);
+bool VivaldiEventHooks::HandleMouseEvent(
+    content::RenderWidgetHostViewBase* root_view,
+    const blink::WebMouseEvent& event) {
+  if (!instance_)
+    return false;
+  return instance_->DoHandleMouseEvent(root_view, event);
 }
 
 // static
-VivaldiEventHooks* VivaldiEventHooks::FromRenderWidgetHost(
-    content::RenderWidgetHostImpl* widget_host) {
-  if (!widget_host)
-    return nullptr;
-  return FromWebContents(widget_host->delegate()->GetAsWebContents());
+bool VivaldiEventHooks::HandleWheelEvent(
+    content::RenderWidgetHostViewBase* root_view,
+    const blink::WebMouseWheelEvent& event,
+    const ui::LatencyInfo& latency) {
+  if (!instance_)
+    return false;
+  return instance_->DoHandleWheelEvent(root_view, event, latency);
 }
 
 // static
-VivaldiEventHooks* VivaldiEventHooks::FromWebContents(
-    content::WebContents* web_contents) {
-  // Follow Chromium pattern for ::From methods and allow a null argument.
-  if (!web_contents)
-    return nullptr;
-  return FromOutermostContents(web_contents->GetOutermostWebContents());
+bool VivaldiEventHooks::HandleWheelEventAfterChild(
+    content::RenderWidgetHostViewBase* root_view,
+    const blink::WebMouseWheelEvent& event) {
+  if (!instance_)
+    return false;
+  return instance_->DoHandleWheelEventAfterChild(root_view, event);
+}
+
+// static
+bool VivaldiEventHooks::HandleKeyboardEvent(
+    content::RenderWidgetHostImpl* widget_host,
+    const content::NativeWebKeyboardEvent& event) {
+  if (!instance_)
+    return false;
+  return instance_->DoHandleKeyboardEvent(widget_host, event);
+}
+
+bool VivaldiEventHooks::HandleDragEnd(content::WebContents* web_contents,
+                                      blink::DragOperation operation,
+                                      bool cancelled,
+                                      int screen_x,
+                                      int screen_y) {
+  if (!web_contents || !instance_)
+    return false;
+  return instance_->DoHandleDragEnd(web_contents, operation, cancelled,
+                                    screen_x, screen_y);
 }

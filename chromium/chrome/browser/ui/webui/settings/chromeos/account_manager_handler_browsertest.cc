@@ -226,8 +226,9 @@ class AccountManagerUIHandlerTest
   std::unique_ptr<TestingAccountManagerUIHandler> handler_;
 };
 
+// TODO(https://crbug.com/1131834): Re-enable flaky test.
 IN_PROC_BROWSER_TEST_P(AccountManagerUIHandlerTest,
-                       OnGetAccountsNoSecondaryAccounts) {
+                       DISABLED_OnGetAccountsNoSecondaryAccounts) {
   const std::vector<AccountManager::Account> account_manager_accounts =
       GetAccountsFromAccountManager();
   // Only Primary account.
@@ -258,12 +259,21 @@ IN_PROC_BROWSER_TEST_P(AccountManagerUIHandlerTest,
             ValueOrEmpty(device_account.FindStringKey("email")));
   EXPECT_EQ(GetDeviceAccountInfo().id,
             ValueOrEmpty(device_account.FindStringKey("id")));
-  EXPECT_EQ(GetDeviceAccountInfo().organization,
-            ValueOrEmpty(device_account.FindStringKey("organization")));
+  if (GetDeviceAccountInfo().user_type ==
+      user_manager::UserType::USER_TYPE_CHILD) {
+    std::string organization = GetDeviceAccountInfo().organization;
+    base::ReplaceSubstringsAfterOffset(&organization, 0, " ", "&nbsp;");
+    EXPECT_EQ(organization,
+              ValueOrEmpty(device_account.FindStringKey("organization")));
+  } else {
+    EXPECT_EQ(GetDeviceAccountInfo().organization,
+              ValueOrEmpty(device_account.FindStringKey("organization")));
+  }
 }
 
+// TODO(https://crbug.com/1131819): Re-enable flaky test.
 IN_PROC_BROWSER_TEST_P(AccountManagerUIHandlerTest,
-                       OnGetAccountsWithSecondaryAccounts) {
+                       DISABLED_OnGetAccountsWithSecondaryAccounts) {
   UpsertAccount("secondary1@example.com");
   UpsertAccount("secondary2@example.com");
   const std::vector<AccountManager::Account> account_manager_accounts =
@@ -295,8 +305,16 @@ IN_PROC_BROWSER_TEST_P(AccountManagerUIHandlerTest,
             ValueOrEmpty(device_account.FindStringKey("email")));
   EXPECT_EQ(GetDeviceAccountInfo().id,
             ValueOrEmpty(device_account.FindStringKey("id")));
-  EXPECT_EQ(GetDeviceAccountInfo().organization,
-            ValueOrEmpty(device_account.FindStringKey("organization")));
+  if (GetDeviceAccountInfo().user_type ==
+      user_manager::UserType::USER_TYPE_CHILD) {
+    std::string organization = GetDeviceAccountInfo().organization;
+    base::ReplaceSubstringsAfterOffset(&organization, 0, " ", "&nbsp;");
+    EXPECT_EQ(organization,
+              ValueOrEmpty(device_account.FindStringKey("organization")));
+  } else {
+    EXPECT_EQ(GetDeviceAccountInfo().organization,
+              ValueOrEmpty(device_account.FindStringKey("organization")));
+  }
 
   // Check secondary accounts.
   for (const base::Value& account : result) {

@@ -17,6 +17,7 @@
 #include "base/win/scoped_handle.h"
 #include "base/win/windows_types.h"
 #include "chrome/credential_provider/gaiacp/scoped_lsa_policy.h"
+#include "chrome/credential_provider/gaiacp/win_http_url_fetcher.h"
 #include "url/gurl.h"
 
 // These define are documented in
@@ -59,6 +60,20 @@ constexpr int kInitialDuplicateUsernameIndex = 2;
 // Default extension used as a fallback if the picture_url returned from gaia
 // does not have a file extension.
 extern const wchar_t kDefaultProfilePictureFileExtension[];
+
+// Name of the sub-folder under which all files for GCPW are stored.
+extern const base::FilePath::CharType kCredentialProviderFolder[];
+
+// Default URL for the GEM MDM API.
+extern const wchar_t kDefaultMdmUrl[];
+
+// Maximum number of consecutive Upload device details failures for which we do
+// enforce auth.
+extern const int kMaxNumConsecutiveUploadDeviceFailures;
+
+// Maximum allowed time delta after which user policies should be refreshed
+// again.
+extern const base::TimeDelta kMaxTimeDeltaSinceLastUserPolicyRefresh;
 
 // Because of some strange dependency problems with windows header files,
 // define STATUS_SUCCESS here instead of including ntstatus.h or SubAuth.h
@@ -314,6 +329,7 @@ struct FakesForTesting {
   ScopedLsaPolicy::CreatorCallback scoped_lsa_policy_creator;
   OSUserManager* os_user_manager_for_testing = nullptr;
   OSProcessManager* os_process_manager_for_testing = nullptr;
+  WinHttpUrlFetcher::CreatorCallback fake_win_http_url_fetcher_creator;
 };
 
 // DLL entrypoint signature for settings testing fakes.  This is used by
@@ -368,6 +384,25 @@ base::FilePath GetChromePath();
 
 // Returns the file path to system installed chrome.exe.
 base::FilePath GetSystemChromePath();
+
+// Generates gcpw dm token for the given |sid|. If any of the lsa operations
+// fail, function returns a result other than S_OK.
+HRESULT GenerateGCPWDmToken(const base::string16& sid);
+
+// Reads the gcpw dm token from lsa store for the given |sid| and writes it back
+// in |token| output parameter.  If any of the lsa operations fail, function
+// returns a result other than S_OK.
+HRESULT GetGCPWDmToken(const base::string16& sid, base::string16* token);
+
+// Gets the gcpw service URL.
+GURL GetGcpwServiceUrl();
+
+// Converts the |url| in the form of http://xxxxx.googleapis.com/...
+// to a form that points to a development URL as specified with |dev|
+// environment. Final url will be in the form
+// https://{dev}-xxxxx.sandbox.googleapis.com/...
+base::string16 GetDevelopmentUrl(const base::string16& url,
+                                 const base::string16& dev);
 
 }  // namespace credential_provider
 

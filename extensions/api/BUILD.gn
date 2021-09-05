@@ -21,7 +21,7 @@ static_library("apis") {
     "//chrome/common:buildflags",
     "//chrome/common/apps/platform_apps",
     "//chrome/common/extensions/api",
-    "//chrome/common/media_router/mojom:media_router",
+    "//chrome/services/qrcode_generator/public/mojom",
     "//components/autofill/core/common",
     "//components/bookmarks/browser",
     "//components/browser_sync",
@@ -30,6 +30,7 @@ static_library("apis") {
     "//components/keep_alive_registry",
     "//components/keyed_service/content",
     "//components/language/core/browser",
+    "//components/media_router/common/mojom:media_router",
     "//components/password_manager/core/browser",
     "//components/permissions",
     "//components/pref_registry",
@@ -87,9 +88,6 @@ static_library("apis") {
   sources = [
     "access_keys/access_keys_api.cc",
     "access_keys/access_keys_api.h",
-    "auto_update/auto_update_api_linux.cc",
-    "auto_update/auto_update_api_mac.mm",
-    "auto_update/auto_update_api_win.cc",
     "auto_update/auto_update_api.h",
     "bookmark_context_menu/bookmark_context_menu_api.cc",
     "bookmark_context_menu/bookmark_context_menu_api.h",
@@ -154,13 +152,29 @@ static_library("apis") {
     "vivaldi_account/vivaldi_account_api.cc",
     "vivaldi_account/vivaldi_account_api.h",
     "vivaldi_utilities/vivaldi_utilities_api.cc",
-    "vivaldi_utilities/vivaldi_utilities_api_linux.cc",
-    "vivaldi_utilities/vivaldi_utilities_api_mac.mm",
-    "vivaldi_utilities/vivaldi_utilities_api_win.cc",
     "vivaldi_utilities/vivaldi_utilities_api.h",
     "window/window_private_api.cc",
     "window/window_private_api.h",
     "zoom/zoom_api.cc",
     "zoom/zoom_api.h",
   ]
+
+  if (is_linux) {
+    sources += [
+      "auto_update/auto_update_api_linux.cc",
+      "vivaldi_utilities/vivaldi_utilities_api_linux.cc",
+    ]
+  }
+  if (is_mac) {
+    sources += [
+      "auto_update/auto_update_api_mac.mm",
+      "vivaldi_utilities/vivaldi_utilities_api_mac.mm",
+    ]
+  }
+  if (is_win) {
+    sources += [
+      "auto_update/auto_update_api_win.cc",
+      "vivaldi_utilities/vivaldi_utilities_api_win.cc",
+    ]
+  }
 }

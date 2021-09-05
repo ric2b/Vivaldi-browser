@@ -97,6 +97,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="4235360514405112390">Jildich</translation>
 <translation id="4250431568374086873">Jo ferbining mei dizze webstee is net folslein feilich</translation>
 <translation id="4265872034478892965">Tastean troch jo behearder</translation>
+<translation id="4305666528087210886">De wie gjin tagong ta de triem</translation>
 <translation id="4312866146174492540">Tsjinkeare (standert)</translation>
 <translation id="4356973930735388585">Oanfallers op dizze webstee besykje mooglik om gefaarlike programma's op jo kompjûter te ynstallearjen, wêrmei gegevens stellen of wiske kinne wurde (lykas foto's, wachtwurden, berjochten en kredytkaarten).</translation>
 <translation id="4408413947728134509"><ph name="NUM_COOKIES" /> koekjes</translation>
@@ -151,6 +152,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="6165508094623778733">Mear ynformaasje</translation>
 <translation id="6177128806592000436">Jo ferbining mei dizze webstee is net feilich</translation>
 <translation id="6203231073485539293">Kontrolearje jo ynternet ferbining</translation>
+<translation id="6225522625585012689">Gean nei &lt;strong&gt;vivaldi://policy&lt;/strong&gt; om de list mei tsjinkearde url's en oare belied regels te besjen dy oplein wurde troch jo systeembehearder.</translation>
 <translation id="625755898061068298">Jo ha de kar makke om befeiliging warskôgingen fan dizze webstee út te skeakeljen.</translation>
 <translation id="6264485186158353794">Tebek nei feilige webstee</translation>
 <translation id="6305205051461490394"><ph name="URL" /> is net te berikken.</translation>
@@ -200,7 +202,6 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="8041940743680923270">Algemiene standert ynstelling brûke (Freegje)</translation>
 <translation id="808894953321890993">Wachtwurd feroarje</translation>
 <translation id="8119307142152921512">folgers en advertinsjes</translation>
-<translation id="8142868475871995937">Gean nei &lt;strong&gt;vivaldi://policy&lt;/strong&gt; om de list fan URL-adressen op de swarte list te sjen en oare betingsten dy't twongen wurde troch de systeembehearder.</translation>
 <translation id="8149426793427495338">Jo kompjûter is gien sliepen.</translation>
 <translation id="8150722005171944719">De triem op <ph name="URL" /> is net te berikken. It is miskien wol wiske, ferpleatst, of de triem foech beheind de tagong.</translation>
 <translation id="8184538546369750125">Algemiene standert ynstelling brûke (Tastean)</translation>
@@ -223,6 +224,7 @@ nedich ha: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="9011424611726486705">Webstee ynstellings iepenje</translation>
 <translation id="9025348182339809926">(Unjildich)</translation>
 <translation id="9039213469156557790">Ek befettet dizze webstee boarnen dy net befeilige binne. Dizze boarnen kinne ûnder ferstjoeren troch oaren besjoen wurde en kinne troch in oanfaller oanpast wurde om it gedrach fan de webstee te feroarjen.</translation>
+<translation id="9062620674789239642">It is mooglik ferpleatst, bewurke, of wiske.</translation>
 <translation id="9069693763241529744">Tsjinkeard troch in tafoeging</translation>
 <translation id="9169664750068251925">Altyd tsjinkeare op dizze webstee</translation>
 <translation id="9180553614777056266">Advertinsje tsjinkearder</translation>

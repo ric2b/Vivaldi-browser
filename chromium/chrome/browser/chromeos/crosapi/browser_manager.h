@@ -12,6 +12,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
+#include "chrome/browser/chromeos/crosapi/environment_provider.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "components/session_manager/core/session_manager_observer.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -24,6 +25,7 @@ namespace crosapi {
 
 class AshChromeServiceImpl;
 class BrowserLoader;
+class TestMojoConnectionManager;
 
 // Manages the lifetime of lacros-chrome, and its loading status. This class is
 // a part of ash-chrome.
@@ -52,10 +54,11 @@ class BrowserManager : public session_manager::SessionManagerObserver {
   void SetLoadCompleteCallback(LoadCompleteCallback callback);
 
   // Opens the browser window in lacros-chrome.
-  // If lacros-chrome is not yet launched, it triggers to launch.
-  // This needs to be called after loading. The condition can be checked
-  // IsReady(), and if not yet, SetLoadCompletionCallback can be used
-  // to wait for the loading.
+  // If lacros-chrome is not yet launched, it triggers to launch. If this is
+  // called again during the setup phase of the launch process, it will be
+  // ignored. This needs to be called after loading. The condition can be
+  // checked IsReady(), and if not yet, SetLoadCompletionCallback can be used to
+  // wait for the loading.
   // TODO(crbug.com/1101676): Notify callers the result of opening window
   // request. Because of asynchronous operations crossing processes,
   // there's no guarantee that the opening window request succeeds.
@@ -64,6 +67,11 @@ class BrowserManager : public session_manager::SessionManagerObserver {
   // This design often leads the flakiness behavior of the product and testing,
   // so should be avoided.
   void NewWindow();
+
+  const std::string& lacros_version() const { return lacros_version_; }
+  void set_lacros_version(const std::string& version) {
+    lacros_version_ = version;
+  }
 
  private:
   enum class State {
@@ -83,6 +91,9 @@ class BrowserManager : public session_manager::SessionManagerObserver {
     // Lacros-chrome is loaded and ready for launching.
     STOPPED,
 
+    // Lacros-chrome is creating a new log file to log to.
+    CREATING_LOG_FILE,
+
     // Lacros-chrome is launching.
     STARTING,
 
@@ -94,10 +105,12 @@ class BrowserManager : public session_manager::SessionManagerObserver {
     TERMINATING,
   };
 
-  // Starts the lacros-chrome process. Returns whether the subprocess is
-  // created. Note that the subprocess may be crashed immediately, even if this
-  // returns true. This can be called only in STOPPED state.
-  bool Start();
+  // Posts CreateLogFile() and StartWithLogFile() to the thread pooll.
+  void Start();
+
+  // Starts the lacros-chrome process and redirects stdout/err to file pointed
+  // by logfd.
+  void StartWithLogFile(base::ScopedFD logfd);
 
   // Called when PendingReceiver of AshChromeService is passed from
   // lacros-chrome.
@@ -114,8 +127,7 @@ class BrowserManager : public session_manager::SessionManagerObserver {
   void OnLacrosChromeTerminated();
 
   // session_manager::SessionManagerObserver:
-  // Starts to load the lacros-chrome executable.
-  void OnUserSessionStarted(bool is_primary_user) override;
+  void OnSessionStateChanged() override;
 
   // Called on load completion.
   void OnLoadComplete(const base::FilePath& path);
@@ -130,6 +142,12 @@ class BrowserManager : public session_manager::SessionManagerObserver {
   // Path to the lacros-chrome disk image directory.
   base::FilePath lacros_path_;
 
+  // Version of lacros-chrome displayed to user in feedback report, etc.
+  // It includes both browser version and channel in the format of:
+  // {browser version} {channel}
+  // For example, "87.0.0.1 dev", "86.0.4240.38 beta".
+  std::string lacros_version_;
+
   // Called when the binary download completes.
   LoadCompleteCallback load_complete_callback_;
 
@@ -143,6 +161,14 @@ class BrowserManager : public session_manager::SessionManagerObserver {
   // Implementation of AshChromeService Mojo APIs.
   // Instantiated on receiving the PendingReceiver from lacros-chrome.
   std::unique_ptr<AshChromeServiceImpl> ash_chrome_service_;
+
+  // Helps set up and manage the mojo connections between lacros-chrome and
+  // ash-chrome in testing environment. Only applicable when
+  // '--lacros-mojo-socket-for-testing' is present in the command line.
+  std::unique_ptr<TestMojoConnectionManager> test_mojo_connection_manager_;
+
+  // Used to pass ash-chrome specific flags/configurations to lacros-chrome.
+  std::unique_ptr<EnvironmentProvider> environment_provider_;
 
   base::WeakPtrFactory<BrowserManager> weak_factory_{this};
 };

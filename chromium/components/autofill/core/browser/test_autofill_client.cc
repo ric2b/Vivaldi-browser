@@ -71,6 +71,10 @@ AddressNormalizer* TestAutofillClient::GetAddressNormalizer() {
   return &test_address_normalizer_;
 }
 
+AutofillOfferManager* TestAutofillClient::GetAutofillOfferManager() {
+  return autofill_offer_manager_.get();
+}
+
 const GURL& TestAutofillClient::GetLastCommittedURL() {
   return last_committed_url_;
 }
@@ -80,8 +84,8 @@ TestAutofillClient::GetSecurityLevelForUmaHistograms() {
   return security_level_;
 }
 
-std::string TestAutofillClient::GetPageLanguage() const {
-  return page_language_;
+translate::LanguageState* TestAutofillClient::GetLanguageState() {
+  return &mock_translate_driver_.GetLanguageState();
 }
 
 #if !defined(OS_IOS)
@@ -262,6 +266,12 @@ void TestAutofillClient::LoadRiskData(
     base::OnceCallback<void(const std::string&)> callback) {
   std::move(callback).Run("some risk data");
 }
+
+#if defined(OS_IOS)
+bool TestAutofillClient::IsQueryIDRelevant(int query_id) {
+  return true;
+}
+#endif
 
 void TestAutofillClient::InitializeUKMSources() {
   test_ukm_recorder_.UpdateSourceURL(source_id_, form_origin_);

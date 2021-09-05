@@ -47,6 +47,22 @@ proto::FeatureType FromFeatureType(FeatureType type) {
 
 }  // namespace
 
+void LanguageToProto(Language* language, LanguageProto* proto) {
+  DCHECK(language);
+  DCHECK(proto);
+  proto->set_locale(language->locale);
+  proto->set_name(language->name);
+  proto->set_native_name(language->native_name);
+}
+
+void LanguageFromProto(LanguageProto* proto, Language* language) {
+  DCHECK(language);
+  DCHECK(proto);
+  language->locale = proto->locale();
+  language->name = proto->name();
+  language->native_name = proto->native_name();
+}
+
 void TutorialToProto(Tutorial* tutorial, TutorialProto* proto) {
   DCHECK(tutorial);
   DCHECK(proto);
@@ -69,6 +85,38 @@ void TutorialFromProto(TutorialProto* proto, Tutorial* tutorial) {
   tutorial->poster_url = GURL(proto->poster_url());
   tutorial->caption_url = GURL(proto->caption_url());
   tutorial->video_length = proto->video_length();
+}
+
+void TutorialGroupToProto(TutorialGroup* group, TutorialGroupProto* proto) {
+  DCHECK(group);
+  DCHECK(proto);
+  LanguageToProto(&group->language, proto->mutable_language());
+  proto->clear_tutorials();
+  for (auto& tutorial : group->tutorials)
+    TutorialToProto(&tutorial, proto->add_tutorials());
+}
+
+void TutorialGroupFromProto(TutorialGroupProto* proto, TutorialGroup* group) {
+  DCHECK(group);
+  DCHECK(proto);
+  LanguageFromProto(proto->mutable_language(), &group->language);
+  group->tutorials.clear();
+  for (auto tutorial_proto : proto->tutorials()) {
+    Tutorial tutorial;
+    TutorialFromProto(&tutorial_proto, &tutorial);
+    group->tutorials.emplace_back(std::move(tutorial));
+  }
+}
+
+void TutorialGroupsFromServerResponseProto(ServerResponseProto* proto,
+                                           std::vector<TutorialGroup>* groups) {
+  DCHECK(groups);
+  DCHECK(proto);
+  for (auto group_proto : proto->tutorial_groups()) {
+    TutorialGroup group;
+    TutorialGroupFromProto(&group_proto, &group);
+    groups->emplace_back(group);
+  }
 }
 
 }  // namespace video_tutorials

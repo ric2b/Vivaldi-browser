@@ -19,9 +19,13 @@
   'targets': [
     {
       'target_name': 'crashpad_compat',
+      'dependencies': [
+        '../util/no_cfi_icall.gyp:no_cfi_icall',
+      ],
+      'include_dirs': [
+        '..',
+      ],
       'sources': [
-        'android/android/api-level.cc',
-        'android/android/api-level.h',
         'android/dlfcn_internal.cc',
         'android/dlfcn_internal.h',
         'android/elf.h',
@@ -38,7 +42,8 @@
         'linux/signal.h',
         'linux/sys/ptrace.h',
         'linux/sys/user.h',
-        'mac/AvailabilityMacros.h',
+        'mac/Availability.h',
+        'mac/AvailabilityVersions.h',
         'mac/kern/exc_resource.h',
         'mac/mach/i386/thread_state.h',
         'mac/mach/mach.h',

@@ -4,9 +4,15 @@
 
 package org.chromium.chrome.browser.incognito;
 
+import static org.junit.Assert.assertEquals;
+
+import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.PendingIntent.CanceledException;
 import android.content.Context;
+import android.os.Build;
 import android.support.test.InstrumentationRegistry;
 import android.util.Pair;
 
@@ -18,6 +24,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
@@ -177,5 +184,28 @@ public class IncognitoNotificationServiceTest {
 
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> Assert.assertFalse(LibraryLoader.getInstance().isInitialized()));
+    }
+
+    @Test
+    @MediumTest
+    @Feature("Incognito")
+    @TargetApi(Build.VERSION_CODES.M)
+    @SuppressLint("NewApi")
+    public void testCloseAllIncognitoNotificationIsDisplayed() {
+        mActivityTestRule.startMainActivityOnBlankPage();
+
+        createTabOnUiThread();
+        createTabOnUiThread();
+
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    mActivityTestRule.getActivity().getTabModelSelector().getModel(true).getCount(),
+                    Matchers.is(2));
+        });
+
+        Context context = ContextUtils.getApplicationContext();
+        NotificationManager nm =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        assertEquals(1, nm.getActiveNotifications().length);
     }
 }

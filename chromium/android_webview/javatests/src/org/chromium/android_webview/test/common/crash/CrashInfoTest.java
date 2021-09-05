@@ -18,6 +18,7 @@ import org.chromium.android_webview.common.crash.CrashInfo;
 import org.chromium.android_webview.common.crash.CrashInfo.UploadState;
 import org.chromium.android_webview.test.AwJUnit4ClassRunner;
 import org.chromium.android_webview.test.OnlyRunIn;
+import org.chromium.base.test.util.Batch;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,7 +27,8 @@ import java.util.Map;
  * Unit tests for CrashInfo.
  */
 @RunWith(AwJUnit4ClassRunner.class)
-@OnlyRunIn(SINGLE_PROCESS)
+@OnlyRunIn(SINGLE_PROCESS) // These are unit tests
+@Batch(Batch.UNIT_TESTS)
 public class CrashInfoTest {
     /**
      * Create a {@link CrashInfo} object for testing.
@@ -44,6 +46,20 @@ public class CrashInfoTest {
         crashInfo.uploadId = uploadId;
         crashInfo.uploadTime = uploadTime;
         crashInfo.uploadState = state;
+
+        return crashInfo;
+    }
+
+    /**
+     * Create a hidden {@link CrashInfo} object for testing.
+     *
+     * {@code appPackageName} is used as a representative of crash keys in tests.
+     */
+    public static CrashInfo createHiddenCrashInfo(String localId, long captureTime, String uploadId,
+            long uploadTime, String appPackageName, UploadState state) {
+        CrashInfo crashInfo =
+                createCrashInfo(localId, captureTime, uploadId, uploadTime, appPackageName, state);
+        crashInfo.isHidden = true;
 
         return crashInfo;
     }

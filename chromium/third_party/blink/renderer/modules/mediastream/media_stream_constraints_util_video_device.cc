@@ -64,16 +64,25 @@ double NumericValueFitness(const NumericConstraint& constraint,
 }
 
 // Returns the fitness distance between the ideal value of |constraint| and the
-// closest value to it in the range [min, max].
-// If the ideal value is contained in the range, returns 1.
+// closest value to it in the range [min, max] if the constraint is supported.
+// If the constraint is present but not supported, returns 1 if there is no
+// ideal value (to account the failed boolean capability constraint) or 2
+// otherwise (to account the failed boolean capability constraint and failed
+// numeric ideal value constraint).
+// If the ideal value is contained in the range, returns 0.
 // If there is no ideal value, returns 0;
 // Based on https://w3c.github.io/mediacapture-main/#dfn-fitness-distance.
 template <typename NumericConstraint>
-double NumericRangeFitness(
+double NumericRangeSupportFitness(
     const NumericConstraint& constraint,
-    const media_constraints::NumericRangeSet<decltype(constraint.Min())>&
-        range) {
+    const media_constraints::NumericRangeSet<decltype(constraint.Min())>& range,
+    bool constraint_present,
+    bool constraint_supported) {
   DCHECK(!range.IsEmpty());
+
+  if (constraint_present && !constraint_supported)
+    return 1.0 + (constraint.HasIdeal() ? 1.0 : 0.0);
+
   if (!constraint.HasIdeal())
     return 0.0;
 
@@ -83,7 +92,7 @@ double NumericRangeFitness(
   else if (range.Min().has_value() && ideal < *range.Min())
     return NumericConstraintFitnessDistance(ideal, *range.Min());
 
-  return 1.0;
+  return 0.0;  // |range| contains |ideal|
 }
 
 // Returns a custom distance between |native_value| and the ideal value and
@@ -290,9 +299,12 @@ class CandidateFormat {
           static_cast<double>(track_settings_with_rescale.target_width()) /
           track_settings_with_rescale.target_height();
       DCHECK(!std::isnan(target_aspect_ratio));
-      double target_frame_rate = track_settings_with_rescale.max_frame_rate();
-      if (target_frame_rate == 0.0)
-        target_frame_rate = NativeFrameRate();
+      double best_supported_frame_rate =
+          track_settings_with_rescale.max_frame_rate();
+      if (best_supported_frame_rate == 0.0 ||
+          best_supported_frame_rate > NativeFrameRate()) {
+        best_supported_frame_rate = NativeFrameRate();
+      }
 
       track_fitness_with_rescale =
           NumericValueFitness(basic_constraint_set.aspect_ratio,
@@ -302,7 +314,7 @@ class CandidateFormat {
           NumericValueFitness(basic_constraint_set.width,
                               track_settings_with_rescale.target_width()) +
           NumericValueFitness(basic_constraint_set.frame_rate,
-                              target_frame_rate);
+                              best_supported_frame_rate);
     }
 
     double track_fitness_without_rescale = HUGE_VAL;
@@ -317,17 +329,19 @@ class CandidateFormat {
             basic_constraint_set, resolution_set(), constrained_frame_rate(),
             format(), false /* enable_rescale */);
         DCHECK(!track_settings_without_rescale.target_size().has_value());
-        double target_frame_rate =
+        double best_supported_frame_rate =
             track_settings_without_rescale.max_frame_rate();
-        if (target_frame_rate == 0.0)
-          target_frame_rate = NativeFrameRate();
+        if (best_supported_frame_rate == 0.0 ||
+            best_supported_frame_rate > NativeFrameRate()) {
+          best_supported_frame_rate = NativeFrameRate();
+        }
         track_fitness_without_rescale =
             NumericValueFitness(basic_constraint_set.aspect_ratio,
                                 NativeAspectRatio()) +
             NumericValueFitness(basic_constraint_set.height, NativeHeight()) +
             NumericValueFitness(basic_constraint_set.width, NativeWidth()) +
             NumericValueFitness(basic_constraint_set.frame_rate,
-                                target_frame_rate);
+                                best_supported_frame_rate);
       }
     }
 
@@ -457,19 +471,27 @@ class PTZDeviceState {
     return pan_set_.IsEmpty() || tilt_set_.IsEmpty() || zoom_set_.IsEmpty();
   }
 
-  double Fitness(const MediaTrackConstraintSetPlatform& basic_set) const {
-    return NumericRangeFitness(basic_set.pan, pan_set_) +
-           NumericRangeFitness(basic_set.tilt, tilt_set_) +
-           NumericRangeFitness(basic_set.zoom, zoom_set_);
+  double Fitness(
+      const MediaTrackConstraintSetPlatform& basic_set,
+      const media::VideoCaptureControlSupport& control_support) const {
+    return NumericRangeSupportFitness(basic_set.pan, pan_set_,
+                                      basic_set.pan.IsPresent(),
+                                      control_support.pan) +
+           NumericRangeSupportFitness(basic_set.tilt, tilt_set_,
+                                      basic_set.tilt.IsPresent(),
+                                      control_support.tilt) +
+           NumericRangeSupportFitness(basic_set.zoom, zoom_set_,
+                                      basic_set.zoom.IsPresent(),
+                                      control_support.zoom);
   }
 
   const char* FailedConstraintName() const {
     MediaTrackConstraintSetPlatform dummy;
-    if (!pan_set_.IsEmpty())
+    if (pan_set_.IsEmpty())
       return dummy.pan.GetName();
-    if (!tilt_set_.IsEmpty())
+    if (tilt_set_.IsEmpty())
       return dummy.tilt.GetName();
-    if (!zoom_set_.IsEmpty())
+    if (zoom_set_.IsEmpty())
       return dummy.zoom.GetName();
 
     // No failed constraint.
@@ -557,17 +579,17 @@ bool DeviceSatisfiesConstraintSet(
     return false;
   }
 
-  if (constraint_set.pan.IsPresent() && !device.pan_tilt_zoom_supported) {
+  if (constraint_set.pan.HasMandatory() && !device.control_support.pan) {
     UpdateFailedConstraintName(constraint_set.pan, failed_constraint_name);
     return false;
   }
 
-  if (constraint_set.tilt.IsPresent() && !device.pan_tilt_zoom_supported) {
+  if (constraint_set.tilt.HasMandatory() && !device.control_support.tilt) {
     UpdateFailedConstraintName(constraint_set.tilt, failed_constraint_name);
     return false;
   }
 
-  if (constraint_set.zoom.IsPresent() && !device.pan_tilt_zoom_supported) {
+  if (constraint_set.zoom.HasMandatory() && !device.control_support.zoom) {
     UpdateFailedConstraintName(constraint_set.zoom, failed_constraint_name);
     return false;
   }
@@ -614,7 +636,7 @@ double CandidateFitness(const DeviceInfo& device,
                         const MediaTrackConstraintSetPlatform& constraint_set,
                         VideoTrackAdapterSettings* track_settings) {
   return DeviceFitness(device, constraint_set) +
-         ptz_state.Fitness(constraint_set) +
+         ptz_state.Fitness(constraint_set, device.control_support) +
          candidate_format.Fitness(constraint_set, track_settings) +
          OptionalBoolFitness(noise_reduction,
                              constraint_set.goog_noise_reduction);
@@ -669,14 +691,14 @@ VideoInputDeviceCapabilities::VideoInputDeviceCapabilities() = default;
 VideoInputDeviceCapabilities::VideoInputDeviceCapabilities(
     String device_id,
     String group_id,
+    const media::VideoCaptureControlSupport& control_support,
     Vector<media::VideoCaptureFormat> formats,
-    media::VideoFacingMode facing_mode,
-    bool pan_tilt_zoom_supported)
+    media::VideoFacingMode facing_mode)
     : device_id(std::move(device_id)),
       group_id(std::move(group_id)),
+      control_support(control_support),
       formats(std::move(formats)),
-      facing_mode(facing_mode),
-      pan_tilt_zoom_supported(pan_tilt_zoom_supported) {}
+      facing_mode(facing_mode) {}
 
 VideoInputDeviceCapabilities::VideoInputDeviceCapabilities(
     VideoInputDeviceCapabilities&& other) = default;

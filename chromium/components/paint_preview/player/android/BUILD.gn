@@ -4,6 +4,10 @@
 
 import("//build/config/android/rules.gni")
 
+java_cpp_enum("compositor_status_generated_enum") {
+  sources = [ "//components/paint_preview/player/compositor_status.h" ]
+}
+
 source_set("android") {
   sources = [
     "player_compositor_delegate_android.cc",
@@ -57,6 +61,7 @@ android_library("java") {
     "java/src/org/chromium/components/paintpreview/player/PlayerSwipeRefreshHandler.java",
     "java/src/org/chromium/components/paintpreview/player/PlayerUserActionRecorder.java",
     "java/src/org/chromium/components/paintpreview/player/PlayerUserFrustrationDetector.java",
+    "java/src/org/chromium/components/paintpreview/player/frame/CompressibleBitmap.java",
     "java/src/org/chromium/components/paintpreview/player/frame/PlayerFrameBitmapPainter.java",
     "java/src/org/chromium/components/paintpreview/player/frame/PlayerFrameBitmapState.java",
     "java/src/org/chromium/components/paintpreview/player/frame/PlayerFrameBitmapStateController.java",
@@ -73,6 +78,8 @@ android_library("java") {
     "java/src/org/chromium/components/paintpreview/player/frame/PlayerFrameViewDelegate.java",
     "java/src/org/chromium/components/paintpreview/player/frame/PlayerFrameViewport.java",
   ]
+
+  srcjar_deps = [ ":compositor_status_generated_enum" ]
 
   deps = [
     "//base:base_java",
@@ -162,8 +169,10 @@ junit_binary("paint_preview_junit_tests") {
   sources = [
     "junit/src/org/chromium/components/paintpreview/player/PlayerManagerTest.java",
     "junit/src/org/chromium/components/paintpreview/player/PlayerUserFrustrationDetectorTest.java",
+    "junit/src/org/chromium/components/paintpreview/player/frame/CompressibleBitmapTest.java",
     "junit/src/org/chromium/components/paintpreview/player/frame/PaintPreviewCustomFlingingShadowScroller.java",
     "junit/src/org/chromium/components/paintpreview/player/frame/PlayerFrameBitmapPainterTest.java",
+    "junit/src/org/chromium/components/paintpreview/player/frame/PlayerFrameCoordinatorTest.java",
     "junit/src/org/chromium/components/paintpreview/player/frame/PlayerFrameMediatorTest.java",
     "junit/src/org/chromium/components/paintpreview/player/frame/PlayerFrameScaleControllerTest.java",
     "junit/src/org/chromium/components/paintpreview/player/frame/PlayerFrameScrollControllerTest.java",

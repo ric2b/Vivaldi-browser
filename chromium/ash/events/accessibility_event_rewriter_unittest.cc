@@ -11,15 +11,14 @@
 #include "ash/public/cpp/accessibility_event_rewriter_delegate.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "base/command_line.h"
 #include "base/macros.h"
-#include "ui/accessibility/accessibility_switches.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/chromeos/events/event_rewriter_chromeos.h"
 #include "ui/chromeos/events/modifier_key.h"
 #include "ui/chromeos/events/pref_names.h"
+#include "ui/events/devices/device_data_manager_test_api.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_handler.h"
@@ -178,7 +177,7 @@ class ChromeVoxAccessibilityEventRewriterTest
 TEST_F(ChromeVoxAccessibilityEventRewriterTest, EventsNotConsumedWhenDisabled) {
   AccessibilityControllerImpl* controller =
       Shell::Get()->accessibility_controller();
-  EXPECT_FALSE(controller->spoken_feedback_enabled());
+  EXPECT_FALSE(controller->spoken_feedback().enabled());
 
   generator_->PressKey(ui::VKEY_A, ui::EF_NONE);
   EXPECT_EQ(1, event_recorder_.events_seen());
@@ -201,7 +200,7 @@ TEST_F(ChromeVoxAccessibilityEventRewriterTest, KeyEventsConsumedWhenEnabled) {
   AccessibilityControllerImpl* controller =
       Shell::Get()->accessibility_controller();
   controller->SetSpokenFeedbackEnabled(true, A11Y_NOTIFICATION_NONE);
-  EXPECT_TRUE(controller->spoken_feedback_enabled());
+  EXPECT_TRUE(controller->spoken_feedback().enabled());
 
   generator_->PressKey(ui::VKEY_A, ui::EF_NONE);
   EXPECT_EQ(1, event_recorder_.events_seen());
@@ -247,7 +246,7 @@ TEST_F(ChromeVoxAccessibilityEventRewriterTest,
        KeysNotEatenWithChromeVoxDisabled) {
   AccessibilityControllerImpl* controller =
       Shell::Get()->accessibility_controller();
-  EXPECT_FALSE(controller->spoken_feedback_enabled());
+  EXPECT_FALSE(controller->spoken_feedback().enabled());
 
   // Send Search+Shift+Right.
   generator_->PressKey(ui::VKEY_LWIN, ui::EF_COMMAND_DOWN);
@@ -279,7 +278,7 @@ TEST_F(ChromeVoxAccessibilityEventRewriterTest, KeyEventsCaptured) {
   AccessibilityControllerImpl* controller =
       Shell::Get()->accessibility_controller();
   controller->SetSpokenFeedbackEnabled(true, A11Y_NOTIFICATION_NONE);
-  EXPECT_TRUE(controller->spoken_feedback_enabled());
+  EXPECT_TRUE(controller->spoken_feedback().enabled());
 
   // Initialize expected counts as variables for easier maintaiblity.
   size_t recorded_count = 0;
@@ -324,7 +323,7 @@ TEST_F(ChromeVoxAccessibilityEventRewriterTest,
   AccessibilityControllerImpl* controller =
       Shell::Get()->accessibility_controller();
   controller->SetSpokenFeedbackEnabled(true, A11Y_NOTIFICATION_NONE);
-  EXPECT_TRUE(controller->spoken_feedback_enabled());
+  EXPECT_TRUE(controller->spoken_feedback().enabled());
 
   // Initialize expected counts as variables for easier maintaiblity.
   size_t recorded_count = 0;
@@ -445,11 +444,9 @@ class SwitchAccessAccessibilityEventRewriterTest : public AshTestBase {
         accessibility_event_rewriter_.get());
 
     controller_ = Shell::Get()->accessibility_controller();
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kEnableExperimentalAccessibilitySwitchAccess);
     controller_->SetAccessibilityEventRewriter(
         accessibility_event_rewriter_.get());
-    controller_->SetSwitchAccessEnabled(true);
+    controller_->switch_access().SetEnabled(true);
   }
 
   void TearDown() override {
@@ -644,6 +641,86 @@ TEST_F(SwitchAccessAccessibilityEventRewriterTest,
   EXPECT_EQ(SwitchAccessCommand::kSelect, command_map.at(51));
   EXPECT_EQ(SwitchAccessCommand::kSelect, command_map.at(83));
   EXPECT_EQ(command_map.end(), command_map.find(48));
+}
+
+TEST_F(SwitchAccessAccessibilityEventRewriterTest, SetKeyboardInputTypes) {
+  AccessibilityEventRewriter* rewriter =
+      controller_->GetAccessibilityEventRewriterForTest();
+  EXPECT_NE(nullptr, rewriter);
+
+  // Set Switch Access to capture these keys as the select command.
+  SetKeyCodesForSwitchAccessCommand(
+      {ui::VKEY_1, ui::VKEY_2, ui::VKEY_3, ui::VKEY_4},
+      SwitchAccessCommand::kSelect);
+
+  std::vector<ui::InputDevice> keyboards;
+  ui::DeviceDataManagerTestApi device_data_test_api;
+  keyboards.emplace_back(ui::InputDevice(1, ui::INPUT_DEVICE_INTERNAL, ""));
+  keyboards.emplace_back(ui::InputDevice(2, ui::INPUT_DEVICE_USB, ""));
+  keyboards.emplace_back(ui::InputDevice(3, ui::INPUT_DEVICE_BLUETOOTH, ""));
+  keyboards.emplace_back(ui::InputDevice(4, ui::INPUT_DEVICE_UNKNOWN, ""));
+  device_data_test_api.SetKeyboardDevices(keyboards);
+
+  // Press the "1" key with no source device id.
+  generator_->PressKey(ui::VKEY_1, ui::EF_NONE);
+  generator_->ReleaseKey(ui::VKEY_1, ui::EF_NONE);
+
+  // The event was captured by AccessibilityEventRewriter.
+  EXPECT_FALSE(event_capturer_.last_key_event());
+  EXPECT_EQ(SwitchAccessCommand::kSelect, delegate_->last_command());
+
+  // Press the "1" key from the internal keyboard which is captured by
+  // AccessibilityEventRewriter.
+  generator_->PressKey(ui::VKEY_1, ui::EF_NONE, 1);
+  generator_->ReleaseKey(ui::VKEY_1, ui::EF_NONE, 1);
+  EXPECT_FALSE(event_capturer_.last_key_event());
+
+  // Press the "2" key from the usb keyboard which is captured by
+  // AccessibilityEventRewriter.
+  generator_->PressKey(ui::VKEY_2, ui::EF_NONE, 2);
+  generator_->ReleaseKey(ui::VKEY_2, ui::EF_NONE, 2);
+  EXPECT_FALSE(event_capturer_.last_key_event());
+
+  // Press the "3" key from the bluetooth keyboard which is captured by
+  // AccessibilityEventRewriter.
+  generator_->PressKey(ui::VKEY_3, ui::EF_NONE, 3);
+  generator_->ReleaseKey(ui::VKEY_3, ui::EF_NONE, 3);
+  EXPECT_FALSE(event_capturer_.last_key_event());
+
+  // Press the "4" key from the unknown keyboard which is captured by
+  // AccessibilityEventRewriter.
+  generator_->PressKey(ui::VKEY_4, ui::EF_NONE, 4);
+  generator_->ReleaseKey(ui::VKEY_4, ui::EF_NONE, 2);
+  EXPECT_FALSE(event_capturer_.last_key_event());
+
+  // Now, exclude some device types.
+  rewriter->SetKeyboardInputDeviceTypes(
+      {ui::INPUT_DEVICE_USB, ui::INPUT_DEVICE_BLUETOOTH});
+
+  // Press the "1" key from the internal keyboard which is not captured by
+  // AccessibilityEventRewriter.
+  generator_->PressKey(ui::VKEY_1, ui::EF_NONE, 1);
+  generator_->ReleaseKey(ui::VKEY_1, ui::EF_NONE, 1);
+  EXPECT_TRUE(event_capturer_.last_key_event());
+  event_capturer_.Reset();
+
+  // Press the "2" key from the usb keyboard which is captured by
+  // AccessibilityEventRewriter.
+  generator_->PressKey(ui::VKEY_2, ui::EF_NONE, 2);
+  generator_->ReleaseKey(ui::VKEY_2, ui::EF_NONE, 2);
+  EXPECT_FALSE(event_capturer_.last_key_event());
+
+  // Press the "3" key from the bluetooth keyboard which is captured by
+  // AccessibilityEventRewriter.
+  generator_->PressKey(ui::VKEY_3, ui::EF_NONE, 3);
+  generator_->ReleaseKey(ui::VKEY_3, ui::EF_NONE, 3);
+  EXPECT_FALSE(event_capturer_.last_key_event());
+
+  // Press the "4" key from the unknown keyboard which is not captured by
+  // AccessibilityEventRewriter.
+  generator_->PressKey(ui::VKEY_4, ui::EF_NONE, 4);
+  generator_->ReleaseKey(ui::VKEY_4, ui::EF_NONE, 2);
+  EXPECT_TRUE(event_capturer_.last_key_event());
 }
 
 }  // namespace

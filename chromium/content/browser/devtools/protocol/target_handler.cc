@@ -14,12 +14,12 @@
 #include "base/unguessable_token.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/lacros_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/devtools/browser_devtools_agent_host.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/browser/devtools/devtools_manager.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
-#include "content/browser/frame_host/navigation_request.h"
+#include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/devtools_agent_host_client.h"
@@ -90,6 +90,8 @@ std::unique_ptr<Target::TargetInfo> CreateInfo(DevToolsAgentHost* host) {
           .Build();
   if (!host->GetOpenerId().empty())
     target_info->SetOpenerId(host->GetOpenerId());
+  if (!host->GetOpenerFrameId().empty())
+    target_info->SetOpenerFrameId(host->GetOpenerFrameId());
   if (host->GetBrowserContext())
     target_info->SetBrowserContextId(host->GetBrowserContext()->UniqueId());
   return target_info;
@@ -866,7 +868,9 @@ Response TargetHandler::CloseTarget(const std::string& target_id,
       DevToolsAgentHost::GetForId(target_id);
   if (!agent_host)
     return Response::InvalidParams("No target with given id found");
-  *out_success = agent_host->Close();
+  if (!agent_host->Close())
+    return Response::InvalidParams("Specified target doesn't support closing");
+  *out_success = true;
   return Response::Success();
 }
 

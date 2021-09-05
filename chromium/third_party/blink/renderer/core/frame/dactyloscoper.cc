@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
+#include "third_party/blink/renderer/core/svg/svg_string_list_tear_off.h"
 #include "third_party/blink/renderer/platform/privacy_budget/identifiability_digest_helpers.h"
 
 namespace blink {
@@ -21,6 +22,16 @@ void Dactyloscoper::Record(WebFeature feature) {
   // TODO(mkwst): This is a stub. We'll pull in more interesting functionality
   // here over time.
 }
+
+namespace {
+
+bool ShouldSample(WebFeature feature) {
+  return IdentifiabilityStudySettings::Get()->ShouldSample(
+      IdentifiableSurface::FromTypeAndToken(
+          IdentifiableSurface::Type::kWebFeature, feature));
+}
+
+}  // namespace
 
 // static
 void Dactyloscoper::Record(ExecutionContext* context, WebFeature feature) {
@@ -37,7 +48,7 @@ void Dactyloscoper::Record(ExecutionContext* context, WebFeature feature) {
 void Dactyloscoper::RecordDirectSurface(ExecutionContext* context,
                                         WebFeature feature,
                                         const IdentifiableToken& value) {
-  if (!IdentifiabilityStudySettings::Get()->IsActive() || !context)
+  if (!context || !ShouldSample(feature))
     return;
   auto* window = DynamicTo<LocalDOMWindow>(context);
   if (!window)
@@ -52,7 +63,7 @@ void Dactyloscoper::RecordDirectSurface(ExecutionContext* context,
 void Dactyloscoper::RecordDirectSurface(ExecutionContext* context,
                                         WebFeature feature,
                                         const String& str) {
-  if (!IdentifiabilityStudySettings::Get()->IsActive() || !context)
+  if (!context || !ShouldSample(feature))
     return;
   if (str.IsEmpty())
     return;
@@ -64,7 +75,7 @@ void Dactyloscoper::RecordDirectSurface(ExecutionContext* context,
 void Dactyloscoper::RecordDirectSurface(ExecutionContext* context,
                                         WebFeature feature,
                                         const Vector<String>& strs) {
-  if (!IdentifiabilityStudySettings::Get()->IsActive() || !context)
+  if (!context || !ShouldSample(feature))
     return;
   if (strs.IsEmpty())
     return;
@@ -76,13 +87,12 @@ void Dactyloscoper::RecordDirectSurface(ExecutionContext* context,
 }
 
 // static
-void Dactyloscoper::RecordDirectSurface(
-    ExecutionContext* context,
-    WebFeature feature,
-    const NotShared<DOMFloat32Array>& buffer) {
-  if (!IdentifiabilityStudySettings::Get()->IsActive() || !context)
+void Dactyloscoper::RecordDirectSurface(ExecutionContext* context,
+                                        WebFeature feature,
+                                        const DOMArrayBufferView* buffer) {
+  if (!context || !ShouldSample(feature))
     return;
-  if (buffer.IsNull() || buffer->lengthAsSizeT() == 0)
+  if (!buffer || buffer->byteLengthAsSizeT() == 0)
     return;
   IdentifiableTokenBuilder builder(
       base::make_span(static_cast<uint8_t*>(buffer->BaseAddress()),
@@ -94,7 +104,7 @@ void Dactyloscoper::RecordDirectSurface(
 void Dactyloscoper::RecordDirectSurface(ExecutionContext* context,
                                         WebFeature feature,
                                         SVGStringListTearOff* strings) {
-  RecordDirectSurface(context, feature, strings->Target()->Values());
+  RecordDirectSurface(context, feature, strings->Values());
 }
 
 }  // namespace blink

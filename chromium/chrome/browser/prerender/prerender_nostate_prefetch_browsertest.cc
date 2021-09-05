@@ -407,7 +407,7 @@ class NoStatePrefetchBrowserTest
   }
 
   // Synchronization note: The IPCs used to communicate DOM events back to the
-  // referring web page (see blink::mojom::PrerenderHandleClient) may race w/
+  // referring web page (see blink::mojom::PrerenderProcessorClient) may race w/
   // the IPCs used here to inject script. The WaitFor* variants should be used
   // when an event was expected to happen or to happen soon.
 
@@ -1463,6 +1463,7 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
       kPrefetchCanceledHistogram,
       base::Bind(
           [](const base::Closure& quit_closure, bool* called,
+             const char* histogram_name, uint64_t name_hash,
              base::HistogramBase::Sample sample) {
             *called = true;
             quit_closure.Run();

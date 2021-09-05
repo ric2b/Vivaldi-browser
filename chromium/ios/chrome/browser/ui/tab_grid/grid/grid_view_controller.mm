@@ -21,7 +21,9 @@
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_image_data_source.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_item.h"
 #import "ios/chrome/browser/ui/tab_grid/grid/grid_layout.h"
+#import "ios/chrome/browser/ui/tab_grid/grid/horizontal_layout.h"
 #import "ios/chrome/browser/ui/tab_grid/transitions/grid_transition_layout.h"
+#import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -48,11 +50,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                   UICollectionViewDelegate,
                                   UICollectionViewDragDelegate,
                                   UICollectionViewDropDelegate>
-// There is no need to update the collection view when other view controllers
-// are obscuring the collection view. Bookkeeping is based on |-viewWillAppear:|
-// and |-viewWillDisappear methods. Note that the |Did| methods are not reliably
-// called (e.g., edge case in multitasking).
-@property(nonatomic, assign) BOOL updatesCollectionView;
 // A collection view of items in a grid format.
 @property(nonatomic, weak) UICollectionView* collectionView;
 // The local model backing the collection view.
@@ -76,8 +73,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 @property(nonatomic, assign) CGPoint itemReorderTouchPoint;
 // Animator to show or hide the empty state.
 @property(nonatomic, strong) UIViewPropertyAnimator* emptyStateAnimator;
-// The default layout for the tab grid.
-@property(nonatomic, strong) GridLayout* defaultLayout;
+// The default layout for the tab switcher.
+@property(nonatomic, strong) TabSwitcherLayout* defaultLayout;
+// The layout for the tab grid.
+@property(nonatomic, strong) GridLayout* gridLayout;
+// The layout for the thumb strip.
+@property(nonatomic, strong) HorizontalLayout* horizontalLayout;
 // The layout used while the grid is being reordered.
 @property(nonatomic, strong) UICollectionViewLayout* reorderingLayout;
 // YES if, when reordering is enabled, the order of the cells has changed.
@@ -90,6 +91,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     NSHashTable<UICollectionViewCell*>* pointerInteractionCells API_AVAILABLE(
         ios(13.4));
 #endif  // defined(__IPHONE_13_4)
+// The transition layout either from grid to horizontal layout or from
+// horizontal to grid layout.
+@property(nonatomic, strong)
+    UICollectionViewTransitionLayout* gridHorizontalTransitionLayout;
 @end
 
 @implementation GridViewController
@@ -105,7 +110,14 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 #pragma mark - UIViewController
 
 - (void)loadView {
-  self.defaultLayout = [[GridLayout alloc] init];
+  self.horizontalLayout = [[HorizontalLayout alloc] init];
+  self.gridLayout = [[GridLayout alloc] init];
+  if (IsThumbStripEnabled()) {
+    self.defaultLayout = self.horizontalLayout;
+  } else {
+    self.defaultLayout = self.gridLayout;
+  }
+
   UICollectionView* collectionView =
       [[UICollectionView alloc] initWithFrame:CGRectZero
                          collectionViewLayout:self.defaultLayout];
@@ -269,7 +281,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 - (void)contentWillAppearAnimated:(BOOL)animated {
-  self.updatesCollectionView = YES;
   self.defaultLayout.animatesItemUpdates = YES;
   [self.collectionView reloadData];
   // Selection is invalid if there are no items.
@@ -287,7 +298,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 - (void)contentWillDisappear {
-  self.updatesCollectionView = NO;
 }
 
 #pragma mark - UICollectionViewDataSource
@@ -420,11 +430,9 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (UIDragPreviewParameters*)collectionView:(UICollectionView*)collectionView
     dragPreviewParametersForItemAtIndexPath:(NSIndexPath*)indexPath {
-  UIDragPreviewParameters* params = [[UIDragPreviewParameters alloc] init];
-  GridCell* cell = base::mac::ObjCCastStrict<GridCell>(
+  GridCell* gridCell = base::mac::ObjCCastStrict<GridCell>(
       [self.collectionView cellForItemAtIndexPath:indexPath]);
-  params.visiblePath = cell.visiblePath;
-  return params;
+  return gridCell.dragPreviewParameters;
 }
 
 #pragma mark - UICollectionViewDropDelegate
@@ -453,21 +461,52 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
         (id<UICollectionViewDropCoordinator>)coordinator {
   id<UICollectionViewDropItem> item = coordinator.items.firstObject;
 
-  NSIndexPath* dropIndexPath = coordinator.destinationIndexPath;
-  if (!dropIndexPath) {
-    dropIndexPath = [NSIndexPath indexPathForItem:(self.items.count - 1)
-                                        inSection:0];
+  // Append to the end of the collection, unless drop index is specified.
+  NSUInteger destinationIndex = self.items.count;
+  if (item.sourceIndexPath) {
+    // The sourceIndexPath is non-nil if the drop item is from this same
+    // collection view. Move to last position rather than appending if this is a
+    // reorder operation.
+    destinationIndex = self.items.count - 1;
+  }
+  if (coordinator.destinationIndexPath) {
+    destinationIndex =
+        base::checked_cast<NSUInteger>(coordinator.destinationIndexPath.item);
+  }
+  NSIndexPath* dropIndexPath = [NSIndexPath indexPathForItem:destinationIndex
+                                                   inSection:0];
+
+  // Drop synchronously if local object is available.
+  if (item.dragItem.localObject) {
+    [coordinator dropItem:item.dragItem toItemAtIndexPath:dropIndexPath];
+    // The sourceIndexPath is non-nil if the drop item is from this same
+    // collection view.
+    [self.dragDropHandler dropItem:item.dragItem
+                           toIndex:destinationIndex
+                fromSameCollection:(item.sourceIndexPath != nil)];
+    return;
   }
 
-  NSUInteger destinationIndex =
-      base::checked_cast<NSUInteger>(dropIndexPath.item);
-  [coordinator dropItem:item.dragItem toItemAtIndexPath:dropIndexPath];
+  // Drop asynchronously if local object is not available.
+  UICollectionViewDropPlaceholder* placeholder =
+      [[UICollectionViewDropPlaceholder alloc]
+          initWithInsertionIndexPath:dropIndexPath
+                     reuseIdentifier:kCellIdentifier];
+  placeholder.cellUpdateHandler = ^(UICollectionViewCell* placeholderCell) {
+    GridCell* gridCell = base::mac::ObjCCastStrict<GridCell>(placeholderCell);
+    gridCell.theme = self.theme;
+  };
+  placeholder.previewParametersProvider =
+      ^UIDragPreviewParameters*(UICollectionViewCell* placeholderCell) {
+    GridCell* gridCell = base::mac::ObjCCastStrict<GridCell>(placeholderCell);
+    return gridCell.dragPreviewParameters;
+  };
 
-  // TODO(crbug.com/1095200): Handle the edge case that two windows are
-  // simultaneously dragging and dropping.
-  [self.dragDropHandler dropItem:item.dragItem
-                         toIndex:destinationIndex
-              fromSameCollection:collectionView.hasActiveDrag];
+  id<UICollectionViewDropPlaceholderContext> context =
+      [coordinator dropItem:item.dragItem toPlaceholder:placeholder];
+  [self.dragDropHandler dropItemFromProvider:item.dragItem.itemProvider
+                                     toIndex:destinationIndex
+                          placeholderContext:context];
 }
 
 #pragma mark - UIScrollViewDelegate
@@ -511,12 +550,14 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
   self.items = [items mutableCopy];
   self.selectedItemID = selectedItemID;
-  if ([self updatesCollectionView]) {
-    [self.collectionView reloadData];
-    [self.collectionView
-        selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
-                     animated:YES
-               scrollPosition:UICollectionViewScrollPositionTop];
+  [self.collectionView reloadData];
+  [self.collectionView selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
+                                    animated:YES
+                              scrollPosition:UICollectionViewScrollPositionTop];
+  if (self.items.count > 0) {
+    [self removeEmptyStateAnimated:YES];
+  } else {
+    [self animateEmptyStateIn];
   }
   // Whether the view is visible or not, the delegate must be updated.
   [self.delegate gridViewController:self didChangeItemCount:self.items.count];
@@ -595,9 +636,13 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 - (void)selectItemWithID:(NSString*)selectedItemID {
-  self.selectedItemID = selectedItemID;
-  if (!([self updatesCollectionView] && self.showsSelectionUpdates))
+  if (self.selectedItemID == selectedItemID)
     return;
+
+  [self.collectionView
+      deselectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
+                     animated:YES];
+  self.selectedItemID = selectedItemID;
   [self.collectionView
       selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
                    animated:YES
@@ -612,8 +657,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
          [self indexOfItemWithID:item.identifier] == NSNotFound);
   NSUInteger index = [self indexOfItemWithID:itemID];
   self.items[index] = item;
-  if (![self updatesCollectionView])
-    return;
   GridCell* cell = base::mac::ObjCCastStrict<GridCell>(
       [self.collectionView cellForItemAtIndexPath:CreateIndexPath(index)]);
   // |cell| may be nil if it is scrolled offscreen.
@@ -646,6 +689,45 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       collectionViewUpdatesCompletion:completion];
 }
 
+#pragma mark - LayoutSwitcher
+
+- (void)willTransitionToLayout:(LayoutSwitcherState)nextState
+                    completion:
+                        (void (^)(BOOL completed, BOOL finished))completion {
+  auto completionBlock = ^(BOOL completed, BOOL finished) {
+    completion(completed, finished);
+    self.collectionView.scrollEnabled = YES;
+  };
+  switch (nextState) {
+    case LayoutSwitcherState::Horizontal:
+      self.gridHorizontalTransitionLayout = [self.collectionView
+          startInteractiveTransitionToCollectionViewLayout:self.horizontalLayout
+                                                completion:completionBlock];
+      break;
+    case LayoutSwitcherState::Full:
+      self.gridHorizontalTransitionLayout = [self.collectionView
+          startInteractiveTransitionToCollectionViewLayout:self.gridLayout
+                                                completion:completionBlock];
+      break;
+  }
+
+  // Stops collectionView scrolling when the animation starts.
+  [self.collectionView setContentOffset:self.collectionView.contentOffset
+                               animated:NO];
+}
+
+- (void)didUpdateTransitionLayoutProgress:(CGFloat)progress {
+  self.gridHorizontalTransitionLayout.transitionProgress = progress;
+}
+
+- (void)didTransitionToLayoutSuccessfully:(BOOL)success {
+  if (success) {
+    [self.collectionView finishInteractiveTransition];
+  } else {
+    [self.collectionView cancelInteractiveTransition];
+  }
+}
+
 #pragma mark - Private properties
 
 - (NSUInteger)selectedIndex {
@@ -654,19 +736,11 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 #pragma mark - Private
 
-// Performs model updates and view updates together if the view is appeared, or
-// only the model updates if the view is not appeared. |completion| is only run
-// if view is appeared.
+// Performs model updates and view updates together.
 - (void)performModelUpdates:(ProceduralBlock)modelUpdates
               collectionViewUpdates:(ProceduralBlock)collectionViewUpdates
     collectionViewUpdatesCompletion:
         (ProceduralBlockWithBool)collectionViewUpdatesCompletion {
-  // If the view isn't visible, there's no need for the collection view to
-  // update.
-  if (![self updatesCollectionView]) {
-    modelUpdates();
-    return;
-  }
   [self.collectionView performBatchUpdates:^{
     // Synchronize model and view updates.
     modelUpdates();

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -26,6 +27,8 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
+#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_crx_util.h"
@@ -39,6 +42,7 @@
 #include "chrome/browser/download/download_target_determiner.h"
 #include "chrome/browser/download/mixed_content_download_blocking.h"
 #include "chrome/browser/download/save_package_file_picker.h"
+#include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/platform_util.h"
@@ -344,6 +348,15 @@ void MaybeReportDangerousDownloadBlocked(
   Profile* profile = Profile::FromBrowserContext(browser_context);
   if (!profile)
     return;
+
+  // If |download| has a deep scanning malware verdict, then it means the
+  // dangerous file has already been reported.
+  auto* scan_result = static_cast<enterprise_connectors::ScanResult*>(
+      download->GetUserData(enterprise_connectors::ScanResult::kKey));
+  if (scan_result &&
+      enterprise_connectors::ContainsMalwareVerdict(scan_result->response)) {
+    return;
+  }
 
   std::string raw_digest_sha256 = download->GetHash();
   extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(profile)
@@ -975,6 +988,7 @@ void ChromeDownloadManagerDelegate::RequestConfirmation(
       // Figure out type of dialog and display.
       DownloadLocationDialogType dialog_type =
           DownloadLocationDialogType::DEFAULT;
+
       switch (reason) {
         case DownloadConfirmationReason::TARGET_NO_SPACE:
           dialog_type = DownloadLocationDialogType::LOCATION_FULL;
@@ -1154,11 +1168,15 @@ void ChromeDownloadManagerDelegate::OnDownloadCanceled(
 #endif  // defined(OS_ANDROID)
 
 bool ChromeDownloadManagerDelegate::ShouldShowDownloadLaterDialog() const {
-  if (!base::FeatureList::IsEnabled(download::features::kDownloadLater))
+  if (!base::FeatureList::IsEnabled(download::features::kDownloadLater) ||
+      profile_->IsOffTheRecord()) {
     return false;
+  }
+
   bool require_cellular = base::GetFieldTrialParamByFeatureAsBool(
       download::features::kDownloadLater,
-      download::features::kDownloadLaterRequireCellular, true);
+      download::features::kDownloadLaterRequireCellular,
+      /*default_value=*/true);
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           download::switches::kDownloadLaterDebugOnWifi)) {
     require_cellular = false;
@@ -1168,11 +1186,26 @@ bool ChromeDownloadManagerDelegate::ShouldShowDownloadLaterDialog() const {
       network::mojom::ConnectionType(
           net::NetworkChangeNotifier::GetConnectionType()));
 
-  // Show download later dialog when network condition is met.
+  // Check whether network condition is met.
   if (require_cellular && !on_cellular)
     return false;
 
-  return download_prefs_->PromptDownloadLater() && !profile_->IsOffTheRecord();
+  // Check lite mode if the download later prompt is never shown before.
+  if (!download_prefs_->HasDownloadLaterPromptShown()) {
+    bool require_lite_mode = base::GetFieldTrialParamByFeatureAsBool(
+        download::features::kDownloadLater,
+        download::features::kDownloadLaterRequireLiteMode,
+        /*default_value=*/false);
+    auto* data_reduction_settings =
+        DataReductionProxyChromeSettingsFactory::GetForBrowserContext(profile_);
+    bool lite_mode_enabled =
+        data_reduction_settings->IsDataReductionProxyEnabled();
+
+    if (require_lite_mode && !lite_mode_enabled)
+      return false;
+  }
+
+  return download_prefs_->PromptDownloadLater();
 }
 
 void ChromeDownloadManagerDelegate::DetermineLocalPath(

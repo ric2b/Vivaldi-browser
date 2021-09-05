@@ -56,6 +56,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
+using testing::_;
 using testing::NiceMock;
 using testing::NotNull;
 
@@ -196,12 +197,8 @@ class SyncEngineImplTest : public testing::Test {
 
     sync_prefs_ = std::make_unique<SyncPrefs>(&pref_service_);
     sync_thread_.StartAndWaitForTesting();
-    ON_CALL(invalidator_, UpdateInterestedTopics(testing::_, testing::_))
+    ON_CALL(invalidator_, UpdateInterestedTopics(_, _))
         .WillByDefault(testing::Return(true));
-    backend_ = std::make_unique<SyncEngineImpl>(
-        "dummyDebugName", &invalidator_, GetSyncInvalidationsService(),
-        sync_prefs_->AsWeakPtr(),
-        temp_dir_.GetPath().Append(base::FilePath(kTestSyncDir)));
 
     fake_manager_factory_ = std::make_unique<FakeSyncManagerFactory>(
         &fake_manager_, network::TestNetworkConnectionTracker::GetInstance());
@@ -229,8 +226,19 @@ class SyncEngineImplTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
+  void CreateBackend() {
+    backend_ = std::make_unique<SyncEngineImpl>(
+        "dummyDebugName", &invalidator_, GetSyncInvalidationsService(),
+        sync_prefs_->AsWeakPtr(),
+        temp_dir_.GetPath().Append(base::FilePath(kTestSyncDir)));
+  }
+
   // Synchronously initializes the backend.
   void InitializeBackend(bool expect_success) {
+    if (!backend_) {
+      CreateBackend();
+    }
+
     host_.SetExpectSuccess(expect_success);
 
     SyncEngine::InitParams params;
@@ -241,7 +249,7 @@ class SyncEngineImplTest : public testing::Test {
     params.http_factory_getter = base::BindOnce(&CreateHttpBridgeFactory);
     params.authenticated_account_id = CoreAccountId("account_id");
     params.sync_manager_factory = std::move(fake_manager_factory_);
-    sync_prefs_->GetInvalidationVersions(&params.invalidation_versions);
+    params.invalidation_versions = sync_prefs_->GetInvalidationVersions();
 
     backend_->Initialize(std::move(params));
 
@@ -325,8 +333,10 @@ class SyncEngineImplTest : public testing::Test {
 class SyncEngineImplWithSyncInvalidationsTest : public SyncEngineImplTest {
  public:
   SyncEngineImplWithSyncInvalidationsTest() {
-    override_features_.InitAndEnableFeature(
-        switches::kSubscribeForSyncInvalidations);
+    override_features_.InitWithFeatures(
+        /*enabled_features=*/{switches::kSyncSendInterestedDataTypes,
+                              switches::kUseSyncInvalidations},
+        /*disabled_features=*/{});
   }
 
  protected:
@@ -336,6 +346,21 @@ class SyncEngineImplWithSyncInvalidationsTest : public SyncEngineImplTest {
 
   base::test::ScopedFeatureList override_features_;
   NiceMock<MockSyncInvalidationsService> mock_instance_id_driver_;
+};
+
+class SyncEngineImplWithSyncInvalidationsForWalletAndOfferTest
+    : public SyncEngineImplTest {
+ public:
+  SyncEngineImplWithSyncInvalidationsForWalletAndOfferTest() {
+    override_features_.InitWithFeatures(
+        /*enabled_features=*/{switches::kSyncSendInterestedDataTypes,
+                              switches::kUseSyncInvalidations,
+                              switches::kUseSyncInvalidationsForWalletAndOffer},
+        /*disabled_features=*/{});
+  }
+
+ protected:
+  base::test::ScopedFeatureList override_features_;
 };
 
 // Test basic initialization with no initial types (first time initialization).
@@ -658,6 +683,7 @@ TEST_F(SyncEngineImplTest, ShouldDestroyAfterInitFailure) {
 
 TEST_F(SyncEngineImplWithSyncInvalidationsTest,
        ShouldInvalidateDataTypesOnIncomingInvalidation) {
+  CreateBackend();
   EXPECT_CALL(mock_instance_id_driver_, AddListener(backend_.get()));
   InitializeBackend(/*expect_success=*/true);
 
@@ -674,6 +700,37 @@ TEST_F(SyncEngineImplWithSyncInvalidationsTest,
   fake_manager_->WaitForSyncThread();
   EXPECT_EQ(1, fake_manager_->GetInvalidationCount(ModelType::BOOKMARKS));
   EXPECT_EQ(1, fake_manager_->GetInvalidationCount(ModelType::PREFERENCES));
+}
+
+TEST_F(SyncEngineImplWithSyncInvalidationsTest,
+       UseOldInvalidationsOnlyForWalletAndOffer) {
+  enabled_types_.PutAll({AUTOFILL_WALLET_DATA, AUTOFILL_WALLET_OFFER});
+
+  InitializeBackend(/*expect_success=*/true);
+  EXPECT_CALL(
+      invalidator_,
+      UpdateInterestedTopics(
+          backend_.get(), ModelTypeSetToTopicSet(
+                              {AUTOFILL_WALLET_DATA, AUTOFILL_WALLET_OFFER})));
+  ConfigureDataTypes();
+
+  // At shutdown, we clear the registered invalidation ids.
+  EXPECT_CALL(invalidator_, UpdateInterestedTopics(backend_.get(), TopicSet()));
+}
+
+TEST_F(SyncEngineImplWithSyncInvalidationsForWalletAndOfferTest,
+       DoNotUseOldInvalidationsAtAll) {
+  enabled_types_.PutAll({AUTOFILL_WALLET_DATA, AUTOFILL_WALLET_OFFER});
+
+  // Since the old invalidations system is not being used anymore (based on the
+  // enabled feature flags), SyncEngine should call the (old) invalidator with
+  // an empty TopicSet upon construction.
+  EXPECT_CALL(invalidator_, UpdateInterestedTopics(_, TopicSet()));
+  CreateBackend();
+
+  EXPECT_CALL(invalidator_, UpdateInterestedTopics(_, _)).Times(0);
+  InitializeBackend(/*expect_success=*/true);
+  ConfigureDataTypes();
 }
 
 }  // namespace

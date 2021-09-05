@@ -8,14 +8,10 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/views/payments/payment_request_sheet_controller.h"
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/payment_request_state.h"
-#include "ui/views/controls/styled_label_listener.h"
-
-namespace views {
-class StyledLabel;
-}
 
 namespace payments {
 
@@ -26,14 +22,13 @@ class PaymentRequestRowView;
 // Payment Request dialog.
 class PaymentSheetViewController : public PaymentRequestSheetController,
                                    public PaymentRequestSpec::Observer,
-                                   public PaymentRequestState::Observer,
-                                   public views::StyledLabelListener {
+                                   public PaymentRequestState::Observer {
  public:
   // Does not take ownership of the arguments, which should outlive this object.
   // The `spec` and `state` objects should not be null.
-  PaymentSheetViewController(PaymentRequestSpec* spec,
-                             PaymentRequestState* state,
-                             PaymentRequestDialogView* dialog);
+  PaymentSheetViewController(base::WeakPtr<PaymentRequestSpec> spec,
+                             base::WeakPtr<PaymentRequestState> state,
+                             base::WeakPtr<PaymentRequestDialogView> dialog);
   ~PaymentSheetViewController() override;
 
   // PaymentRequestSpec::Observer:
@@ -53,11 +48,6 @@ class PaymentSheetViewController : public PaymentRequestSheetController,
   std::unique_ptr<views::View> CreateExtraFooterView() override;
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // views::StyledLabelListener:
-  void StyledLabelLinkClicked(views::StyledLabel* label,
-                              const gfx::Range& range,
-                              int event_flags) override;
-
   void UpdatePayButtonState(bool enabled);
 
   // These functions create the various sections and rows of the payment sheet.
@@ -73,6 +63,8 @@ class PaymentSheetViewController : public PaymentRequestSheetController,
   std::unique_ptr<PaymentRequestRowView> CreateContactInfoRow();
   std::unique_ptr<PaymentRequestRowView> CreateShippingOptionRow();
   std::unique_ptr<views::View> CreateDataSourceRow();
+
+  base::WeakPtrFactory<PaymentSheetViewController> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(PaymentSheetViewController);
 };

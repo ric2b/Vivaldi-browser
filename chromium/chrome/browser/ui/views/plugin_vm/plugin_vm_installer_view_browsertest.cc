@@ -9,6 +9,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_installer_factory.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_test_helper.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
@@ -28,6 +29,7 @@
 #include "chromeos/tpm/stub_install_attributes.h"
 #include "components/account_id/account_id.h"
 #include "components/download/public/background_service/download_metadata.h"
+#include "components/download/public/background_service/features.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -98,6 +100,9 @@ class PluginVmInstallerViewBrowserTest : public DialogBrowserTest {
     // Set correct PluginVmImage preference value.
     SetPluginVmImagePref(embedded_test_server()->GetURL(kZipFile).spec(),
                          kZipFileHash);
+    auto* installer = plugin_vm::PluginVmInstallerFactory::GetForProfile(
+        browser()->profile());
+    installer->SetFreeDiskSpaceForTesting(installer->RequiredFreeDiskSpace());
   }
 
   void SetPluginVmImagePref(std::string url, std::string hash) {
@@ -189,7 +194,10 @@ class PluginVmInstallerViewBrowserTestWithFeatureEnabled
     : public PluginVmInstallerViewBrowserTest {
  public:
   PluginVmInstallerViewBrowserTestWithFeatureEnabled() {
-    feature_list_.InitAndEnableFeature(features::kPluginVm);
+    feature_list_.InitWithFeaturesAndParameters(
+        {{features::kPluginVm, {}},
+         {download::kDownloadServiceFeature, {{"start_up_delay_ms", "0"}}}},
+        {});
   }
 
  private:

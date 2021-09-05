@@ -183,9 +183,9 @@ class MODULES_EXPORT RTCPeerConnection final
       const RTCSessionDescriptionInit*,
       V8VoidFunction*,
       V8RTCPeerConnectionErrorCallback* = nullptr);
-  RTCSessionDescription* localDescription();
-  RTCSessionDescription* currentLocalDescription();
-  RTCSessionDescription* pendingLocalDescription();
+  RTCSessionDescription* localDescription() const;
+  RTCSessionDescription* currentLocalDescription() const;
+  RTCSessionDescription* pendingLocalDescription() const;
 
   ScriptPromise setRemoteDescription(ScriptState*,
                                      const RTCSessionDescriptionInit*,
@@ -195,9 +195,9 @@ class MODULES_EXPORT RTCPeerConnection final
       const RTCSessionDescriptionInit*,
       V8VoidFunction*,
       V8RTCPeerConnectionErrorCallback* = nullptr);
-  RTCSessionDescription* remoteDescription();
-  RTCSessionDescription* currentRemoteDescription();
-  RTCSessionDescription* pendingRemoteDescription();
+  RTCSessionDescription* remoteDescription() const;
+  RTCSessionDescription* currentRemoteDescription() const;
+  RTCSessionDescription* pendingRemoteDescription() const;
 
   String signalingState() const;
 
@@ -337,18 +337,25 @@ class MODULES_EXPORT RTCPeerConnection final
                            const String& url,
                            int error_code,
                            const String& error_text) override;
-  void DidChangeSignalingState(
-      webrtc::PeerConnectionInterface::SignalingState) override;
+  void DidChangeSessionDescriptions(
+      RTCSessionDescriptionPlatform* pending_local_description,
+      RTCSessionDescriptionPlatform* current_local_description,
+      RTCSessionDescriptionPlatform* pending_remote_description,
+      RTCSessionDescriptionPlatform* current_remote_description) override;
   void DidChangeIceGatheringState(
       webrtc::PeerConnectionInterface::IceGatheringState) override;
   void DidChangeIceConnectionState(
       webrtc::PeerConnectionInterface::IceConnectionState) override;
   void DidChangePeerConnectionState(
       webrtc::PeerConnectionInterface::PeerConnectionState) override;
-  void DidAddReceiverPlanB(std::unique_ptr<RTCRtpReceiverPlatform>) override;
-  void DidRemoveReceiverPlanB(std::unique_ptr<RTCRtpReceiverPlatform>) override;
+  void DidModifyReceiversPlanB(
+      webrtc::PeerConnectionInterface::SignalingState,
+      Vector<std::unique_ptr<RTCRtpReceiverPlatform>> platform_receivers_added,
+      Vector<std::unique_ptr<RTCRtpReceiverPlatform>>
+          platform_receivers_removed) override;
   void DidModifySctpTransport(WebRTCSctpTransportSnapshot) override;
-  void DidModifyTransceivers(Vector<std::unique_ptr<RTCRtpTransceiverPlatform>>,
+  void DidModifyTransceivers(webrtc::PeerConnectionInterface::SignalingState,
+                             Vector<std::unique_ptr<RTCRtpTransceiverPlatform>>,
                              Vector<uintptr_t>,
                              bool is_remote_description) override;
   void DidAddRemoteDataChannel(
@@ -453,10 +460,10 @@ class MODULES_EXPORT RTCPeerConnection final
   void Dispose();
 
   void MaybeDispatchEvent(Event*);
+  // TODO(hbos): Remove any remaining uses of ScheduleDispatchEvent.
   void ScheduleDispatchEvent(Event*);
   void ScheduleDispatchEvent(Event*, BoolFunction);
   void DispatchScheduledEvents();
-  void MaybeFireNegotiationNeeded();
   MediaStreamTrack* GetTrack(MediaStreamComponent*) const;
   RTCRtpSender* FindSenderForTrackAndStream(MediaStreamTrack*, MediaStream*);
   HeapVector<Member<RTCRtpSender>>::iterator FindSender(
@@ -571,6 +578,10 @@ class MODULES_EXPORT RTCPeerConnection final
 
   HeapHashSet<Member<RTCIceTransport>> ActiveIceTransports() const;
 
+  Member<RTCSessionDescription> pending_local_description_;
+  Member<RTCSessionDescription> current_local_description_;
+  Member<RTCSessionDescription> pending_remote_description_;
+  Member<RTCSessionDescription> current_remote_description_;
   webrtc::PeerConnectionInterface::SignalingState signaling_state_;
   webrtc::PeerConnectionInterface::IceGatheringState ice_gathering_state_;
   webrtc::PeerConnectionInterface::IceConnectionState ice_connection_state_;
@@ -618,7 +629,6 @@ class MODULES_EXPORT RTCPeerConnection final
   FrameScheduler::SchedulingAffectingFeatureHandle
       feature_handle_for_scheduler_;
 
-  bool negotiation_needed_;
   // When the |peer_handler_| is unregistered, the native peer connection is
   // closed and disappears from the chrome://webrtc-internals page. This happens
   // when page context is destroyed.

@@ -15,6 +15,8 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_background_animator_observer.h"
 #include "ash/shell.h"
+#include "ash/style/default_color_constants.h"
+#include "ash/style/default_colors.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "chromeos/constants/chromeos_switches.h"
@@ -241,9 +243,9 @@ SkColor ShelfBackgroundAnimator::GetBackgroundColor(
       shelf_target_color = SK_ColorTRANSPARENT;
       break;
     case ShelfBackgroundType::kLoginNonBlurredWallpaper:
-      shelf_target_color =
-          SkColorSetA(login_constants::kDefaultBaseColor,
-                      login_constants::kNonBlurredWallpaperBackgroundAlpha);
+      shelf_target_color = SkColorSetA(
+          DeprecatedGetLoginBackgroundBaseColor(kLoginBackgroundBaseColor),
+          login_constants::kNonBlurredWallpaperBackgroundAlpha);
       break;
   }
   return shelf_target_color;

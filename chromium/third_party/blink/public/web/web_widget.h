@@ -70,10 +70,6 @@ class Cursor;
 class LatencyInfo;
 }
 
-namespace viz {
-class LocalSurfaceIdAllocation;
-}
-
 namespace blink {
 class SynchronousCompositorRegistry;
 struct VisualProperties;
@@ -92,7 +88,6 @@ class WebWidget {
   // the default settings will be used, tests may provide a |settings| object to
   // override the defaults.
   virtual cc::LayerTreeHost* InitializeCompositing(
-      bool never_composited,
       scheduler::WebThreadScheduler* main_thread_scheduler,
       cc::TaskGraphRunner* task_graph_runner,
       bool for_child_local_root_frame,
@@ -167,9 +162,6 @@ class WebWidget {
   // Returns the state of focus for the WebWidget.
   virtual bool HasFocus() { return false; }
 
-  // Sets the root widget's window segments.
-  virtual void SetWindowSegments(WebVector<WebRect> window_segments) {}
-
   // Returns the anchor and focus bounds of the current selection.
   // If the selection range is empty, it returns the caret bounds.
   virtual bool SelectionBounds(WebRect& anchor, WebRect& focus) const {
@@ -218,8 +210,9 @@ class WebWidget {
 
   // Process the input event, invoking the callback when complete. This
   // method will call the callback synchronously.
-  virtual void ProcessInputEventSynchronously(const WebCoalescedInputEvent&,
-                                              HandledEventCallback) = 0;
+  virtual void ProcessInputEventSynchronouslyForTesting(
+      const WebCoalescedInputEvent&,
+      HandledEventCallback) = 0;
 
   virtual void DidOverscrollForTesting(
       const gfx::Vector2dF& overscroll_delta,
@@ -258,39 +251,45 @@ class WebWidget {
   virtual void ApplyVisualProperties(
       const VisualProperties& visual_properties) = 0;
 
-  // Update the surface allocation information, compositor viewport rect and
-  // screen info on the widget. This method is temporary as updating visual
-  // properties is shared action between WidgetBase and RenderWidget, and will
-  // be removed when it is all done inside blink proper.
-  // (https://crbug.com/1097816)
-  virtual void UpdateSurfaceAndScreenInfo(
-      const viz::LocalSurfaceIdAllocation& new_local_surface_id_allocation,
-      const gfx::Rect& compositor_viewport_pixel_rect,
-      const ScreenInfo& new_screen_info) = 0;
-
-  // Similar to UpdateSurfaceAndScreenInfo but the surface allocation
-  // and compositor viewport rect remain the same.
-  virtual void UpdateScreenInfo(const ScreenInfo& new_screen_info) = 0;
-
-  // Similar to UpdateSurfaceAndScreenInfo but the surface allocation
-  // remains the same.
-  virtual void UpdateCompositorViewportAndScreenInfo(
-      const gfx::Rect& compositor_viewport_pixel_rect,
-      const ScreenInfo& new_screen_info) = 0;
-
-  // Similar to UpdateSurfaceAndScreenInfo but the surface allocation and screen
-  // info remain the same.
-  virtual void UpdateCompositorViewportRect(
-      const gfx::Rect& compositor_viewport_pixel_rect) = 0;
-
   // Returns information about the screen where this view's widgets are being
   // displayed.
   virtual const ScreenInfo& GetScreenInfo() = 0;
+
+  // Returns original (non-emulated) information about the screen where this
+  // view's widgets are being displayed.
+  virtual const ScreenInfo& GetOriginalScreenInfo() = 0;
+
+  // Called to get the position of the widget's window in screen
+  // coordinates. Note, the window includes any decorations such as borders,
+  // scrollbars, URL bar, tab strip, etc. if they exist.
+  virtual gfx::Rect WindowRect() = 0;
+
+  // Called to get the view rect in screen coordinates. This is the actual
+  // content view area, i.e. doesn't include any window decorations.
+  virtual gfx::Rect ViewRect() = 0;
+
+  // Sets the screen rects (in screen coordinates).
+  virtual void SetScreenRects(const gfx::Rect& widget_screen_rect,
+                              const gfx::Rect& window_screen_rect) = 0;
+
+  // Returns the visible viewport size (in screen coorindates).
+  virtual gfx::Size VisibleViewportSizeInDIPs() = 0;
+
+  // Returns the emulator scale.
+  virtual float GetEmulatorScale() { return 1.0f; }
+
+  // Sets the pending window rects (in screen coordinates). This is used because
+  // the window rect is delivered asynchronously to the browser. Pass in nullptr
+  // to clear the pending window rect once the browser has acknowledged the
+  // request.
+  virtual void SetPendingWindowRect(const gfx::Rect* window_screen_rect) = 0;
 
 #if defined(OS_ANDROID)
   // Return the synchronous compositor registry.
   virtual SynchronousCompositorRegistry* GetSynchronousCompositorRegistry() = 0;
 #endif
+
+  virtual bool IsHidden() const = 0;
 
  protected:
   ~WebWidget() = default;

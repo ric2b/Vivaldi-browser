@@ -4,20 +4,30 @@
 
 #include "chrome/browser/nearby_sharing/nearby_notification_manager.h"
 
+#include "base/files/file_util.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/download/download_prefs.h"
+#include "chrome/browser/image_decoder/image_decoder.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
 #include "chrome/browser/nearby_sharing/logging/logging.h"
 #include "chrome/browser/nearby_sharing/nearby_sharing_service.h"
 #include "chrome/browser/notifications/notification_display_service.h"
+#include "chrome/browser/platform_util.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/download_manager.h"
+#include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_types.h"
@@ -185,6 +195,21 @@ gfx::Image GetImageFromShareTarget(const ShareTarget& share_target) {
   return gfx::Image();
 }
 
+NearbyNotificationManager::ReceivedContentType GetReceivedContentType(
+    const ShareTarget& share_target) {
+  if (!share_target.text_attachments.empty())
+    return NearbyNotificationManager::ReceivedContentType::kText;
+
+  if (share_target.file_attachments.size() != 1)
+    return NearbyNotificationManager::ReceivedContentType::kFiles;
+
+  const FileAttachment& file = share_target.file_attachments[0];
+  if (file.type() == sharing::mojom::FileMetadata::Type::kImage)
+    return NearbyNotificationManager::ReceivedContentType::kSingleImage;
+
+  return NearbyNotificationManager::ReceivedContentType::kFiles;
+}
+
 class ProgressNotificationDelegate : public NearbyNotificationDelegate {
  public:
   explicit ProgressNotificationDelegate(NearbyNotificationManager* manager)
@@ -253,6 +278,163 @@ class ConnectionRequestNotificationDelegate
   bool has_accept_button_;
 };
 
+class ReceivedImageDecoder : public ImageDecoder::ImageRequest {
+ public:
+  using ImageCallback = base::OnceCallback<void(const SkBitmap& decoded_image)>;
+
+  explicit ReceivedImageDecoder(ImageCallback callback)
+      : callback_(std::move(callback)) {}
+  ~ReceivedImageDecoder() override = default;
+
+  void DecodeImage(const base::Optional<base::FilePath>& image_path) {
+    if (!image_path) {
+      OnDecodeImageFailed();
+      return;
+    }
+
+    auto contents = std::make_unique<std::string>();
+    auto* contents_ptr = contents.get();
+
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock()},
+        base::BindOnce(&base::ReadFileToString, *image_path, contents_ptr),
+        base::BindOnce(&ReceivedImageDecoder::OnFileRead,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(contents)));
+  }
+
+  // ImageDecoder::ImageRequest implementation:
+  void OnImageDecoded(const SkBitmap& decoded_image) override {
+    std::move(callback_).Run(decoded_image);
+    delete this;
+  }
+
+  void OnDecodeImageFailed() override {
+    std::move(callback_).Run(SkBitmap());
+    delete this;
+  }
+
+ private:
+  void OnFileRead(std::unique_ptr<std::string> contents,
+                  bool is_contents_read) {
+    if (!is_contents_read || !contents || contents->empty()) {
+      NS_LOG(VERBOSE) << __func__ << ": Image contents not found.";
+      OnDecodeImageFailed();
+      return;
+    }
+
+    ImageDecoder::Start(this, *contents);
+  }
+
+  ImageCallback callback_;
+  base::WeakPtrFactory<ReceivedImageDecoder> weak_ptr_factory_{this};
+};
+
+class SuccessNotificationDelegate : public NearbyNotificationDelegate {
+ public:
+  SuccessNotificationDelegate(
+      NearbyNotificationManager* manager,
+      Profile* profile,
+      ShareTarget share_target,
+      NearbyNotificationManager::ReceivedContentType type,
+      const SkBitmap& image,
+      base::OnceCallback<
+          void(NearbyNotificationManager::SuccessNotificationAction)>
+          testing_callback)
+      : manager_(manager),
+        profile_(profile),
+        share_target_(std::move(share_target)),
+        type_(type),
+        image_(image),
+        testing_callback_(std::move(testing_callback)) {}
+  ~SuccessNotificationDelegate() override = default;
+
+  // NearbyNotificationDelegate:
+  void OnClick(const std::string& notification_id,
+               const base::Optional<int>& action_index) override {
+    // Ignore clicks on notification body.
+    if (!action_index)
+      return;
+
+    switch (type_) {
+      case NearbyNotificationManager::ReceivedContentType::kText:
+        DCHECK_EQ(0, *action_index);
+        CopyTextToClipboard();
+        break;
+      case NearbyNotificationManager::ReceivedContentType::kSingleImage:
+        switch (*action_index) {
+          case 0:
+            OpenDownloadsFolder();
+            break;
+          case 1:
+            CopyImageToClipboard();
+            break;
+          default:
+            NOTREACHED();
+            break;
+        }
+        break;
+      case NearbyNotificationManager::ReceivedContentType::kFiles:
+        DCHECK_EQ(0, *action_index);
+        OpenDownloadsFolder();
+        break;
+    }
+
+    manager_->CloseSuccessNotification();
+  }
+
+  void OnClose(const std::string& notification_id) override {
+    manager_->CloseSuccessNotification();
+  }
+
+ private:
+  void OpenDownloadsFolder() {
+    platform_util::OpenItem(
+        profile_,
+        DownloadPrefs::FromDownloadManager(
+            content::BrowserContext::GetDownloadManager(profile_))
+            ->DownloadPath(),
+        platform_util::OPEN_FOLDER, platform_util::OpenOperationCallback());
+
+    if (testing_callback_) {
+      std::move(testing_callback_)
+          .Run(NearbyNotificationManager::SuccessNotificationAction::
+                   kOpenDownloads);
+    }
+  }
+
+  void CopyTextToClipboard() {
+    DCHECK_GT(share_target_.text_attachments.size(), 0u);
+    const std::string& text = share_target_.text_attachments[0].text_body();
+    ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
+        .WriteText(base::UTF8ToUTF16(text));
+
+    if (testing_callback_) {
+      std::move(testing_callback_)
+          .Run(NearbyNotificationManager::SuccessNotificationAction::kCopyText);
+    }
+  }
+
+  void CopyImageToClipboard() {
+    DCHECK(!image_.isNull());
+    ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
+        .WriteImage(image_);
+
+    if (testing_callback_) {
+      std::move(testing_callback_)
+          .Run(
+              NearbyNotificationManager::SuccessNotificationAction::kCopyImage);
+    }
+  }
+
+  NearbyNotificationManager* manager_;
+  Profile* profile_;
+  ShareTarget share_target_;
+  NearbyNotificationManager::ReceivedContentType type_;
+  SkBitmap image_;
+  base::OnceCallback<void(NearbyNotificationManager::SuccessNotificationAction)>
+      testing_callback_;
+};
+
 class OnboardingNotificationDelegate : public NearbyNotificationDelegate {
  public:
   explicit OnboardingNotificationDelegate(NearbyNotificationManager* manager)
@@ -304,10 +486,12 @@ constexpr base::TimeDelta
 NearbyNotificationManager::NearbyNotificationManager(
     NotificationDisplayService* notification_display_service,
     NearbySharingService* nearby_service,
-    PrefService* pref_service)
+    PrefService* pref_service,
+    Profile* profile)
     : notification_display_service_(notification_display_service),
       nearby_service_(nearby_service),
-      pref_service_(pref_service) {
+      pref_service_(pref_service),
+      profile_(profile) {
   DCHECK(notification_display_service_);
   DCHECK(nearby_service_);
   DCHECK(pref_service_);
@@ -325,6 +509,12 @@ NearbyNotificationManager::~NearbyNotificationManager() {
 void NearbyNotificationManager::OnTransferUpdate(
     const ShareTarget& share_target,
     const TransferMetadata& transfer_metadata) {
+  NS_LOG(VERBOSE) << __func__ << ": Nearby notification manager: "
+                  << "Transfer update for share target with ID "
+                  << share_target.id << ": "
+                  << TransferMetadata::StatusToString(
+                         transfer_metadata.status());
+
   if (!share_target_)
     share_target_ = share_target;
   DCHECK_EQ(share_target_->id, share_target.id);
@@ -386,7 +576,7 @@ void NearbyNotificationManager::ShowProgress(
 
   // Show indeterminate progress while waiting for remote device to accept.
   if (transfer_metadata.status() == TransferMetadata::Status::kInProgress)
-    notification.set_progress(100.0 * transfer_metadata.progress());
+    notification.set_progress(transfer_metadata.progress());
   else
     notification.set_progress(-1);
 
@@ -461,12 +651,76 @@ void NearbyNotificationManager::ShowOnboarding() {
 void NearbyNotificationManager::ShowSuccess(const ShareTarget& share_target) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
+  if (!share_target.is_incoming) {
+    message_center::Notification notification =
+        CreateNearbyNotification(kNearbyNotificationId);
+    notification.set_title(GetSuccessNotificationTitle(share_target));
+
+    delegate_map_.erase(kNearbyNotificationId);
+
+    notification_display_service_->Display(
+        NotificationHandler::Type::NEARBY_SHARE, notification,
+        /*metadata=*/nullptr);
+    return;
+  }
+
+  ReceivedContentType type = GetReceivedContentType(share_target);
+
+  if (type != ReceivedContentType::kSingleImage) {
+    ShowIncomingSuccess(share_target, type, /*image=*/SkBitmap());
+    return;
+  }
+
+  // ReceivedContentType::kSingleImage means exactly one image file.
+  DCHECK_EQ(1u, share_target.file_attachments.size());
+
+  // ReceivedImageDecoder will delete itself.
+  auto* image_decoder = new ReceivedImageDecoder(
+      base::BindOnce(&NearbyNotificationManager::ShowIncomingSuccess,
+                     weak_ptr_factory_.GetWeakPtr(), share_target, type));
+  image_decoder->DecodeImage(share_target.file_attachments[0].file_path());
+}
+
+void NearbyNotificationManager::ShowIncomingSuccess(
+    const ShareTarget& share_target,
+    ReceivedContentType type,
+    const SkBitmap& image) {
   message_center::Notification notification =
       CreateNearbyNotification(kNearbyNotificationId);
   notification.set_title(GetSuccessNotificationTitle(share_target));
 
-  // TODO(crbug.com/1102348): Show content specific actions and preview images.
-  delegate_map_.erase(kNearbyNotificationId);
+  // Revert to generic file handling if image decoding failed.
+  if (type == ReceivedContentType::kSingleImage && image.isNull())
+    type = ReceivedContentType::kFiles;
+
+  if (!image.isNull()) {
+    notification.set_type(message_center::NOTIFICATION_TYPE_IMAGE);
+    notification.set_image(gfx::Image::CreateFrom1xBitmap(image));
+  }
+
+  std::vector<message_center::ButtonInfo> notification_actions;
+  switch (type) {
+    case ReceivedContentType::kText:
+      notification_actions.emplace_back(l10n_util::GetStringUTF16(
+          IDS_NEARBY_NOTIFICATION_ACTION_COPY_TO_CLIPBOARD));
+      break;
+    case ReceivedContentType::kSingleImage:
+      notification_actions.emplace_back(l10n_util::GetStringUTF16(
+          IDS_NEARBY_NOTIFICATION_ACTION_OPEN_FOLDER));
+      notification_actions.emplace_back(l10n_util::GetStringUTF16(
+          IDS_NEARBY_NOTIFICATION_ACTION_COPY_TO_CLIPBOARD));
+      break;
+    case ReceivedContentType::kFiles:
+      notification_actions.emplace_back(l10n_util::GetStringUTF16(
+          IDS_NEARBY_NOTIFICATION_ACTION_OPEN_FOLDER));
+      break;
+  }
+  notification.set_buttons(notification_actions);
+
+  delegate_map_[kNearbyNotificationId] =
+      std::make_unique<SuccessNotificationDelegate>(
+          this, profile_, share_target, type, image,
+          std::move(success_action_test_callback_));
 
   notification_display_service_->Display(
       NotificationHandler::Type::NEARBY_SHARE, notification,
@@ -532,4 +786,15 @@ void NearbyNotificationManager::OnOnboardingClicked() {
 void NearbyNotificationManager::OnOnboardingDismissed() {
   CloseOnboarding();
   UpdateOnboardingDismissedTime(pref_service_);
+}
+
+void NearbyNotificationManager::CloseSuccessNotification() {
+  delegate_map_.erase(kNearbyNotificationId);
+  notification_display_service_->Close(NotificationHandler::Type::NEARBY_SHARE,
+                                       kNearbyNotificationId);
+}
+
+void NearbyNotificationManager::SetOnSuccessClickedForTesting(
+    base::OnceCallback<void(SuccessNotificationAction)> callback) {
+  success_action_test_callback_ = std::move(callback);
 }

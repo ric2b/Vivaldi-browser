@@ -24,6 +24,7 @@ include_rules = [
   "+mojo/public/cpp/system",
   "+skia",
   "+third_party/khronos",
+  "+third_party/libyuv",
   "+third_party/skia",
   "+third_party/perfetto/protos/perfetto/trace/track_event",
   "+ui/latency",
@@ -34,6 +35,7 @@ include_rules = [
   "+ui/gl/gl_utils.h",
   "+ui/gl/gpu_switching_manager.h",
   "+ui/gl/gpu_switching_observer.h",
+  "+ui/gl/hdr_metadata.h",
   "+ui/gl/trace_util.h",
   "+gpu/ipc/common/vulkan_ycbcr_info.h",
   "+gpu/ipc/gpu_task_scheduler_helper.h",
@@ -66,5 +68,8 @@ specific_include_rules = {
   ],
   "delegated_ink_point_renderer\.*" : [
     "+mojo/public/cpp/bindings",
+  ],
+  "viz_pixel_test\.(cc|h)": [
+    "+components/viz/test",
   ],
 }

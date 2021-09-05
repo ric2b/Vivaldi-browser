@@ -43,7 +43,7 @@
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
-#include "third_party/blink/public/common/page/web_drag_operation.h"
+#include "third_party/blink/public/common/page/drag_operation.h"
 #include "third_party/blink/public/common/widget/device_emulation_params.h"
 #include "third_party/blink/public/common/widget/screen_info.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-shared.h"
@@ -53,18 +53,12 @@
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_text_input_type.h"
 #include "third_party/blink/public/platform/web_touch_action.h"
-#include "third_party/blink/public/web/web_meaningful_layout.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
 
 class SkBitmap;
 
-namespace cc {
-class PaintImage;
-}
-
 namespace gfx {
 class Point;
-class PointF;
 }
 
 namespace ui {
@@ -73,11 +67,8 @@ struct ImeTextSpan;
 }
 
 namespace blink {
-struct VisualProperties;
 class WebDragData;
 class WebMouseEvent;
-class WebGestureEvent;
-struct WebFloatRect;
 class WebWidget;
 class WebLocalFrame;
 class WebString;
@@ -97,11 +88,6 @@ class WebWidgetClient {
   // will unconditionally ensure that the compositor is actually run.
   virtual void ScheduleAnimationForWebTests() {}
 
-  // Called immediately following the first compositor-driven (frame-generating)
-  // layout that happened after an interesting document lifecyle change (see
-  // WebMeaningfulLayout for details.)
-  virtual void DidMeaningfulLayout(WebMeaningfulLayout) {}
-
   // Called when some JS code has instructed the window associated to the main
   // frame to close, which will result in a request to the browser to close the
   // RenderWidget associated to it
@@ -113,22 +99,10 @@ class WebWidgetClient {
   // Called to show the widget according to the given policy.
   virtual void Show(WebNavigationPolicy) {}
 
-  // Returns original (non-emulated) information about the screen where this
-  // view's widgets are being displayed.
-  virtual ScreenInfo GetOriginalScreenInfo() { return {}; }
-
-  // Called to get/set the position of the widget's window in screen
+  // Called to set the position of the widget's window in screen
   // coordinates. Note, the window includes any decorations such as borders,
   // scrollbars, URL bar, tab strip, etc. if they exist.
-  virtual WebRect WindowRect() { return WebRect(); }
-  virtual void SetWindowRect(const WebRect&) {}
-
-  // Called to get the view rect in screen coordinates. This is the actual
-  // content view area, i.e. doesn't include any window decorations.
-  virtual WebRect ViewRect() { return WebRect(); }
-
-  // Set the size of the widget.
-  virtual void SetSize(const gfx::Size&) {}
+  virtual void SetWindowRect(const gfx::Rect&) {}
 
   // Requests to lock the mouse cursor for the |requester_frame| in the
   // widget. If true is returned, the success result will be asynchronously
@@ -157,46 +131,14 @@ class WebWidgetClient {
   // Returns true iff the pointer is locked to this widget.
   virtual bool IsPointerLocked() { return false; }
 
-  // Converts the |rect| from Blink's Viewport coordinates to the
-  // coordinates in the native window used to display the content, in
-  // DIP.  They're identical in tradional world, but will differ when
-  // use-zoom-for-dsf feature is eanbled, and Viewport coordinates
-  // becomes DSF times larger than window coordinates.
-  // TODO(oshima): Update the comment when the migration is completed.
-  virtual void ConvertViewportToWindow(WebRect* rect) {}
-
-  // Converts the |rect| from Blink's Viewport coordinates to the
-  // coordinates in the native window used to display the content, in
-  // DIP.  They're identical in tradional world, but will differ when
-  // use-zoom-for-dsf feature is eanbled, and Viewport coordinates
-  // becomes DSF times larger than window coordinates.
-  // TODO(oshima): Update the comment when the migration is completed.
-  virtual void ConvertViewportToWindow(WebFloatRect* rect) {}
-
-  // Converts the |rect| from the coordinates in native window in
-  // DIP to Blink's Viewport coordinates. They're identical in
-  // tradional world, but will differ when use-zoom-for-dsf feature
-  // is eanbled.  TODO(oshima): Update the comment when the
-  // migration is completed.
-  virtual void ConvertWindowToViewport(WebFloatRect* rect) {}
-  virtual gfx::Point ConvertWindowPointToViewport(const gfx::Point& point) {
-    return point;
+  // Called when a drag-and-drop operation should begin. Returns whether the
+  // call has been handled.
+  virtual bool InterceptStartDragging(const WebDragData&,
+                                      DragOperationsMask,
+                                      const SkBitmap& drag_image,
+                                      const gfx::Point& drag_image_offset) {
+    return false;
   }
-  virtual gfx::PointF ConvertWindowPointToViewport(const gfx::PointF& point) {
-    return point;
-  }
-
-  // Called when a drag-and-drop operation should begin.
-  virtual void StartDragging(const WebDragData&,
-                             WebDragOperationsMask,
-                             const SkBitmap& drag_image,
-                             const gfx::Point& drag_image_offset) {}
-
-  // Requests an image decode and will have the |callback| run asynchronously
-  // when it completes. Forces a new main frame to occur that will trigger
-  // pushing the decode through the compositor.
-  virtual void RequestDecode(const cc::PaintImage& image,
-                             base::OnceCallback<void(bool)> callback) {}
 
   using LayerTreeFrameSinkCallback = base::OnceCallback<void(
       std::unique_ptr<cc::LayerTreeFrameSink>,
@@ -219,10 +161,6 @@ class WebWidgetClient {
   // perform actual painting work.
   virtual void WillBeginMainFrame() {}
 
-  // Notification that the BeginMainFrame completed, was committed into the
-  // compositor (thread) and submitted to the display compositor.
-  virtual void DidCommitAndDrawCompositorFrame() {}
-
   // Notification that page scale animation was changed.
   virtual void DidCompletePageScaleAnimation() {}
 
@@ -238,23 +176,6 @@ class WebWidgetClient {
   // Record the time it took for the first paint after the widget transitioned
   // from background inactive to active.
   virtual void RecordTimeToFirstActivePaint(base::TimeDelta duration) {}
-
-  // Returns a scale of the device emulator from the widget.
-  virtual float GetEmulatorScale() const { return 1.0f; }
-
-  // Returns whether we handled a GestureScrollEvent.
-  virtual void DidHandleGestureScrollEvent(
-      const WebGestureEvent& gesture_event,
-      const gfx::Vector2dF& unused_delta,
-      const cc::OverscrollBehavior& overscroll_behavior,
-      bool event_processed) {}
-
-  // Called before gesture events are processed and allows the
-  // client to handle the event itself. Return true if event was handled
-  // and further processing should stop.
-  virtual bool WillHandleGestureEvent(const WebGestureEvent& event) {
-    return false;
-  }
 
   // Called before mouse events are processed and allows the
   // client to handle the event itself. Return true if event was handled
@@ -275,12 +196,8 @@ class WebWidgetClient {
     return WebTextInputType::kWebTextInputTypeNone;
   }
 
-  // Returns the current pepper caret bounds in window coordinates.
+  // Returns the current pepper caret bounds in blink/viewport coordinates.
   virtual gfx::Rect GetPepperCaretBounds() { return gfx::Rect(); }
-
-  // The state of the focus has changed for the WebWidget. |enabled|
-  // is the new state.
-  virtual void FocusChanged(bool enabled) {}
 
   // Set the composition in pepper.
   virtual void ImeSetCompositionForPepper(
@@ -303,17 +220,9 @@ class WebWidgetClient {
   // Called to indicate a syntehtic event was queued.
   virtual void WillQueueSyntheticEvent(const WebCoalescedInputEvent& event) {}
 
-  // Apply the visual properties to the widget.
-  virtual void UpdateVisualProperties(
-      const VisualProperties& visual_properties) {}
-
-  // Apply the updated screen rects.
-  virtual void UpdateScreenRects(const gfx::Rect& widget_screen_rect,
-                                 const gfx::Rect& window_screen_rect) {}
-
-  // Device emulation control.
-  virtual void EnableDeviceEmulation(const DeviceEmulationParams& parameters) {}
-  virtual void DisableDeviceEmulation() {}
+  // Whether compositing to LCD text should be auto determined. This can be
+  // overridden by tests to disable this.
+  virtual bool ShouldAutoDetermineCompositingToLCDTextSetting() { return true; }
 };
 
 }  // namespace blink

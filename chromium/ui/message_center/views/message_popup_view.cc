@@ -39,7 +39,7 @@ MessagePopupView::MessagePopupView(const Notification& notification,
   if (!message_view_->IsManuallyExpandedOrCollapsed())
     message_view_->SetExpanded(message_view_->IsAutoExpandingAllowed());
   AddChildView(message_view_);
-  set_notify_enter_exit_on_child(true);
+  SetNotifyEnterExitOnChild(true);
 }
 
 MessagePopupView::MessagePopupView(MessagePopupCollection* popup_collection)
@@ -64,8 +64,17 @@ void MessagePopupView::UpdateContents(const Notification& notification) {
           .should_make_spoken_feedback_for_popup_updates) {
     ui::AXNodeData new_data;
     message_view_->GetAccessibleNodeData(&new_data);
-    if (old_data.GetStringAttribute(ax::mojom::StringAttribute::kName) !=
-        new_data.GetStringAttribute(ax::mojom::StringAttribute::kName))
+
+    const std::string& new_name =
+        new_data.GetStringAttribute(ax::mojom::StringAttribute::kName);
+    const std::string& old_name =
+        old_data.GetStringAttribute(ax::mojom::StringAttribute::kName);
+    if (new_name.empty()) {
+      new_data.SetNameFrom(ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
+      return;
+    }
+
+    if (old_name != new_name)
       NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
   }
 }

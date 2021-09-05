@@ -4,10 +4,10 @@
 
 #include "content/browser/media/session/media_session_controller.h"
 
-#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/media/media_devices_util.h"
 #include "content/browser/media/media_web_contents_observer.h"
 #include "content/browser/media/session/media_session_impl.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/common/media/media_player_delegate_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/media_device_id.h"
@@ -43,6 +43,7 @@ void MediaSessionController::SetMetadata(
 }
 
 bool MediaSessionController::OnPlaybackStarted() {
+  is_paused_ = false;
   is_playback_in_progress_ = true;
   return AddOrRemovePlayer();
 }
@@ -132,6 +133,8 @@ bool MediaSessionController::IsPictureInPictureAvailable(int player_id) const {
 }
 
 void MediaSessionController::OnPlaybackPaused(bool reached_end_of_stream) {
+  is_paused_ = true;
+
   if (reached_end_of_stream) {
     is_playback_in_progress_ = false;
     AddOrRemovePlayer();
@@ -170,6 +173,11 @@ void MediaSessionController::OnAudioOutputSinkChanged(
   media_session_->OnAudioOutputSinkIdChanged();
 }
 
+void MediaSessionController::OnAudioOutputSinkChangingDisabled() {
+  supports_audio_output_device_switching_ = false;
+  media_session_->OnAudioOutputSinkChangingDisabled();
+}
+
 bool MediaSessionController::IsMediaSessionNeeded() const {
   if (!is_playback_in_progress_)
     return false;
@@ -192,6 +200,12 @@ bool MediaSessionController::AddOrRemovePlayer() {
       OnSuspend(player_id_);
       return false;
     }
+
+    // Need to synchronise paused/playing state in case we're adding the player
+    // because of entering Picture-In-Picture.
+    if (is_paused_)
+      media_session_->OnPlayerPaused(this, player_id_);
+
     return true;
   }
 
@@ -207,6 +221,12 @@ bool MediaSessionController::HasVideo(int player_id) const {
 std::string MediaSessionController::GetAudioOutputSinkId(int player_id) const {
   DCHECK_EQ(player_id_, player_id);
   return audio_output_sink_id_;
+}
+
+bool MediaSessionController::SupportsAudioOutputDeviceSwitching(
+    int player_id) const {
+  DCHECK_EQ(player_id_, player_id);
+  return supports_audio_output_device_switching_;
 }
 
 }  // namespace content

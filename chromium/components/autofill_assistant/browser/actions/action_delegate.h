@@ -102,8 +102,8 @@ class ActionDelegate {
 
   // Click or tap the |element|.
   virtual void ClickOrTapElement(
-      const ElementFinder::Result& element,
       ClickType click_type,
+      const ElementFinder::Result& element,
       base::OnceCallback<void(const ClientStatus&)> callback) = 0;
 
   // Wait for the |element|'s document to become interactive.
@@ -192,12 +192,11 @@ class ActionDelegate {
                               const autofill::FormData&,
                               const autofill::FormFieldData&)> callback) = 0;
 
-  // Select the option given by |selector| and the value of the option to be
-  // picked.
+  // Select the option to be picked given by the |value| in the |element|.
   virtual void SelectOption(
-      const Selector& selector,
       const std::string& value,
       DropdownSelectStrategy select_strategy,
+      const ElementFinder::Result& element,
       base::OnceCallback<void(const ClientStatus&)> callback) = 0;
 
   // Focus on element given by |selector|. |top_padding| specifies the padding
@@ -232,25 +231,25 @@ class ActionDelegate {
   // clicking the field and then simulating key presses, otherwise the `value`
   // attribute will be set directly.
   virtual void SetFieldValue(
-      const ElementFinder::Result& element,
       const std::string& value,
       KeyboardValueFillStrategy fill_strategy,
       int key_press_delay_in_millisecond,
+      const ElementFinder::Result& element,
       base::OnceCallback<void(const ClientStatus&)> callback) = 0;
 
-  // Set the |value| of the |attribute| of the element given by |selector|.
+  // Set the |value| of all the |attributes| of the |element|.
   virtual void SetAttribute(
-      const Selector& selector,
-      const std::vector<std::string>& attribute,
+      const std::vector<std::string>& attributes,
       const std::string& value,
+      const ElementFinder::Result& element,
       base::OnceCallback<void(const ClientStatus&)> callback) = 0;
 
   // Sets the keyboard focus to |element| and inputs the specified codepoints.
   // Returns the result through |callback|.
   virtual void SendKeyboardInput(
-      const ElementFinder::Result& element,
       const std::vector<UChar32>& codepoints,
       int key_press_delay_in_millisecond,
+      const ElementFinder::Result& element,
       base::OnceCallback<void(const ClientStatus&)> callback) = 0;
 
   // Return the outerHTML of an element given by |selector|.
@@ -259,9 +258,10 @@ class ActionDelegate {
       base::OnceCallback<void(const ClientStatus&, const std::string&)>
           callback) = 0;
 
-  // Return the tag of the element given by |selector|.
+  // Return the tag of the |element|. In case of an error, returns an empty
+  // string.
   virtual void GetElementTag(
-      const Selector& selector,
+      const ElementFinder::Result& element,
       base::OnceCallback<void(const ClientStatus&, const std::string&)>
           callback) = 0;
 
@@ -336,10 +336,15 @@ class ActionDelegate {
   // Sets or updates info box.
   virtual void SetInfoBox(const InfoBox& infoBox) = 0;
 
-  // Show the progress bar and set it at |progress|%.
+  // Set the progress bar at |progress|%.
   virtual void SetProgress(int progress) = 0;
 
-  // Show the progress bar and set the |active_step| to active.
+  // Set the progress bar at the |active_step| linked to the given
+  // |active_step_identifier|.
+  virtual bool SetProgressActiveStepIdentifier(
+      const std::string& active_step_identifier) = 0;
+
+  // Set the progress bar at the |active_step|.
   virtual void SetProgressActiveStep(int active_step) = 0;
 
   // Shows the progress bar when |visible| is true. Hides it when false.
@@ -419,6 +424,8 @@ class ActionDelegate {
   // Sets the OverlayBehavior.
   virtual void SetOverlayBehavior(
       ConfigureUiStateProto::OverlayBehavior overlay_behavior) = 0;
+
+  virtual base::WeakPtr<ActionDelegate> GetWeakPtr() = 0;
 
  protected:
   ActionDelegate() = default;

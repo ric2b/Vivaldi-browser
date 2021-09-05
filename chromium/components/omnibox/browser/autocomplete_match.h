@@ -106,6 +106,15 @@ struct AutocompleteMatch {
     int style;
   };
 
+  // NavsuggestTiles are used specifically with TILE_NAVSUGGEST matches.
+  // This structure should describe only the specific details for individual
+  // tiles; all other properties are considered as shared and should be
+  // extracted from the encompassing AutocompleteMatch object.
+  struct NavsuggestTile {
+    GURL url;
+    base::string16 title;
+  };
+
   typedef std::vector<ACMatchClassification> ACMatchClassifications;
 
   // Type used by providers to attach additional, optional information to
@@ -352,6 +361,8 @@ struct AutocompleteMatch {
   // Adds optional information to the |additional_info| dictionary.
   void RecordAdditionalInfo(const std::string& property,
                             const std::string& value);
+  void RecordAdditionalInfo(const std::string& property,
+                            const base::string16& value);
   void RecordAdditionalInfo(const std::string& property, int value);
   void RecordAdditionalInfo(const std::string& property, base::Time value);
 
@@ -428,12 +439,6 @@ struct AutocompleteMatch {
   // relevance score, this match's own relevance score will be upgraded.
   void UpgradeMatchWithPropertiesFrom(AutocompleteMatch& duplicate_match);
 
-  // Called for navigation suggestions whose URLs cannot be inline autocompleted
-  // (e.g. because the input is not a prefix of the URL), to check if |title|
-  // can be inline autocompleted instead.
-  void TryAutocompleteWithTitle(const base::string16& title,
-                                const AutocompleteInput& input);
-
   // Tries, in order, to:
   // - Prefix autocomplete |primary_text|,
   // - Prefix autocomplete |secondary_text|,
@@ -441,13 +446,17 @@ struct AutocompleteMatch {
   // - Non-prefix autocomplete |secondary_text|.
   // Midword and title autocompletion are only attempted if
   // |OmniboxFieldTrial::RichAutocompletionAutocompleteTitles()| and
-  // |OmniboxFieldTrial::RichAutocompletionAutocompleteNonPrefix()| are true
+  // |OmniboxFieldTrial::RichAutocompletionAutocompleteNonPrefix*()| are true
   // respectively.
   // Returns false if none of the autocompletions were appropriate (or the
   // features were disabled).
   bool TryRichAutocompletion(const base::string16& primary_text,
                              const base::string16& secondary_text,
-                             const AutocompleteInput& input);
+                             const AutocompleteInput& input,
+                             bool shortcut_provider = false);
+
+  // True if both |inline_autocompletion| & |prefix_autocompletion| are empty.
+  bool IsEmptyAutocompletion() const;
 
   // The provider of this match, used to remember which provider the user had
   // selected when the input changes. This may be NULL, in which case there is
@@ -458,9 +467,6 @@ struct AutocompleteMatch {
   // returned by various providers. This is used to rank matches among all
   // responding providers, so different providers must be carefully tuned to
   // supply matches with appropriate relevance.
-  //
-  // TODO(pkasting): http://b/1111299 This should be calculated algorithmically,
-  // rather than being a fairly fixed value defined by the table above.
   int relevance = 0;
 
   // How many times this result was typed in / selected from the omnibox.
@@ -481,13 +487,22 @@ struct AutocompleteMatch {
   // |fill_into_edit|. Always empty if kRichAutocompletionShowTitlesParam is
   // disabled.
   base::string16 fill_into_edit_additional_text;
+  // When rich autocompleting titles, |fill_into_edit| &
+  // |fill_into_edit_additional_text| are swapped (i.e. the former contains the
+  // title, and the latter contains the URL). This is consistent with how the
+  // suggestion should be displayed. But the shortcut DB must persist the
+  // original (i.e. URL) |fill_into_edit|; otherwise the shortcut provider may
+  // autocomplete the title even when title autocompletion is inappropriate
+  // (e.g. because the input is too short). Therefore, |swapped_fill_into_edit|
+  // is set to true when rich autocompleting titles.
+  bool swapped_fill_into_edit = false;
 
   // The inline autocompletion to display after the user's input in the
   // omnibox, if this match becomes the default match.  It may be empty.
   base::string16 inline_autocompletion;
   // The inline autocompletion to display before the user's input in the
   // omnibox, if this match becomes the default match. Always empty if
-  // kRichAutocompletionAutocompleteNonPrefix is disabled.
+  // non-prefix autocompletion is disabled.
   base::string16 prefix_autocompletion;
 
   // If false, the omnibox should prevent this match from being the
@@ -500,15 +515,6 @@ struct AutocompleteMatch {
   // and a navigation to "foo/" (an intranet host) or search for "foo"
   // should set this flag.
   bool allowed_to_be_default_match = false;
-
-  // Set by |TryAutocompleteWithTitle|. If |type| is navigational, then this
-  // field indicates |fill_into_edit| is not the URL but instead looks like
-  // search terms (e.g. `title - URL`). If |type| is non-navigational, then this
-  // is true regardless; i.e., |fill_into_edit| is not a URL. This allows
-  // callees of AutocompleteClassifier::Classify, such as
-  // OmniboxEditModel::AdjustTextForCopy, to treat such navigational matches
-  // differently than typical navigational matches with URL text.
-  bool is_navigational_title_match = false;
 
   // The URL to actually load when the autocomplete item is selected. This URL
   // should be canonical so we can compare URLs with strcmp to avoid dupes.
@@ -644,6 +650,10 @@ struct AutocompleteMatch {
 
   // A list of query tiles to be shown as part of this match.
   std::vector<query_tiles::Tile> query_tiles;
+
+  // A list of navsuggest tiles to be shown as part of this match.
+  // This object is only populated for TILE_NAVSUGGEST AutocompleteMatches.
+  std::vector<NavsuggestTile> navsuggest_tiles;
 
   // So users of AutocompleteMatch can use the same ellipsis that it uses.
   static const char kEllipsis[];

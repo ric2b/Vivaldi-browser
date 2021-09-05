@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_test.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
+#include "third_party/blink/renderer/core/paint/paint_layer.h"
 
 using testing::ElementsAre;
 
@@ -106,15 +107,14 @@ TEST_F(NGFragmentItemTest, CopyMove) {
   EXPECT_NE(line_item->LineBoxFragment(), nullptr);
   NGFragmentItem copy_of_line(*line_item);
   EXPECT_EQ(copy_of_line.LineBoxFragment(), line_item->LineBoxFragment());
-  // Ink overflow is not copied for line items. See |NGFragmentItem| copy ctor.
-  EXPECT_FALSE(copy_of_line.IsInkOverflowComputed());
+  EXPECT_TRUE(copy_of_line.IsInkOverflowComputed());
 
   // Test moving a line item.
   NGFragmentItem move_of_line(std::move(copy_of_line));
   EXPECT_EQ(move_of_line.LineBoxFragment(), line_item->LineBoxFragment());
   // After the move, the source fragment should be released.
   EXPECT_EQ(copy_of_line.LineBoxFragment(), nullptr);
-  EXPECT_FALSE(move_of_line.IsInkOverflowComputed());
+  EXPECT_TRUE(move_of_line.IsInkOverflowComputed());
 
   // To test moving ink overflow, add an ink overflow to |move_of_line|.
   PhysicalRect not_small_ink_overflow_rect(0, 0, 5000, 100);
@@ -344,6 +344,35 @@ TEST_F(NGFragmentItemTest, CulledInlineBox) {
   Vector<const NGFragmentItem*> items_for_span2 = ItemsForAsVector(*span2);
   EXPECT_EQ(items_for_span2.size(), 0u);
   EXPECT_EQ(IntRect(0, 20, 80, 10), span2->AbsoluteBoundingBoxRect());
+}
+
+TEST_F(NGFragmentItemTest, SelfPaintingInlineBox) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+    #self_painting_inline_box {
+      opacity: .2;
+    }
+    </style>
+    <div>
+      <span id="self_painting_inline_box">self painting inline box</span>
+    </div>
+  )HTML");
+
+  // Invalidate the ink overflow of a child in `#self_painting_inline_box`.
+  auto* self_painting_inline_box =
+      ToLayoutInline(GetLayoutObjectByElementId("self_painting_inline_box"));
+  ASSERT_TRUE(self_painting_inline_box->HasSelfPaintingLayer());
+  auto* text = ToLayoutText(self_painting_inline_box->FirstChild());
+  text->InvalidateVisualOverflow();
+
+  // Mark the |PaintLayer| to need to recalc visual overflow.
+  self_painting_inline_box->Layer()->SetNeedsVisualOverflowRecalc();
+  RunDocumentLifecycle();
+
+  // Test if it recalculated the ink overflow.
+  NGInlineCursor cursor;
+  for (cursor.MoveTo(*text); cursor; cursor.MoveToNextForSameLayoutObject())
+    EXPECT_TRUE(cursor.Current()->IsInkOverflowComputed());
 }
 
 // Various nodes/elements to test insertions.

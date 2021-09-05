@@ -12,9 +12,9 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/child/child_process.h"
-#include "content/renderer/media/audio/audio_output_ipc_factory.h"
 #include "content/renderer/pepper/audio_helper.h"
 #include "ppapi/shared_impl/ppb_audio_config_shared.h"
+#include "third_party/blink/public/web/modules/media/audio/web_audio_output_ipc_factory.h"
 
 namespace content {
 
@@ -22,7 +22,7 @@ namespace content {
 PepperPlatformAudioOutput* PepperPlatformAudioOutput::Create(
     int sample_rate,
     int frames_per_buffer,
-    const base::UnguessableToken& source_frame_token,
+    const blink::LocalFrameToken& source_frame_token,
     AudioHelper* client) {
   scoped_refptr<PepperPlatformAudioOutput> audio_output(
       new PepperPlatformAudioOutput());
@@ -131,12 +131,13 @@ PepperPlatformAudioOutput::PepperPlatformAudioOutput()
 bool PepperPlatformAudioOutput::Initialize(
     int sample_rate,
     int frames_per_buffer,
-    const base::UnguessableToken& source_frame_token,
+    const blink::LocalFrameToken& source_frame_token,
     AudioHelper* client) {
   DCHECK(client);
   client_ = client;
 
-  ipc_ = AudioOutputIPCFactory::get()->CreateAudioOutputIPC(source_frame_token);
+  ipc_ = blink::WebAudioOutputIPCFactory::GetInstance().CreateAudioOutputIPC(
+      source_frame_token);
   CHECK(ipc_);
 
   media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,

@@ -268,6 +268,13 @@ a rotation of 180 degrees in mp4 meta data.
 Actual video frames are the same as four-colors.mp4, except it specifies
 a rotation of 270 degrees in mp4 meta data.
 
+#### four-colors-incompatible-stride.y4m
+A 962x540 raw YUV single frame video with 4 color blocks (Y,R,G,B) and a GL
+incompatible stride. Converted from four-colors.mp4 using ffmpeg:
+```
+ffmpeg -i four-colors.mp4 -vf "scale=w=962:h=540,format=yuv420p" -frames:v 1 four-colors-incompatible-stride.y4m
+```
+
 #### four-colors-vp9.webm
 A 960x540 vp9 video with 4 color blocks (Y,R,G,B) in every frame. This is
 converted from four-colors.mp4 by ffmpeg.
@@ -683,6 +690,16 @@ JSON file that contains all metadata related to test-25fps.vp9_2, used by the
 video_decode_accelerator_tests. This includes the video codec, resolution and
 md5 checksums of individual video frames when converted to the I420 format.
 
+#### test-25fps.av1.ivf:
+The av1 video whose content is the same as test-25fps.h264.
+```
+ffmpeg -i test-25fps.h264 -vcodec libaom-av1 test-25fps.av1.ivf
+```
+
+#### test-25fps.av1.ivf.json:
+JSON file that contains all metadata related to test-25fps.av1.ivf, used by the
+video\_decode\_accelerator\_tests. This includes the video codec, resolution and
+md5 checksums of individual video frames when converted to the I420 format.
 
 ### VP9 video with raw vp9 frames
 

@@ -4,7 +4,6 @@
 
 // Include test fixture.
 GEN_INCLUDE(['../testing/chromevox_next_e2e_test_base.js']);
-GEN_INCLUDE(['../testing/mock_feedback.js']);
 
 /**
  * Test fixture for LocaleOutputHelper.
@@ -42,28 +41,6 @@ ChromeVoxLocaleOutputHelperTest = class extends ChromeVoxNextE2ETest {
         {'lang': 'es-ES'}, {'lang': 'it-IT'}, {'lang': 'ja-JP'},
         {'lang': 'ko-KR'}, {'lang': 'zh-TW'}, {'lang': 'ast'}, {'lang': 'pt'}
       ]);
-    };
-  }
-
-  /**
-   * @return {!MockFeedback}
-   */
-  createMockFeedback() {
-    const mockFeedback =
-        new MockFeedback(this.newCallback(), this.newCallback.bind(this));
-
-    mockFeedback.install();
-    return mockFeedback;
-  }
-
-  /**
-   * Create a function which performs the command |cmd|.
-   * @param {string} cmd
-   * @return {function(): void}
-   */
-  doCmd(cmd) {
-    return function() {
-      CommandHandler.onCommand(cmd);
     };
   }
 

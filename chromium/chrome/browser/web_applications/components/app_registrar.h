@@ -18,6 +18,9 @@
 
 class GURL;
 class Profile;
+namespace apps {
+struct ShareTarget;
+}
 namespace base {
 class Time;
 }
@@ -89,7 +92,14 @@ class AppRegistrar {
       const AppId& app_id) const = 0;
   virtual base::Optional<SkColor> GetAppBackgroundColor(
       const AppId& app_id) const = 0;
-  virtual const GURL& GetAppLaunchURL(const AppId& app_id) const = 0;
+  virtual const GURL& GetAppStartUrl(const AppId& app_id) const = 0;
+  virtual const std::string* GetAppLaunchQueryParams(
+      const AppId& app_id) const = 0;
+  virtual const apps::ShareTarget* GetAppShareTarget(
+      const AppId& app_id) const = 0;
+
+  // Returns the start_url with launch_query_params appended to the end if any.
+  GURL GetAppLaunchUrl(const AppId& app_id) const;
 
   // TODO(crbug.com/910016): Replace uses of this with GetAppScope().
   virtual base::Optional<GURL> GetAppScopeInternal(
@@ -109,7 +119,7 @@ class AppRegistrar {
       const AppId& app_id) const = 0;
 
   // Represents which icon sizes we successfully downloaded from the IconInfos.
-  virtual std::vector<SquareSizePx> GetAppDownloadedIconSizesAny(
+  virtual SortedSizesPx GetAppDownloadedIconSizesAny(
       const AppId& app_id) const = 0;
 
   // Returns the "shortcuts" field from the app manifest, use |AppIconManager|

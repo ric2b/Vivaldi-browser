@@ -56,7 +56,6 @@ class WebAppUninstallDialogDelegateView : public views::DialogDelegateView {
   // views::WidgetDelegate:
   ui::ModalType GetModalType() const override;
   gfx::ImageSkia GetWindowIcon() override;
-  bool ShouldShowWindowIcon() const override;
 
   // Uninstalls the web app. Returns true on success.
   bool Uninstall();
@@ -72,8 +71,8 @@ class WebAppUninstallDialogDelegateView : public views::DialogDelegateView {
 
   // The web app we are showing the dialog for.
   const web_app::AppId app_id_;
-  // The dialog needs launch_url copy even if app gets uninstalled.
-  GURL app_launch_url_;
+  // The dialog needs start_url copy even if app gets uninstalled.
+  GURL app_start_url_;
 
   Profile* const profile_;
 };

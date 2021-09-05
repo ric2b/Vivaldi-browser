@@ -7,10 +7,10 @@
 #include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
-#include "build/build_config.h"
 #include "content/browser/font_access/font_enumeration_cache.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/permissions/permission_controller_impl.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/test/mock_permission_manager.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/test_render_frame_host.h"
@@ -18,6 +18,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/font_access/font_enumeration_table.pb.h"
+#include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "url/gurl.h"
@@ -48,13 +49,26 @@ class TestPermissionManager : public MockPermissionManager {
     return 0;
   }
 
+  blink::mojom::PermissionStatus GetPermissionStatusForFrame(
+      PermissionType permission,
+      RenderFrameHost* render_frame_host,
+      const GURL& requesting_origin) override {
+    return permission_status_for_frame_;
+  }
+
   void SetRequestCallback(
       base::RepeatingCallback<void(PermissionCallback)> request_callback) {
     request_callback_ = std::move(request_callback);
   }
 
+  void SetPermissionStatusForFrame(blink::mojom::PermissionStatus status) {
+    permission_status_for_frame_ = status;
+  }
+
  private:
   base::RepeatingCallback<void(PermissionCallback)> request_callback_;
+  blink::mojom::PermissionStatus permission_status_for_frame_ =
+      blink::mojom::PermissionStatus::ASK;
 };
 
 }  // namespace
@@ -66,10 +80,8 @@ class FontAccessManagerImplTest : public RenderViewHostImplTestHarness {
   }
 
   void SetUp() override {
-#if !defined(OS_MAC)
     FontEnumerationCache* instance = FontEnumerationCache::GetInstance();
     instance->ResetStateForTesting();
-#endif
 
     RenderViewHostImplTestHarness::SetUp();
     NavigateAndCommit(kTestUrl);
@@ -106,6 +118,8 @@ class FontAccessManagerImplTest : public RenderViewHostImplTestHarness {
         base::BindRepeating([](PermissionCallback callback) {
           std::move(callback).Run(blink::mojom::PermissionStatus::GRANTED);
         }));
+    test_permission_manager()->SetPermissionStatusForFrame(
+        blink::mojom::PermissionStatus::GRANTED);
   }
 
   void AutoDenyPermission() {
@@ -113,13 +127,38 @@ class FontAccessManagerImplTest : public RenderViewHostImplTestHarness {
         base::BindRepeating([](PermissionCallback callback) {
           std::move(callback).Run(blink::mojom::PermissionStatus::DENIED);
         }));
+    test_permission_manager()->SetPermissionStatusForFrame(
+        blink::mojom::PermissionStatus::DENIED);
+  }
+
+  void AskGrantPermission() {
+    test_permission_manager()->SetPermissionStatusForFrame(
+        blink::mojom::PermissionStatus::ASK);
+    test_permission_manager()->SetRequestCallback(
+        base::BindRepeating([](PermissionCallback callback) {
+          std::move(callback).Run(blink::mojom::PermissionStatus::GRANTED);
+        }));
+  }
+
+  void AskDenyPermission() {
+    test_permission_manager()->SetPermissionStatusForFrame(
+        blink::mojom::PermissionStatus::ASK);
+    test_permission_manager()->SetRequestCallback(
+        base::BindRepeating([](PermissionCallback callback) {
+          std::move(callback).Run(blink::mojom::PermissionStatus::DENIED);
+        }));
+  }
+
+  void SetFrameHidden() {
+    static_cast<RenderFrameHostImpl*>(main_rfh())
+        ->VisibilityChanged(blink::mojom::FrameVisibility::kNotRendered);
   }
 
   void SimulateUserActivation() {
     static_cast<RenderFrameHostImpl*>(main_rfh())
         ->UpdateUserActivationState(
             blink::mojom::UserActivationUpdateType::kNotifyActivation,
-            blink::mojom::UserActivationNotificationType::kInteraction);
+            blink::mojom::UserActivationNotificationType::kTest);
   }
 
  protected:
@@ -133,46 +172,7 @@ class FontAccessManagerImplTest : public RenderViewHostImplTestHarness {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-#if defined(OS_MAC)
-TEST_F(FontAccessManagerImplTest, NoUserActivationPermissionDenied) {
-  ASSERT_TRUE(manager_remote_.is_bound() && manager_remote_.is_connected());
-  AutoGrantPermission();
-
-  base::RunLoop loop;
-  bool permission_requested = false;
-  manager_remote_->RequestPermission(
-      base::BindLambdaForTesting([&](blink::mojom::PermissionStatus status) {
-        permission_requested = true;
-        EXPECT_EQ(blink::mojom::PermissionStatus::DENIED, status)
-            << "No user activation yields a permission denied status";
-        loop.Quit();
-      }));
-
-  loop.Run();
-  EXPECT_TRUE(permission_requested) << "Permission has been requested";
-}
-
-TEST_F(FontAccessManagerImplTest, UserActivationPermissionManagerTriggered) {
-  ASSERT_TRUE(manager_remote_.is_bound() && manager_remote_.is_connected());
-  AutoGrantPermission();
-  SimulateUserActivation();
-
-  base::RunLoop loop;
-  bool permission_requested = false;
-  manager_remote_->RequestPermission(
-      base::BindLambdaForTesting([&](blink::mojom::PermissionStatus status) {
-        permission_requested = true;
-        EXPECT_EQ(blink::mojom::PermissionStatus::GRANTED, status)
-            << "User activation yields a permission granted status";
-        loop.Quit();
-      }));
-
-  loop.Run();
-  EXPECT_TRUE(permission_requested) << "Permission has been requested";
-}
-#endif
-
-#if defined(OS_WIN)
+#if defined(PLATFORM_HAS_LOCAL_FONT_ENUMERATION_IMPL)
 namespace {
 
 void ValidateFontEnumerationBasic(FontEnumerationStatus status,
@@ -193,7 +193,51 @@ void ValidateFontEnumerationBasic(FontEnumerationStatus status,
 
 }  // namespace
 
-TEST_F(FontAccessManagerImplTest, ValidateEnumerationBasic) {
+TEST_F(FontAccessManagerImplTest, FailsIfFrameNotInViewport) {
+  ASSERT_TRUE(manager_remote_.is_bound() && manager_remote_.is_connected());
+  AutoGrantPermission();
+  SetFrameHidden();
+
+  base::RunLoop run_loop;
+  manager_remote_->EnumerateLocalFonts(
+      base::BindLambdaForTesting([&](FontEnumerationStatus status,
+                                     base::ReadOnlySharedMemoryRegion region) {
+        EXPECT_EQ(status, FontEnumerationStatus::kNotVisible)
+            << "Frame needs to be rendered";
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+TEST_F(FontAccessManagerImplTest, EnumerationConsumesUserActivation) {
+  ASSERT_TRUE(manager_remote_.is_bound() && manager_remote_.is_connected());
+  AskGrantPermission();
+  SimulateUserActivation();
+
+  base::RunLoop run_loop;
+  manager_remote_->EnumerateLocalFonts(
+      base::BindLambdaForTesting([&](FontEnumerationStatus status,
+                                     base::ReadOnlySharedMemoryRegion region) {
+        EXPECT_EQ(status, FontEnumerationStatus::kOk)
+            << "Font Enumeration was successful.";
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+
+  AskGrantPermission();
+
+  base::RunLoop run_loop2;
+  manager_remote_->EnumerateLocalFonts(
+      base::BindLambdaForTesting([&](FontEnumerationStatus status,
+                                     base::ReadOnlySharedMemoryRegion region) {
+        EXPECT_EQ(status, FontEnumerationStatus::kNeedsUserActivation)
+            << "User Activation Required.";
+        run_loop2.Quit();
+      }));
+  run_loop2.Run();
+}
+
+TEST_F(FontAccessManagerImplTest, PreviouslyGrantedValidateEnumerationBasic) {
   ASSERT_TRUE(manager_remote_.is_bound() && manager_remote_.is_connected());
   AutoGrantPermission();
   SimulateUserActivation();
@@ -210,9 +254,41 @@ TEST_F(FontAccessManagerImplTest, ValidateEnumerationBasic) {
   run_loop.Run();
 }
 
-TEST_F(FontAccessManagerImplTest, EnumerationPermissionDeniedIfNoActivation) {
+TEST_F(FontAccessManagerImplTest, UserActivationRequiredBeforeGrant) {
   ASSERT_TRUE(manager_remote_.is_bound() && manager_remote_.is_connected());
-  AutoGrantPermission();
+  AskGrantPermission();
+  SimulateUserActivation();
+
+  base::RunLoop run_loop;
+  manager_remote_->EnumerateLocalFonts(
+      base::BindLambdaForTesting([&](FontEnumerationStatus status,
+                                     base::ReadOnlySharedMemoryRegion region) {
+        EXPECT_EQ(status, FontEnumerationStatus::kOk)
+            << "Font Enumeration was successful.";
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+TEST_F(FontAccessManagerImplTest, EnumerationFailsIfNoActivation) {
+  ASSERT_TRUE(manager_remote_.is_bound() && manager_remote_.is_connected());
+  AskGrantPermission();
+
+  base::RunLoop run_loop;
+  manager_remote_->EnumerateLocalFonts(
+      base::BindLambdaForTesting([&](FontEnumerationStatus status,
+                                     base::ReadOnlySharedMemoryRegion region) {
+        EXPECT_EQ(status, FontEnumerationStatus::kNeedsUserActivation)
+            << "User Activation is needed.";
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+TEST_F(FontAccessManagerImplTest, PermissionDeniedOnAskErrors) {
+  ASSERT_TRUE(manager_remote_.is_bound() && manager_remote_.is_connected());
+  AskDenyPermission();
+  SimulateUserActivation();
 
   base::RunLoop run_loop;
   manager_remote_->EnumerateLocalFonts(
@@ -225,7 +301,7 @@ TEST_F(FontAccessManagerImplTest, EnumerationPermissionDeniedIfNoActivation) {
   run_loop.Run();
 }
 
-TEST_F(FontAccessManagerImplTest, PermissionDeniedErrors) {
+TEST_F(FontAccessManagerImplTest, PermissionPreviouslyDeniedErrors) {
   ASSERT_TRUE(manager_remote_.is_bound() && manager_remote_.is_connected());
   AutoDenyPermission();
   SimulateUserActivation();

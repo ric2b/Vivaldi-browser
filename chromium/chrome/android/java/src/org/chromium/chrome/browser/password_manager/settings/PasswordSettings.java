@@ -28,8 +28,8 @@ import androidx.preference.PreferenceGroup;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.password_check.PasswordCheck;
 import org.chromium.chrome.browser.password_check.PasswordCheckFactory;
 import org.chromium.chrome.browser.password_check.PasswordCheckPreference;
@@ -43,7 +43,6 @@ import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.webauthn.CableAuthenticatorModuleProvider;
-import org.chromium.components.browser_ui.settings.ChromeBaseCheckBoxPreference;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.SearchUtils;
@@ -108,7 +107,7 @@ public class PasswordSettings
     private Preference mLinkPref;
     private Preference mSecurityKey;
     private ChromeSwitchPreference mSavePasswordsSwitch;
-    private ChromeBaseCheckBoxPreference mAutoSignInSwitch;
+    private ChromeSwitchPreference mAutoSignInSwitch;
     private PasswordCheckPreference mCheckPasswords;
     private TextMessagePreference mEmptyView;
     private boolean mSearchRecorded;
@@ -220,7 +219,7 @@ public class PasswordSettings
             return true;
         }
         if (id == R.id.menu_id_targeted_help) {
-            HelpAndFeedback.getInstance().show(getActivity(),
+            HelpAndFeedbackLauncherImpl.getInstance().show(getActivity(),
                     getString(R.string.help_context_passwords), Profile.getLastUsedRegularProfile(),
                     null);
             return true;
@@ -496,7 +495,7 @@ public class PasswordSettings
     }
 
     private void createAutoSignInCheckbox() {
-        mAutoSignInSwitch = new ChromeBaseCheckBoxPreference(getStyledContext(), null);
+        mAutoSignInSwitch = new ChromeSwitchPreference(getStyledContext(), null);
         mAutoSignInSwitch.setKey(PREF_AUTOSIGNIN_SWITCH);
         mAutoSignInSwitch.setTitle(R.string.passwords_auto_signin_title);
         mAutoSignInSwitch.setOrder(ORDER_AUTO_SIGNIN_CHECKBOX);

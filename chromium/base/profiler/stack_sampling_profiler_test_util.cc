@@ -6,10 +6,12 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/path_service.h"
+#include "base/profiler/profiler_buildflags.h"
 #include "base/profiler/stack_buffer.h"
 #include "base/profiler/stack_sampling_profiler.h"
 #include "base/profiler/unwinder.h"
@@ -316,7 +318,7 @@ std::vector<Frame> SampleScenario(UnwindScenario* scenario,
                       sample = std::move(result_sample);
                       sampling_thread_completed.Signal();
                     })),
-                CreateCoreUnwindersForTesting(module_cache));
+                CreateCoreUnwindersFactoryForTesting(module_cache));
             if (aux_unwinder_factory)
               profiler.AddAuxUnwinder(std::move(aux_unwinder_factory).Run());
             profiler.Start();
@@ -370,7 +372,7 @@ void ExpectStackDoesNotContain(
 
   std::set<FunctionAddressRange, FunctionAddressRangeCompare> seen_functions;
   for (const auto& frame : stack) {
-    for (const auto function : functions) {
+    for (const auto& function : functions) {
       if (frame.instruction_pointer >=
               reinterpret_cast<uintptr_t>(function.start) &&
           frame.instruction_pointer <=
@@ -380,7 +382,7 @@ void ExpectStackDoesNotContain(
     }
   }
 
-  for (const auto function : seen_functions) {
+  for (const auto& function : seen_functions) {
     ADD_FAILURE() << "Function at " << function.start
                   << " was unexpectedly found in stack:\n"
                   << FormatSampleForDiagnosticOutput(stack);
@@ -414,7 +416,7 @@ uintptr_t GetAddressInOtherLibrary(NativeLibrary library) {
   return address;
 }
 
-std::vector<std::unique_ptr<Unwinder>> CreateCoreUnwindersForTesting(
+StackSamplingProfiler::UnwindersFactory CreateCoreUnwindersFactoryForTesting(
     ModuleCache* module_cache) {
 #if defined(OS_ANDROID) && BUILDFLAG(ENABLE_ARM_CFI_TABLE)
   std::vector<std::unique_ptr<Unwinder>> unwinders;
@@ -422,9 +424,13 @@ std::vector<std::unique_ptr<Unwinder>> CreateCoreUnwindersForTesting(
       reinterpret_cast<uintptr_t>(&__executable_start)));
   unwinders.push_back(CreateChromeUnwinderAndroidForTesting(
       reinterpret_cast<uintptr_t>(&__executable_start)));
-  return unwinders;
+  return BindOnce(
+      [](std::vector<std::unique_ptr<Unwinder>> unwinders) {
+        return unwinders;
+      },
+      std::move(unwinders));
 #else
-  return {};
+  return StackSamplingProfiler::UnwindersFactory();
 #endif
 }
 

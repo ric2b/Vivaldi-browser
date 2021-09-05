@@ -17,15 +17,15 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.infobar.TranslateCompactInfoBar;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
 import org.chromium.chrome.test.util.InfoBarUtil;
@@ -44,10 +44,10 @@ import java.util.concurrent.TimeoutException;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class TranslateCompactInfoBarTest {
     @Rule
-    public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
-            new ChromeActivityTestRule<>(ChromeActivity.class);
+    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     private static final String TRANSLATE_PAGE = "/chrome/test/data/translate/fr_test.html";
+    private static final String NON_TRANSLATE_PAGE = "/chrome/test/data/android/simple.html";
 
     private InfoBarContainer mInfoBarContainer;
     private InfoBarTestAnimationListener mListener;
@@ -74,6 +74,7 @@ public class TranslateCompactInfoBarTest {
     @MediumTest
     @Feature({"Browser", "Main"})
     @Restriction(ChromeRestriction.RESTRICTION_TYPE_GOOGLE_PLAY_SERVICES)
+    @DisabledTest(message = "https://crbug.com/1130712")
     public void testTranslateCompactInfoBarAppears() throws TimeoutException {
         mActivityTestRule.loadUrl(mTestServer.getURL(TRANSLATE_PAGE));
         mListener.addInfoBarAnimationFinished("InfoBar not opened.");
@@ -89,6 +90,7 @@ public class TranslateCompactInfoBarTest {
     @MediumTest
     @Feature({"Browser", "Main"})
     @Restriction(ChromeRestriction.RESTRICTION_TYPE_GOOGLE_PLAY_SERVICES)
+    @DisabledTest(message = "https://crbug.com/1130712")
     public void testTranslateCompactInfoBarOverflowMenus() throws TimeoutException {
         mActivityTestRule.loadUrl(mTestServer.getURL(TRANSLATE_PAGE));
         mListener.addInfoBarAnimationFinished("InfoBar not opened.");
@@ -111,6 +113,7 @@ public class TranslateCompactInfoBarTest {
     @MediumTest
     @Feature({"Browser", "Main"})
     @Restriction(ChromeRestriction.RESTRICTION_TYPE_GOOGLE_PLAY_SERVICES)
+    @DisabledTest(message = "https://crbug.com/1130712")
     public void testTabMenuDismissedOnOrientationChange() throws Exception {
         mActivityTestRule.loadUrl(mTestServer.getURL(TRANSLATE_PAGE));
         mListener.addInfoBarAnimationFinished("InfoBar not opened.");
@@ -140,6 +143,7 @@ public class TranslateCompactInfoBarTest {
     @MediumTest
     @Feature({"Browser", "Main"})
     @Restriction(ChromeRestriction.RESTRICTION_TYPE_GOOGLE_PLAY_SERVICES)
+    @DisabledTest(message = "https://crbug.com/1130712")
     public void testTranslateCompactInfoBarReopenOnTarget() throws TimeoutException {
         mActivityTestRule.loadUrl(mTestServer.getURL(TRANSLATE_PAGE));
         mListener.addInfoBarAnimationFinished("InfoBar not opened.");
@@ -161,6 +165,68 @@ public class TranslateCompactInfoBarTest {
                 mActivityTestRule.getActivity(), R.id.translate_id);
 
         infoBar = (TranslateCompactInfoBar) mInfoBarContainer.getInfoBarsForTesting().get(0);
+
+        // Only the target tab is selected.
+        Assert.assertFalse(infoBar.isSourceTabSelectedForTesting());
+        Assert.assertTrue(infoBar.isTargetTabSelectedForTesting());
+    }
+
+    /**
+     * Test that translation starts automatically when "Translate..." is pressed in the menu.
+     */
+    @Test
+    @MediumTest
+    @Feature({"Browser", "Main"})
+    @Restriction(ChromeRestriction.RESTRICTION_TYPE_GOOGLE_PLAY_SERVICES)
+    @DisabledTest(message = "https://crbug.com/1130712")
+    public void testStartTranslateOnManualInitiation() throws TimeoutException {
+        // Load a page that won't trigger the translate recommendation.
+        mActivityTestRule.loadUrl(mTestServer.getURL(NON_TRANSLATE_PAGE));
+
+        Assert.assertTrue(mInfoBarContainer.getInfoBarsForTesting().isEmpty());
+
+        // Invoke bar by clicking the manual translate button.
+        MenuUtils.invokeCustomMenuActionSync(InstrumentationRegistry.getInstrumentation(),
+                mActivityTestRule.getActivity(), R.id.translate_id);
+        mListener.addInfoBarAnimationFinished("InfoBar not opened.");
+
+        TranslateCompactInfoBar infoBar =
+                (TranslateCompactInfoBar) mInfoBarContainer.getInfoBarsForTesting().get(0);
+
+        // Only the target tab is selected.
+        Assert.assertFalse(infoBar.isSourceTabSelectedForTesting());
+        Assert.assertTrue(infoBar.isTargetTabSelectedForTesting());
+    }
+
+    /**
+     * Test that pressing "Translate..." will start a translation even if the infobar is visible.
+     */
+    @Test
+    @MediumTest
+    @Feature({"Browser", "Main"})
+    @Restriction(ChromeRestriction.RESTRICTION_TYPE_GOOGLE_PLAY_SERVICES)
+    @DisabledTest(message = "https://crbug.com/1130712")
+    public void testManualInitiationWithBarOpen() throws TimeoutException {
+        mActivityTestRule.loadUrl(mTestServer.getURL(TRANSLATE_PAGE));
+        mListener.addInfoBarAnimationFinished("InfoBar not opened.");
+
+        TranslateCompactInfoBar infoBar =
+                (TranslateCompactInfoBar) mInfoBarContainer.getInfoBarsForTesting().get(0);
+
+        // Only the source tab is selected.
+        Assert.assertTrue(infoBar.isSourceTabSelectedForTesting());
+        Assert.assertFalse(infoBar.isTargetTabSelectedForTesting());
+
+        MenuUtils.invokeCustomMenuActionSync(InstrumentationRegistry.getInstrumentation(),
+                mActivityTestRule.getActivity(), R.id.translate_id);
+
+        // Only the target tab is selected.
+        Assert.assertFalse(infoBar.isSourceTabSelectedForTesting());
+        Assert.assertTrue(infoBar.isTargetTabSelectedForTesting());
+
+        // Verify that hitting "Translate..." again doesn't revert the translation.
+        MenuUtils.invokeCustomMenuActionSync(InstrumentationRegistry.getInstrumentation(),
+                mActivityTestRule.getActivity(), R.id.translate_id);
 
         // Only the target tab is selected.
         Assert.assertFalse(infoBar.isSourceTabSelectedForTesting());

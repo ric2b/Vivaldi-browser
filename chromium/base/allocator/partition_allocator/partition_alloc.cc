@@ -17,7 +17,6 @@
 #include "base/allocator/partition_allocator/partition_direct_map_extent.h"
 #include "base/allocator/partition_allocator/partition_oom.h"
 #include "base/allocator/partition_allocator/partition_page.h"
-#include "base/allocator/partition_allocator/spin_lock.h"
 #include "base/check_op.h"
 #include "base/no_destructor.h"
 #include "base/synchronization/lock.h"
@@ -29,8 +28,13 @@ NOINLINE void PartitionRoot<thread_safe>::OutOfMemory(size_t size) {
 #if !defined(ARCH_CPU_64_BITS)
   // Check whether this OOM is due to a lot of super pages that are allocated
   // but not committed, probably due to http://crbug.com/421387.
-  if (total_size_of_super_pages + total_size_of_direct_mapped_pages -
-          total_size_of_committed_pages >
+  //
+  // Reading values without locking is fine here, we are going to crash anyway,
+  // this is used for reporting only, and concurrent successful allocations are
+  // unlikely.
+  if (TS_UNCHECKED_READ(total_size_of_super_pages) +
+          TS_UNCHECKED_READ(total_size_of_direct_mapped_pages) -
+          TS_UNCHECKED_READ(total_size_of_committed_pages) >
       kReasonableSizeOfUnusedPages) {
     internal::PartitionOutOfMemoryWithLotsOfUncommitedPages(size);
   }
@@ -48,40 +52,6 @@ void PartitionRoot<thread_safe>::DecommitEmptyPages() {
     page = nullptr;
   }
 }
-
-// Two partition pages are used as guard / metadata page so make sure the super
-// page size is bigger.
-static_assert(kPartitionPageSize * 4 <= kSuperPageSize, "ok super page size");
-static_assert(!(kSuperPageSize % kPartitionPageSize), "ok super page multiple");
-// Four system pages gives us room to hack out a still-guard-paged piece
-// of metadata in the middle of a guard partition page.
-static_assert(kSystemPageSize * 4 <= kPartitionPageSize,
-              "ok partition page size");
-static_assert(!(kPartitionPageSize % kSystemPageSize),
-              "ok partition page multiple");
-static_assert(sizeof(internal::PartitionPage<internal::ThreadSafe>) <=
-                  kPageMetadataSize,
-              "PartitionPage should not be too big");
-static_assert(sizeof(internal::PartitionBucket<internal::ThreadSafe>) <=
-                  kPageMetadataSize,
-              "PartitionBucket should not be too big");
-static_assert(kPageMetadataSize * kNumPartitionPagesPerSuperPage <=
-                  kSystemPageSize,
-              "page metadata fits in hole");
-// Limit to prevent callers accidentally overflowing an int size.
-static_assert(kMaxDirectMapped <= (1UL << 31) + kPageAllocationGranularity,
-              "maximum direct mapped allocation");
-// Check that some of our zanier calculations worked out as expected.
-#if ENABLE_TAG_FOR_MTE_CHECKED_PTR
-static_assert(kSmallestBucket >= alignof(std::max_align_t),
-              "generic smallest bucket");
-#else
-static_assert(kSmallestBucket == alignof(std::max_align_t),
-              "generic smallest bucket");
-#endif
-static_assert(kMaxBucketed == 983040, "generic max bucketed");
-static_assert(kMaxSystemPagesPerSlotSpan < (1 << 8),
-              "System pages per slot span must be less than 128.");
 
 #if ENABLE_TAG_FOR_SINGLE_TAG_CHECKED_PTR
 namespace internal {
@@ -194,25 +164,106 @@ bool PartitionAllocHooks::ReallocOverrideHookIfEnabled(size_t* out,
 }
 
 void PartitionAllocGlobalInit(OomFunction on_out_of_memory) {
+  // This is from page_allocator_constants.h and doesn't really fit here, but
+  // there isn't a centralized initialization function in page_allocator.cc, so
+  // there's no good place in that file to do a STATIC_ASSERT_OR_PA_CHECK.
+  STATIC_ASSERT_OR_PA_CHECK((SystemPageSize() & (SystemPageSize() - 1)) == 0,
+                            "SystemPageSize() must be power of 2");
+
+  // Two partition pages are used as guard / metadata page so make sure the
+  // super page size is bigger.
+  STATIC_ASSERT_OR_PA_CHECK(PartitionPageSize() * 4 <= kSuperPageSize,
+                            "ok super page size");
+  STATIC_ASSERT_OR_PA_CHECK(!(kSuperPageSize % PartitionPageSize()),
+                            "ok super page multiple");
+  // Four system pages gives us room to hack out a still-guard-paged piece
+  // of metadata in the middle of a guard partition page.
+  STATIC_ASSERT_OR_PA_CHECK(SystemPageSize() * 4 <= PartitionPageSize(),
+                            "ok partition page size");
+  STATIC_ASSERT_OR_PA_CHECK(!(PartitionPageSize() % SystemPageSize()),
+                            "ok partition page multiple");
+  static_assert(sizeof(internal::PartitionPage<internal::ThreadSafe>) <=
+                    kPageMetadataSize,
+                "PartitionPage should not be too big");
+  STATIC_ASSERT_OR_PA_CHECK(
+      kPageMetadataSize * NumPartitionPagesPerSuperPage() <= SystemPageSize(),
+      "page metadata fits in hole");
+
+  // Limit to prevent callers accidentally overflowing an int size.
+  STATIC_ASSERT_OR_PA_CHECK(
+      MaxDirectMapped() <= (1UL << 31) + PageAllocationGranularity(),
+      "maximum direct mapped allocation");
+
+  // Check that some of our zanier calculations worked out as expected.
+#if ENABLE_TAG_FOR_MTE_CHECKED_PTR
+  static_assert(kSmallestBucket >= kAlignment, "generic smallest bucket");
+#else
+  static_assert(kSmallestBucket == kAlignment, "generic smallest bucket");
+#endif
+  static_assert(kMaxBucketed == 983040, "generic max bucketed");
+  STATIC_ASSERT_OR_PA_CHECK(
+      MaxSystemPagesPerSlotSpan() < (1 << 8),
+      "System pages per slot span must be less than 128.");
+
   PA_DCHECK(on_out_of_memory);
   internal::g_oom_handling_function = on_out_of_memory;
 }
 
 void PartitionAllocGlobalUninitForTesting() {
-#if defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
+#if defined(PA_HAS_64_BITS_POINTERS) && \
+    !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
   if (IsPartitionAllocGigaCageEnabled())
     internal::PartitionAddressSpace::UninitForTesting();
 #endif
   internal::g_oom_handling_function = nullptr;
 }
 
+// TODO(lizeb): Consider making this constexpr. Without C++17 std::array, this
+// requires some template magic, only do it if it helps performance.
 template <bool thread_safe>
-void PartitionRoot<thread_safe>::Init(bool enforce_alignment) {
+uint16_t PartitionRoot<thread_safe>::bucket_index_lookup[((kBitsPerSizeT + 1) *
+                                                          kNumBucketsPerOrder) +
+                                                         1];
+
+template <bool thread_safe>
+void InitBucketIndexLookup(PartitionRoot<thread_safe>* root) {
+  uint16_t* bucket_index_ptr =
+      &PartitionRoot<thread_safe>::bucket_index_lookup[0];
+  uint16_t bucket_index = 0;
+  const uint16_t sentinel_bucket_index = kNumBuckets;
+
+  for (uint16_t order = 0; order <= kBitsPerSizeT; ++order) {
+    for (uint16_t j = 0; j < kNumBucketsPerOrder; ++j) {
+      if (order < kMinBucketedOrder) {
+        // Use the bucket of the finest granularity for malloc(0) etc.
+        *bucket_index_ptr++ = 0;
+      } else if (order > kMaxBucketedOrder) {
+        *bucket_index_ptr++ = sentinel_bucket_index;
+      } else {
+        uint16_t valid_bucket_index = bucket_index;
+        while (root->buckets[valid_bucket_index].slot_size % kSmallestBucket)
+          valid_bucket_index++;
+        *bucket_index_ptr++ = valid_bucket_index;
+        bucket_index++;
+      }
+    }
+  }
+  PA_DCHECK(bucket_index == kNumBuckets);
+  PA_DCHECK(bucket_index_ptr ==
+            PartitionRoot<thread_safe>::bucket_index_lookup +
+                ((kBitsPerSizeT + 1) * kNumBucketsPerOrder));
+  // And there's one last bucket lookup that will be hit for e.g. malloc(-1),
+  // which tries to overflow to a non-existent order.
+  *bucket_index_ptr = sentinel_bucket_index;
+}
+
+template <bool thread_safe>
+void PartitionRoot<thread_safe>::Init(PartitionOptions opts) {
   ScopedGuard guard{lock_};
   if (initialized)
     return;
 
-#if defined(ARCH_CPU_64_BITS) && !defined(OS_NACL)
+#if defined(PA_HAS_64_BITS_POINTERS)
   // Reserve address space for partition alloc.
   if (IsPartitionAllocGigaCageEnabled())
     internal::PartitionAddressSpace::Init();
@@ -220,44 +271,15 @@ void PartitionRoot<thread_safe>::Init(bool enforce_alignment) {
 
   // If alignment needs to be enforced, disallow adding cookies and/or tags at
   // the beginning of the slot.
-  allow_extras = !enforce_alignment;
+  allow_extras = (opts.alignment != PartitionOptions::Alignment::kAlignedAlloc);
 
   // We mark the sentinel bucket/page as free to make sure it is skipped by our
   // logic to find a new active page.
-  //
-  // This may be executed several times, once per PartitionRoot. This is not an
-  // issue, as the operation is atomic and idempotent.
-  Bucket::get_sentinel_bucket()->active_pages_head = Page::get_sentinel_page();
+  memset(&sentinel_bucket, 0, sizeof(sentinel_bucket));
+  sentinel_bucket.active_pages_head = Page::get_sentinel_page();
 
   // This is a "magic" value so we can test if a root pointer is valid.
   inverted_self = ~reinterpret_cast<uintptr_t>(this);
-
-  // Precalculate some shift and mask constants used in the hot path.
-  // Example: malloc(41) == 101001 binary.
-  // Order is 6 (1 << 6-1) == 32 is highest bit set.
-  // order_index is the next three MSB == 010 == 2.
-  // sub_order_index_mask is a mask for the remaining bits == 11 (masking to 01
-  // for
-  // the sub_order_index).
-  size_t order;
-  for (order = 0; order <= kBitsPerSizeT; ++order) {
-    size_t order_index_shift;
-    if (order < kNumBucketsPerOrderBits + 1)
-      order_index_shift = 0;
-    else
-      order_index_shift = order - (kNumBucketsPerOrderBits + 1);
-    order_index_shifts[order] = order_index_shift;
-    size_t sub_order_index_mask;
-    if (order == kBitsPerSizeT) {
-      // This avoids invoking undefined behavior for an excessive shift.
-      sub_order_index_mask =
-          static_cast<size_t>(-1) >> (kNumBucketsPerOrderBits + 1);
-    } else {
-      sub_order_index_mask = ((static_cast<size_t>(1) << order) - 1) >>
-                             (kNumBucketsPerOrderBits + 1);
-    }
-    order_sub_index_masks[order] = sub_order_index_mask;
-  }
 
   // Set up the actual usable buckets first.
   // Note that typical values (i.e. min allocation size of 8) will result in
@@ -283,35 +305,27 @@ void PartitionRoot<thread_safe>::Init(bool enforce_alignment) {
   PA_DCHECK(current_size == 1 << kMaxBucketedOrder);
   PA_DCHECK(bucket == &buckets[0] + kNumBuckets);
 
-  // Then set up the fast size -> bucket lookup table.
-  bucket = &buckets[0];
-  Bucket** bucket_ptr = &bucket_lookups[0];
-  for (order = 0; order <= kBitsPerSizeT; ++order) {
-    for (j = 0; j < kNumBucketsPerOrder; ++j) {
-      if (order < kMinBucketedOrder) {
-        // Use the bucket of the finest granularity for malloc(0) etc.
-        *bucket_ptr++ = &buckets[0];
-      } else if (order > kMaxBucketedOrder) {
-        *bucket_ptr++ = Bucket::get_sentinel_bucket();
-      } else {
-        Bucket* valid_bucket = bucket;
-        // Skip over invalid buckets.
-        while (valid_bucket->slot_size % kSmallestBucket)
-          valid_bucket++;
-        *bucket_ptr++ = valid_bucket;
-        bucket++;
-      }
-    }
-  }
-  PA_DCHECK(bucket == &buckets[0] + kNumBuckets);
-  PA_DCHECK(bucket_ptr ==
-            &bucket_lookups[0] + ((kBitsPerSizeT + 1) * kNumBucketsPerOrder));
-  // And there's one last bucket lookup that will be hit for e.g. malloc(-1),
-  // which tries to overflow to a non-existent order.
-  *bucket_ptr = Bucket::get_sentinel_bucket();
+  // Then set up the fast size -> bucket lookup table.  We call this multiple
+  // times, even though the indices are shared between all PartitionRoots, but
+  // this operation is idempotent, so there is no harm.
+  InitBucketIndexLookup(this);
+
+#if !defined(OS_POSIX)
+  // TLS in ThreadCache not supported on other OSes.
+  with_thread_cache = false;
+#else
+  with_thread_cache =
+      (opts.thread_cache == PartitionOptions::ThreadCache::kEnabled);
+
+  if (with_thread_cache)
+    internal::ThreadCache::Init(this);
+#endif  // !defined(OS_POSIX)
 
   initialized = true;
 }
+
+template <bool thread_safe>
+PartitionRoot<thread_safe>::~PartitionRoot() = default;
 
 template <bool thread_safe>
 bool PartitionRoot<thread_safe>::ReallocDirectMappedInPlace(
@@ -336,7 +350,7 @@ bool PartitionRoot<thread_safe>::ReallocDirectMappedInPlace(
 
     // Don't reallocate in-place if new size is less than 80 % of the full
     // map size, to avoid holding on to too much unused address space.
-    if ((new_size / kSystemPageSize) * 5 < (map_size / kSystemPageSize) * 4)
+    if ((new_size / SystemPageSize()) * 5 < (map_size / SystemPageSize()) * 4)
       return false;
 
     // Shrink by decommitting unneeded pages and making them inaccessible.
@@ -396,7 +410,7 @@ void* PartitionRoot<thread_safe>::ReallocFlags(int flags,
     return nullptr;
   }
 
-  if (new_size > kMaxDirectMapped) {
+  if (new_size > MaxDirectMapped()) {
     if (flags & PartitionAllocReturnNull)
       return nullptr;
     internal::PartitionExcessiveAllocationSize(new_size);
@@ -481,7 +495,7 @@ static size_t PartitionPurgePage(internal::PartitionPage<thread_safe>* page,
                                  bool discard) {
   const internal::PartitionBucket<thread_safe>* bucket = page->bucket;
   size_t slot_size = bucket->slot_size;
-  if (slot_size < kSystemPageSize || !page->num_allocated_slots)
+  if (slot_size < SystemPageSize() || !page->num_allocated_slots)
     return 0;
 
   size_t bucket_num_slots = bucket->get_slots_per_span();
@@ -500,8 +514,19 @@ static size_t PartitionPurgePage(internal::PartitionPage<thread_safe>* page,
     return discardable_bytes;
   }
 
+#if defined(PAGE_ALLOCATOR_CONSTANTS_ARE_CONSTEXPR)
   constexpr size_t kMaxSlotCount =
-      (kPartitionPageSize * kMaxPartitionPagesPerSlotSpan) / kSystemPageSize;
+      (PartitionPageSize() * kMaxPartitionPagesPerSlotSpan) / SystemPageSize();
+#elif defined(OS_APPLE)
+  // It's better for slot_usage to be stack-allocated and fixed-size, which
+  // demands that its size be constexpr. On OS_APPLE, PartitionPageSize() is
+  // always SystemPageSize() << 2, so regardless of what the run time page size
+  // is, kMaxSlotCount can always be simplified to this expression.
+  constexpr size_t kMaxSlotCount = 4 * kMaxPartitionPagesPerSlotSpan;
+  PA_CHECK(kMaxSlotCount ==
+           (PartitionPageSize() * kMaxPartitionPagesPerSlotSpan) /
+               SystemPageSize());
+#endif
   PA_DCHECK(bucket_num_slots <= kMaxSlotCount);
   PA_DCHECK(page->num_unprovisioned_slots < bucket_num_slots);
   size_t num_slots = bucket_num_slots - page->num_unprovisioned_slots;
@@ -642,16 +667,21 @@ static void PartitionPurgeBucket(
 
 template <bool thread_safe>
 void PartitionRoot<thread_safe>::PurgeMemory(int flags) {
-  ScopedGuard guard{lock_};
-  if (flags & PartitionPurgeDecommitEmptyPages)
-    DecommitEmptyPages();
-  if (flags & PartitionPurgeDiscardUnusedSystemPages) {
-    for (size_t i = 0; i < kNumBuckets; ++i) {
-      Bucket* bucket = &buckets[i];
-      if (bucket->slot_size >= kSystemPageSize)
-        PartitionPurgeBucket(bucket);
+  {
+    ScopedGuard guard{lock_};
+    if (flags & PartitionPurgeDecommitEmptyPages)
+      DecommitEmptyPages();
+    if (flags & PartitionPurgeDiscardUnusedSystemPages) {
+      for (size_t i = 0; i < kNumBuckets; ++i) {
+        Bucket* bucket = &buckets[i];
+        if (bucket->slot_size >= SystemPageSize())
+          PartitionPurgeBucket(bucket);
+      }
     }
   }
+
+  if (with_thread_cache)
+    internal::ThreadCacheRegistry::Instance().PurgeAll();
 }
 
 template <bool thread_safe>
@@ -743,27 +773,30 @@ template <bool thread_safe>
 void PartitionRoot<thread_safe>::DumpStats(const char* partition_name,
                                            bool is_light_dump,
                                            PartitionStatsDumper* dumper) {
-  ScopedGuard guard{lock_};
-  PartitionMemoryStats stats = {0};
-  stats.total_mmapped_bytes =
-      total_size_of_super_pages + total_size_of_direct_mapped_pages;
-  stats.total_committed_bytes = total_size_of_committed_pages;
-
-  size_t direct_mapped_allocations_total_size = 0;
-
   static const size_t kMaxReportableDirectMaps = 4096;
-
   // Allocate on the heap rather than on the stack to avoid stack overflow
-  // skirmishes (on Windows, in particular).
+  // skirmishes (on Windows, in particular). Allocate before locking below,
+  // otherwise when PartitionAlloc is malloc() we get reentrancy issues. This
+  // inflates reported values a bit for detailed dumps though, by 16kiB.
   std::unique_ptr<uint32_t[]> direct_map_lengths = nullptr;
   if (!is_light_dump) {
     direct_map_lengths =
         std::unique_ptr<uint32_t[]>(new uint32_t[kMaxReportableDirectMaps]);
   }
-
   PartitionBucketMemoryStats bucket_stats[kNumBuckets];
   size_t num_direct_mapped_allocations = 0;
+  PartitionMemoryStats stats = {0};
+
+  // Collect data with the lock held, cannot allocate or call third-party code
+  // below.
   {
+    ScopedGuard guard{lock_};
+
+    stats.total_mmapped_bytes =
+        total_size_of_super_pages + total_size_of_direct_mapped_pages;
+    stats.total_committed_bytes = total_size_of_committed_pages;
+
+    size_t direct_mapped_allocations_total_size = 0;
     for (size_t i = 0; i < kNumBuckets; ++i) {
       const Bucket* bucket = &buckets[i];
       // Don't report the pseudo buckets that the generic allocator sets up in
@@ -792,12 +825,21 @@ void PartitionRoot<thread_safe>::DumpStats(const char* partition_name,
         continue;
       direct_map_lengths[num_direct_mapped_allocations] = slot_size;
     }
+
+    stats.total_resident_bytes += direct_mapped_allocations_total_size;
+    stats.total_active_bytes += direct_mapped_allocations_total_size;
+
+    stats.has_thread_cache = !is_light_dump && with_thread_cache;
+    if (stats.has_thread_cache) {
+      internal::ThreadCacheRegistry::Instance().DumpStats(
+          true, &stats.current_thread_cache_stats);
+      internal::ThreadCacheRegistry::Instance().DumpStats(
+          false, &stats.all_thread_caches_stats);
+    }
   }
 
+  // Do not hold the lock when calling |dumper|, as it may allocate.
   if (!is_light_dump) {
-    // Call |PartitionsDumpBucketStats| after collecting stats because it can
-    // try to allocate using |PartitionRoot::Alloc()| and it can't
-    // obtain the lock.
     for (size_t i = 0; i < kNumBuckets; ++i) {
       if (bucket_stats[i].is_valid)
         dumper->PartitionsDumpBucketStats(partition_name, &bucket_stats[i]);
@@ -817,9 +859,6 @@ void PartitionRoot<thread_safe>::DumpStats(const char* partition_name,
       dumper->PartitionsDumpBucketStats(partition_name, &mapped_stats);
     }
   }
-
-  stats.total_resident_bytes += direct_mapped_allocations_total_size;
-  stats.total_active_bytes += direct_mapped_allocations_total_size;
   dumper->PartitionDumpTotals(partition_name, &stats);
 }
 
@@ -835,27 +874,53 @@ PartitionAllocator<thread_safe>::~PartitionAllocator() {
 }
 
 template <bool thread_safe>
-void PartitionAllocator<thread_safe>::init(
-    PartitionAllocatorAlignment alignment) {
-  partition_root_.Init(
-      alignment ==
-      PartitionAllocatorAlignment::kAlignedAlloc /* enforce_alignment */);
+void PartitionAllocator<thread_safe>::init(PartitionOptions opts) {
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  PA_CHECK(opts.thread_cache == PartitionOptions::ThreadCache::kDisabled)
+      << "Cannot use a thread cache when PartitionAlloc is malloc().";
+#endif
+  partition_root_.Init(opts);
   PartitionAllocMemoryReclaimer::Instance()->RegisterPartition(
       &partition_root_);
 }
 
 template PartitionAllocator<internal::ThreadSafe>::~PartitionAllocator();
-template void PartitionAllocator<internal::ThreadSafe>::init(
-    PartitionAllocatorAlignment alignment);
+template void PartitionAllocator<internal::ThreadSafe>::init(PartitionOptions);
 template PartitionAllocator<internal::NotThreadSafe>::~PartitionAllocator();
 template void PartitionAllocator<internal::NotThreadSafe>::init(
-    PartitionAllocatorAlignment alignment);
+    PartitionOptions);
 
 #if DCHECK_IS_ON()
 void DCheckIfManagedByPartitionAllocNormalBuckets(const void* ptr) {
   PA_DCHECK(IsManagedByPartitionAllocNormalBuckets(ptr));
 }
 #endif
+
+// Gets the offset from the beginning of the allocated slot, adjusted for cookie
+// (if any).
+// CAUTION! Use only for normal buckets. Using on direct-mapped allocations may
+// lead to undefined behavior.
+//
+// This function is not a template, and can be used on either variant
+// (thread-safe or not) of the allocator. This relies on the two PartitionRoot<>
+// having the same layout, which is enforced by static_assert().
+BASE_EXPORT size_t PartitionAllocGetSlotOffset(void* ptr) {
+  internal::DCheckIfManagedByPartitionAllocNormalBuckets(ptr);
+  // The only allocations that don't use tag are allocated outside of GigaCage,
+  // hence we'd never get here in the use_tag=false case.
+  ptr = internal::PartitionPointerAdjustSubtract(true /* use_tag */, ptr);
+  auto* page =
+      internal::PartitionAllocGetPageForSize<internal::ThreadSafe>(ptr);
+  PA_DCHECK(PartitionRoot<internal::ThreadSafe>::FromPage(page)->allow_extras);
+
+  // Get the offset from the beginning of the slot span.
+  uintptr_t ptr_addr = reinterpret_cast<uintptr_t>(ptr);
+  uintptr_t slot_span_start = reinterpret_cast<uintptr_t>(
+      internal::PartitionPage<internal::ThreadSafe>::ToPointer(page));
+  size_t offset_in_slot_span = ptr_addr - slot_span_start;
+
+  return page->bucket->GetSlotOffset(offset_in_slot_span);
+}
 
 }  // namespace internal
 

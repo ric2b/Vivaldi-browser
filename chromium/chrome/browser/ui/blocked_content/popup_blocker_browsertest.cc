@@ -461,6 +461,17 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, NoPopupsLaunchWhenTabIsClosed) {
   ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile()));
 }
 
+IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
+                       PopupsAllowedWhenPopupBlockingIsDisabled) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      embedder_support::kDisablePopupBlocking);
+
+  GURL url(
+      embedded_test_server()->GetURL("/popup_blocker/popup-window-open.html"));
+
+  NavigateAndCheckPopupShown(url, kExpectPopup);
+}
+
 // This only exists for the AllowPopupsWhenTabIsClosedWithSpecialPolicy test.
 // Remove this in Chrome 88. https://crbug.com/937569
 class PopupBlockerSpecialPolicyBrowserTest : public PopupBlockerBrowserTest {
@@ -556,7 +567,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
 // https://codereview.chromium.org/23903056
 // BUG=https://code.google.com/p/chromium/issues/detail?id=295299
 // TODO(ananta). Debug and fix this test.
-#if defined(USE_AURA) && defined(OS_LINUX)
+#if defined(USE_AURA) && (defined(OS_LINUX) || defined(OS_CHROMEOS))
 #define MAYBE_WindowFeatures DISABLED_WindowFeatures
 #else
 #define MAYBE_WindowFeatures WindowFeatures

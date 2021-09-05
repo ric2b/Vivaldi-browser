@@ -22,12 +22,17 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 
+// Vivaldi
+import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.NavigationPopup;
+import org.chromium.chrome.browser.profiles.Profile;
 
 /**
  * A {@link LinearLayout} that displays a horizontal row of icons for page actions.
  */
-public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickListener {
+public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickListener,
+        View.OnLongClickListener {
     private AppMenuHandler mAppMenuHandler;
     private AppMenuDelegate mAppMenuDelegate;
 
@@ -43,20 +48,28 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
         super(context, attrs);
     }
 
+    // Vivaldi
+    private Tab mCurrentTab;
+    private NavigationPopup mNavigationPopup;
+
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
 
         mForwardButton = findViewById(R.id.forward_menu_id);
         mForwardButton.setOnClickListener(this);
+        // Vivaldi
+        mForwardButton.setOnLongClickListener(this);
 
         mBookmarkButton = findViewById(R.id.bookmark_this_page_id);
         mBookmarkButton.setOnClickListener(this);
 
         if (ChromeApplication.isVivaldi()) {
             mBackwardButton = findViewById(R.id.backward_menu_id);
-            if (mBackwardButton != null)
+            if (mBackwardButton != null) {
                 mBackwardButton.setOnClickListener(this);
+                mBackwardButton.setOnLongClickListener(this);
+            }
 
             ImageButton homeButton = findViewById(R.id.home_menu_id);
             if (homeButton != null)
@@ -103,6 +116,9 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
         mDownloadButton.setEnabled(DownloadUtils.isAllowedToDownloadPage(currentTab));
 
         loadingStateChanged(currentTab.isLoading());
+
+        // Vivaldi
+        mCurrentTab = currentTab;
     }
 
     @Override
@@ -125,7 +141,14 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
     }
 
     private void updateBookmarkMenuItem(BookmarkBridge bookmarkBridge, Tab currentTab) {
-        // Vivaldi
+        // Vivaldi:
+        // If the bookmarkBridge is unavailable, there is no way to determine the state,
+        // so make the bookmark item passive/disabled.
+        if (bookmarkBridge == null) {
+            mBookmarkButton.setImageResource(R.drawable.btn_star);
+            mBookmarkButton.setEnabled(false);
+            return;
+        }
         if (currentTab.isNativePage() || currentTab.getWebContents() == null)
             mBookmarkButton.setEnabled(false);
         else
@@ -141,5 +164,48 @@ public class AppMenuIconRowFooter extends LinearLayout implements View.OnClickLi
             mBookmarkButton.setContentDescription(
                     getContext().getString(R.string.accessibility_menu_bookmark));
         }
+    }
+
+    // Vivaldi
+    private final Runnable mNavigationPopupDismissRunnable = new Runnable() {
+        @Override
+        public void run() {
+            mAppMenuHandler.hideAppMenu();
+        }
+    };
+
+    // Vivaldi
+    @Override
+    public boolean onLongClick(View v) {
+        if ((v == mBackwardButton) || (v == mForwardButton)) {
+            if (mCurrentTab == null || mCurrentTab.getWebContents() == null) return false;
+            // Context must be a ChromeActivity here for NavigationPopup to work.
+            Context context = mCurrentTab.getWindowAndroid().getContext().get();
+            assert context instanceof ChromeActivity;
+            mNavigationPopup = new NavigationPopup(
+                    Profile.fromWebContents(mCurrentTab.getWebContents()),
+                    context,
+                    mCurrentTab.getWebContents().getNavigationController(),
+                    (v == mBackwardButton) ? NavigationPopup.Type.TABLET_BACK
+                                           : NavigationPopup.Type.TABLET_FORWARD);
+
+            // Close app menu when dismissing the navigation popup.
+            mNavigationPopup.setOnDismissCallback(mNavigationPopupDismissRunnable);
+            mNavigationPopup.show(this);
+
+            return true;
+        }
+        return false;
+    }
+
+    // Vivaldi
+    @Override
+    public void onWindowFocusChanged(boolean hasWindowFocus) {
+        // Ensure the navigation popup is not shown after resuming activity from background.
+        if (hasWindowFocus && mNavigationPopup != null) {
+            mNavigationPopup.dismiss();
+            mNavigationPopup = null;
+        }
+        super.onWindowFocusChanged(hasWindowFocus);
     }
 }

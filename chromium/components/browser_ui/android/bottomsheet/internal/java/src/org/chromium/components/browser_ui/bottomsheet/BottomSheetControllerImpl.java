@@ -35,12 +35,6 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController {
     /** The initial capacity for the priority queue handling pending content show requests. */
     private static final int INITIAL_QUEUE_CAPACITY = 1;
 
-    /** The height of the shadow that sits above the toolbar. */
-    private int mToolbarShadowHeight;
-
-    /** The offset of the toolbar shadow from the top that remains empty. */
-    private int mShadowTopOffset;
-
     /** A handle to the {@link BottomSheet} that this class controls. */
     private BottomSheet mBottomSheet;
 
@@ -114,10 +108,6 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController {
 
         mBottomSheet.init(window, keyboardDelegate);
         mBottomSheet.setAccssibilityUtil(mAccessibilityUtil);
-        mToolbarShadowHeight = mBottomSheet.getResources().getDimensionPixelOffset(
-                BottomSheet.getTopShadowResourceId());
-        mShadowTopOffset = mBottomSheet.getResources().getDimensionPixelOffset(
-                BottomSheet.getShadowTopOffsetResourceId());
 
         // Initialize the queue with a comparator that checks content priority.
         mContentQueue = new PriorityQueue<>(INITIAL_QUEUE_CAPACITY,
@@ -296,7 +286,7 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController {
 
     @Override
     public int getTopShadowHeight() {
-        return mToolbarShadowHeight + mShadowTopOffset;
+        return mBottomSheet != null ? (int) mBottomSheet.getToolbarShadowHeight() : 0;
     }
 
     @Override
@@ -377,14 +367,26 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController {
         mBottomSheet.endAnimations();
     }
 
+    @VisibleForTesting
+    public void forceDismissAllContent() {
+        clearRequestsAndHide();
+
+        // Handle content that has a custom lifecycle.
+        hideContent(mBottomSheet.getCurrentSheetContent(), /* animate= */ true);
+    }
+
     @Override
     public boolean requestShowContent(BottomSheetContent content, boolean animate) {
+        if (content == null) {
+            throw new RuntimeException("Attempting to show null content in the sheet!");
+        }
+
         if (mBottomSheet == null) mSheetInitializer.run();
 
         // If already showing the requested content, do nothing.
         if (content == mBottomSheet.getCurrentSheetContent()) return true;
 
-        boolean shouldSuppressExistingContent = mBottomSheet.getCurrentSheetContent() != null
+        boolean shouldSwapForPriorityContent = mBottomSheet.getCurrentSheetContent() != null
                 && content.getPriority() < mBottomSheet.getCurrentSheetContent().getPriority()
                 && canBottomSheetSwitchContent();
 
@@ -392,13 +394,20 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController {
         // necessary. If already hidden, |showNextContent| will handle the request.
         mContentQueue.add(content);
 
-        if (mBottomSheet.getCurrentSheetContent() == null) {
+        if (mBottomSheet.getCurrentSheetContent() == null && !mSuppressionTokens.hasTokens()) {
             showNextContent(animate);
             return true;
-        } else if (shouldSuppressExistingContent) {
+        } else if (shouldSwapForPriorityContent) {
             mContentQueue.add(mBottomSheet.getCurrentSheetContent());
-            mBottomSheet.setSheetState(SheetState.HIDDEN, animate);
-            return true;
+            if (!mSuppressionTokens.hasTokens()) {
+                mBottomSheet.setSheetState(SheetState.HIDDEN, animate);
+                return true;
+            } else {
+                // Since the sheet is already suppressed and hidden, clear the sheet's content if
+                // the requested content is higher priority. The unsuppression logic will figure out
+                // which content to show next.
+                mBottomSheet.showContent(null);
+            }
         }
         return false;
     }
@@ -458,6 +467,10 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController {
      * @param animate Whether the sheet should animate opened.
      */
     private void showNextContent(boolean animate) {
+        if (mBottomSheet.getSheetState() != SheetState.HIDDEN) {
+            throw new RuntimeException("Showing next content before sheet is hidden!");
+        }
+
         if (mContentQueue.isEmpty()) {
             mBottomSheet.showContent(null);
             return;

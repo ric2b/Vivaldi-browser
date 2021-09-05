@@ -97,6 +97,7 @@ class PLATFORM_EXPORT PaintController {
     return new_paint_chunks_.LastChunk().bounds;
   }
 
+  void EnsureChunk() { new_paint_chunks_.EnsureChunk(); }
   void RecordHitTestData(const DisplayItemClient& client,
                          const IntRect& rect,
                          TouchAction touch_action) {
@@ -230,9 +231,6 @@ class PLATFORM_EXPORT PaintController {
   // Returns DisplayItemList added using CreateAndAppend() since beginning or
   // the last CommitNewDisplayItems(). Use with care.
   DisplayItemList& NewDisplayItemList() { return new_display_item_list_; }
-
-  void AppendDebugDrawingAfterCommit(sk_sp<const PaintRecord>,
-                                     const PropertyTreeStateOrAlias&);
 
 #if DCHECK_IS_ON()
   void ShowCompactDebugData() const;

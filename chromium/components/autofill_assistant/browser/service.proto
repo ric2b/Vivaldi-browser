@@ -459,6 +459,21 @@ enum ClickType {
   CLICK = 3;
 }
 
+message AutofillValue {
+  message Profile { optional string identifier = 1; }
+
+  // The profile to be used. This has to be requested with a
+  // |CollectUserDataAction| first.
+  optional Profile profile = 1;
+
+  // A string containing any number of "${key}" placeholders, where the key is
+  // an integer corresponding to entries from field_types.h or
+  // |AutofillFormatProto::AutofillAssistantCustomField|.
+  // Note that the set of actually available fields are outside of our
+  // control and are retrieved automatically from the provided profile.
+  optional string value_expression = 2;
+}
+
 // An action could be performed.
 message ActionProto {
   // Wait these many milliseconds before executing the action, if set.
@@ -505,7 +520,7 @@ message ActionProto {
   // action sent to the client after this one. Default is false.
   optional bool clean_contextual_ui = 33;
 
-  reserved 34, 46, 47, 48, 50, 51;
+  reserved 8, 13 to 17, 20 to 23, 25 to 27, 30, 34, 38, 46 to 48, 50, 51;
 }
 
 // Result of |CollectUserDataProto| to be sent to the server.
@@ -545,6 +560,12 @@ message CollectUserDataResultProto {
   optional bool shown_to_user = 16;
   // Indicates that the chosen login option was missing the username.
   optional bool login_missing_username = 17;
+  // Indicates what profile data is available for the Contact.
+  repeated string non_empty_contact_field = 18;
+  // Indicates what profile data is available for the Shipping address.
+  repeated string non_empty_shipping_address_field = 19;
+  // Indicates what profile data is available for the Billing address.
+  repeated string non_empty_billing_address_field = 20;
 
   reserved 7, 8;
 }
@@ -607,6 +628,9 @@ message ProcessedActionStatusDetailsProto {
 
   // More information included for autofill related errors.
   optional AutofillErrorInfoProto autofill_error_info = 3;
+
+  // More information included for |SetFormFieldValueProto| related errors.
+  optional SetFormFieldErrorInfoProto form_field_error_info = 4;
 }
 
 message NavigationInfoProto {
@@ -709,6 +733,13 @@ message AutofillErrorInfoProto {
 
   // Errors that occurred during fallback filling of autofill fields.
   repeated AutofillFieldError autofill_field_error = 5;
+}
+
+// Message to report |SetFormFieldValueProto| related errors for debugging
+// purposes.
+message SetFormFieldErrorInfoProto {
+  // The index of |keypress| that caused the action to be invalid.
+  optional int32 invalid_keypress_index = 1;
 }
 
 // The pseudo type values come from
@@ -914,13 +945,20 @@ message SelectOptionProto {
   // The drop down element on which to select an option.
   optional SelectorProto element = 2;
 
-  // Value of the option to use.
-  optional string selected_option = 3;
+  oneof value {
+    // Value of the option to use.
+    string selected_option = 3;
+    // A value from an Autofill source. Note that this must be proceeded by a
+    // |CollectUserDataAction|.
+    AutofillValue autofill_value = 5;
+  }
 
   // The strategy used to select a value option. This defaults to
   // |LABEL_STARTS_WITH| for the legacy case.
   optional DropdownSelectStrategy select_strategy = 4
       [default = LABEL_STARTS_WITH];
+
+  reserved 1;
 }
 
 // Contain a localized text message from the server.
@@ -993,9 +1031,9 @@ message UseAddressProto {
   // Message used to indicate what form fields should be filled with what
   // information coming from the address.
   message RequiredField {
-    // A string containing either a single integer key or multiple "${key}"
-    // placeholders, where the key is an integer corresponding to entries from
-    // field_types.h or AutofillFormatProto::AutofillAssistantCustomField.
+    // A string containing any number of "${key}" placeholders, where the key
+    // is an integer corresponding to entries from field_types.h or
+    // |AutofillFormatProto::AutofillAssistantCustomField|.
     // Example:
     // * "3" -> First name.
     // * "${3}" -> First name.
@@ -1059,9 +1097,9 @@ message UseCreditCardProto {
   // Message used to indicate what form fields should be filled with what
   // information.
   message RequiredField {
-    // A string containing either a single integer key or multiple "${key}"
-    // placeholders, where the key is an integer corresponding to entries from
-    // field_types.h or AutofillFormatProto::AutofillAssistantCustomField.
+    // A string containing any number of "${key}" placeholders, where the key
+    // is an integer corresponding to entries from field_types.h or
+    // |AutofillFormatProto::AutofillAssistantCustomField|.
     // Example:
     // * "51" -> Full name.
     // * "${51}" -> Full Name.
@@ -1186,9 +1224,17 @@ message ShowProgressBarProto {
     // |step_icons|) indicating the current step the flow is in, marking
     // all previous steps as complete. The active step will not be marked as
     // complete but instead be marked as active with a pulsating animation.
-    // Setting the value to |N| will mark all steps as complete with no step
-    // being active anymore.
+    // Setting the value to |N| or -1 will mark all steps as complete with no
+    // step being active anymore.
     int32 active_step = 8;
+
+    // The string reference of an icon defined in the
+    // |StepProgressBarConfiguration|. This sets the |active_step| to that icon
+    // with the same logic as |active_step| itself.
+    string active_step_identifier = 11;
+
+    // Completes the progress in whichever progress bar is active.
+    bool complete_progress = 12;
   }
 
   // Whether the step progress bar should go into an error state.
@@ -1199,6 +1245,13 @@ message ShowProgressBarProto {
 
   // Hide the progress bar in the UI.
   optional bool hide = 7;
+
+  message StepProgressBarIcon {
+    optional DrawableProto icon = 1;
+
+    // The reference identifier of this step.
+    optional string identifier = 2;
+  }
 
   // The configuration of the step progress bar. Only has an impact if the new
   // progress bar is being used. This configuration should only be sent once in
@@ -1213,7 +1266,9 @@ message ShowProgressBarProto {
     // Set the icons for the new progress bar. The size of the |step_icons|
     // gives the length of the progress bar. As such an empty list is not
     // supported. The list needs to be at least 2 items long.
-    repeated DrawableProto step_icons = 2;
+    repeated StepProgressBarIcon annotated_step_icons = 3;
+
+    reserved 2;
   }
   optional StepProgressBarConfiguration step_progress_bar_configuration = 9;
 
@@ -1901,6 +1956,9 @@ message SetFormFieldValueProto {
       bool use_password = 5;
       // Use the value stored at the specified memory location.
       string client_memory_key = 6;
+      // A value from an Autofill source. Note that this must be proceeded by a
+      // |CollectUserDataAction|.
+      AutofillValue autofill_value = 8;
     }
 
     reserved 7;

@@ -25,7 +25,7 @@
 #include "content/browser/devtools/protocol/devtools_download_manager_delegate.h"
 #include "content/browser/devtools/protocol/devtools_protocol_test_support.h"
 #include "content/browser/download/download_manager_impl.h"
-#include "content/browser/frame_host/navigator.h"
+#include "content/browser/renderer_host/navigator.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -387,12 +387,12 @@ bool MatchesBitmap(const SkBitmap& expected_bmp,
 class CaptureScreenshotTest : public DevToolsProtocolTest {
  protected:
   enum ScreenshotEncoding { ENCODING_PNG, ENCODING_JPEG };
-  void CaptureScreenshotAndCompareTo(const SkBitmap& expected_bitmap,
-                                     ScreenshotEncoding encoding,
-                                     bool from_surface,
-                                     float device_scale_factor = 0,
-                                     const gfx::RectF& clip = gfx::RectF(),
-                                     float clip_scale = 0) {
+
+  std::unique_ptr<SkBitmap> CaptureScreenshot(
+      ScreenshotEncoding encoding,
+      bool from_surface,
+      const gfx::RectF& clip = gfx::RectF(),
+      float clip_scale = 0) {
     std::unique_ptr<base::DictionaryValue> params(new base::DictionaryValue());
     params->SetString("format", encoding == ENCODING_PNG ? "png" : "jpeg");
     params->SetInteger("quality", 100);
@@ -419,6 +419,17 @@ class CaptureScreenshotTest : public DevToolsProtocolTest {
       result_bitmap = DecodeJPEG(base64);
     }
     EXPECT_TRUE(result_bitmap);
+    return result_bitmap;
+  }
+
+  void CaptureScreenshotAndCompareTo(const SkBitmap& expected_bitmap,
+                                     ScreenshotEncoding encoding,
+                                     bool from_surface,
+                                     float device_scale_factor = 0,
+                                     const gfx::RectF& clip = gfx::RectF(),
+                                     float clip_scale = 0) {
+    std::unique_ptr<SkBitmap> result_bitmap =
+        CaptureScreenshot(encoding, from_surface, clip, clip_scale);
 
     gfx::Rect matching_mask(gfx::SkIRectToRect(expected_bitmap.bounds()));
 #if defined(OS_MAC)
@@ -558,6 +569,64 @@ IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest, CaptureScreenshotJpeg) {
   expected_bitmap.eraseColor(SkColorSetRGB(0x12, 0x34, 0x56));
   CaptureScreenshotAndCompareTo(expected_bitmap, ENCODING_JPEG, false);
 }
+
+// ChromeOS and Android don't support software compositing.
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+
+class NoGPUCaptureScreenshotTest : public CaptureScreenshotTest {
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    CaptureScreenshotTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(switches::kDisableGpuCompositing);
+  }
+};
+
+// Tests that large screenshots are composited fine with software compositor.
+// Regression test for https://crbug.com/1137291.
+IN_PROC_BROWSER_TEST_F(NoGPUCaptureScreenshotTest, LargeScreenshot) {
+  // This test fails consistently on low-end Android devices.
+  // See crbug.com/653637.
+  // TODO(eseckler): Reenable with error limit if necessary.
+  if (base::SysInfo::IsLowEndDevice())
+    return;
+  // If disabling software compositing is disabled by the test caller,
+  // we're out of luck.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableSoftwareCompositingFallback)) {
+    return;
+  }
+  shell()->LoadURL(
+      GURL("data:text/html,"
+           "<style>body,html { padding: 0; margin: 0; }</style>"
+           "<div style='width: 1250px; height: 8440px; "
+           "     background: linear-gradient(red, blue)'></div>"));
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+  Attach();
+
+  auto params = std::make_unique<base::DictionaryValue>();
+  params->SetInteger("width", 1280);
+  params->SetInteger("height", 8440);
+  params->SetDouble("deviceScaleFactor", 1);
+  params->SetBoolean("mobile", false);
+  SendCommand("Emulation.setDeviceMetricsOverride", std::move(params));
+  auto bitmap =
+      CaptureScreenshot(ENCODING_PNG, true, gfx::RectF(0, 0, 1280, 8440), 1);
+  SendCommand("Emulation.clearDeviceMetricsOverride", nullptr);
+
+  EXPECT_EQ(1280, bitmap->width());
+  EXPECT_EQ(8440, bitmap->height());
+
+  // Top-left is red-ish.
+  SkColor top_left = bitmap->getColor(0, 0);
+  EXPECT_GT(static_cast<int>(SkColorGetR(top_left)), 128);
+  EXPECT_LT(static_cast<int>(SkColorGetB(top_left)), 128);
+
+  // Bottom-left is blue-ish.
+  SkColor bottom_left = bitmap->getColor(0, 8339);
+  EXPECT_LT(static_cast<int>(SkColorGetR(bottom_left)), 128);
+  EXPECT_GT(static_cast<int>(SkColorGetB(bottom_left)), 128);
+}
+
+#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 
 // Setting frame size (through RWHV) is not supported on Android.
 // This test seems to be very flaky on windows: https://crbug.com/801173

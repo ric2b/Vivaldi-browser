@@ -228,6 +228,10 @@ TEST_P(PaintLayerTest, NonCompositedScrollingNeedsRepaint) {
     return;
 
   SetBodyInnerHTML(R"HTML(
+    <style>
+     /* to prevent the mock overlay scrollbar from affecting compositing. */
+     ::-webkit-scrollbar { display: none; }
+    </style>
     <div id='scroll' style='width: 100px; height: 100px; overflow: scroll'>
       <div id='content' style='position: relative; background: blue;
           width: 2000px; height: 2000px'></div>
@@ -2926,6 +2930,19 @@ TEST_P(PaintLayerTest, GlobalRootScrollerHitTest) {
     EXPECT_EQ(result_scrollbar.InnerNode(), &GetDocument());
     EXPECT_NE(result_scrollbar.GetScrollbar(), nullptr);
   }
+}
+
+TEST_P(PaintLayerTest, HasNonEmptyChildLayoutObjectsZeroSizeOverflowVisible) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="layer" style="position: relative">
+      <div style="overflow: visible; height: 0; width: 0">text</div>
+    </div>
+  )HTML");
+
+  auto* layer = ToLayoutBox(GetLayoutObjectByElementId("layer"))->Layer();
+  EXPECT_TRUE(layer->HasVisibleContent());
+  EXPECT_FALSE(layer->HasVisibleDescendant());
+  EXPECT_TRUE(layer->HasNonEmptyChildLayoutObjects());
 }
 
 }  // namespace blink

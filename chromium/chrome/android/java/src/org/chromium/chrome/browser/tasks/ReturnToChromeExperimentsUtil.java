@@ -22,9 +22,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.locale.LocaleManager;
-import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.TabLaunchType;
-import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
@@ -140,11 +138,13 @@ public final class ReturnToChromeExperimentsUtil {
      *
      * @param url The URL to load.
      * @param transition The page transition type.
+     * @param incognito Whether to load URL in an incognito Tab.
      * @return true if we have handled the navigation, false otherwise.
      */
     public static boolean willHandleLoadUrlFromStartSurface(
-            String url, @PageTransition int transition) {
-        return willHandleLoadUrlWithPostDataFromStartSurface(url, transition, null, null);
+            String url, @PageTransition int transition, @Nullable Boolean incognito) {
+        return willHandleLoadUrlWithPostDataFromStartSurface(
+                url, transition, null, null, incognito);
     }
 
     /**
@@ -156,24 +156,33 @@ public final class ReturnToChromeExperimentsUtil {
      * @param postDataType   postData type.
      * @param postData       POST data to include in the tab URL's request body, ex. bitmap when
      *         image search.
+     * @param incognito Whether to load URL in an incognito Tab. If null, the current tab model will
+     *         be used.
      * @return true if we have handled the navigation, false otherwise.
      */
     public static boolean willHandleLoadUrlWithPostDataFromStartSurface(String url,
             @PageTransition int transition, @Nullable String postDataType,
-            @Nullable byte[] postData) {
+            @Nullable byte[] postData, @Nullable Boolean incognito) {
         ChromeActivity chromeActivity = getActivityPresentingOverviewWithOmnibox();
         if (chromeActivity == null) return false;
 
         // Create a new unparented tab.
-        TabModel model = chromeActivity.getCurrentTabModel();
+        boolean incognitoParam;
+        if (incognito == null) {
+            incognitoParam = chromeActivity.getCurrentTabModel().isIncognito();
+        } else {
+            incognitoParam = incognito;
+        }
+
         LoadUrlParams params = new LoadUrlParams(url);
+        // TODO(https://crbug.com/1134187): This may no longer accurate.
         params.setTransitionType(transition | PageTransition.FROM_ADDRESS_BAR);
         if (!TextUtils.isEmpty(postDataType) && postData != null && postData.length != 0) {
             params.setVerbatimHeaders("Content-Type: " + postDataType);
             params.setPostData(ResourceRequestBody.createFromBytes(postData));
         }
 
-        chromeActivity.getTabCreator(model.isIncognito())
+        chromeActivity.getTabCreator(incognitoParam)
                 .createNewTab(params, TabLaunchType.FROM_START_SURFACE, null);
 
         if (transition == PageTransition.AUTO_BOOKMARK) {
@@ -211,17 +220,12 @@ public final class ReturnToChromeExperimentsUtil {
         return chromeActivity;
     }
 
-    /**
-     * TODO(crbug/1041865): avoid using GURL since {@link #shouldShowStartSurfaceAsTheHomePage()}
-     *  is in the critical path in Instant Start.
-     */
-    private static boolean isNTPUrl(String url) {
-        if (CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)) {
-            try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-                return NewTabPage.isNTPUrl(url);
-            }
-        }
-        return NewTabPage.isNTPUrl(url);
+    public static boolean isCanonicalizedNTPUrl(String url) {
+        if (TextUtils.isEmpty(url)) return false;
+        // Avoid loading native library due to GURL usage since
+        // #shouldShowStartSurfaceAsTheHomePage() is in the critical path in Instant Start.
+        return url.equals("chrome://newtab/") || url.equals("chrome-native://newtab/")
+                || url.equals("about:newtab");
     }
 
     /**
@@ -237,6 +241,29 @@ public final class ReturnToChromeExperimentsUtil {
     }
 
     /**
+     * @return Whether we should show Start Surface as the home page on phone. Start surface
+     *         hasn't been enabled on tablet yet.
+     */
+    public static boolean shouldShowStartSurfaceAsTheHomePageOnPhone(boolean isTablet) {
+        return !isTablet && shouldShowStartSurfaceAsTheHomePage();
+    }
+
+    /**
+     * @return Whether Start Surface should be shown as NTP.
+     */
+    public static boolean shouldShowStartSurfaceHomeAsNTP(boolean incognito, boolean isTablet) {
+        return !incognito && shouldShowStartSurfaceAsTheHomePageOnPhone(isTablet);
+    }
+
+    /**
+     * @return Whether hides the home button on an incognito tab.
+     */
+    public static boolean shouldHideHomeButtonForStartSurface(boolean incognito, boolean isTablet) {
+        return incognito && StartSurfaceConfiguration.START_SURFACE_HIDE_INCOGNITO_SWITCH.getValue()
+                && shouldShowStartSurfaceAsTheHomePageOnPhone(isTablet);
+    }
+
+    /**
      * Check whether we should show Start Surface as the home page for initial tab creation.
      *
      * @return Whether Start Surface should be shown as the home page.
@@ -247,7 +274,7 @@ public final class ReturnToChromeExperimentsUtil {
         // accessibility is not enabled and not on tablet.
         String homePageUrl = HomepageManager.getHomepageUri();
         return StartSurfaceConfiguration.isStartSurfaceSinglePaneEnabled()
-                && (TextUtils.isEmpty(homePageUrl) || isNTPUrl(homePageUrl))
+                && (TextUtils.isEmpty(homePageUrl) || isCanonicalizedNTPUrl(homePageUrl))
                 && !ChromeAccessibilityUtil.get().isAccessibilityEnabled()
                 && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(
                         ContextUtils.getApplicationContext());
@@ -258,7 +285,9 @@ public final class ReturnToChromeExperimentsUtil {
      * @return the total tab count, and works before native initialization.
      */
     public static int getTotalTabCount(TabModelSelector tabModelSelector) {
-        if (CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)
+        if ((CachedFeatureFlags.isEnabled(ChromeFeatureList.INSTANT_START)
+                    || CachedFeatureFlags.isEnabled(
+                            ChromeFeatureList.PAINT_PREVIEW_SHOW_ON_STARTUP))
                 && !tabModelSelector.isTabStateInitialized()) {
             List<PseudoTab> allTabs;
             try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {

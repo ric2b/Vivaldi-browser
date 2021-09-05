@@ -50,7 +50,8 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   void GetSavedPasswordsList(UiEntriesCallback callback) override;
   void GetPasswordExceptionsList(ExceptionEntriesCallback callback) override;
   bool ChangeSavedPassword(const std::vector<int>& ids,
-                           base::string16 new_password) override;
+                           const base::string16& new_username,
+                           const base::string16& new_password) override;
   void RemoveSavedPasswords(const std::vector<int>& ids) override;
   void RemovePasswordExceptions(const std::vector<int>& ids) override;
   void UndoRemoveSavedPasswordOrException() override;
@@ -70,21 +71,25 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   // TODO(crbug.com/1102294): Mimic the signature in PasswordFeatureManager.
   void SetAccountStorageOptIn(bool opt_in,
                               content::WebContents* web_contents) override;
-  std::vector<api::passwords_private::CompromisedCredential>
+  std::vector<api::passwords_private::InsecureCredential>
   GetCompromisedCredentials() override;
-  void GetPlaintextCompromisedPassword(
-      api::passwords_private::CompromisedCredential credential,
+  std::vector<api::passwords_private::InsecureCredential> GetWeakCredentials()
+      override;
+  void GetPlaintextInsecurePassword(
+      api::passwords_private::InsecureCredential credential,
       api::passwords_private::PlaintextReason reason,
       content::WebContents* web_contents,
-      PlaintextCompromisedPasswordCallback callback) override;
-  bool ChangeCompromisedCredential(
-      const api::passwords_private::CompromisedCredential& credential,
+      PlaintextInsecurePasswordCallback callback) override;
+  bool ChangeInsecureCredential(
+      const api::passwords_private::InsecureCredential& credential,
       base::StringPiece new_password) override;
-  bool RemoveCompromisedCredential(
-      const api::passwords_private::CompromisedCredential& credential) override;
+  bool RemoveInsecureCredential(
+      const api::passwords_private::InsecureCredential& credential) override;
   void StartPasswordCheck(StartPasswordCheckCallback callback) override;
   void StopPasswordCheck() override;
   api::passwords_private::PasswordCheckStatus GetPasswordCheckStatus() override;
+  password_manager::InsecureCredentialsManager* GetInsecureCredentialsManager()
+      override;
 
   // PasswordUIView implementation.
   Profile* GetProfile() override;

@@ -28,7 +28,6 @@
 #include <memory>
 
 #include "cc/layers/picture_layer.h"
-#include "third_party/blink/renderer/core/accessibility/apply_dark_mode.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
@@ -145,7 +144,7 @@ static WebPluginContainerImpl* GetPluginContainer(LayoutObject& layout_object) {
 // position offset for this composited layer.
 static bool UsesCompositedStickyPosition(PaintLayer& layer) {
   return layer.GetLayoutObject().StyleRef().HasStickyConstrainedPosition() &&
-         layer.AncestorOverflowLayer()->NeedsCompositedScrolling();
+         layer.AncestorScrollContainerLayer()->NeedsCompositedScrolling();
 }
 
 // Returns the sticky position offset that should be removed from a given layer
@@ -157,9 +156,10 @@ static FloatPoint StickyPositionOffsetForLayer(PaintLayer& layer) {
   if (!UsesCompositedStickyPosition(layer))
     return FloatPoint();
 
-  const StickyConstraintsMap& constraints_map = layer.AncestorOverflowLayer()
-                                                    ->GetScrollableArea()
-                                                    ->GetStickyConstraintsMap();
+  const StickyConstraintsMap& constraints_map =
+      layer.AncestorScrollContainerLayer()
+          ->GetScrollableArea()
+          ->GetStickyConstraintsMap();
   const StickyPositionScrollingConstraints& constraints =
       constraints_map.at(&layer);
 
@@ -499,8 +499,10 @@ void CompositedLayerMapping::ComputeBoundsOfOwningLayer(
       RoundedIntPoint(offset_from_composited_ancestor);
 
   PhysicalOffset subpixel_accumulation;
-  if (!owning_layer_.Transform() ||
-      owning_layer_.Transform()->IsIdentityOrTranslation()) {
+  if ((!owning_layer_.Transform() ||
+       owning_layer_.Transform()->IsIdentityOrTranslation()) &&
+      !(owning_layer_.GetCompositingReasons() &
+        CompositingReason::kPreventingSubpixelAccumulationReasons)) {
     subpixel_accumulation =
         offset_from_composited_ancestor -
         PhysicalOffset(snapped_offset_from_composited_ancestor);
@@ -891,7 +893,11 @@ void CompositedLayerMapping::UpdateInternalHierarchy() {
   // layers in SetSubLayers(), so it's not inserted here.
   graphics_layer_->RemoveFromParent();
 
-  if (scrolling_contents_layer_)
+  bool overflow_controls_after_scrolling_contents =
+      owning_layer_.IsRootLayer() ||
+      (owning_layer_.GetScrollableArea() &&
+       owning_layer_.GetScrollableArea()->HasOverlayOverflowControls());
+  if (overflow_controls_after_scrolling_contents && scrolling_contents_layer_)
     graphics_layer_->AddChild(scrolling_contents_layer_.get());
 
   if (layer_for_horizontal_scrollbar_)
@@ -900,6 +906,9 @@ void CompositedLayerMapping::UpdateInternalHierarchy() {
     graphics_layer_->AddChild(layer_for_vertical_scrollbar_.get());
   if (layer_for_scroll_corner_)
     graphics_layer_->AddChild(layer_for_scroll_corner_.get());
+
+  if (!overflow_controls_after_scrolling_contents && scrolling_contents_layer_)
+    graphics_layer_->AddChild(scrolling_contents_layer_.get());
 
   if (decoration_outline_layer_)
     graphics_layer_->AddChild(decoration_outline_layer_.get());
@@ -1405,20 +1414,6 @@ void CompositedLayerMapping::ContentChanged(ContentChangeType change_type) {
   }
 }
 
-FloatPoint3D CompositedLayerMapping::ComputeTransformOrigin(
-    const IntRect& border_box) const {
-  const ComputedStyle& style = GetLayoutObject().StyleRef();
-
-  FloatPoint3D origin;
-  origin.SetX(
-      FloatValueForLength(style.TransformOriginX(), border_box.Width()));
-  origin.SetY(
-      FloatValueForLength(style.TransformOriginY(), border_box.Height()));
-  origin.SetZ(style.TransformOriginZ());
-
-  return origin;
-}
-
 // Return the offset from the top-left of this compositing layer at which the
 // LayoutObject's contents are painted.
 PhysicalOffset CompositedLayerMapping::ContentOffsetInCompositingLayer() const {
@@ -1460,32 +1455,36 @@ GraphicsLayer* CompositedLayerMapping::ParentForSublayers() const {
   return graphics_layer_.get();
 }
 
-void CompositedLayerMapping::SetSublayers(
-    const GraphicsLayerVector& sublayers) {
+void CompositedLayerMapping::SetSublayers(GraphicsLayerVector sublayers) {
   GraphicsLayer* parent = ParentForSublayers();
 
   // TODO(szager): Remove after diagnosing crash crbug.com/1092673
   CHECK(parent);
 
-  // Some layers are managed by CompositedLayerMapping under |parent| need to
-  // be reattached after SetChildren() below which will clobber all children.
-  GraphicsLayerVector layers_needing_reattachment;
-  auto add_layer_needing_reattachment =
-      [parent, &layers_needing_reattachment](GraphicsLayer* layer) {
-        if (layer && layer->Parent() == parent)
-          layers_needing_reattachment.push_back(layer);
-      };
-  add_layer_needing_reattachment(layer_for_horizontal_scrollbar_.get());
-  add_layer_needing_reattachment(layer_for_vertical_scrollbar_.get());
-  add_layer_needing_reattachment(layer_for_scroll_corner_.get());
-  add_layer_needing_reattachment(decoration_outline_layer_.get());
-  add_layer_needing_reattachment(mask_layer_.get());
-  add_layer_needing_reattachment(non_scrolling_squashing_layer_.get());
+  // The caller should have inserted |foreground_layer_| into |sublayers|.
+  DCHECK(!foreground_layer_ || sublayers.Contains(foreground_layer_.get()));
+
+  if (parent == graphics_layer_.get()) {
+    // SetChildren() below will clobber all layers in |parent|, so we need to
+    // add layers that should stay in the children list into |sublayers|.
+    if (!NeedsToReparentOverflowControls()) {
+      if (layer_for_horizontal_scrollbar_)
+        sublayers.insert(0, layer_for_horizontal_scrollbar_.get());
+      if (layer_for_vertical_scrollbar_)
+        sublayers.insert(0, layer_for_vertical_scrollbar_.get());
+      if (layer_for_scroll_corner_)
+        sublayers.insert(0, layer_for_scroll_corner_.get());
+    }
+
+    if (decoration_outline_layer_)
+      sublayers.push_back(decoration_outline_layer_.get());
+    if (mask_layer_)
+      sublayers.push_back(mask_layer_.get());
+    if (non_scrolling_squashing_layer_)
+      sublayers.push_back(non_scrolling_squashing_layer_.get());
+  }
 
   parent->SetChildren(sublayers);
-
-  for (GraphicsLayer* layer : layers_needing_reattachment)
-    parent->AddChild(layer);
 }
 
 GraphicsLayerUpdater::UpdateType CompositedLayerMapping::UpdateTypeForChildren(
@@ -1635,8 +1634,9 @@ void CompositedLayerMapping::DoPaintTask(
       paint_info.paint_layer->GetLayoutObject().GetFrame());
   context.SetDeviceScaleFactor(device_scale_factor);
   Settings* settings = GetLayoutObject().GetFrame()->GetSettings();
-  context.SetDarkMode(
-      BuildDarkModeSettings(*settings, *GetLayoutObject().View()));
+  context.SetDarkModeEnabled(
+      settings->GetForceDarkModeEnabled() &&
+      !GetLayoutObject().View()->StyleRef().DarkColorScheme());
 
   // As a composited layer may be painted directly, we need to traverse the
   // effect tree starting from the current node all the way up through the
@@ -2056,10 +2056,6 @@ bool CompositedLayerMapping::IsUnderSVGHiddenContainer() const {
   return owning_layer_.IsUnderSVGHiddenContainer();
 }
 
-bool CompositedLayerMapping::IsSVGRoot() const {
-  return GetLayoutObject().IsSVGRoot();
-}
-
 bool CompositedLayerMapping::IsTrackingRasterInvalidations() const {
   return GetLayoutObject().GetFrameView()->IsTrackingRasterInvalidations();
 }
@@ -2070,18 +2066,8 @@ void CompositedLayerMapping::GraphicsLayersDidChange() {
   frame_view->SetForeignLayerListNeedsUpdate();
 }
 
-bool CompositedLayerMapping::PaintBlockedByDisplayLockIncludingAncestors(
-    DisplayLockContextLifecycleTarget target) const {
-  auto* node = GetLayoutObject().GetNode();
-  if (node) {
-    auto* element = DynamicTo<Element>(node);
-    if (target == DisplayLockContextLifecycleTarget::kSelf && element) {
-      if (auto* context = element->GetDisplayLockContext()) {
-        if (!context->ShouldPaint(DisplayLockLifecycleTarget::kSelf))
-          return true;
-      }
-    }
-  }
+bool CompositedLayerMapping::PaintBlockedByDisplayLockIncludingAncestors()
+    const {
   return DisplayLockUtilities::NearestLockedExclusiveAncestor(
       GetLayoutObject());
 }

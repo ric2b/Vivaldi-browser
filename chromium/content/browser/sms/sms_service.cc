@@ -14,8 +14,9 @@
 #include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
-#include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/sms/sms_metrics.h"
 #include "content/browser/sms/user_consent_handler.h"
 #include "content/public/browser/navigation_details.h"
@@ -25,6 +26,7 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/public/mojom/sms/sms_receiver.mojom-shared.h"
 
 using blink::SmsReceiverDestroyedReason;
@@ -68,7 +70,7 @@ SmsService::SmsService(
 
 SmsService::~SmsService() {
   if (callback_)
-    CompleteRequest(SmsStatus::kTimeout);
+    CompleteRequest(SmsStatus::kUnhandledRequest);
   DCHECK(!callback_);
 }
 
@@ -131,13 +133,38 @@ void SmsService::OnReceive(const std::string& one_time_code) {
   DCHECK(!start_time_.is_null());
 
   receive_time_ = base::TimeTicks::Now();
-  RecordSmsReceiveTime(receive_time_ - start_time_);
+  RecordSmsReceiveTime(receive_time_ - start_time_,
+                       render_frame_host()->GetPageUkmSourceId());
+  RecordSmsParsingStatus(SmsParsingStatus::kParsed,
+                         render_frame_host()->GetPageUkmSourceId());
 
   one_time_code_ = one_time_code;
 
   consent_handler_->RequestUserConsent(
       one_time_code, base::BindOnce(&SmsService::CompleteRequest,
                                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void SmsService::OnFailure(FailureType failure_type) {
+  SmsParser::SmsParsingStatus status = SmsParsingStatus::kParsed;
+  switch (failure_type) {
+    case FailureType::kSmsNotParsed_OTPFormatRegexNotMatch:
+      status = SmsParsingStatus::kOTPFormatRegexNotMatch;
+      break;
+    case FailureType::kSmsNotParsed_HostAndPortNotParsed:
+      status = SmsParsingStatus::kHostAndPortNotParsed;
+      break;
+    case FailureType::kSmsNotParsed_kGURLNotValid:
+      status = SmsParsingStatus::kGURLNotValid;
+      break;
+    case FailureType::kPromptTimeout:
+    case FailureType::kPromptCancelled:
+      // TODO(yigu): Land implementation in crrev.com/2427560.
+      NOTIMPLEMENTED();
+      break;
+  }
+  DCHECK(status != SmsParsingStatus::kParsed);
+  RecordSmsParsingStatus(status, render_frame_host()->GetPageUkmSourceId());
 }
 
 void SmsService::Abort() {

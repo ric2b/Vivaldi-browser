@@ -12,19 +12,19 @@ namespace content {
 namespace a11y {
 
 /**
- * Converts cocoa node object to a line index in the formatted accessibility
- * tree, the node is placed at, and vice versa.
+ * Converts accessible node object to a line index in the formatted
+ * accessibility tree, the node is placed at, and vice versa.
  */
-class LineIndexesMap {
+class LineIndexer final {
  public:
-  LineIndexesMap(const BrowserAccessibilityCocoa* cocoa_node);
-  ~LineIndexesMap();
+  LineIndexer(const gfx::NativeViewAccessible node);
+  virtual ~LineIndexer();
 
-  std::string IndexBy(const BrowserAccessibilityCocoa* cocoa_node) const;
+  std::string IndexBy(const gfx::NativeViewAccessible node) const;
   gfx::NativeViewAccessible NodeBy(const std::string& index) const;
 
  private:
-  void Build(const BrowserAccessibilityCocoa* cocoa_node, int* counter);
+  void Build(const gfx::NativeViewAccessible node, int* counter);
 
   std::map<const gfx::NativeViewAccessible, std::string> map;
 };
@@ -63,8 +63,7 @@ class OptionalNSObject final {
 // Invokes attributes matching the given property filter.
 class AttributeInvoker final {
  public:
-  AttributeInvoker(const BrowserAccessibilityCocoa* cocoa_node,
-                   const LineIndexesMap& line_indexes_map);
+  AttributeInvoker(const id node, const LineIndexer* line_indexer);
 
   // Invokes an attribute matching to a property filter.
   OptionalNSObject Invoke(const PropertyNode& property_node) const;
@@ -85,8 +84,8 @@ class AttributeInvoker final {
   gfx::NativeViewAccessible LineIndexToNode(
       const base::string16 line_index) const;
 
-  const BrowserAccessibilityCocoa* cocoa_node;
-  const LineIndexesMap& line_indexes_map;
+  const id node;
+  const LineIndexer* line_indexer;
   const NSArray* attributes;
   const NSArray* parameterized_attributes;
 };

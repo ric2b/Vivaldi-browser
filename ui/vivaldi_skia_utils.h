@@ -3,7 +3,14 @@
 #ifndef UI_VIVALDI_SKIA_UTILS_H_
 #define UI_VIVALDI_SKIA_UTILS_H_
 
+#include <string>
+#include <vector>
+
 #include "third_party/skia/include/core/SkBitmap.h"
+
+namespace base {
+class FilePath;
+}
 
 namespace vivaldi {
 namespace skia_utils {
@@ -14,14 +21,21 @@ enum class ImageFormat {
 };
 
 SkBitmap SmartCropAndSize(const SkBitmap& capture,
-                                 int target_width,
-                                 int target_height);
+                          int target_width,
+                          int target_height);
 
-bool EncodeBitmap(const SkBitmap& bitmap,
-                  ImageFormat image_format,
-                  int image_quality,
-                  std::vector<unsigned char>& data,
-                  std::string& mime_type);
+std::vector<unsigned char> EncodeBitmap(SkBitmap bitmap,
+                                        ImageFormat image_format,
+                                        int image_quality);
+
+std::string EncodeBitmapAsDataUrl(SkBitmap bitmap,
+                                  ImageFormat image_format,
+                                  int image_quality);
+
+base::FilePath EncodeBitmapToFile(base::FilePath directory,
+                                  SkBitmap bitmap,
+                                  ImageFormat image_format,
+                                  int image_quality);
 
 }  // namespace skia_utils
 }  // namespace vivaldi

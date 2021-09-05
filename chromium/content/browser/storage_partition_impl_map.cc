@@ -49,6 +49,8 @@
 #include "services/network/public/cpp/features.h"
 #include "storage/browser/blob/blob_storage_context.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace content {
 
 namespace {
@@ -341,13 +343,28 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
   base::FilePath relative_partition_path = GetStoragePartitionPath(
       partition_config.partition_domain(), partition_config.partition_name());
 
+  base::Optional<StoragePartitionConfig> fallback_config =
+      partition_config.GetFallbackForBlobUrls();
+  StoragePartitionImpl* fallback_for_blob_urls =
+      fallback_config.has_value() ? Get(*fallback_config, /*can_create=*/false)
+                                  : nullptr;
+
+  // NOTE(andre@vivaldi.com) : On startup and tab-restore the
+  // webcontentsdelegate might not yet be set. Set the default storagepartition
+  // as blob-fallback. See Browser::SetAsDelegate.
+  if (!fallback_for_blob_urls &&
+      vivaldi::IsVivaldiApp(partition_config.partition_domain())) {
+    fallback_for_blob_urls =
+        Get(StoragePartitionConfig::CreateDefault(), /*can_create=*/false);
+  }
+
   std::unique_ptr<StoragePartitionImpl> partition_ptr(
       StoragePartitionImpl::Create(
           browser_context_, partition_config.in_memory(),
           relative_partition_path, partition_config.partition_domain()));
   StoragePartitionImpl* partition = partition_ptr.get();
   partitions_[partition_config] = std::move(partition_ptr);
-  partition->Initialize();
+  partition->Initialize(fallback_for_blob_urls);
 
   // Arm the serviceworker cookie change observation API.
   partition->GetCookieStoreContext()->ListenToCookieChanges(

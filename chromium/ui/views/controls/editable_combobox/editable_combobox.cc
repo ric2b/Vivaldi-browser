@@ -70,7 +70,7 @@ class Arrow : public Button {
         ButtonController::NotifyAction::kOnPress);
 
     SetInkDropMode(InkDropMode::ON);
-    set_has_ink_drop_action_on_click(true);
+    SetHasInkDropActionOnClick(true);
   }
   ~Arrow() override = default;
 
@@ -91,7 +91,7 @@ class Arrow : public Button {
     return std::make_unique<views::FloodFillInkDropRipple>(
         size(), GetInkDropCenterBasedOnLastEvent(),
         style::GetColor(*this, style::CONTEXT_TEXTFIELD, style::STYLE_PRIMARY),
-        ink_drop_visible_opacity());
+        GetInkDropVisibleOpacity());
   }
 
  private:
@@ -538,8 +538,7 @@ void EditableCombobox::ShowDropDownMenu(ui::MenuSourceType source_type) {
                           MenuAnchorPosition::kTopLeft, source_type);
 }
 
-BEGIN_METADATA(EditableCombobox)
-METADATA_PARENT_CLASS(View)
-END_METADATA()
+BEGIN_METADATA(EditableCombobox, View)
+END_METADATA
 
 }  // namespace views

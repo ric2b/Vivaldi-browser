@@ -111,6 +111,15 @@ void PopulateResourceResponse(net::URLRequest* request,
       !(request->load_flags() & net::LOAD_PREFETCH) &&
       response_info.unused_since_prefetch;
 
+  response->was_cookie_in_request = false;
+  for (const auto& cookie_with_access_result : request->maybe_sent_cookies()) {
+    if (cookie_with_access_result.access_result.status.IsInclude()) {
+      // IsInclude() true means the cookie was sent.
+      response->was_cookie_in_request = true;
+      break;
+    }
+  }
+
   if (is_load_timing_enabled)
     request->GetLoadTimingInfo(&response->load_timing);
 
@@ -131,6 +140,8 @@ void PopulateResourceResponse(net::URLRequest* request,
   response->response_start = base::TimeTicks::Now();
   response->encoded_data_length = request->GetTotalReceivedBytes();
   response->auth_challenge_info = request->auth_challenge_info();
+  response->has_range_requested = request->extra_request_headers().HasHeader(
+      net::HttpRequestHeaders::kRange);
 }
 
 // A subclass of net::UploadBytesElementReader which owns
@@ -180,31 +191,6 @@ class FileElementReader : public net::UploadFileElementReader {
   DISALLOW_COPY_AND_ASSIGN(FileElementReader);
 };
 
-class RawFileElementReader : public net::UploadFileElementReader {
- public:
-  RawFileElementReader(ResourceRequestBody* resource_request_body,
-                       base::TaskRunner* task_runner,
-                       const DataElement& element)
-      : net::UploadFileElementReader(
-            task_runner,
-            // TODO(mmenke): Is duplicating this necessary?
-            element.file().Duplicate(),
-            element.path(),
-            element.offset(),
-            element.length(),
-            element.expected_modification_time()),
-        resource_request_body_(resource_request_body) {
-    DCHECK_EQ(network::mojom::DataElementType::kRawFile, element.type());
-  }
-
-  ~RawFileElementReader() override {}
-
- private:
-  scoped_refptr<ResourceRequestBody> resource_request_body_;
-
-  DISALLOW_COPY_AND_ASSIGN(RawFileElementReader);
-};
-
 std::unique_ptr<net::UploadDataStream> CreateUploadDataStream(
     ResourceRequestBody* body,
     std::vector<base::File>& opened_files,
@@ -214,9 +200,14 @@ std::unique_ptr<net::UploadDataStream> CreateUploadDataStream(
     network::mojom::DataElementType type = body->elements()->begin()->type();
     if (type == network::mojom::DataElementType::kChunkedDataPipe ||
         type == network::mojom::DataElementType::kReadOnceStream) {
-      return std::make_unique<ChunkedDataPipeUploadDataStream>(
-          body,
-          body->elements_mutable()->begin()->ReleaseChunkedDataPipeGetter());
+      auto upload_data_stream =
+          std::make_unique<ChunkedDataPipeUploadDataStream>(
+              body, body->elements_mutable()
+                        ->begin()
+                        ->ReleaseChunkedDataPipeGetter());
+      if (type == network::mojom::DataElementType::kReadOnceStream)
+        upload_data_stream->EnableCache();
+      return upload_data_stream;
     }
   }
 
@@ -232,10 +223,6 @@ std::unique_ptr<net::UploadDataStream> CreateUploadDataStream(
         DCHECK(opened_file != opened_files.end());
         element_readers.push_back(std::make_unique<FileElementReader>(
             body, file_task_runner, element, std::move(*opened_file++)));
-        break;
-      case network::mojom::DataElementType::kRawFile:
-        element_readers.push_back(std::make_unique<RawFileElementReader>(
-            body, file_task_runner, element));
         break;
       case network::mojom::DataElementType::kBlob: {
         CHECK(false) << "Network service always uses DATA_PIPE for blobs.";
@@ -517,7 +504,6 @@ URLLoader::URLLoader(
       fetch_window_id_(request.fetch_window_id),
       origin_policy_manager_(nullptr),
       trust_token_helper_factory_(std::move(trust_token_helper_factory)),
-      isolated_world_origin_(request.isolated_world_origin),
       cookie_observer_(std::move(cookie_observer)),
       has_fetch_streaming_upload_body_(HasFetchStreamingUploadBody(&request)),
       allow_http1_for_streaming_upload_(
@@ -603,8 +589,24 @@ URLLoader::URLLoader(
       CrossOriginReadBlockingExceptionForPlugin::ShouldAllowForPlugin(
           factory_params_->process_id);
   request_mode_ = request.mode;
+
   if (request.trusted_params) {
     has_user_activation_ = request.trusted_params->has_user_activation;
+
+    if (factory_params_->client_security_state) {
+      // Enforce that only one ClientSecurityState is ever given to us, as this
+      // is an invariant in the current codebase. In case of a compromised
+      // renderer process, we might be passed both, in which case we prefer to
+      // use the factory params' value: contrary to the request params, it is
+      // always sourced from the browser process.
+      DCHECK(!request.trusted_params->client_security_state)
+          << "Must not provide a ClientSecurityState in both "
+             "URLLoaderFactoryParams and ResourceRequest::TrustedParams.";
+    } else {
+      // This might be nullptr, but that does not matter. Clone it anyways.
+      request_client_security_state_ =
+          request.trusted_params->client_security_state.Clone();
+    }
   }
 
   throttling_token_ = network::ScopedThrottlingToken::MaybeCreate(
@@ -629,11 +631,6 @@ URLLoader::URLLoader(
   if (request.credentials_mode == mojom::CredentialsMode::kOmit ||
       request.credentials_mode ==
           mojom::CredentialsMode::kOmitBug_775438_Workaround) {
-    const auto creds_mask = net::LOAD_DO_NOT_SAVE_COOKIES |
-                            net::LOAD_DO_NOT_SEND_COOKIES |
-                            net::LOAD_DO_NOT_SEND_AUTH_DATA;
-    DCHECK((request.load_flags & creds_mask) == 0 ||
-           (request.load_flags & creds_mask) == creds_mask);
     url_request_->set_allow_credentials(false);
     url_request_->set_send_client_certs(request.credentials_mode ==
                                         mojom::CredentialsMode::kOmit);
@@ -996,8 +993,24 @@ int URLLoader::CanConnectToRemoteEndpoint(
     return net::ERR_INSECURE_PRIVATE_NETWORK_REQUEST;
   }
 
-  const mojom::ClientSecurityStatePtr& security_state =
-      factory_params_->client_security_state;
+  // Depending on the type of URL request, we source the client security state
+  // from either the URLRequest's trusted params (for navigations, which share
+  // a factory) or the URLLoaderFactory's params. We prefer the factory params
+  // over the request params, as the former always come from the browser
+  // process.
+  //
+  // We use a raw pointer instead of a const-ref to a StructPtr in order to be
+  // able to assign a new value to the variable. A ternary operator would let us
+  // define a const-ref but would prevent logging which branch was taken.
+  const mojom::ClientSecurityState* security_state =
+      factory_params_->client_security_state.get();
+  if (security_state) {
+    DVLOG(1) << "CORS-RFC1918 check: using factory client security state.";
+  } else {
+    DVLOG(1) << "CORS-RFC1918 check: using request client security state.";
+    security_state = request_client_security_state_.get();
+  }
+
   if (!security_state) {
     DVLOG(1) << "CORS-RFC1918 check: skipped, missing client security state.";
     return net::OK;
@@ -1081,7 +1094,8 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
               url_request_->url(), url_request_->original_url(),
               url_request_->initiator(), *response, request_mode_,
               factory_params_->request_initiator_origin_lock,
-              cross_origin_embedder_policy, coep_reporter_)) {
+              request_destination_, cross_origin_embedder_policy,
+              coep_reporter_)) {
     CompleteBlockedResponse(net::ERR_BLOCKED_BY_RESPONSE, false,
                             blocked_reason);
     DeleteSelf();
@@ -1294,7 +1308,8 @@ void URLLoader::ContinueOnResponseStarted() {
               url_request_->url(), url_request_->original_url(),
               url_request_->initiator(), *response_, request_mode_,
               factory_params_->request_initiator_origin_lock,
-              cross_origin_embedder_policy, coep_reporter_)) {
+              request_destination_, cross_origin_embedder_policy,
+              coep_reporter_)) {
     CompleteBlockedResponse(net::ERR_BLOCKED_BY_RESPONSE, false,
                             blocked_reason);
     DeleteSelf();
@@ -1310,8 +1325,7 @@ void URLLoader::ContinueOnResponseStarted() {
     corb_analyzer_ =
         std::make_unique<CrossOriginReadBlocking::ResponseAnalyzer>(
             url_request_->url(), url_request_->initiator(), *response_,
-            factory_params_->request_initiator_origin_lock, request_mode_,
-            isolated_world_origin_, network_service_client_);
+            factory_params_->request_initiator_origin_lock, request_mode_);
     is_more_corb_sniffing_needed_ = corb_analyzer_->needs_sniffing();
     if (corb_analyzer_->ShouldBlock()) {
       DCHECK(!is_more_corb_sniffing_needed_);
@@ -1460,7 +1474,7 @@ void URLLoader::DidRead(int num_bytes, bool completed_synchronously) {
         const std::string& type_hint = response_->mime_type;
         std::string new_type;
         is_more_mime_sniffing_needed_ = !net::SniffMimeType(
-            data.data(), data.size(), url_request_->url(), type_hint,
+            data, url_request_->url(), type_hint,
             net::ForceSniffFileUrlsForHtml::kDisabled, &new_type);
         // SniffMimeType() returns false if there is not enough data to
         // determine the mime type. However, even if it returns false, it

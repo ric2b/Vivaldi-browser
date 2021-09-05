@@ -16,7 +16,6 @@
 #include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/dcheck_is_on.h"
-#include "base/macros.h"
 #include "base/scoped_clear_last_error.h"
 #include "base/strings/string_piece_forward.h"
 
@@ -147,7 +146,7 @@
 // There is the special severity of DFATAL, which logs FATAL in debug mode,
 // ERROR in normal mode.
 //
-// Output is of the format, for example:
+// Output is formatted as per the following example, except on Chrome OS.
 // [3816:3877:0812/234555.406952:VERBOSE1:drm_device_handle.cc(90)] Succeeded
 // authenticating /dev/dri/card0 in 0 ms with 1 attempt(s)
 //
@@ -158,6 +157,9 @@
 // 3. The date/time of the log message, in MMDD/HHMMSS.Milliseconds format
 // 4. The log level
 // 5. The filename and line number where the log was instantiated
+//
+// Output for Chrome OS can be switched to syslog-like format. See
+// InitWithSyslogPrefix() in logging_chromeos.h for details.
 //
 // Note that the visibility can be changed by setting preferences in
 // SetLogItems()
@@ -214,6 +216,13 @@ enum LogLockingState { LOCK_LOG_FILE, DONT_LOCK_LOG_FILE };
 // Defaults to APPEND_TO_OLD_LOG_FILE.
 enum OldFileDeletionState { DELETE_OLD_LOG_FILE, APPEND_TO_OLD_LOG_FILE };
 
+#if defined(OS_CHROMEOS)
+// Defines the log message prefix format to use.
+// LOG_FORMAT_SYSLOG indicates syslog-like message prefixes.
+// LOG_FORMAT_CHROME indicates the normal Chrome format.
+enum class BASE_EXPORT LogFormat { LOG_FORMAT_CHROME, LOG_FORMAT_SYSLOG };
+#endif
+
 struct BASE_EXPORT LoggingSettings {
   // Equivalent to logging destination enum, but allows for multiple
   // destinations.
@@ -230,6 +239,8 @@ struct BASE_EXPORT LoggingSettings {
   // of the FILE. If there's an error writing to this file, no fallback paths
   // will be opened.
   FILE* log_file = nullptr;
+  // ChromeOS uses the syslog log format by default.
+  LogFormat log_format = LogFormat::LOG_FORMAT_SYSLOG;
 #endif
 };
 
@@ -324,10 +335,9 @@ using LogAssertHandlerFunction =
 class BASE_EXPORT ScopedLogAssertHandler {
  public:
   explicit ScopedLogAssertHandler(LogAssertHandlerFunction handler);
+  ScopedLogAssertHandler(const ScopedLogAssertHandler&) = delete;
+  ScopedLogAssertHandler& operator=(const ScopedLogAssertHandler&) = delete;
   ~ScopedLogAssertHandler();
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ScopedLogAssertHandler);
 };
 
 // Sets the Log Message Handler that gets passed every log message before
@@ -568,7 +578,8 @@ class BASE_EXPORT LogMessage {
 
   // Used for CHECK().  Implied severity = LOG_FATAL.
   LogMessage(const char* file, int line, const char* condition);
-
+  LogMessage(const LogMessage&) = delete;
+  LogMessage& operator=(const LogMessage&) = delete;
   virtual ~LogMessage();
 
   std::ostream& stream() { return stream_; }
@@ -593,7 +604,17 @@ class BASE_EXPORT LogMessage {
   // will have lost the thread error value when the log call returns.
   base::ScopedClearLastError last_error_;
 
-  DISALLOW_COPY_AND_ASSIGN(LogMessage);
+#if defined(OS_CHROMEOS)
+  void InitWithSyslogPrefix(base::StringPiece filename,
+                            int line,
+                            uint64_t tick_count,
+                            const char* log_severity_name_c_str,
+                            const char* log_prefix,
+                            bool enable_process_id,
+                            bool enable_thread_id,
+                            bool enable_timestamp,
+                            bool enable_tickcount);
+#endif
 };
 
 // This class is used to explicitly ignore values in the conditional
@@ -626,14 +647,13 @@ class BASE_EXPORT Win32ErrorLogMessage : public LogMessage {
                        int line,
                        LogSeverity severity,
                        SystemErrorCode err);
-
+  Win32ErrorLogMessage(const Win32ErrorLogMessage&) = delete;
+  Win32ErrorLogMessage& operator=(const Win32ErrorLogMessage&) = delete;
   // Appends the error message before destructing the encapsulated class.
   ~Win32ErrorLogMessage() override;
 
  private:
   SystemErrorCode err_;
-
-  DISALLOW_COPY_AND_ASSIGN(Win32ErrorLogMessage);
 };
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 // Appends a formatted system message of the errno type
@@ -643,14 +663,13 @@ class BASE_EXPORT ErrnoLogMessage : public LogMessage {
                   int line,
                   LogSeverity severity,
                   SystemErrorCode err);
-
+  ErrnoLogMessage(const ErrnoLogMessage&) = delete;
+  ErrnoLogMessage& operator=(const ErrnoLogMessage&) = delete;
   // Appends the error message before destructing the encapsulated class.
   ~ErrnoLogMessage() override;
 
  private:
   SystemErrorCode err_;
-
-  DISALLOW_COPY_AND_ASSIGN(ErrnoLogMessage);
 };
 #endif  // OS_WIN
 

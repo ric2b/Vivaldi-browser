@@ -12,6 +12,7 @@ import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.download.DownloadLaterMetrics.DownloadLaterUiEvent;
 import org.chromium.chrome.browser.download.dialogs.DownloadDateTimePickerDialog;
 import org.chromium.chrome.browser.download.dialogs.DownloadDateTimePickerDialogImpl;
+import org.chromium.chrome.browser.download.dialogs.DownloadDialogUtils;
 import org.chromium.chrome.browser.download.dialogs.DownloadLaterDialogChoice;
 import org.chromium.chrome.browser.download.dialogs.DownloadLaterDialogController;
 import org.chromium.chrome.browser.download.dialogs.DownloadLaterDialogCoordinator;
@@ -105,8 +106,18 @@ public class DownloadDialogBridge
             mShowEditLocation = (dirs != null && dirs.size() > 1);
             ModalDialogManager modalDialogManager =
                     ((ModalDialogManagerHolder) activity).getModalDialogManager();
-            showDialog(activity, modalDialogManager, getPrefService(), totalBytes, dialogType,
-                    suggestedPath, supportsLaterDialog);
+
+            // Suggests an alternative download location.
+            @DownloadLocationDialogType
+            int suggestedDialogType = dialogType;
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.SMART_SUGGESTION_FOR_LARGE_DOWNLOADS)
+                    && DownloadDialogUtils.shouldSuggestDownloadLocation(
+                            dirs, getDownloadDefaultDirectory(), totalBytes)) {
+                suggestedDialogType = DownloadLocationDialogType.LOCATION_SUGGESTION;
+            }
+
+            showDialog(activity, modalDialogManager, getPrefService(), totalBytes,
+                    suggestedDialogType, suggestedPath, supportsLaterDialog);
         });
     }
 
@@ -155,7 +166,9 @@ public class DownloadDialogBridge
             @DownloadLaterDialogChoice int choice, long startTime) {
         mDownloadLaterChoice = choice;
         mDownloadLaterTime = startTime;
-        DownloadLaterMetrics.recordDownloadLaterDialogChoice(choice);
+
+        DownloadLaterMetrics.recordDownloadLaterDialogChoice(
+                choice, DownloadDialogBridgeJni.get().isDataReductionProxyEnabled(), mTotalBytes);
 
         // When there is no error message, skip the location dialog.
         if (mLocationDialogType == DownloadLocationDialogType.DEFAULT) {
@@ -288,5 +301,6 @@ public class DownloadDialogBridge
         void onCanceled(long nativeDownloadDialogBridge, DownloadDialogBridge caller);
         String getDownloadDefaultDirectory();
         void setDownloadAndSaveFileDefaultDirectory(String directory);
+        boolean isDataReductionProxyEnabled();
     }
 }

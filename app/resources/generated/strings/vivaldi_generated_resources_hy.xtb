@@ -13,12 +13,12 @@
 <translation id="1163931534039071049">&amp;Դիտել ֆրեյմի կոդը</translation>
 <translation id="1165039591588034296">Սխալ</translation>
 <translation id="1175364870820465910">&amp;Տպել…</translation>
-<translation id="1177863135347784049">Փոփոխելի</translation>
 <translation id="1181037720776840403">Հեռացնել</translation>
 <translation id="1187722533808055681">Անգործ վիճակից արթնացումներ</translation>
 <translation id="119944043368869598">Ջնջել բոլորը</translation>
 <translation id="1221825588892235038">Միայն նշված մասը</translation>
 <translation id="1244303850296295656">Ընդլայնման սխալ</translation>
+<translation id="125220115284141797">Ստանդարտ</translation>
 <translation id="1274977772557788323">Adobe Flash Player-ի պահոցի կարգավորումներ</translation>
 <translation id="1297175357211070620">Վերջնակետ</translation>
 <translation id="1303101771013849280">Էջանիշերի HTML ֆայլ</translation>
@@ -45,9 +45,11 @@
 <translation id="1723824996674794290">Ն&amp;որ պատուհան</translation>
 <translation id="1725149567830788547">Ցույց տալ կա&amp;ռավարման տարրերը</translation>
 <translation id="1729533290416704613">Այն նաև փոխել է ստանդարտ որոնիչը, որով Դուք որոնում եք հասցեի դաշտի միջոցով։</translation>
+<translation id="174123615272205933">Փոփոխելի</translation>
 <translation id="1744108098763830590">հետին էջ</translation>
 <translation id="176587472219019965">Ն&amp;որ պատուհան</translation>
 <translation id="1769104665586091481">Բացել հղումը նոր &amp;պատուհանում</translation>
+<translation id="1779468444204342338">Նվազագույն</translation>
 <translation id="1815083418640426271">Փակցնել որպես պարզ տեքստ</translation>
 <translation id="1828901632669367785">Տպել համակարգային պատուհանի միջոցով…</translation>
 <translation id="1850508293116537636">Պտտել &amp;ժամսլաքի ուղղությամբ</translation>
@@ -87,7 +89,6 @@
 <translation id="2381756643783702095">Հարցնել մինչ ուղարկելը (խորհուրդ է տրվում)</translation>
 <translation id="241082044617551207">Անհայտ փլագին</translation>
 <translation id="2423578206845792524">Պահպանել պատկերը որպե&amp;ս…</translation>
-<translation id="2436707352762155834">Նվազագույն</translation>
 <translation id="2439110203301358333">Ձեր համակարգչի մեկ այլ ծրագիր ավելացրել է ընդլայնում, որը կարող է ազդել Vivaldi-ի աշխատանքի վրա ու փոխել այն։</translation>
 <translation id="2445081178310039857">Պահանջվում է ընդլայնման արմատային պանակը։</translation>
 <translation id="2470702053775288986">Չաջակցվող ընդլայնումներն անջատվել են</translation>
@@ -245,7 +246,6 @@
 <translation id="5039804452771397117">Թույլատրել</translation>
 <translation id="5057110919553308744">Ընդլայնմանը սեղմելու դեպքում</translation>
 <translation id="5063480226653192405">Օգտագործում</translation>
-<translation id="5068918910148307423">Թույլ չտալ վերջերս փակված կայքերին ավարտել տվյալների ուղարկումն ու ստացումը</translation>
 <translation id="5116628073786783676">Պահպանել աուդիոն որպե&amp;ս…</translation>
 <translation id="5143374789336132547">«<ph name="EXTENSION_NAME" />» ընդլայնումը փոխել է այն հասցեն, որը բացվում է, երբ սեղմում եք գլխավոր էջի կոճակը։</translation>
 <translation id="5154108062446123722"><ph name="PRINTING_DESTINATION" />-ի լրացուցիչ կարգավորումներ</translation>
@@ -264,6 +264,7 @@
 <translation id="5355926466126177564">«<ph name="EXTENSION_NAME" />» ընդլայնումը փոխել է ստանդարտ որոնիչը, որով Դուք որոնում եք հասցեի դաշտի միջոցով։</translation>
 <translation id="5360150013186312835">Ցույց տալ գործիքների երիզում</translation>
 <translation id="5362741141255528695">Ընտրեք մասնավոր բանալիի ֆայլը։</translation>
+<translation id="536638840841140142">Ոչ մի</translation>
 <translation id="5370819323174483825">&amp;Թարմացնել</translation>
 <translation id="5398572795982417028">Էջերի քանակի սահմաններից դուրս է, առավելագույն քանակը <ph name="MAXIMUM_PAGE" /> է</translation>
 <translation id="5425042808445046667">Շարունակել ներբեռնումը</translation>
@@ -388,7 +389,6 @@
 <translation id="7663719505383602579">Ստացող. <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Տեղակայված է Ձեր ադմինիստրատորի կողմից</translation>
 <translation id="7685049629764448582">JavaScript-ի հիշողություն</translation>
-<translation id="7701040980221191251">Ոչ մի</translation>
 <translation id="7701869757853594372">USER մշակիչներ</translation>
 <translation id="7704305437604973648">Խնդիր</translation>
 <translation id="7710568461918838723">Հե&amp;ռարձակել…</translation>

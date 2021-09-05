@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/test/metrics/histogram_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/clipboard_data.h"
 
@@ -31,7 +32,7 @@ TEST_F(ClipboardNonBackedTest, WriteAndGetClipboardData) {
 
   auto* expected_clipboard_data_ptr = clipboard_data.get();
   clipboard()->WriteClipboardData(std::move(clipboard_data));
-  auto* actual_clipboard_data_ptr = clipboard()->GetClipboardData();
+  auto* actual_clipboard_data_ptr = clipboard()->GetClipboardData(nullptr);
 
   EXPECT_EQ(expected_clipboard_data_ptr, actual_clipboard_data_ptr);
 }
@@ -51,7 +52,26 @@ TEST_F(ClipboardNonBackedTest, WriteClipboardData) {
   previous_data = clipboard()->WriteClipboardData(std::move(second_data));
 
   EXPECT_EQ(first_data_ptr, previous_data.get());
-  EXPECT_EQ(second_data_ptr, clipboard()->GetClipboardData());
+  EXPECT_EQ(second_data_ptr, clipboard()->GetClipboardData(nullptr));
+}
+
+// Verifies that directly writing to ClipboardInternal does not result in
+// histograms being logged. This is used by ClipboardHistoryController to
+// manipulate the clipboard in order to facilitate pasting from clipboard
+// history.
+TEST_F(ClipboardNonBackedTest, AdminWriteDoesNotRecordHistograms) {
+  base::HistogramTester histogram_tester;
+  auto data = std::make_unique<ClipboardData>();
+  data->set_text("test");
+
+  auto* data_ptr = data.get();
+
+  // Write the data to the clipboard, no histograms should be recorded.
+  clipboard()->WriteClipboardData(std::move(data));
+  EXPECT_EQ(data_ptr, clipboard()->GetClipboardData(/*data_dst=*/nullptr));
+
+  histogram_tester.ExpectTotalCount("Clipboard.Read", 0);
+  histogram_tester.ExpectTotalCount("Clipboard.Write", 0);
 }
 
 }  // namespace ui

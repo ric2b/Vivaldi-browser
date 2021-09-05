@@ -485,9 +485,12 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method write
 [Worker] interface FontFace
 [Worker]     attribute @@toStringTag
+[Worker]     getter ascentOverride
+[Worker]     getter descentOverride
 [Worker]     getter display
 [Worker]     getter family
 [Worker]     getter featureSettings
+[Worker]     getter lineGapOverride
 [Worker]     getter loaded
 [Worker]     getter status
 [Worker]     getter stretch
@@ -497,9 +500,12 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter weight
 [Worker]     method constructor
 [Worker]     method load
+[Worker]     setter ascentOverride
+[Worker]     setter descentOverride
 [Worker]     setter display
 [Worker]     setter family
 [Worker]     setter featureSettings
+[Worker]     setter lineGapOverride
 [Worker]     setter stretch
 [Worker]     setter style
 [Worker]     setter unicodeRange
@@ -1166,6 +1172,8 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter actualBoundingBoxDescent
 [Worker]     getter actualBoundingBoxLeft
 [Worker]     getter actualBoundingBoxRight
+[Worker]     getter fontBoundingBoxAscent
+[Worker]     getter fontBoundingBoxDescent
 [Worker]     getter width
 [Worker]     method constructor
 [Worker] interface TransformStream
@@ -2653,6 +2661,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker] interface WorkerGlobalScope : EventTarget
 [Worker]     attribute @@toStringTag
 [Worker]     getter caches
+[Worker]     getter crossOriginIsolated
 [Worker]     getter crypto
 [Worker]     getter fonts
 [Worker]     getter indexedDB

@@ -66,7 +66,13 @@ class SESSIONS_EXPORT TabRestoreServiceHelper
     // Android keeps at most 5 recent tabs.
     kMaxEntries = 5,
 #else
+#if defined(VIVALDI_BUILD)
+    // Ties in with session_service.cc kWritesPerReset, so both
+    // must be changed.
+    kMaxEntries = 100,
+#else
     kMaxEntries = 25,
+#endif  // defined(VIVALDI_BUILD)
 #endif
   };
 

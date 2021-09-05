@@ -551,7 +551,7 @@ std::vector<SkColor> ReadBackWindow(HWND window, const gfx::Size& size) {
   DCHECK(mem_hdc.IsValid());
 
   BITMAPV4HEADER hdr;
-  gfx::CreateBitmapV4Header(size.width(), size.height(), &hdr);
+  gfx::CreateBitmapV4HeaderForARGB888(size.width(), size.height(), &hdr);
 
   void* bits = nullptr;
   base::win::ScopedBitmap bitmap(
@@ -1081,10 +1081,7 @@ TEST_F(DirectCompositionPixelTest, ResizeVideoLayer) {
     EXPECT_EQ(gfx::SwapResult::SWAP_ACK,
               surface_->SwapBuffers(base::DoNothing()));
   }
-
-  // Swap chain isn't recreated on resize.
-  ASSERT_TRUE(surface_->GetLayerSwapChainForTesting(0));
-  EXPECT_EQ(swap_chain.Get(), surface_->GetLayerSwapChainForTesting(0).Get());
+  swap_chain = surface_->GetLayerSwapChainForTesting(0);
   EXPECT_TRUE(SUCCEEDED(swap_chain->GetDesc1(&desc)));
   EXPECT_EQ(desc.Width, 30u);
   EXPECT_EQ(desc.Height, 30u);

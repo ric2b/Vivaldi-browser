@@ -21,9 +21,11 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "base/callback.h"
+#include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
+#include "base/threading/scoped_blocking_call.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -32,8 +34,12 @@
 #include "chromeos/dbus/power_manager/idle.pb.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_unittest_util.h"
+#include "ui/views/controls/label.h"
 
 namespace ash {
+namespace {
+constexpr float kFastForwardFactor = 1.0001;
+}  // namespace
 
 class TestAmbientURLLoaderImpl : public AmbientURLLoader {
  public:
@@ -44,18 +50,46 @@ class TestAmbientURLLoaderImpl : public AmbientURLLoader {
   void Download(
       const std::string& url,
       network::SimpleURLLoader::BodyAsStringCallback callback) override {
-    std::string data = data_ ? *data_ : "test";
+    // Reply with a unique string each time to avoid check to skip loading
+    // duplicate images.
+    std::unique_ptr<std::string> data = std::make_unique<std::string>(
+        data_ ? *data_ : base::StringPrintf("test_image_%i", count_));
+    count_++;
     // Pretend to respond asynchronously.
     base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback),
-                       std::make_unique<std::string>(data)),
+        FROM_HERE, base::BindOnce(std::move(callback), std::move(data)),
         base::TimeDelta::FromMilliseconds(1));
+  }
+  void DownloadToFile(
+      const std::string& url,
+      network::SimpleURLLoader::DownloadToFileCompleteCallback callback,
+      const base::FilePath& file_path) override {
+    if (!data_) {
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::BindOnce(std::move(callback), base::FilePath()));
+      return;
+    }
+
+    if (!WriteFile(file_path, *data_)) {
+      LOG(WARNING) << "error writing file to file_path: " << file_path;
+
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::BindOnce(std::move(callback), base::FilePath()));
+      return;
+    }
+
+    base::SequencedTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), file_path));
   }
 
   void SetData(std::unique_ptr<std::string> data) { data_ = std::move(data); }
 
  private:
+  bool WriteFile(const base::FilePath& file_path, const std::string& data) {
+    base::ScopedBlockingCall blocking(FROM_HERE, base::BlockingType::MAY_BLOCK);
+    return base::WriteFile(file_path, data);
+  }
+  int count_ = 0;
   // If not null, will return this data.
   std::unique_ptr<std::string> data_;
 };
@@ -101,8 +135,10 @@ AmbientAshTestBase::AmbientAshTestBase()
 AmbientAshTestBase::~AmbientAshTestBase() = default;
 
 void AmbientAshTestBase::SetUp() {
-  scoped_feature_list_.InitAndEnableFeature(
-      chromeos::features::kAmbientModeFeature);
+  scoped_feature_list_.InitAndEnableFeatureWithParameters(
+      chromeos::features::kAmbientModeFeature,
+      {{"GeoPhotosEnabled", "true"},
+       {"CapturedOnPixelPhotosEnabled", "false"}});
   image_downloader_ = std::make_unique<TestImageDownloader>();
   ambient_client_ = std::make_unique<TestAmbientClient>(&wake_lock_provider_);
   chromeos::PowerManagerClient::InitializeFake();
@@ -138,7 +174,7 @@ void AmbientAshTestBase::SetAmbientModeEnabled(bool enabled) {
 
 void AmbientAshTestBase::ShowAmbientScreen() {
   // The widget will be destroyed in |AshTestBase::TearDown()|.
-  ambient_controller()->ShowUi(AmbientUiMode::kInSessionUi);
+  ambient_controller()->ShowUi();
   // The UI only shows when images are downloaded to avoid showing blank screen.
   FastForwardToNextImage();
   // Flush the message loop to finish all async calls.
@@ -146,12 +182,11 @@ void AmbientAshTestBase::ShowAmbientScreen() {
 }
 
 void AmbientAshTestBase::HideAmbientScreen() {
-  ambient_controller()->HideLockScreenUi();
+  ambient_controller()->ShowHiddenUi();
 }
 
 void AmbientAshTestBase::CloseAmbientScreen() {
-  ambient_controller()->ambient_ui_model()->SetUiVisibility(
-      AmbientUiVisibility::kClosed);
+  ambient_controller()->CloseUi();
 }
 
 void AmbientAshTestBase::LockScreen() {
@@ -195,6 +230,14 @@ void AmbientAshTestBase::SetScreenBrightnessAndWait(double percent) {
   base::RunLoop().RunUntilIdle();
 }
 
+views::View* AmbientAshTestBase::GetMediaStringViewTextContainer() {
+  return GetMediaStringView()->media_text_container_for_testing();
+}
+
+views::Label* AmbientAshTestBase::GetMediaStringViewTextLabel() {
+  return GetMediaStringView()->media_text_label_for_testing();
+}
+
 void AmbientAshTestBase::SimulateMediaMetadataChanged(
     media_session::MediaMetadata metadata) {
   GetMediaStringView()->MediaSessionMetadataChanged(metadata);
@@ -231,11 +274,60 @@ MediaStringView* AmbientAshTestBase::GetMediaStringView() {
 
 void AmbientAshTestBase::FastForwardToInactivity() {
   task_environment()->FastForwardBy(
-      2 * AmbientController::kAutoShowWaitTimeInterval);
+      kFastForwardFactor * AmbientController::kAutoShowWaitTimeInterval);
 }
 
 void AmbientAshTestBase::FastForwardToNextImage() {
-  task_environment()->FastForwardBy(1.2 * kPhotoRefreshInterval);
+  task_environment()->FastForwardBy(kFastForwardFactor * kPhotoRefreshInterval);
+}
+
+void AmbientAshTestBase::FastForwardTiny() {
+  // `TestAmbientURLLoaderImpl` has a small delay (1ms) to fake download delay,
+  // here we fake plenty of time to download the image.
+  task_environment()->FastForwardBy(base::TimeDelta::FromMilliseconds(10));
+}
+
+void AmbientAshTestBase::FastForwardToLockScreen() {
+  task_environment()->FastForwardBy(kFastForwardFactor * kLockScreenDelay);
+}
+
+void AmbientAshTestBase::FastForwardHalfLockScreenDelay() {
+  task_environment()->FastForwardBy(0.5 * kFastForwardFactor *
+                                    kLockScreenDelay);
+}
+
+void AmbientAshTestBase::SetPowerStateCharging() {
+  power_manager::PowerSupplyProperties proto;
+  proto.set_battery_state(
+      power_manager::PowerSupplyProperties_BatteryState_CHARGING);
+  proto.set_external_power(
+      power_manager::PowerSupplyProperties_ExternalPower_AC);
+  PowerStatus::Get()->SetProtoForTesting(proto);
+  ambient_controller()->OnPowerStatusChanged();
+}
+
+void AmbientAshTestBase::SetPowerStateDischarging() {
+  power_manager::PowerSupplyProperties proto;
+  proto.set_battery_state(
+      power_manager::PowerSupplyProperties_BatteryState_DISCHARGING);
+  proto.set_external_power(
+      power_manager::PowerSupplyProperties_ExternalPower_DISCONNECTED);
+  PowerStatus::Get()->SetProtoForTesting(proto);
+  ambient_controller()->OnPowerStatusChanged();
+}
+
+void AmbientAshTestBase::SetPowerStateFull() {
+  power_manager::PowerSupplyProperties proto;
+  proto.set_battery_state(
+      power_manager::PowerSupplyProperties_BatteryState_FULL);
+  proto.set_external_power(
+      power_manager::PowerSupplyProperties_ExternalPower_AC);
+  PowerStatus::Get()->SetProtoForTesting(proto);
+  ambient_controller()->OnPowerStatusChanged();
+}
+
+void AmbientAshTestBase::FastForwardToRefreshWeather() {
+  task_environment()->FastForwardBy(1.2 * kWeatherRefreshInterval);
 }
 
 int AmbientAshTestBase::GetNumOfActiveWakeLocks(
@@ -262,6 +354,10 @@ bool AmbientAshTestBase::IsAccessTokenRequestPending() const {
   return ambient_client_->IsAccessTokenRequestPending();
 }
 
+base::TimeDelta AmbientAshTestBase::GetRefreshTokenDelay() {
+  return token_controller()->GetTimeUntilReleaseForTesting();
+}
+
 AmbientController* AmbientAshTestBase::ambient_controller() {
   return Shell::Get()->ambient_controller();
 }
@@ -278,12 +374,21 @@ AmbientAccessTokenController* AmbientAshTestBase::token_controller() {
   return ambient_controller()->access_token_controller_for_testing();
 }
 
+FakeAmbientBackendControllerImpl* AmbientAshTestBase::backend_controller() {
+  return static_cast<FakeAmbientBackendControllerImpl*>(
+      ambient_controller()->ambient_backend_controller());
+}
+
 void AmbientAshTestBase::FetchTopics() {
   photo_controller()->FetchTopicsForTesting();
 }
 
 void AmbientAshTestBase::FetchImage() {
   photo_controller()->FetchImageForTesting();
+}
+
+void AmbientAshTestBase::FetchBackupImages() {
+  photo_controller()->FetchBackupImagesForTesting();
 }
 
 void AmbientAshTestBase::SetUrlLoaderData(std::unique_ptr<std::string> data) {
@@ -293,7 +398,7 @@ void AmbientAshTestBase::SetUrlLoaderData(std::unique_ptr<std::string> data) {
   url_loader_->SetData(std::move(data));
 }
 
-void AmbientAshTestBase::SeteImageDecoderImage(const gfx::ImageSkia& image) {
+void AmbientAshTestBase::SetImageDecoderImage(const gfx::ImageSkia& image) {
   auto* image_decoder = static_cast<TestAmbientImageDecoderImpl*>(
       photo_controller()->get_image_decoder_for_testing());
 

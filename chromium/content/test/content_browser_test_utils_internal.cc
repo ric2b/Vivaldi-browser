@@ -21,13 +21,12 @@
 #include "base/task/thread_pool.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "content/browser/frame_host/frame_tree_node.h"
-#include "content/browser/frame_host/navigator.h"
-#include "content/browser/frame_host/render_frame_host_delegate.h"
-#include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
+#include "content/browser/renderer_host/frame_tree_node.h"
+#include "content/browser/renderer_host/navigator.h"
+#include "content/browser/renderer_host/render_frame_host_delegate.h"
+#include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/frame_visual_properties.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -42,6 +41,7 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_javascript_dialog_manager.h"
+#include "third_party/blink/public/common/frame/frame_visual_properties.h"
 
 namespace content {
 
@@ -85,9 +85,23 @@ bool NavigateToURLInSameBrowsingInstance(Shell* window, const GURL& url) {
                           ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK));
   observer.Wait();
 
-  if (!IsLastCommittedEntryOfPageType(window->web_contents(), PAGE_TYPE_NORMAL))
+  if (!IsLastCommittedEntryOfPageType(window->web_contents(),
+                                      PAGE_TYPE_NORMAL)) {
+    NavigationEntry* last_entry =
+        window->web_contents()->GetController().GetLastCommittedEntry();
+    DLOG(WARNING) << "last_entry->GetPageType() = "
+                  << (last_entry ? last_entry->GetPageType() : -1);
     return false;
-  return window->web_contents()->GetLastCommittedURL() == url;
+  }
+
+  if (window->web_contents()->GetLastCommittedURL() != url) {
+    DLOG(WARNING) << "window->web_contents()->GetLastCommittedURL() = "
+                  << window->web_contents()->GetLastCommittedURL()
+                  << "; url = " << url;
+    return false;
+  }
+
+  return true;
 }
 
 FrameTreeVisualizer::FrameTreeVisualizer() {

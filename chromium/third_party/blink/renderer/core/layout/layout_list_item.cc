@@ -47,6 +47,7 @@ LayoutListItem::LayoutListItem(Element* element)
 
 void LayoutListItem::StyleDidChange(StyleDifference diff,
                                     const ComputedStyle* old_style) {
+  NOT_DESTROYED();
   LayoutBlockFlow::StyleDidChange(diff, old_style);
 
   StyleImage* current_image = StyleRef().ListStyleImage();
@@ -80,18 +81,21 @@ void LayoutListItem::StyleDidChange(StyleDifference diff,
 }
 
 void LayoutListItem::InsertedIntoTree() {
+  NOT_DESTROYED();
   LayoutBlockFlow::InsertedIntoTree();
 
   ListItemOrdinal::ItemInsertedOrRemoved(this);
 }
 
 void LayoutListItem::WillBeRemovedFromTree() {
+  NOT_DESTROYED();
   LayoutBlockFlow::WillBeRemovedFromTree();
 
   ListItemOrdinal::ItemInsertedOrRemoved(this);
 }
 
 void LayoutListItem::SubtreeDidChange() {
+  NOT_DESTROYED();
   LayoutObject* marker = Marker();
   if (!marker)
     return;
@@ -113,15 +117,18 @@ void LayoutListItem::SubtreeDidChange() {
 }
 
 int LayoutListItem::Value() const {
+  NOT_DESTROYED();
   DCHECK(GetNode());
   return ordinal_.Value(*GetNode());
 }
 
 bool LayoutListItem::IsEmpty() const {
+  NOT_DESTROYED();
   return LastChild() == Marker();
 }
 
 void LayoutListItem::UpdateMarkerTextIfNeeded() {
+  NOT_DESTROYED();
   LayoutObject* marker = Marker();
   if (ListMarker* list_marker = ListMarker::Get(marker))
     list_marker->UpdateMarkerTextIfNeeded(*marker);
@@ -140,6 +147,10 @@ LayoutObject* GetParentOfFirstLineBox(LayoutBlockFlow* curr) {
     if (curr_child->IsOutsideListMarker())
       continue;
 
+    // Moving a legacy marker inside an NG object is not supported.
+    if (curr_child->IsLayoutNGObject())
+      continue;
+
     if (curr_child->IsInline() &&
         (!curr_child->IsLayoutInline() ||
          curr->GeneratesLineBoxesForInlineChild(curr_child)))
@@ -148,7 +159,7 @@ LayoutObject* GetParentOfFirstLineBox(LayoutBlockFlow* curr) {
     if (curr_child->IsFloating() || curr_child->IsOutOfFlowPositioned())
       continue;
 
-    if (curr->HasOverflowClip())
+    if (curr->IsScrollContainer())
       return curr;
 
     auto* child_block_flow = DynamicTo<LayoutBlockFlow>(curr_child);
@@ -197,6 +208,7 @@ void ForceLogicalHeight(LayoutObject& layout_object, const Length& height) {
 // marker_container to 0px; else restore it to LogicalHeight of <li>.
 bool LayoutListItem::PrepareForBlockDirectionAlign(
     const LayoutObject* line_box_parent) {
+  NOT_DESTROYED();
   LayoutObject* marker = Marker();
   LayoutObject* marker_parent = marker->Parent();
   bool is_inside = marker->IsInsideListMarker();
@@ -260,6 +272,7 @@ static bool IsFirstLeafChild(LayoutObject* container, LayoutObject* child) {
 }
 
 bool LayoutListItem::UpdateMarkerLocation() {
+  NOT_DESTROYED();
   DCHECK(Marker());
 
   LayoutObject* marker = Marker();
@@ -278,7 +291,7 @@ bool LayoutListItem::UpdateMarkerLocation() {
 
   if (marker->IsOutsideListMarker())
     line_box_parent = GetParentOfFirstLineBox(this);
-  if (line_box_parent && (line_box_parent->HasOverflowClip() ||
+  if (line_box_parent && (line_box_parent->IsScrollContainer() ||
                           !line_box_parent->IsLayoutBlockFlow() ||
                           (line_box_parent->IsBox() &&
                            ToLayoutBox(line_box_parent)->IsWritingModeRoot())))
@@ -323,11 +336,13 @@ bool LayoutListItem::UpdateMarkerLocation() {
 }
 
 void LayoutListItem::RecalcVisualOverflow() {
+  NOT_DESTROYED();
   RecalcChildVisualOverflow();
   RecalcSelfVisualOverflow();
 }
 
 void LayoutListItem::ComputeVisualOverflow(bool recompute_floats) {
+  NOT_DESTROYED();
   LayoutRect previous_visual_overflow_rect = VisualOverflowRect();
   ClearVisualOverflow();
 
@@ -346,6 +361,7 @@ void LayoutListItem::ComputeVisualOverflow(bool recompute_floats) {
 }
 
 void LayoutListItem::AddLayoutOverflowFromChildren() {
+  NOT_DESTROYED();
   LayoutBlockFlow::AddLayoutOverflowFromChildren();
   UpdateOverflow();
 }
@@ -353,6 +369,7 @@ void LayoutListItem::AddLayoutOverflowFromChildren() {
 // Align marker_inline_box in block direction according to line_box_root's
 // baseline.
 void LayoutListItem::AlignMarkerInBlockDirection() {
+  NOT_DESTROYED();
   // Specify wether need to restore to the original baseline which is the
   // baseline of marker parent. Because we might adjust the position at the last
   // layout pass. So if there's no line box in line_box_parent make sure it
@@ -429,6 +446,7 @@ void LayoutListItem::AlignMarkerInBlockDirection() {
 }
 
 void LayoutListItem::UpdateOverflow() {
+  NOT_DESTROYED();
   LayoutObject* marker_object = Marker();
   if (!marker_object || !marker_object->Parent() ||
       !marker_object->Parent()->IsBox() || marker_object->IsInsideListMarker())
@@ -581,7 +599,7 @@ void LayoutListItem::UpdateOverflow() {
         layout_block_object->AddLayoutOverflow(marker_rect);
       }
 
-      if (object->HasOverflowClip())
+      if (object->HasNonVisibleOverflow())
         break;
 
       if (object->HasSelfPaintingLayer())
@@ -593,10 +611,12 @@ void LayoutListItem::UpdateOverflow() {
 }
 
 void LayoutListItem::Paint(const PaintInfo& paint_info) const {
+  NOT_DESTROYED();
   ListItemPainter(*this).Paint(paint_info);
 }
 
 void LayoutListItem::OrdinalValueChanged() {
+  NOT_DESTROYED();
   LayoutObject* marker = Marker();
   if (ListMarker* list_marker = ListMarker::Get(marker)) {
     list_marker->OrdinalValueChanged(*marker);
@@ -608,6 +628,7 @@ void LayoutListItem::OrdinalValueChanged() {
 }
 
 void LayoutListItem::UpdateLayout() {
+  NOT_DESTROYED();
   LayoutObject* marker = Marker();
   if (ListMarker* list_marker = ListMarker::Get(marker))
     list_marker->UpdateMarkerTextIfNeeded(*marker);

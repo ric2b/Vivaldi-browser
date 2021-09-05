@@ -142,8 +142,8 @@ export class Viewport {
     /** @private {number} */
     this.prevScale_ = 1;
 
-    /** @private {!Viewport.PinchPhase} */
-    this.pinchPhase_ = Viewport.PinchPhase.PINCH_NONE;
+    /** @private {!PinchPhase} */
+    this.pinchPhase_ = PinchPhase.PINCH_NONE;
 
     /** @private {?Point} */
     this.pinchPanVector_ = null;
@@ -188,19 +188,26 @@ export class Viewport {
     // Set to a default zoom manager - used in tests.
     this.setZoomManager(new InactiveZoomManager(this.getZoom.bind(this), 1));
 
-    if (this.window_ === document.documentElement) {
+    // Case where |chrome_pdf::features::kPDFViewerUpdate| is disabled.
+    if (this.window_ === document.documentElement ||
+        // Necessary check since during testing a fake DOM element is used.
+        !(this.window_ instanceof HTMLElement)) {
       window.addEventListener('scroll', this.updateViewport_.bind(this));
       // The following line is only used in tests, since they expect
       // |scrollCallback| to be called on the mock |window_| object (legacy).
       this.window_.scrollCallback = this.updateViewport_.bind(this);
+      window.addEventListener('resize', this.resizeWrapper_.bind(this));
+      // The following line is only used in tests, since they expect
+      // |resizeCallback| to be called on the mock |window_| object (legacy).
+      this.window_.resizeCallback = this.resizeWrapper_.bind(this);
     } else {
+      // Case where |chrome_pdf::features::kPDFViewerUpdate| is enabled.
       this.window_.addEventListener('scroll', this.updateViewport_.bind(this));
+      const resizeObserver = new ResizeObserver(_ => this.resizeWrapper_());
+      const target = this.window_.parentElement;
+      assert(target.id === 'main');
+      resizeObserver.observe(target);
     }
-
-    window.addEventListener('resize', this.resizeWrapper_.bind(this));
-    // The following line is only used in tests, since they expect
-    // |resizeCallback| to be called on the mock |window_| object (legacy).
-    this.window_.resizeCallback = this.resizeWrapper_.bind(this);
 
     document.body.addEventListener(
         'change-zoom', e => this.setZoom(e.detail.zoom));
@@ -494,6 +501,11 @@ export class Viewport {
     return this.zoomManager_.applyBrowserZoom(this.internalZoom_);
   }
 
+  /** @return {!Array<number>} The preset zoom factors. */
+  get presetZoomFactors() {
+    return this.presetZoomFactors_;
+  }
+
   /** @param {!ZoomManager} manager */
   setZoomManager(manager) {
     this.resetTracker();
@@ -507,7 +519,7 @@ export class Viewport {
   }
 
   /**
-   * @return {!Viewport.PinchPhase} The phase of the current pinch gesture for
+   * @return {!PinchPhase} The phase of the current pinch gesture for
    *    the viewport.
    */
   get pinchPhase() {
@@ -1396,8 +1408,8 @@ export class Viewport {
       this.mightZoom_(() => {
         const {direction, center, startScaleRatio} = e.detail;
         this.pinchPhase_ = direction === 'out' ?
-            Viewport.PinchPhase.PINCH_UPDATE_ZOOM_OUT :
-            Viewport.PinchPhase.PINCH_UPDATE_ZOOM_IN;
+            PinchPhase.PINCH_UPDATE_ZOOM_OUT :
+            PinchPhase.PINCH_UPDATE_ZOOM_IN;
 
         const scaleDelta = startScaleRatio / this.prevScale_;
         if (this.firstPinchCenterInFrame_ != null) {
@@ -1428,6 +1440,8 @@ export class Viewport {
           this.keepContentCentered_ = false;
         }
 
+        this.fittingType_ = FittingType.NONE;
+
         this.setPinchZoomInternal_(
             scaleDelta, this.frameToPluginCoordinate_(center));
         this.updateViewport_();
@@ -1447,7 +1461,7 @@ export class Viewport {
     window.requestAnimationFrame(() => {
       this.mightZoom_(() => {
         const {center, startScaleRatio} = e.detail;
-        this.pinchPhase_ = Viewport.PinchPhase.PINCH_END;
+        this.pinchPhase_ = PinchPhase.PINCH_END;
         const scaleDelta = startScaleRatio / this.prevScale_;
         this.pinchCenter_ = /** @type {!Point} */ (center);
 
@@ -1456,7 +1470,7 @@ export class Viewport {
         this.updateViewport_();
       });
 
-      this.pinchPhase_ = Viewport.PinchPhase.PINCH_NONE;
+      this.pinchPhase_ = PinchPhase.PINCH_NONE;
       this.pinchPanVector_ = null;
       this.pinchCenter_ = null;
       this.firstPinchCenterInFrame_ = null;
@@ -1472,7 +1486,7 @@ export class Viewport {
     // We also use rAF for pinch start, so that if there is a pinch end event
     // scheduled by rAF, this pinch start will be sent after.
     window.requestAnimationFrame(() => {
-      this.pinchPhase_ = Viewport.PinchPhase.PINCH_START;
+      this.pinchPhase_ = PinchPhase.PINCH_START;
       this.prevScale_ = 1;
       this.oldCenterInContent_ =
           this.frameToContent_(this.frameToPluginCoordinate_(e.detail.center));
@@ -1484,6 +1498,11 @@ export class Viewport {
       this.firstPinchCenterInFrame_ = e.detail.center;
     });
   }
+
+  /** @return {!GestureDetector} */
+  getGestureDetectorForTesting() {
+    return this.gestureDetector_;
+  }
 }
 
 /**
@@ -1491,7 +1510,7 @@ export class Viewport {
  * This should match PinchPhase enum in pdf/out_of_process_instance.h
  * @enum {number}
  */
-Viewport.PinchPhase = {
+export const PinchPhase = {
   PINCH_NONE: 0,
   PINCH_START: 1,
   PINCH_UPDATE_ZOOM_OUT: 2,

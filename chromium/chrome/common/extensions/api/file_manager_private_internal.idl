@@ -70,7 +70,7 @@ namespace fileManagerPrivateInternal {
                                    GetContentMimeTypeCallback callback);
     static void getContentMetadata(DOMString blobUUID,
                                    DOMString mimeType,
-                                   fileManagerPrivate.ContentMetadataType type,
+                                   boolean includeImages,
                                    GetContentMetadataCallback callback);
     static void pinDriveFile(DOMString url,
                              boolean pin,
@@ -85,6 +85,7 @@ namespace fileManagerPrivateInternal {
     static void getFileTasks(DOMString[] urls,
                              GetFileTasksCallback callback);
     static void getDownloadUrl(DOMString url, GetUrlCallback callback);
+    static void copyImageToClipboard(DOMString url, SimpleCallback callback);
     static void startCopy(DOMString url,
                           DOMString parentUrl,
                           DOMString newName,
@@ -120,5 +121,7 @@ namespace fileManagerPrivateInternal {
                              GetThumbnailCallback callback);
     static void sharesheetHasTargets(DOMString[] urls, BooleanCallback callback);
     static void invokeSharesheet(DOMString[] urls, SimpleCallback callback);
+    static void toggleAddedToHoldingSpace(DOMString[] urls, boolean add,
+                                          optional SimpleCallback callback);
   };
 };
